@@ -24,6 +24,11 @@ AIHUB emits the two signals an alerting rule consumes and stops there:
 | `aihub_email_delivery_cancelled_timestamp_seconds{kind,reason}`            | `/metrics`, read from durable rows      |
 | one `ERROR` log line per terminal failure, context `[EmailOutboxDispatch]` | the instance log                        |
 
+Prometheus scrapes each environment's `/metrics` endpoint through a dedicated
+loopback-only Nginx listener on the Production host and the restricted SSH
+tunnel. Public API and Sandbox `/metrics` paths remain blocked; see the scrape
+and firewall setup in [aihub-observability.md](aihub-observability.md).
+
 Configuring the rule that turns those into a page is deployment-owned
 ([`deploy-vps.md`](deploy-vps.md)). That split is deliberate: adding a broker to
 the application would put a third-party availability dependency in the same

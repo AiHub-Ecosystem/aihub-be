@@ -46,12 +46,16 @@ node -e '
       host: request.headers.host,
       forwardedHost: request.headers["x-forwarded-host"],
     })}\n`);
+    const isMetrics = request.url === "/metrics";
+    const responseBody = isMetrics
+      ? Buffer.from("# TYPE aihub_test_metric gauge\naihub_test_metric 1\n")
+      : body;
     response.writeHead(200, {
-      "Content-Type": "application/json",
-      "Content-Length": body.length,
+      "Content-Type": isMetrics ? "text/plain; version=0.0.4" : "application/json",
+      "Content-Length": responseBody.length,
       "X-Request-Id": "req_01ARZ3NDEKTSV4RRFFQ69G5FAV",
     });
-    response.end(body);
+    response.end(responseBody);
   }).listen(3021, "127.0.0.1");
 ' "$fixture" "$tmp/upstream-headers.jsonl" &
 backend_pid=$!
@@ -73,6 +77,7 @@ sed \
   -e "s#/var/log/aihub-access.log#$tmp/aihub-access.log#g" \
   -e 's/listen 443 ssl;/listen 127.0.0.1:18080;/' \
   -e 's/listen 80;/listen 127.0.0.1:18081;/' \
+  -e 's/listen 127.0.0.1:19103;/listen 127.0.0.1:18082;/' \
   "$repo_root/ops/nginx/aihub-api.conf" > "$tmp/aihub-api.conf"
 
 cat > "$tmp/nginx.conf" <<EOF
@@ -139,5 +144,18 @@ curl --silent --show-error -D "$tmp/other.headers" -o /dev/null \
   -H 'Accept-Encoding: gzip' http://127.0.0.1:18080/health
 if grep -Eiq '^Content-Encoding: gzip' "$tmp/other.headers"; then
   printf 'Unexpected gzip outside the two Speaking grading routes.\n' >&2
+  exit 1
+fi
+
+curl --silent --show-error --fail http://127.0.0.1:18082/metrics > "$tmp/private-metrics.prom"
+grep -Fxq 'aihub_test_metric 1' "$tmp/private-metrics.prom"
+if curl --silent --show-error -o /dev/null -w '%{http_code}' \
+  -H 'Host: api.aihubproduction.com' http://127.0.0.1:18080/metrics | grep -Fxq '200'; then
+  printf 'The public API listener unexpectedly exposed /metrics.\n' >&2
+  exit 1
+fi
+if curl --silent --show-error -o /dev/null -w '%{http_code}' \
+  http://127.0.0.1:18082/health | grep -Fxq '200'; then
+  printf 'The private scrape listener unexpectedly proxied a non-metrics path.\n' >&2
   exit 1
 fi

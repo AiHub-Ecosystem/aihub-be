@@ -882,7 +882,9 @@ file, the two rendered directories, and the `.env.production` paths before
 starting:
 
 1. Set `AIHUB_SANDBOX_ENABLED=false` in `.env.production` before pushing the
-   release. After CD syncs the new host files, its
+   release. On the monitoring host, set
+   `~/aihub-monitoring/sandbox-targets/targets.yml` to `[]` before stopping the
+   Sandbox app, so Prometheus removes its optional scrape target. After CD syncs the new host files, its
    `prepare-sandbox-cutover` step removes the managed Sandbox nginx route,
    stops both Sandbox slots, and recreates the Production Agent if its rendered
    connection file still contains Sandbox fields. The active Production app
@@ -913,7 +915,14 @@ starting:
 5. Run `ops/status.sh <commit-sha>` and confirm both tiers use that image and
    pass health/readiness checks. Inspect each app's `/run/secrets/aihub` mount
    and confirm the Production and Sandbox source directories differ. Do not
-   print or copy any rendered secret contents.
+   print or copy any rendered secret contents. Then restore the Sandbox scrape
+   target on the monitoring host by setting
+   `~/aihub-monitoring/sandbox-targets/targets.yml` to:
+
+   ```yaml
+   - targets: [172.27.0.1:19104]
+     labels: { host: production, environment: sandbox }
+   ```
 
 ## Start the Vault-backed stack
 
@@ -1273,10 +1282,12 @@ half of that guarantee the application cannot enforce itself.
 ### Disabling the sandbox tier
 
 Set `AIHUB_SANDBOX_ENABLED=false` and remove `AIHUB_SANDBOX_HOST` and
-`AIHUB_SANDBOX_ORG_IDS` together. The next `main` deployment removes the
-managed nginx Sandbox file and stale `app-sandbox` container. It does not drop
-`aihub_sandbox`; retain that database until its backup and disposal have been
-approved separately.
+`AIHUB_SANDBOX_ORG_IDS` together. Before the deployment stops the Sandbox app,
+set `~/aihub-monitoring/sandbox-targets/targets.yml` to `[]` on the monitoring
+host so its file-based scrape target is removed. The next `main` deployment
+removes the managed nginx Sandbox file and stale `app-sandbox` container. It
+does not drop `aihub_sandbox`; retain that database until its backup and
+disposal have been approved separately.
 
 ## Container stdout and stderr logs (#363)
 
