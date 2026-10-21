@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 const script = join(process.cwd(), 'scripts', 'checks', 'check-file-size.mjs');
-const GRANDFATHERED = 'src/postman/build-postman-collection.ts';
+const GRANDFATHERED = 'src/openapi/build-openapi-document.ts';
 const EXEMPT = 'src/catalog/public-routes.ts';
 
 function runCheck(cwd: string) {
