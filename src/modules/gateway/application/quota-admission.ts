@@ -1,4 +1,5 @@
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { AppError } from '@/common/errors/app-error';
 
 import type { QuotaCounterPort } from './quota-counter.port';
 import { quotaExceededError } from './quota-period';
@@ -13,9 +14,24 @@ export interface QuotaAdmissionInput {
 export type QuotaAdmission = 'verified' | 'unverified';
 
 /**
+ * A hard-stop quota that could not be checked. It is not a quota refusal, so it
+ * never carries next month's retry hint (#373); it fails closed like graded
+ * admission does (ADR-0116).
+ */
+function quotaUnverifiable(): AppError {
+  return new AppError({
+    code: 'REDIS_UNAVAILABLE',
+    message: 'Quota could not be verified',
+    retryable: true,
+    retryAfterMs: 1_000,
+  });
+}
+
+/**
  * Decides whether a production request fits the monthly quota. A counter that
  * cannot be read, or reads an unsafe value, is never taken as zero: a hard-stop
- * quota refuses, any other admits and says the quota went unverified.
+ * quota refuses with a short retryable answer, any other admits and says the
+ * quota went unverified.
  */
 export async function admitMonthlyQuota(
   counter: QuotaCounterPort,
@@ -30,7 +46,7 @@ export async function admitMonthlyQuota(
     }
   } catch {
     if (input.hardStopOnQuota) {
-      throw quotaExceededError(now());
+      throw quotaUnverifiable();
     }
     return 'unverified';
   }

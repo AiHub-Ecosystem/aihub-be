@@ -100,7 +100,7 @@ function httpContextFor(
 describe('quota and metering component behaviour', () => {
   const now = () => new Date('2026-09-16T12:00:00.000Z');
 
-  it('hard-stop rejects an over-quota request and records a non-billable error', async () => {
+  it('hard-stop refuses an unverifiable quota with a retryable 503 and records a non-billable error', async () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor({ hardStopOnQuota: true });
@@ -112,8 +112,9 @@ describe('quota and metering component behaviour', () => {
     );
 
     expect(failure).toMatchObject({
-      code: 'QUOTA_EXCEEDED',
-      httpStatus: 429,
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryAfterMs: 1_000,
     });
 
     const repository = new FakeUsageRepository();
@@ -126,13 +127,13 @@ describe('quota and metering component behaviour', () => {
 
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
-        error: expect.objectContaining({ code: 'QUOTA_EXCEEDED' }),
+        error: expect.objectContaining({ code: 'REDIS_UNAVAILABLE' }),
       }),
     );
     expect(repository.records[0]).toEqual(
       expect.objectContaining({
-        outcome: 'client_error',
-        httpStatus: 429,
+        outcome: 'internal_error',
+        httpStatus: 503,
         billableRequests: 0,
         meteringStatus: 'not_applicable',
       }),

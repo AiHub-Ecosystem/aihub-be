@@ -1,3 +1,7 @@
+import { AppError } from '@/common/errors/app-error';
+
+import { findPostgresErrorLink } from './postgres-error-chain';
+
 const ADAPTER_CONNECTION_KINDS = new Set([
   'DatabaseNotReachable',
   'ConnectionClosed',
@@ -38,50 +42,33 @@ const PG_CONNECTION_MESSAGES = [
  * never reported as a database outage.
  */
 export function isPostgresUnavailable(error: unknown): boolean {
-  const pending: { readonly value: unknown; readonly wrapped: boolean }[] = [
-    { value: error, wrapped: false },
-  ];
-  const seen = new Set<object>();
+  return (
+    findPostgresErrorLink(
+      error,
+      ({ code, message, kind, wrapped }) =>
+        (typeof kind === 'string' && ADAPTER_CONNECTION_KINDS.has(kind)) ||
+        (typeof code === 'string' &&
+          (PRISMA_CONNECTION_CODES.has(code) ||
+            SERVER_UNAVAILABLE_SQLSTATES.has(code) ||
+            /^08[0-9A-Z]{3}$/.test(code) ||
+            (wrapped && NETWORK_CODES.has(code)))) ||
+        (typeof message === 'string' &&
+          PG_CONNECTION_MESSAGES.some((text) => message.includes(text))),
+    ) !== undefined
+  );
+}
 
-  while (pending.length > 0) {
-    const next = pending.pop();
-    if (next === undefined) break;
-    const candidate = next.value;
-    if (typeof candidate !== 'object' || candidate === null) continue;
-    if (seen.has(candidate)) continue;
-    seen.add(candidate);
-
-    const record = candidate as Record<string, unknown>;
-    const code = record.code ?? record.originalCode;
-    const message = record.message ?? record.originalMessage;
-    if (
-      (typeof record.kind === 'string' &&
-        ADAPTER_CONNECTION_KINDS.has(record.kind)) ||
-      (typeof code === 'string' &&
-        (PRISMA_CONNECTION_CODES.has(code) ||
-          SERVER_UNAVAILABLE_SQLSTATES.has(code) ||
-          /^08[0-9A-Z]{3}$/.test(code) ||
-          (next.wrapped && NETWORK_CODES.has(code)))) ||
-      (typeof message === 'string' &&
-        PG_CONNECTION_MESSAGES.some((text) => message.includes(text)))
-    ) {
-      return true;
-    }
-
-    const name = candidate instanceof Error ? candidate.name : '';
-    const wrapped =
-      next.wrapped ||
-      name.startsWith('PrismaClient') ||
-      name === 'DriverAdapterError';
-    for (const key of ['cause', 'meta', 'driverAdapterError']) {
-      if (record[key] !== undefined) {
-        pending.push({
-          value: record[key],
-          wrapped: wrapped || key === 'driverAdapterError',
-        });
-      }
-    }
-  }
-
-  return false;
+/** The one answer for a database outage or timeout (ADR-0118). */
+export function databaseUnavailableError(
+  cause?: unknown,
+  message = 'Database temporarily unavailable',
+): AppError {
+  return new AppError({
+    code: 'DATABASE_UNAVAILABLE',
+    message,
+    retryable: true,
+    retryAfterMs: 1_000,
+    retryAfterHeader: true,
+    ...(cause === undefined ? {} : { cause }),
+  });
 }

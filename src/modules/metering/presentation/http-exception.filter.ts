@@ -21,7 +21,10 @@ import {
   requestDurationMs,
 } from '@/common/http/request-timing.hook';
 import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
-import { isPostgresUnavailable } from '@/common/postgres/postgres-unavailable-error';
+import {
+  databaseUnavailableError,
+  isPostgresUnavailable,
+} from '@/common/postgres/postgres-unavailable-error';
 import { isRequestId } from '@/common/request-context/request-id';
 import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
 import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
@@ -88,23 +91,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
           timeout: postgresTimeout,
         }),
       );
-      exception = new AppError({
-        code: 'DATABASE_UNAVAILABLE',
-        message: 'Database temporarily unavailable',
-        retryable: true,
-      });
+      exception = databaseUnavailableError();
     } else if (
       !(exception instanceof AppError) &&
       isPostgresUnavailable(exception)
     ) {
       this.logger.error(JSON.stringify({ event: 'postgres_unavailable' }));
-      exception = new AppError({
-        code: 'DATABASE_UNAVAILABLE',
-        message: 'Database temporarily unavailable',
-        retryable: true,
-        retryAfterMs: 1_000,
-        retryAfterHeader: true,
-      });
+      exception = databaseUnavailableError();
     }
 
     const { status, envelope } = this.resolve(

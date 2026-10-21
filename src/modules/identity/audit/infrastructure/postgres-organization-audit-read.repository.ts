@@ -16,6 +16,7 @@ import type {
 import {
   dateValue,
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -190,7 +191,7 @@ export class PostgresOrganizationAuditReadRepository
         input.limit,
       ]);
     } catch (error) {
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
 
     const events: OrganizationAuditEventRecord[] = [];

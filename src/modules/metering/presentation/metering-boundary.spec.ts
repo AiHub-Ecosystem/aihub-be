@@ -87,8 +87,9 @@ describe('metering request boundary', () => {
       const request = authenticatedRequest();
       const send = jest.fn();
       const status = jest.fn(() => ({ send }));
+      const header = jest.fn();
       const filter = new HttpExceptionFilter(finalizer);
-      const context = httpContextFor(request, { status });
+      const context = httpContextFor(request, { status, header });
       const logger = jest
         .spyOn(Logger.prototype, 'error')
         .mockImplementation(() => undefined);
@@ -106,11 +107,13 @@ describe('metering request boundary', () => {
         await filter.catch(error, context);
 
         expect(status).toHaveBeenCalledWith(503);
+        expect(header).toHaveBeenCalledWith('Retry-After', '1');
         expect(send).toHaveBeenCalledWith({
           error: expect.objectContaining({
             code: 'DATABASE_UNAVAILABLE',
             message: 'Database temporarily unavailable',
             retryable: true,
+            retry_after_ms: 1_000,
           }),
         });
         expect(logger).toHaveBeenCalledWith(
@@ -127,6 +130,49 @@ describe('metering request boundary', () => {
       }
     },
   );
+
+  it('maps an unreachable database to a retryable 503 with Retry-After, without the driver message', async () => {
+    const finalizer = new FakeFinalizer();
+    const send = jest.fn();
+    const status = jest.fn(() => ({ send }));
+    const header = jest.fn();
+    const filter = new HttpExceptionFilter(finalizer);
+    const context = httpContextFor(authenticatedRequest(), { status, header });
+    const logger = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const error = Object.assign(
+      new Error("Can't reach database server at db.internal:5432"),
+      {
+        name: 'PrismaClientKnownRequestError',
+        code: 'P1001',
+        meta: {
+          driverAdapterError: { cause: { kind: 'DatabaseNotReachable' } },
+        },
+      },
+    );
+
+    try {
+      await filter.catch(error, context);
+
+      expect(status).toHaveBeenCalledWith(503);
+      expect(header).toHaveBeenCalledWith('Retry-After', '1');
+      expect(send).toHaveBeenCalledWith({
+        error: expect.objectContaining({
+          code: 'DATABASE_UNAVAILABLE',
+          retryable: true,
+          retry_after_ms: 1_000,
+        }),
+      });
+      expect(logger).toHaveBeenCalledWith(
+        JSON.stringify({ event: 'postgres_unavailable' }),
+      );
+      expect(JSON.stringify(send.mock.calls)).not.toContain('db.internal');
+      expect(JSON.stringify(logger.mock.calls)).not.toContain('db.internal');
+    } finally {
+      logger.mockRestore();
+    }
+  });
 
   it('awaits a successful metering write before emitting the public envelope', async () => {
     const finalizer = new FakeFinalizer();

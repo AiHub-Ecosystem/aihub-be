@@ -71,6 +71,10 @@ describe('admitMonthlyQuota', () => {
       ),
     );
 
-    expect(error.code).toBe('QUOTA_EXCEEDED');
+    expect(error).toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryable: true,
+      retryAfterMs: 1_000,
+    });
   });
 });

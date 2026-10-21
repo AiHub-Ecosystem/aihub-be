@@ -137,9 +137,12 @@ export class QuotaGuard implements CanActivate {
         this.now,
       );
     } catch (error) {
+      // A confirmed completed replay costs no quota, so it passes whether the
+      // quota is exhausted or could not be verified.
       if (
         error instanceof AppError &&
-        error.code === 'QUOTA_EXCEEDED' &&
+        (error.code === 'QUOTA_EXCEEDED' ||
+          error.code === 'REDIS_UNAVAILABLE') &&
         (await isCompletedWritingReplay(
           request,
           authenticated,

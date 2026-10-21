@@ -13,6 +13,7 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   membershipRoleValue,
   membershipStatusValue,
@@ -143,7 +144,7 @@ export class PostgresOrganizationRenameRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 }

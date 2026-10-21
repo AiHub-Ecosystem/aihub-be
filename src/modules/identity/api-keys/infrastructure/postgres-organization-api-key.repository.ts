@@ -13,6 +13,7 @@ import type {
 import {
   dateValue,
   identityStoreError,
+  identityStoreUnavailable,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 
 import {
@@ -306,7 +307,7 @@ export class PostgresOrganizationApiKeyRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -391,7 +392,7 @@ export class PostgresOrganizationApiKeyRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -421,7 +422,7 @@ export class PostgresOrganizationApiKeyRepository
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
     } catch (error) {
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
 
     // An invalid projection fails the whole request rather than quietly
@@ -520,7 +521,7 @@ export class PostgresOrganizationApiKeyRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 }

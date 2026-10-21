@@ -28,6 +28,7 @@ import {
 import {
   dateValue,
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   membershipRoleValue,
   organizationStatusValue,
@@ -272,7 +273,7 @@ export class PostgresOrganizationInvitationRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -343,7 +344,7 @@ export class PostgresOrganizationInvitationRepository
         invitedByUsername: invitedByUser.username,
       }));
     } catch (error) {
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
 
     const invitations: OpenOrganizationInvitationRecord[] = [];
@@ -488,7 +489,7 @@ export class PostgresOrganizationInvitationRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -594,7 +595,7 @@ export class PostgresOrganizationInvitationRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable', error);
+      throw identityStoreUnavailable(error);
     }
   }
 }
