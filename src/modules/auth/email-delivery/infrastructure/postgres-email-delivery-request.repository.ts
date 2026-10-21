@@ -37,6 +37,7 @@ import {
   stringValue,
 } from '@/modules/auth/shared/infrastructure/auth-row';
 import { claimEmailDeliveryRequests } from './email-delivery-claim';
+import { CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL } from './email-delivery-stale-cancellation';
 import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';
 
 /**
@@ -63,31 +64,6 @@ const FAIL_EXHAUSTED_SQL = `
   WHERE status = 'queued'
     AND kind = ANY($2::text[])
     AND attempts >= 3
-    AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-  RETURNING id, kind, status,
-            payload_ciphertext AS "payloadCiphertext", attempts,
-            last_attempt_at AS "lastAttemptAt",
-            last_error_code AS "lastErrorCode",
-            cancel_reason AS "cancelReason",
-            created_at AS "createdAt", completed_at AS "completedAt"
-`;
-
-/**
- * Queued requests older than every credential an Email Delivery Request can
- * carry. None of them can be sent any more, so they are cancelled as expired
- * and their payload erased without being opened, which is the only way a
- * payload no instance can decrypt still leaves the table (ADR-0074). A row
- * still under a live lease is left to the instance that holds it.
- */
-const CANCEL_STALE_SQL = `
-  UPDATE email_delivery_requests
-  SET status = 'cancelled', cancel_reason = 'credential_expired',
-      payload_ciphertext = NULL, completed_at = $1,
-      lease_owner = NULL, lease_expires_at = NULL,
-      organization_id = NULL, inviter_id = NULL
-  WHERE status = 'queued'
-    AND kind = ANY($3::text[])
-    AND created_at <= $2
     AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
   RETURNING id, kind, status,
             payload_ciphertext AS "payloadCiphertext", attempts,
@@ -645,11 +621,11 @@ export class PostgresEmailDeliveryRequestRepository
     client: AuthSqlClient,
     input: { at: Date; createdAtOrBefore: Date },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await authQueryRows(client, CANCEL_STALE_SQL, [
-      input.at,
-      input.createdAtOrBefore,
-      EMAIL_DELIVERY_KINDS,
-    ]);
+    const rows = await authQueryRows(
+      client,
+      CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL,
+      [input.at, input.createdAtOrBefore, EMAIL_DELIVERY_KINDS],
+    );
     return toKnownRecords(rows);
   }
 
@@ -669,7 +645,7 @@ export class PostgresEmailDeliveryRequestRepository
   }
 
   async claim(
-    client: AuthSqlClient,
+    client: Parameters<typeof claimEmailDeliveryRequests>[0],
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     return claimEmailDeliveryRequests(client, input, toKnownRecords);
@@ -744,14 +720,12 @@ export class PostgresEmailDeliveryRequestRepository
 }
 
 /**
- * The same statements, reached through the pool instead of a caller's open
- * transaction. The poller owns its own transactions â€” it claims in one
- * statement and dispatches outside any transaction, so nothing holds a
- * connection while a provider call is in flight.
+ * Claims run in a short transaction; dispatch runs outside it, so no database
+ * connection is held while a provider call is in flight.
  */
 export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   constructor(
-    private readonly client: AuthSqlClient,
+    private readonly client: Parameters<typeof claimEmailDeliveryRequests>[0],
     private readonly requests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
   ) {}
 
@@ -833,7 +807,9 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   }
 
   /** Durable bounded cancellation samples for alerting. */
-  cancellationTimestamps() {
+  cancellationTimestamps(): ReturnType<
+    typeof readEmailOutboxCancellationTimestamps
+  > {
     return readEmailOutboxCancellationTimestamps(this.client);
   }
 

@@ -12,11 +12,17 @@ import { PostgresEmailDeliveryRequestRepository } from './postgres-email-deliver
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 const ROW_ID = 'edr_01J00000000000000000000000';
 
-function clientReturning(row: Record<string, unknown>) {
+function clientReturningRows(rows: readonly Record<string, unknown>[]) {
+  const query = async (): Promise<readonly Record<string, unknown>[]> => rows;
   const fake: QueryFake = {
-    query: async (): Promise<readonly Record<string, unknown>[]> => [row],
+    query,
+    transaction: (callback) => callback({ query }),
   };
   return prismaFromQueryFake(fake);
+}
+
+function clientReturning(row: Record<string, unknown>) {
+  return clientReturningRows([row]);
 }
 
 function queuedRow(
@@ -113,15 +119,13 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
     const knownId = 'edr_01J00000000000000000000001';
-    const client = prismaFromQueryFake({
-      query: async () => [
-        queuedRow({
-          kind: 'carrier_pigeon_email',
-          payloadCiphertext: 'secret',
-        }),
-        queuedRow({ id: knownId }),
-      ],
-    });
+    const client = clientReturningRows([
+      queuedRow({
+        kind: 'carrier_pigeon_email',
+        payloadCiphertext: 'secret',
+      }),
+      queuedRow({ id: knownId }),
+    ]);
 
     try {
       const claimed = await new PostgresEmailDeliveryRequestRepository().claim(

@@ -172,10 +172,11 @@ database transition does not lose the signal. `summary.cancelled` in the per-pas
 (`email outbox pass claimed=... cancelled=N failed=N deferred=N`) remains the
 visibility for routine cancellations.
 
-A queued request older than the longest credential lifetime (24 hours) is also
-cancelled as `credential_expired`, at the start of every pass and without being
-opened. Its credential can no longer work, so it can never be sent; cancelling it
-is what erases a payload that no instance can decrypt.
+A credential-bearing request older than the longest credential lifetime (24
+hours) is also cancelled as `credential_expired`, at the start of every pass
+and without being opened. MFA notices have no credential; an equally old MFA
+notice is cancelled as `not_actionable`. Both paths erase the queued payload
+without opening it.
 
 ## Queue backlog: when dispatch stops
 

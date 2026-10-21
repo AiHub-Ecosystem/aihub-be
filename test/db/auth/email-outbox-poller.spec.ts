@@ -448,6 +448,37 @@ describe('email outbox dispatch poller', () => {
       ).toHaveLength(5);
     });
 
+    it('keeps overlapping competing-group claim passes full and fair', async () => {
+      const organizations = ['org_concurrent_first', 'org_concurrent_second'];
+      for (let index = 0; index < 12; index += 1) {
+        for (const [group, organizationId] of organizations.entries()) {
+          await seedRequest({
+            kind: 'organization_invite_email',
+            schedulingOrganizationId: organizationId,
+            schedulingInviterId: `usr_concurrent_${group}`,
+          });
+        }
+      }
+
+      const [first, second] = await Promise.all([
+        claim(OWNER_A),
+        claim(OWNER_B),
+      ]);
+
+      expect(first).toHaveLength(10);
+      expect(second).toHaveLength(10);
+      for (const batch of [first, second]) {
+        const selected = await schedulingIdsOf(batch.map(({ id }) => id));
+        for (const organizationId of organizations) {
+          expect(
+            selected.filter(
+              ({ organization_id }) => organization_id === organizationId,
+            ),
+          ).toHaveLength(5);
+        }
+      }
+    });
+
     it('caps each competing inviter at five invitation rows', async () => {
       for (let index = 0; index < 8; index += 1) {
         await seedRequest({
@@ -602,6 +633,30 @@ describe('email outbox dispatch poller', () => {
         reason: 'credential_expired',
         timestampSeconds: NOW.getTime() / 1_000,
       });
+    });
+
+    it('does not report a credential expiry for a stale MFA notice', async () => {
+      const id = `edr_${ulid()}`;
+      const staleAt = new Date(NOW.getTime() - 24 * HOUR - 1);
+      await pool.query(
+        `INSERT INTO email_delivery_requests (
+           id, kind, status, payload_ciphertext, attempts, created_at
+         ) VALUES ($1, 'mfa_enabled_notification', 'queued', $2, 0, $3)`,
+        [id, cipher.encrypt('{}'), staleAt],
+      );
+
+      await store.cancelStale({ at: NOW, createdAtOrBefore: staleAt });
+
+      expect(await rowOf(id)).toMatchObject({
+        status: 'cancelled',
+        cancel_reason: 'not_actionable',
+      });
+      expect(await store.cancellationTimestamps()).not.toContainEqual(
+        expect.objectContaining({
+          kind: 'mfa_enabled_notification',
+          reason: 'credential_expired',
+        }),
+      );
     });
 
     it('clears scheduling IDs when an exhausted invitation request is reconciled', async () => {

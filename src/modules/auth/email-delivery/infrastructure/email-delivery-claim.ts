@@ -5,9 +5,13 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
+  type AuthRepositoryClient,
   type AuthSqlClient,
   authQueryRows,
+  authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
+
+const EMAIL_OUTBOX_CLAIM_LOCK = 'auth-email-outbox-claim';
 
 const CLAIM_SQL = `
   WITH eligible AS (
@@ -125,7 +129,7 @@ const CLAIM_SQL = `
             request.completed_at AS "completedAt"
 `;
 
-export async function claimEmailDeliveryRequests(
+async function claimEmailDeliveryRequestsInTransaction(
   client: AuthSqlClient,
   input: ClaimEmailDeliveryRequestsInput,
   toKnownRecords: (
@@ -158,4 +162,26 @@ export async function claimEmailDeliveryRequests(
       left.createdAt.getTime() - right.createdAt.getTime() ||
       left.id.localeCompare(right.id),
   );
+}
+
+export function claimEmailDeliveryRequests(
+  client: AuthRepositoryClient,
+  input: ClaimEmailDeliveryRequestsInput,
+  toKnownRecords: (
+    rows: readonly Record<string, unknown>[],
+  ) => readonly EmailDeliveryRequestRecord[],
+): Promise<readonly EmailDeliveryRequestRecord[]> {
+  return authTransaction(client, async (transaction) => {
+    // Re-rank after earlier claim leases commit so SKIP LOCKED cannot consume a group's share.
+    await authQueryRows(
+      transaction,
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [EMAIL_OUTBOX_CLAIM_LOCK],
+    );
+    return claimEmailDeliveryRequestsInTransaction(
+      transaction,
+      input,
+      toKnownRecords,
+    );
+  });
 }
