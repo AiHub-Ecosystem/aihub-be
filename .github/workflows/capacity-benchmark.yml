@@ -42,6 +42,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Test capacity benchmark process timeout handling
+        run: pnpm test:capacity-benchmark
+
       - name: Record runner hardware and Docker engine
         run: |
           mkdir -p artifacts/capacity-benchmark
