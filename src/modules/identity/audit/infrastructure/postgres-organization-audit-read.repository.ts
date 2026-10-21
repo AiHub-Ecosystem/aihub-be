@@ -189,8 +189,8 @@ export class PostgresOrganizationAuditReadRepository
         filter.to ?? null,
         input.limit,
       ]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreError('Identity store is unavailable', error);
     }
 
     const events: OrganizationAuditEventRecord[] = [];

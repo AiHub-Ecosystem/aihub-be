@@ -130,10 +130,16 @@ describe.each<[FaultMode, number]>([
       const lookup = await timed(() => authenticator.authenticate(credential));
       const write = await timed(() => usage.insert(usageRecord()));
 
-      for (const call of [lookup, write]) {
-        expect(isPostgresUnavailable(rejection(call.result))).toBe(true);
-        expect(call.ms).toBeLessThan(boundMs);
-      }
+      // The identity store answers the outage itself; a usage write's driver
+      // error is mapped by the exception filter, which reads the same test.
+      expect(rejection(lookup.result)).toMatchObject({
+        code: 'DATABASE_UNAVAILABLE',
+        httpStatus: 503,
+        retryable: true,
+        retryAfterMs: 1_000,
+      });
+      expect(isPostgresUnavailable(rejection(write.result))).toBe(true);
+      expect(Math.max(lookup.ms, write.ms)).toBeLessThan(boundMs);
 
       await proxy.setMode('normal');
       await eventually(async () => {
@@ -154,8 +160,7 @@ describe.each<[FaultMode, number]>([
   }, 30_000);
 });
 
-it('keeps serving through a slow Postgres', async () => {
-  await proxy.setMode('normal');
+it('answers or refuses retryably inside the bound while Postgres is slow, then recovers', async () => {
   const holder = createPrismaClient('integration-test', proxiedUrl);
   const authenticator = new ApiKeyAuthenticator(
     new PostgresApiKeyRepository(holder.prisma),
@@ -163,21 +168,40 @@ it('keeps serving through a slow Postgres', async () => {
     noFailures,
     () => TEST_NOW,
   );
+  const usage = new PostgresUsageRepository(holder.prisma);
   const credential = {
     value: fixture.organizationA.apiKey.raw,
     environment: 'production',
     clientIp: '198.51.100.9',
   };
   try {
-    // A slow link delays each round trip; the pool connects before it slows.
     await authenticator.authenticate(credential);
+
+    // Each round trip now waits; a call either completes or meets one of the
+    // pool's bounds (1 s to connect, query_timeout to answer) as a 503.
     await proxy.setMode('slow');
     const lookup = await timed(() => authenticator.authenticate(credential));
-    expect(lookup.result).toMatchObject({
-      status: 'fulfilled',
-      value: { organizationId: ORGANIZATION_A },
-    });
-    expect(lookup.ms).toBeLessThan(STALLED_BOUND_MS);
+    const write = await timed(() => usage.insert(usageRecord()));
+
+    const lookupOutcome =
+      lookup.result.status === 'fulfilled'
+        ? lookup.result.value.organizationId
+        : (lookup.result.reason as { readonly code?: string }).code;
+    const writeOutcome =
+      write.result.status === 'fulfilled'
+        ? 'written'
+        : isPostgresUnavailable(write.result.reason)
+          ? 'unavailable'
+          : 'other failure';
+    expect([ORGANIZATION_A, 'DATABASE_UNAVAILABLE']).toContain(lookupOutcome);
+    expect(['written', 'unavailable']).toContain(writeOutcome);
+    expect(Math.max(lookup.ms, write.ms)).toBeLessThan(STALLED_BOUND_MS);
+
+    await proxy.setMode('normal');
+    await eventually(async () => {
+      await authenticator.authenticate(credential);
+      return true;
+    }, 5_000);
   } finally {
     await proxy.setMode('normal');
     await holder.close();

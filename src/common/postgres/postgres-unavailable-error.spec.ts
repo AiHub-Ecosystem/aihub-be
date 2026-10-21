@@ -29,7 +29,8 @@ describe('isPostgresUnavailable', () => {
     'Connection terminated unexpectedly',
     'timeout exceeded when trying to connect',
     'Query read timeout',
-  ])('recognizes the node-postgres message %s', (message) => {
+    'Transaction API error: Unable to start a transaction in the given time.',
+  ])('recognizes the connection message %s', (message) => {
     expect(isPostgresUnavailable(new Error(message))).toBe(true);
   });
 

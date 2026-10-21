@@ -135,6 +135,8 @@ beforeAll(async () => {
   );
   if (client === undefined) throw new Error('Gateway Redis client missing');
   gatewayRedis = client;
+  // The gateway client never queues commands, so wait until it is connected.
+  await eventually(async () => (await client.ping()) === 'PONG');
   raw = createTenantIsolationRedis();
   interceptor = new ConcurrencyPermitInterceptor(
     new RedisConcurrencyLimiter(gatewayRedis, NOOP_LOGGER),
@@ -231,6 +233,7 @@ describe('a slow AI Service under grading load and client retries', () => {
   const ORGANIZATION_PERMITS = 20;
   const LOAD_DEADLINE_MS = 3_000;
   const POOL_CONNECTIONS = 10;
+  const CIRCUIT_RESET_MS = 30_000;
 
   it('refuses and times out within bounds, keeps queues and memory bounded, leaks no permit, and recovers', async () => {
     const organizations = [1, 2].map(
@@ -282,11 +285,16 @@ describe('a slow AI Service under grading load and client retries', () => {
       clearInterval(sampler);
     }
 
-    // Every caller hears back by its deadline, with a retryable answer.
+    // Every caller hears back by its deadline, with a retryable answer:
+    // admitted calls time out, excess calls are refused, and once enough
+    // calls time out the circuit breaker answers AI_SERVICE_UNAVAILABLE.
     for (const outcome of outcomes) {
-      expect(['OK', 'AI_SERVICE_TIMEOUT', 'CONCURRENCY_LIMIT']).toContain(
-        outcome.code,
-      );
+      expect([
+        'OK',
+        'AI_SERVICE_TIMEOUT',
+        'AI_SERVICE_UNAVAILABLE',
+        'CONCURRENCY_LIMIT',
+      ]).toContain(outcome.code);
       expect(outcome.ms).toBeLessThan(LOAD_DEADLINE_MS + DEADLINE_SLACK_MS);
     }
     expect(
@@ -301,10 +309,11 @@ describe('a slow AI Service under grading load and client retries', () => {
     for (const organizationId of organizations) {
       expect(await inflight(organizationId)).toBe(0);
     }
+    // An open circuit breaker probes again after its 30 s reset timeout.
     stubDelayMs = 0;
     await eventually(async () => {
       const recovered = await timed(() => gradedCall(organizations[0] ?? ''));
       return recovered.result.status === 'fulfilled' && recovered.ms < 1_000;
-    }, 5_000);
-  }, 30_000);
+    }, CIRCUIT_RESET_MS + 5_000);
+  }, 90_000);
 });

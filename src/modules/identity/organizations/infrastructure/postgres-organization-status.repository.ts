@@ -53,7 +53,7 @@ export class PostgresOrganizationStatusRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreError('Identity store is unavailable', error);
     }
   }
 

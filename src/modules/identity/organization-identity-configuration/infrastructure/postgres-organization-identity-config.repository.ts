@@ -405,8 +405,8 @@ export class PostgresOrganizationIdentityConfigRepository
         select: status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,
       });
       return first ?? undefined;
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreError('Identity store is unavailable', error);
     }
   }
 }

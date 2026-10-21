@@ -91,8 +91,10 @@ class IoredisIdentityClient implements RedisIdentityClient {
     return this.client.expire(key, seconds);
   }
 
+  // A quit that cannot reach Redis leaves ioredis reconnecting, which keeps
+  // a shutting-down process alive; drop the connection instead.
   quit(): Promise<unknown> {
-    return this.client.quit();
+    return this.client.quit().catch(() => this.client.disconnect());
   }
 }
 

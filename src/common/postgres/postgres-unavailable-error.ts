@@ -22,11 +22,13 @@ const NETWORK_CODES = new Set([
   'EAI_AGAIN',
 ]);
 
-// The messages node-postgres uses for a lost or unanswered connection.
+// The messages node-postgres uses for a lost or unanswered connection, and
+// Prisma's for a transaction that never got a connection (P2028).
 const PG_CONNECTION_MESSAGES = [
   'Connection terminated',
   'timeout exceeded when trying to connect',
   'Query read timeout',
+  'Unable to start a transaction in the given time',
 ];
 
 /**
