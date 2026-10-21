@@ -69,6 +69,10 @@
     // Invoked by .husky/commit-msg, a shell hook knip does not parse, so no
     // import or test edge reaches it from the JavaScript graph.
     "scripts/checks/commit-message.mjs",
+    // Invoked by the Claude Code PostToolUse hook in .claude/settings.json, which
+    // knip does not parse.
+    "scripts/checks/issue-triage-hook.mjs",
+    "scripts/checks/issue-triage-hook.spec.mjs",
     // Child Jest config for the Postgres crash-durability worker process.
     "jest.config.db-worker.cjs"
   ],

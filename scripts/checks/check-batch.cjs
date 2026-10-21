@@ -43,6 +43,7 @@ const BATCHED_GATES = [
   'validate:openapi',
   'test:capacity-benchmark',
   'test:check-changed',
+  'test:issue-triage',
 ];
 
 function concurrencyFor({ freeBytes } = {}) {

@@ -53,6 +53,10 @@ const pathCases = [
     gates: ['lint', 'test:check-changed'],
   },
   {
+    path: 'scripts/checks/issue-triage-hook.mjs',
+    gates: ['lint', 'test:issue-triage'],
+  },
+  {
     path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
     gates: ['lint', 'test:capacity-benchmark'],
   },

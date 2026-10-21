@@ -54,6 +54,7 @@ export const GATE_COMMANDS = {
   test: 'test',
   'test:capacity-benchmark': 'test:capacity-benchmark',
   'test:check-changed': 'test:check-changed',
+  'test:issue-triage': 'test:issue-triage',
   'test:monitoring-config': 'test:monitoring-config',
   'test:related': 'test:related',
   'type-check': 'type-check',
@@ -130,6 +131,9 @@ export function classifyPath(p) {
 
   if (path.includes('check-changed')) {
     return ['lint', 'test:check-changed'];
+  }
+  if (path.includes('issue-triage')) {
+    return ['lint', 'test:issue-triage'];
   }
 
   if (path.includes('nginx')) {
