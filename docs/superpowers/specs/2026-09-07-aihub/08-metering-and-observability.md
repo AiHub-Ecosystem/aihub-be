@@ -165,7 +165,8 @@ Essay content represents PII belonging to our customer's end-users — logging i
 ```
 aihub_requests_total{operation,status,outcome}
 aihub_request_duration_seconds{operation}          histogram
-aihub_admission_duration_seconds{operation}       histogram
+aihub_admission_duration_seconds{operation,identity_mode,retry_budget} histogram
+aihub_graded_completion_duration_seconds{operation,identity_mode,retry_budget} histogram
 aihub_downstream_duration_seconds{operation}       histogram
 aihub_tokens_total{operation}                       counter
 aihub_rejected_total{reason}                       rate_limit|quota|concurrency|auth

@@ -17,6 +17,7 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
+import { quotaExceededError } from '@/modules/gateway/application/quota-period';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
@@ -106,6 +107,21 @@ export class QuotaGuard implements CanActivate {
 
     addMeteringEvidence(request, { quotaTracked: quota !== null });
     if (quota === null) {
+      return true;
+    }
+
+    const gradedAdmission = request.aihubGradedAdmission;
+    if (gradedAdmission !== undefined) {
+      if (
+        gradedAdmission.stage === 'quota' &&
+        !(await isCompletedWritingReplay(
+          request,
+          authenticated,
+          this.idempotency,
+        ))
+      ) {
+        throw quotaExceededError(this.now());
+      }
       return true;
     }
 

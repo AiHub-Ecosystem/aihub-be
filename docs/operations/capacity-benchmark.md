@@ -89,6 +89,13 @@ below 80%, host memory use below 80%, and zero Postgres pool waiting clients.
 These are local benchmark operating thresholds that leave headroom; they do
 not establish Production tenant capacity.
 
+The report also includes admission and post-result completion p50/p95/p99 by
+the observed `identity_mode` and `retry_budget` pair, plus the sample count for
+each pair. Route and observed-path sample counts below the configured minimum
+make the stage inconclusive. A run reports only the paths it exercised; use an
+active identity configuration and keyed Writing requests to measure the signed
+assertion and retry-budget paths.
+
 At the highest mixed-grading rate that met all four p99 deadlines and delivered
 its full offered load, the harness runs quota reconciliation and usage
 reporting concurrently in the disposable stack while grading continues. This

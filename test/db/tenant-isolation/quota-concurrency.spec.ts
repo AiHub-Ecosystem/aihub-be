@@ -125,7 +125,6 @@ describe('tenant isolation for Redis counters', () => {
   it('does not let one Organization consume another Organization concurrency lease', async () => {
     const limiter = new RedisConcurrencyLimiter(
       redisClients.gateway,
-      () => TEST_NOW.getTime(),
       NOOP_LOGGER,
     );
 

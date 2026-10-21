@@ -317,7 +317,11 @@ export class IdempotencyService implements IdempotencyServicePort {
         await this.releaseAfterFailure(input, requestId, error);
       }
     } finally {
-      input.backgroundLifecycle?.settled();
+      try {
+        await input.backgroundLifecycle?.settled();
+      } catch {
+        // The request outcome is already stored; permit cleanup cannot rewrite it.
+      }
       clearTimer(hardTimer);
       controller.abort();
     }

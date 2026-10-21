@@ -20,6 +20,7 @@ import {
   overloadRate,
   parseDockerImageIdentity,
   parseDockerStats,
+  summarizeGradedPathTimings,
 } from './capacity-benchmark-utils.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -863,6 +864,32 @@ async function runK6({
   const appResourcePeak = peak(appSamples);
   const hostResourcePeak = peak(hostSamples);
   const restartCountAfter = await dockerRestartCount(appContainerId);
+  const pathSamples = Object.fromEntries(
+    routeNames
+      .filter((name) => gradingRouteNames.includes(name))
+      .map((name) => [
+        name,
+        Object.fromEntries(
+          Object.entries(routeResults[name].timingsByPath).map(
+            ([path, timing]) => [
+              path,
+              {
+                count: timing.completionMs.count,
+                status:
+                  timing.completionMs.count >= minimumGradingSamples
+                    ? 'sufficient'
+                    : 'inconclusive',
+              },
+            ],
+          ),
+        ),
+      ]),
+  );
+  const pathSamplesAdequate = Object.values(pathSamples).every(
+    (paths) =>
+      Object.keys(paths).length > 0 &&
+      Object.values(paths).every(({ status }) => status === 'sufficient'),
+  );
 
   return {
     workload,
@@ -881,7 +908,7 @@ async function runK6({
             { routes: routeResults },
             routeNames.filter((name) => gradingRouteNames.includes(name)),
             minimumGradingSamples,
-          )
+          ) && pathSamplesAdequate
           ? 'sufficient'
           : 'inconclusive'
         : 'not_applicable',
@@ -899,6 +926,7 @@ async function runK6({
             : { count: routeResults[name].count, status: 'not_applicable' },
         ]),
       ),
+      paths: pathSamples,
     },
     appResourceSampleCount: appSamples.length,
     hostResourceSampleCount: hostSamples.length,
@@ -957,7 +985,12 @@ function routeSummary(metrics, name, logTiming) {
   const pathName = routePaths[name];
   const p99Ms = finite(latency['p(99)']);
   const p95Ms = finite(latency['p(95)']);
-  const timing = logTiming ?? { totalMs: [], admissionMs: [] };
+  const timing = logTiming ?? {
+    totalMs: [],
+    admissionMs: [],
+    completionMs: [],
+    paths: {},
+  };
   return {
     path: pathName,
     count:
@@ -969,6 +1002,8 @@ function routeSummary(metrics, name, logTiming) {
       metricValue(metrics, `benchmark_api_errors_${name}`, 'count') ?? 0,
     correctedTotalMs: percentileSet(timing.totalMs),
     admissionMs: percentileSet(timing.admissionMs),
+    completionMs: percentileSet(timing.completionMs),
+    timingsByPath: summarizeGradedPathTimings(timing.paths),
     downstreamMs: {
       p50: finite(metrics[`benchmark_downstream_${name}`]?.values?.med),
       p95: finite(metrics[`benchmark_downstream_${name}`]?.values?.['p(95)']),
@@ -1028,10 +1063,35 @@ async function requestTimingLogs(containerId, since, sinceMs) {
       }).find(([operation]) => operation === event.operation)?.[1] ??
       byPath[event.route];
     if (name === undefined) continue;
-    const record = (results[name] ??= { totalMs: [], admissionMs: [] });
+    const record = (results[name] ??= {
+      totalMs: [],
+      admissionMs: [],
+      completionMs: [],
+      paths: {},
+    });
     if (Number.isFinite(event.total_ms)) record.totalMs.push(event.total_ms);
     if (Number.isFinite(event.admission_ms)) {
       record.admissionMs.push(event.admission_ms);
+    }
+    if (Number.isFinite(event.completion_ms)) {
+      record.completionMs.push(event.completion_ms);
+    }
+    if (
+      (event.identity_mode === 'declared_id' ||
+        event.identity_mode === 'signed_assertion') &&
+      (event.retry_budget === 'keyed_writing' || event.retry_budget === 'none')
+    ) {
+      const path = `${event.identity_mode}:${event.retry_budget}`;
+      const sample = (record.paths[path] ??= {
+        admissionMs: [],
+        completionMs: [],
+      });
+      if (Number.isFinite(event.admission_ms)) {
+        sample.admissionMs.push(event.admission_ms);
+      }
+      if (Number.isFinite(event.completion_ms)) {
+        sample.completionMs.push(event.completion_ms);
+      }
     }
   }
   return results;

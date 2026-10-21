@@ -13,6 +13,8 @@ import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
@@ -313,6 +315,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
         userId: value,
         organizationId,
         scopes: [],
+        mode: 'declared_id',
       }),
     };
     repository = new FakeRepository();
@@ -324,6 +327,15 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       .useValue(identities)
       .overrideProvider(RATE_LIMITER)
       .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
+      .overrideProvider(CONCURRENCY_LIMITER)
+      .useValue({
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      })
       .overrideProvider(ORGANIZATION_RETRY_BUDGET)
       .useValue({ consume: async () => ({ allowed: true }) })
       .overrideProvider(WRITING_CHART_UPLOAD_REPOSITORY)

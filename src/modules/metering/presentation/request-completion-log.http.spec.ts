@@ -23,9 +23,10 @@ import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import type {
@@ -183,6 +184,7 @@ class ScriptedDispatcher {
 class ScriptedUsageRepository {
   readonly records: UsageRecord[] = [];
   private failing = false;
+  delayMs = 0;
 
   failInserts(): void {
     this.failing = true;
@@ -192,18 +194,21 @@ class ScriptedUsageRepository {
     this.failing = false;
   }
 
-  insert(record: UsageRecord): Promise<void> {
+  async insert(record: UsageRecord): Promise<void> {
     if (this.failing) {
-      return Promise.reject(new Error('metering store unavailable'));
+      throw new Error('metering store unavailable');
     }
 
+    if (this.delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, this.delayMs));
+    }
     this.records.push(record);
-    return Promise.resolve();
   }
 }
 
 let idempotencyDelayMs = 0;
 let retryBudgetUnavailable = false;
+let permitReleaseDelayMs = 0;
 
 const idempotency = {
   async execute<T>(
@@ -288,19 +293,34 @@ describe('request completion log over the HTTP boundary', () => {
       .useValue(idempotency)
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(testApiKeyAuthenticator)
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .overrideProvider(GRADED_ADMISSION)
       .useValue({
         consume: async () => {
           if (retryBudgetUnavailable) {
             throw new AppError({
-              code: 'RETRY_BUDGET_UNAVAILABLE',
-              message: 'Organization retry budget is unavailable',
+              code: 'REDIS_UNAVAILABLE',
+              message: 'Grading controls are temporarily unavailable',
               retryable: true,
               retryAfterMs: 1_000,
             });
           }
-          return { allowed: true };
+          return { stage: 'admitted' };
         },
+      })
+      .overrideProvider(CONCURRENCY_LIMITER)
+      .useValue({
+        acquire: async () => ({
+          allowed: true,
+          lease: {
+            release: async () => {
+              if (permitReleaseDelayMs > 0) {
+                await new Promise<void>((resolve) =>
+                  setTimeout(resolve, permitReleaseDelayMs),
+                );
+              }
+            },
+          },
+        }),
       })
       .compile();
 
@@ -332,6 +352,8 @@ describe('request completion log over the HTTP boundary', () => {
     usageRepository.succeed();
     idempotencyDelayMs = 0;
     retryBudgetUnavailable = false;
+    permitReleaseDelayMs = 0;
+    usageRepository.delayMs = 0;
     usageRepository.records.length = 0;
     log.reset();
     exporter.reset();
@@ -363,10 +385,13 @@ describe('request completion log over the HTTP boundary', () => {
       http_status: 200,
       total_ms: expect.any(Number),
       admission_ms: expect.any(Number),
+      completion_ms: expect.any(Number),
       outcome: 'success',
       org_id: 'local-development',
       operation: 'writing.task1.grade',
       environment: 'development',
+      identity_mode: 'declared_id',
+      retry_budget: 'keyed_writing',
     });
   });
 
@@ -397,11 +422,14 @@ describe('request completion log over the HTTP boundary', () => {
       http_status: 200,
       total_ms: expect.any(Number),
       admission_ms: expect.any(Number),
+      completion_ms: expect.any(Number),
       outcome: 'success',
       api_key_id: API_KEY_ID,
       org_id: 'local-development',
       operation: 'writing.task1.grade',
       environment: 'development',
+      identity_mode: 'declared_id',
+      retry_budget: 'keyed_writing',
     });
     expect(JSON.stringify(log.all())).not.toContain(API_KEY_VALUE);
   });
@@ -464,6 +492,37 @@ describe('request completion log over the HTTP boundary', () => {
     } finally {
       delayGuard.mockRestore();
     }
+  });
+
+  it('measures completion through usage persistence and permit release without changing total_ms', async () => {
+    usageRepository.delayMs = 40;
+    permitReleaseDelayMs = 40;
+    const completionBefore = await metricValue(
+      app,
+      'aihub_graded_completion_duration_seconds_sum',
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: { 'idempotency-key': 'completion-settled' },
+      payload: VALID_BODY,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const event = log.only();
+    expect(event['completion_ms']).toBeGreaterThanOrEqual(70);
+    expect(event['total_ms']).toBeLessThan(event['completion_ms'] as number);
+    expect(
+      (await metricValue(app, 'aihub_graded_completion_duration_seconds_sum')) -
+        completionBefore,
+    ).toBeGreaterThanOrEqual(0.07);
+    const metrics = String(
+      (await app.inject({ method: 'GET', url: METRICS_ROUTE_PATH })).body,
+    );
+    expect(metrics).toMatch(
+      /aihub_graded_completion_duration_seconds_count\{[^}]*operation="writing\.task1\.grade"[^}]*identity_mode="declared_id"[^}]*retry_budget="keyed_writing"[^}]*\} [1-9]/,
+    );
   });
 
   it('starts admission timing after Writing idempotency work, at dispatch', async () => {
@@ -618,7 +677,7 @@ describe('request completion log over the HTTP boundary', () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({
       error: {
-        code: 'RETRY_BUDGET_UNAVAILABLE',
+        code: 'REDIS_UNAVAILABLE',
         retryable: true,
         retry_after_ms: 1_000,
       },
@@ -628,7 +687,7 @@ describe('request completion log over the HTTP boundary', () => {
         operation: 'writing.task1.grade',
         http_status: 503,
         outcome: 'internal_error',
-        error_code: 'RETRY_BUDGET_UNAVAILABLE',
+        error_code: 'REDIS_UNAVAILABLE',
       }),
     );
     expect(await metricValue(app, 'aihub_requests_total')).toBe(

@@ -268,6 +268,7 @@ describe('Speaking Audio upload HTTP flow', () => {
         userId: value,
         organizationId,
         scopes: [],
+        mode: 'declared_id',
       }),
     };
 

@@ -83,6 +83,7 @@ export function createRedisGatewayClient(
     commandTimeout: 100,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
+    autoResendUnfulfilledCommands: false,
   });
   client.on('error', () => undefined);
   return new IoredisGatewayClient(client);

@@ -70,6 +70,7 @@ export class UserIdentityGuard implements CanActivate {
           userId: 'local-development',
           organizationId: authenticated.organizationId,
           scopes: [],
+          mode: 'declared_id',
         };
         addMeteringEvidence(request, { actorId: 'local-development' });
         return true;

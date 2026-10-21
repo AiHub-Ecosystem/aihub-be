@@ -10,14 +10,13 @@ import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import type {
   DispatchResult,
   OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
-import type { RateLimiterPort } from '@/modules/gateway/application/rate-limiter.port';
-import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -93,9 +92,6 @@ describe('Writing user identity HTTP flow', () => {
   const authenticator: ApiKeyAuthenticatorPort = {
     authenticate: async () => authenticatedApiKey,
   };
-  const limiter: RateLimiterPort = {
-    consume: async () => ({ allowed: true }),
-  };
   const dispatcher: OperationDispatcherPort = {
     dispatch: async (
       operation: 'writing.task1.grade',
@@ -151,14 +147,19 @@ describe('Writing user identity HTTP flow', () => {
     })
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(authenticator)
-      .overrideProvider(RATE_LIMITER)
-      .useValue(limiter)
       .overrideProvider(OPERATION_DISPATCHER)
       .useValue(dispatcher)
       .overrideProvider(IDEMPOTENCY_SERVICE)
       .useValue(idempotencyService)
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
+      .overrideProvider(CONCURRENCY_LIMITER)
+      .useValue({
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      })
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
       .useValue(configRepository)
       .overrideProvider(JWKS_KEY_PROVIDER)

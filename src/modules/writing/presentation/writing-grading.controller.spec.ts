@@ -12,7 +12,8 @@ import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -56,6 +57,7 @@ describe('Writing grading HTTP flow', () => {
   let dispatchAttemptCalls = 0;
   let quotaCount = 0;
   let retryBudgetUnavailableCalls = 0;
+  let admissionUnavailable = false;
   const seenRetryKeys = new Set<string>();
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
@@ -157,25 +159,52 @@ describe('Writing grading HTTP flow', () => {
           quotaCount += 1;
         },
       } satisfies QuotaCounterPort)
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
+      .overrideProvider(CONCURRENCY_LIMITER)
       .useValue({
-        async consume({ idempotencyKey }: { idempotencyKey: string }) {
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({
+        async consume({
+          idempotencyKey,
+          monthlyRequestQuota,
+        }: {
+          idempotencyKey?: string;
+          monthlyRequestQuota: number | null;
+        }) {
+          if (admissionUnavailable) {
+            throw new AppError({
+              code: 'REDIS_UNAVAILABLE',
+              message: 'Grading controls are temporarily unavailable',
+              retryable: true,
+              retryAfterMs: 1_000,
+            });
+          }
           if (idempotencyKey === 'redis-outage-task2-key') {
             retryBudgetUnavailableCalls += 1;
             throw new AppError({
-              code: 'RETRY_BUDGET_UNAVAILABLE',
-              message: 'Organization retry budget is unavailable',
+              code: 'REDIS_UNAVAILABLE',
+              message: 'Grading controls are temporarily unavailable',
               retryable: true,
               retryAfterMs: 1_000,
             });
           }
           if (idempotencyKey === 'storm-task2-key') {
             if (seenRetryKeys.has(idempotencyKey)) {
-              return { allowed: false, retryAfterMs: 60_250 };
+              return { stage: 'retry_budget', retryAfterMs: 60_250 };
             }
             seenRetryKeys.add(idempotencyKey);
           }
-          return { allowed: true };
+          if (
+            monthlyRequestQuota !== null &&
+            quotaCount >= monthlyRequestQuota
+          ) {
+            return { stage: 'quota', quota: monthlyRequestQuota };
+          }
+          return { stage: 'admitted' };
         },
       })
       .compile();
@@ -507,7 +536,7 @@ describe('Writing grading HTTP flow', () => {
     for (const response of [first, repeat]) {
       expect(response.statusCode).toBe(503);
       expect(response.json().error).toMatchObject({
-        code: 'RETRY_BUDGET_UNAVAILABLE',
+        code: 'REDIS_UNAVAILABLE',
         retryable: true,
         retry_after_ms: 1_000,
       });
@@ -516,6 +545,37 @@ describe('Writing grading HTTP flow', () => {
     expect(quotaCount).toBe(beforeQuota);
     expect(dispatchAttemptCalls).toBe(beforeDispatchAttempts);
     expect(task2DownstreamCalls).toBe(beforeDownstreamCalls);
+  });
+
+  it('returns retryable 503 during a Redis admission outage and recovers without dispatching the failed request', async () => {
+    const beforeQuota = quotaCount;
+    const beforeDownstreamCalls = task1DownstreamCalls;
+    const request = {
+      method: 'POST' as const,
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { 'idempotency-key': 'redis-admission-recovery-task1' },
+      payload: {
+        question: task1Request.question,
+        chart_type: task1Request.topic,
+        essay: task1Request.essay,
+        image_url: task1Request.url,
+      },
+    };
+
+    admissionUnavailable = true;
+    const unavailable = await app.inject(request);
+    admissionUnavailable = false;
+    const recovered = await app.inject(request);
+
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json().error).toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryable: true,
+      retry_after_ms: 1_000,
+    });
+    expect(recovered.statusCode).toBe(200);
+    expect(quotaCount).toBe(beforeQuota);
+    expect(task1DownstreamCalls).toBe(beforeDownstreamCalls + 1);
   });
 
   it('rejects a Task 2 grading request without Idempotency-Key', async () => {

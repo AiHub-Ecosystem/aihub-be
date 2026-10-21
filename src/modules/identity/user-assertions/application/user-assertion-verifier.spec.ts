@@ -177,6 +177,7 @@ describe('UserAssertionVerifier', () => {
       userId: 'user_123',
       organizationId: 'org_acme',
       scopes: [],
+      mode: 'signed_assertion',
     });
   });
 

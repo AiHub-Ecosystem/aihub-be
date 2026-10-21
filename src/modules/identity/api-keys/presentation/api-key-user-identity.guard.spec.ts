@@ -29,6 +29,7 @@ const resolved: ResolvedUserIdentity = {
   userId: 'student-123',
   organizationId: 'org_acme',
   scopes: [],
+  mode: 'declared_id',
 };
 
 function request(headers: Record<string, unknown> = {}) {

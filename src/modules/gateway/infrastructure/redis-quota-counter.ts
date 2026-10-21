@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
@@ -13,7 +14,7 @@ export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;
 
 export type RedisQuotaCounterClient = Pick<
   RedisGatewayClient,
-  'get' | 'incr' | 'expire' | 'quit'
+  'eval' | 'get' | 'quit'
 >;
 
 interface LoggerLike {
@@ -85,16 +86,17 @@ export class RedisQuotaCounter implements QuotaCounterPort {
       throw unavailable();
     }
 
+    const client = this.client;
     try {
       const key = monthKey(request.organizationId, this.now());
-      const count = await this.client.incr(key);
+      const count = await incrementRedisCounterWithExpiry(
+        (script, numberOfKeys, ...args) =>
+          client.eval(script, numberOfKeys, ...args),
+        key,
+        QUOTA_TTL_SECONDS,
+      );
       if (!isUsableCount(count) || count === 0) {
         throw new Error('Redis quota counter result is invalid');
-      }
-
-      const expiry = await this.client.expire(key, QUOTA_TTL_SECONDS);
-      if (expiry !== 1) {
-        throw new Error('Redis quota counter TTL was not set');
       }
 
       this.reportRecovered();

@@ -34,6 +34,10 @@ import {
   type MeteringFinalizerPort,
 } from '@/modules/metering/application/metering-finalizer.port';
 import { billBackgroundCompletion } from '@/modules/metering/public/background-completion-billing';
+import {
+  markGradedCompletionSettled,
+  markGradedCompletionStarted,
+} from '@/modules/metering/public/graded-request-timing';
 import { getMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 import { isAllowedTask1ImageUrl } from '@/modules/writing/application/task1-image-url.policy';
 
@@ -77,6 +81,7 @@ function backgroundLifecycleFor(
     evidence: getMeteringEvidence(request),
     finalizer,
     ...(concurrency === undefined ? {} : { inner: concurrency }),
+    onCompletionSettled: () => markGradedCompletionSettled(request.raw),
   });
 }
 
@@ -90,6 +95,7 @@ function requestMetadata(
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
     onDispatchStart: () => markRequestAdmission(request.raw),
+    onAiServiceResultAvailable: () => markGradedCompletionStarted(request.raw),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

@@ -4,7 +4,7 @@ import type { MeteringFinalizerPort } from './metering-finalizer.port';
 /** Structurally the idempotency background lifecycle, without importing it. */
 export interface BackgroundWorkLifecycle {
   started(): void;
-  settled(): void;
+  settled(): void | Promise<void>;
   completed?(): void | Promise<void>;
 }
 
@@ -14,6 +14,7 @@ export interface BackgroundCompletionBillingInput {
   readonly evidence: MeteringEvidence | undefined;
   readonly finalizer: MeteringFinalizerPort;
   readonly inner?: BackgroundWorkLifecycle;
+  readonly onCompletionSettled?: () => void;
   readonly now?: () => number;
 }
 
@@ -38,7 +39,10 @@ export function billBackgroundCompletion(
 
   return {
     started: () => inner?.started(),
-    settled: () => inner?.settled(),
+    settled: async () => {
+      await inner?.settled();
+      input.onCompletionSettled?.();
+    },
     // Awaited by the background work, so a shutdown drain does not close the
     // database under the one charge this grading carries.
     completed: async () => {

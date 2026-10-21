@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import {
   type RedisConcurrencyClient,
   RedisConcurrencyLimiter,
@@ -62,7 +63,7 @@ class FakeLogger {
 describe('RedisConcurrencyLimiter', () => {
   it('atomically acquires an organization lease and releases its request member', async () => {
     const redis = new FakeRedis();
-    const limiter = new RedisConcurrencyLimiter(redis, () => 10_000);
+    const limiter = new RedisConcurrencyLimiter(redis);
 
     const decision = await limiter.acquire({
       organizationId: 'org_acme',
@@ -144,52 +145,21 @@ describe('RedisConcurrencyLimiter', () => {
     ]);
   });
 
-  it('uses a global process-local backstop and releases fallback leases', async () => {
-    const limiter = new RedisConcurrencyLimiter(
-      new FailingRedis(),
-      () => 10_000,
-    );
+  it('returns retryable unavailable when Redis cannot acquire a permit', async () => {
+    const limiter = new RedisConcurrencyLimiter(new FailingRedis());
 
-    const first = await limiter.acquire({
-      organizationId: 'org_acme',
-      maxConcurrent: 1,
-      requestId: 'req_01JBACKSTOP00000000000000000',
-    });
-    expect(first.allowed).toBe(true);
-    if (!first.allowed) {
-      throw new Error('expected a fallback concurrency lease');
-    }
-
-    await first.lease.release();
-
-    await expect(
-      limiter.acquire({
-        organizationId: 'org_other',
-        maxConcurrent: 1,
-        requestId: 'req_01JBACKSTOP00000000000000001',
-      }),
-    ).resolves.toMatchObject({ allowed: true });
-  });
-
-  it('prunes stale fallback leases before applying the process cap', async () => {
-    let now = 120_000;
-    const limiter = new RedisConcurrencyLimiter(new FailingRedis(), () => now);
-
-    const first = await limiter.acquire({
-      organizationId: 'org_acme',
-      maxConcurrent: 1,
-      requestId: 'req_01JSTALE0000000000000000000',
-    });
-    expect(first.allowed).toBe(true);
-
-    now = 240_001;
     await expect(
       limiter.acquire({
         organizationId: 'org_acme',
         maxConcurrent: 1,
-        requestId: 'req_01JSTALE0000000000000000001',
+        requestId: 'req_01JBACKSTOP00000000000000000',
       }),
-    ).resolves.toMatchObject({ allowed: true });
+    ).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1_000,
+    } satisfies Partial<AppError>);
   });
 
   it('logs one outage and one recovery without exposing request identifiers', async () => {
@@ -207,20 +177,23 @@ describe('RedisConcurrencyLimiter', () => {
         zrem: (key: string, member: string) => current.zrem(key, member),
         quit: () => current.quit(),
       },
-      Date.now,
       logger,
     );
 
-    await limiter.acquire({
-      organizationId: 'org_secret',
-      maxConcurrent: 1,
-      requestId: 'req_secret',
-    });
-    await limiter.acquire({
-      organizationId: 'org_secret',
-      maxConcurrent: 1,
-      requestId: 'req_secret_2',
-    });
+    await expect(
+      limiter.acquire({
+        organizationId: 'org_secret',
+        maxConcurrent: 1,
+        requestId: 'req_secret',
+      }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
+    await expect(
+      limiter.acquire({
+        organizationId: 'org_secret',
+        maxConcurrent: 1,
+        requestId: 'req_secret_2',
+      }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
     expect(logger.warnings).toHaveLength(1);
     expect(logger.warnings[0]).not.toContain('org_secret');
     expect(logger.warnings[0]).not.toContain('req_secret');

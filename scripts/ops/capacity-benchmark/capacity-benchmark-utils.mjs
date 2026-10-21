@@ -51,6 +51,31 @@ export function hasMinimumRouteSamples(run, routeNames, minimumSamples) {
   );
 }
 
+export function summarizeGradedPathTimings(paths) {
+  const summarize = (values) => {
+    if (values.length === 0) {
+      return { count: 0, p50: null, p95: null, p99: null };
+    }
+    const ordered = [...values].sort((left, right) => left - right);
+    const at = (fraction) => ordered[Math.ceil(fraction * ordered.length) - 1];
+    return {
+      count: ordered.length,
+      p50: at(0.5),
+      p95: at(0.95),
+      p99: at(0.99),
+    };
+  };
+  return Object.fromEntries(
+    Object.entries(paths).map(([path, timing]) => [
+      path,
+      {
+        admissionMs: summarize(timing.admissionMs),
+        completionMs: summarize(timing.completionMs),
+      },
+    ]),
+  );
+}
+
 export function minimumGradingHoldSeconds(
   workload,
   offeredRateRps,

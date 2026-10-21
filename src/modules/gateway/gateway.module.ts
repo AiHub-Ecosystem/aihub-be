@@ -41,6 +41,7 @@ import {
   DOWNSTREAM_RETRY_BUDGET,
   type DownstreamRetryBudgetPort,
 } from './application/downstream-retry-budget.port';
+import { GRADED_ADMISSION } from './application/graded-admission.port';
 import { GradingOrchestrator } from './application/grading-orchestrator';
 import { GRADING_ORCHESTRATOR } from './application/grading-orchestrator.port';
 import { GuardedOperationDispatcher } from './application/guarded-operation-dispatcher';
@@ -76,6 +77,7 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from './infrastructure/redis-gateway.client';
+import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
 import { RedisOrganizationRetryBudget } from './infrastructure/redis-organization-retry-budget';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
@@ -149,6 +151,13 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       provide: RATE_LIMITER,
       useFactory: (client: RedisGatewayClient | undefined): RedisRateLimiter =>
         new RedisRateLimiter('', client),
+      inject: [REDIS_GATEWAY_CLIENT],
+    },
+    {
+      provide: GRADED_ADMISSION,
+      useFactory: (
+        client: RedisGatewayClient | undefined,
+      ): RedisGradedAdmission => new RedisGradedAdmission(client),
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
@@ -248,6 +257,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     GRADING_ORCHESTRATOR,
     DownstreamHttpClient,
     RATE_LIMITER,
+    GRADED_ADMISSION,
     RateLimitGuard,
     ORGANIZATION_RETRY_BUDGET,
     OrganizationRetryBudgetGuard,

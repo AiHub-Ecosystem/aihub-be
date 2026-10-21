@@ -17,6 +17,8 @@ export interface GradingRequestMetadata {
   readonly signal: AbortSignal;
   /** Called only when work crosses the idempotency gate into dispatch. */
   readonly onDispatchStart?: () => void;
+  /** Called when the AI Service result is available, before persistence and metering. */
+  readonly onAiServiceResultAvailable?: () => void;
   readonly organizationId: string;
   readonly apiKeyId: string;
   readonly environment: string;

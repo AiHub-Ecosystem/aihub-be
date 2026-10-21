@@ -8,8 +8,9 @@ import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -77,8 +78,15 @@ describe('authenticated metering HTTP boundary', () => {
       .useValue(dispatcher)
       .overrideProvider(IDEMPOTENCY_SERVICE)
       .useValue(idempotency)
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
+      .overrideProvider(CONCURRENCY_LIMITER)
+      .useValue({
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

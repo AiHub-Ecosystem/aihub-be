@@ -13,16 +13,12 @@ import {
   type ConcurrencyDecision,
   type ConcurrencyLimiterPort,
 } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import {
   type DispatchResult,
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
-import {
-  RATE_LIMITER,
-  type RateLimiterPort,
-} from '@/modules/gateway/application/rate-limiter.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -177,9 +173,6 @@ describe('Writing concurrency HTTP flow', () => {
   const authenticator: ApiKeyAuthenticatorPort = {
     authenticate: async (_credentials: ApiKeyCredential) => authenticatedApiKey,
   };
-  const rateLimiter: RateLimiterPort = {
-    consume: async () => ({ allowed: true }),
-  };
   const idempotencyService: IdempotencyServicePort = {
     async execute<T>(
       input: IdempotencyExecutionInput,
@@ -209,10 +202,8 @@ describe('Writing concurrency HTTP flow', () => {
     })
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(authenticator)
-      .overrideProvider(RATE_LIMITER)
-      .useValue(rateLimiter)
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
       .overrideProvider(CONCURRENCY_LIMITER)
       .useValue(limiter)
       .overrideProvider(IDEMPOTENCY_SERVICE)

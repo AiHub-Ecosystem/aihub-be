@@ -24,7 +24,6 @@ import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
@@ -311,8 +310,6 @@ beforeAll(async () => {
     .useValue(appConnectionConfiguration)
     .overrideProvider(DownstreamHttpClient)
     .useValue(downstreamStub)
-    .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-    .useValue({ consume: async () => ({ allowed: true }) })
     .compile();
   app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ genReqId: () => generateRequestId() }),

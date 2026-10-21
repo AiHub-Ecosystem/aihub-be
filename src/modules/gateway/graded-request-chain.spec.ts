@@ -16,7 +16,8 @@ import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
@@ -156,8 +157,15 @@ describe('graded request chain', () => {
       .useValue(noOpDispatchAttemptRecord)
       .overrideProvider(WEB_SESSION_CLIENT_SECRET)
       .useValue({ resolve: () => 'test-bff-client-secret' })
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
+      .overrideProvider(CONCURRENCY_LIMITER)
+      .useValue({
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

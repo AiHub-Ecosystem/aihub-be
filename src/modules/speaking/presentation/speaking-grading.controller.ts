@@ -26,6 +26,7 @@ import {
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
+import { markGradedCompletionStarted } from '@/modules/metering/public/graded-request-timing';
 import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,
@@ -97,6 +98,7 @@ function requestMetadata(
     receivedAt: lifecycle.receivedAt,
     signal: lifecycle.signal,
     onDispatchStart: () => markRequestAdmission(request.raw),
+    onAiServiceResultAvailable: () => markGradedCompletionStarted(request.raw),
     organizationId: authenticated.organizationId,
     apiKeyId: authenticated.apiKeyId,
     environment: authenticated.environment,

@@ -24,6 +24,7 @@ import {
   overloadRate,
   parseDockerImageIdentity,
   parseDockerStats,
+  summarizeGradedPathTimings,
   summarizeRepetitions,
   taggedMetricValues,
   task1PayloadFromFixture,
@@ -151,6 +152,23 @@ await test('requires enough completed route samples before a stage can pass', ()
       1000,
     ),
     0,
+  );
+});
+
+await test('summarizes admission and completion by the bounded identity and retry path', () => {
+  assert.deepEqual(
+    summarizeGradedPathTimings({
+      'declared_id:keyed_writing': {
+        admissionMs: [4, 1, 3, 2],
+        completionMs: [40, 10, 30, 20],
+      },
+    }),
+    {
+      'declared_id:keyed_writing': {
+        admissionMs: { count: 4, p50: 2, p95: 4, p99: 4 },
+        completionMs: { count: 4, p50: 20, p95: 40, p99: 40 },
+      },
+    },
   );
 });
 

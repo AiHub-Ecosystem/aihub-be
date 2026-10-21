@@ -1,3 +1,4 @@
+import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
 import {
   QUOTA_TTL_SECONDS,
   RedisQuotaCounter,
@@ -8,23 +9,28 @@ class FakeRedis implements RedisQuotaCounterClient {
   readonly values = new Map<string, string>();
   readonly reads: string[] = [];
   readonly expirations = new Map<string, number>();
-  expireResult = 1;
+  failAfterIncrement = false;
+
+  async eval(
+    script: string,
+    numberOfKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<number> {
+    if (script !== INCREMENT_WITH_EXPIRY_SCRIPT || numberOfKeys !== 1) {
+      throw new Error('unexpected quota script');
+    }
+    const key = String(args[0]);
+    const seconds = Number(args[1]);
+    this.expirations.set(key, seconds);
+    const next = Number(this.values.get(key) ?? '0') + 1;
+    this.values.set(key, String(next));
+    if (this.failAfterIncrement) throw new Error('redis result was ambiguous');
+    return next;
+  }
 
   async get(key: string): Promise<string | null> {
     this.reads.push(key);
     return this.values.get(key) ?? null;
-  }
-
-  async incr(key: string): Promise<number> {
-    const current = Number(this.values.get(key) ?? '0');
-    const next = current + 1;
-    this.values.set(key, String(next));
-    return next;
-  }
-
-  async expire(key: string, seconds: number): Promise<number> {
-    this.expirations.set(key, seconds);
-    return this.expireResult;
   }
 
   async quit(): Promise<'OK'> {
@@ -33,15 +39,11 @@ class FakeRedis implements RedisQuotaCounterClient {
 }
 
 class FailingRedis implements RedisQuotaCounterClient {
+  eval(): Promise<number> {
+    return Promise.reject(new Error('redis down'));
+  }
+
   get(): Promise<string | null> {
-    return Promise.reject(new Error('redis down'));
-  }
-
-  incr(): Promise<number> {
-    return Promise.reject(new Error('redis down'));
-  }
-
-  expire(): Promise<number> {
     return Promise.reject(new Error('redis down'));
   }
 
@@ -149,15 +151,15 @@ describe('RedisQuotaCounter', () => {
     await expect(counter.read({ organizationId: 'org_acme' })).resolves.toBe(0);
   });
 
-  it('reports expiry maintenance failure after the increment', async () => {
+  it('reports an ambiguous increment result after the atomic mutation', async () => {
     const redis = new FakeRedis();
-    redis.expireResult = 0;
+    redis.failAfterIncrement = true;
     const logger = new FakeLogger();
     const counter = new RedisQuotaCounter(redis, now, logger);
 
     await expect(
       counter.increment({ organizationId: 'org_acme' }),
-    ).rejects.toThrow('Redis quota counter TTL was not set');
+    ).rejects.toThrow('redis result was ambiguous');
 
     expect(redis.values.get('aihub:v1:quota:org_acme:2026-09')).toBe('1');
     expect(logger.warnings).toHaveLength(1);
@@ -170,9 +172,8 @@ describe('RedisQuotaCounter', () => {
     let current: RedisQuotaCounterClient = failing;
     const counter = new RedisQuotaCounter(
       {
+        eval: (...args) => current.eval(...args),
         get: (key) => current.get(key),
-        incr: (key) => current.incr(key),
-        expire: (key, seconds) => current.expire(key, seconds),
         quit: () => current.quit(),
       },
       now,

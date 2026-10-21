@@ -37,6 +37,14 @@ export class OrganizationRetryBudgetGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const admission = request.aihubGradedAdmission;
+    if (admission !== undefined) {
+      if (admission.stage === 'retry_budget') {
+        throw retryBudgetExceeded(admission.retryAfterMs);
+      }
+      return true;
+    }
+
     const evidence = getMeteringEvidence(request);
     if (
       evidence === undefined ||

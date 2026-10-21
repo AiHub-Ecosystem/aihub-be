@@ -20,6 +20,11 @@ import {
 } from '@/modules/metering/application/metering-evidence';
 import type { MeteringOutcome } from '@/modules/metering/application/metering-finalizer.port';
 import { requestOutcome } from '@/modules/metering/application/request-outcome';
+import {
+  recordGradedAdmission,
+  requestGradedCompletionMs,
+  requestGradedDimensions,
+} from '@/modules/metering/public/graded-request-timing';
 
 const COMPLETION_EVENT = 'request_completed';
 const OPERATION_BY_ROUTE = new Map<string, OperationId>(
@@ -43,6 +48,7 @@ interface RequestCompletionEvent {
   readonly http_status: number;
   readonly total_ms: number;
   readonly admission_ms?: number;
+  readonly completion_ms?: number;
   readonly outcome: MeteringOutcome;
   readonly error_code?: ErrorCode;
   readonly org_id?: string;
@@ -66,6 +72,8 @@ function completionEvent(
   const traceId = request.aihubTraceId;
   const statusCode = reply.statusCode;
   const admissionMs = requestAdmissionMs(request.raw);
+  const completionMs = requestGradedCompletionMs(request.raw);
+  const dimensions = requestGradedDimensions(request.raw);
 
   return {
     event: COMPLETION_EVENT,
@@ -80,6 +88,7 @@ function completionEvent(
     total_ms:
       evidence?.totalMs ?? requestDurationMs(request.raw, reply.elapsedTime),
     ...(admissionMs === undefined ? {} : { admission_ms: admissionMs }),
+    ...(completionMs === undefined ? {} : { completion_ms: completionMs }),
     outcome: requestOutcome(statusCode, errorCode),
     ...(errorCode === undefined ? {} : { error_code: errorCode }),
     ...(request.aihubAuth === undefined ||
@@ -92,6 +101,12 @@ function completionEvent(
           org_id: evidence.organizationId,
           operation: evidence.operation,
           environment: evidence.environment,
+          ...(dimensions === undefined
+            ? {}
+            : {
+                identity_mode: dimensions.identityMode,
+                retry_budget: dimensions.retryBudget,
+              }),
         }),
     ...(traceId === undefined ? {} : { trace_id: traceId }),
   };
@@ -121,13 +136,13 @@ function recordRequestMetrics(
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
   const tokens = evidence === undefined ? undefined : tokensOf(evidence);
   const admissionMs = requestAdmissionMs(request.raw);
+  const dimensions = requestGradedDimensions(request.raw);
 
   recordCompletedRequest({
     operation,
     statusCode: reply.statusCode,
     outcome,
     totalMs,
-    ...(admissionMs === undefined ? {} : { admissionMs }),
     ...(evidence?.downstreamMs === undefined
       ? {}
       : { downstreamMs: evidence.downstreamMs }),
@@ -139,6 +154,7 @@ function recordRequestMetrics(
       ? {}
       : { meteringStatus: evidence.meteringStatus }),
   });
+  recordGradedAdmission(operation, admissionMs, dimensions);
 }
 
 /**

@@ -9,11 +9,12 @@ export interface ConcurrencyPermit {
   responseFinished(): Promise<void>;
   requestFinished(): Promise<void>;
   backgroundFinished(): Promise<void>;
+  isReleased(): boolean;
 }
 
 export interface ConcurrencyBackgroundLifecycle {
   started(): void;
-  settled(): void;
+  settled(): Promise<void>;
 }
 
 declare module 'fastify' {
@@ -69,6 +70,7 @@ export function createConcurrencyPermit(
         }
       }
     },
+    isReleased: () => released,
   };
 }
 
@@ -88,8 +90,8 @@ export function getConcurrencyBackgroundLifecycle(
 
   return {
     started: () => permit.holdForBackground(),
-    settled: () => {
-      void permit.backgroundFinished().catch(() => undefined);
+    settled: async () => {
+      await permit.backgroundFinished().catch(() => undefined);
     },
   };
 }

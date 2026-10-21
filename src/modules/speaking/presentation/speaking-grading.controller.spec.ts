@@ -16,6 +16,8 @@ import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
@@ -206,6 +208,15 @@ describe('Speaking grading HTTP flow', () => {
       )
       .overrideProvider(DISPATCH_ATTEMPT_RECORD)
       .useValue(noOpDispatchAttemptRecord)
+      .overrideProvider(CONCURRENCY_LIMITER)
+      .useValue({
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
