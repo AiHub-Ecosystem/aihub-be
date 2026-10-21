@@ -1,4 +1,4 @@
-// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked as follow-on.
+// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked in #964.
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 

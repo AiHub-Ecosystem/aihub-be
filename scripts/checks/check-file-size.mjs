@@ -2,9 +2,11 @@
 /**
  * Source file length ceiling (ADR-0110): hand-written source files are capped
  * at 500 code lines (blank lines and comments excluded). Composition roots,
- * single-schema configuration, and catalogues are exempt with stated reasons;
- * the existing oversized files are grandfathered behind the allowlist below
- * and carry a `ponytail:` header comment until refactored.
+ * single-schema configuration, and catalogues are exempt with stated reasons.
+ * The existing oversized files are grandfathered behind a ratchet (#869): each
+ * may shrink but never grow past its recorded count, the count must be lowered
+ * when the file shrinks, and the entry must go once the file is back under the
+ * ceiling. Each carries a `ponytail:` header linking its split issue.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -49,26 +51,65 @@ function codeLines(file) {
   return n;
 }
 
-const allowlist = new Set([
-  'src/openapi/build-openapi-document.ts',
-  'src/postman/build-postman-collection.ts',
-  'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
-  'src/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository.ts',
-  'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts',
-  'src/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository.ts',
-  'src/modules/identity/identity.module.ts',
-  'src/config/runtime-configuration.ts',
-  'src/catalog/public-routes.ts',
+const CEILING = 500;
+
+// Exempt by design (ADR-0110); no ceiling and no ratchet.
+const exempt = new Map([
+  ['src/modules/identity/identity.module.ts', 'composition root'],
+  [
+    'src/config/runtime-configuration.ts',
+    'single-schema configuration (ADR-0075)',
+  ],
+  ['src/catalog/public-routes.ts', 'route catalogue'],
 ]);
+
+// Grandfathered (ADR-0110): recorded code-line count; the split is tracked in
+// the issue named in each file's `ponytail:` header.
+const grandfathered = new Map([
+  ['src/openapi/build-openapi-document.ts', 2130],
+  ['src/postman/build-postman-collection.ts', 983],
+  [
+    'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
+    959,
+  ],
+  [
+    'src/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository.ts',
+    744,
+  ],
+  [
+    'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts',
+    818,
+  ],
+  [
+    'src/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository.ts',
+    513,
+  ],
+]);
+
+function violation(rel, lines) {
+  if (exempt.has(rel)) return undefined;
+  const recorded = grandfathered.get(rel);
+  if (recorded === undefined) {
+    return lines > CEILING
+      ? `${lines} code lines exceeds the ${CEILING}-line ceiling (ADR-0110).`
+      : undefined;
+  }
+  if (lines <= CEILING)
+    return `${lines} code lines is back under the ${CEILING}-line ceiling; remove it from the grandfathered list.`;
+  if (lines > recorded)
+    return `${lines} code lines grew past its grandfathered ${recorded} (ADR-0110); split it instead of growing it.`;
+  if (lines < recorded)
+    return `${lines} code lines is below its grandfathered ${recorded}; lower the recorded count to ${lines}.`;
+  return undefined;
+}
 
 let failed = false;
 for (const file of collectFiles(srcDir)) {
   const rel = relative(root, file).replace(/\\/g, '/');
   if (rel.includes('/generated/')) continue;
-  if (codeLines(file) > 500 && !allowlist.has(rel)) {
-    console.error(
-      `${rel}: ${codeLines(file)} code lines exceeds the 500-line ceiling (ADR-0110).`,
-    );
+  const message = violation(rel, codeLines(file));
+  if (message) {
+    console.error(`${rel}: ${message}`);
     failed = true;
   }
 }

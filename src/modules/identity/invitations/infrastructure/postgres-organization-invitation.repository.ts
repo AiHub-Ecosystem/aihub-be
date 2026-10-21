@@ -1,4 +1,4 @@
-// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked as follow-on.
+// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked in #965.
 import { AppError } from '@/common/errors/app-error';
 import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
