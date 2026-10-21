@@ -1,8 +1,9 @@
 import { Counter } from '@prometheus-io/client';
 
 import { registry } from '@/common/observability/metrics';
+import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
-import type { QuotaUsageSourcePort } from '@/modules/gateway/application/quota-usage-source.port';
+import type { MonthlyBillableUsagePort } from '@/modules/metering/public/quota-reconciliation';
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
 
@@ -27,12 +28,12 @@ export type QuotaSeedClient = Pick<RedisGatewayClient, 'eval'>;
  * missing key is never read as zero usage (#371). Concurrent requests in this
  * process share one rebuild; across processes `SET NX` keeps the first.
  */
-export class RedisQuotaSeeder {
+export class RedisQuotaSeeder implements QuotaCounterSeedPort {
   private readonly flights = new Map<string, Promise<void>>();
 
   constructor(
     private readonly client: QuotaSeedClient,
-    private readonly source: QuotaUsageSourcePort,
+    private readonly source: MonthlyBillableUsagePort,
   ) {}
 
   seed(organizationId: string, now: Date): Promise<void> {

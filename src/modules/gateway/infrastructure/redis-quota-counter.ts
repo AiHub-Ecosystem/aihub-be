@@ -5,11 +5,11 @@ import { recordRedisUnavailable } from '@/common/observability/redis-unavailable
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
+  QuotaCounterSeedPort,
 } from '@/modules/gateway/application/quota-counter.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import { safeNonNegativeCount } from '@/modules/metering/public/count-decode';
 import type { RedisGatewayClient } from './redis-gateway.client';
-import type { RedisQuotaSeeder } from './redis-quota-seed';
 
 export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;
 
@@ -63,7 +63,7 @@ export class RedisQuotaCounter implements QuotaCounterPort {
     client: RedisQuotaCounterClient | undefined,
     now: () => Date = () => new Date(),
     logger: LoggerLike = new Logger(RedisQuotaCounter.name),
-    private readonly seeder?: Pick<RedisQuotaSeeder, 'seed'>,
+    private readonly seeder?: QuotaCounterSeedPort,
   ) {
     this.client = client;
     this.now = now;

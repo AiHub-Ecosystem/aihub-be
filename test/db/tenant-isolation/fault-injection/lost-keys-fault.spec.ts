@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
-import type { QuotaUsageSourcePort } from '@/modules/gateway/application/quota-usage-source.port';
 import { RedisConcurrencyLimiter } from '@/modules/gateway/infrastructure/redis-concurrency-limiter';
 import {
   type RedisGatewayClient,
@@ -11,8 +10,9 @@ import {
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
 import { quotaKeyForMonth } from '@/modules/gateway/infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
+import type { MonthlyBillableUsagePort } from '@/modules/metering/application/monthly-billable-usage.port';
+import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/postgres-monthly-billable-usage';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
-import { PostgresMonthlyBillableUsage } from '@/modules/metering/public/quota-reconciliation';
 import {
   type PrismaClientHolder,
   createPrismaClient,
@@ -104,7 +104,7 @@ beforeEach(async () => {
   }
   durableReads = 0;
   const durable = new PostgresMonthlyBillableUsage(holder.prisma);
-  const source: QuotaUsageSourcePort = {
+  const source: MonthlyBillableUsagePort = {
     billableCount: (organizationId, from, to) => {
       durableReads += 1;
       return durable.billableCount(organizationId, from, to);

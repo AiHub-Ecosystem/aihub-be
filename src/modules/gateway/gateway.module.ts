@@ -19,7 +19,11 @@ import {
   DispatchAttemptModule,
   type DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
-import { PostgresMonthlyBillableUsage } from '@/modules/metering/public/quota-reconciliation';
+import {
+  MONTHLY_BILLABLE_USAGE,
+  MonthlyBillableUsageModule,
+  type MonthlyBillableUsagePort,
+} from '@/modules/metering/public/quota-reconciliation';
 import {
   PersistenceModule,
   type PrismaClientHolder,
@@ -56,10 +60,6 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from './application/quota-counter.port';
-import {
-  QUOTA_USAGE_SOURCE,
-  type QuotaUsageSourcePort,
-} from './application/quota-usage-source.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
 import { SandboxAdmission } from './application/sandbox-admission';
 import {
@@ -98,6 +98,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     SecretsModule,
     IdempotencyModule,
     DispatchAttemptModule,
+    MonthlyBillableUsageModule,
     PersistenceModule,
   ],
   providers: [
@@ -160,17 +161,11 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
-      provide: QUOTA_USAGE_SOURCE,
-      inject: [RUNTIME_PRISMA_CLIENT],
-      useFactory: (runtime: PrismaClientHolder): QuotaUsageSourcePort =>
-        new PostgresMonthlyBillableUsage(runtime.prisma),
-    },
-    {
       provide: RedisQuotaSeeder,
-      inject: [REDIS_GATEWAY_CLIENT, QUOTA_USAGE_SOURCE],
+      inject: [REDIS_GATEWAY_CLIENT, MONTHLY_BILLABLE_USAGE],
       useFactory: (
         client: RedisGatewayClient | undefined,
-        source: QuotaUsageSourcePort,
+        source: MonthlyBillableUsagePort,
       ): RedisQuotaSeeder | undefined =>
         client === undefined ? undefined : new RedisQuotaSeeder(client, source),
     },

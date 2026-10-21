@@ -270,9 +270,7 @@ export class PostgresOrganizationInvitationRepository
         return { kind: 'created' };
       });
     } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+      if (error instanceof AppError) throw error;
       throw identityStoreUnavailable(error);
     }
   }

@@ -564,9 +564,7 @@ async function rethrowMutationFailure(
   if (refused !== undefined) {
     await recordOrganizationAuditDenial(client, stamp, refused);
   }
-  if (error instanceof AppError) {
-    throw error;
-  }
+  if (error instanceof AppError) throw error;
   throw identityStoreUnavailable(error);
 }
 

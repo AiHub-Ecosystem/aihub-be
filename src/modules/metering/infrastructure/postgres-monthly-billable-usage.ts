@@ -1,3 +1,4 @@
+import type { MonthlyBillableUsagePort } from '@/modules/metering/application/monthly-billable-usage.port';
 import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
@@ -17,7 +18,7 @@ export const MONTHLY_BILLABLE_USAGE_SQL = `
  * Durable usage for seeding a quota counter Redis lost (#371). It counts the
  * same rows `quota:reconcile` overwrites the counter with.
  */
-export class PostgresMonthlyBillableUsage {
+export class PostgresMonthlyBillableUsage implements MonthlyBillableUsagePort {
   constructor(private readonly client: PrismaMeteringClient) {}
 
   async billableCount(

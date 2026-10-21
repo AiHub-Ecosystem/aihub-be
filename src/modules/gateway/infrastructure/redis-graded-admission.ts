@@ -10,11 +10,11 @@ import type {
   GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
 import { quotaUnverifiableError } from '@/modules/gateway/application/quota-admission';
+import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { ORGANIZATION_RETRY_SEEN_CAP } from './redis-organization-retry-budget';
 import { quotaKeyForMonth } from './redis-quota-counter';
-import type { RedisQuotaSeeder } from './redis-quota-seed';
 
 const RATE_WINDOW_MS = 60_000;
 const QUOTA_COUNTER_MISSING = 5;
@@ -107,7 +107,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
     private readonly now: () => number = () => Date.now(),
     private readonly random: () => number = Math.random,
     private readonly logger: LoggerLike = new Logger(RedisGradedAdmission.name),
-    private readonly seeder?: Pick<RedisQuotaSeeder, 'seed'>,
+    private readonly seeder?: QuotaCounterSeedPort,
   ) {}
 
   async consume(
