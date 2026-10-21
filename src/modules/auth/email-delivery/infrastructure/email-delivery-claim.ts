@@ -175,7 +175,10 @@ export function claimEmailDeliveryRequests(
     // Re-rank after earlier claim leases commit so SKIP LOCKED cannot consume a group's share.
     await authQueryRows(
       transaction,
-      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      `WITH claim_lock AS MATERIALIZED (
+         SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+       )
+       SELECT 1 FROM claim_lock`,
       [EMAIL_OUTBOX_CLAIM_LOCK],
     );
     return claimEmailDeliveryRequestsInTransaction(
