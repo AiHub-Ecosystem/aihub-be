@@ -8,7 +8,7 @@ import { RedisOrganizationRetryBudget } from '@/modules/gateway/infrastructure/r
 import { OrganizationRetryBudgetGuard } from '@/modules/gateway/presentation/organization-retry-budget.guard';
 import type { MeteringEvidence } from '@/modules/metering/application/metering-evidence';
 
-import { redisThroughProxy } from './fault-targets';
+import { redisAnswers, redisThroughProxy } from './fault-targets';
 
 function requestFor(
   requestId: string,
@@ -35,20 +35,6 @@ function contextFor(request: Record<string, unknown>): ExecutionContext {
   } as ExecutionContext;
 }
 
-async function waitForRedis(
-  client: NonNullable<ReturnType<typeof createRedisGatewayClient>>,
-): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await client.ping()) === 'PONG') return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-  }
-  throw new Error('Redis did not recover through the fault proxy');
-}
-
 describe('Organization retry-budget admission through a Redis fault proxy', () => {
   it('fails closed on Redis disconnects and slow commands, then recovers', async () => {
     const { proxy, url } = await redisThroughProxy(400);
@@ -68,7 +54,7 @@ describe('Organization retry-budget admission through a Redis fault proxy', () =
     };
 
     try {
-      await waitForRedis(client);
+      await redisAnswers(client);
 
       const retryBucketKeys = [
         'aihub:v1:downstream-retry:{writing.task1.grade}:first',
@@ -137,7 +123,7 @@ describe('Organization retry-budget admission through a Redis fault proxy', () =
       expect(downstream).toHaveBeenCalledTimes(1);
 
       await proxy.setMode('normal');
-      await waitForRedis(client);
+      await redisAnswers(client);
       await run('retry-fault-recovered', 'retry-fault-recovered-key');
 
       await run('retry-fault-slow-seed', 'retry-fault-slow-seed-key');
@@ -157,7 +143,7 @@ describe('Organization retry-budget admission through a Redis fault proxy', () =
 
       await new Promise((resolve) => setTimeout(resolve, 800));
       await proxy.setMode('normal');
-      await waitForRedis(client);
+      await redisAnswers(client);
       await run('retry-fault-slow-recovered', 'retry-fault-slow-recovered-key');
       expect(downstream).toHaveBeenCalledTimes(4);
     } finally {

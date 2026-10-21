@@ -4,15 +4,16 @@ import {
   QUERY_TIMEOUT_MARGIN_MS,
   REQUEST_POSTGRES_TIMEOUTS,
 } from '@/common/postgres/postgres-pool';
-import { isPostgresUnavailable } from '@/common/postgres/postgres-unavailable-error';
+import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
+
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
 import type {
   ApiKeyCachePort,
   AuthFailureCounterPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import { createPrismaClient } from '@/modules/persistence/persistence.module';
 
 import { createTestPool } from '../../shared/database';
@@ -20,16 +21,14 @@ import {
   ORGANIZATION_A,
   TEST_NOW,
   type TenantIsolationFixture,
-  createTenantIdentity,
   createTenantIsolationRedis,
-  resetTenantIsolation,
-  seedTenantIsolation,
 } from '../fixtures';
 
 import {
   eventually,
   postgresThroughProxy,
   rejection,
+  resetAndSeedTenants,
   timed,
 } from './fault-targets';
 import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
@@ -52,6 +51,45 @@ const noFailures: AuthFailureCounterPort = {
   recordFailure: async () => 0,
 };
 
+const DATABASE_UNAVAILABLE_ANSWER = {
+  status: 503,
+  retryAfter: '1',
+  error: { code: 'DATABASE_UNAVAILABLE', retryable: true, retryAfterMs: 1_000 },
+};
+
+/** What a client receives for an error: the real exception filter's answer. */
+async function answerFor(error: unknown) {
+  let status = 0;
+  let retryAfter: string | undefined;
+  let body: { readonly error?: Record<string, unknown> } = {};
+  const response = {
+    header: (name: string, value: string) => {
+      if (name === 'Retry-After') retryAfter = value;
+    },
+    status: (code: number) => {
+      status = code;
+      return {
+        send: (sent: typeof body) => {
+          body = sent;
+        },
+      };
+    },
+  };
+  await new HttpExceptionFilter({ finalize: async () => undefined }).catch(
+    error,
+    new ExecutionContextHost([{ id: 'req_fault', headers: {} }, response]),
+  );
+  return {
+    status,
+    retryAfter,
+    error: {
+      code: body.error?.code,
+      retryable: body.error?.retryable,
+      retryAfterMs: body.error?.retry_after_ms,
+    },
+  };
+}
+
 let pool: ReturnType<typeof createTestPool>;
 let raw: ReturnType<typeof createTenantIsolationRedis>;
 let proxy: TcpFaultProxy;
@@ -68,14 +106,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await proxy.setMode('normal');
-  await resetTenantIsolation(pool, raw);
-  fixture = await seedTenantIsolation(
-    pool,
-    await createTenantIdentity('https://tenant-a.example.test', 'tenant-a-key'),
-    await createTenantIdentity('https://tenant-b.example.test', 'tenant-b-key'),
-    generateOrganizationApiKey(TEST_NOW),
-    generateOrganizationApiKey(TEST_NOW),
-  );
+  fixture = await resetAndSeedTenants(pool, raw);
 });
 
 afterAll(async () => {
@@ -130,15 +161,15 @@ describe.each<[FaultMode, number]>([
       const lookup = await timed(() => authenticator.authenticate(credential));
       const write = await timed(() => usage.insert(usageRecord()));
 
-      // The identity store answers the outage itself; a usage write's driver
-      // error is mapped by the exception filter, which reads the same test.
-      expect(rejection(lookup.result)).toMatchObject({
-        code: 'DATABASE_UNAVAILABLE',
-        httpStatus: 503,
-        retryable: true,
-        retryAfterMs: 1_000,
-      });
-      expect(isPostgresUnavailable(rejection(write.result))).toBe(true);
+      // The identity store answers the outage itself; the usage write's
+      // driver error is mapped by the exception filter. Both reach the
+      // client as the same retryable answer.
+      expect(await answerFor(rejection(lookup.result))).toEqual(
+        DATABASE_UNAVAILABLE_ANSWER,
+      );
+      expect(await answerFor(rejection(write.result))).toEqual(
+        DATABASE_UNAVAILABLE_ANSWER,
+      );
       expect(Math.max(lookup.ms, write.ms)).toBeLessThan(boundMs);
 
       await proxy.setMode('normal');
@@ -160,8 +191,11 @@ describe.each<[FaultMode, number]>([
   }, 30_000);
 });
 
-it('answers or refuses retryably inside the bound while Postgres is slow, then recovers', async () => {
-  const holder = createPrismaClient('integration-test', proxiedUrl);
+/** An API-key lookup and a usage write over a link that delays each chunk. */
+async function callsOverSlowLink(slowMs: number) {
+  const slow = await postgresThroughProxy(slowMs);
+  await slow.proxy.setMode('slow');
+  const holder = createPrismaClient('integration-test', slow.url);
   const authenticator = new ApiKeyAuthenticator(
     new PostgresApiKeyRepository(holder.prisma),
     noCache,
@@ -169,41 +203,43 @@ it('answers or refuses retryably inside the bound while Postgres is slow, then r
     () => TEST_NOW,
   );
   const usage = new PostgresUsageRepository(holder.prisma);
-  const credential = {
-    value: fixture.organizationA.apiKey.raw,
-    environment: 'production',
-    clientIp: '198.51.100.9',
-  };
   try {
-    await authenticator.authenticate(credential);
-
-    // Each round trip now waits; a call either completes or meets one of the
-    // pool's bounds (1 s to connect, query_timeout to answer) as a 503.
-    await proxy.setMode('slow');
-    const lookup = await timed(() => authenticator.authenticate(credential));
+    const lookup = await timed(() =>
+      authenticator.authenticate({
+        value: fixture.organizationA.apiKey.raw,
+        environment: 'production',
+        clientIp: '198.51.100.9',
+      }),
+    );
     const write = await timed(() => usage.insert(usageRecord()));
-
-    const lookupOutcome =
-      lookup.result.status === 'fulfilled'
-        ? lookup.result.value.organizationId
-        : (lookup.result.reason as { readonly code?: string }).code;
-    const writeOutcome =
-      write.result.status === 'fulfilled'
-        ? 'written'
-        : isPostgresUnavailable(write.result.reason)
-          ? 'unavailable'
-          : 'other failure';
-    expect([ORGANIZATION_A, 'DATABASE_UNAVAILABLE']).toContain(lookupOutcome);
-    expect(['written', 'unavailable']).toContain(writeOutcome);
-    expect(Math.max(lookup.ms, write.ms)).toBeLessThan(STALLED_BOUND_MS);
-
-    await proxy.setMode('normal');
-    await eventually(async () => {
-      await authenticator.authenticate(credential);
-      return true;
-    }, 5_000);
+    return { lookup, write };
   } finally {
-    await proxy.setMode('normal');
     await holder.close();
+    await slow.proxy.close();
   }
+}
+
+it('keeps serving through a slightly slow Postgres', async () => {
+  // Tens of milliseconds per chunk still connects and answers.
+  const { lookup, write } = await callsOverSlowLink(25);
+
+  expect(lookup.result).toMatchObject({
+    status: 'fulfilled',
+    value: { organizationId: ORGANIZATION_A },
+  });
+  expect(write.result.status).toBe('fulfilled');
+  expect(Math.max(lookup.ms, write.ms)).toBeLessThan(STALLED_BOUND_MS);
+}, 30_000);
+
+it('refuses as a retryable outage inside the bound when Postgres is slower than the connect timeout', async () => {
+  // A round trip longer than the 1 s connect timeout never gets a connection.
+  const { lookup, write } = await callsOverSlowLink(1_500);
+
+  expect(await answerFor(rejection(lookup.result))).toEqual(
+    DATABASE_UNAVAILABLE_ANSWER,
+  );
+  expect(await answerFor(rejection(write.result))).toEqual(
+    DATABASE_UNAVAILABLE_ANSWER,
+  );
+  expect(Math.max(lookup.ms, write.ms)).toBeLessThan(REFUSED_BOUND_MS + 1_000);
 }, 30_000);

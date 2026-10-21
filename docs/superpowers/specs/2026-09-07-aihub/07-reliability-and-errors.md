@@ -157,7 +157,7 @@ than merely warn.
 
 ## I.8 Postgres degraded mode
 
-The Postgres row of the #372 matrix, decided in
+The Postgres row of the #372 matrix, proposed in
 [ADR-0118](../../../adr/0118-postgres-outage-answers-retryable-503.md) and
 proven by `test/db/tenant-isolation/fault-injection/postgres-fault.spec.ts`
 (#328).
@@ -166,7 +166,7 @@ proven by `test/db/tenant-isolation/fault-injection/postgres-fault.spec.ts`
 | ---------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Refusing or unreachable                  | `connectionTimeoutMillis` (1 s) per new connection                                     | `503 DATABASE_UNAVAILABLE`, `retryable: true`, `retry_after_ms: 1000` |
 | Not answering an open connection         | Client `query_timeout`: the pool's `statement_timeout` plus 1 s (5 s on request paths) | `503 DATABASE_UNAVAILABLE`, `retryable: true`, `retry_after_ms: 1000` |
-| Answering, but a statement or lock waits | Server `statement_timeout` (4 s) and `lock_timeout` (1 s) on request paths             | `503 DATABASE_UNAVAILABLE`, `retryable: true`                         |
+| Answering, but a statement or lock waits | Server `statement_timeout` (4 s) and `lock_timeout` (1 s) on request paths             | `503 DATABASE_UNAVAILABLE`, `retryable: true`, `retry_after_ms: 1000` |
 | Slow but answering                       | Served; each round trip adds its delay until one of the bounds above fires             | The normal answer                                                     |
 
 A cached API key keeps authenticating for the rest of its cache TTL, because

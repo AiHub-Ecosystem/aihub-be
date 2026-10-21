@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Related issue: #472
-- Amends: [ADR-0089](0089-ingress-based-request-timing.md) (admission labels only), [ADR-0018](0018-monthly-quota-enforcement.md) (graded Redis-control outages only)
+- Amends: [ADR-0089](0089-ingress-based-request-timing.md) (admission labels only), [ADR-0018](0018-monthly-quota-enforcement.md) (graded Redis-control outages only), `04-redis.md` §F.5 (graded rate limit, concurrency, and quota rows; recorded 2026-10-22 by #328)
 
 ## Context
 

@@ -19,9 +19,12 @@ import { createTenantIsolationRedis } from '../fixtures';
 
 import {
   eventually,
+  inflight,
+  redisAnswers,
   redisThroughProxy,
   redisUnavailableCount,
   rejection,
+  sandboxInflight,
   timed,
 } from './fault-targets';
 import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
@@ -70,14 +73,6 @@ function concurrencyRequest(
   };
 }
 
-async function inflight(organization: string): Promise<number> {
-  return raw.zcard(`aihub:v1:inflight:${organization}`);
-}
-
-async function redisReachable(): Promise<void> {
-  await eventually(async () => (await client.ping()) === 'PONG');
-}
-
 beforeAll(async () => {
   const target = await redisThroughProxy();
   proxy = target.proxy;
@@ -89,7 +84,7 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await proxy.setMode('normal');
-  await redisReachable();
+  await redisAnswers(client);
 });
 
 afterAll(async () => {
@@ -109,7 +104,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         NOOP_LOGGER,
       );
       const organization = organizationId();
-      await redisReachable();
+      await redisAnswers(client);
       const before = await redisUnavailableCount('graded_admission');
 
       await proxy.setMode(mode);
@@ -124,7 +119,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       );
 
       await proxy.setMode('normal');
-      await redisReachable();
+      await redisAnswers(client);
       await expect(
         admission.consume(gradedRequest(organization)),
       ).resolves.toEqual({ stage: 'admitted' });
@@ -135,7 +130,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       async (environment) => {
         const limiter = new RedisConcurrencyLimiter(client, NOOP_LOGGER);
         const organization = organizationId();
-        await redisReachable();
+        await redisAnswers(client);
         const before = await redisUnavailableCount('concurrency');
 
         await proxy.setMode(mode);
@@ -149,11 +144,14 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
           before,
         );
 
-        // A slow reply lands after the timeout; the limiter removes the lease.
+        // A slow or held acquire reaches Redis after the timeout and adds the
+        // lease; only the limiter's background removal takes it out again.
         await proxy.setMode('normal');
-        await redisReachable();
+        await redisAnswers(client);
         await eventually(
-          async () => (await inflight(organization)) === 0,
+          async () =>
+            (await inflight(raw, organization)) === 0 &&
+            (environment !== 'sandbox' || (await sandboxInflight(raw)) === 0),
           LEASE_REMOVAL_RETRY_MS * 3,
         );
 
@@ -162,31 +160,10 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         );
         expect(recovered.allowed).toBe(true);
         if (recovered.allowed) await recovered.lease.release();
-        expect(await inflight(organization)).toBe(0);
+        expect(await inflight(raw, organization)).toBe(0);
+        expect(await sandboxInflight(raw)).toBe(0);
       },
     );
-
-    it('frees a permit whose release failed during the outage once Redis returns', async () => {
-      const limiter = new RedisConcurrencyLimiter(client, NOOP_LOGGER);
-      const organization = organizationId();
-      await redisReachable();
-      const decision = await limiter.acquire(concurrencyRequest(organization));
-      if (!decision.allowed) throw new Error('lease was not granted');
-      expect(await inflight(organization)).toBe(1);
-
-      await proxy.setMode(mode);
-      const release = await timed(() => decision.lease.release());
-
-      expect(rejection(release.result)).toMatchObject(REDIS_UNAVAILABLE);
-      expect(release.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
-
-      await proxy.setMode('normal');
-      await redisReachable();
-      await eventually(
-        async () => (await inflight(organization)) === 0,
-        LEASE_REMOVAL_RETRY_MS * 3,
-      );
-    });
 
     it('keeps the non-graded rate limit at a process-local ceiling', async () => {
       const limiter = new RedisRateLimiter(
@@ -196,7 +173,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         NOOP_LOGGER,
       );
       const keyId = `ak_${randomUUID()}`;
-      await redisReachable();
+      await redisAnswers(client);
       const before = await redisUnavailableCount('rate_limit');
 
       await proxy.setMode(mode);
@@ -218,7 +195,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         () => new Date(),
         NOOP_LOGGER,
       );
-      await redisReachable();
+      await redisAnswers(client);
       const before = await redisUnavailableCount('quota');
 
       await proxy.setMode(mode);
@@ -246,11 +223,35 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       );
 
       expect(open.result).toEqual({ status: 'fulfilled', value: 'unverified' });
-      expect(rejection(hardStop.result)).toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      });
+      // Not a quota refusal with next month's hint (#373).
+      expect(rejection(hardStop.result)).toMatchObject(REDIS_UNAVAILABLE);
       expect(Math.max(open.ms, hardStop.ms)).toBeLessThan(FAIL_FAST_BOUND_MS);
       expect(await redisUnavailableCount('quota')).toBeGreaterThan(before);
     });
   },
 );
+
+// Only a refused connection loses the release: a slow or held ZREM still
+// reaches Redis once the link recovers, so it would pass without the fix.
+it('frees a permit whose release was lost to a refused connection once Redis returns', async () => {
+  const limiter = new RedisConcurrencyLimiter(client, NOOP_LOGGER);
+  const organization = organizationId();
+  await redisAnswers(client);
+  const decision = await limiter.acquire(concurrencyRequest(organization));
+  if (!decision.allowed) throw new Error('lease was not granted');
+  expect(await inflight(raw, organization)).toBe(1);
+
+  await proxy.setMode('refuse');
+  const release = await timed(() => decision.lease.release());
+
+  expect(rejection(release.result)).toMatchObject(REDIS_UNAVAILABLE);
+  expect(release.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
+  expect(await inflight(raw, organization)).toBe(1);
+
+  await proxy.setMode('normal');
+  await redisAnswers(client);
+  await eventually(
+    async () => (await inflight(raw, organization)) === 0,
+    LEASE_REMOVAL_RETRY_MS * 3,
+  );
+});

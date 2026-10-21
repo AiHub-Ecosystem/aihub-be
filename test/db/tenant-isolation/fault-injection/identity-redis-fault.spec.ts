@@ -21,10 +21,7 @@ import {
   ORGANIZATION_B,
   TEST_NOW,
   type TenantIsolationFixture,
-  createTenantIdentity,
   createTenantIsolationRedis,
-  resetTenantIsolation,
-  seedTenantIsolation,
   signUserAssertion,
 } from '../fixtures';
 
@@ -32,6 +29,7 @@ import {
   redisThroughProxy,
   redisUnavailableCount,
   rejection,
+  resetAndSeedTenants,
   timed,
 } from './fault-targets';
 import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
@@ -66,14 +64,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await proxy.setMode('normal');
-  await resetTenantIsolation(pool, raw);
-  fixture = await seedTenantIsolation(
-    pool,
-    await createTenantIdentity('https://tenant-a.example.test', 'tenant-a-key'),
-    await createTenantIdentity('https://tenant-b.example.test', 'tenant-b-key'),
-    generateOrganizationApiKey(TEST_NOW),
-    generateOrganizationApiKey(TEST_NOW),
-  );
+  fixture = await resetAndSeedTenants(pool, raw);
 });
 
 afterAll(async () => {

@@ -1,18 +1,69 @@
+import type Redis from 'ioredis';
+import type { Pool } from 'pg';
+
 import { getMetrics } from '@/common/observability/metrics';
 import type { RedisProtectionSeam } from '@/common/observability/redis-unavailable-metric';
+import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
 import { testDatabaseUrl } from '../../shared/database';
+import {
+  TEST_NOW,
+  type TenantIsolationFixture,
+  createTenantIdentity,
+  resetTenantIsolation,
+  seedTenantIsolation,
+} from '../fixtures';
 
 import { TcpFaultProxy } from './tcp-fault-proxy';
 
-export async function redisUnavailableCount(
+/** A metric's current value from the exposition, or 0 before it is set. */
+export async function metricValue(
+  name: string,
+  labels: Readonly<Record<string, string>>,
+): Promise<number> {
+  const labelText = Object.entries(labels)
+    .map(([key, value]) => `${key}="${value}"`)
+    .join(',');
+  const line = (await getMetrics())
+    .split('\n')
+    .find((candidate) => candidate.startsWith(`${name}{${labelText}} `));
+  return line === undefined ? 0 : Number(line.slice(line.lastIndexOf(' ') + 1));
+}
+
+export function redisUnavailableCount(
   seam: RedisProtectionSeam,
 ): Promise<number> {
-  const match = new RegExp(
-    `^aihub_redis_unavailable_total\\{seam="${seam}"\\} ([0-9.e+]+)$`,
-    'm',
-  ).exec(await getMetrics());
-  return match === null ? 0 : Number(match[1]);
+  return metricValue('aihub_redis_unavailable_total', { seam });
+}
+
+/** Concurrency leases Redis holds for an Organization, or for all Sandbox. */
+export function inflight(raw: Redis, organizationId: string): Promise<number> {
+  return raw.zcard(`aihub:v1:inflight:${organizationId}`);
+}
+
+export function sandboxInflight(raw: Redis): Promise<number> {
+  return raw.zcard('aihub:v1:inflight:sandbox');
+}
+
+/** Clears the lane and seeds tenants A and B with fresh keys and identities. */
+export async function resetAndSeedTenants(
+  pool: Pool,
+  raw: Redis,
+): Promise<TenantIsolationFixture> {
+  await resetTenantIsolation(pool, raw);
+  return seedTenantIsolation(
+    pool,
+    await createTenantIdentity('https://tenant-a.example.test', 'tenant-a-key'),
+    await createTenantIdentity('https://tenant-b.example.test', 'tenant-b-key'),
+    generateOrganizationApiKey(TEST_NOW),
+    generateOrganizationApiKey(TEST_NOW),
+  );
+}
+
+export async function redisAnswers(client: {
+  ping(): Promise<string>;
+}): Promise<void> {
+  await eventually(async () => (await client.ping()) === 'PONG');
 }
 
 export interface FaultTarget {
