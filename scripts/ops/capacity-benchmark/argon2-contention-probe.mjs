@@ -122,7 +122,9 @@ async function startProbeServer() {
   const token = await new SignJWT({ sub: 'capacity-probe' })
     .setProtectedHeader({ alg: 'RS256', kid: 'capacity-probe' })
     .setIssuedAt()
-    .setExpirationTime('1h')
+    // Signed once at app start and verified when the Argon2 stage runs, which
+    // is more than an hour later in the full profile; outlive any run.
+    .setExpirationTime('12h')
     .sign(signingKey);
 
   const [
