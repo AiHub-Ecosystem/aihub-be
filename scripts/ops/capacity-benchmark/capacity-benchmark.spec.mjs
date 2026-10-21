@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import {
   parseArgon2QueueMetrics,
+  parseDownstreamQueued,
   percentile,
   summarizeProbeSamples,
 } from './argon2-contention-probe.mjs';
@@ -41,6 +42,19 @@ await test('reads Argon2 queue counters from Prometheus exposition', () => {
     { waits: 7, refusals: 2 },
   );
   assert.deepEqual(parseArgon2QueueMetrics(''), { waits: 0, refusals: 0 });
+});
+
+await test('sums queued requests across every downstream pool origin', () => {
+  assert.equal(
+    parseDownstreamQueued(
+      '# HELP aihub_downstream_pool_queued queued\n' +
+        'aihub_downstream_pool_queued{origin="http://writing:8080"} 7\n' +
+        'aihub_downstream_pool_queued{origin="http://speaking:8081"} 3\n' +
+        'aihub_downstream_pool_queued_other 99\n',
+    ),
+    10,
+  );
+  assert.equal(parseDownstreamQueued(''), 0);
 });
 
 await test('reports nearest-rank p95 for in-process contention probes', () => {
