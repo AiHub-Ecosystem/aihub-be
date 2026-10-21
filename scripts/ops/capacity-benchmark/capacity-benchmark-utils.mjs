@@ -147,6 +147,11 @@ export function minimumGradingHoldSeconds(
   );
 }
 
+// Repetitions run on separate VMs of the same runner shape, whose usable
+// memory differs by a few MiB; compare the shape, not the exact byte count.
+const memoryGiB = (report) =>
+  Math.round((report.benchmark.host.totalMemoryBytes ?? 0) / 1024 ** 3);
+
 export function summarizeRepetitions(reports, expectedRepetitions) {
   if (
     !Array.isArray(reports) ||
@@ -174,8 +179,7 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
           firstReport.benchmark.runnerDescription ||
         report.benchmark.host.logicalCpuCount !==
           firstReport.benchmark.host.logicalCpuCount ||
-        report.benchmark.host.totalMemoryBytes !==
-          firstReport.benchmark.host.totalMemoryBytes ||
+        memoryGiB(report) !== memoryGiB(firstReport) ||
         JSON.stringify(report.benchmark.configuration.stageRatesRps) !==
           JSON.stringify(firstReport.benchmark.configuration.stageRatesRps) ||
         report.benchmark.configuration.minimumGradingSamples !==

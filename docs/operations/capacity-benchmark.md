@@ -70,7 +70,9 @@ error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
 
 The `Capacity benchmark` GitHub Actions workflow runs only through
 `workflow_dispatch`. It runs three repetitions at 8, 16, 32, and 64 offered
-requests per second on a fresh `ubuntu-24.04` GitHub-hosted VM, with the same 1,000
+requests per second, in parallel, each on its own fresh `ubuntu-24.04`
+GitHub-hosted VM, so the p99 spread includes VM-to-VM variance. A summary job
+then combines them. Each repetition uses the same 1,000
 sample minimum, 60 ms Redis RTT, and 2,000 ms stub latency. It is not a pull
 request gate. The workflow records the runner hardware and Docker engine,
 uploads each raw JSON result, and includes the p99 min/median/max spread across
