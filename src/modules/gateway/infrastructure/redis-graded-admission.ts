@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
@@ -179,6 +180,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
   }
 
   private reportDegraded(): void {
+    recordRedisUnavailable('graded_admission');
     if (this.redisIsDegraded) return;
     this.redisIsDegraded = true;
     this.logger.warn(

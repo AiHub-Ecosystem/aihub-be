@@ -103,6 +103,8 @@ Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the
 
 The last line represents an absolute boundary: failing open on rate limiting risks _money_; failing open on authorization risks _customer data_.
 
+> **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE` (`retry_after_ms: 1000`); no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and to local-auth rate limits. A post-result quota increment failure still marks usage `quota_unverified`. The fault-injection tests in `test/db/tenant-isolation/fault-injection/` (#328) prove each row of this table and the amendment.
+
 ### Why Quotas Fail Open
 
 **Allowing a request through can be corrected post-facto; rejecting it cannot.**
@@ -167,6 +169,8 @@ new Redis({
   enableOfflineQueue: false,
 });
 ```
+
+The gateway client (graded admission, concurrency, retry budgets) uses `commandTimeout: 200` and `connectTimeout: 1000`, calibrated from the Production app-to-Redis round trip; the identity and auth clients keep 100 ms.
 
 A **hung** Redis is far more dangerous than a **dead** Redis. A dead Redis triggers an immediate connection refusal and activates fallback logic. A hung Redis without timeouts causes every incoming request to hang indefinitely — turning a Redis hiccup into a total system stall. `enableOfflineQueue: false` forces commands to error immediately rather than accumulating in Node RAM.
 

@@ -5,8 +5,9 @@ import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 import type { OperationId } from '@/catalog/operation-id';
 
 /**
- * Shared metric registry. The rejection and Redis-unavailable counters
- * (`aihub_rejected_total`, `aihub_redis_unavailable_total`) belong to #200.
+ * Shared metric registry. The rejection counter (`aihub_rejected_total`)
+ * belongs to #200; `aihub_redis_unavailable_total` lives in
+ * `redis-unavailable-metric.ts`.
  */
 export const METRICS_ROUTE_PATH = '/metrics';
 

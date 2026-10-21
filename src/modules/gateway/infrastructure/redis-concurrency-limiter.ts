@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   ConcurrencyDecision,
   ConcurrencyLease,
@@ -16,6 +17,8 @@ export type RedisConcurrencyClient = Pick<
 
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 export const CONCURRENCY_STALE_LEASE_MS = 120_000;
+export const LEASE_REMOVAL_RETRY_MS = 1_000;
+const LEASE_REMOVAL_ATTEMPTS = 5;
 const UNAVAILABLE_RETRY_AFTER_MS = 1_000;
 
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
@@ -81,7 +84,8 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       return denied();
     }
 
-    if (this.client === undefined) {
+    const client = this.client;
+    if (client === undefined) {
       this.reportDegraded();
       throw this.unavailableError();
     }
@@ -91,7 +95,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     const sandboxKey = 'aihub:v1:inflight:sandbox';
     const keys = sandbox ? [organizationKey, sandboxKey] : [organizationKey];
     try {
-      const result = await this.client.eval(
+      const result = await client.eval(
         sandbox
           ? ACQUIRE_SANDBOX_CONCURRENCY_SCRIPT
           : ACQUIRE_CONCURRENCY_SCRIPT,
@@ -116,9 +120,11 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       this.reportRecovered();
       return {
         allowed: true,
-        lease: this.remoteLease(this.client, keys, request.requestId),
+        lease: this.remoteLease(client, keys, request.requestId),
       };
     } catch (error) {
+      // A slow reply can time out after Redis already added the lease.
+      this.removeLater(client, keys, request.requestId);
       this.reportDegraded(error);
       throw this.unavailableError(error);
     }
@@ -142,6 +148,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
             this.reportRecovered();
             return undefined;
           } catch (error) {
+            this.removeLater(client, keys, requestId);
             this.reportDegraded(error);
             throw this.unavailableError(error);
           }
@@ -151,7 +158,30 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     };
   }
 
+  // ponytail: a few timed retries, not a durable queue. A lease they miss
+  // still expires through the stale-lease prune after CONCURRENCY_STALE_LEASE_MS.
+  private removeLater(
+    client: RedisConcurrencyClient,
+    keys: readonly string[],
+    requestId: string,
+    attempt = 1,
+  ): void {
+    const timer = setTimeout(() => {
+      void Promise.all(keys.map((key) => client.zrem(key, requestId))).then(
+        () => this.reportRecovered(),
+        () => {
+          recordRedisUnavailable('concurrency');
+          if (attempt < LEASE_REMOVAL_ATTEMPTS) {
+            this.removeLater(client, keys, requestId, attempt + 1);
+          }
+        },
+      );
+    }, LEASE_REMOVAL_RETRY_MS);
+    timer.unref();
+  }
+
   private reportDegraded(error?: unknown): void {
+    recordRedisUnavailable('concurrency');
     if (this.redisIsDegraded) {
       return;
     }

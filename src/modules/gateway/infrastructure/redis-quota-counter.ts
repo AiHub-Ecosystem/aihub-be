@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   QuotaCounterPort,
@@ -111,6 +112,7 @@ export class RedisQuotaCounter implements QuotaCounterPort {
   }
 
   private reportDegraded(): void {
+    recordRedisUnavailable('quota');
     if (this.redisIsDegraded) {
       return;
     }

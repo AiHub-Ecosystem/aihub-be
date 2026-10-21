@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   OrganizationRetryBudgetDecision,
   OrganizationRetryBudgetPort,
@@ -136,6 +137,7 @@ export class RedisOrganizationRetryBudget
   }
 
   private reportDegraded(): void {
+    recordRedisUnavailable('retry_budget');
     if (this.redisIsDegraded) return;
     this.redisIsDegraded = true;
     this.logger.warn(

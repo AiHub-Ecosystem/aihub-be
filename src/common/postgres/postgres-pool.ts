@@ -24,6 +24,9 @@ export const REQUEST_POSTGRES_TIMEOUTS = {
   idle_in_transaction_session_timeout: 10_000,
 } as const satisfies PostgresTimeouts;
 
+/** How long past statement_timeout the client waits before giving up itself. */
+export const QUERY_TIMEOUT_MARGIN_MS = 1_000;
+
 export const OPERATOR_POSTGRES_TIMEOUTS = {
   statement_timeout: 300_000,
   lock_timeout: 30_000,
@@ -114,12 +117,18 @@ export function postgresPoolOptions(
   max: number,
   timeouts: PostgresTimeouts = REQUEST_POSTGRES_TIMEOUTS,
 ): PoolConfig {
+  const statementTimeoutMs = timeouts.statement_timeout;
   return {
     connectionString: databaseUrl,
     max,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 30_000,
     ...timeouts,
+    // statement_timeout is enforced by the server, so a server that stops
+    // answering on an open connection would hold the query forever.
+    ...(typeof statementTimeoutMs === 'number'
+      ? { query_timeout: statementTimeoutMs + QUERY_TIMEOUT_MARGIN_MS }
+      : {}),
   };
 }
 
