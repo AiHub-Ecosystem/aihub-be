@@ -36,11 +36,15 @@ export function runProcess(command, args, options = {}) {
     child.once('spawn', () => {
       if (!killProcessGroup || options.timeout === undefined) return;
       timeoutId = setTimeout(() => {
-        try {
-          process.kill(-child.pid, options.killSignal ?? 'SIGTERM');
-        } catch (error) {
-          if (error.code !== 'ESRCH')
-            child.kill(options.killSignal ?? 'SIGTERM');
+        const signal = options.killSignal ?? 'SIGTERM';
+        if (child.pid === undefined) {
+          child.kill(signal);
+        } else {
+          try {
+            process.kill(-child.pid, signal);
+          } catch (error) {
+            if (error.code !== 'ESRCH') child.kill(signal);
+          }
         }
         child.stdout.destroy();
         child.stderr.destroy();
