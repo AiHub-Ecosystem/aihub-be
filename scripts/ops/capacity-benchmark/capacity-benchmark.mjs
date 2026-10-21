@@ -588,6 +588,7 @@ try {
   process.stdout.write('Cleaning up benchmark Compose project...\n');
   await dockerCompose(['down', '--volumes', '--remove-orphans'], {
     timeout: 60_000,
+    killSignal: 'SIGKILL',
   }).catch((error) => {
     process.stderr.write(`Benchmark cleanup failed: ${error.message}\n`);
     process.exitCode = 1;
@@ -674,6 +675,7 @@ function runProcess(command, args, options = {}) {
       env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: options.timeout,
+      killSignal: options.killSignal,
     });
     let stdout = '';
     let stderr = '';

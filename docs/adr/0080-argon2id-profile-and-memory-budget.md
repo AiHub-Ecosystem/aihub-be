@@ -63,9 +63,29 @@ The `pnpm capacity:benchmark` harness now measures in-process DNS lookup and
 RS256 `jwtVerify` p95 while idle and during an over-cap login burst, with one
 production Writing chart image verification in flight. It records login
 p95 and peak process RSS and fails above the existing 614 MiB gate. The
-measurement has not been run in this environment because the Docker Engine is
-unavailable; the harness results must be appended here after a run. No new
-latency or RSS result is inferred from the earlier measurements above.
+GitHub Actions quick-profile run [#39465063200](https://github.com/AiHub-Ecosystem/aihub-be/actions/runs/39465063200)
+used stage rates of 32 and 64 requests/s, one repetition, and a minimum of
+1,000 grading samples per route. Its measurement window was 19 minutes 12
+seconds on `ubuntu-24.04` (4 logical CPUs; app container limited to 1.5 CPUs
+and 768 MiB).
+
+| Measurement                         | Idle (n=51) | 16-RPS login burst (n=166) |     Delta |
+| ----------------------------------- | ----------: | -------------------------: | --------: |
+| `dns.lookup(benchmark-support)` p95 |    0.777 ms |                   2.368 ms | +1.591 ms |
+| RS256 `jose.jwtVerify` p95          |    0.600 ms |                   2.213 ms | +1.613 ms |
+
+The burst recorded a login p95 of 1,275.72 ms, 150 Argon2 queue waits, and 89
+queue refusals. Peak process RSS was 378 MiB, 236 MiB below the 614 MiB gate.
+All issue-specific Argon2 checks passed, including the chart sanitizer and
+its overlap with the burst. That check used the harness's synthetic 32x32
+image; it does not measure production-sized chart decoding.
+
+The mixed-grading sweep had no passing rate and recorded high route error
+counts, so this run establishes no safe grading capacity. The report does not
+include per-status error counts, leaving the cause unresolved. The report
+artifact uploaded successfully, but the workflow was cancelled after
+`docker compose down` remained stuck during cleanup; the measurement results
+were written before cleanup began.
 
 ## Verification (2026-10-07)
 
