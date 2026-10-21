@@ -14,6 +14,7 @@ import {
   hasMinimumRouteSamples,
   highestPassingRate,
   jsonAfterPrefix,
+  k6ProcessTimeoutMs,
   metricValue,
   minimumGradingHoldSeconds,
   overloadRate,
@@ -716,7 +717,12 @@ async function dockerRestartCount(containerId) {
   const result = await runProcess(
     'docker',
     ['inspect', '--format', '{{.RestartCount}}', containerId],
-    { env: benchmarkEnvironment },
+    {
+      timeout: 30_000,
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
+      env: benchmarkEnvironment,
+    },
   );
   const count = Number(result.stdout.trim());
   if (!Number.isSafeInteger(count) || count < 0) {
@@ -759,14 +765,17 @@ async function runK6({
   isRecovery = false,
 }) {
   if (routeNames.includes('refresh')) {
-    await dockerCompose([
-      'run',
-      '--rm',
-      '--no-deps',
-      'seed',
-      'node',
-      'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
-    ]);
+    await dockerCompose(
+      [
+        'run',
+        '--rm',
+        '--no-deps',
+        'seed',
+        'node',
+        'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
+      ],
+      { timeout: 60_000, killProcessGroup: true, killSignal: 'SIGKILL' },
+    );
   }
   const restartCountBefore = await dockerRestartCount(appContainerId);
   const startMs = Date.now();
@@ -809,6 +818,9 @@ async function runK6({
       '/scripts/capacity-benchmark-k6.js',
     ],
     {
+      timeout: k6ProcessTimeoutMs(Number.parseInt(runDuration, 10)),
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
       onStdout: loadStartScanner(),
       onStderr: loadStartScanner(),
     },
@@ -978,7 +990,12 @@ async function requestTimingLogs(containerId, since, sinceMs) {
   const output = await runProcess(
     'docker',
     ['logs', `--since=${since}`, containerId],
-    { env: benchmarkEnvironment },
+    {
+      timeout: 60_000,
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
+      env: benchmarkEnvironment,
+    },
   ).catch(() => ({ stdout: '' }));
   const results = {};
   const byPath = {

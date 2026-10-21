@@ -18,6 +18,7 @@ import {
   hasOneUserPerVu,
   highestPassingRate,
   jsonAfterPrefix,
+  k6ProcessTimeoutMs,
   metricValue,
   minimumGradingHoldSeconds,
   overloadRate,
@@ -378,4 +379,9 @@ await test('does not wait for detached descendants to close timed-out pipes', as
     Date.now() - startedAt < 750,
     'timeout must not wait for inherited pipes',
   );
+});
+
+await test('bounds k6 stage processes after their duration and graceful stop', () => {
+  assert.equal(k6ProcessTimeoutMs(84), 179_000);
+  assert.equal(k6ProcessTimeoutMs(667), 762_000);
 });

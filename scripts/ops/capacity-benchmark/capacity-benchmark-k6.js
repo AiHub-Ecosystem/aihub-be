@@ -2,6 +2,7 @@ import exec from 'k6/execution';
 import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
 import {
+  K6_GRACEFUL_STOP_SECONDS,
   authAndGradingWorkload,
   hasOneUserPerVu,
   task1PayloadFromFixture,
@@ -86,7 +87,7 @@ export const options = {
       duration,
       preAllocatedVUs: Math.min(maxVUs, Math.max(16, rate * 3)),
       maxVUs,
-      gracefulStop: '65s',
+      gracefulStop: `${K6_GRACEFUL_STOP_SECONDS}s`,
       exec: 'load',
     },
     metrics: {

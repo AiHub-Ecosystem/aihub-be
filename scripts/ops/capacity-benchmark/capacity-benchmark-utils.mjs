@@ -1,3 +1,9 @@
+export const K6_GRACEFUL_STOP_SECONDS = 65;
+
+export function k6ProcessTimeoutMs(durationSeconds) {
+  return (durationSeconds + K6_GRACEFUL_STOP_SECONDS + 30) * 1000;
+}
+
 export function highestPassingRate(
   runs,
   routeNames,
