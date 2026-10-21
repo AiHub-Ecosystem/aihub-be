@@ -41,6 +41,25 @@ The PostgreSQL marker belongs on the database named in `DB_LANE_ADMIN_URL`; the
 Redis marker belongs in database 0. Only add them after confirming each server
 is dedicated to this lane; do not mark a shared service.
 
+## Local retention query-plan seed
+
+The explicit Prisma seed creates 100,000 synthetic `usage_records` and 100,000
+matching `dispatch_attempts`, with timestamps spread across 210 days so a
+30-day retention cutoff has expired rows to examine. It runs `ANALYZE` on both
+tables afterwards. The command requires `AIHUB_BENCHMARK_SEED=1` and only accepts
+the local `aihub` or `aihub_benchmark` database. It replaces only rows whose
+request IDs start with `aihub-benchmark-retention-`. Run `pnpm migrate` first
+so the local schema matches the checked-in migration history.
+
+```bash
+AIHUB_BENCHMARK_SEED=1 \
+DATABASE_URL=postgres://aihub:change-me@localhost:5432/aihub \
+pnpm db:seed
+```
+
+The Prisma CLI runs this seed only when `pnpm db:seed` is invoked explicitly;
+it is not part of `pnpm migrate`, `prisma migrate dev`, or application startup.
+
 ## Changing the schema
 
 1. Edit `prisma/schema.prisma`. Model and field names are the TypeScript names

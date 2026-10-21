@@ -13,6 +13,7 @@
     "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && nest start --watch",
     "start": "node dist/main.js",
     "migrate": "node scripts/cli/migrate.mjs",
+    "db:seed": "pnpm generate:prisma-client && prisma db seed",
     "cli": "node scripts/cli/cli.mjs",
     "dev:assertion": "node scripts/cli/dev-sign-assertion.mjs",
     "demo:bootstrap": "node scripts/cli/demo-bootstrap.mjs",
