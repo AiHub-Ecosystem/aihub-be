@@ -14,6 +14,7 @@ import { TcpFaultProxy } from '../tenant-isolation/fault-injection/tcp-fault-pro
 // stated bound, and that the sockets and memory they hold do not accumulate.
 const AUTH_BOUND_MS = 2_000;
 const ROUNDS = 5;
+const MAX_REDIS_CONNECTIONS = 6;
 
 async function timedCall(
   run: () => Promise<HttpAnswer | undefined>,
@@ -61,38 +62,49 @@ describe('auth routes while their Redis hangs', () => {
     });
     const app = worker;
 
+    // One login, refresh, and registration, each timed.
+    const round = async () => [
+      await timedCall(() =>
+        sendRequest(app.url, {
+          path: '/v1/auth/login',
+          body: {
+            email: `nobody-${ulid().toLowerCase()}@example.test`,
+            password: 'Correct-horse-battery-9!',
+          },
+        }),
+      ),
+      await timedCall(() =>
+        sendRequest(app.url, { path: '/v1/auth/refresh', body: {} }),
+      ),
+      await timedCall(() =>
+        sendRequest(app.url, {
+          path: '/v1/auth/register',
+          body: {
+            email: `fault-${ulid().toLowerCase()}@example.test`,
+            username: `fault_${ulid().toLowerCase().slice(-12)}`,
+            password: 'Correct-horse-battery-9!',
+          },
+        }),
+      ),
+    ];
+
     await proxy.setMode('hang');
-    const memoryBefore = await residentMemory(app);
-    const socketsAtHang = proxy.openConnectionCount();
-
-    const calls = [];
-    for (let round = 0; round < ROUNDS; round += 1) {
-      calls.push(
-        await timedCall(() =>
-          sendRequest(app.url, {
-            path: '/v1/auth/login',
-            body: {
-              email: `nobody-${ulid().toLowerCase()}@example.test`,
-              password: 'Correct-horse-battery-9!',
-            },
-          }),
-        ),
-        await timedCall(() =>
-          sendRequest(app.url, { path: '/v1/auth/refresh', body: {} }),
-        ),
-        await timedCall(() =>
-          sendRequest(app.url, {
-            path: '/v1/auth/register',
-            body: {
-              email: `fault-${ulid().toLowerCase()}@example.test`,
-              username: `fault_${ulid().toLowerCase().slice(-12)}`,
-              password: 'Correct-horse-battery-9!',
-            },
-          }),
-        ),
-      );
+    // Warm-up rounds let the first password hash allocate its 64 MiB Argon2
+    // buffer and every lazily connected Redis client open its connection;
+    // only what accumulates per request afterwards counts.
+    const calls = [...(await round()), ...(await round())];
+    const memoryAfterWarmUp = await residentMemory(app);
+    let peakSockets = proxy.openConnectionCount();
+    const sampler = setInterval(() => {
+      peakSockets = Math.max(peakSockets, proxy?.openConnectionCount() ?? 0);
+    }, 10);
+    try {
+      for (let index = 0; index < ROUNDS; index += 1) {
+        calls.push(...(await round()));
+      }
+    } finally {
+      clearInterval(sampler);
     }
-
     // Every call gets an answer that is not a server failure, in bound.
     expect(calls.every(({ answer }) => answer !== undefined)).toBe(true);
     expect(
@@ -104,9 +116,13 @@ describe('auth routes while their Redis hangs', () => {
         .filter(({ status }) => status >= 500),
     ).toEqual([]);
     expect(Math.max(...calls.map(({ ms }) => ms))).toBeLessThan(AUTH_BOUND_MS);
-    // The hung Redis connections are reused, not multiplied per request.
-    expect(proxy.openConnectionCount()).toBeLessThanOrEqual(socketsAtHang);
-    expect((await residentMemory(app)) - memoryBefore).toBeLessThan(
+    // A client may replace a timed-out connection, but the app keeps a fixed
+    // handful of Redis clients; a socket per request would pass this after
+    // the first round of the 21 requests.
+    expect(peakSockets).toBeLessThanOrEqual(MAX_REDIS_CONNECTIONS);
+    // Ten more hashes held per request would add 640 MiB; less than one
+    // buffer of growth means nothing accumulates.
+    expect((await residentMemory(app)) - memoryAfterWarmUp).toBeLessThan(
       64 * 1024 ** 2,
     );
   }, 120_000);
