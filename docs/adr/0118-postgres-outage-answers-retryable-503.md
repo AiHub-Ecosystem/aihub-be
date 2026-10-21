@@ -1,6 +1,6 @@
 # ADR-0118: A Postgres outage answers a bounded, retryable 503
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-21
 - Related: [#328](https://github.com/AiHub-Ecosystem/aihub-be/issues/328), [#372](https://github.com/AiHub-Ecosystem/aihub-be/issues/372), [ADR-0116](0116-post-result-grading-completion-timing.md)
 - Amends: `07-reliability-and-errors.md` (adds §I.8 and the `DATABASE_UNAVAILABLE` row)

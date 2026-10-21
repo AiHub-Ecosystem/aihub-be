@@ -157,7 +157,7 @@ than merely warn.
 
 ## I.8 Postgres degraded mode
 
-The Postgres row of the #372 matrix, proposed in
+The Postgres row of the #372 matrix, decided in
 [ADR-0118](../../../adr/0118-postgres-outage-answers-retryable-503.md) and
 proven by `test/db/tenant-isolation/fault-injection/postgres-fault.spec.ts`
 (#328).
