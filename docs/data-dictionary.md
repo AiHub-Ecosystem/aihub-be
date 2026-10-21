@@ -8,7 +8,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | --------------------------- | ----------- | ------- |
 | ApiKey                      | identity    | 14      |
 | AuthIdentity                | auth        | 8       |
-| EmailDeliveryRequest        | auth        | 14      |
+| EmailDeliveryRequest        | auth        | 16      |
 | AuthEmailRecipientRateLimit | auth        | 5       |
 | EmailVerificationToken      | auth        | 10      |
 | IdempotencyRecord           | idempotency | 12      |
@@ -92,6 +92,8 @@ Owner: `auth`
 | leaseExpiresAt              | DateTime? | @map("lease_expires_at") @db.Timestamptz(6)                |
 | failureReportedAt           | DateTime? | @map("failure_reported_at") @db.Timestamptz(6)             |
 | failureNotifyLeaseExpiresAt | DateTime? | @map("failure_notify_lease_expires_at") @db.Timestamptz(6) |
+| organizationId              | String?   | @map("organization_id")                                    |
+| inviterId                   | String?   | @map("inviter_id")                                         |
 
 ## AuthEmailRecipientRateLimit
 

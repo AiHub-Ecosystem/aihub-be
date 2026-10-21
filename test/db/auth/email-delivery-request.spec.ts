@@ -364,6 +364,8 @@ describe('email delivery request repository', () => {
     await repository.insert(emailDeliveryTransaction(authClient), {
       ...insertInput(invite),
       kind: 'organization_invite_email',
+      organizationId: 'org_test_invite',
+      inviterId: 'usr_test_inviter',
       createdAt: new Date(NOW.getTime() - 30_000),
     });
     await repository.insert(emailDeliveryTransaction(authClient), {

@@ -83,6 +83,31 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
     ]);
   });
 
+  it('stores only opaque invitation scheduling IDs on invitation rows', async () => {
+    const script = new ScriptedPrisma();
+    const transaction = new EmailDeliveryTransactionAdapter(script.client());
+    const input: InsertEmailDeliveryRequestInput = {
+      id: ROW_ID,
+      kind: 'organization_invite_email',
+      organizationId: 'org_opaque',
+      inviterId: 'usr_opaque',
+      payloadCiphertext: 'sealed',
+      createdAt: NOW,
+    };
+
+    await new PostgresEmailDeliveryRequestRepository().insert(
+      transaction,
+      input,
+    );
+
+    expect(script.statements[0]?.args[0]).toMatchObject({
+      data: {
+        organizationId: 'org_opaque',
+        inviterId: 'usr_opaque',
+      },
+    });
+  });
+
   it('skips an unknown kind without failing valid rows in the same claim', async () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')

@@ -20,10 +20,10 @@ export class RuntimeConnectionConfigurationError extends Error {
  * Loads connection and sandbox signing material rendered by Vault Agent.
  *
  * The existing typed runtime-secret provider owns downstream credentials. This
- * loader covers the process-level settings that are needed before Nest wiring
- * exists (database, Redis, and the sandbox assertion signer). Local development
- * remains compatible with the explicit .env source because an absent connection
- * file is a no-op.
+ * loader covers the process-level settings needed before Nest wiring exists
+ * (database, cache and email-rate Redis, and the sandbox assertion signer). Local
+ * development remains compatible with the explicit .env source because an
+ * absent connection file is a no-op.
  */
 export function loadRuntimeConnectionEnvironment(
   options: RuntimeConnectionEnvironmentOptions,
@@ -72,7 +72,7 @@ export function loadRuntimeConnectionEnvironment(
   );
   assertAllowedKeys(
     redis,
-    ['url', 'sandbox_url'],
+    ['url', 'sandbox_url', 'email_send_rate_url'],
     'Redis runtime secret bundle',
   );
 
@@ -93,6 +93,11 @@ export function loadRuntimeConnectionEnvironment(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox Redis URL' : 'Redis URL',
+  );
+  env.AIHUB_EMAIL_SEND_RATE_REDIS_URL = requiredRecordString(
+    redis,
+    'email_send_rate_url',
+    'email send rate Redis URL',
   );
 
   // shortcut: the shared JSON is parsed; upgrade once #351 splits Vault mounts.

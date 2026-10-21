@@ -36,52 +36,8 @@ import {
   oneOf,
   stringValue,
 } from '@/modules/auth/shared/infrastructure/auth-row';
-
-/**
- * One statement, so the claim is atomic without a surrounding transaction: the
- * CTE takes row locks that `SKIP LOCKED` makes per-instance, and the update that
- * reads them can only see rows this claim actually won.
- *
- * A row is claimable when it is queued, still has attempts left, is not held by
- * a live lease, and has waited out its retry delay. `last_attempt_at IS NULL`
- * is a row that has never been attempted, which is due immediately. The delay
- * is one minute after the first attempt and five after the second; the `attempts`
- * cap in the table makes a fourth attempt impossible even if this predicate is
- * wrong, which is why the two live together.
- */
-const CLAIM_SQL = `
-  WITH claimable AS (
-    SELECT id
-    FROM email_delivery_requests
-    WHERE status = 'queued'
-      AND kind = ANY($5::text[])
-      AND attempts < 3
-      AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-      AND (
-        last_attempt_at IS NULL
-        OR last_attempt_at <= $1 - CASE attempts
-             WHEN 0 THEN interval '0 seconds'
-             WHEN 1 THEN interval '1 minute'
-             ELSE interval '5 minutes'
-           END
-      )
-    ORDER BY created_at, id
-    LIMIT $2
-    FOR UPDATE SKIP LOCKED
-  )
-  UPDATE email_delivery_requests request
-  SET lease_owner = $3, lease_expires_at = $1 + ($4 || ' milliseconds')::interval
-  FROM claimable
-  WHERE request.id = claimable.id
-  RETURNING request.id, request.kind, request.status,
-            request.payload_ciphertext AS "payloadCiphertext",
-            request.attempts,
-            request.last_attempt_at AS "lastAttemptAt",
-            request.last_error_code AS "lastErrorCode",
-            request.cancel_reason AS "cancelReason",
-            request.created_at AS "createdAt",
-            request.completed_at AS "completedAt"
-`;
+import { claimEmailDeliveryRequests } from './email-delivery-claim';
+import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';
 
 /**
  * A request that spent its last attempt but whose outcome was never written:
@@ -102,12 +58,18 @@ const FAIL_EXHAUSTED_SQL = `
   UPDATE email_delivery_requests
   SET status = 'failed', last_attempt_at = COALESCE(last_attempt_at, $1),
       last_error_code = 'outcome_unknown', payload_ciphertext = NULL,
-      completed_at = $1, lease_owner = NULL, lease_expires_at = NULL
+      completed_at = $1, lease_owner = NULL, lease_expires_at = NULL,
+      organization_id = NULL, inviter_id = NULL
   WHERE status = 'queued'
     AND kind = ANY($2::text[])
     AND attempts >= 3
     AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-  RETURNING id
+  RETURNING id, kind, status,
+            payload_ciphertext AS "payloadCiphertext", attempts,
+            last_attempt_at AS "lastAttemptAt",
+            last_error_code AS "lastErrorCode",
+            cancel_reason AS "cancelReason",
+            created_at AS "createdAt", completed_at AS "completedAt"
 `;
 
 /**
@@ -121,7 +83,8 @@ const CANCEL_STALE_SQL = `
   UPDATE email_delivery_requests
   SET status = 'cancelled', cancel_reason = 'credential_expired',
       payload_ciphertext = NULL, completed_at = $1,
-      lease_owner = NULL, lease_expires_at = NULL
+      lease_owner = NULL, lease_expires_at = NULL,
+      organization_id = NULL, inviter_id = NULL
   WHERE status = 'queued'
     AND kind = ANY($3::text[])
     AND created_at <= $2
@@ -516,6 +479,12 @@ export class PostgresEmailDeliveryRequestRepository
         status: 'queued',
         payloadCiphertext: input.payloadCiphertext,
         createdAt: input.createdAt,
+        ...(input.kind === 'organization_invite_email'
+          ? {
+              organizationId: input.organizationId,
+              inviterId: input.inviterId,
+            }
+          : {}),
       },
     });
   }
@@ -581,6 +550,8 @@ export class PostgresEmailDeliveryRequestRepository
           status: 'provider_accepted',
           lastAttemptAt: input.attemptedAt,
           payloadCiphertext: null,
+          organizationId: null,
+          inviterId: null,
           completedAt: input.attemptedAt,
           leaseOwner: null,
           leaseExpiresAt: null,
@@ -606,6 +577,8 @@ export class PostgresEmailDeliveryRequestRepository
           lastAttemptAt: input.failedAt,
           lastErrorCode: input.errorCode,
           payloadCiphertext: null,
+          organizationId: null,
+          inviterId: null,
           completedAt: input.failedAt,
           leaseOwner: null,
           leaseExpiresAt: null,
@@ -641,6 +614,8 @@ export class PostgresEmailDeliveryRequestRepository
           status: 'cancelled',
           cancelReason: input.reason,
           payloadCiphertext: null,
+          organizationId: null,
+          inviterId: null,
           completedAt: input.cancelledAt,
           leaseOwner: null,
           leaseExpiresAt: null,
@@ -697,14 +672,7 @@ export class PostgresEmailDeliveryRequestRepository
     client: AuthSqlClient,
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    const rows = await authQueryRows(client, CLAIM_SQL, [
-      input.now,
-      input.limit,
-      input.owner,
-      String(input.leaseMs),
-      EMAIL_DELIVERY_KINDS,
-    ]);
-    return toKnownRecords(rows);
+    return claimEmailDeliveryRequests(client, input, toKnownRecords);
   }
 
   async claimUnreportedFailures(
@@ -862,6 +830,11 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly now: Date;
   }): Promise<readonly EmailDeliveryBacklogRow[]> {
     return this.requests.backlog(this.client, input);
+  }
+
+  /** Durable bounded cancellation samples for alerting. */
+  cancellationTimestamps() {
+    return readEmailOutboxCancellationTimestamps(this.client);
   }
 
   claimUnreportedFailures(input: {

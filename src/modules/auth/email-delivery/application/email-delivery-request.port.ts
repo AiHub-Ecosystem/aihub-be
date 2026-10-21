@@ -82,12 +82,21 @@ export const EMAIL_DELIVERY_REQUEST_WRITER = Symbol(
  */
 export const EMAIL_DELIVERY_ID = Symbol('EMAIL_DELIVERY_ID');
 
-export interface InsertEmailDeliveryRequestInput {
+interface InsertEmailDeliveryRequestBase {
   readonly id: string;
-  readonly kind: EmailDeliveryKind;
   readonly payloadCiphertext: string;
   readonly createdAt: Date;
 }
+
+export type InsertEmailDeliveryRequestInput =
+  | (InsertEmailDeliveryRequestBase & {
+      readonly kind: 'organization_invite_email';
+      readonly organizationId: string;
+      readonly inviterId: string;
+    })
+  | (InsertEmailDeliveryRequestBase & {
+      readonly kind: Exclude<EmailDeliveryKind, 'organization_invite_email'>;
+    });
 
 /**
  * The only way an Email Delivery Request's payload can be sealed and read back.

@@ -114,6 +114,36 @@ describe('EmailOutboxPollerScheduler', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it('serves durable cancellation timestamps through metrics and removes the source on shutdown', async () => {
+    const poller = new ControllablePoller();
+    const subject = new EmailOutboxPollerScheduler(
+      poller as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      undefined,
+      async () => [
+        {
+          kind: 'verification_email',
+          reason: 'credential_expired',
+          timestampSeconds: 1_797_000_000,
+        },
+      ],
+    );
+    subjects.push(subject);
+
+    subject.onModuleInit();
+    expect(await getMetrics()).toContain(
+      'aihub_email_delivery_cancelled_timestamp_seconds{kind="verification_email",reason="credential_expired"} 1797000000',
+    );
+
+    subject.onApplicationShutdown();
+
+    expect(await getMetrics()).not.toContain(
+      'aihub_email_delivery_cancelled_timestamp_seconds{',
+    );
+  });
+
   it('skips a tick while the previous pass is still running', async () => {
     const poller = new ControllablePoller(true);
 

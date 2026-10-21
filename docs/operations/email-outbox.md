@@ -1,9 +1,11 @@
-# Email outbox: terminal failure evidence
+# Email outbox: dispatch and operational signals
 
-This runbook describes what an operator sees when an Email Delivery Request
-stops without provider acceptance, and what to alert on. The outbox itself is
-decided in [ADR-0074](../adr/0074-transactional-email-outbox.md); this document
-covers the operational signal only.
+This runbook describes the Email Delivery Request lifecycle, the accepted
+dispatch controls in [ADR-0117](../adr/0117-prioritize-and-pace-email-outbox-dispatch.md),
+and the operational signals to alert on. The outbox lifecycle is decided in
+[ADR-0074](../adr/0074-transactional-email-outbox.md). ADR-0117's dispatch
+controls and alert rules are implemented in this release; they become active
+when the release and migration are deployed.
 
 ## The alerting boundary
 
@@ -18,6 +20,8 @@ AIHUB emits the two signals an alerting rule consumes and stops there:
 | Signal                                                                     | Where it is read                        |
 | -------------------------------------------------------------------------- | --------------------------------------- |
 | `aihub_email_delivery_failed_total{kind="..."}`                            | `/metrics` on each application instance |
+| `aihub_email_outbox_oldest_queued_age_seconds{kind="..."}`                 | `/metrics`, read from Postgres          |
+| `aihub_email_delivery_cancelled_timestamp_seconds{kind,reason}`            | `/metrics`, read from durable rows      |
 | one `ERROR` log line per terminal failure, context `[EmailOutboxDispatch]` | the instance log                        |
 
 Configuring the rule that turns those into a page is deployment-owned
@@ -28,10 +32,56 @@ indistinguishable from the delivery failure it was reporting.
 
 The seam is a single function,
 `reportTerminalEmailDeliveryFailure` in
-`src/modules/auth/infrastructure/email-outbox-poller.scheduler.ts`. It is the
+`src/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler.ts`. It is the
 one place a terminal failure becomes observable, so a change to alerting
 plumbing has one function to move rather than a policy scattered across the
 dispatch path.
+
+## Accepted #438 dispatch controls
+
+The controls keep one poller and database per environment while sharing a
+send-rate reservation across Production and Sandbox. They require the #438
+release and migration in each enabled environment.
+
+Before enabling the shared cap, an operator must:
+
+1. Check the Resend team's current `rate_limit.limit` and
+   `rate_limit.duration` in the [Account Usage API](https://resend.com/changelog/account-usage-api).
+2. Set `AIHUB_EMAIL_SEND_RATE_LIMIT` to a positive cap no greater than the
+   verified limit, and `AIHUB_EMAIL_SEND_RATE_DURATION_MS` to the verified
+   duration converted to milliseconds. The limiter spaces reservations by
+   `ceil(duration_ms / limit)`; use the same values in Production and Sandbox.
+   AIHUB will not query Resend at runtime.
+3. Point both environments at the same dedicated limiter Redis URL/keyspace.
+   Keep it separate from the environment-specific `REDIS_URL` values.
+4. Record the verified limit, duration, configured cap, and date checked here.
+   Do not record the Resend API key.
+
+Production and Sandbox require the same positive
+`AIHUB_EMAIL_SEND_RATE_LIMIT` and `AIHUB_EMAIL_SEND_RATE_DURATION_MS` values.
+The runtime fails startup if either is missing in production mode. Do not
+deploy the release while the verification record below is pending.
+
+| Resend Usage API limit | Duration | Configured cap | Verified on |
+| ---------------------- | -------- | -------------- | ----------- |
+| Not verified yet       | —        | Pending        | Pending     |
+
+The limiter fails closed: if it cannot reserve a send slot, the request stays
+queued without spending an attempt. Do not configure a per-instance fallback.
+Once implemented, the queue-age rule below alerts on this condition. The cap
+covers both environments, while priority and invitation fair share apply only
+within each environment; Sandbox can consume account send capacity also used by
+Production.
+
+Dispatch order within each environment is password reset, verification
+(registration and resend share the same kind), MFA enabled/removed notices, then
+invitations. Rows within a priority tier remain oldest first. When invitation
+groups compete, a ten-row batch allows at most five invitation rows for any one
+Organization and at most five for any one inviter; spare slots go to other
+queued invitations. Queued rows carry opaque Organization and inviter IDs and
+clear them at terminal state. Older invitation rows without those IDs are
+temporarily treated as one legacy group; their ciphertext is not opened for a
+backfill.
 
 ## What is emitted
 
@@ -100,18 +150,20 @@ declined the API request; `outcome_unknown` means a process died after
 reserving the last attempt, so no answer was recorded (see above). Nothing else
 about the provider's answer survives to this point, by design.
 
-## Cancellation is not an alert
+## Credential expiry alerts; other cancellations do not
 
 A request is `cancelled` when its credential is superseded, expired, revoked, or
 otherwise no longer actionable before handoff — a user resends a verification
-email, or an invitation is revoked. ADR-0074 calls this expected lifecycle
-handling. It emits no metric and no event.
+email, or an invitation is revoked. Superseded, revoked, and other non-expiry
+cancellations remain expected lifecycle handling and do not alert.
 
-That is a load-bearing distinction: an alert rule that fired on cancellation
-would page on routine user behaviour and train operators to ignore the one event
-that matters. `summary.cancelled` in the per-pass log line
-(`email outbox pass claimed=... cancelled=N failed=N deferred=N`) is the
-visibility for it.
+Credential expiry is different: an increase in queued credentials expiring
+before dispatch is an operational failure signal. The bounded cancellation
+metric labeled by `kind` and `reason` reads durable outbox state, and the alert
+selects only `reason="credential_expired"`. A process restart after the
+database transition does not lose the signal. `summary.cancelled` in the per-pass log line
+(`email outbox pass claimed=... cancelled=N failed=N deferred=N`) remains the
+visibility for routine cancellations.
 
 A queued request older than the longest credential lifetime (24 hours) is also
 cancelled as `credential_expired`, at the start of every pass and without being
@@ -133,10 +185,11 @@ up, and that counter stays flat. Two gauges cover that case:
 Both are read from the table at scrape time rather than from the poller, so they
 keep rising while dispatch is stopped. If the table cannot be read, the series
 disappear instead of repeating their last value, so an `absent()` rule catches
-that too. `kind` is the only label.
+that too. For these two gauges, `kind` is the only label.
 
-Suggested alert condition: the oldest queued age exceeds 15 minutes for any
-`kind`. A healthy request is sent on its first pass (every 5 seconds) or retried
+A #438 alert fires when oldest queued age exceeds 15 minutes for any `kind`.
+The Prometheus rule is in `ops/monitoring/alert.rules.yml`. A healthy request
+is sent on its first pass (every 5 seconds) or retried
 at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A request
 held back because its payload is sealed with a key version this instance lacks
 waits 5 minutes between claims, so a key removed too early shows up here too.

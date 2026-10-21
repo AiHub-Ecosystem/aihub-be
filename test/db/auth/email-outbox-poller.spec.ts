@@ -40,6 +40,9 @@ const NOW = new Date('2026-10-05T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
 const OWNER_A = 'outbox-instance-a';
 const OWNER_B = 'outbox-instance-b';
+const allowSendRateReservation = {
+  reserve: async () => ({ reserved: true as const }),
+};
 
 /**
  * The cipher the application itself uses, so a row written here can only be read
@@ -95,6 +98,9 @@ interface SeededRequest {
 interface SeedOptions {
   readonly kind?: EmailDeliveryKind;
   readonly expiresAt?: Date;
+  readonly createdAt?: Date;
+  readonly schedulingOrganizationId?: string | null;
+  readonly schedulingInviterId?: string | null;
   readonly organizationName?: string;
   readonly role?: 'owner' | 'admin' | 'member';
   /** Seals the payload with another keyring, as a rotation leaves rows sealed. */
@@ -165,6 +171,19 @@ async function seedRequest(options: SeedOptions = {}): Promise<SeededRequest> {
   }
 
   const id = `edr_${ulid()}`;
+  const createdAt = options.createdAt ?? NOW;
+  const schedulingOrganizationId =
+    kind !== 'organization_invite_email'
+      ? null
+      : options.schedulingOrganizationId === undefined
+        ? organizationId
+        : options.schedulingOrganizationId;
+  const schedulingInviterId =
+    kind !== 'organization_invite_email'
+      ? null
+      : options.schedulingInviterId === undefined
+        ? userId
+        : options.schedulingInviterId;
   const shared = {
     email,
     token,
@@ -180,13 +199,16 @@ async function seedRequest(options: SeedOptions = {}): Promise<SeededRequest> {
       : shared;
   await pool.query(
     `INSERT INTO email_delivery_requests (
-       id, kind, status, payload_ciphertext, attempts, last_attempt_at, created_at
-     ) VALUES ($1, $2, 'queued', $3, 0, NULL, $4)`,
+       id, kind, status, payload_ciphertext, attempts, last_attempt_at,
+       created_at, organization_id, inviter_id
+     ) VALUES ($1, $2, 'queued', $3, 0, NULL, $4, $5, $6)`,
     [
       id,
       kind,
       (options.sealedWith ?? cipher).encrypt(JSON.stringify(payload)),
-      NOW,
+      createdAt,
+      schedulingOrganizationId,
+      schedulingInviterId,
     ],
   );
   return { id, tokenHash, email, token };
@@ -262,6 +284,7 @@ function poller(
     new PostgresEmailCredentialRepository(client),
     cipher,
     sender,
+    allowSendRateReservation,
     now,
     { hash },
     { owner, onTerminalFailure: reportTerminalEmailDeliveryFailure },
@@ -292,19 +315,38 @@ interface Row {
   readonly lease_owner: string | null;
   readonly lease_expires_at: Date | null;
   readonly failure_reported_at: Date | null;
+  readonly organization_id: string | null;
+  readonly inviter_id: string | null;
 }
 
 async function rowOf(id: string): Promise<Row> {
   const result = await pool.query<Row>(
     `SELECT status, attempts, payload_ciphertext, cancel_reason, last_error_code,
             last_attempt_at, completed_at, lease_owner, lease_expires_at,
-            failure_reported_at
+            failure_reported_at, organization_id, inviter_id
      FROM email_delivery_requests WHERE id = $1`,
     [id],
   );
   const row = result.rows[0];
   if (row === undefined) throw new Error('expected an email delivery request');
   return row;
+}
+
+async function schedulingIdsOf(
+  ids: readonly string[],
+): Promise<
+  readonly { organization_id: string | null; inviter_id: string | null }[]
+> {
+  const { rows } = await pool.query<{
+    organization_id: string | null;
+    inviter_id: string | null;
+  }>(
+    `SELECT organization_id, inviter_id
+     FROM email_delivery_requests
+     WHERE id = ANY($1::text[])`,
+    [ids],
+  );
+  return rows;
 }
 
 function claim(
@@ -334,6 +376,187 @@ async function setAttemptEvidence(
 
 describe('email outbox dispatch poller', () => {
   describe('claims', () => {
+    it('claims a newer password reset before an older invitation backlog', async () => {
+      const old = new Date(NOW.getTime() - MINUTE);
+      await seedRequest({ kind: 'organization_invite_email', createdAt: old });
+      await seedRequest({ kind: 'organization_invite_email', createdAt: old });
+      const reset = await seedRequest({
+        kind: 'password_reset_email',
+        createdAt: NOW,
+      });
+
+      const claimed = await claim(OWNER_A);
+
+      expect(claimed[0]?.id).toBe(reset.id);
+    });
+
+    it('keeps FIFO order within a priority tier and places both MFA notices before invitations', async () => {
+      const olderMfa = await seedRequest({
+        kind: 'mfa_removed_notification',
+        createdAt: new Date(NOW.getTime() - 2 * MINUTE),
+      });
+      const reset = await seedRequest({ kind: 'password_reset_email' });
+      const verification = await seedRequest({ kind: 'verification_email' });
+      const newerMfa = await seedRequest({
+        kind: 'mfa_enabled_notification',
+        createdAt: new Date(NOW.getTime() - MINUTE),
+      });
+      const invitation = await seedRequest({
+        kind: 'organization_invite_email',
+      });
+
+      const claimed = await claim(OWNER_A);
+
+      expect(claimed.map(({ id }) => id)).toEqual([
+        reset.id,
+        verification.id,
+        olderMfa.id,
+        newerMfa.id,
+        invitation.id,
+      ]);
+    });
+
+    it('caps each competing Organization at five invitation rows and fills the batch from other Organizations', async () => {
+      const firstOrganization = 'org_fair_share_first';
+      const secondOrganization = 'org_fair_share_second';
+      for (let index = 0; index < 8; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: firstOrganization,
+          schedulingInviterId: 'usr_shared_inviter',
+        });
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: secondOrganization,
+          schedulingInviterId: 'usr_shared_inviter',
+        });
+      }
+
+      const claimed = await claim(OWNER_A);
+      const selected = await schedulingIdsOf(claimed.map(({ id }) => id));
+
+      expect(claimed).toHaveLength(10);
+      expect(
+        selected.filter(
+          ({ organization_id }) => organization_id === firstOrganization,
+        ),
+      ).toHaveLength(5);
+      expect(
+        selected.filter(
+          ({ organization_id }) => organization_id === secondOrganization,
+        ),
+      ).toHaveLength(5);
+    });
+
+    it('caps each competing inviter at five invitation rows', async () => {
+      for (let index = 0; index < 8; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: `org_fair_share_${index}`,
+          schedulingInviterId: 'usr_fair_share_first',
+        });
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: `org_fair_share_${index + 20}`,
+          schedulingInviterId: 'usr_fair_share_second',
+        });
+      }
+
+      const claimed = await claim(OWNER_A);
+      const selected = await schedulingIdsOf(claimed.map(({ id }) => id));
+
+      expect(claimed).toHaveLength(10);
+      expect(
+        selected.filter(
+          ({ inviter_id }) => inviter_id === 'usr_fair_share_first',
+        ),
+      ).toHaveLength(5);
+      expect(
+        selected.filter(
+          ({ inviter_id }) => inviter_id === 'usr_fair_share_second',
+        ),
+      ).toHaveLength(5);
+    });
+
+    it('uses the whole batch when all queued invitations belong to one Organization and inviter', async () => {
+      for (let index = 0; index < 10; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: 'org_only_group',
+          schedulingInviterId: 'usr_only_group',
+        });
+      }
+
+      expect(await claim(OWNER_A)).toHaveLength(10);
+    });
+
+    it('uses a single capped legacy group for queued invitations without scheduling IDs', async () => {
+      for (let index = 0; index < 6; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: null,
+          schedulingInviterId: null,
+        });
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: 'org_new_group',
+          schedulingInviterId: 'usr_new_group',
+        });
+      }
+
+      const claimed = await claim(OWNER_A);
+      const selected = await schedulingIdsOf(claimed.map(({ id }) => id));
+
+      expect(claimed).toHaveLength(10);
+      expect(
+        selected.filter(({ organization_id }) => organization_id === null),
+      ).toHaveLength(5);
+      expect(
+        selected.filter(
+          ({ organization_id }) => organization_id === 'org_new_group',
+        ),
+      ).toHaveLength(5);
+    });
+
+    it('clears scheduling IDs and retains a durable timestamp when stale invitation mail expires', async () => {
+      const staleAt = new Date(NOW.getTime() - 24 * HOUR - 1);
+      const seeded = await seedRequest({
+        kind: 'organization_invite_email',
+        createdAt: staleAt,
+      });
+
+      await store.cancelStale({ at: NOW, createdAtOrBefore: staleAt });
+
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'cancelled',
+        cancel_reason: 'credential_expired',
+        organization_id: null,
+        inviter_id: null,
+      });
+      expect(await store.cancellationTimestamps()).toContainEqual({
+        kind: 'organization_invite_email',
+        reason: 'credential_expired',
+        timestampSeconds: NOW.getTime() / 1_000,
+      });
+    });
+
+    it('clears scheduling IDs when an exhausted invitation request is reconciled', async () => {
+      const seeded = await seedRequest({ kind: 'organization_invite_email' });
+      await setAttemptEvidence(
+        seeded.id,
+        3,
+        new Date(NOW.getTime() - 10 * MINUTE),
+      );
+
+      await store.failExhausted({ at: NOW });
+
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'failed',
+        organization_id: null,
+        inviter_id: null,
+      });
+    });
+
     it('gives every queued request to exactly one of two pollers', async () => {
       await seedRequest();
       await seedRequest();
@@ -550,6 +773,18 @@ describe('email outbox dispatch poller', () => {
       });
     });
 
+    it('clears invitation scheduling IDs after provider acceptance', async () => {
+      const seeded = await seedRequest({ kind: 'organization_invite_email' });
+
+      await poller(OWNER_A, new RecordingSender()).runOnce();
+
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'provider_accepted',
+        organization_id: null,
+        inviter_id: null,
+      });
+    });
+
     it('leaves a request sealed with a key version this instance lacks queued, unerased, and claimable after its retry time', async () => {
       const seeded = await seedRequest({ sealedWith: foreignCipher });
       const sender = new RecordingSender();
@@ -589,6 +824,7 @@ describe('email outbox dispatch poller', () => {
         new PostgresEmailCredentialRepository(client),
         cipher,
         sender,
+        allowSendRateReservation,
         () => NOW,
         { hash },
         { owner: OWNER_A, batchSize: 3 },
@@ -643,10 +879,15 @@ describe('email outbox dispatch poller', () => {
 
       expect(sender.sends).toEqual([]);
       expect((await rowOf(seeded.id)).status).toBe('cancelled');
+      expect(await rowOf(seeded.id)).toMatchObject({
+        organization_id: null,
+        inviter_id: null,
+      });
     });
 
     it('never dispatches a request whose credential expires at this instant', async () => {
       const seeded = await seedRequest({
+        kind: 'organization_invite_email',
         expiresAt: new Date(NOW.getTime() + 1_000),
       });
       const sender = new RecordingSender();
@@ -662,6 +903,8 @@ describe('email outbox dispatch poller', () => {
         status: 'cancelled',
         cancel_reason: 'credential_expired',
         payload_ciphertext: null,
+        organization_id: null,
+        inviter_id: null,
       });
       expect(summary.cancelled).toBe(1);
     });
@@ -738,6 +981,7 @@ describe('email outbox dispatch poller', () => {
         new PostgresEmailCredentialRepository(client),
         cipher,
         sender,
+        allowSendRateReservation,
         () => clock,
         { hash },
         {

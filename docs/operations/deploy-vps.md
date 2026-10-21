@@ -981,6 +981,15 @@ image still using it. The pre-Web-Session image rejects the new
 is unsafe. Production and staging use the following coordinated cutover, with
 planned downtime for the application:
 
+For #438, `redis.json` must contain the same dedicated `email_send_rate_url` in
+the Production and Sandbox Vault bundles. Verify Resend's account `limit` and
+`duration`, then set the positive `AIHUB_EMAIL_SEND_RATE_LIMIT` and
+`AIHUB_EMAIL_SEND_RATE_DURATION_MS` values in `.env.production` before the
+cutover. The connection loader rejects unknown fields, so do not render the new
+`redis.json` shape while an old app image might restart. Restore the old
+connection template and rendered document before restarting an old image during
+rollback.
+
 1. Provision the new KV bundle and its read policy first. Keep the live Agent
    templates and rendered documents unchanged; keep new templates outside the
    Agent's mounted paths until the cutover. Record the previous image digest and

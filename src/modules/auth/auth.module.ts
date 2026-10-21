@@ -38,6 +38,10 @@ import {
   type EmailPayloadCipherPort,
 } from './email-delivery/application/email-delivery-request.port';
 import {
+  EMAIL_SEND_RATE_LIMITER,
+  type EmailSendRateLimiterPort,
+} from './email-delivery/application/email-send-rate-limiter.port';
+import {
   EMAIL_SENDER,
   type EmailSenderPort,
 } from './email-delivery/application/email-sender.port';
@@ -53,6 +57,7 @@ import {
   PostgresEmailDispatchStore,
   pruneExpiredAuthEmailRecipientLimits,
 } from './email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { RedisEmailSendRateLimiter } from './email-delivery/infrastructure/redis-email-send-rate-limiter';
 import { ResendEmailSender } from './email-delivery/infrastructure/resend-email.sender';
 import { LOCAL_AUTH_SERVICE } from './local-credentials/application/local-auth-service.port';
 import {
@@ -350,6 +355,19 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
       inject: [RUNTIME_SECRET_PROVIDER],
     },
+    {
+      provide: EMAIL_SEND_RATE_LIMITER,
+      inject: [RUNTIME_CONNECTION_CONFIGURATION, appConfig.KEY],
+      useFactory: (
+        connections: RuntimeConnectionConfigurationPort,
+        configuration: ConfigType<typeof appConfig>,
+      ): EmailSendRateLimiterPort =>
+        new RedisEmailSendRateLimiter(
+          connections.emailSendRateRedisUrl ?? '',
+          configuration.AIHUB_EMAIL_SEND_RATE_LIMIT,
+          configuration.AIHUB_EMAIL_SEND_RATE_DURATION_MS,
+        ),
+    },
     // The dispatch poller runs in every instance against its own database, so
     // it takes the same pool and key the writers used (ADR-0074). The token
     // hashing is the opaque issuer's, which is the one function all three
@@ -360,6 +378,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         runtime: PrismaClientHolder,
         cipher: EmailPayloadCipherPort,
         sender: EmailSenderPort,
+        sendRateLimiter: EmailSendRateLimiterPort,
         configuration: ConfigType<typeof appConfig>,
       ): EmailDeliveryPoller => {
         const isProduction =
@@ -376,6 +395,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
           new PostgresEmailCredentialRepository(runtime.prisma),
           cipher,
           sender,
+          sendRateLimiter,
           (): Date => new Date(),
           { hash: hashOpaqueToken },
           {
@@ -389,6 +409,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         RUNTIME_PRISMA_CLIENT,
         EMAIL_PAYLOAD_CIPHER,
         EMAIL_SENDER,
+        EMAIL_SEND_RATE_LIMITER,
         appConfig.KEY,
       ],
     },
@@ -407,6 +428,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
           configuration.NODE_ENV !== 'test',
           () =>
             pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
+          () => store.cancellationTimestamps(),
         );
       },
       inject: [EmailDeliveryPoller, RUNTIME_PRISMA_CLIENT, appConfig.KEY],
