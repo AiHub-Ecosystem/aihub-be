@@ -6,6 +6,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { lastLines, runProcess } from './capacity-benchmark-process.mjs';
 import {
   appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
@@ -13,6 +14,7 @@ import {
   hasMinimumRouteSamples,
   highestPassingRate,
   jsonAfterPrefix,
+  k6ProcessTimeoutMs,
   metricValue,
   minimumGradingHoldSeconds,
   overloadRate,
@@ -588,9 +590,13 @@ try {
   process.stdout.write('Cleaning up benchmark Compose project...\n');
   await dockerCompose(['down', '--volumes', '--remove-orphans'], {
     timeout: 60_000,
+    killSignal: 'SIGKILL',
+    killProcessGroup: true,
+    stdio: 'ignore',
   }).catch((error) => {
-    process.stderr.write(`Benchmark cleanup failed: ${error.message}\n`);
-    process.exitCode = 1;
+    process.stderr.write(`Benchmark cleanup warning: ${error.message}\n`);
+    // GitHub discards its hosted runner after the already-written report uploads.
+    if (process.env.GITHUB_ACTIONS !== 'true') process.exitCode = 1;
   });
 }
 
@@ -667,57 +673,6 @@ async function controlArgon2Probe(containerId, pathName) {
   return JSON.parse(result.stdout);
 }
 
-function runProcess(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: repositoryRoot,
-      env: options.env ?? process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: options.timeout,
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout = appendLimited(stdout, chunk);
-      options.onStdout?.(chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr = appendLimited(stderr, chunk);
-      options.onStderr?.(chunk);
-    });
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      if (code !== 0 && !options.allowNonZeroExit) {
-        reject(
-          new Error(
-            `${command} ${
-              code === null ? `was terminated by ${signal}` : `exited ${code}`
-            }: ${lastLines(stderr || stdout, 30)}`,
-          ),
-        );
-        return;
-      }
-      resolve({ stdout, stderr, exitCode: code });
-    });
-  });
-}
-
-function appendLimited(current, chunk) {
-  const result = current + chunk;
-  return result.length > 8_000_000 ? result.slice(-8_000_000) : result;
-}
-
-function lastLines(value, limit) {
-  return value
-    .split(/\r?\n/)
-    .slice(-limit)
-    .map((line) => (line.length > 2000 ? '[omitted long output line]' : line))
-    .join('\n')
-    .trim();
-}
-
 async function waitForHealthyApp() {
   const containerId = (
     await dockerCompose(['ps', '-q', 'aihub'])
@@ -762,7 +717,12 @@ async function dockerRestartCount(containerId) {
   const result = await runProcess(
     'docker',
     ['inspect', '--format', '{{.RestartCount}}', containerId],
-    { env: benchmarkEnvironment },
+    {
+      timeout: 30_000,
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
+      env: benchmarkEnvironment,
+    },
   );
   const count = Number(result.stdout.trim());
   if (!Number.isSafeInteger(count) || count < 0) {
@@ -805,14 +765,17 @@ async function runK6({
   isRecovery = false,
 }) {
   if (routeNames.includes('refresh')) {
-    await dockerCompose([
-      'run',
-      '--rm',
-      '--no-deps',
-      'seed',
-      'node',
-      'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
-    ]);
+    await dockerCompose(
+      [
+        'run',
+        '--rm',
+        '--no-deps',
+        'seed',
+        'node',
+        'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
+      ],
+      { timeout: 60_000, killProcessGroup: true, killSignal: 'SIGKILL' },
+    );
   }
   const restartCountBefore = await dockerRestartCount(appContainerId);
   const startMs = Date.now();
@@ -855,6 +818,9 @@ async function runK6({
       '/scripts/capacity-benchmark-k6.js',
     ],
     {
+      timeout: k6ProcessTimeoutMs(Number.parseInt(runDuration, 10)),
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
       onStdout: loadStartScanner(),
       onStderr: loadStartScanner(),
     },
@@ -1024,7 +990,12 @@ async function requestTimingLogs(containerId, since, sinceMs) {
   const output = await runProcess(
     'docker',
     ['logs', `--since=${since}`, containerId],
-    { env: benchmarkEnvironment },
+    {
+      timeout: 60_000,
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
+      env: benchmarkEnvironment,
+    },
   ).catch(() => ({ stdout: '' }));
   const results = {};
   const byPath = {
@@ -1129,7 +1100,15 @@ function watchDockerStats(containerId) {
       }
     }
   });
-  return { samples, stop: () => child.kill() };
+  return {
+    samples,
+    stop: () => {
+      // The stats CLI can outlive Compose teardown and keep Node's pipe open.
+      child.kill('SIGKILL');
+      child.stdout.destroy();
+      child.unref();
+    },
+  };
 }
 
 function watchHostResources() {
