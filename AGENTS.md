@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues and specs live in GitHub Issues; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Before filing or editing an issue, read `docs/agents/issue-tracker.md`: every open issue carries a milestone, one triage role, and a priority, and `node scripts/checks/check-issue-triage.mjs` must pass. Issues and specs live in GitHub Issues; use the `gh` CLI.
 
 ### GitHub language
 
@@ -61,10 +61,7 @@ When a task generates throwaway files that must not be committed — issue-body 
 
 ### Runtime configuration
 
-- The Nest application has one TypeBox-backed environment schema under `src/config`. It owns names, types, defaults, requiredness, and secret metadata; validate one snapshot before pre-DI consumers such as OpenTelemetry, then expose typed configuration through `@nestjs/config` for DI. Direct `process.env` reads stay inside the configuration boundary; this rule does not cover independent CLI and operational scripts.
-- Keep Vault as the source for runtime secret values. The schema records sensitivity but never loads or prints secret values. Preserve existing `NODE_ENV` modes and `AIHUB_RUNTIME_DATABASE_SCOPE` conditions; staging follows production rules.
-- Check `.env.example`, `.env.production.example`, and the CI boot fixture against the schema. The CI fixture supplies fake values; it does not define configuration metadata.
-- Build one SeaweedFS S3 client per process through a shared factory in the secrets infrastructure. Nest modules receive the client through `SecretsModule`'s public seam; the independent CLI composition root calls the factory with explicit configuration and Vault values. Adapters select their bucket; deployment configuration maps tier-specific bucket values to canonical application variable names.
+Before changing `src/config`, an environment file, a Vault-held secret, or the SeaweedFS client, read `docs/agents/runtime-configuration.md`.
 
 ### Security and reliability
 
@@ -75,9 +72,7 @@ When a task generates throwaway files that must not be committed — issue-body 
 
 ### Deployed state
 
-To check what is live on the production host (commit, health, errors since start), run `ops/status.sh` as `docs/operations/deploy-vps.md` describes under "Checking deployed state".
-
-For nginx changes, read the "Managed nginx configuration" section in `docs/operations/deploy-vps.md` and inspect all of `sudo -l` before assessing access. Passwordless Docker or dockerd access is root-equivalent; verify the allowed commands before saying a root operator is required.
+Before checking what is live in production, changing nginx, or assessing host access, read `docs/agents/production-host.md`.
 
 Treat implementation and release as separate authorizations. VPS credentials do not authorize pushing, enabling deployment gates, or triggering production deployment; do those only when the user explicitly requests them.
 
@@ -98,12 +93,6 @@ pnpm verify
 
 `pnpm verify:summary` runs the same loop and prints only the result, the first failing step, and the path of a log file of its own; use it when the output is read into context.
 
-The unit lane is memory-bound on a developer machine, not worker-bound. `jest.config.cjs` caps it at two workers, and the database lanes run `--runInBand` behind a Postgres advisory lane lock, so two concurrent `pnpm test:db` invocations wait for each other instead of interleaving. CI runs the same scripts under the same caps, so there is no lower-worker CI mode to fall back on. Measured 2026-10-20: 310 suites in the unit lane (`pnpm test -- --listTests`), each worker booting Nest DI, SWC, and the Prisma client.
-
-Check free memory before starting a full loop. The unit lane lowers its own worker count from measured free memory (`scripts/checks/jest-worker-cap.cjs`: a two GiB per worker budget, never above the two it replaces, never below one) and prints one warning line when it does, so a slowed run is explained rather than mistaken for a hang. Pin a count with `AIHUB_JEST_MAX_WORKERS` when you know the machine better than the budget does; an unusable value fails at config load, not silently. Lowering `maxWorkers` is still no substitute for capacity: when only a few gigabytes are free, prefer the narrow gates and leave `pnpm verify` until the machine is quieter. Setting `NODE_OPTIONS=--max-old-space-size` helps only while physical memory remains; on a saturated host it postpones the crash and makes it larger.
-
-Run one full loop at a time on a machine. Concurrent agents double the resident workers, and that overlap, not the code under test, is the usual source of a heap death here.
+Before starting a full loop, and whenever a run dies with a worker or heap error, read `docs/agents/verification.md` for the memory budget.
 
 A worker or heap death is not a test result. Read the error line, then re-run the named suite alone: a suite that passes alone did not fail, and the rest of that run is not evidence about the change. Do not reach green by skipping a suite, lowering a `coverageThreshold`, or editing an assertion — record what was observed and why the run is inconclusive.
-
-Read `.claude/agents/` for role ownership before changing a path owned by another role. Keep `CLAUDE.md` Claude-specific; shared rules belong here and in `.claude/`.
