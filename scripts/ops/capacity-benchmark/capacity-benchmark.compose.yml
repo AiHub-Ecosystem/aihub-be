@@ -92,7 +92,7 @@ services:
       REDIS_URL: redis://benchmark-support:6379
       DOWNSTREAM_AI_WRITING_URL: http://benchmark-support:8080
       DOWNSTREAM_AI_WRITING_TOKEN: benchmark-writing-token
-      DOWNSTREAM_AI_SPEAKING_URL: http://benchmark-support:8080
+      DOWNSTREAM_AI_SPEAKING_URL: http://benchmark-support:8081
       DOWNSTREAM_AI_SPEAKING_CLIENT_ID: benchmark-speaking-client
       DOWNSTREAM_AI_SPEAKING_SECRET_KEY: benchmark-speaking-secret
       RESEND_API_KEY: benchmark-no-send

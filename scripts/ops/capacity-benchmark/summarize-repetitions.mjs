@@ -41,27 +41,29 @@ function renderMarkdown(result) {
     `- Minimum grading samples per route: ${result.minimumGradingSamples}`,
     `- Repetitions: ${result.repetitionCount}`,
     '',
-    '| Stage | Route | Completed samples by repetition | p99 min / median / max (ms) | Verdict |',
-    '| --- | --- | --- | --- | --- |',
+    '| Stage | Route | Completed samples by repetition | Errors by repetition | p99 min / median / max (ms) | Accepted p99 min / median / max (ms) | Sample verdict |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
   ];
 
+  const spread = (value) =>
+    value ? `${value.min} / ${value.median} / ${value.max}` : 'unavailable';
   for (const stage of result.stages) {
     for (const [routeName, route] of Object.entries(stage.routes)) {
       const counts = route.samples
         .map(({ repetition, count }) => `R${repetition}: ${count}`)
         .join(', ');
-      const spread = route.p99Ms
-        ? `${route.p99Ms.min} / ${route.p99Ms.median} / ${route.p99Ms.max}`
-        : 'unavailable';
+      const errors = route.samples
+        .map(({ repetition, errorCount }) => `R${repetition}: ${errorCount}`)
+        .join(', ');
       lines.push(
-        `| ${stage.label} | ${routeName} | ${counts} | ${spread} | ${route.sampleVerdict} |`,
+        `| ${stage.label} | ${routeName} | ${counts} | ${errors} | ${spread(route.p99Ms)} | ${spread(route.acceptedP99Ms)} | ${route.sampleVerdict} |`,
       );
     }
   }
 
   lines.push(
     '',
-    'Each stage verdict is inconclusive if it is missing a repetition or any grading route has fewer than the configured minimum samples.',
+    'Each stage verdict is inconclusive if it is missing a repetition or any grading route has fewer than the configured minimum samples. The sample verdict counts every response, so read it with the error column: a route that answers only with errors has enough samples but no capacity. Accepted p99 covers 2xx responses only.',
     '',
   );
   return lines.join('\n');

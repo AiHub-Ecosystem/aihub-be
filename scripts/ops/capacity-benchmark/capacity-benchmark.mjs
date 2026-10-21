@@ -975,11 +975,13 @@ function routeSummary(metrics, name, logTiming) {
   const pathName = routePaths[name];
   const p99Ms = finite(latency['p(99)']);
   const p95Ms = finite(latency['p(95)']);
+  const accepted = metrics[`benchmark_accepted_latency_${name}`]?.values ?? {};
   const timing = logTiming ?? {
     totalMs: [],
     admissionMs: [],
     completionMs: [],
     paths: {},
+    errorsByCode: {},
   };
   return {
     path: pathName,
@@ -988,8 +990,19 @@ function routeSummary(metrics, name, logTiming) {
     p50Ms: finite(latency.med),
     p95Ms,
     p99Ms,
+    acceptedLatencyMs: {
+      p50: finite(accepted.med),
+      p95: finite(accepted['p(95)']),
+      p99: finite(accepted['p(99)']),
+    },
     errorCount:
       metricValue(metrics, `benchmark_api_errors_${name}`, 'count') ?? 0,
+    // Keyed `<http_status> <error_code>` from the gateway's completion log;
+    // transport errors never reached it, so they are counted separately.
+    errorsByCode: timing.errorsByCode,
+    transportErrorCount:
+      metricValue(metrics, `benchmark_api_transport_errors_${name}`, 'count') ??
+      0,
     correctedTotalMs: percentileSet(timing.totalMs),
     admissionMs: percentileSet(timing.admissionMs),
     completionMs: percentileSet(timing.completionMs),
@@ -1058,7 +1071,12 @@ async function requestTimingLogs(containerId, since, sinceMs) {
       admissionMs: [],
       completionMs: [],
       paths: {},
+      errorsByCode: {},
     });
+    if (Number.isInteger(event.http_status) && event.http_status >= 400) {
+      const key = `${event.http_status} ${event.error_code ?? 'NO_ERROR_CODE'}`;
+      record.errorsByCode[key] = (record.errorsByCode[key] ?? 0) + 1;
+    }
     if (Number.isFinite(event.total_ms)) record.totalMs.push(event.total_ms);
     if (Number.isFinite(event.admission_ms)) {
       record.admissionMs.push(event.admission_ms);

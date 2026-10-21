@@ -234,6 +234,8 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
                 completionMs: { p50: 20, p99: 30 },
               },
             },
+            acceptedLatencyMs: { p50: 9, p95: 14, p99: p99Ms - 1 },
+            errorCount: repetition,
           },
         },
         sampleAdequacy: {
@@ -266,6 +268,17 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.min, 10);
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.median, 15);
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.max, 20);
+  assert.deepEqual(summary.stages[0].routes.writing_task1.acceptedP99Ms, {
+    min: 9,
+    median: 14,
+    max: 19,
+  });
+  assert.deepEqual(
+    summary.stages[0].routes.writing_task1.samples.map(
+      ({ errorCount }) => errorCount,
+    ),
+    [1, 2],
+  );
   assert.equal(summary.stages[0].verdict, 'sufficient');
   assert.equal(
     summary.stages[0].paths.writing_task1['declared_id:keyed_writing']
@@ -412,6 +425,10 @@ await test('reads tagged k6 metrics and Docker resource samples', () => {
   assert.deepEqual(
     parseDockerStats('{"CPUPerc":"150.25%","MemUsage":"384MiB / 768MiB"}'),
     { cpuPercent: 150.25, memoryBytes: 402653184 },
+  );
+  assert.deepEqual(
+    parseDockerStats('[2J[H{"CPUPerc":"12.5%","MemUsage":"1GiB / 768MiB"}[K'),
+    { cpuPercent: 12.5, memoryBytes: 1073741824 },
   );
   assert.deepEqual(
     parseDockerImageIdentity(
