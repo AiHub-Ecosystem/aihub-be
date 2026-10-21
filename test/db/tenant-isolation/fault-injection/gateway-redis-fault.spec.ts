@@ -13,6 +13,7 @@ import {
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
 import { RedisQuotaCounter } from '@/modules/gateway/infrastructure/redis-quota-counter';
+import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from '@/modules/gateway/infrastructure/redis-rate-limiter';
 
 import { createTenantIsolationRedis } from '../fixtures';
@@ -58,6 +59,7 @@ function gradedRequest(organization: string) {
     requestId: `req_${randomUUID()}`,
     operation: 'writing.task2.grade' as const,
     monthlyRequestQuota: 1_000,
+    hardStopOnQuota: false,
   };
 }
 
@@ -102,6 +104,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         () => Date.now(),
         Math.random,
         NOOP_LOGGER,
+        new RedisQuotaSeeder(client, { billableCount: async () => 0 }),
       );
       const organization = organizationId();
       await redisAnswers(client);

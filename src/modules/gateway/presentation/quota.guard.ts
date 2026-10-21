@@ -122,6 +122,12 @@ export class QuotaGuard implements CanActivate {
       ) {
         throw quotaExceededError(this.now());
       }
+      if (
+        gradedAdmission.stage === 'admitted' &&
+        gradedAdmission.quotaUnverified
+      ) {
+        addMeteringEvidence(request, { quotaUnverified: true });
+      }
       return true;
     }
 

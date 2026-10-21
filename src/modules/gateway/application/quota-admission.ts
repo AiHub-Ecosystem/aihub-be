@@ -18,7 +18,7 @@ export type QuotaAdmission = 'verified' | 'unverified';
  * never carries next month's retry hint (#373); it fails closed like graded
  * admission does (ADR-0116).
  */
-function quotaUnverifiable(): AppError {
+export function quotaUnverifiableError(): AppError {
   return new AppError({
     code: 'REDIS_UNAVAILABLE',
     message: 'Quota could not be verified',
@@ -46,7 +46,7 @@ export async function admitMonthlyQuota(
     }
   } catch {
     if (input.hardStopOnQuota) {
-      throw quotaUnverifiable();
+      throw quotaUnverifiableError();
     }
     return 'unverified';
   }

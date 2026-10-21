@@ -19,6 +19,7 @@ import {
   DispatchAttemptModule,
   type DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
+import { PostgresMonthlyBillableUsage } from '@/modules/metering/public/quota-reconciliation';
 import {
   PersistenceModule,
   type PrismaClientHolder,
@@ -55,6 +56,10 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from './application/quota-counter.port';
+import {
+  QUOTA_USAGE_SOURCE,
+  type QuotaUsageSourcePort,
+} from './application/quota-usage-source.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
 import { SandboxAdmission } from './application/sandbox-admission';
 import {
@@ -80,6 +85,7 @@ import {
 import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
 import { RedisOrganizationRetryBudget } from './infrastructure/redis-organization-retry-budget';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
+import { RedisQuotaSeeder } from './infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
 import { OrganizationRetryBudgetGuard } from './presentation/organization-retry-budget.guard';
@@ -154,11 +160,34 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
+      provide: QUOTA_USAGE_SOURCE,
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (runtime: PrismaClientHolder): QuotaUsageSourcePort =>
+        new PostgresMonthlyBillableUsage(runtime.prisma),
+    },
+    {
+      provide: RedisQuotaSeeder,
+      inject: [REDIS_GATEWAY_CLIENT, QUOTA_USAGE_SOURCE],
+      useFactory: (
+        client: RedisGatewayClient | undefined,
+        source: QuotaUsageSourcePort,
+      ): RedisQuotaSeeder | undefined =>
+        client === undefined ? undefined : new RedisQuotaSeeder(client, source),
+    },
+    {
       provide: GRADED_ADMISSION,
       useFactory: (
         client: RedisGatewayClient | undefined,
-      ): RedisGradedAdmission => new RedisGradedAdmission(client),
-      inject: [REDIS_GATEWAY_CLIENT],
+        seeder: RedisQuotaSeeder | undefined,
+      ): RedisGradedAdmission =>
+        new RedisGradedAdmission(
+          client,
+          undefined,
+          undefined,
+          undefined,
+          seeder,
+        ),
+      inject: [REDIS_GATEWAY_CLIENT, RedisQuotaSeeder],
     },
     {
       provide: ORGANIZATION_RETRY_BUDGET,
@@ -183,9 +212,12 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     },
     {
       provide: QUOTA_COUNTER,
-      useFactory: (client: RedisGatewayClient | undefined): QuotaCounterPort =>
-        new RedisQuotaCounter(client),
-      inject: [REDIS_GATEWAY_CLIENT],
+      useFactory: (
+        client: RedisGatewayClient | undefined,
+        seeder: RedisQuotaSeeder | undefined,
+      ): QuotaCounterPort =>
+        new RedisQuotaCounter(client, undefined, undefined, seeder),
+      inject: [REDIS_GATEWAY_CLIENT, RedisQuotaSeeder],
     },
     {
       provide: SANDBOX_DISPATCH_BUDGET,

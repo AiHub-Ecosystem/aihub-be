@@ -84,6 +84,8 @@ Nightly job:    SELECT count(*) FROM usage_records
 
 The Redis counter acts as a **fast gating heuristic**; `usage_records` is the definitive number used for invoicing. The nightly job reconciles the counter against truth, ensuring any intraday drift never impacts billing.
 
+**A missing counter is never zero usage (#371).** The shared Redis can lose a key to a restart, eviction, or `FLUSHDB` (#348). When the current month's key is absent, admission rebuilds it from `usage_records` with the reconciliation job's filter and writes it with `SET NX`, so concurrent requests seed it once (one durable read per process, the first writer across processes). `aihub_quota_counter_seeds_total{outcome}` counts each rebuild. If the durable read fails, the request is admitted as `quota_unverified`, or refused with retryable `503 REDIS_UNAVAILABLE` for a hard-stop Organization. A post-result increment never recreates a missing counter at 1; it leaves the rebuild to the next admission.
+
 Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the start of the next calendar month.
 
 <a id="f5-redis-chết-thì-sao--quyết-định-từng-mục"></a>

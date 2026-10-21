@@ -346,11 +346,13 @@ describe('durable dispatch-attempt evidence', () => {
         attempt.rows[0]?.request_id,
       ]),
     ).toMatchObject({ rowCount: 0 });
+    // Admission rebuilt the deleted counter from durable usage (#371); the
+    // killed request never added to it.
     expect(
       await redis.get(
         `aihub:v1:quota:${organizationId}:${monthKey(new Date())}`,
       ),
-    ).toBeNull();
+    ).toBe('0');
 
     await pool.query(
       `UPDATE dispatch_attempts
