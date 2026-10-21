@@ -142,3 +142,53 @@ host details with any baseline shared with issues #268, #273, #328, #398, or
 #224 (#114 is closed and superseded). A result describes only this workload
 and its recorded runner; it is not an exact capacity claim for the shared
 2-vCPU Production host.
+
+## When to rerun
+
+The benchmark has no schedule. It is rerun by hand, with the `Capacity
+benchmark` workflow's `full` profile, whenever one of the invalidation triggers
+below fires. A scheduled run that nobody compares costs runner time and teaches
+nothing. Each trigger names a recorded input of the baseline, so a fired
+trigger is exactly the case where the recorded numbers stop describing the
+code. Do not add a `schedule:` until #713 bounds every Docker, k6, and probe
+child and always tears the stack down. Without that, an unattended hung run
+burns the 300-minute job limit and leaves a stack on the runner.
+
+Invalidation triggers:
+
+- The runner image (`ubuntu-24.04`) or the pinned generator
+  (`grafana/k6:0.54.0`) changes. Keep the benchmark pinned even where
+  `ci.yml` uses `ubuntu-latest`; the pin keeps repetitions comparable.
+- A Compose image changes: `postgres:16-alpine`, `redis:7.4.2-alpine`, or
+  `node:22.23.2-bookworm-slim`.
+- The AIHUB container limits change (1.5 CPU, 768 MiB), or ADR-0080's 614 MiB
+  RSS gate changes.
+- A declared constant changes: `BENCHMARK_REDIS_RTT_MS` (60),
+  `BENCHMARK_STUB_LATENCY_MS` (2000), `BENCHMARK_MAX_VUS` (256), or the 1,000
+  sample minimum.
+- Code behind a measured ceiling changes: the downstream connection pool, the
+  grading admission chain (rate limit, quota, concurrency, retry budget), or the
+  Argon2 profile and its concurrency cap.
+- The Production host topology changes. The first question of the review checklist in
+  `docs/reliability-maturity.md` section D asks this against the topology in
+  section C: host size, slot count, a new shared dependency, a pool or
+  `connection_limit`, or a pooler.
+
+Whoever lands the change that fires a trigger dispatches the run. They compare
+its `repetitions-summary.md` with the baseline record in this document before
+the triggering issue closes. Do not compare it with memory or an expired
+artifact; the workflow keeps artifacts for 30 days. A new baseline replaces the
+record here in the same change, together with the commit and the triggers that
+were true at that commit.
+
+A rerun is a regression, and opens a follow-up issue, when any of these is
+true:
+
+- For any stage and grading route, the median p99 across three repetitions
+  exceeds the recorded baseline's maximum p99 for that stage and route.
+- A route that had enough samples in the baseline is now inconclusive.
+- The highest passing mixed-grading rate drops, or the first observed ceiling
+  changes.
+
+The follow-up issue links the run and is posted to the baseline's consumers:
+#268, #273, #328, and #398.
