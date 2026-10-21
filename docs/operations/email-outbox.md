@@ -77,9 +77,11 @@ Dispatch order within each environment is password reset, verification
 (registration and resend share the same kind), MFA enabled/removed notices, then
 invitations. Rows within a priority tier remain oldest first. When invitation
 groups compete, a ten-row batch allows at most five invitation rows for any one
-Organization and at most five for any one inviter; spare slots go to other
-queued invitations. Queued rows carry opaque Organization and inviter IDs and
-clear them at terminal state. Older invitation rows without those IDs are
+Organization and at most five for any one inviter while another group still
+has eligible invitations. If a competing group's entire queue fits within its
+share, the remaining group can use those slots to fill the batch. Queued rows
+carry opaque Organization and inviter IDs and clear them at terminal state.
+Older invitation rows without those IDs are
 temporarily treated as one legacy group; their ciphertext is not opened for a
 backfill.
 

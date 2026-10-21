@@ -203,16 +203,18 @@ directories, then provision each directory to its own Vault path:
 // sandbox/database.json
 {"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub"}
 // production/redis.json
-{"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0"}
+{"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0","email_send_rate_url":"redis://<shared-limiter-user>:<password>@redis.aihubproduction.com:6379/2"}
 // sandbox/redis.json
-{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1"}
+{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1","email_send_rate_url":"redis://<shared-limiter-user>:<password>@redis.aihubproduction.com:6379/2"}
 ```
 
 The application reads only its tier's URLs from Vault Agent at startup; neither
-URL is passed through Compose interpolation. The Sandbox database and Redis
-credentials must be valid only for their Sandbox data stores. Redis database
-`/1` alone is not an isolation boundary; use an ACL identity limited to
-Sandbox keys and commands.
+URL is passed through Compose interpolation. Set the same dedicated
+`email_send_rate_url` in both bundles, separate from the environment-specific
+`url` values, so Production and Sandbox share the account limiter. The Sandbox
+database and environment-specific Redis credentials must be valid only for
+their Sandbox data stores. Redis database `/1` alone is not an isolation
+boundary; use an ACL identity limited to Sandbox keys and commands.
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
 (`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and

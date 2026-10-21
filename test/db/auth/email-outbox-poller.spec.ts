@@ -478,6 +478,70 @@ describe('email outbox dispatch poller', () => {
       ).toHaveLength(5);
     });
 
+    it('reuses an exhausted Organization share to fill the invitation batch', async () => {
+      for (let index = 0; index < 10; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: 'org_sparse_majority',
+          schedulingInviterId: 'usr_sparse_majority',
+        });
+      }
+      for (let index = 0; index < 2; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: 'org_sparse_minority',
+          schedulingInviterId: 'usr_sparse_minority',
+        });
+      }
+
+      const claimed = await claim(OWNER_A);
+      const selected = await schedulingIdsOf(claimed.map(({ id }) => id));
+
+      expect(claimed).toHaveLength(10);
+      expect(
+        selected.filter(
+          ({ organization_id }) => organization_id === 'org_sparse_majority',
+        ),
+      ).toHaveLength(8);
+      expect(
+        selected.filter(
+          ({ organization_id }) => organization_id === 'org_sparse_minority',
+        ),
+      ).toHaveLength(2);
+    });
+
+    it('reuses an exhausted inviter share when the remaining invitations no longer compete', async () => {
+      for (let index = 0; index < 10; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: `org_sparse_inviter_majority_${index}`,
+          schedulingInviterId: 'usr_sparse_inviter_majority',
+        });
+      }
+      for (let index = 0; index < 2; index += 1) {
+        await seedRequest({
+          kind: 'organization_invite_email',
+          schedulingOrganizationId: `org_sparse_inviter_minority_${index}`,
+          schedulingInviterId: 'usr_sparse_inviter_minority',
+        });
+      }
+
+      const claimed = await claim(OWNER_A);
+      const selected = await schedulingIdsOf(claimed.map(({ id }) => id));
+
+      expect(claimed).toHaveLength(10);
+      expect(
+        selected.filter(
+          ({ inviter_id }) => inviter_id === 'usr_sparse_inviter_majority',
+        ),
+      ).toHaveLength(8);
+      expect(
+        selected.filter(
+          ({ inviter_id }) => inviter_id === 'usr_sparse_inviter_minority',
+        ),
+      ).toHaveLength(2);
+    });
+
     it('uses the whole batch when all queued invitations belong to one Organization and inviter', async () => {
       for (let index = 0; index < 10; index += 1) {
         await seedRequest({

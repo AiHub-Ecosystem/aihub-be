@@ -26,7 +26,7 @@ Each environment keeps its own outbox and poller. Within that environment, dispa
 
 Rows within the same priority tier are ordered by `created_at`, then `id`. This priority and fairness policy does not coordinate queue ordering between Production and Sandbox.
 
-Invitation fair share applies only when competing invitation groups are queued in the same environment. In a ten-row claim batch, no Organization may contribute more than five invitation rows, and no inviter may contribute more than five. Unused slots remain available to other queued invitations, so the rule is work-conserving. The [Organization Invitation Send Limit](0039-organization-invitation-send-rate-boundary.md) continues to govern invitation creation; it is a different policy.
+Invitation fair share applies only when competing invitation groups are queued in the same environment. In a ten-row claim batch, an Organization or inviter may contribute at most five invitation rows while another group still has eligible invitations. If a competing group's entire queue fits within its share, the remaining group may use those slots to fill the batch. The [Organization Invitation Send Limit](0039-organization-invitation-send-rate-boundary.md) continues to govern invitation creation; it is a different policy.
 
 Queued invitation rows store opaque Organization and inviter IDs for this scheduling decision. Clear both IDs when a row becomes terminal (`provider_accepted`, `failed`, or `cancelled`). Existing queued invitation rows without these IDs form one temporary legacy group; do not decrypt their payloads for a backfill. The five-row cap applies to that group when another invitation group is competing.
 
@@ -49,7 +49,7 @@ Count cancellation by bounded `kind` and `reason` from durable outbox evidence, 
 ## Acceptance contract for #438
 
 - A claim pass in either environment selects password resets before verification, verification before MFA notices, and MFA notices before invitations; same-kind rows are FIFO.
-- Under invitation competition, no Organization or inviter supplies more than five of ten claimed invitation rows, and unused share is available to other queued groups.
+- Under invitation competition, no Organization or inviter supplies more than five of ten claimed invitation rows while another group still has eligible rows. If a competing group's queue fits within its share, a remaining group can use the unused slots to fill the batch.
 - Every send reserves from the same account-scoped limiter across Production, Sandbox, and all replicas. The configured rate is operator-set from the verified Usage API limit and duration, sends have no bursts, and a limiter failure leaves the request queued without spending an attempt.
 - Per-kind oldest-queue age alerts after 15 minutes for every kind. Credential-expiry cancellations have a separate durable, bounded signal and alert; other cancellations do not.
 - Invitation Organization and inviter IDs exist only while queued. Legacy queued invitations without IDs use the temporary legacy group.

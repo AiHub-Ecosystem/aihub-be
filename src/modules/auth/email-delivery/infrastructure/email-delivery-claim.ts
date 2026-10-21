@@ -68,11 +68,46 @@ const CLAIM_SQL = `
       AND (invitation_groups.inviter_count <= 1
            OR ranked.inviter_rank <= 5)
   ),
+  fair_candidate_count AS (
+    SELECT count(*) AS candidate_count FROM fair_candidates
+  ),
+  overflow_candidates AS (
+    SELECT ranked.id, ranked.priority, ranked.created_at
+    FROM ranked
+    CROSS JOIN invitation_groups
+    CROSS JOIN fair_candidate_count
+    WHERE fair_candidate_count.candidate_count < $2
+      AND ((invitation_groups.organization_count > 1
+            AND ranked.organization_rank > 5)
+           OR (invitation_groups.inviter_count > 1
+               AND ranked.inviter_rank > 5))
+      AND (invitation_groups.organization_count <= 1
+           OR ranked.organization_rank <= 5
+           OR NOT EXISTS (
+             SELECT 1 FROM ranked other
+             WHERE other.organization_rank > 5
+               AND other.organization_id IS DISTINCT FROM ranked.organization_id
+           ))
+      AND (invitation_groups.inviter_count <= 1
+           OR ranked.inviter_rank <= 5
+           OR NOT EXISTS (
+             SELECT 1 FROM ranked other
+             WHERE other.inviter_rank > 5
+               AND other.inviter_id IS DISTINCT FROM ranked.inviter_id
+           ))
+  ),
+  claim_candidates AS (
+    SELECT id, priority, created_at, 0 AS candidate_tier FROM fair_candidates
+    UNION ALL
+    SELECT id, priority, created_at, 1 AS candidate_tier
+    FROM overflow_candidates
+  ),
   claimable AS (
     SELECT request.id
     FROM email_delivery_requests request
-    JOIN fair_candidates candidate ON candidate.id = request.id
-    ORDER BY candidate.priority, candidate.created_at, candidate.id
+    JOIN claim_candidates candidate ON candidate.id = request.id
+    ORDER BY candidate.priority, candidate.candidate_tier,
+             candidate.created_at, candidate.id
     LIMIT $2
     FOR UPDATE OF request SKIP LOCKED
   )
