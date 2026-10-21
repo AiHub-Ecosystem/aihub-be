@@ -18,7 +18,7 @@ import {
 
 type ApiKeyLookupRow = Record<string, unknown>;
 
-const API_KEY_LOOKUP_SQL = `
+export const API_KEY_LOOKUP_SQL = `
   SELECT
     api_key.organization_id AS "organizationId",
     api_key.id AS "apiKeyId",
