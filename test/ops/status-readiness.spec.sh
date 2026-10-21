@@ -96,7 +96,7 @@ sed "s|/etc/nginx/conf.d|$config_dir|g" "$repository_root/ops/status.sh" \
 
 expected_revision=0123456789abcdef0123456789abcdef01234567
 all_up='{"status":"ok","dependencies":{"runtime-postgres":"up","control-plane-write-postgres":"up","control-plane-read-postgres":"up","redis":"up"}}'
-one_down='{"status":"error","dependencies":{"runtime-postgres":"up","control-plane-write-postgres":"up","control-plane-read-postgres":"down","redis":"up"}}'
+one_down='{"status":"ok","dependencies":{"runtime-postgres":"up","control-plane-write-postgres":"up","control-plane-read-postgres":"down","redis":"up"}}'
 missing_runtime='{"status":"ok","dependencies":{"redis":"up"}}'
 missing_redis='{"status":"ok","dependencies":{"runtime-postgres":"up"}}'
 
@@ -120,11 +120,15 @@ run_status normal 200 "$all_up"
 assert_contains "$output" "production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200 $expected_dependencies"
 assert_contains "$output" "sandbox    ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200 $expected_dependencies"
 
-run_status normal 503 "$one_down"
+run_status normal 200 "$one_down"
 [[ "$exit_code" == 1 ]] || fail "one dependency down exited $exit_code"
 assert_contains "$output" 'production FAIL'
 assert_contains "$output" 'sandbox    FAIL'
-assert_contains "$output" 'readiness_probe=503 readiness_dependencies=runtime-postgres=up,control-plane-write-postgres=up,control-plane-read-postgres=down,redis=up'
+assert_contains "$output" 'readiness_probe=200 readiness_dependencies=runtime-postgres=up,control-plane-write-postgres=up,control-plane-read-postgres=down,redis=up'
+
+run_status normal 503 "$all_up"
+[[ "$exit_code" == 1 ]] || fail "non-200 readiness response exited $exit_code"
+assert_contains "$output" 'readiness_probe=503 readiness_dependencies=runtime-postgres=up,control-plane-write-postgres=up,control-plane-read-postgres=up,redis=up'
 
 run_status timeout 200 ''
 [[ "$exit_code" == 1 ]] || fail "readiness timeout exited $exit_code"
