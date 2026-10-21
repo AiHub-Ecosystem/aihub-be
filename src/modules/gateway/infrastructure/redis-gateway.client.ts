@@ -80,7 +80,9 @@ export function createRedisGatewayClient(
   }
 
   const client = new Redis(url, {
-    commandTimeout: 100,
+    // Calibrated 2026-10-21 from Production app to remote Redis: ready p99 265.537 ms (100 samples), PING p99 71.184 ms (1,000).
+    connectTimeout: 1_000,
+    commandTimeout: 200,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
     autoResendUnfulfilledCommands: false,
