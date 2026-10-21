@@ -107,13 +107,19 @@ const speakingServer = createHttpServer(handleStubRequest);
 writingServer.listen(8080, '0.0.0.0');
 speakingServer.listen(8081, '0.0.0.0');
 
+// Delay every chunk by the same one-way latency without holding back the chunks
+// behind it, like a link delay. Pausing the source per chunk serialized the
+// stream and stretched the configured 60 ms round trip to as much as 120 ms.
+// Equal-delay timers fire in insertion order, so byte order is kept; the source
+// pauses only when the destination applies backpressure.
 function forwardDelayed(source, destination) {
   source.on('data', (chunk) => {
-    source.pause();
     setTimeout(() => {
       if (destination.destroyed) return;
-      if (destination.write(chunk)) source.resume();
-      else destination.once('drain', () => source.resume());
+      if (!destination.write(chunk) && !source.isPaused()) {
+        source.pause();
+        destination.once('drain', () => source.resume());
+      }
     }, oneWayDelayMs);
   });
   source.on('end', () => {
@@ -125,6 +131,11 @@ function forwardDelayed(source, destination) {
 const redisServer = createTcpServer((client) => {
   const [host, portText] = redisTarget.split(':');
   const upstream = connect(Number(portText), host);
+  // ioredis disables Nagle on its socket. Without the same here, a command
+  // longer than one TCP segment (the retry-budget EVAL) waits a delayed ACK,
+  // about 40 ms, that the real link does not add.
+  client.setNoDelay(true);
+  upstream.setNoDelay(true);
   client.on('error', () => upstream.destroy());
   upstream.on('error', () => client.destroy());
   forwardDelayed(client, upstream);
