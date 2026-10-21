@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 import test from 'node:test';
 
 import {
@@ -7,6 +8,7 @@ import {
   percentile,
   summarizeProbeSamples,
 } from './argon2-contention-probe.mjs';
+import { runProcess } from './capacity-benchmark-process.mjs';
 import {
   appendStreamingMarkerChunk,
   authAndGradingWorkload,
@@ -354,4 +356,26 @@ await test('reads JSON from plain output and escaped k6 console logs', () => {
     requests: {},
     errors: {},
   });
+});
+
+await test('does not wait for detached descendants to close timed-out pipes', async (t) => {
+  if (process.platform === 'win32')
+    return t.skip('requires POSIX process groups');
+
+  const startedAt = Date.now();
+  await assert.rejects(
+    runProcess(
+      process.execPath,
+      [
+        '-e',
+        "const { spawn } = require('node:child_process'); spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { detached: true, stdio: ['ignore', 1, 2] }).unref(); setInterval(() => {}, 1000);",
+      ],
+      { timeout: 50, killProcessGroup: true, killSignal: 'SIGKILL' },
+    ),
+    /timed out after 50ms/,
+  );
+  assert.ok(
+    Date.now() - startedAt < 750,
+    'timeout must not wait for inherited pipes',
+  );
 });
