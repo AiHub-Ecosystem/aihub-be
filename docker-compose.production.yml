@@ -7,9 +7,6 @@ x-container-logging: &container-logging
     max-file: "3"
 
 x-app-common: &app-common
-  build:
-    context: .
-    dockerfile: Dockerfile
   image: ${AIHUB_IMAGE:-aihub-be:local}
   logging: *container-logging
   init: true

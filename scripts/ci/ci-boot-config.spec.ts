@@ -164,6 +164,28 @@ describe('CI boot configuration', () => {
     );
   });
 
+  it('runs production migrations from the CI-published image', () => {
+    const compose = readFileSync('docker-compose.production.yml', 'utf8');
+    const appCommonStart = compose.indexOf('x-app-common: &app-common');
+    const appCommonEnd = compose.indexOf(
+      '\nx-app-database-networks:',
+      appCommonStart,
+    );
+    const appCommon = compose.slice(appCommonStart, appCommonEnd);
+    const blueGreen = readFileSync(
+      'scripts/ops/blue-green/blue-green-host.sh',
+      'utf8',
+    );
+
+    expect(appCommonStart).toBeGreaterThanOrEqual(0);
+    expect(appCommonEnd).toBeGreaterThan(appCommonStart);
+    expect(appCommon).not.toMatch(/^  build:/m);
+    expect(blueGreen).toContain('run --pull always --no-deps --rm migrate');
+    expect(blueGreen).toContain(
+      'run --pull always --no-deps --rm migrate-sandbox',
+    );
+  });
+
   it('maps the sandbox Customer Web URL only to the sandbox app', () => {
     const compose = readFileSync('docker-compose.production.yml', 'utf8');
     const sandboxIndex = compose.indexOf('  app-sandbox:');

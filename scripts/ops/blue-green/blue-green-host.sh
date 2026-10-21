@@ -1114,10 +1114,10 @@ deploy() {
     compose_migrate=("${compose[@]}" --profile migration)
     edge_monitor_start 0
     migration_status=0
-    "${compose_migrate[@]}" run --no-deps --rm migrate </dev/null || migration_status=$?
+    "${compose_migrate[@]}" run --pull always --no-deps --rm migrate </dev/null || migration_status=$?
     if [[ "$sandbox_enabled" == true && "$migration_status" -eq 0 ]]; then
       compose_sandbox_migrate=("${compose[@]}" --profile migration)
-      "${compose_sandbox_migrate[@]}" run --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
+      "${compose_sandbox_migrate[@]}" run --pull always --no-deps --rm migrate-sandbox </dev/null || migration_status=$?
     fi
     edge_monitor_stop
     capture_resources after-migrations || migration_status=1
