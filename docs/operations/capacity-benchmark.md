@@ -123,7 +123,11 @@ The final stage runs a login burst intended to saturate the per-process Argon2
 cap (defaults: 16 requests/s with a cap of two and `UV_THREADPOOL_SIZE=4`); it
 fails unless the burst records an actual queue wait. An in-process
 probe measures `dns.lookup('benchmark-support')` and RS256 `jose.jwtVerify`
-every 100 ms during a five-second idle window and the burst. When the probe
+every 100 ms during an idle window and the burst. The idle window starts only
+after every downstream pool queue left by the preceding stages has drained
+(the run fails if they are still queued after two minutes). It lasts five
+seconds and extends in five-second steps, up to 30 seconds, until it has ten
+samples of each probe. When the probe
 observes Argon2 queue work, it runs one image through the production Writing
 chart sanitizer and its serialized processing queue, tying the chart
 verification to actual hash contention. The report records login
@@ -135,7 +139,9 @@ with `BENCHMARK_ARGON2_MAX_CONCURRENCY`,
 `BENCHMARK_ARGON2_THREADPOOL_SIZE`, and `BENCHMARK_ARGON2_BURST_RATE_RPS`.
 
 Each JSON result is written to the ignored
-`artifacts/capacity-benchmark/<run-id>/results.json`. The GitHub workflow also
+`artifacts/capacity-benchmark/<run-id>/results.json`. A run that fails writes
+the stages it completed and the error to `partial-results.json` instead, so a
+late failure still leaves evidence; it never counts as a repetition. The GitHub workflow also
 writes `repetitions-summary.json` and `repetitions-summary.md` beside those run
 directories. Keep the environment, commit, rate schedule, workload mix, and
 host details with any baseline shared with issues #268, #273, #328, #398, or

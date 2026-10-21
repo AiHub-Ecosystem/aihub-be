@@ -236,8 +236,7 @@ try {
   }
 
   await controlArgon2Probe(appContainerId, '/reset');
-  await new Promise((resolve) => setTimeout(resolve, 5000));
-  const idleArgon2Probe = await controlArgon2Probe(appContainerId, '/burst');
+  const idleArgon2Probe = await waitForIdleProbeSamples(appContainerId);
   /** @type {number | undefined} */
   let argon2BurstStartedAt;
   /** @type {number | undefined} */
@@ -582,10 +581,32 @@ try {
     process.exitCode = 1;
   }
 } catch (error) {
-  process.stderr.write(
-    `Capacity benchmark failed: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`Capacity benchmark failed: ${message}\n`);
   process.exitCode = 1;
+  // Keep the stages that did complete for diagnosis. The repetitions summary
+  // reads only results.json, so a failed run never counts as a repetition.
+  await writeFile(
+    path.join(artifactDirectory, 'partial-results.json'),
+    `${JSON.stringify(
+      {
+        benchmark: {
+          startedAt: startedAt.toISOString(),
+          failedAt: new Date().toISOString(),
+          repetition,
+          runtimeCommit: benchmarkRevision,
+          error: message,
+        },
+        runs,
+        sampledResources: {
+          appContainer: statsWatcher?.samples ?? [],
+          host: hostWatcher?.samples ?? [],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  ).catch(() => undefined);
 } finally {
   statsWatcher?.stop();
   hostWatcher?.stop();
@@ -673,6 +694,21 @@ async function controlArgon2Probe(containerId, pathName) {
     { env: benchmarkEnvironment },
   );
   return JSON.parse(result.stdout);
+}
+
+// Samples keep accumulating while the probe refuses to start the burst, so a
+// slow idle window gets more time instead of discarding the stages already run.
+async function waitForIdleProbeSamples(containerId) {
+  for (let attempt = 1; ; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    try {
+      return await controlArgon2Probe(containerId, '/burst');
+    } catch (error) {
+      if (attempt >= 6 || !error.message.includes('insufficient idle probe')) {
+        throw error;
+      }
+    }
+  }
 }
 
 async function waitForHealthyApp() {
