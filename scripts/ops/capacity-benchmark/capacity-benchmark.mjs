@@ -589,9 +589,11 @@ try {
   await dockerCompose(['down', '--volumes', '--remove-orphans'], {
     timeout: 60_000,
     killSignal: 'SIGKILL',
+    killProcessGroup: true,
   }).catch((error) => {
-    process.stderr.write(`Benchmark cleanup failed: ${error.message}\n`);
-    process.exitCode = 1;
+    process.stderr.write(`Benchmark cleanup warning: ${error.message}\n`);
+    // GitHub discards its hosted runner after the already-written report uploads.
+    if (process.env.GITHUB_ACTIONS !== 'true') process.exitCode = 1;
   });
 }
 
@@ -670,13 +672,17 @@ async function controlArgon2Probe(containerId, pathName) {
 
 function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
+    const killProcessGroup =
+      options.killProcessGroup === true && process.platform !== 'win32';
     const child = spawn(command, args, {
       cwd: repositoryRoot,
+      detached: killProcessGroup,
       env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: options.timeout,
+      timeout: killProcessGroup ? undefined : options.timeout,
       killSignal: options.killSignal,
     });
+    let timeoutId;
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8');
@@ -689,8 +695,23 @@ function runProcess(command, args, options = {}) {
       stderr = appendLimited(stderr, chunk);
       options.onStderr?.(chunk);
     });
-    child.once('error', reject);
+    child.once('spawn', () => {
+      if (!killProcessGroup || options.timeout === undefined) return;
+      timeoutId = setTimeout(() => {
+        try {
+          process.kill(-child.pid, options.killSignal ?? 'SIGTERM');
+        } catch (error) {
+          if (error.code !== 'ESRCH')
+            child.kill(options.killSignal ?? 'SIGTERM');
+        }
+      }, options.timeout);
+    });
+    child.once('error', (error) => {
+      clearTimeout(timeoutId);
+      reject(error);
+    });
     child.once('close', (code, signal) => {
+      clearTimeout(timeoutId);
       if (code !== 0 && !options.allowNonZeroExit) {
         reject(
           new Error(
