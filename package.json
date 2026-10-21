@@ -37,7 +37,6 @@
     "coverage:merged": "node scripts/checks/merged-coverage.cjs",
     "test:watch": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --watch",
     "type-check": "node scripts/generate/generate-prisma-client.mjs && tsc --noEmit",
-    "type-check:tsgo": "node scripts/generate/generate-prisma-client.mjs && tsgo --noEmit",
     "format": "biome format --write .",
     "lint": "oxlint . && biome check .",
     "format:check": "prettier --check \"**/*.{md,yaml,yml}\"",
@@ -114,7 +113,7 @@
     "@types/opossum": "8.1.9",
     "@types/pg": "^8.23.1",
     "@types/postman-collection": "^3.5.11",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "@typescript/native": "npm:typescript@7.0.2",
     "dependency-cruiser": "^18.6.0",
     "husky": "^9.1.7",
     "istanbul-lib-coverage": "3.2.2",
@@ -130,6 +129,6 @@
     "prisma": "7.10.0",
     "squawk-cli": "2.69.0",
     "tsx": "^4.23.15",
-    "typescript": "^5.7.3"
+    "typescript": "npm:@typescript/typescript6@6.0.2"
   }
 }
