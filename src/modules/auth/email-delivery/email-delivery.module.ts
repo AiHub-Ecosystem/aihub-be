@@ -32,6 +32,10 @@ import {
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
+import {
+  EMAIL_PROVIDER_OUTAGE_CIRCUIT,
+  type EmailProviderOutageCircuitPort,
+} from './application/email-provider-outage-circuit.port';
 import { emailDailySendBudgetLimits } from './application/email-send-daily-budget.policy';
 import {
   EMAIL_DAILY_SEND_BUDGET,
@@ -116,6 +120,10 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         ),
     },
     {
+      provide: EMAIL_PROVIDER_OUTAGE_CIRCUIT,
+      useExisting: EMAIL_SEND_RATE_LIMITER,
+    },
+    {
       provide: EMAIL_DAILY_SEND_BUDGET,
       inject: [EMAIL_DAILY_BUDGET_PRISMA_CLIENT, appConfig.KEY],
       useFactory: (
@@ -136,6 +144,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         cipher: EmailPayloadCipherPort,
         sender: EmailSenderPort,
         sendRateLimiter: EmailSendRateLimiterPort,
+        providerOutageCircuit: EmailProviderOutageCircuitPort,
         dailySendBudget: EmailDailySendBudgetPort,
         configuration: ConfigType<typeof appConfig>,
         notices: EmailNoticeResolvers,
@@ -155,6 +164,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
           cipher,
           sender,
           sendRateLimiter,
+          providerOutageCircuit,
           (): Date => new Date(),
           { hash: hashOpaqueToken },
           {
@@ -173,6 +183,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         EMAIL_PAYLOAD_CIPHER,
         EMAIL_SENDER,
         EMAIL_SEND_RATE_LIMITER,
+        EMAIL_PROVIDER_OUTAGE_CIRCUIT,
         EMAIL_DAILY_SEND_BUDGET,
         appConfig.KEY,
         EMAIL_NOTICE_RESOLVERS,
@@ -185,6 +196,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         runtime: PrismaClientHolder,
         configuration: ConfigType<typeof appConfig>,
         dailyBudget: EmailDailySendBudgetPort,
+        providerOutageCircuit: EmailProviderOutageCircuitPort,
       ): EmailOutboxPollerScheduler => {
         const store = new PostgresEmailDispatchStore(runtime.prisma);
         return new EmailOutboxPollerScheduler(
@@ -196,6 +208,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
             pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
           () => store.cancellationTimestamps(),
           () => dailyBudget.usage(),
+          () => providerOutageCircuit.readOutageDurationMs(),
         );
       },
       inject: [
@@ -203,6 +216,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         RUNTIME_PRISMA_CLIENT,
         appConfig.KEY,
         EMAIL_DAILY_SEND_BUDGET,
+        EMAIL_PROVIDER_OUTAGE_CIRCUIT,
       ],
     },
   ],

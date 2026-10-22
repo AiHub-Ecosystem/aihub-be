@@ -13,6 +13,7 @@ import {
   setDownstreamPoolQueuedSource,
   setEmailOutboxBacklogSource,
   setEmailOutboxCancellationSource,
+  setEmailProviderOutageDurationSource,
   setPostgresPoolStatsSource,
 } from './metrics';
 
@@ -337,6 +338,43 @@ describe('email outbox backlog metrics', () => {
     healthy = false;
 
     expect(await getMetrics()).not.toContain('aihub_email_outbox_queued{');
+  });
+});
+
+describe('email provider outage metric', () => {
+  afterEach(() => {
+    setEmailProviderOutageDurationSource(undefined);
+  });
+
+  it('exposes shared outage duration in seconds without labels', async () => {
+    setEmailProviderOutageDurationSource(async () => 90_000);
+
+    expect(await sample('aihub_email_provider_outage_duration_seconds')).toBe(
+      '90',
+    );
+    expect(await getMetrics()).toContain(
+      '# HELP aihub_email_provider_outage_duration_seconds',
+    );
+    expect(await getMetrics()).not.toMatch(
+      /aihub_email_provider_outage_duration_seconds\{/,
+    );
+  });
+
+  it('resets the gauge when shared outage state cannot be read', async () => {
+    let healthy = true;
+    setEmailProviderOutageDurationSource(async () => {
+      if (!healthy) throw new Error('Redis unavailable');
+      return 12_000;
+    });
+    expect(await sample('aihub_email_provider_outage_duration_seconds')).toBe(
+      '12',
+    );
+
+    healthy = false;
+
+    expect(await sample('aihub_email_provider_outage_duration_seconds')).toBe(
+      '0',
+    );
   });
 });
 

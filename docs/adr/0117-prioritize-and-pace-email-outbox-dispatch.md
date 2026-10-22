@@ -1,6 +1,6 @@
 # ADR-0117: Prioritize and pace email outbox dispatch
 
-- Status: Accepted; dispatch priority amended by [ADR-0120](0120-notification-event-catalog.md) (a lowest tier for Notification Event email)
+- Status: Accepted; dispatch priority amended by [ADR-0120](0120-notification-event-catalog.md) (a lowest tier for Notification Event email); provider-wide outage coordination across environments amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md)
 - Date: 2026-10-21
 - Related issue: [#438](https://github.com/AiHub-Ecosystem/aihub-be/issues/438), [#449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449), [#410](https://github.com/AiHub-Ecosystem/aihub-be/issues/410), [#557](https://github.com/AiHub-Ecosystem/aihub-be/issues/557)
 - Amends: [ADR-0074](0074-transactional-email-outbox.md) (dispatch ordering and credential-expiry cancellation alerts only)

@@ -45,6 +45,13 @@ const OWNER_B = 'outbox-instance-b';
 const allowSendRateReservation = {
   reserve: async () => ({ reserved: true as const }),
 };
+const allowProviderOutagePermit = {
+  acquireSendPermit: async () => ({ allowed: true as const }),
+  releaseProbe: async () => undefined,
+  recordProviderFailure: async (retryAfterMs: number) => retryAfterMs,
+  recordProviderReachable: async () => undefined,
+  readOutageDurationMs: async () => 0,
+};
 
 /**
  * The cipher the application itself uses, so a row written here can only be read
@@ -287,6 +294,7 @@ function poller(
     cipher,
     sender,
     allowSendRateReservation,
+    allowProviderOutagePermit,
     now,
     { hash },
     { owner, onTerminalFailure: reportTerminalEmailDeliveryFailure },
@@ -1000,6 +1008,7 @@ describe('email outbox dispatch poller', () => {
         cipher,
         sender,
         allowSendRateReservation,
+        allowProviderOutagePermit,
         () => NOW,
         { hash },
         { owner: OWNER_A, batchSize: 3 },
@@ -1158,6 +1167,7 @@ describe('email outbox dispatch poller', () => {
         cipher,
         sender,
         allowSendRateReservation,
+        allowProviderOutagePermit,
         () => clock,
         { hash },
         {

@@ -14,6 +14,7 @@ import {
   setEmailDailySendBudgetSource,
   setEmailOutboxBacklogSource,
   setEmailOutboxCancellationSource,
+  setEmailProviderOutageDurationSource,
 } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
 
@@ -60,6 +61,7 @@ export class EmailOutboxPollerScheduler
       readonly used: number;
       readonly limit: number;
     }>,
+    private readonly providerOutageDuration?: () => Promise<number>,
   ) {}
 
   onModuleInit(): void {
@@ -72,6 +74,9 @@ export class EmailOutboxPollerScheduler
     }
     if (this.dailyBudget !== undefined) {
       setEmailDailySendBudgetSource(this.dailyBudget);
+    }
+    if (this.providerOutageDuration !== undefined) {
+      setEmailProviderOutageDurationSource(this.providerOutageDuration);
     }
     this.timer = setInterval(() => {
       void this.pass();
@@ -105,6 +110,9 @@ export class EmailOutboxPollerScheduler
     }
     if (this.dailyBudget !== undefined) {
       setEmailDailySendBudgetSource(undefined);
+    }
+    if (this.providerOutageDuration !== undefined) {
+      setEmailProviderOutageDurationSource(undefined);
     }
   }
 

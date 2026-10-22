@@ -289,6 +289,35 @@ tests:
               description: "The shared UTC-day Resend budget has reached the invitation cutoff; protected recovery capacity remains."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#daily-email-budget
 
+  # #410: provider outages alert after five minutes only while email is queued.
+  - interval: 1m
+    input_series:
+      - series: "aihub_email_provider_outage_duration_seconds"
+        values: "0 120 240 300 301 360"
+      - series: 'aihub_email_outbox_queued{kind="verification_email"}'
+        values: "1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EmailProviderOutage
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+            exp_annotations:
+              summary: "The shared Resend provider circuit has stayed open for more than five minutes"
+              description: "Queued AIHUB email is waiting while the account-wide Resend circuit remains open. Check the provider status and email-outbox runbook."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#provider-wide-outage-backoff
+  - interval: 1m
+    input_series:
+      - series: "aihub_email_provider_outage_duration_seconds"
+        values: "301x6"
+      - series: 'aihub_email_outbox_queued{kind="verification_email"}'
+        values: "0x6"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EmailProviderOutage
+        exp_alerts: []
+
   # #438: every queued kind is watched at 15 minutes; durable credential
   # expiry samples alert only for that cancellation reason and age out at 15m.
   - interval: 1m

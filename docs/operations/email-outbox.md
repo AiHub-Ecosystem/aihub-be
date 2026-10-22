@@ -192,6 +192,35 @@ The configuration pause and its one-alert suppression are per poller process.
 If several application instances independently observe the same credential
 problem, each can emit one signal until one of its sends succeeds.
 
+## Provider-wide outage backoff (ADR-0122, #410)
+
+HTTP `5xx`, `429`, timeouts, and rejections from the configured Resend `fetch`
+call open one account-wide circuit across Production, Sandbox, and all poller
+instances. Those failures do not consume request attempts. The shared
+full-jitter backoff starts at five seconds and caps at five minutes; a valid
+`429 Retry-After` remains a minimum and can extend the cooldown. After each
+cooldown, one real queued request is allowed as the account-wide probe. `5xx`,
+`429`, and transport failures keep or extend the circuit; any other HTTP response
+closes it. `401` and `403` close the outage circuit because the provider
+responded, while retaining the existing per-poller five-minute configuration
+hold. Message-specific failures keep the #449 classification.
+
+The unlabeled gauge `aihub_email_provider_outage_duration_seconds` reports the
+shared circuit's current duration on `/metrics`. The `EmailProviderOutage`
+rule fires after five minutes only while queued mail exists. The per-kind
+oldest-queued-age alert remains at 15 minutes. Account-wide protection is fully
+active after the #410 release is deployed to every Production and Sandbox
+poller. Redis stores this circuit state temporarily; if Redis loses it, a poller
+can send an early probe, and the next provider-wide failure opens the backoff
+again. Pollers fail closed while Redis is unavailable.
+
+The stable outbox request ID remains the Resend idempotency key. Resend retains
+those keys for 24 hours. The `api-key.near-expiry` notification can remain
+queued for up to 14 days under ADR-0120, so an ambiguous handoff retried after
+Resend's 24-hour retention expires may send a duplicate. Preserve the 14-day
+notification window; the no-duplicate guarantee applies only within the
+provider's key-retention period.
+
 ## Credential expiry alerts; other cancellations do not
 
 A request is `cancelled` when its credential is superseded, expired, revoked, or

@@ -1,4 +1,5 @@
 import type { EmailMessage } from '@/modules/auth/email-delivery/application/email-sender.port';
+import { EmailProviderTransportError } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { ResendEmailSender } from './resend-email.sender';
 
 describe('ResendEmailSender', () => {
@@ -110,6 +111,42 @@ describe('ResendEmailSender', () => {
       status: 429,
       retryAfter: '30',
     });
+  });
+
+  it('classifies a fetch rejection without retaining the thrown error', async () => {
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => {
+        throw new Error('private transport details');
+      },
+    );
+
+    const rejection = sender.send(message);
+    await expect(rejection).rejects.toMatchObject({
+      name: 'EmailProviderTransportError',
+      message: 'Email provider transport failed',
+    });
+    await expect(rejection).rejects.toBeInstanceOf(EmailProviderTransportError);
+  });
+
+  it('does not classify sender serialization errors as provider transport failures', async () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const fetcher = jest.fn(async () => ({
+      status: 200,
+      headers: { get: () => null },
+    }));
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      fetcher,
+    );
+
+    await expect(
+      sender.send({ ...message, subject: circular as unknown as string }),
+    ).rejects.not.toBeInstanceOf(EmailProviderTransportError);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('requires a non-empty sender address', () => {

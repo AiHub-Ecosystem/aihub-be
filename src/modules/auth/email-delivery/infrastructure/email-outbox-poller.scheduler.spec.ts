@@ -172,6 +172,34 @@ describe('EmailOutboxPollerScheduler', () => {
     expect(await getMetrics()).not.toContain('aihub_email_daily_send_budget{');
   });
 
+  it('reports the shared provider outage duration through metrics and removes the source on shutdown', async () => {
+    const subject = new EmailOutboxPollerScheduler(
+      new ControllablePoller() as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      async () => 45_000,
+    );
+    subjects.push(subject);
+
+    subject.onModuleInit();
+
+    expect(await getMetrics()).toContain(
+      'aihub_email_provider_outage_duration_seconds 45',
+    );
+
+    subject.onApplicationShutdown();
+
+    expect(
+      await getMetrics().then((metrics) =>
+        metrics.includes('aihub_email_provider_outage_duration_seconds 0'),
+      ),
+    ).toBe(true);
+  });
+
   it('skips a tick while the previous pass is still running', async () => {
     const poller = new ControllablePoller(true);
 

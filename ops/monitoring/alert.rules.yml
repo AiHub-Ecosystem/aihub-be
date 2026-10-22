@@ -82,6 +82,17 @@ groups:
 
   - name: aihub-email-outbox
     rules:
+      - alert: EmailProviderOutage
+        expr: max(aihub_email_provider_outage_duration_seconds) > 300 and on() (sum(aihub_email_outbox_queued) > 0)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "The shared Resend provider circuit has stayed open for more than five minutes"
+          description: "Queued AIHUB email is waiting while the account-wide Resend circuit remains open. Check the provider status and email-outbox runbook."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#provider-wide-outage-backoff
+
       - alert: AIHUBEmailOutboxQueueAgeAboveBound
         expr: aihub_email_outbox_oldest_queued_age_seconds > 900
         for: 0m

@@ -13,6 +13,10 @@ import type {
   EmailPayloadCipherPort,
   ReleaseUnspentEmailAttemptInput,
 } from './email-delivery-request.port';
+import type {
+  EmailProviderOutageCircuitPort,
+  EmailProviderSendPermit,
+} from './email-provider-outage-circuit.port';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type {
   EmailSendRateLimiterPort,
@@ -213,6 +217,43 @@ export class FakeEmailSendRateLimiter implements EmailSendRateLimiterPort {
   }
 }
 
+export class FakeEmailProviderOutageCircuit
+  implements EmailProviderOutageCircuitPort
+{
+  permit: EmailProviderSendPermit = { allowed: true };
+  readonly failures: number[] = [];
+  readonly failedProbeTokens: (string | undefined)[] = [];
+  readonly releases: string[] = [];
+  reachable = 0;
+  outageDurationMs = 0;
+  cooldownMs = 5_000;
+
+  async acquireSendPermit(): Promise<EmailProviderSendPermit> {
+    return this.permit;
+  }
+
+  async releaseProbe(probeToken: string): Promise<void> {
+    this.releases.push(probeToken);
+  }
+
+  async recordProviderFailure(
+    retryAfterMs: number,
+    probeToken?: string,
+  ): Promise<number> {
+    this.failures.push(retryAfterMs);
+    this.failedProbeTokens.push(probeToken);
+    return Math.max(this.cooldownMs, retryAfterMs);
+  }
+
+  async recordProviderReachable(): Promise<void> {
+    this.reachable += 1;
+  }
+
+  async readOutageDurationMs(): Promise<number> {
+    return this.outageDurationMs;
+  }
+}
+
 export function claimed(
   overrides: Partial<EmailDeliveryRequestRecord> = {},
 ): EmailDeliveryRequestRecord {
@@ -266,6 +307,7 @@ export function harness(
       readonly retryAfterMs?: number;
     };
     rateLimiter?: FakeEmailSendRateLimiter;
+    outageCircuit?: FakeEmailProviderOutageCircuit;
     dailySendBudget?: EmailDailySendBudgetPort;
     now?: () => Date;
     notices?: EmailNoticeResolvers;
@@ -283,12 +325,15 @@ export function harness(
   store: FakeStore;
   credentials: FakeCredentials;
   sender: RecordingSender;
+  outageCircuit: FakeEmailProviderOutageCircuit;
 } {
   const store = new FakeStore();
   const credentials = new FakeCredentials();
   credentials.state = options.credential ?? 'actionable';
   const sender = options.sender ?? new RecordingSender();
   const rateLimiter = options.rateLimiter ?? new FakeEmailSendRateLimiter();
+  const outageCircuit =
+    options.outageCircuit ?? new FakeEmailProviderOutageCircuit();
   if (options.rateReservation !== undefined) {
     rateLimiter.result = options.rateReservation.reserved
       ? { reserved: true }
@@ -303,6 +348,7 @@ export function harness(
     sealed(options.payload ?? VERIFICATION_PAYLOAD),
     sender,
     rateLimiter,
+    outageCircuit,
     options.now ?? ((): Date => NOW),
     { hash: () => TOKEN_HASH },
     {
@@ -322,7 +368,7 @@ export function harness(
         : { dailySendBudget: options.dailySendBudget }),
     },
   );
-  return { poller, store, credentials, sender };
+  return { poller, store, credentials, sender, outageCircuit };
 }
 
 export function worstCaseBatchMs(batchSize: number): number {

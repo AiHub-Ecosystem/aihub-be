@@ -1,24 +1,23 @@
-import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
-
+import { EmailDeliveryPollerMaintenance } from './email-delivery-poller-maintenance';
+import type { EmailDeliveryPollerMaintenanceOptions } from './email-delivery-poller-maintenance';
 import type {
   EmailCredentialActionabilityPort,
   EmailCredentialState,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
-  EmailDeliveryKind,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
   EmailNoticeResolvers,
-  ReleaseUnspentEmailAttemptInput,
 } from './email-delivery-request.port';
-import {
-  API_KEY_NEAR_EXPIRY_WINDOW_MS,
-  EMAIL_DELIVERY_KINDS,
-  EnvelopeCipherError,
-} from './email-delivery-request.port';
+import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
+export { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller-maintenance';
+import type {
+  EmailProviderOutageCircuitPort,
+  EmailProviderSendPermit,
+} from './email-provider-outage-circuit.port';
 import { emailProviderRetryAfterMs } from './email-provider-retry-after.policy';
 import { emailDailySendBudgetCategory } from './email-send-daily-budget.policy';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
@@ -29,14 +28,7 @@ import type {
   EmailProviderResponse,
   EmailSenderPort,
 } from './email-sender.port';
-
-/**
- * A request gets this many provider attempts before it is given up on
- * (ADR-0074). The delay before each retry is a property of the claim, which
- * reads `attempts` and `last_attempt_at` together, so there is one place that
- * decides when a request is due rather than two that can disagree.
- */
-export const MAX_DELIVERY_ATTEMPTS = 3;
+import { EmailProviderTransportError } from './email-sender.port';
 
 /**
  * How long a request this instance could not open waits before any instance
@@ -49,35 +41,6 @@ export const DEFER_RETRY_MS = 5 * 60_000;
 /** Retry a reservation outage on the next poll pass without spending an attempt. */
 export const EMAIL_SEND_RATE_LIMIT_RETRY_MS = 5_000;
 
-/**
- * The longest any credential an Email Delivery Request carries stays valid. A
- * queued request older than this can never be sent, whatever its payload says.
- */
-export const MAX_CREDENTIAL_LIFETIME_MS = Math.max(
-  ...Object.values(OPAQUE_TOKEN_BINDINGS).map((binding) => binding.ttlMs),
-);
-
-/**
- * Each stale cutoff and the kinds it bounds. A near-expiry notice outlives the
- * credential cutoff on purpose: its event is already recorded, so cancelling it
- * after a day-long outage would drop the only warning its keys get (ADR-0120).
- */
-const STALE_CUTOFFS: readonly {
-  readonly ageMs: number;
-  readonly kinds: readonly EmailDeliveryKind[];
-}[] = [
-  {
-    ageMs: MAX_CREDENTIAL_LIFETIME_MS,
-    kinds: EMAIL_DELIVERY_KINDS.filter(
-      (kind) => kind !== 'api_key_near_expiry_notification',
-    ),
-  },
-  {
-    ageMs: API_KEY_NEAR_EXPIRY_WINDOW_MS,
-    kinds: ['api_key_near_expiry_notification'],
-  },
-];
-
 export interface EmailDispatchSummary {
   readonly claimed: number;
   readonly providerAccepted: number;
@@ -89,26 +52,14 @@ export interface EmailDispatchSummary {
   readonly deferred: number;
 }
 
-export interface EmailDeliveryPollerOptions {
-  /** Identifies this instance on the rows it leases. */
-  readonly owner: string;
+export interface EmailDeliveryPollerOptions
+  extends EmailDeliveryPollerMaintenanceOptions {
   /** Validated by the Auth composition root; unset deployments use token-only copy. */
   readonly customerWebBaseUrl?: string;
   /** Filled by the modules that own a notice's facts; see the port. */
   readonly notices?: EmailNoticeResolvers;
   readonly batchSize?: number;
   readonly leaseMs?: number;
-  /**
-   * Called once per request that used its last attempt. The application layer
-   * has no logger and no metrics registry, so the infrastructure that composes
-   * the poller decides what a terminal failure emits. Cancellation never
-   * arrives here: ADR-0074 calls it expected lifecycle handling.
-   */
-  readonly onTerminalFailure?: (failure: {
-    readonly id: string;
-    readonly kind: EmailDeliveryKind;
-    readonly errorCode: EmailDeliveryErrorCode;
-  }) => void;
   /** One safe signal per credential outage, reset by the next accepted send. */
   readonly onProviderConfigurationFailure?: (failure: {
     readonly status: 401 | 403;
@@ -187,11 +138,7 @@ export class EmailDeliveryPoller {
   private readonly leaseMs: number;
   private providerPausedUntil = 0;
   private providerConfigurationAlerted = false;
-  // shortcut: retries survive only this process, durable recovery needs an attempt-outcome journal.
-  private readonly pendingUnspentAttempts = new Map<
-    string,
-    ReleaseUnspentEmailAttemptInput
-  >();
+  private readonly maintenance: EmailDeliveryPollerMaintenance;
 
   constructor(
     private readonly store: EmailDispatchStorePort,
@@ -199,6 +146,7 @@ export class EmailDeliveryPoller {
     private readonly cipher: EmailPayloadCipherPort,
     private readonly sender: EmailSenderPort,
     private readonly sendRateLimiter: EmailSendRateLimiterPort,
+    private readonly providerOutageCircuit: EmailProviderOutageCircuitPort,
     private readonly now: () => Date,
     private readonly tokens: { hash(raw: string): string },
     private readonly options: EmailDeliveryPollerOptions,
@@ -206,19 +154,20 @@ export class EmailDeliveryPoller {
     this.batchSize = options.batchSize ?? EmailDeliveryPoller.BATCH_SIZE;
     this.leaseMs =
       options.leaseMs ?? EmailDeliveryPoller.leaseMsFor(this.batchSize);
+    this.maintenance = new EmailDeliveryPollerMaintenance(
+      store,
+      now,
+      options,
+      this.batchSize,
+      this.leaseMs,
+    );
   }
 
   async runOnce(): Promise<EmailDispatchSummary> {
-    const stale = await this.cancelStaleRequests();
-    for (const id of stale) this.pendingUnspentAttempts.delete(id);
-    await this.retryPendingUnspentAttempts();
-    const exhausted =
-      this.pendingUnspentAttempts.size === 0
-        ? await this.failExhaustedRequests()
-        : 0;
+    const maintenance = await this.maintenance.reconcile();
     const claimAt = this.now();
     const claimed =
-      this.pendingUnspentAttempts.size > 0 ||
+      this.maintenance.hasPendingAttemptReleases ||
       claimAt.getTime() < this.providerPausedUntil
         ? []
         : await this.store.claim({
@@ -231,15 +180,20 @@ export class EmailDeliveryPoller {
     const summary = {
       claimed: claimed.length,
       providerAccepted: 0,
-      cancelled: stale.length,
-      failed: exhausted,
+      cancelled: maintenance.cancelled,
+      failed: maintenance.failed,
       deferred: 0,
     };
     let pauseBatch = false;
     for (const request of claimed) {
       if (pauseBatch) {
+        const now = this.now();
+        const retryAfterMs = Math.max(
+          EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+          this.providerPausedUntil - now.getTime(),
+        );
         try {
-          await this.defer(request, this.now(), DEFER_RETRY_MS);
+          await this.defer(request, now, retryAfterMs);
           summary.deferred += 1;
         } catch {
           // Its lease lapses if the store cannot hand it back.
@@ -252,6 +206,10 @@ export class EmailDeliveryPoller {
         if (outcome === 'cancelled') summary.cancelled += 1;
         if (outcome === 'failed') summary.failed += 1;
         if (outcome === 'deferred') summary.deferred += 1;
+        if (outcome === 'provider_outage') {
+          summary.deferred += 1;
+          pauseBatch = true;
+        }
         if (outcome === 'configuration_failure') {
           summary.deferred += 1;
           pauseBatch = true;
@@ -264,115 +222,8 @@ export class EmailDeliveryPoller {
         if (this.now().getTime() < this.providerPausedUntil) pauseBatch = true;
       }
     }
-    await this.reportUnreportedFailures();
+    await this.maintenance.reportUnreportedFailures();
     return summary;
-  }
-
-  /**
-   * Cancels requests that outlived every credential an Email Delivery Request
-   * can carry, without opening them. This is what bounds a request that is never
-   * dispatched — one sealed under a key version no instance holds, or one whose
-   * credential check keeps failing — so its payload is still erased.
-   */
-  private async cancelStaleRequests(): Promise<string[]> {
-    const now = this.now();
-    const cancelledIds: string[] = [];
-    for (const cutoff of STALE_CUTOFFS) {
-      try {
-        const cancelled = await this.store.cancelStale({
-          at: now,
-          createdAtOrBefore: new Date(now.getTime() - cutoff.ageMs),
-          kinds: cutoff.kinds,
-        });
-        cancelledIds.push(...cancelled.map(({ id }) => id));
-      } catch {
-        // The next pass retries; a stale row stays unsendable either way.
-      }
-    }
-    return cancelledIds;
-  }
-
-  /**
-   * Gives up requests that spent their last attempt without a recorded outcome.
-   *
-   * The attempt is reserved before the provider is called, so a process that
-   * dies in between leaves a row that is `queued`, already at the cap, and
-   * excluded from every further claim. It would keep its ciphertext and never
-   * report anything. This gives it up before the claim rather than calling the
-   * provider a fourth time.
-   */
-  private async failExhaustedRequests(): Promise<number> {
-    try {
-      const failed = await this.store.failExhausted({ at: this.now() });
-      return failed.length;
-    } catch {
-      // The next pass retries. Nothing is lost either way: an unreported
-      // terminal row stays claimable until its alert is emitted.
-      return 0;
-    }
-  }
-
-  /**
-   * Emits the alert for every terminal request that has no record of one, which
-   * after a restart includes the ones whose own pass died before its callback.
-   * A terminal row is not claimable, so without this its alert would be lost for
-   * good — and reporting from durable state is what keeps the event at one per
-   * terminal failure rather than one per pass.
-   *
-   * The store claims the rows before returning them under a lease, so a failure
-   * two instances reconcile at once is reported once between them, and one this
-   * instance dies reporting stays claimable again when the lease lapses.
-   */
-  private async reportUnreportedFailures(): Promise<void> {
-    let pending: readonly EmailDeliveryRequestRecord[];
-    try {
-      pending = await this.store.claimUnreportedFailures({
-        limit: this.batchSize,
-        now: this.now(),
-        leaseMs: this.leaseMs,
-      });
-    } catch {
-      return;
-    }
-    for (const failure of pending) {
-      // A failed row carries a bounded cause; the claim only returns ones that
-      // do, and a row that somehow did not is left alone rather than reported
-      // under a code nobody recorded.
-      if (failure.lastErrorCode === null) continue;
-      try {
-        this.report({
-          id: failure.id,
-          kind: failure.kind,
-          errorCode: failure.lastErrorCode,
-        });
-        await this.store.markFailureReported({
-          id: failure.id,
-          reportedAt: this.now(),
-        });
-      } catch {
-        // Emitting is what has to be retried, not recorded: hand the claim back so
-        // this row is reportable now rather than after the lease lapses. A
-        // callback that throws is an observability defect, not a delivery one, so
-        // it must not stop the rest of the batch.
-        await this.releaseNotification(failure.id);
-      }
-    }
-  }
-
-  private async releaseNotification(id: string): Promise<void> {
-    try {
-      await this.store.releaseFailureNotification({ id });
-    } catch {
-      // The lease still lapses on its own, so this is a delay, not a loss.
-    }
-  }
-
-  private report(failure: {
-    readonly id: string;
-    readonly kind: EmailDeliveryKind;
-    readonly errorCode: EmailDeliveryErrorCode;
-  }): void {
-    this.options.onTerminalFailure?.(failure);
   }
 
   private async dispatch(
@@ -383,6 +234,7 @@ export class EmailDeliveryPoller {
     | 'failed'
     | 'retried'
     | 'deferred'
+    | 'provider_outage'
     | 'configuration_failure'
   > {
     const now = this.now();
@@ -395,14 +247,14 @@ export class EmailDeliveryPoller {
     if (delivery === undefined) {
       // A payload this instance cannot open will never open, so waiting would
       // claim the row forever without ever making it deliverable.
-      return this.cancel(request, 'not_actionable', now);
+      return this.maintenance.cancel(request, 'not_actionable', now);
     }
 
     const credential = delivery.handler.credential(delivery.payload);
     if (credential !== undefined) {
       const expiry = Date.parse(credential.expiresAt);
       if (!Number.isFinite(expiry) || expiry <= now.getTime()) {
-        return this.cancel(request, 'credential_expired', now);
+        return this.maintenance.cancel(request, 'credential_expired', now);
       }
 
       const state = await this.credentials.check({
@@ -411,7 +263,7 @@ export class EmailDeliveryPoller {
         now,
       });
       if (state !== 'actionable') {
-        return this.cancel(request, cancelReasonOf(state), now);
+        return this.maintenance.cancel(request, cancelReasonOf(state), now);
       }
     }
 
@@ -425,7 +277,21 @@ export class EmailDeliveryPoller {
       notices: this.options.notices ?? {},
     });
     if (message === undefined) {
-      return this.cancel(request, 'not_actionable', now);
+      return this.maintenance.cancel(request, 'not_actionable', now);
+    }
+
+    let sendPermit: EmailProviderSendPermit;
+    try {
+      sendPermit = await this.providerOutageCircuit.acquireSendPermit();
+    } catch {
+      return this.deferForProviderOutage(
+        request,
+        now,
+        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      );
+    }
+    if (!sendPermit.allowed) {
+      return this.deferForProviderOutage(request, now, sendPermit.retryAfterMs);
     }
 
     // The attempt is spent before the provider is called, not recorded after it
@@ -435,9 +301,11 @@ export class EmailDeliveryPoller {
     try {
       reservation = await this.sendRateLimiter.reserve();
     } catch {
+      await this.releaseProbe(sendPermit);
       return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
     }
     if (!reservation.reserved) {
+      await this.releaseProbe(sendPermit);
       const retryAfterMs = reservation.retryAfterMs;
       return this.defer(
         request,
@@ -455,9 +323,11 @@ export class EmailDeliveryPoller {
           emailDailySendBudgetCategory(request.kind),
         );
       } catch {
+        await this.releaseProbe(sendPermit);
         return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
       }
       if (!budgetReservation.reserved) {
+        await this.releaseProbe(sendPermit);
         const expiresAt = delivery.handler.credential(
           delivery.payload,
         )?.expiresAt;
@@ -479,40 +349,82 @@ export class EmailDeliveryPoller {
       }
     }
 
-    await this.store.reserveAttempt({
-      id: request.id,
-      attemptedAt: now,
-      owner: this.options.owner,
-    });
+    try {
+      await this.store.reserveAttempt({
+        id: request.id,
+        attemptedAt: now,
+        owner: this.options.owner,
+      });
+    } catch (error) {
+      await this.releaseProbe(sendPermit);
+      throw error;
+    }
 
     let response: EmailProviderResponse;
     try {
       response = await this.deliver(request, message);
     } catch (error) {
-      return this.recordFailure(request, errorCodeOf(error), now);
+      if (error instanceof EmailProviderTransportError) {
+        const failedAt = this.now();
+        const retryAfterMs = await this.openProviderCircuit(
+          0,
+          failedAt,
+          sendPermit.probeToken,
+        );
+        await this.maintenance.releaseUnspentAttempt(
+          request,
+          new Date(failedAt.getTime() + retryAfterMs),
+        );
+        return 'provider_outage';
+      }
+      await this.releaseProbe(sendPermit);
+      return this.maintenance.recordFailure(request, errorCodeOf(error), now);
     }
 
     const responseReceivedAt = this.now();
 
+    if (response.status === 429) {
+      const retryAfterMs = emailProviderRetryAfterMs(
+        response.retryAfter,
+        responseReceivedAt,
+      );
+      const circuitDelayMs = await this.openProviderCircuit(
+        retryAfterMs,
+        responseReceivedAt,
+        sendPermit.probeToken,
+      );
+      await this.maintenance.releaseUnspentAttempt(
+        request,
+        new Date(
+          responseReceivedAt.getTime() + Math.max(retryAfterMs, circuitDelayMs),
+        ),
+      );
+      return 'provider_outage';
+    }
+
+    if (response.status >= 500 && response.status < 600) {
+      const retryAfterMs = await this.openProviderCircuit(
+        0,
+        responseReceivedAt,
+        sendPermit.probeToken,
+      );
+      await this.maintenance.releaseUnspentAttempt(
+        request,
+        new Date(responseReceivedAt.getTime() + retryAfterMs),
+      );
+      return 'provider_outage';
+    }
+
+    await this.closeProviderCircuit();
+
     if (response.status === 401 || response.status === 403) {
       this.providerPausedUntil = responseReceivedAt.getTime() + DEFER_RETRY_MS;
       this.reportProviderConfigurationFailure(response.status);
-      await this.releaseUnspentAttempt(
+      await this.maintenance.releaseUnspentAttempt(
         request,
         new Date(this.providerPausedUntil),
       );
       return 'configuration_failure';
-    }
-
-    if (response.status === 429) {
-      await this.releaseUnspentAttempt(
-        request,
-        new Date(
-          responseReceivedAt.getTime() +
-            emailProviderRetryAfterMs(response.retryAfter, responseReceivedAt),
-        ),
-      );
-      return 'deferred';
     }
 
     if (response.status === 400 || response.status === 422) {
@@ -526,7 +438,7 @@ export class EmailDeliveryPoller {
     }
 
     if (response.status < 200 || response.status >= 300) {
-      return this.recordFailure(request, 'provider_rejected', now);
+      return this.maintenance.recordFailure(request, 'provider_rejected', now);
     }
 
     await this.store.markProviderAccepted({
@@ -577,6 +489,80 @@ export class EmailDeliveryPoller {
     return 'deferred';
   }
 
+  private async deferForProviderOutage(
+    request: EmailDeliveryRequestRecord,
+    now: Date,
+    retryAfterMs: number,
+  ): Promise<'provider_outage'> {
+    const safeRetryAfterMs =
+      Number.isSafeInteger(retryAfterMs) && retryAfterMs >= 0
+        ? retryAfterMs
+        : EMAIL_SEND_RATE_LIMIT_RETRY_MS;
+    this.providerPausedUntil = Math.max(
+      this.providerPausedUntil,
+      now.getTime() + safeRetryAfterMs,
+    );
+    await this.defer(
+      request,
+      now,
+      Math.max(EMAIL_SEND_RATE_LIMIT_RETRY_MS, safeRetryAfterMs),
+    );
+    return 'provider_outage';
+  }
+
+  private async releaseProbe(permit: EmailProviderSendPermit): Promise<void> {
+    if (!permit.allowed || permit.probeToken === undefined) return;
+    try {
+      await this.providerOutageCircuit.releaseProbe(permit.probeToken);
+    } catch {
+      // Redis expires the probe lock with its bounded recovery TTL.
+    }
+  }
+
+  private async openProviderCircuit(
+    retryAfterMs: number,
+    openedAt: Date,
+    probeToken?: string,
+  ): Promise<number> {
+    try {
+      const circuitDelayMs =
+        await this.providerOutageCircuit.recordProviderFailure(
+          retryAfterMs,
+          probeToken,
+        );
+      const safeDelayMs =
+        Number.isSafeInteger(circuitDelayMs) && circuitDelayMs >= 0
+          ? Math.max(retryAfterMs, circuitDelayMs)
+          : Math.max(retryAfterMs, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
+      this.providerPausedUntil = Math.max(
+        this.providerPausedUntil,
+        openedAt.getTime() + safeDelayMs,
+      );
+      return safeDelayMs;
+    } catch {
+      const fallbackDelayMs = Math.max(
+        retryAfterMs,
+        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      );
+      this.providerPausedUntil = Math.max(
+        this.providerPausedUntil,
+        openedAt.getTime() + fallbackDelayMs,
+      );
+      return fallbackDelayMs;
+    }
+  }
+
+  private async closeProviderCircuit(): Promise<void> {
+    try {
+      await this.providerOutageCircuit.recordProviderReachable();
+    } catch {
+      this.providerPausedUntil = Math.max(
+        this.providerPausedUntil,
+        this.now().getTime() + EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      );
+    }
+  }
+
   private async deliver(
     request: EmailDeliveryRequestRecord,
     message: EmailMessage,
@@ -585,33 +571,6 @@ export class EmailDeliveryPoller {
     // already durable, and already what every attempt of this request has
     // used, so an uncertain handoff can be retried without a second email.
     return this.sender.send(message, { idempotencyKey: request.id });
-  }
-
-  private async releaseUnspentAttempt(
-    request: EmailDeliveryRequestRecord,
-    retryAt: Date,
-  ): Promise<void> {
-    const input = {
-      id: request.id,
-      owner: this.options.owner,
-      previousAttempts: request.attempts,
-      previousAttemptAt: request.lastAttemptAt,
-      retryAt,
-    };
-    this.pendingUnspentAttempts.set(request.id, input);
-    await this.store.releaseUnspentAttempt(input);
-    this.pendingUnspentAttempts.delete(request.id);
-  }
-
-  private async retryPendingUnspentAttempts(): Promise<void> {
-    for (const [id, input] of this.pendingUnspentAttempts) {
-      try {
-        await this.store.releaseUnspentAttempt(input);
-        this.pendingUnspentAttempts.delete(id);
-      } catch {
-        // Keep the known non-consuming outcome ahead of the exhausted sweep.
-      }
-    }
   }
 
   private reportProviderConfigurationFailure(status: 401 | 403): void {
@@ -624,52 +583,5 @@ export class EmailDeliveryPoller {
     } catch {
       // A failed alert callback does not turn a held request into a delivery attempt.
     }
-  }
-
-  /**
-   * The last allowed attempt is terminal; anything earlier only moves the next
-   * one forward. `attempts` is what the row already carries, so the request
-   * that follows the final attempt is the one that stops.
-   */
-  private async recordFailure(
-    request: EmailDeliveryRequestRecord,
-    errorCode: EmailDeliveryErrorCode,
-    now: Date,
-  ): Promise<'retried' | 'failed'> {
-    if (request.attempts + 1 >= MAX_DELIVERY_ATTEMPTS) {
-      await this.store.markFailed({
-        id: request.id,
-        failedAt: now,
-        errorCode,
-        owner: this.options.owner,
-      });
-      // The alert is not emitted here. The moment this commits, the row is
-      // eligible for another instance's reconciliation, so emitting from this
-      // path would let both instances report the same failure. Reconciliation at
-      // the end of this pass claims the row under the notification lease and
-      // emits it, so it is still this pass that reports it.
-      return 'failed';
-    }
-    await this.store.recordFailedAttempt({
-      id: request.id,
-      attemptedAt: now,
-      errorCode,
-      owner: this.options.owner,
-    });
-    return 'retried';
-  }
-
-  private async cancel(
-    request: EmailDeliveryRequestRecord,
-    reason: EmailDeliveryCancelReason,
-    now: Date,
-  ): Promise<'cancelled'> {
-    await this.store.markCancelled({
-      id: request.id,
-      cancelledAt: now,
-      reason,
-      owner: this.options.owner,
-    });
-    return 'cancelled';
   }
 }

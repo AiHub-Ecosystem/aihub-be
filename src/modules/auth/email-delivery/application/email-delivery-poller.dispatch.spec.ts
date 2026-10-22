@@ -5,6 +5,7 @@ import {
 } from './email-delivery-poller';
 import {
   FakeCredentials,
+  FakeEmailProviderOutageCircuit,
   FakeEmailSendRateLimiter,
   FakeStore,
   NOW,
@@ -21,7 +22,10 @@ import {
 } from './email-delivery-poller.spec-support';
 import type { EmailDeliveryPayload } from './email-delivery-request.port';
 import { EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS } from './email-provider-retry-after.policy';
-import type { EmailSenderPort } from './email-sender.port';
+import {
+  EmailProviderTransportError,
+  type EmailSenderPort,
+} from './email-sender.port';
 
 describe('EmailDeliveryPoller', () => {
   it('dispatches MFA security notices without checking credential actionability', async () => {
@@ -240,11 +244,112 @@ describe('EmailDeliveryPoller', () => {
     expect(summary.failed).toBe(0);
   });
 
+  it('refunds an attempt and pauses the rest of the batch after a provider-wide 5xx', async () => {
+    const { poller, store, sender, outageCircuit } = harness();
+    outageCircuit.permit = { allowed: true, probeToken: 'probe-token' };
+    store.claimResult = [
+      claimed({ id: 'edr_first', attempts: 2 }),
+      claimed({ id: 'edr_second' }),
+    ];
+    sender.response = { status: 503, retryAfter: undefined };
+
+    const summary = await poller.runOnce();
+
+    expect(store.unspent).toEqual([
+      {
+        id: 'edr_first',
+        previousAttempts: 2,
+        previousAttemptAt: null,
+        retryAt: expect.any(Date),
+      },
+    ]);
+    expect(outageCircuit.failures).toEqual([0]);
+    expect(outageCircuit.failedProbeTokens).toEqual(['probe-token']);
+    expect(sender.sends).toHaveLength(1);
+    expect(store.deferred).toContain('edr_second');
+    expect(store.attempts).toEqual([]);
+    expect(store.failed).toEqual([]);
+    expect(summary.deferred).toBe(2);
+  });
+
+  it('keeps mail queued through more than three provider failures, then delivers it', async () => {
+    let now = new Date(NOW);
+    const { poller, store, sender } = harness({ now: () => new Date(now) });
+    sender.response = { status: 503, retryAfter: undefined };
+
+    for (let failure = 0; failure < 4; failure += 1) {
+      store.claimResult = [claimed({ attempts: 0 })];
+      await poller.runOnce();
+      now = new Date(now.getTime() + 5_000);
+    }
+
+    sender.response = { status: 202, retryAfter: undefined };
+    store.claimResult = [claimed({ attempts: 0 })];
+    await poller.runOnce();
+
+    expect(sender.sends).toHaveLength(5);
+    expect(store.unspent).toHaveLength(4);
+    expect(
+      store.unspent.every((attempt) => attempt.previousAttempts === 0),
+    ).toBe(true);
+    expect(store.attempts).toEqual([]);
+    expect(store.failed).toEqual([]);
+    expect(store.accepted).toEqual([ROW_ID]);
+  });
+
+  it('does not reserve a send or spend an attempt while the shared circuit is open', async () => {
+    const { poller, store, sender, outageCircuit } = harness();
+    outageCircuit.permit = { allowed: false, retryAfterMs: 12_000 };
+    store.claimResult = [claimed({ attempts: 2 })];
+
+    const summary = await poller.runOnce();
+
+    expect(store.reserved).toEqual([]);
+    expect(store.attempts).toEqual([]);
+    expect(sender.sends).toEqual([]);
+    expect(store.deferredUntil).toEqual([new Date(NOW.getTime() + 12_000)]);
+    expect(summary.deferred).toBe(1);
+  });
+
+  it('continues stale and terminal reconciliation while shared sends are paused', async () => {
+    const { poller, store, outageCircuit } = harness();
+    outageCircuit.permit = { allowed: false, retryAfterMs: 12_000 };
+    store.stale = [claimed({ id: 'edr_stale' })];
+    store.exhausted = [
+      claimed({
+        id: 'edr_exhausted',
+        status: 'failed',
+        lastErrorCode: 'timeout',
+      }),
+    ];
+    store.claimResult = [claimed()];
+
+    const summary = await poller.runOnce();
+
+    expect(store.staleCutoffs).toHaveLength(2);
+    expect(summary.cancelled).toBe(1);
+    expect(store.reported).toEqual(['edr_exhausted']);
+    expect(store.deferred).toContain(ROW_ID);
+  });
+
+  it('treats a Resend fetch rejection as provider-wide and refunds the attempt', async () => {
+    const { poller, store, sender, outageCircuit } = harness();
+    store.claimResult = [claimed({ attempts: 1 })];
+    sender.failure = new EmailProviderTransportError();
+
+    await poller.runOnce();
+
+    expect(outageCircuit.failures).toEqual([0]);
+    expect(store.unspent).toHaveLength(1);
+    expect(store.attempts).toEqual([]);
+    expect(store.failed).toEqual([]);
+  });
+
   it.each([400, 422] as const)(
     'fails a %s response after one provider attempt',
     async (status) => {
       const terminalFailures: unknown[] = [];
-      const { poller, store, sender } = harness({
+      const { poller, store, sender, outageCircuit } = harness({
         onTerminalFailure: (failure) => terminalFailures.push(failure),
       });
       store.claimResult = [claimed()];
@@ -257,6 +362,7 @@ describe('EmailDeliveryPoller', () => {
         { id: ROW_ID, errorCode: 'provider_permanent_rejection' },
       ]);
       expect(store.attempts).toEqual([]);
+      expect(outageCircuit.reachable).toBe(1);
       expect(summary.failed).toBe(1);
       expect(terminalFailures).toEqual([
         {
@@ -272,7 +378,7 @@ describe('EmailDeliveryPoller', () => {
     'holds the queue and emits one configuration alert for %s',
     async (status) => {
       const alerts: { status: number }[] = [];
-      const { poller, store, sender } = harness({
+      const { poller, store, sender, outageCircuit } = harness({
         onProviderConfigurationFailure: (failure) => alerts.push(failure),
       });
       store.claimResult = [claimed(), claimed({ id: 'edr_second' })];
@@ -290,6 +396,7 @@ describe('EmailDeliveryPoller', () => {
         },
       ]);
       expect(store.deferred).toEqual([ROW_ID, 'edr_second']);
+      expect(outageCircuit.reachable).toBe(1);
       expect(alerts).toEqual([{ status }]);
       expect(summary.deferred).toBe(2);
 
@@ -331,7 +438,7 @@ describe('EmailDeliveryPoller', () => {
   });
 
   it('defers 429 without spending an attempt and honours Retry-After', async () => {
-    const { poller, store, sender } = harness();
+    const { poller, store, sender, outageCircuit } = harness();
     const previousAttemptAt = new Date(NOW.getTime() - 60_000);
     store.claimResult = [
       claimed({ attempts: 1, lastAttemptAt: previousAttemptAt }),
@@ -350,10 +457,11 @@ describe('EmailDeliveryPoller', () => {
     ]);
     expect(store.attempts).toEqual([]);
     expect(summary.deferred).toBe(1);
+    expect(outageCircuit.failures).toEqual([30_000]);
 
     await poller.runOnce();
 
-    expect(store.claims[1]?.now).toEqual(NOW);
+    expect(store.claims).toHaveLength(1);
     expect(sender.sends).toHaveLength(1);
   });
 
@@ -424,7 +532,9 @@ describe('EmailDeliveryPoller', () => {
       retryAfter: 'Saturday, 23-Oct-76 12:00:30 GMT',
     };
     await overFiftyYears.poller.runOnce();
-    expect(overFiftyYears.store.deferredUntil).toEqual([NOW]);
+    expect(overFiftyYears.store.deferredUntil).toEqual([
+      new Date(NOW.getTime() + 5_000),
+    ]);
 
     const exactlyFiftyYears = harness();
     exactlyFiftyYears.store.claimResult = [claimed()];
@@ -449,7 +559,7 @@ describe('EmailDeliveryPoller', () => {
   });
 
   it('retries unclassified 4xx responses under the bounded default policy', async () => {
-    const { poller, store, sender } = harness();
+    const { poller, store, sender, outageCircuit } = harness();
     store.claimResult = [claimed()];
     sender.response = { status: 404, retryAfter: undefined };
 
@@ -459,6 +569,7 @@ describe('EmailDeliveryPoller', () => {
       { id: ROW_ID, errorCode: 'provider_rejected' },
     ]);
     expect(store.failed).toEqual([]);
+    expect(outageCircuit.reachable).toBe(1);
   });
 
   it('gives up on the third attempt instead of scheduling a fourth', async () => {
@@ -581,6 +692,7 @@ describe('EmailDeliveryPoller', () => {
       sealed(VERIFICATION_PAYLOAD),
       failingThenWorking,
       new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -614,6 +726,7 @@ describe('EmailDeliveryPoller', () => {
       unknownKeyVersionCipher(),
       sender,
       new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -645,6 +758,7 @@ describe('EmailDeliveryPoller', () => {
       unknownKeyVersionCipher(),
       new RecordingSender(),
       new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -741,6 +855,7 @@ describe('EmailDeliveryPoller', () => {
       unreadableCipher(),
       sender,
       new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -766,6 +881,7 @@ describe('EmailDeliveryPoller', () => {
       sealed(VERIFICATION_PAYLOAD),
       sender,
       new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },

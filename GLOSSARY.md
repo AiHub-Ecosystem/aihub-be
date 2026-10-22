@@ -84,6 +84,12 @@ _Avoid_: per-route email cap
 The maximum aggregate request rate AIHUB permits for sends to one email-provider
 account, shared across every AIHUB instance using that account.
 
+**Email Provider Outage**:
+A period when the Resend account cannot accept delivery requests because of
+provider rate limiting, service failure, timeout, or connection failure. A
+message-specific rejection and a credential configuration problem are separate
+conditions.
+
 **Email Daily Send Budget**:
 A maximum number of outbound email attempts AIHUB may reserve per UTC calendar
 day across all deployments using one provider account. Organization Invitations

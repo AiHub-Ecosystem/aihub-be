@@ -35,4 +35,12 @@ export interface EmailSenderPort {
   ): Promise<EmailProviderResponse>;
 }
 
+/** A rejection from the configured provider fetch, without retaining its body. */
+export class EmailProviderTransportError extends Error {
+  constructor() {
+    super('Email provider transport failed');
+    this.name = 'EmailProviderTransportError';
+  }
+}
+
 export const EMAIL_SENDER = Symbol('EMAIL_SENDER');

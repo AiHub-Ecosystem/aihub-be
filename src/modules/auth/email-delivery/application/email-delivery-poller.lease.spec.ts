@@ -1,6 +1,7 @@
 import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,
+  FakeEmailProviderOutageCircuit,
   FakeEmailSendRateLimiter,
   FakeStore,
   NOW,
@@ -33,6 +34,7 @@ describe('EmailDeliveryPoller', () => {
       sealed(VERIFICATION_PAYLOAD),
       new RecordingSender(),
       new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a', batchSize: 25 },

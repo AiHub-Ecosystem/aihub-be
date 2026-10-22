@@ -8,6 +8,7 @@ import {
   type EmailDeliveryKindLabel,
   registerEmailOutboxCancellationMetric,
 } from './email-outbox-cancellation-metric';
+import { registerEmailProviderOutageMetric } from './email-provider-outage-metric';
 
 export type {
   EmailDeliveryKindLabel,
@@ -506,6 +507,8 @@ export const setEmailOutboxCancellationSource =
   registerEmailOutboxCancellationMetric(registry);
 export const setEmailDailySendBudgetSource =
   registerEmailDailySendBudgetMetric(registry);
+export const setEmailProviderOutageDurationSource =
+  registerEmailProviderOutageMetric(registry);
 
 export interface DispatchAttemptUnresolvedSample {
   readonly operation: OperationId | 'other';
