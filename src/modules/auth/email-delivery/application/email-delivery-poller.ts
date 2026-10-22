@@ -13,6 +13,7 @@ import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
+import { emailDailySendBudgetCategory } from './email-send-daily-budget.policy';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type { EmailSendRateLimiterPort } from './email-send-rate-limiter.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
@@ -360,7 +361,7 @@ export class EmailDeliveryPoller {
       let budgetReservation;
       try {
         budgetReservation = await this.options.dailySendBudget.reserve(
-          request.kind,
+          emailDailySendBudgetCategory(request.kind),
         );
       } catch {
         return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);

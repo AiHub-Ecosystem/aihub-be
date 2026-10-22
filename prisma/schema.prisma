@@ -134,6 +134,7 @@ model EmailDailySendBudget {
   id             BigInt   @id @default(1)
   budgetDate     DateTime @map("budget_date") @db.Date
   dailyBudget    BigInt   @map("daily_budget")
+  invitationBudget BigInt @map("invitation_budget")
   reservedSends  BigInt   @map("reserved_sends")
 
   @@map("email_daily_send_budgets")

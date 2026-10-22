@@ -38,6 +38,7 @@ import {
   type EmailDeliveryRequestWriterPort,
   type EmailPayloadCipherPort,
 } from './email-delivery/application/email-delivery-request.port';
+import { emailDailySendBudgetLimits } from './email-delivery/application/email-send-daily-budget.policy';
 import {
   EMAIL_DAILY_SEND_BUDGET,
   type EmailDailySendBudgetPort,
@@ -383,7 +384,9 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
       ): EmailDailySendBudgetPort =>
         new PostgresEmailDailySendBudget(
           () => database.pool,
-          configuration.AIHUB_EMAIL_DAILY_SEND_BUDGET ?? 0,
+          emailDailySendBudgetLimits(
+            configuration.AIHUB_EMAIL_DAILY_SEND_BUDGET ?? 0,
+          ),
         ),
     },
     // The dispatch poller runs in every instance against its own database, so

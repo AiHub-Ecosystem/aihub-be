@@ -181,7 +181,7 @@ describe('EmailDeliveryPoller', () => {
 
     const summary = await poller.runOnce();
 
-    expect(reserve).toHaveBeenCalledWith('verification_email');
+    expect(reserve).toHaveBeenCalledWith('priority');
     expect(store.reserved).toEqual([]);
     expect(store.deferredUntil).toEqual([
       new Date(Date.parse(VERIFICATION_PAYLOAD.expiresAt)),
