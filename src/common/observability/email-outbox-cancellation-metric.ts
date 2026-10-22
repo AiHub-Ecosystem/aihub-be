@@ -5,7 +5,8 @@ export type EmailDeliveryKindLabel =
   | 'password_reset_email'
   | 'organization_invite_email'
   | 'mfa_enabled_notification'
-  | 'mfa_removed_notification';
+  | 'mfa_removed_notification'
+  | 'api_key_near_expiry_notification';
 
 export interface EmailOutboxCancellationSample {
   readonly kind: EmailDeliveryKindLabel;

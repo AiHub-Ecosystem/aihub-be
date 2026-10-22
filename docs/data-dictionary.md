@@ -6,7 +6,8 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 
 | Table (model)               | Owner       | Columns |
 | --------------------------- | ----------- | ------- |
-| ApiKey                      | identity    | 14      |
+| ApiKey                      | identity    | 15      |
+| NotificationEvent           | identity    | 8       |
 | AuthIdentity                | auth        | 8       |
 | EmailDeliveryRequest        | auth        | 16      |
 | AuthEmailRecipientRateLimit | auth        | 5       |
@@ -17,7 +18,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | OrganizationIdentityConfig  | identity    | 11      |
 | OrganizationInvitation      | identity    | 11      |
 | OrganizationMembership      | identity    | 8       |
-| Organization                | identity    | 19      |
+| Organization                | identity    | 20      |
 | PasswordResetToken          | auth        | 7       |
 | RefreshToken                | auth        | 9       |
 | SandboxDispatchReservation  | gateway     | 6       |
@@ -41,22 +42,38 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 
 Owner: `identity`
 
-| Column              | Type         | Attributes                                                                                    |
-| ------------------- | ------------ | --------------------------------------------------------------------------------------------- |
-| id                  | String       | @id                                                                                           |
-| organizationId      | String       | @map("organization_id")                                                                       |
-| keyHash             | Bytes        | @unique(map: "api_keys_hash_uq") @map("key_hash")                                             |
-| keyPrefix           | String       | @map("key_prefix")                                                                            |
-| name                | String       |                                                                                               |
-| scopes              | String[]     | @default([])                                                                                  |
-| allowedEnvironments | String[]     | @default(["production"]) @map("allowed_environments")                                         |
-| status              | String       | @default("active")                                                                            |
-| expiresAt           | DateTime?    | @map("expires_at") @db.Timestamptz(6)                                                         |
-| lastUsedAt          | DateTime?    | @map("last_used_at") @db.Timestamptz(6)                                                       |
-| revokedAt           | DateTime?    | @map("revoked_at") @db.Timestamptz(6)                                                         |
-| createdAt           | DateTime     | @default(now()) @map("created_at") @db.Timestamptz(6)                                         |
-| internal            | Boolean      | @default(false)                                                                               |
-| organization        | Organization | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
+| Column              | Type                | Attributes                                                                                    |
+| ------------------- | ------------------- | --------------------------------------------------------------------------------------------- |
+| id                  | String              | @id                                                                                           |
+| organizationId      | String              | @map("organization_id")                                                                       |
+| keyHash             | Bytes               | @unique(map: "api_keys_hash_uq") @map("key_hash")                                             |
+| keyPrefix           | String              | @map("key_prefix")                                                                            |
+| name                | String              |                                                                                               |
+| scopes              | String[]            | @default([])                                                                                  |
+| allowedEnvironments | String[]            | @default(["production"]) @map("allowed_environments")                                         |
+| status              | String              | @default("active")                                                                            |
+| expiresAt           | DateTime?           | @map("expires_at") @db.Timestamptz(6)                                                         |
+| lastUsedAt          | DateTime?           | @map("last_used_at") @db.Timestamptz(6)                                                       |
+| revokedAt           | DateTime?           | @map("revoked_at") @db.Timestamptz(6)                                                         |
+| createdAt           | DateTime            | @default(now()) @map("created_at") @db.Timestamptz(6)                                         |
+| internal            | Boolean             | @default(false)                                                                               |
+| organization        | Organization        | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
+| notificationEvents  | NotificationEvent[] |                                                                                               |
+
+## NotificationEvent
+
+Owner: `identity`
+
+| Column           | Type         | Attributes                                                                                    |
+| ---------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| id               | String       | @id                                                                                           |
+| kind             | String       |                                                                                               |
+| organizationId   | String       | @map("organization_id")                                                                       |
+| apiKeyId         | String       | @map("api_key_id")                                                                            |
+| subjectExpiresAt | DateTime     | @map("subject_expires_at") @db.Timestamptz(6)                                                 |
+| recordedAt       | DateTime     | @map("recorded_at") @db.Timestamptz(6)                                                        |
+| organization     | Organization | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
+| apiKey           | ApiKey       | @relation(fields: [apiKeyId], references: [id], onDelete: NoAction, onUpdate: NoAction)       |
 
 ## AuthIdentity
 
@@ -251,6 +268,7 @@ Owner: `identity`
 | identityConfig         | OrganizationIdentityConfig? |                                                                                                                                  |
 | invitations            | OrganizationInvitation[]    |                                                                                                                                  |
 | memberships            | OrganizationMembership[]    |                                                                                                                                  |
+| notificationEvents     | NotificationEvent[]         |                                                                                                                                  |
 | createdByUserAccount   | UserAccount?                | @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
 
 ## PasswordResetToken

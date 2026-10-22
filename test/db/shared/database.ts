@@ -124,6 +124,7 @@ export async function resetIdentityTables(pool: Pool): Promise<void> {
     TRUNCATE TABLE
       organization_audit_events,
       email_daily_send_budgets,
+      notification_events,
       auth_email_recipient_rate_limits,
       email_delivery_requests,
       user_mfa_recovery_codes,

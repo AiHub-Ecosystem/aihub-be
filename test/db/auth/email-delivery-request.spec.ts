@@ -2,6 +2,7 @@ import { ulid } from 'ulid';
 
 import type { Pool } from 'pg';
 
+import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
@@ -318,6 +319,7 @@ describe('email delivery request repository', () => {
     const cancelled = await repository.cancelStale(authClient, {
       at: NOW,
       createdAtOrBefore: cutoff,
+      kinds: EMAIL_DELIVERY_KINDS,
     });
 
     expect(cancelled.map((row) => row.id)).toEqual([stale]);
@@ -376,6 +378,7 @@ describe('email delivery request repository', () => {
     await repository.cancelStale(authClient, {
       at: NOW,
       createdAtOrBefore: new Date(NOW.getTime() - 3_000_000),
+      kinds: EMAIL_DELIVERY_KINDS,
     });
 
     const backlog = await repository.backlog(authClient, { now: NOW });

@@ -6,6 +6,7 @@
 30 3 * * * '@AIHUB_APP_DIR@/scripts/ops/host-jobs/host-scheduled-job.sh' avatar-sweep >/dev/null 2>&1
 10,25,40,55 * * * * '@AIHUB_APP_DIR@/scripts/ops/host-jobs/host-scheduled-job.sh' chart-upload-sweep >/dev/null 2>&1
 20 4 * * * '@AIHUB_APP_DIR@/scripts/ops/host-jobs/host-scheduled-job.sh' speaking-upload-sweep >/dev/null 2>&1
+15 1 * * * '@AIHUB_APP_DIR@/scripts/ops/host-jobs/host-scheduled-job.sh' notification-sweep >/dev/null 2>&1
 47 * * * * '@AIHUB_APP_DIR@/scripts/ops/backups/backup-postgres.sh' postgres-backup >/dev/null 2>&1
 * * * * * '@AIHUB_APP_DIR@/scripts/ops/host-jobs/container-watchdog.sh' >/dev/null 2>&1
 # END AIHUB MANAGED JOBS

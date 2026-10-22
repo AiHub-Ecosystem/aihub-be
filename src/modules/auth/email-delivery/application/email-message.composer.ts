@@ -1,3 +1,7 @@
+import {
+  API_KEY_NEAR_EXPIRY_WINDOW_MS,
+  type ApiKeyNearExpiryNotificationInput,
+} from './email-delivery-request.port';
 import type { EmailMessage } from './email-sender.port';
 import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
 
@@ -25,6 +29,8 @@ export interface MfaSecurityNotificationInput {
   readonly email: string;
   readonly action: 'enabled' | 'removed';
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => {
@@ -279,6 +285,56 @@ export function composeOrganizationInviteEmail(
       expiryLabel: 'Lời mời có hiệu lực đến',
       expiresAt,
       notice: 'Nếu bạn không mong đợi lời mời này, hãy bỏ qua email.',
+    }),
+  };
+}
+
+/**
+ * Rotation keeps a key's expiry (#986), so the only remedy the notice can name
+ * is a replacement key followed by revoking the old one (ADR-0120).
+ */
+export function composeApiKeyNearExpiryNotification(
+  input: ApiKeyNearExpiryNotificationInput,
+  customerWebBaseUrl?: string,
+): EmailMessage {
+  const url =
+    customerWebBaseUrl === undefined
+      ? undefined
+      : `${customerWebBaseUrl}/console/orgs/${encodeURIComponent(input.organizationId)}/api-keys`;
+  const keyLines = input.apiKeys.map(
+    (key) =>
+      `${key.name} (${key.id}): hết hạn ${formatVietnameseDateTime(key.expiresAt)} (giờ Việt Nam)`,
+  );
+  const earliest = new Date(
+    Math.min(...input.apiKeys.map((key) => key.expiresAt.getTime())),
+  );
+  const subject = `API key của ${input.organizationName} trên AIHUB sắp hết hạn`;
+  const introduction = `Các API key sau của tổ chức ${input.organizationName} sẽ hết hạn trong vòng ${API_KEY_NEAR_EXPIRY_WINDOW_MS / DAY_MS} ngày và sau đó không thể xác thực request.`;
+  const remedy =
+    'Hãy tạo API key mới, chuyển ứng dụng sang key mới, rồi thu hồi key cũ. Xoay vòng (rotate) không gia hạn key.';
+  const text = [
+    'Chào bạn,',
+    '',
+    introduction,
+    '',
+    ...keyLines.map((line) => `- ${line}`),
+    '',
+    remedy,
+    ...(url === undefined ? [] : ['', url]),
+  ].join('\n');
+  if (url === undefined) return { recipient: input.email, subject, text };
+  return {
+    recipient: input.email,
+    subject,
+    text,
+    html: linkedEmailHtml({
+      title: 'API key sắp hết hạn',
+      introduction: `${introduction} ${keyLines.join('; ')}.`,
+      buttonLabel: 'Quản lý API key',
+      url,
+      expiryLabel: 'Key đầu tiên hết hạn',
+      expiresAt: `${formatVietnameseDateTime(earliest)} (giờ Việt Nam)`,
+      notice: remedy,
     }),
   };
 }

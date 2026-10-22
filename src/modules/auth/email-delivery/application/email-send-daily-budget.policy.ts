@@ -10,8 +10,12 @@ export function emailDailySendBudgetLimits(
   };
 }
 
+/** A notice shares the invitation cap, so recovery mail keeps its fifth (ADR-0120). */
 export function emailDailySendBudgetCategory(
   kind: EmailDeliveryKind,
 ): 'invitation' | 'priority' {
-  return kind === 'organization_invite_email' ? 'invitation' : 'priority';
+  return kind === 'organization_invite_email' ||
+    kind === 'api_key_near_expiry_notification'
+    ? 'invitation'
+    : 'priority';
 }

@@ -9,6 +9,7 @@ import type {
   EmailDeliveryPayload,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
+  EmailNoticeResolvers,
   EmailPayloadCipherPort,
 } from './email-delivery-request.port';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
@@ -95,7 +96,10 @@ export class FakeStore implements EmailDispatchStorePort {
 
   deferredUntil: Date[] = [];
   stale: EmailDeliveryRequestRecord[] = [];
-  staleCutoffs: Date[] = [];
+  staleCutoffs: {
+    createdAtOrBefore: Date;
+    kinds: readonly EmailDeliveryKind[];
+  }[] = [];
 
   async releaseDeferred(input: { id: string; retryAt: Date }): Promise<void> {
     this.deferred.push(input.id);
@@ -104,9 +108,13 @@ export class FakeStore implements EmailDispatchStorePort {
 
   async cancelStale(input: {
     createdAtOrBefore: Date;
+    kinds: readonly EmailDeliveryKind[];
   }): Promise<readonly EmailDeliveryRequestRecord[]> {
-    this.staleCutoffs.push(input.createdAtOrBefore);
-    return this.stale;
+    this.staleCutoffs.push({
+      createdAtOrBefore: input.createdAtOrBefore,
+      kinds: input.kinds,
+    });
+    return this.stale.filter((row) => input.kinds.includes(row.kind));
   }
 
   async failExhausted(): Promise<readonly EmailDeliveryRequestRecord[]> {
@@ -230,6 +238,7 @@ export function harness(
     };
     rateLimiter?: FakeEmailSendRateLimiter;
     dailySendBudget?: EmailDailySendBudgetPort;
+    notices?: EmailNoticeResolvers;
     onTerminalFailure?: (failure: {
       readonly id: string;
       readonly kind: EmailDeliveryKind;
@@ -265,6 +274,7 @@ export function harness(
     { hash: () => TOKEN_HASH },
     {
       owner: 'instance-a',
+      ...(options.notices === undefined ? {} : { notices: options.notices }),
       ...(options.onTerminalFailure === undefined
         ? {}
         : { onTerminalFailure: options.onTerminalFailure }),

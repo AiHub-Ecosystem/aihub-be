@@ -12,8 +12,10 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import {
   EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
+  EMAIL_NOTICE_RESOLVERS,
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
+  type EmailNoticeResolvers,
   type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
@@ -110,6 +112,7 @@ import {
 } from './membership/application/organization-membership.port';
 import { PostgresOrganizationMembershipRepository } from './membership/infrastructure/postgres-organization-membership.repository';
 import { OrganizationMembershipController } from './membership/presentation/organization-membership.controller';
+import { PostgresApiKeyNearExpiryNotices } from './notifications/infrastructure/postgres-api-key-near-expiry-notices';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
@@ -176,6 +179,7 @@ import { SandboxAssertionController } from './user-assertions/presentation/sandb
 import { SandboxDemoKeyValidationController } from './user-assertions/presentation/sandbox-demo-key-validation.controller';
 
 const IDENTITY_TRANSACTION_CLIENT = Symbol('IDENTITY_TRANSACTION_CLIENT');
+const API_KEY_NEAR_EXPIRY_NOTICES = Symbol('API_KEY_NEAR_EXPIRY_NOTICES');
 const IDENTITY_READ_CLIENT = Symbol('IDENTITY_READ_CLIENT');
 type IdentityTransactionClient = ReturnType<
   typeof createIdentityTransactionRunner
@@ -212,6 +216,31 @@ type IdentityTransactionClient = ReturnType<
       inject: [CONTROL_PLANE_READ_PRISMA_CLIENT],
       useFactory: (controlPlaneRead: PrismaClientHolder) =>
         createIdentityTransactionRunner(controlPlaneRead.prisma),
+    },
+    // Auth dispatches the near-expiry notice but cannot import this module, so
+    // the resolver is handed to Auth's slot when it is built (ADR-0120).
+    {
+      provide: API_KEY_NEAR_EXPIRY_NOTICES,
+      inject: [
+        IDENTITY_TRANSACTION_CLIENT,
+        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_DELIVERY_REQUEST_WRITER,
+        EMAIL_NOTICE_RESOLVERS,
+      ],
+      useFactory: (
+        client: IdentityTransactionClient,
+        payloadCipher: EmailPayloadCipherPort,
+        emailRequests: EmailDeliveryRequestWriterPort,
+        notices: EmailNoticeResolvers,
+      ): PostgresApiKeyNearExpiryNotices => {
+        const resolver = new PostgresApiKeyNearExpiryNotices(
+          client,
+          payloadCipher,
+          emailRequests,
+        );
+        notices.apiKeyNearExpiry = resolver;
+        return resolver;
+      },
     },
     {
       provide: IDENTITY_POSTGRES_READINESS,

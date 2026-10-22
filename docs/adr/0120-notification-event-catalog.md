@@ -1,9 +1,9 @@
-# ADR-0119: Notification Event catalog
+# ADR-0120: Notification Event catalog
 
 - Status: Accepted
 - Date: 2026-10-22
 - Related issue: [#608](https://github.com/AiHub-Ecosystem/aihub-be/issues/608), [#976](https://github.com/AiHub-Ecosystem/aihub-be/issues/976), [#977](https://github.com/AiHub-Ecosystem/aihub-be/issues/977), [#980](https://github.com/AiHub-Ecosystem/aihub-be/issues/980), [#986](https://github.com/AiHub-Ecosystem/aihub-be/issues/986)
-- Amends: [ADR-0074](0074-transactional-email-outbox.md) (actionability and stale cancellation for requests that carry no credential), [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md) (dispatch priority only)
+- Amends: [ADR-0074](0074-transactional-email-outbox.md) (actionability and stale cancellation for requests that carry no credential), [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md) (dispatch priority only), [ADR-0119](0119-shared-durable-email-daily-budget.md) (daily budget category only)
 
 ## Context
 
@@ -23,7 +23,7 @@ A **Notification Kind** is one member of a closed, code-declared set. The first 
 
 A **Notification Event** is the durable record that AIHUB observed one occurrence of a Notification Kind for an Organization. It stores references only: the kind, the Organization ID, the subject (for `api-key.near-expiry`, the API key ID), the subject's `expires_at` as observed, and the moment it was recorded. It stores no key name, recipient, or email address. It is unique by `(kind, api_key_id, expires_at)`, so one key and expiry produce one event however many times the sweep runs. Every channel is a delivery of an event; the event's ID is what a later webhook sends as its stable event ID.
 
-The new `notifications` module owns the event table and the catalog. It reads API keys and memberships through Identity's `public/` facade and writes email only through Auth's `EmailDeliveryRequestWriterPort`. The `identity` role owns the module until a dedicated role exists.
+The catalog lives in Identity, at `src/modules/identity/notifications/`, and the event table is Identity's. Identity already owns the API keys, Organizations, and memberships the notice is about, and its invitation flow already writes its own rows and an Email Delivery Request in one transaction through Auth's `EmailDeliveryRequestWriterPort`; the notice follows the same path. The operator command reaches the sweep through Identity's `public/` facade.
 
 No retention job is added. Events hold only IDs and dates, one per key and expiry, under an active-key cap of five per Organization. The inbox in #976 stores per-user state and must decide retention for that state when it lands.
 
@@ -33,7 +33,7 @@ Emitting a notice is not an Organization Audit Event: audit records an actor's a
 
 An operator command, `pnpm cli notifications:sweep`, runs once a day per environment through the same host wrapper as the other scheduled jobs. It moves to one-shot containers with every other job under #433 and #495; it does not wait for them.
 
-A key is eligible when it is active, not `internal`, has an `expires_at` within the next 14 days, and has no Notification Event for its current `expires_at`. Selection is a window ending 14 days ahead, not a band between 13 and 14 days, so a missed run catches up and a key created with less than 14 days of life is still notified. A key without an expiry is never notified. Every customer key in the environment's database is eligible, Customer Sandbox keys included; Production and Sandbox each run their own sweep.
+A key is eligible when it is active, not `internal`, has an `expires_at` within the next 14 days, and has no Notification Event for its current `expires_at`. Selection is a window ending 14 days ahead, not a band between 13 and 14 days, so a missed run catches up and a key created with less than 14 days of life is still notified. A key without an expiry is never notified. A key of a suspended Organization is not recorded, so restoring the Organization inside the window still notifies it. Every customer key in the environment's database is eligible, Customer Sandbox keys included; Production and Sandbox each run their own sweep.
 
 Each key is notified once, at the 14-day mark. A second reminder later adds its milestone to the event's uniqueness instead of a new mechanism.
 
@@ -45,11 +45,11 @@ The sweep prints one JSON summary line (events recorded, emails queued, keys ski
 
 ### Dispatch: handlers contributed to Auth's handler table
 
-Auth remains the only writer and dispatcher of the outbox. Its per-kind handler table accepts a handler contributed by another module; the `notifications` module contributes its handler when the module initialises, so Auth never imports it. A handler can add an asynchronous actionability check that runs before an attempt, beside the payload check and rendering every handler already supplies.
+Auth remains the only writer and dispatcher of the outbox, and its per-kind handler table gains the notice's kind. A handler's render may now be asynchronous and may answer that nothing is left to send. The notice's handler reads its facts through a resolver port Auth declares, `ApiKeyNearExpiryNoticeResolverPort`, held in a slot Auth provides; Identity fills the slot when its provider is built, so Auth never imports Identity.
 
 Immediately before an attempt, the handler rechecks that the Organization is active, the recipient still holds an active `owner` or `admin` membership with an active User Account, and each listed key is still active. The email lists only keys that remain active. When no key remains, or the recipient or Organization no longer qualifies, the request is cancelled with the existing `not_actionable` reason. The one-day stale cutoff does not apply to a notice: it is stale, and cancelled as `not_actionable` without being opened, once it is older than the 14-day notice window, by which time every key it lists has expired.
 
-The notice does not reserve from the authentication recipient budget (`reserveAuthenticationEmailRecipient`), which protects authentication mail from abuse. When the daily outbound budget in #375 lands, notices are the first mail it sheds.
+The notice does not reserve from the authentication recipient budget (`reserveAuthenticationEmailRecipient`), which protects authentication mail from abuse. The shared daily budget of [ADR-0119](0119-shared-durable-email-daily-budget.md) counts the notice in its invitation share, so recovery and verification mail keep the fifth reserved for them.
 
 ### Priority
 
@@ -57,7 +57,7 @@ The notice takes a new lowest dispatch tier, after `organization_invite_email`. 
 
 ### Message
 
-The message follows #334: Vietnamese, with the expiry in Asia/Ho_Chi_Minh time labelled "giờ Việt Nam". It names each key by `name` and `id` and never carries a key value, prefix, or hash. Its copy is composed in the `notifications` module, outside the Resend adapter, and links to `${CUSTOMER_WEB_BASE_URL}/console/orgs/{organizationId}/api-keys`. Because rotation keeps the expiry, it tells the customer to create a replacement key and revoke the old one; the copy changes when #986 lets rotation set a new expiry.
+The message follows #334: Vietnamese, with the expiry in Asia/Ho_Chi_Minh time labelled "giờ Việt Nam". It names each key by `name` and `id` and never carries a key value, prefix, or hash. Its copy is composed in Auth's message composer beside the other transactional email, outside the Resend adapter, and links to `${CUSTOMER_WEB_BASE_URL}/console/orgs/{organizationId}/api-keys`. Because rotation keeps the expiry, it tells the customer to create a replacement key and revoke the old one; the copy changes when #986 lets rotation set a new expiry.
 
 ### Not in this slice
 
@@ -68,7 +68,8 @@ No preference route or preference storage: with one kind and no stored choice, a
 - **A `near_expiry_notified_at` column on `api_keys`.** Smallest change, but it records one channel's state on Identity's table and gives the inbox, push, and webhook slices no shared event or stable ID.
 - **A 13-to-14-day band with a 30-day per-Organization suppression**, as #608 first proposed. A missed daily run skips a key for good, and the suppression hides a second key expiring within the same 30 days.
 - **One Email Delivery Request per Organization addressed to every owner and admin**, as #608 first proposed. The outbox payload carries one recipient; changing that for one kind would widen every kind's payload.
-- **Auth calling into `notifications` for the dispatch check.** It forms a module cycle, because `notifications` imports Auth to write requests.
+- **Auth calling into Identity for the dispatch check.** It forms a module cycle, because Identity imports Auth to write requests.
+- **A separate `notifications` module.** Grilling first chose one; the code showed it would read four tables other modules own and rebuild the transactional path to Auth's writer that Identity's invitation flow already has, so the catalog moved into Identity.
 - **Keeping the one-day stale cutoff for notices.** One cutoff for every kind, but a dispatch outage longer than a day would drop the only warning a key gets, since its event is already recorded.
 - **A preference read route returning the default.** It would add a public contract with nothing behind it.
 
@@ -80,4 +81,4 @@ The outbox gains its first kind whose handler lives outside Auth. The `email_del
 
 The notice can lag behind invitations and recovery mail under load, by design. A customer who rotates instead of replacing still loses the key at the original expiry until #986 ships; the email says so.
 
-Registering the sweep in the host crontab is a deployment step and is not claimed by this ADR.
+The sweep is in the managed crontab, `ops/host-jobs/aihub.crontab`, which CD installs on deploy, so the push to `main` that carries it is what schedules it on the host.

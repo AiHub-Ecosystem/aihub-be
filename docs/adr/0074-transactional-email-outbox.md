@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for requests without a credential amended by [ADR-0119](0119-notification-event-catalog.md)
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for requests without a credential amended by [ADR-0120](0120-notification-event-catalog.md)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)

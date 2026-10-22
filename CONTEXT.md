@@ -362,7 +362,7 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [ADR-0074: Transactional outbox for account and invitation email](docs/adr/0074-transactional-email-outbox.md)
 - [Email outbox terminal failure runbook](docs/operations/email-outbox.md)
-- [ADR-0119: Notification Event catalog](docs/adr/0119-notification-event-catalog.md)
+- [ADR-0120: Notification Event catalog](docs/adr/0120-notification-event-catalog.md)
 - [ADR-0053: Optional end-user identity verification per Organization](docs/adr/0053-optional-user-identity-verification.md)
 - [ADR-0054: Sign in on email verification only in the browser that signed up](docs/adr/0054-verification-sign-in-bound-to-signup-browser.md)
 - [ADR-0056: Customer API-key sandbox test tier](docs/adr/0056-customer-sandbox-test-tier.md)

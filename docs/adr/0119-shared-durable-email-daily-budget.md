@@ -1,6 +1,6 @@
 # ADR-0119: Share a durable daily email budget across provider-account deployments
 
-- Status: Accepted
+- Status: Accepted; daily budget category amended by [ADR-0120](0120-notification-event-catalog.md) (Notification Event email counts in the invitation share)
 - Date: 2026-10-22
 - Related issue: [#375](https://github.com/AiHub-Ecosystem/aihub-be/issues/375)
 - Amends: [ADR-0074](0074-transactional-email-outbox.md) (dispatch reservation accounting)

@@ -154,6 +154,9 @@ async function claimEmailDeliveryRequestsInTransaction(
         return 2;
       case 'organization_invite_email':
         return 3;
+      // The SQL ranks it in its ELSE tier; ADR-0120 puts notices last.
+      case 'api_key_near_expiry_notification':
+        return 4;
     }
   };
   return [...toKnownRecords(rows)].sort(

@@ -422,6 +422,7 @@ const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [
   'organization_invite_email',
   'mfa_enabled_notification',
   'mfa_removed_notification',
+  'api_key_near_expiry_notification',
 ];
 
 const EMAIL_OUTBOX_BACKLOG_KIND_LABELS: readonly (

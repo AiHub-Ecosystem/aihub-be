@@ -1,6 +1,6 @@
 /**
- * Removes queued rows older than every credential an Email Delivery Request
- * can carry. Credential-bearing kinds are expired; MFA notices have no
+ * Removes queued rows of the given kinds created at or before the cutoff the
+ * caller chose for them. Credential-bearing kinds are expired; notices have no
  * credential and are not actionable. Both paths erase the queued payload.
  * A row still under a live lease is left to the instance that holds it.
  */
@@ -8,7 +8,8 @@ export const CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL = `
   UPDATE email_delivery_requests
   SET status = 'cancelled',
       cancel_reason = CASE
-        WHEN kind IN ('mfa_enabled_notification', 'mfa_removed_notification')
+        WHEN kind IN ('mfa_enabled_notification', 'mfa_removed_notification',
+                      'api_key_near_expiry_notification')
           THEN 'not_actionable'
         ELSE 'credential_expired'
       END,

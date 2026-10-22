@@ -619,12 +619,16 @@ export class PostgresEmailDeliveryRequestRepository
 
   async cancelStale(
     client: AuthSqlClient,
-    input: { at: Date; createdAtOrBefore: Date },
+    input: {
+      at: Date;
+      createdAtOrBefore: Date;
+      kinds: readonly EmailDeliveryKind[];
+    },
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     const rows = await authQueryRows(
       client,
       CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL,
-      [input.at, input.createdAtOrBefore, EMAIL_DELIVERY_KINDS],
+      [input.at, input.createdAtOrBefore, input.kinds],
     );
     return toKnownRecords(rows);
   }
@@ -795,6 +799,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   cancelStale(input: {
     readonly at: Date;
     readonly createdAtOrBefore: Date;
+    readonly kinds: readonly EmailDeliveryKind[];
   }): Promise<readonly EmailDeliveryRequestRecord[]> {
     return this.requests.cancelStale(this.client, input);
   }

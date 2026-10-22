@@ -15,10 +15,14 @@ describe('email daily send budget policy', () => {
     });
   });
 
-  it('classifies only organization invitations as non-priority mail', () => {
+  it('classifies organization invitations and notices as non-priority mail', () => {
     expect(emailDailySendBudgetCategory('organization_invite_email')).toBe(
       'invitation',
     );
+    // ADR-0120: a notice gives way to recovery mail before anything else does.
+    expect(
+      emailDailySendBudgetCategory('api_key_near_expiry_notification'),
+    ).toBe('invitation');
     expect(emailDailySendBudgetCategory('password_reset_email')).toBe(
       'priority',
     );

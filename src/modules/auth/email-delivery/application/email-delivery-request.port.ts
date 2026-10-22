@@ -1,5 +1,3 @@
-import type { OrganizationInviteEmailInput } from './email-message.composer';
-
 /**
  * Each vocabulary is declared as the runtime list the table's own checks
  * mirror, and the union is derived from it. A repository validating a row
@@ -12,9 +10,63 @@ export const EMAIL_DELIVERY_KINDS = [
   'organization_invite_email',
   'mfa_enabled_notification',
   'mfa_removed_notification',
+  'api_key_near_expiry_notification',
 ] as const;
 
 export type EmailDeliveryKind = (typeof EMAIL_DELIVERY_KINDS)[number];
+
+/**
+ * How far ahead the near-expiry sweep looks, and so how long its notice stays
+ * worth sending: by the end of the window every key it lists has expired
+ * (ADR-0120). It replaces the one-day credential cutoff for that kind.
+ */
+export const API_KEY_NEAR_EXPIRY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Only references are sealed. Who receives it, which keys are still active,
+ * and what they are called are read again at dispatch (ADR-0120).
+ */
+export interface ApiKeyNearExpiryNotificationPayload {
+  readonly organizationId: string;
+  readonly userAccountId: string;
+  readonly apiKeyIds: readonly string[];
+}
+
+/** What the notice is composed from once its facts are read at dispatch. */
+export interface ApiKeyNearExpiryNotificationInput {
+  readonly email: string;
+  readonly organizationId: string;
+  readonly organizationName: string;
+  /** Never empty: a notice with no active key left is not sent. */
+  readonly apiKeys: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly expiresAt: Date;
+  }[];
+}
+
+/**
+ * Answers for a notice whose facts live in another module. `undefined` means
+ * nothing is left to tell: the recipient or Organization no longer qualifies,
+ * or no listed key is still active.
+ */
+export interface ApiKeyNearExpiryNoticeResolverPort {
+  resolve(
+    payload: ApiKeyNearExpiryNotificationPayload,
+    now: Date,
+  ): Promise<ApiKeyNearExpiryNotificationInput | undefined>;
+}
+
+/**
+ * Filled by the module that owns each notice's facts when it is constructed,
+ * because that module imports Auth and Auth cannot import it back. A process
+ * that never fills a slot leaves those requests queued rather than guessing.
+ */
+export interface EmailNoticeResolvers {
+  apiKeyNearExpiry?: ApiKeyNearExpiryNoticeResolverPort;
+}
+
+export const EMAIL_NOTICE_RESOLVERS = Symbol('EMAIL_NOTICE_RESOLVERS');
 
 /**
  * What a worker needs once it claims a request: the inputs the matching Auth
@@ -34,8 +86,11 @@ export interface AuthEmailDeliveryPayload {
 export interface OrganizationInviteEmailDeliveryPayload
   extends AuthEmailDeliveryPayload {
   readonly organizationName: string;
-  /** The same three roles the invitation email composer accepts. */
-  readonly role: OrganizationInviteEmailInput['role'];
+  /**
+   * The same three roles the invitation email composer accepts. Spelled out
+   * rather than imported from it, because the composer reads this port.
+   */
+  readonly role: 'owner' | 'admin' | 'member';
 }
 
 export interface MfaSecurityNotificationPayload {
@@ -45,7 +100,8 @@ export interface MfaSecurityNotificationPayload {
 export type EmailDeliveryPayload =
   | AuthEmailDeliveryPayload
   | OrganizationInviteEmailDeliveryPayload
-  | MfaSecurityNotificationPayload;
+  | MfaSecurityNotificationPayload
+  | ApiKeyNearExpiryNotificationPayload;
 
 export declare const emailDeliveryTransactionBrand: unique symbol;
 
@@ -272,6 +328,7 @@ export interface EmailDispatchStorePort {
   cancelStale(input: {
     readonly at: Date;
     readonly createdAtOrBefore: Date;
+    readonly kinds: readonly EmailDeliveryKind[];
   }): Promise<readonly EmailDeliveryRequestRecord[]>;
   /**
    * Requests that spent their last attempt without a recorded outcome, whose

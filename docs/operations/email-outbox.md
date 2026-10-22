@@ -146,9 +146,9 @@ attempt the new owner is spending or clearing the new owner's lease.
 Suggested alert condition: any increase of `aihub_email_delivery_failed_total`
 over a window long enough to cover the retry schedule (attempts run at 0, +1
 minute, and +5 minutes, so 15 minutes is a safe minimum). `kind` separates the
-five flows (`verification_email`, `password_reset_email`,
+six flows (`verification_email`, `password_reset_email`,
 `organization_invite_email`, `mfa_enabled_notification`,
-`mfa_removed_notification`); a `kind`-specific rise points at that flow's
+`mfa_removed_notification`, `api_key_near_expiry_notification`); a `kind`-specific rise points at that flow's
 recipient domain or its `from` address, which is the usual cause.
 
 The `error=` value is one of three codes. `timeout` means the attempt ran past

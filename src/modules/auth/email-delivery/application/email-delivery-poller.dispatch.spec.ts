@@ -471,9 +471,9 @@ describe('EmailDeliveryPoller', () => {
 
     const summary = await poller.runOnce();
 
-    expect(store.staleCutoffs).toEqual([
+    expect(store.staleCutoffs[0]?.createdAtOrBefore).toEqual(
       new Date(NOW.getTime() - MAX_CREDENTIAL_LIFETIME_MS),
-    ]);
+    );
     expect(summary.cancelled).toBe(1);
   });
 

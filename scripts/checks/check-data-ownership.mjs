@@ -80,6 +80,14 @@ const allowlist = new Map([
     'account identity check',
   ],
   [
+    'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts::user_accounts',
+    'near-expiry notice recipients must hold an active account (ADR-0120)',
+  ],
+  [
+    'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts::auth_identities',
+    'near-expiry notice reads the recipient email at dispatch (ADR-0120)',
+  ],
+  [
     'src/modules/auth/local-credentials/infrastructure/postgres-email-credential.repository.ts::organization_invitations',
     'lookup invitation for email credential',
   ],

@@ -25,8 +25,10 @@ import { EmailDeliveryPoller } from './application/email-delivery-poller';
 import {
   EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
+  EMAIL_NOTICE_RESOLVERS,
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
+  type EmailNoticeResolvers,
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
@@ -96,6 +98,11 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
       inject: [RUNTIME_SECRET_PROVIDER],
     },
+    // Empty here; the module owning a notice's facts fills its slot (ADR-0120).
+    {
+      provide: EMAIL_NOTICE_RESOLVERS,
+      useFactory: (): EmailNoticeResolvers => ({}),
+    },
     {
       provide: EMAIL_SEND_RATE_LIMITER,
       inject: [RUNTIME_CONNECTION_CONFIGURATION, appConfig.KEY],
@@ -132,6 +139,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         sendRateLimiter: EmailSendRateLimiterPort,
         dailySendBudget: EmailDailySendBudgetPort,
         configuration: ConfigType<typeof appConfig>,
+        notices: EmailNoticeResolvers,
       ): EmailDeliveryPoller => {
         const isProduction =
           configuration.NODE_ENV === 'production' ||
@@ -155,6 +163,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
             ...(customerWebBaseUrl === undefined ? {} : { customerWebBaseUrl }),
             onTerminalFailure: reportTerminalEmailDeliveryFailure,
             dailySendBudget,
+            notices,
           },
         );
       },
@@ -165,6 +174,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         EMAIL_SEND_RATE_LIMITER,
         EMAIL_DAILY_SEND_BUDGET,
         appConfig.KEY,
+        EMAIL_NOTICE_RESOLVERS,
       ],
     },
     {
@@ -198,6 +208,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
   exports: [
     EMAIL_DELIVERY_ID,
     EMAIL_DELIVERY_REQUEST_WRITER,
+    EMAIL_NOTICE_RESOLVERS,
     EMAIL_PAYLOAD_CIPHER,
     EMAIL_SENDER,
   ],

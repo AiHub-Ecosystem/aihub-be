@@ -1,4 +1,5 @@
 import {
+  composeApiKeyNearExpiryNotification,
   composeMfaSecurityNotification,
   composeOrganizationInviteEmail,
   composePasswordResetEmail,
@@ -10,6 +11,55 @@ import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-ema
 describe('Auth email message composition', () => {
   const expiresAt = new Date('2026-09-20T00:00:00.000Z');
   const customerWebBaseUrl = 'https://customer.example.com';
+
+  describe('API key near-expiry notice', () => {
+    const input = {
+      email: 'owner@example.com',
+      organizationId: 'org_123',
+      organizationName: 'Resonance',
+      apiKeys: [
+        { id: 'key_a', name: 'Production server', expiresAt },
+        {
+          id: 'key_b',
+          name: 'Batch <grader>',
+          expiresAt: new Date('2026-09-25T00:00:00.000Z'),
+        },
+      ],
+    };
+
+    it('names every listed key by name, id, and Vietnam-time expiry', () => {
+      const message = composeApiKeyNearExpiryNotification(
+        input,
+        customerWebBaseUrl,
+      );
+
+      expect(message).toMatchObject({
+        recipient: 'owner@example.com',
+        subject: 'API key của Resonance trên AIHUB sắp hết hạn',
+      });
+      expect(message.text).toContain(
+        'Production server (key_a): hết hạn lúc 07:00 20 tháng 9, 2026 (giờ Việt Nam)',
+      );
+      expect(message.text).toContain('Batch <grader> (key_b)');
+      expect(message.text).toContain(
+        'https://customer.example.com/console/orgs/org_123/api-keys',
+      );
+      expect(message.text).toContain('tạo API key mới');
+      expect(message.text).toContain('trong vòng 14 ngày');
+      expect(message.html).toContain(
+        'href="https://customer.example.com/console/orgs/org_123/api-keys"',
+      );
+      expect(message.html).toContain('Batch &lt;grader&gt;');
+    });
+
+    it('stays text-only without a Customer Web URL', () => {
+      const message = composeApiKeyNearExpiryNotification(input);
+
+      expect(message.text).toContain('Production server (key_a)');
+      expect(message.text).not.toContain('https://');
+      expect(message.html).toBeUndefined();
+    });
+  });
 
   it('keeps the compiled MJML URL placeholder in the button href', () => {
     expect(AUTH_TRANSACTIONAL_EMAIL_TEMPLATE).toContain('href="{{url}}"');

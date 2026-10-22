@@ -8,8 +8,13 @@ import type {
   EmailDeliveryKind,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
+  EmailNoticeResolvers,
 } from './email-delivery-request.port';
-import { EnvelopeCipherError } from './email-delivery-request.port';
+import {
+  API_KEY_NEAR_EXPIRY_WINDOW_MS,
+  EMAIL_DELIVERY_KINDS,
+  EnvelopeCipherError,
+} from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
@@ -17,7 +22,7 @@ import { emailDailySendBudgetCategory } from './email-send-daily-budget.policy';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type { EmailSendRateLimiterPort } from './email-send-rate-limiter.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
-import type { EmailSenderPort } from './email-sender.port';
+import type { EmailMessage, EmailSenderPort } from './email-sender.port';
 
 /**
  * A request gets this many provider attempts before it is given up on
@@ -46,6 +51,27 @@ export const MAX_CREDENTIAL_LIFETIME_MS = Math.max(
   ...Object.values(OPAQUE_TOKEN_BINDINGS).map((binding) => binding.ttlMs),
 );
 
+/**
+ * Each stale cutoff and the kinds it bounds. A near-expiry notice outlives the
+ * credential cutoff on purpose: its event is already recorded, so cancelling it
+ * after a day-long outage would drop the only warning its keys get (ADR-0120).
+ */
+const STALE_CUTOFFS: readonly {
+  readonly ageMs: number;
+  readonly kinds: readonly EmailDeliveryKind[];
+}[] = [
+  {
+    ageMs: MAX_CREDENTIAL_LIFETIME_MS,
+    kinds: EMAIL_DELIVERY_KINDS.filter(
+      (kind) => kind !== 'api_key_near_expiry_notification',
+    ),
+  },
+  {
+    ageMs: API_KEY_NEAR_EXPIRY_WINDOW_MS,
+    kinds: ['api_key_near_expiry_notification'],
+  },
+];
+
 export interface EmailDispatchSummary {
   readonly claimed: number;
   readonly providerAccepted: number;
@@ -62,6 +88,8 @@ export interface EmailDeliveryPollerOptions {
   readonly owner: string;
   /** Validated by the Auth composition root; unset deployments use token-only copy. */
   readonly customerWebBaseUrl?: string;
+  /** Filled by the modules that own a notice's facts; see the port. */
+  readonly notices?: EmailNoticeResolvers;
   readonly batchSize?: number;
   readonly leaseMs?: number;
   /**
@@ -207,16 +235,20 @@ export class EmailDeliveryPoller {
    */
   private async cancelStaleRequests(): Promise<number> {
     const now = this.now();
-    try {
-      const cancelled = await this.store.cancelStale({
-        at: now,
-        createdAtOrBefore: new Date(now.getTime() - MAX_CREDENTIAL_LIFETIME_MS),
-      });
-      return cancelled.length;
-    } catch {
-      // The next pass retries; a stale row stays unsendable either way.
-      return 0;
+    let total = 0;
+    for (const cutoff of STALE_CUTOFFS) {
+      try {
+        const cancelled = await this.store.cancelStale({
+          at: now,
+          createdAtOrBefore: new Date(now.getTime() - cutoff.ageMs),
+          kinds: cutoff.kinds,
+        });
+        total += cancelled.length;
+      } catch {
+        // The next pass retries; a stale row stays unsendable either way.
+      }
     }
+    return total;
   }
 
   /**
@@ -337,6 +369,19 @@ export class EmailDeliveryPoller {
       }
     }
 
+    // Rendered before anything is reserved, because a notice that reads its
+    // facts now can find nothing left to send.
+    const message = await delivery.handler.render(delivery.payload, {
+      ...(this.options.customerWebBaseUrl === undefined
+        ? {}
+        : { customerWebBaseUrl: this.options.customerWebBaseUrl }),
+      now,
+      notices: this.options.notices ?? {},
+    });
+    if (message === undefined) {
+      return this.cancel(request, 'not_actionable', now);
+    }
+
     // The attempt is spent before the provider is called, not recorded after it
     // answers: a transition that fails must not hand the same request another
     // pass at the provider.
@@ -395,7 +440,7 @@ export class EmailDeliveryPoller {
     });
 
     try {
-      await this.deliver(request, delivery);
+      await this.deliver(request, message);
     } catch (error) {
       return this.recordFailure(request, errorCodeOf(error), now);
     }
@@ -449,18 +494,12 @@ export class EmailDeliveryPoller {
 
   private async deliver(
     request: EmailDeliveryRequestRecord,
-    delivery: ValidatedEmailDelivery,
+    message: EmailMessage,
   ): Promise<void> {
     // The row's own id is the provider idempotency key: it is already unique,
     // already durable, and already what every attempt of this request has
     // used, so an uncertain handoff can be retried without a second email.
-    await this.sender.send(
-      delivery.handler.render(
-        delivery.payload,
-        this.options.customerWebBaseUrl,
-      ),
-      { idempotencyKey: request.id },
-    );
+    await this.sender.send(message, { idempotencyKey: request.id });
   }
 
   /**

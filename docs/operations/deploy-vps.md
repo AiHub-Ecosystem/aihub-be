@@ -579,6 +579,8 @@ The schedule uses the VPS's UTC clock:
 - `chart-upload-sweep` runs `writing:chart-upload-sweep` at 10, 25, 40, and
   55 minutes past each hour.
 - `speaking-upload-sweep` runs `speaking:audio-upload-sweep` at 04:20 daily.
+- `notification-sweep` runs `notifications:sweep` at 01:15 daily, recording
+  API keys that expire within 14 days and queueing their email (ADR-0120).
 
 `idempotency:cleanup` is the one cleanup command not scheduled yet (#272).
 `scripts/ci/cleanup-commands-scheduled.spec.ts` fails when a sweep, prune, or
@@ -601,6 +603,7 @@ and on a run that did not succeed in time
 | Job                                     | Log file                                 |
 | --------------------------------------- | ---------------------------------------- |
 | `quota`, `prune`, `report`, `ttl-audit` | `~/aihub-ops-job.log`                    |
+| `notification-sweep`                    | `~/aihub-ops-job.log`                    |
 | `avatar-sweep`                          | `~/aihub-avatar-sweep.log`               |
 | `chart-upload-sweep`                    | `~/aihub-writing-chart-upload-sweep.log` |
 | `speaking-upload-sweep`                 | `~/aihub-speaking-upload-sweep.log`      |
@@ -628,6 +631,7 @@ and does not prevent the Sandbox invocation.
 | `avatar-sweep`          |           30 minutes |
 | `chart-upload-sweep`    |           30 minutes |
 | `speaking-upload-sweep` |           30 minutes |
+| `notification-sweep`    |           15 minutes |
 
 The wrapper also caps deployment-status lookup at 30 seconds. The in-container
 CLI stops at its listed deadline; if Docker exec has not returned 15 seconds

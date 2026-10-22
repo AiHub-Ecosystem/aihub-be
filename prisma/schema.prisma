@@ -59,9 +59,30 @@ model ApiKey {
   /// A key AIHUB itself uses; left off customer statements (migration 0039).
   internal             Boolean      @default(false)
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notificationEvents   NotificationEvent[]
 
   @@index([organizationId], map: "api_keys_org_idx")
   @@map("api_keys")
+}
+
+/// One observed occurrence of a Notification Kind for an Organization
+/// (ADR-0120). It holds references only; channels deliver it.
+///
+/// `CHECK` constraints on id and kind are owned by migration 0045.
+/// @owner identity
+model NotificationEvent {
+  id               String       @id
+  kind             String
+  organizationId   String       @map("organization_id")
+  apiKeyId         String       @map("api_key_id")
+  subjectExpiresAt DateTime     @map("subject_expires_at") @db.Timestamptz(6)
+  recordedAt       DateTime     @map("recorded_at") @db.Timestamptz(6)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  apiKey           ApiKey       @relation(fields: [apiKeyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([apiKeyId, kind, subjectExpiresAt], map: "notification_events_subject_key")
+  @@index([organizationId], map: "notification_events_organization_idx")
+  @@map("notification_events")
 }
 
 /// A user's single password identity.
@@ -313,7 +334,8 @@ model Organization {
   identityConfig             OrganizationIdentityConfig?
   invitations                OrganizationInvitation[]
   memberships                OrganizationMembership[]
-  createdByUserAccount       UserAccount?                @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  notificationEvents         NotificationEvent[]
+  createdByUserAccount      UserAccount?                @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([createdByUserAccountId], map: "organizations_created_by_idx", where: raw("(created_by_user_account_id IS NOT NULL)"))
   @@map("organizations")

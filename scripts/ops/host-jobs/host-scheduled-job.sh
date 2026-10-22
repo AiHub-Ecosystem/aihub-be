@@ -44,7 +44,7 @@ elif (( $# == 5 )) && [[ "$JOB" == report && "${2:-}" == --from && "${4:-}" == -
   to=$5
   report_window_provided=true
 elif (( $# != 1 )); then
-  printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]\n' "$0" >&2
+  printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]|notification-sweep\n' "$0" >&2
   exit 2
 fi
 # max_age_seconds is how long after a success Prometheus waits for the next
@@ -59,7 +59,8 @@ case "$JOB" in
   avatar-sweep) commands=(avatar:sweep); timeout_seconds=1800; max_age_seconds=90000 ;;
   chart-upload-sweep) commands=(writing:chart-upload-sweep); timeout_seconds=1800; max_age_seconds=3000 ;;
   speaking-upload-sweep) commands=(speaking:audio-upload-sweep); timeout_seconds=1800; max_age_seconds=90000 ;;
-  *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]\n' "$0" >&2; exit 2 ;;
+  notification-sweep) commands=(notifications:sweep); timeout_seconds=900; max_age_seconds=90000 ;;
+  *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]|notification-sweep\n' "$0" >&2; exit 2 ;;
 esac
 
 # Only the bare scheduled form reports to Prometheus; a manual rerun of an

@@ -15,6 +15,7 @@ import type {
   EmailDispatchStorePort,
   EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   EmailDispatchOptions,
   EmailMessage,
@@ -416,6 +417,23 @@ describe('email outbox dispatch poller', () => {
       ]);
     });
 
+    it('claims a near-expiry notice after a newer invitation', async () => {
+      const notice = `edr_${ulid()}`;
+      await pool.query(
+        `INSERT INTO email_delivery_requests (
+           id, kind, status, payload_ciphertext, attempts, created_at
+         ) VALUES ($1, 'api_key_near_expiry_notification', 'queued', $2, 0, $3)`,
+        [notice, cipher.encrypt('{}'), new Date(NOW.getTime() - 2 * MINUTE)],
+      );
+      const invitation = await seedRequest({
+        kind: 'organization_invite_email',
+      });
+
+      const claimed = await claim(OWNER_A);
+
+      expect(claimed.map(({ id }) => id)).toEqual([invitation.id, notice]);
+    });
+
     it('caps each competing Organization at five invitation rows and fills the batch from other Organizations', async () => {
       const firstOrganization = 'org_fair_share_first';
       const secondOrganization = 'org_fair_share_second';
@@ -620,7 +638,11 @@ describe('email outbox dispatch poller', () => {
         createdAt: staleAt,
       });
 
-      await store.cancelStale({ at: NOW, createdAtOrBefore: staleAt });
+      await store.cancelStale({
+        at: NOW,
+        createdAtOrBefore: staleAt,
+        kinds: EMAIL_DELIVERY_KINDS,
+      });
 
       expect(await rowOf(seeded.id)).toMatchObject({
         status: 'cancelled',
@@ -645,7 +667,11 @@ describe('email outbox dispatch poller', () => {
         [id, cipher.encrypt('{}'), staleAt],
       );
 
-      await store.cancelStale({ at: NOW, createdAtOrBefore: staleAt });
+      await store.cancelStale({
+        at: NOW,
+        createdAtOrBefore: staleAt,
+        kinds: EMAIL_DELIVERY_KINDS,
+      });
 
       expect(await rowOf(id)).toMatchObject({
         status: 'cancelled',
@@ -657,6 +683,34 @@ describe('email outbox dispatch poller', () => {
           reason: 'credential_expired',
         }),
       );
+    });
+
+    it('cancels a stale near-expiry notice as not actionable, and only for its own cutoff', async () => {
+      const notice = `edr_${ulid()}`;
+      const staleAt = new Date(NOW.getTime() - 14 * 24 * HOUR - 1);
+      // As old as the notice, but outside the kinds this cutoff bounds.
+      const invite = await seedRequest({
+        kind: 'organization_invite_email',
+        createdAt: staleAt,
+      });
+      await pool.query(
+        `INSERT INTO email_delivery_requests (
+           id, kind, status, payload_ciphertext, attempts, created_at
+         ) VALUES ($1, 'api_key_near_expiry_notification', 'queued', $2, 0, $3)`,
+        [notice, cipher.encrypt('{}'), staleAt],
+      );
+
+      await store.cancelStale({
+        at: NOW,
+        createdAtOrBefore: staleAt,
+        kinds: ['api_key_near_expiry_notification'],
+      });
+
+      expect(await rowOf(notice)).toMatchObject({
+        status: 'cancelled',
+        cancel_reason: 'not_actionable',
+      });
+      expect(await rowOf(invite.id)).toMatchObject({ status: 'queued' });
     });
 
     it('clears scheduling IDs when an exhausted invitation request is reconciled', async () => {
