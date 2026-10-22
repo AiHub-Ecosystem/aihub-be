@@ -169,12 +169,9 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
     );
 
     it('keeps the non-graded rate limit at a process-local ceiling', async () => {
-      const limiter = new RedisRateLimiter(
-        '',
-        client,
-        () => Date.now(),
-        NOOP_LOGGER,
-      );
+      // Freeze time so the Redis timeout loop cannot cross this key's window.
+      const now = 61_234;
+      const limiter = new RedisRateLimiter('', client, () => now, NOOP_LOGGER);
       const keyId = `ak_${randomUUID()}`;
       await redisAnswers(client);
       const before = await redisUnavailableCount('rate_limit');
