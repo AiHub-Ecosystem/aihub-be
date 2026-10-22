@@ -81,6 +81,39 @@ describe('shared durable Resend daily budget', () => {
     expect(await firstDeployment.usage()).toEqual({ used: 5, limit: 7 });
   });
 
+  it('reports an immediately lowered effective limit after reservations exceed it', async () => {
+    await Promise.all(
+      Array.from({ length: 8 }, () => firstDeployment.reserve('priority')),
+    );
+    const lowerBudgetDeployment = new PostgresEmailDailySendBudget(
+      () => secondPool,
+      emailDailySendBudgetLimits(5),
+    );
+
+    await expect(lowerBudgetDeployment.reserve('priority')).resolves.toEqual(
+      expect.objectContaining({ reserved: false }),
+    );
+    await expect(lowerBudgetDeployment.usage()).resolves.toEqual({
+      used: 8,
+      limit: 5,
+    });
+  });
+
+  it('keeps the current day limit when a deployment raises its configured budget', async () => {
+    await firstDeployment.reserve('priority');
+    const higherBudgetDeployment = new PostgresEmailDailySendBudget(
+      () => secondPool,
+      emailDailySendBudgetLimits(20),
+    );
+
+    await higherBudgetDeployment.reserve('priority');
+
+    await expect(higherBudgetDeployment.usage()).resolves.toEqual({
+      used: 2,
+      limit: 10,
+    });
+  });
+
   it('starts a new UTC-day budget after midnight', async () => {
     await firstDeployment.reserve('priority');
     await firstPool.query(

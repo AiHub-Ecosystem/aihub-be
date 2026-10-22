@@ -170,7 +170,7 @@ export class PostgresEmailDailySendBudget implements EmailDailySendBudgetPort {
             AND budget_date = (statement_timestamp() AT TIME ZONE 'UTC')::date
         ), 0) AS used,
         COALESCE((
-          SELECT daily_budget
+          SELECT LEAST(daily_budget, $1::bigint)
           FROM email_daily_send_budgets
           WHERE id = 1
             AND budget_date = (statement_timestamp() AT TIME ZONE 'UTC')::date
