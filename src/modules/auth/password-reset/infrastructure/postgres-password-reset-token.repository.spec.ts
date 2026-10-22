@@ -44,6 +44,18 @@ function resetToken(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * The statements a reset issues before it holds the token: the token's account,
+ * then that account's lock (ADR-0025). The token read under the lock follows.
+ */
+function accountLocked(...tokenReadAndAfter: unknown[]): unknown[] {
+  return [
+    [{ user_account_id: USER_ID }],
+    [{ status: 'active' }],
+    ...tokenReadAndAfter,
+  ];
+}
+
 describe('PostgresPasswordResetTokenRepository', () => {
   it('issues a reset token only for an active password identity and supersedes open tokens', async () => {
     const script = new ScriptedPrisma();
@@ -72,7 +84,7 @@ describe('PostgresPasswordResetTokenRepository', () => {
 
   it('atomically changes the password, consumes reset tokens, and revokes every refresh session and web session', async () => {
     const script = new ScriptedPrisma();
-    script.inside = [[resetToken()]];
+    script.inside = accountLocked([resetToken()]);
 
     await expect(
       repositoryOver(script).consumePasswordReset({
@@ -82,9 +94,9 @@ describe('PostgresPasswordResetTokenRepository', () => {
       }),
     ).resolves.toEqual({ kind: 'reset' });
 
-    expect(script.statements.slice(1).map(({ name }) => name)).toEqual([
-      'authIdentity.updateMany',
+    expect(script.statements.slice(3).map(({ name }) => name)).toEqual([
       'passwordResetToken.updateMany',
+      'authIdentity.updateMany',
       'passwordResetToken.updateMany',
       'refreshToken.updateMany',
       'webSession.updateMany',
@@ -111,6 +123,23 @@ describe('PostgresPasswordResetTokenRepository', () => {
 
   it('revokes no web session at all when the reset token is not consumable', async () => {
     const script = new ScriptedPrisma();
+    script.inside = accountLocked([]);
+
+    await expect(
+      repositoryOver(script).consumePasswordReset({
+        tokenHash: input.tokenHash,
+        passwordHash: input.passwordHash,
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'invalid', reason: 'missing' });
+
+    expect(script.statements.map(({ name }) => name)).not.toContain(
+      'webSession.updateMany',
+    );
+  });
+
+  it('takes no lock at all for a token that belongs to no account', async () => {
+    const script = new ScriptedPrisma();
     script.inside = [[]];
 
     await expect(
@@ -121,12 +150,14 @@ describe('PostgresPasswordResetTokenRepository', () => {
       }),
     ).resolves.toEqual({ kind: 'invalid', reason: 'missing' });
 
-    expect(script.statements).toHaveLength(1);
+    expect(script.statements.map(({ name }) => name)).not.toContain(
+      'authIdentity.updateMany',
+    );
   });
 
-  it('rolls back rather than continue when the reset token was consumed concurrently', async () => {
+  it('answers a consumed token, not a server error, when the token was consumed after it was read', async () => {
     const script = new ScriptedPrisma();
-    script.inside = [[resetToken()], { count: 1 }, { count: 0 }];
+    script.inside = accountLocked([resetToken()], { count: 0 });
 
     await expect(
       repositoryOver(script).consumePasswordReset({
@@ -134,7 +165,11 @@ describe('PostgresPasswordResetTokenRepository', () => {
         passwordHash: input.passwordHash,
         now: input.now,
       }),
-    ).rejects.toThrow('password reset token was concurrently consumed');
+    ).resolves.toEqual({ kind: 'invalid', reason: 'consumed' });
+    // A lost race writes nothing: the password stays the winner's.
+    expect(script.statements.map(({ name }) => name)).not.toContain(
+      'authIdentity.updateMany',
+    );
     expect(script.statements.map(({ name }) => name)).not.toContain(
       'webSession.updateMany',
     );
@@ -159,7 +194,7 @@ describe('PostgresPasswordResetTokenRepository', () => {
 
     for (const current of cases) {
       const script = new ScriptedPrisma();
-      script.inside = [current.rows];
+      script.inside = accountLocked(current.rows);
       await expect(
         repositoryOver(script).consumePasswordReset({
           tokenHash: input.tokenHash,

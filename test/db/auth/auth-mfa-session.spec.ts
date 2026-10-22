@@ -185,6 +185,7 @@ describe('MFA session persistence on PostgreSQL', () => {
             expiresAt: new Date(NOW.getTime() + 30 * 24 * 60 * 60 * 1000),
           },
           issuedAt: NOW,
+          expectedPasswordHash: PASSWORD_HASH,
           mfaProof: proof,
         }),
       ),
@@ -214,6 +215,7 @@ describe('MFA session persistence on PostgreSQL', () => {
         expiresAt: new Date(NOW.getTime() + 30 * 24 * 60 * 60 * 1000),
       },
       issuedAt: NOW,
+      expectedPasswordHash: PASSWORD_HASH,
     });
     await createWebSession(userId);
     const codeHash = createHash('sha256')

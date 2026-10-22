@@ -4,6 +4,7 @@ import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-del
 import {
   LOCK_PASSWORD_IDENTITY_SQL,
   insertEmailDelivery,
+  lockOwningAccount,
 } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   IssuePasswordResetTokenInput,
@@ -62,9 +63,14 @@ function inspectPasswordResetToken(
   return { kind: 'valid', id: row.id, userId: row.userAccountId };
 }
 
+/** The account a reset token belongs to; the token's account never changes. */
+const PASSWORD_RESET_ACCOUNT_SQL =
+  'SELECT user_account_id FROM password_reset_tokens WHERE token_hash = $1';
+
 /**
  * The reset token joined to its account, aliased to the model's field names so
  * the locking read (SQL) and the plain read (generated client) map the same way.
+ * Only the token row is locked here: the account is already held by the caller.
  */
 const LOCK_PASSWORD_RESET_SQL = `
   SELECT token.id,
@@ -75,7 +81,7 @@ const LOCK_PASSWORD_RESET_SQL = `
   FROM password_reset_tokens token
   JOIN user_accounts account ON account.id = token.user_account_id
   WHERE token.token_hash = $1
-  FOR UPDATE
+  FOR UPDATE OF token
 `;
 
 /**
@@ -181,6 +187,16 @@ export class PostgresPasswordResetTokenRepository
     readonly now: Date;
   }): Promise<PasswordResetResult> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: the User Account, then its tokens (ADR-0025). The token is
+      // read again under the lock, so a reset or a reset-link request that won
+      // the account first is seen as a consumed token, not raced.
+      if (
+        !(await lockOwningAccount(transaction, PASSWORD_RESET_ACCOUNT_SQL, [
+          input.tokenHash,
+        ]))
+      ) {
+        return { kind: 'invalid', reason: 'missing' };
+      }
       const rows = await authQueryRows<PasswordResetTokenRow>(
         transaction,
         LOCK_PASSWORD_RESET_SQL,
@@ -191,20 +207,22 @@ export class PostgresPasswordResetTokenRepository
         return inspection;
       }
 
+      // The token is spent before the password changes, so a token that was
+      // spent after it was read answers as consumed with nothing written.
+      const consumed = await transaction.passwordResetToken.updateMany({
+        where: { id: inspection.id, consumedAt: null },
+        data: { consumedAt: input.now },
+      });
+      if (consumed.count === 0) {
+        return { kind: 'invalid', reason: 'consumed' };
+      }
+
       const identity = await transaction.authIdentity.updateMany({
         where: { userAccountId: inspection.userId, provider: 'password' },
         data: { passwordHash: input.passwordHash, updatedAt: input.now },
       });
       if (identity.count === 0) {
         throw new Error('local password identity is missing');
-      }
-
-      const consumed = await transaction.passwordResetToken.updateMany({
-        where: { id: inspection.id, consumedAt: null },
-        data: { consumedAt: input.now },
-      });
-      if (consumed.count === 0) {
-        throw new Error('password reset token was concurrently consumed');
       }
       await transaction.passwordResetToken.updateMany({
         where: { userAccountId: inspection.userId, consumedAt: null },

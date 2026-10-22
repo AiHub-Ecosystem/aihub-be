@@ -1,10 +1,20 @@
 import type { MfaSessionProof } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type { IssuedRefreshToken } from './refresh-token.port';
 
-export interface CreateRefreshSessionInput {
+/** What one stored Refresh Session needs, however its sign-in was proved. */
+export interface RefreshSessionRowInput {
   readonly userId: string;
   readonly token: IssuedRefreshToken;
   readonly issuedAt: Date;
+}
+
+export interface CreateRefreshSessionInput extends RefreshSessionRowInput {
+  /**
+   * The password hash the sign-in verified. The insert refuses when the stored
+   * hash is no longer this one, because a reset replaced the password after the
+   * check (ADR-0025).
+   */
+  readonly expectedPasswordHash: string;
   readonly mfaProof?: MfaSessionProof;
 }
 

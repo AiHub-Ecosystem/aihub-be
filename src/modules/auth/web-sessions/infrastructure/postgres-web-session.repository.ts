@@ -1,3 +1,4 @@
+import { passwordHashIsCurrent } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import { authorizeMfaSession } from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
@@ -29,12 +30,13 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
       )
         return false;
 
-      // A fresh statement after the lock avoids retaining a pre-reset identity snapshot.
-      const identity = await transaction.authIdentity.findFirst({
-        where: { userAccountId: input.userId, provider: 'password' },
-        select: { passwordHash: true },
-      });
-      if (identity?.passwordHash !== input.expectedPasswordHash) {
+      if (
+        !(await passwordHashIsCurrent(
+          transaction,
+          input.userId,
+          input.expectedPasswordHash,
+        ))
+      ) {
         return false;
       }
       await insertWebSession(transaction, {

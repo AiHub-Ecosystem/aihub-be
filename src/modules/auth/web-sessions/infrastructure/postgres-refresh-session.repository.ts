@@ -1,4 +1,8 @@
-import { insertRefreshSession } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
+import {
+  LOCK_ACCOUNT_SQL,
+  insertRefreshSession,
+  passwordHashIsCurrent,
+} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import { authorizeMfaSession } from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
@@ -14,7 +18,14 @@ import type {
   RotateRefreshTokenInput,
 } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 
-/** The refresh token and its account's status, locked for rotation. */
+/** The account a Refresh Token belongs to; the token's account never changes. */
+const REFRESH_TOKEN_ACCOUNT_SQL =
+  'SELECT user_account_id FROM refresh_tokens WHERE id = $1 AND token_hash = $2';
+
+/**
+ * The refresh token and its account's status, locked for rotation. Only the
+ * token row is locked here: the account is already held by the caller.
+ */
 const LOCK_REFRESH_TOKEN_SQL = `
   SELECT token.id,
          token.family_id AS "familyId",
@@ -26,7 +37,7 @@ const LOCK_REFRESH_TOKEN_SQL = `
   FROM refresh_tokens token
   JOIN user_accounts account ON account.id = token.user_account_id
   WHERE token.id = $1 AND token.token_hash = $2
-  FOR UPDATE
+  FOR UPDATE OF token
 `;
 
 interface RefreshTokenRow {
@@ -59,6 +70,15 @@ export class PostgresRefreshSessionRepository
         input.issuedAt,
       );
       if (!authorized) return false;
+      if (
+        !(await passwordHashIsCurrent(
+          transaction,
+          input.userId,
+          input.expectedPasswordHash,
+        ))
+      ) {
+        return false;
+      }
       await insertRefreshSession(transaction, input);
       return true;
     });
@@ -77,6 +97,19 @@ export class PostgresRefreshSessionRepository
     input: RotateRefreshTokenInput,
   ): Promise<RefreshTokenRotationResult> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: the User Account, then its tokens (ADR-0025). The token is
+      // read again under the lock, so a reset that won the account first is
+      // seen as a revoked token, and the two never wait on each other's rows.
+      const owner = await authQueryRows(
+        transaction,
+        REFRESH_TOKEN_ACCOUNT_SQL,
+        [input.tokenId, input.tokenHash],
+      );
+      const accountId = owner[0]?.['user_account_id'];
+      if (typeof accountId !== 'string') {
+        return { kind: 'invalid', reason: 'missing' };
+      }
+      await authQueryRows(transaction, LOCK_ACCOUNT_SQL, [accountId]);
       const rows = await authQueryRows<RefreshTokenRow & { status: string }>(
         transaction,
         LOCK_REFRESH_TOKEN_SQL,

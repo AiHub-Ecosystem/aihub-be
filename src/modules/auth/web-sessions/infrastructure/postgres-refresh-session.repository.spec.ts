@@ -34,16 +34,29 @@ function allArgs(script: ScriptedPrisma): string {
   return JSON.stringify(script.statements.map(({ args }) => args));
 }
 
+/**
+ * The statements a rotation issues before it holds the token: the token's
+ * account, then that account's lock (ADR-0025). The token read follows.
+ */
+function accountLocked(): unknown[] {
+  return [[{ user_account_id: USER_ID }], [{ status: 'active' }]];
+}
+
 describe('PostgresRefreshSessionRepository', () => {
   it('persists only the refresh hash and rotates under a row lock', async () => {
     const script = new ScriptedPrisma();
     const repository = repositoryOver(script);
 
-    script.inside = [[{ status: 'active' }], []];
+    script.inside = [
+      [{ status: 'active' }],
+      [],
+      { passwordHash: 'verified-hash' },
+    ];
     await repository.createRefreshSession({
       userId: USER_ID,
       token: refreshToken,
       issuedAt: input.now,
+      expectedPasswordHash: 'verified-hash',
     });
     const created = script.statements.find(
       ({ name }) => name === 'refreshToken.create',
@@ -52,6 +65,7 @@ describe('PostgresRefreshSessionRepository', () => {
     expect(allArgs(script)).not.toContain(refreshToken.raw);
 
     script.inside = [
+      ...accountLocked(),
       [
         {
           id: refreshToken.id,
@@ -85,9 +99,32 @@ describe('PostgresRefreshSessionRepository', () => {
     ]);
   });
 
+  it('refuses a session whose verified password is no longer the stored one', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [{ status: 'active' }],
+      [],
+      { passwordHash: 'reset-hash' },
+    ];
+
+    await expect(
+      repositoryOver(script).createRefreshSession({
+        userId: USER_ID,
+        token: refreshToken,
+        issuedAt: input.now,
+        expectedPasswordHash: 'verified-hash',
+      }),
+    ).resolves.toBe(false);
+
+    expect(script.statements.map(({ name }) => name)).not.toContain(
+      'refreshToken.create',
+    );
+  });
+
   it('commits the rotation and its successor in one transaction', async () => {
     const script = new ScriptedPrisma();
     script.inside = [
+      ...accountLocked(),
       [
         {
           id: refreshToken.id,

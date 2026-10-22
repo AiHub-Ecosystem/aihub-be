@@ -23,8 +23,13 @@ export class InMemoryRefreshSessionAdapter
     if (this.failCreateRefreshSession) {
       throw new Error('durable store unavailable');
     }
-    if (this.state.accounts.get(input.userId)?.status !== 'active')
+    const account = this.state.accounts.get(input.userId);
+    if (
+      account?.status !== 'active' ||
+      account.passwordHash !== input.expectedPasswordHash
+    ) {
       return false;
+    }
     const factor = this.state.mfaFactors.get(input.userId);
     if (factor?.status === 'enabled') {
       if (

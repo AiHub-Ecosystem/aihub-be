@@ -46,6 +46,7 @@ import {
   RefreshRotationCommittedError,
 } from './local-auth-service.port';
 import {
+  type AuthenticatedCredentials,
   type CredentialCheckPorts,
   authenticateCredentials,
   rejectCredentials,
@@ -412,7 +413,7 @@ export class LocalAuthService {
    * without an access token it could not pair with a cookie.
    */
   private async startLoginSession(
-    credentials: { readonly userId: string; readonly email: string },
+    credentials: AuthenticatedCredentials,
     now: Date,
     ip: string,
     mfaProof?: MfaSessionProof,
@@ -426,6 +427,7 @@ export class LocalAuthService {
       userId: credentials.userId,
       token: refreshToken,
       issuedAt: now,
+      expectedPasswordHash: credentials.passwordHash,
       ...(mfaProof === undefined ? {} : { mfaProof }),
     });
     if (!created) {
