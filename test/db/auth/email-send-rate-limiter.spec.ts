@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+
 import {
   EMAIL_SEND_RATE_RESERVATION_KEY,
   RedisEmailSendRateLimiter,
@@ -23,14 +25,25 @@ describe('shared email send rate limiter', () => {
     secondRedis,
   );
 
+  beforeAll(async () => {
+    await Promise.all(
+      [firstRedis, secondRedis].map(async (redis) => {
+        if (redis.status !== 'ready') await once(redis, 'ready');
+      }),
+    );
+  });
+
   beforeEach(async () => {
     await firstRedis.del(EMAIL_SEND_RATE_RESERVATION_KEY);
   });
 
   afterAll(async () => {
-    await firstRedis.del(EMAIL_SEND_RATE_RESERVATION_KEY);
-    first.onModuleDestroy();
-    second.onModuleDestroy();
+    try {
+      await firstRedis.del(EMAIL_SEND_RATE_RESERVATION_KEY);
+    } finally {
+      first.onModuleDestroy();
+      second.onModuleDestroy();
+    }
   });
 
   it('shares one no-burst reservation across two independent Redis clients', async () => {
