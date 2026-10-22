@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
+import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   GRADED_ADMISSION_SCRIPT,
   RedisGradedAdmission,
@@ -13,22 +14,26 @@ class FakeRedis implements RedisGradedAdmissionClient {
     args: readonly (string | number)[];
   }[] = [];
   result = 0;
+  /** The per-key count the script reports alongside its result. */
+  rateCount = 1;
   /** Results for the next calls, before falling back to `result`. */
   queued: number[] = [];
   failure: Error | undefined;
 
-  async eval(
+  async evalNumbers(
     script: string,
     numberOfKeys: number,
     ...args: readonly (string | number)[]
-  ): Promise<number> {
+  ): Promise<readonly number[]> {
     this.calls.push({ script, numberOfKeys, args });
     if (this.failure !== undefined) throw this.failure;
-    return this.queued.shift() ?? this.result;
+    return [this.queued.shift() ?? this.result, this.rateCount];
   }
 
   async quit(): Promise<void> {}
 }
+
+const NOW = 1_782_000_000_000;
 
 const request: GradedAdmissionRequest = {
   apiKeyId: 'ak_1',
@@ -44,10 +49,15 @@ const request: GradedAdmissionRequest = {
 describe('RedisGradedAdmission', () => {
   it('runs rate, retry-budget, and quota admission in one ordered script', async () => {
     const redis = new FakeRedis();
-    const admission = new RedisGradedAdmission(redis, () => 1_782_000_000_000);
+    const admission = new RedisGradedAdmission(redis, () => NOW);
 
     await expect(admission.consume(request)).resolves.toEqual({
       stage: 'admitted',
+      rate: {
+        limit: 60,
+        remaining: 59,
+        resetInMs: rateLimitWindow('ak_1', NOW).resetInMs,
+      },
     });
 
     expect(redis.calls).toHaveLength(1);
@@ -63,7 +73,7 @@ describe('RedisGradedAdmission', () => {
       script.indexOf("redis.call('GET'"),
     );
     expect(redis.calls[0]?.args.slice(0, 5)).toEqual([
-      'aihub:v1:rl:ak_1:29700000',
+      `aihub:v1:rl:ak_1:${rateLimitWindow('ak_1', NOW).index}`,
       expect.stringMatching(/^aihub:v1:org-retry:\{[0-9a-f]{64}\}:first$/),
       expect.stringMatching(/^aihub:v1:org-retry:\{[0-9a-f]{64}\}:repeats$/),
       expect.stringMatching(/^aihub:v1:org-retry:\{[0-9a-f]{64}\}:seen$/),
@@ -90,16 +100,46 @@ describe('RedisGradedAdmission', () => {
     await expect(
       new RedisGradedAdmission(
         redis,
-        () => 1_782_000_000_000,
+        () => NOW,
         () => 0.25,
       ).consume(request),
     ).resolves.toMatchObject({ stage });
   });
 
+  it('reports what is left of the per-key window, never below zero', async () => {
+    const redis = new FakeRedis();
+    redis.result = 1;
+    redis.rateCount = 61;
+
+    await expect(
+      new RedisGradedAdmission(redis, () => NOW).consume(request),
+    ).resolves.toMatchObject({ rate: { limit: 60, remaining: 0 } });
+  });
+
+  it('tells rate-limited callers refused in the same millisecond different instants, never before the window resets', async () => {
+    const redis = new FakeRedis();
+    redis.result = 1;
+    const admission = new RedisGradedAdmission(redis, () => NOW);
+    const { resetInMs } = rateLimitWindow('ak_1', NOW);
+
+    const hints = await Promise.all(
+      Array.from({ length: 20 }, async () => {
+        const decision = await admission.consume(request);
+        return decision.stage === 'rate_limit' ? decision.retryAfterMs : -1;
+      }),
+    );
+
+    expect(new Set(hints).size).toBeGreaterThan(1);
+    for (const hint of hints) {
+      expect(hint).toBeGreaterThanOrEqual(resetInMs);
+      expect(hint).toBeLessThan(resetInMs + 1_000);
+    }
+  });
+
   it('does not run retry-budget or quota checks for an unkeyed, unlimited request', async () => {
     const redis = new FakeRedis();
 
-    await new RedisGradedAdmission(redis, () => 1_782_000_000_000).consume({
+    await new RedisGradedAdmission(redis, () => NOW).consume({
       apiKeyId: request.apiKeyId,
       rateLimitRpm: request.rateLimitRpm,
       organizationId: request.organizationId,
@@ -146,16 +186,16 @@ describe('RedisGradedAdmission', () => {
     const seed = jest.fn(async () => undefined);
     const admission = new RedisGradedAdmission(
       redis,
-      () => 1_782_000_000_000,
+      () => NOW,
       Math.random,
       undefined,
       { seed },
     );
 
-    await expect(admission.consume(request)).resolves.toEqual({
+    await expect(admission.consume(request)).resolves.toMatchObject({
       stage: 'admitted',
     });
-    expect(seed).toHaveBeenCalledWith('org_1', new Date(1_782_000_000_000));
+    expect(seed).toHaveBeenCalledWith('org_1', new Date(NOW));
     expect(redis.calls).toHaveLength(2);
     expect(redis.calls[1]?.args).toEqual(redis.calls[0]?.args);
   });
@@ -173,13 +213,13 @@ describe('RedisGradedAdmission', () => {
       redis.queued = [5, 0];
       const admission = new RedisGradedAdmission(
         redis,
-        () => 1_782_000_000_000,
+        () => NOW,
         Math.random,
         undefined,
         seeder,
       );
 
-      await expect(admission.consume(request)).resolves.toEqual({
+      await expect(admission.consume(request)).resolves.toMatchObject({
         stage: 'admitted',
         quotaUnverified: true,
       });
@@ -193,7 +233,7 @@ describe('RedisGradedAdmission', () => {
     redis.queued = [5];
     const admission = new RedisGradedAdmission(
       redis,
-      () => 1_782_000_000_000,
+      () => NOW,
       Math.random,
       undefined,
       { seed: async () => Promise.reject(new Error('db down')) },

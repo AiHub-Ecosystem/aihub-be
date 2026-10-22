@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import { RedisConcurrencyLimiter } from '@/modules/gateway/infrastructure/redis-concurrency-limiter';
 import {
   type RedisGatewayClient,
@@ -150,7 +151,7 @@ describe('Redis keys lost under load', () => {
       admission.consume(
         request({ monthlyRequestQuota: DURABLE_USAGE, hardStopOnQuota: true }),
       ),
-    ).resolves.toEqual({ stage: 'quota', quota: DURABLE_USAGE });
+    ).resolves.toMatchObject({ stage: 'quota', quota: DURABLE_USAGE });
     expect(await raw.get(quotaKey(ORGANIZATION_A))).toBe(String(DURABLE_USAGE));
   });
 
@@ -167,7 +168,7 @@ describe('Redis keys lost under load', () => {
       apiKeyId: `ak_${randomUUID()}`,
       rateLimitRpm: 10,
     });
-    const rateKey = `aihub:v1:rl:${limited.apiKeyId}:${Math.floor(minuteStart / 60_000)}`;
+    const rateKey = `aihub:v1:rl:${limited.apiKeyId}:${rateLimitWindow(limited.apiKeyId, minuteStart).index}`;
 
     const admitted: string[] = [];
     for (let index = 0; index < 30; index += 1) {

@@ -69,26 +69,23 @@ describe('authentication rate-limit refusals', () => {
       expect(refusal.retryable).toBe(true);
     });
 
-    it('asks for the Retry-After header, which is what makes the filter send it', async () => {
+    it('carries the wait, which the filter also sends as Retry-After', async () => {
       const refusal = await refusalOf(
         (limiter) => checkAuthRateLimits(limiter, [EMAIL_LIMIT]),
         new Map([['login_email', { allowed: false, retryAfterMs: 900_000 }]]),
       );
 
-      expect(refusal.retryAfterHeader).toBe(true);
       expect(refusal.retryAfterMs).toBe(900_000);
     });
 
-    // A refusal with no wait to report is still rate limited; the filter emits
-    // the header only when there is a number to send, so asking for one here
-    // would publish a header the response cannot answer.
-    it('asks for the header on a refusal that knows no wait too', async () => {
+    // A refusal with no wait to report is still rate limited; with no number to
+    // send, the filter sends no header either.
+    it('carries no wait when no window reports one', async () => {
       const refusal = await refusalOf(
         (limiter) => enforceAuthRateLimits(limiter, [IP_LIMIT]),
         new Map([['login_ip', { allowed: false }]]),
       );
 
-      expect(refusal.retryAfterHeader).toBe(true);
       expect(refusal.retryAfterMs).toBeUndefined();
     });
   });

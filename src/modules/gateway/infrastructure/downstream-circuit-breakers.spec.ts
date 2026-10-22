@@ -167,7 +167,6 @@ describe('DownstreamCircuitBreakers', () => {
       code: 'AI_SERVICE_UNAVAILABLE',
       retryable: true,
       retryAfterMs: 30_000,
-      retryAfterHeader: true,
     });
     expect(await breakerState('writing.task1.grade')).toBe('2');
     completeProbe?.(OK);

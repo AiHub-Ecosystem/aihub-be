@@ -11,7 +11,6 @@ export interface AppErrorOptions {
   readonly message: string;
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
-  readonly retryAfterHeader?: boolean;
   readonly details?: Readonly<Record<string, unknown>>;
   readonly downstreamStatus?: number;
   readonly cause?: unknown;
@@ -30,7 +29,6 @@ export class AppError extends Error {
   readonly httpStatus: HttpStatus;
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
-  readonly retryAfterHeader?: boolean;
   readonly details?: Readonly<Record<string, unknown>>;
   readonly downstreamStatus?: number;
   readonly diagnostic?: string;
@@ -47,10 +45,6 @@ export class AppError extends Error {
 
     if (options.retryAfterMs !== undefined) {
       this.retryAfterMs = options.retryAfterMs;
-    }
-
-    if (options.retryAfterHeader !== undefined) {
-      this.retryAfterHeader = options.retryAfterHeader;
     }
 
     if (options.downstreamStatus !== undefined) {

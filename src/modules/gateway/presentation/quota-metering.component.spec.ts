@@ -122,7 +122,10 @@ describe('quota and metering component behaviour', () => {
     const send = jest.fn();
     await new HttpExceptionFilter(metering).catch(
       failure,
-      httpContextFor(request, { status: () => ({ send }) }),
+      httpContextFor(request, {
+        header: jest.fn(),
+        status: () => ({ send }),
+      }),
     );
 
     expect(send).toHaveBeenCalledWith(
@@ -194,7 +197,10 @@ describe('quota and metering component behaviour', () => {
         message: 'Request failed validation',
         retryable: false,
       }),
-      httpContextFor(request, { status: () => ({ send }) }),
+      httpContextFor(request, {
+        header: jest.fn(),
+        status: () => ({ send }),
+      }),
     );
 
     expect(repository.records[0]).toEqual(
@@ -249,7 +255,10 @@ describe('quota and metering component behaviour', () => {
         message: 'Request failed validation',
         retryable: false,
       }),
-      httpContextFor(request, { status: () => ({ send }) }),
+      httpContextFor(request, {
+        header: jest.fn(),
+        status: () => ({ send }),
+      }),
     );
 
     expect(counter.increments).toEqual([]);

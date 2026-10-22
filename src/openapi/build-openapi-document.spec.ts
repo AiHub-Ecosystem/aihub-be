@@ -875,9 +875,9 @@ describe('buildOpenApiDocument', () => {
     expect(serviceUnavailable).toContain('Retry-After');
   });
 
-  // The identity module's own rate limit is a different refusal and carries no
-  // header, so a 429 outside authentication keeps the plain response.
-  it('leaves a non-authentication lockout without the retry header', () => {
+  // Every refusal that carries retry_after_ms also sends Retry-After (#403), so
+  // a 429 outside authentication documents the header too.
+  it('documents the retry header on a non-authentication lockout', () => {
     const doc = build();
     const operation =
       doc.paths['/v1/organizations/{organization_id}/invitations']?.post;
@@ -885,7 +885,7 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['429']).toEqual({
       $ref: '#/components/responses/Error429',
     });
-    expect(JSON.stringify(doc.components.responses.Error429)).not.toContain(
+    expect(JSON.stringify(doc.components.responses.Error429)).toContain(
       'Retry-After',
     );
   });

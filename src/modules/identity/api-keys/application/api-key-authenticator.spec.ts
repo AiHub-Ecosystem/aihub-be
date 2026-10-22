@@ -328,7 +328,6 @@ describe('ApiKeyAuthenticator', () => {
       httpStatus: 503,
       retryable: true,
       retryAfterMs: 1_000,
-      retryAfterHeader: true,
     });
     const sameHash = authenticateKey(0);
     await new Promise<void>((resolve) => setImmediate(resolve));

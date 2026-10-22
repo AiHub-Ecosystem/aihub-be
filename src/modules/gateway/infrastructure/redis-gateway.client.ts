@@ -16,11 +16,27 @@ export interface RedisGatewayClient {
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<number>;
+  /** For a script that returns an array of integers. */
+  evalNumbers(
+    script: string,
+    numberOfKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<readonly number[]>;
   zrem(key: string, member: string): Promise<number>;
   quit(): Promise<unknown>;
 }
 
 export const REDIS_GATEWAY_CLIENT = Symbol('REDIS_GATEWAY_CLIENT');
+
+export function numbers(result: unknown): readonly number[] {
+  if (
+    !Array.isArray(result) ||
+    !result.every((item): item is number => typeof item === 'number')
+  ) {
+    throw new Error('Redis command result is invalid');
+  }
+  return result;
+}
 
 class IoredisGatewayClient implements RedisGatewayClient {
   constructor(private readonly client: Redis) {}
@@ -61,6 +77,14 @@ class IoredisGatewayClient implements RedisGatewayClient {
       }
       return result;
     });
+  }
+
+  evalNumbers(
+    script: string,
+    numberOfKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<readonly number[]> {
+    return this.client.eval(script, numberOfKeys, ...args).then(numbers);
   }
 
   zrem(key: string, member: string): Promise<number> {

@@ -8,6 +8,7 @@ import type {
   ConcurrencyLimiterPort,
   ConcurrencyRequest,
 } from '@/modules/gateway/application/concurrency-limiter.port';
+import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<
@@ -15,6 +16,7 @@ export type RedisConcurrencyClient = Pick<
   'eval' | 'zrem' | 'quit'
 >;
 
+/** A refused permit is told to wait this long, plus up to as long again. */
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 export const CONCURRENCY_STALE_LEASE_MS = 120_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
@@ -62,10 +64,6 @@ interface LoggerLike {
   log(message: string): void;
 }
 
-function denied(): ConcurrencyDecision {
-  return { allowed: false, retryAfterMs: CONCURRENCY_RETRY_AFTER_MS };
-}
-
 export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
   private redisIsDegraded = false;
 
@@ -74,6 +72,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     private readonly logger: LoggerLike = new Logger(
       RedisConcurrencyLimiter.name,
     ),
+    private readonly random: () => number = Math.random,
   ) {}
 
   async acquire(request: ConcurrencyRequest): Promise<ConcurrencyDecision> {
@@ -81,7 +80,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       !Number.isInteger(request.maxConcurrent) ||
       request.maxConcurrent <= 0
     ) {
-      return denied();
+      return this.denied();
     }
 
     const client = this.client;
@@ -111,7 +110,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       );
       if (result === 0) {
         this.reportRecovered();
-        return denied();
+        return this.denied();
       }
       if (result !== 1) {
         throw new Error('Redis concurrency response is invalid');
@@ -178,6 +177,17 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       );
     }, LEASE_REMOVAL_RETRY_MS);
     timer.unref();
+  }
+
+  private denied(): ConcurrencyDecision {
+    return {
+      allowed: false,
+      retryAfterMs: jitteredRetryAfterMs(
+        CONCURRENCY_RETRY_AFTER_MS,
+        this.random,
+        CONCURRENCY_RETRY_AFTER_MS,
+      ),
+    };
   }
 
   private reportDegraded(error?: unknown): void {

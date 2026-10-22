@@ -40,7 +40,6 @@ describe('HttpExceptionFilter', () => {
         message: 'Authentication capacity is temporarily unavailable',
         retryable: true,
         retryAfterMs: 1000,
-        retryAfterHeader: true,
       }),
       host,
     );

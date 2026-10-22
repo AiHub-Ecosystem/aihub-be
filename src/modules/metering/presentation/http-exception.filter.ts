@@ -104,11 +104,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception,
       requestId ?? 'unknown',
     );
-    if (
-      exception instanceof AppError &&
-      exception.retryAfterHeader === true &&
-      exception.retryAfterMs !== undefined
-    ) {
+    // Standard HTTP clients and retry libraries read the header, not the body.
+    if (exception instanceof AppError && exception.retryAfterMs !== undefined) {
       response.header(
         'Retry-After',
         String(Math.ceil(exception.retryAfterMs / 1_000)),

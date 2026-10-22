@@ -157,7 +157,7 @@ describe('tenant isolation for Redis counters', () => {
     expect(firstB.allowed).toBe(true);
     expect(secondA).toEqual({
       allowed: false,
-      retryAfterMs: 500,
+      retryAfterMs: expect.any(Number),
     });
     if (firstA.allowed) {
       await firstA.lease.release();

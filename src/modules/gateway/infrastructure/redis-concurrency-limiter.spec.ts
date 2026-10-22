@@ -98,10 +98,10 @@ describe('RedisConcurrencyLimiter', () => {
     ]);
   });
 
-  it('rejects an atomic acquisition with the concurrency error hint', async () => {
+  it('rejects an atomic acquisition with a jittered concurrency hint', async () => {
     const redis = new FakeRedis();
     redis.nextEvaluation = 0;
-    const limiter = new RedisConcurrencyLimiter(redis);
+    const limiter = new RedisConcurrencyLimiter(redis, undefined, () => 0.5);
 
     await expect(
       limiter.acquire({
@@ -109,7 +109,30 @@ describe('RedisConcurrencyLimiter', () => {
         maxConcurrent: 1,
         requestId: 'req_01JCONCURRENCYFULL000000000000',
       }),
-    ).resolves.toEqual({ allowed: false, retryAfterMs: 500 });
+    ).resolves.toEqual({ allowed: false, retryAfterMs: 750 });
+  });
+
+  it('tells a burst refused together different instants between 500 and 1000 ms', async () => {
+    const redis = new FakeRedis();
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    const hints: number[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      redis.nextEvaluation = 0;
+      const decision = await limiter.acquire({
+        organizationId: 'org_acme',
+        maxConcurrent: 1,
+        requestId: `req_01JCONCURRENCYFULL${String(index).padStart(12, '0')}`,
+      });
+      if (!decision.allowed) hints.push(decision.retryAfterMs);
+    }
+
+    expect(hints).toHaveLength(20);
+    expect(new Set(hints).size).toBeGreaterThan(1);
+    for (const hint of hints) {
+      expect(hint).toBeGreaterThanOrEqual(500);
+      expect(hint).toBeLessThan(1_000);
+    }
   });
 
   it('atomically enforces Sandbox limits for the Organization and whole environment', async () => {

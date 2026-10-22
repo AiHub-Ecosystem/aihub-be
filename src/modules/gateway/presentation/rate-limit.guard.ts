@@ -5,6 +5,7 @@ import {
   Injectable,
   Optional,
 } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
@@ -15,8 +16,10 @@ import type {
   GradedAdmissionPort,
 } from '@/modules/gateway/application/graded-admission.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
+import { RATE_WINDOW_MS } from '@/modules/gateway/application/rate-limit-window';
 import {
   RATE_LIMITER,
+  type RateLimitStanding,
   type RateLimiterPort,
 } from '@/modules/gateway/application/rate-limiter.port';
 import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
@@ -40,6 +43,27 @@ function rateLimited(retryAfterMs: number | undefined): AppError {
     retryable: true,
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   });
+}
+
+/**
+ * The caller's own per-key limit, in the `RateLimit-Policy` and `RateLimit`
+ * fields of draft-ietf-httpapi-ratelimit-headers-11, so a client can slow
+ * down before it is refused. Only the key's own figures are ever reported.
+ */
+function reportStanding(
+  context: ExecutionContext,
+  standing: RateLimitStanding | undefined,
+): void {
+  if (standing === undefined) return;
+  const reply = context.switchToHttp().getResponse<FastifyReply>();
+  reply.header(
+    'RateLimit-Policy',
+    `"per-key";q=${standing.limit};w=${RATE_WINDOW_MS / 1_000}`,
+  );
+  reply.header(
+    'RateLimit',
+    `"per-key";r=${standing.remaining};t=${Math.ceil(standing.resetInMs / 1_000)}`,
+  );
 }
 
 function idempotencyKeyForRequest(
@@ -122,6 +146,7 @@ export class RateLimitGuard implements CanActivate {
         hardStopOnQuota: authenticated.hardStopOnQuota,
       });
       request.aihubGradedAdmission = decision;
+      reportStanding(context, decision.rate);
 
       if (decision.stage === 'rate_limit') {
         throw rateLimited(decision.retryAfterMs);
@@ -133,6 +158,7 @@ export class RateLimitGuard implements CanActivate {
       keyId: authenticated.apiKeyId,
       limit: authenticated.rateLimitRpm,
     });
+    reportStanding(context, decision.standing);
 
     if (!decision.allowed) {
       throw rateLimited(decision.retryAfterMs);

@@ -68,7 +68,6 @@ export function databaseUnavailableError(
     message,
     retryable: true,
     retryAfterMs: 1_000,
-    retryAfterHeader: true,
     ...(cause === undefined ? {} : { cause }),
   });
 }

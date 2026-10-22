@@ -328,9 +328,11 @@ describe('a slow AI Service under grading load and client retries', () => {
     expect(Math.max(...refusals.map(({ ms }) => ms))).toBeLessThan(
       REFUSAL_BOUND_MS,
     );
-    expect(new Set(refusals.map(({ retryAfterMs }) => retryAfterMs))).toEqual(
-      new Set([CONCURRENCY_RETRY_AFTER_MS]),
-    );
+    // The hint is jittered (#403), between the base wait and twice it.
+    for (const { retryAfterMs } of refusals) {
+      expect(retryAfterMs).toBeGreaterThanOrEqual(CONCURRENCY_RETRY_AFTER_MS);
+      expect(retryAfterMs).toBeLessThan(2 * CONCURRENCY_RETRY_AFTER_MS);
+    }
     expect(Math.max(...timeouts.map(({ ms }) => ms))).toBeLessThan(
       LOAD_DEADLINE_MS + DEADLINE_SLACK_MS,
     );

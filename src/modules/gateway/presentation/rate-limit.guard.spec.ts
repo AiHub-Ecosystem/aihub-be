@@ -18,11 +18,21 @@ const authenticated = {
   allowedEnvironments: ['production'],
 } as const;
 
-function contextFor(request: Record<string, unknown>): ExecutionContext {
+function contextFor(
+  request: Record<string, unknown>,
+  headers = new Map<string, string>(),
+): ExecutionContext {
   return {
-    switchToHttp: () => ({ getRequest: () => request }),
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => ({
+        header: (name: string, value: string) => headers.set(name, value),
+      }),
+    }),
   } as ExecutionContext;
 }
+
+const standing = { limit: 600, remaining: 41, resetInMs: 12_001 };
 
 function requestFor(
   operation: keyof typeof OPERATION_CATALOG,
@@ -91,6 +101,43 @@ describe('RateLimitGuard', () => {
       keyId: authenticated.apiKeyId,
       limit: authenticated.rateLimitRpm,
     });
+  });
+
+  it('reports the per-key standing of an admitted graded request in the RateLimit fields', async () => {
+    const headers = new Map<string, string>();
+    const guard = new RateLimitGuard(
+      { consume: async () => ({ allowed: true }) },
+      { consume: async () => ({ stage: 'admitted', rate: standing }) },
+    );
+
+    await guard.canActivate(
+      contextFor(requestFor('writing.task1.grade'), headers),
+    );
+
+    expect(Object.fromEntries(headers)).toEqual({
+      'RateLimit-Policy': '"per-key";q=600;w=60',
+      RateLimit: '"per-key";r=41;t=13',
+    });
+  });
+
+  it('reports the standing on a 429 too, next to the retry hint', async () => {
+    const headers = new Map<string, string>();
+    const guard = new RateLimitGuard({
+      consume: async () => ({
+        allowed: false,
+        retryAfterMs: 12_500,
+        standing: { ...standing, remaining: 0 },
+      }),
+    });
+    const request = requestFor('writing.task1.grade');
+    request.routeOptions = {
+      url: PUBLIC_ROUTES['writing.chartUploads.create'].path,
+    };
+
+    await expect(
+      guard.canActivate(contextFor(request, headers)),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED', retryAfterMs: 12_500 });
+    expect(headers.get('RateLimit')).toBe('"per-key";r=0;t=13');
   });
 
   it('fails closed when graded admission is not wired', async () => {

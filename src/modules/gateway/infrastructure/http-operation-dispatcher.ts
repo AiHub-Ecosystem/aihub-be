@@ -40,9 +40,7 @@ function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
     message: 'AI service returned an error',
     retryable: status >= 500,
     downstreamStatus: status,
-    ...(status === 503 && retryAfterMs !== undefined
-      ? { retryAfterMs, retryAfterHeader: true }
-      : {}),
+    ...(status === 503 && retryAfterMs !== undefined ? { retryAfterMs } : {}),
     cause: new Error(`downstream status ${status}`),
   });
 }
@@ -231,7 +229,7 @@ function downstreamResponseError(
         retryable: hint.retryable,
         downstreamStatus: response.status,
         ...(response.status === 503 && retryDelay !== undefined
-          ? { retryAfterMs: retryDelay, retryAfterHeader: true }
+          ? { retryAfterMs: retryDelay }
           : {}),
       });
 }

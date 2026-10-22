@@ -93,7 +93,6 @@ export class Argon2PasswordHasher implements PasswordHasherPort {
       message: 'Authentication capacity is temporarily unavailable',
       retryable: true,
       retryAfterMs: ARGON2_RETRY_AFTER_MS,
-      retryAfterHeader: true,
     });
   }
 }

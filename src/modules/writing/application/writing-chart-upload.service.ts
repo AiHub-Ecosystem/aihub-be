@@ -34,7 +34,6 @@ function rateLimited(): AppError {
     message: 'Writing chart upload limit reached; retry later',
     retryable: true,
     retryAfterMs: WRITING_CHART_RATE_WINDOW_MS,
-    retryAfterHeader: true,
   });
 }
 

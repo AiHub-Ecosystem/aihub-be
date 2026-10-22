@@ -939,21 +939,27 @@ or database messages:
 part of the contract. `retryable` tells you whether a retry can possibly help,
 so you do not have to infer it from the status.
 
-`retry_after_ms` is present only when AIHUB knows how long to wait:
-`RATE_LIMITED` (until the minute window frees a request), `CONCURRENCY_LIMIT`
-(500 ms), and `QUOTA_EXCEEDED` (until the next UTC month starts, which can be
-weeks). A Redis outage during graded admission or concurrency returns
-`REDIS_UNAVAILABLE` with a short 1000 ms hint, and a database outage returns
-`DATABASE_UNAVAILABLE` with the same hint. Other errors,
-`AI_SERVICE_TIMEOUT` included, do not carry it; use your own backoff. A quota
+`retry_after_ms` is present only when AIHUB knows how long to wait. Every
+response that carries it also carries a `Retry-After` header with the same wait
+in whole seconds, rounded up, so a standard HTTP client or retry library can
+read it.
+
+AIHUB adds random jitter to these hints, so clients refused at the same moment
+are not all told to come back at the same instant:
+
+| Refusal                                     | `retry_after_ms`                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------- |
+| `RATE_LIMITED` (per-key rate)               | Until your key's window resets, plus 0–999 ms                                   |
+| `RATE_LIMITED` (same-key retry budget)      | 60 s, plus 0–999 ms                                                             |
+| `CONCURRENCY_LIMIT`                         | 500–999 ms                                                                      |
+| `QUOTA_EXCEEDED`                            | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset |
+| `REDIS_UNAVAILABLE`, `DATABASE_UNAVAILABLE` | 1000 ms                                                                         |
+
+The quota offset is fixed per Organization, so Organizations stopped by their
+quota do not all return at 00:00 UTC on the 1st. Other errors,
+`AI_SERVICE_TIMEOUT` included, carry no hint; use your own backoff. A quota
 refusal is `retryable`, but only after that wait, so do not spend retry attempts
 on it.
-
-`retry_after_ms` is in the response body. Organization same-key retry-budget
-refusals also include `Retry-After`, aligned with the body hint. Other AI
-grading rate limits in this guide do not add that header. Auth login lockouts
-also send it in whole seconds, rounded up from the longer exhausted login
-window.
 
 The table below covers the customer-facing AI grading operations. It does not
 try to list every error from account, Organization, or other control-plane
@@ -972,8 +978,8 @@ separate table below.
 |  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running | Different body: use a new key; in-flight request: wait, then retry the same key and body                           |
 |  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                  | Reduce the essay or audio size to fit the route limit                                                              |
 |  422 | `AUDIO_UNREADABLE`              | The Speaking audio could not be decoded (`retryable: false`)                                 | Check the file is a real recording in a supported format, then send a new one; resending the same file fails again |
-|  429 | `RATE_LIMITED`                  | Request rate or Organization same-key retry budget exceeded                                  | Back off for `retry_after_ms`; also observe `Retry-After` when present                                             |
-|  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                                          | Reduce parallelism; retry in ~500ms                                                                                |
+|  429 | `RATE_LIMITED`                  | Request rate or Organization same-key retry budget exceeded                                  | Wait for `Retry-After` (the same wait as `retry_after_ms`) before retrying                                         |
+|  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                                          | Reduce parallelism; retry after `Retry-After` (500–999 ms)                                                         |
 |  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                      | Wait for the reset or contact AIHUB about your quota                                                               |
 |  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                                                 | Retry later if `retryable` is true                                                                                 |
 |  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                                                      | Do not retry. Report it with the `request_id`                                                                      |
@@ -1012,12 +1018,37 @@ regenerating it will not help.
 ### Retry policy that works
 
 - Retry only when `retryable` is `true`.
-- Use exponential backoff with full jitter — random between zero and the cap,
-  not a fixed delay. Fixed delays make every client retry in lockstep and
-  knock the service over again just as it recovers.
+- Honour `Retry-After` when the response has one: never retry sooner.
+- Add your own jitter on top of it, and use exponential backoff with full
+  jitter when there is no hint — random between zero and the cap, not a fixed
+  delay. Fixed delays make every client retry in lockstep and knock the service
+  over again just as it recovers.
 - Cap at two or three attempts.
 - Always resend the same `Idempotency-Key` when retrying a Writing grade; do not
   blindly retry Speaking.
+
+### Rate-limit header fields
+
+Responses from a rate-limited route, `429` refusals included, describe your
+API key's per-minute limit in the `RateLimit-Policy` and `RateLimit` fields of
+[draft-ietf-httpapi-ratelimit-headers-11](https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-11):
+
+```http
+RateLimit-Policy: "per-key";q=600;w=60
+RateLimit: "per-key";r=41;t=13
+```
+
+- `q` is your key's limit per window, and `w` the window: 60 seconds.
+- `r` is how many requests the key has left in the current window, and `t` the
+  whole seconds until that window resets.
+- Each key has a fixed one-minute window that starts at its own offset into the
+  minute, so different keys do not reset together. When `r` reaches `0`, a new
+  window starts after `t` seconds.
+
+The fields describe your own key only. They are advisory while the draft is not
+final, so the syntax may change with a later revision. Use them to slow down
+before you are refused. The monthly quota is not reported in these fields; a
+route for reading quota usage is tracked in #150.
 
 ### Rate limit and concurrency are different problems
 

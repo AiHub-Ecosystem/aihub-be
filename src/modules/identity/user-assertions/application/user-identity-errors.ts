@@ -42,9 +42,7 @@ export function identityProviderUnavailable(
     code: 'IDENTITY_PROVIDER_UNAVAILABLE',
     message: 'Identity provider is unavailable',
     retryable: true,
-    ...(retryAfterMs === undefined
-      ? {}
-      : { retryAfterMs, retryAfterHeader: true }),
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     ...(cause === undefined ? {} : { cause }),
   });
 }

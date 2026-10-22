@@ -24,7 +24,6 @@ function retryBudgetExceeded(retryAfterMs: number): AppError {
     message: 'Organization retry budget exceeded',
     retryable: true,
     retryAfterMs,
-    retryAfterHeader: true,
   });
 }
 

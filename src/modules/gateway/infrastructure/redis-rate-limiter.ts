@@ -2,11 +2,16 @@ import { Logger } from '@nestjs/common';
 
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
+import {
+  type RateLimitWindow,
+  rateLimitWindow,
+} from '@/modules/gateway/application/rate-limit-window';
 import type {
   RateLimitDecision,
   RateLimitRequest,
   RateLimiterPort,
 } from '@/modules/gateway/application/rate-limiter.port';
+import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
@@ -23,6 +28,7 @@ export class RedisRateLimiter implements RateLimiterPort {
   private readonly client: RedisRateLimitClient | undefined;
   private readonly now: () => number;
   private readonly logger: Pick<Logger, 'warn' | 'log'>;
+  private readonly random: () => number;
 
   // ponytail: a process-local, single-instance approximation of the same
   // per-minute limit, only ever consulted while Redis is unreachable. It is
@@ -37,10 +43,12 @@ export class RedisRateLimiter implements RateLimiterPort {
     client?: RedisRateLimitClient,
     now: () => number = () => Date.now(),
     logger: Pick<Logger, 'warn' | 'log'> = new Logger(RedisRateLimiter.name),
+    random: () => number = Math.random,
   ) {
     this.client = client ?? createRedisGatewayClient(url);
     this.now = now;
     this.logger = logger;
+    this.random = random;
   }
 
   async consume(request: RateLimitRequest): Promise<RateLimitDecision> {
@@ -49,8 +57,8 @@ export class RedisRateLimiter implements RateLimiterPort {
       return this.consumeFallback(request);
     }
 
-    const minute = Math.floor(this.now() / 60_000);
-    const bucket = `aihub:v1:rl:${request.keyId}:${minute}`;
+    const window = rateLimitWindow(request.keyId, this.now());
+    const bucket = `aihub:v1:rl:${request.keyId}:${window.index}`;
     let count: number;
     try {
       count = await incrementRedisCounterWithExpiry(
@@ -65,12 +73,7 @@ export class RedisRateLimiter implements RateLimiterPort {
     }
 
     this.reportRecovered();
-
-    if (count <= request.limit) {
-      return { allowed: true };
-    }
-
-    return this.rejection();
+    return this.decide(request, count, window);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -105,16 +108,19 @@ export class RedisRateLimiter implements RateLimiterPort {
   }
 
   private consumeFallback(request: RateLimitRequest): RateLimitDecision {
-    const minute = Math.floor(this.now() / 60_000);
+    const window = rateLimitWindow(request.keyId, this.now());
     const existing = this.fallbackWindows.get(request.keyId);
     const count =
-      existing !== undefined && existing.windowStart === minute
+      existing !== undefined && existing.windowStart === window.index
         ? existing.count + 1
         : 1;
-    this.fallbackWindows.set(request.keyId, { windowStart: minute, count });
-    this.pruneStaleFallbackWindows(minute);
+    this.fallbackWindows.set(request.keyId, {
+      windowStart: window.index,
+      count,
+    });
+    this.pruneStaleFallbackWindows(window.index);
 
-    return count <= request.limit ? { allowed: true } : this.rejection();
+    return this.decide(request, count, window);
   }
 
   /** Keeps the fallback map from growing for the lifetime of an outage. */
@@ -126,8 +132,22 @@ export class RedisRateLimiter implements RateLimiterPort {
     }
   }
 
-  private rejection(): RateLimitDecision {
-    const elapsed = this.now() % 60_000;
-    return { allowed: false, retryAfterMs: Math.max(1, 60_000 - elapsed) };
+  private decide(
+    request: RateLimitRequest,
+    count: number,
+    window: RateLimitWindow,
+  ): RateLimitDecision {
+    const standing = {
+      limit: request.limit,
+      remaining: Math.max(0, request.limit - count),
+      resetInMs: window.resetInMs,
+    };
+    return count <= request.limit
+      ? { allowed: true, standing }
+      : {
+          allowed: false,
+          retryAfterMs: jitteredRetryAfterMs(window.resetInMs, this.random),
+          standing,
+        };
   }
 }

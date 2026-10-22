@@ -52,7 +52,7 @@ export async function admitMonthlyQuota(
   }
 
   if (count >= input.quota) {
-    throw quotaExceededError(now());
+    throw quotaExceededError(now(), input.organizationId);
   }
   return 'verified';
 }

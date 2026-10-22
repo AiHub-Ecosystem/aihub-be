@@ -5,6 +5,8 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
+import { QUOTA_ROLLOVER_SPREAD_MS } from '@/modules/gateway/application/quota-period';
+import { stableOffsetMs } from '@/modules/gateway/application/retry-hint';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
@@ -13,6 +15,9 @@ import {
   openMeteringEvidence,
 } from '@/modules/metering/application/metering-evidence';
 import { QuotaGuard } from './quota.guard';
+
+/** This Organization's fixed share of the rollover spread. */
+const ROLLOVER_OFFSET_MS = stableOffsetMs('org_acme', QUOTA_ROLLOVER_SPREAD_MS);
 
 class FakeQuotaCounter implements QuotaCounterPort {
   current = 0;
@@ -137,7 +142,7 @@ describe('QuotaGuard', () => {
         code: 'QUOTA_EXCEEDED',
         httpStatus: 429,
         retryable: true,
-        retryAfterMs: 1_252_800_000,
+        retryAfterMs: 1_252_800_000 + ROLLOVER_OFFSET_MS,
       });
     },
   );
@@ -157,7 +162,7 @@ describe('QuotaGuard', () => {
 
     await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
       code: 'QUOTA_EXCEEDED',
-      retryAfterMs: 3_600_000,
+      retryAfterMs: 3_600_000 + ROLLOVER_OFFSET_MS,
     });
   });
 
@@ -172,7 +177,7 @@ describe('QuotaGuard', () => {
     await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
       code: 'QUOTA_EXCEEDED',
       httpStatus: 429,
-      retryAfterMs: 1_252_800_000,
+      retryAfterMs: 1_252_800_000 + ROLLOVER_OFFSET_MS,
     });
   });
 

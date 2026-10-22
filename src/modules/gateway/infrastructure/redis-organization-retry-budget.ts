@@ -9,13 +9,13 @@ import type {
   OrganizationRetryBudgetPort,
   OrganizationRetryBudgetRequest,
 } from '@/modules/gateway/application/organization-retry-budget.port';
+import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from './redis-gateway.client';
 
 const WINDOW_MS = 60_000;
-const RETRY_HINT_JITTER_MS = 1_000;
 
 /**
  * How many distinct Idempotency-Keys one Organization's retry budget remembers.
@@ -152,10 +152,9 @@ export class RedisOrganizationRetryBudget
   }
 
   private rejection(): OrganizationRetryBudgetDecision {
-    const jitter = Math.floor(this.random() * RETRY_HINT_JITTER_MS);
     return {
       allowed: false,
-      retryAfterMs: WINDOW_MS + jitter,
+      retryAfterMs: jitteredRetryAfterMs(WINDOW_MS, this.random),
     };
   }
 

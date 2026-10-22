@@ -12,19 +12,23 @@ import type {
 import { quotaUnverifiableError } from '@/modules/gateway/application/quota-admission';
 import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
+import type { RateLimitStanding } from '@/modules/gateway/application/rate-limiter.port';
+import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { ORGANIZATION_RETRY_SEEN_CAP } from './redis-organization-retry-budget';
 import { quotaKeyForMonth } from './redis-quota-counter';
 
-const RATE_WINDOW_MS = 60_000;
 const QUOTA_COUNTER_MISSING = 5;
-const RETRY_HINT_JITTER_MS = 1_000;
 const UNAVAILABLE_RETRY_AFTER_MS = 1_000;
 
+// Returns {result, rate_count}: the count feeds the RateLimit header fields.
 export const GRADED_ADMISSION_SCRIPT = `
+local rate_count = 0
+local function admit()
 if ARGV[6] ~= '' and redis.call('EXISTS', KEYS[5]) == 0 then return 5 end
 
-local rate_count = redis.call('INCR', KEYS[1])
+rate_count = redis.call('INCR', KEYS[1])
 if rate_count == 1 then redis.call('EXPIRE', KEYS[1], 120) end
 if rate_count > tonumber(ARGV[1]) then return 1 end
 
@@ -72,11 +76,15 @@ if ARGV[6] ~= '' then
 end
 
 return 0
+end
+
+local result = admit()
+return {result, rate_count}
 `;
 
 export type RedisGradedAdmissionClient = Pick<
   RedisGatewayClient,
-  'eval' | 'quit'
+  'evalNumbers' | 'quit'
 >;
 
 interface LoggerLike {
@@ -120,8 +128,15 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
     }
 
     const now = this.now();
+    const window = rateLimitWindow(request.apiKeyId, now);
     const quota = request.monthlyRequestQuota;
-    let result = await this.evaluate(client, request, now, quota);
+    let [result, rateCount] = await this.evaluate(
+      client,
+      request,
+      window.index,
+      now,
+      quota,
+    );
     let quotaUnverified = false;
     // The script stops before any write when the quota counter is missing,
     // so it can run again once the counter is rebuilt (#371).
@@ -131,37 +146,55 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
           throw new Error('No quota counter source is configured');
         }
         await this.seeder.seed(request.organizationId, new Date(now));
-        result = await this.evaluate(client, request, now, quota);
+        [result, rateCount] = await this.evaluate(
+          client,
+          request,
+          window.index,
+          now,
+          quota,
+        );
         if (result === QUOTA_COUNTER_MISSING) {
           throw new Error('Redis quota counter is missing');
         }
       } catch (cause) {
         if (cause instanceof AppError) throw cause;
         if (request.hardStopOnQuota) throw quotaUnverifiableError();
-        result = await this.evaluate(client, request, now, null);
+        [result, rateCount] = await this.evaluate(
+          client,
+          request,
+          window.index,
+          now,
+          null,
+        );
         quotaUnverified = true;
       }
     }
 
     this.reportRecovered();
+    const rate: RateLimitStanding = {
+      limit: request.rateLimitRpm,
+      remaining: Math.max(0, request.rateLimitRpm - rateCount),
+      resetInMs: window.resetInMs,
+    };
     switch (result) {
       case 0:
         return quotaUnverified
-          ? { stage: 'admitted', quotaUnverified: true }
-          : { stage: 'admitted' };
+          ? { stage: 'admitted', quotaUnverified: true, rate }
+          : { stage: 'admitted', rate };
       case 1:
         return {
           stage: 'rate_limit',
-          retryAfterMs: Math.max(1, RATE_WINDOW_MS - (now % RATE_WINDOW_MS)),
+          retryAfterMs: jitteredRetryAfterMs(window.resetInMs, this.random),
+          rate,
         };
       case 2:
         return {
           stage: 'retry_budget',
-          retryAfterMs:
-            60_000 + Math.floor(this.random() * RETRY_HINT_JITTER_MS),
+          retryAfterMs: jitteredRetryAfterMs(60_000, this.random),
+          rate,
         };
       case 3:
-        return { stage: 'quota', quota: quota ?? 0 };
+        return { stage: 'quota', quota: quota ?? 0, rate };
       case 4:
       default:
         this.reportDegraded();
@@ -178,17 +211,18 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
   private async evaluate(
     client: RedisGradedAdmissionClient,
     request: GradedAdmissionRequest,
+    window: number,
     now: number,
     quota: number | null,
-  ): Promise<number> {
-    const minute = Math.floor(now / RATE_WINDOW_MS);
+  ): Promise<readonly [number, number]> {
     const retryPrefix = `aihub:v1:org-retry:{${digest(request.organizationId)}}`;
     const applyRetryBudget = request.idempotencyKey !== undefined;
+    let reply: readonly number[];
     try {
-      return await client.eval(
+      reply = await client.evalNumbers(
         GRADED_ADMISSION_SCRIPT,
         5,
-        `aihub:v1:rl:${request.apiKeyId}:${minute}`,
+        `aihub:v1:rl:${request.apiKeyId}:${window}`,
         `${retryPrefix}:first`,
         `${retryPrefix}:repeats`,
         `${retryPrefix}:seen`,
@@ -209,6 +243,14 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
       this.reportDegraded();
       throw redisUnavailable(cause);
     }
+    const [result, rateCount] = reply;
+    if (result === undefined || rateCount === undefined) {
+      this.reportDegraded();
+      throw redisUnavailable(
+        new Error('Redis graded admission result is invalid'),
+      );
+    }
+    return [result, rateCount];
   }
 
   private reportDegraded(): void {

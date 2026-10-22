@@ -76,7 +76,6 @@ describe('OrganizationRetryBudgetGuard', () => {
       httpStatus: 429,
       retryable: true,
       retryAfterMs: 61_250,
-      retryAfterHeader: true,
     });
   });
 

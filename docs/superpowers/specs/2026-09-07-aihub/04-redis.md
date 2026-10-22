@@ -16,7 +16,7 @@ Prefix `aihub:v1:` — evolving the cache schema later only requires bumping to 
 | `v1:key:miss:<sha256hex>`       | `1`     | 30s            | Postgres               | Same as above                                                          |
 | `v1:jwks:<org_id>`              | JSON    | 15m            | Customer JWKS endpoint | Fetches directly (with SSRF guards)                                    |
 | `v1:authfail:<ip>`              | counter | 300s           | —                      | **Fail open** + emit alert                                             |
-| `v1:rl:<key_id>:<minute>`       | counter | 120s           | —                      | Graded: **fail closed** (503); other: local backstop                   |
+| `v1:rl:<key_id>:<window>`       | counter | 120s           | —                      | Graded: **fail closed** (503); other: local backstop                   |
 | `v1:inflight:<org_id>`          | zset    | self-cleaning  | —                      | **Fail closed** (503) until it recovers                                |
 | `v1:quota:<org_id>:<YYYY-MM>`   | counter | 40 days        | `usage_records`        | Graded: **fail closed** (503); other: unverified, or 503 for hard stop |
 | `v1:org-retry:{org_id}:first`   | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                             |
@@ -33,12 +33,17 @@ The retry-budget ledger is the one structure here whose size follows traffic. `s
 ## F.2 Rate Limiting: Fixed Window, No Lua
 
 ```ts
-const bucket = `v1:rl:${keyId}:${Math.floor(Date.now() / 60000)}`;
+// Each key's one-minute windows start at its own offset into the minute (#403).
+const offset = sha256(keyId).readUInt32BE(0) % 60_000;
+const window = Math.floor((Date.now() - offset) / 60_000);
+const bucket = `v1:rl:${keyId}:${window}`;
 const n = await redis.incr(bucket);
 if (n === 1) await redis.expire(bucket, 120);
 if (n > org.rate_limit_rpm)
-  throw new RateLimitedError({ retryAfterMs: msToNextMinute() });
+  throw new RateLimitedError({ retryAfterMs: msToWindowEnd() + jitter(1_000) });
 ```
+
+A fixed window aligned to the wall-clock minute would reset every key at the same instant and send every refused caller back then too. The per-key offset spreads the resets across the minute, and the hint adds 0–999 ms of jitter on top of the time to reset, so two callers refused in the same millisecond are told different instants. The limit enforced per window is unchanged. Responses report the key's standing in the `RateLimit-Policy` and `RateLimit` fields (draft-ietf-httpapi-ratelimit-headers-11), and every hint is also sent as `Retry-After` ([integration guide §8](../../../integration-guide.md#8-errors)).
 
 ```
 Trade-off: fixed window -> maximum burst of 2x rate_limit_rpm across minute boundaries.
@@ -69,7 +74,7 @@ try {
 
 We utilize a sorted set (zset) instead of `INCR`/`DECR` because sorted sets are **self-healing**: if a worker process crashes mid-execution, `finally` never runs, `DECR` is permanently lost, and counters drift upwards until that organization is indefinitely locked out. `zremrangebyscore` cleans up zombie entries older than 120 seconds automatically.
 
-Default `max_concurrent = 20`/org → triggers `429 CONCURRENCY_LIMIT` with a short `retry_after_ms` (~500ms).
+Default `max_concurrent = 20`/org → triggers `429 CONCURRENCY_LIMIT` with a short `retry_after_ms`: 500 ms plus 0–499 ms of jitter, so a burst refused together does not retry together (#403).
 
 <a id="f4-quota"></a>
 
@@ -86,7 +91,7 @@ The Redis counter acts as a **fast gating heuristic**; `usage_records` is the de
 
 **A missing counter is never zero usage (#371).** The shared Redis can lose a key to a restart, eviction, or `FLUSHDB` (#348). When the current month's key is absent, admission rebuilds it from `usage_records` with the reconciliation job's filter and writes it with `SET NX`, so concurrent requests seed it once (one durable read per process, the first writer across processes). `aihub_quota_counter_seeds_total{outcome}` counts each rebuild. If the durable read fails, the request is admitted as `quota_unverified`, or refused with retryable `503 REDIS_UNAVAILABLE` for a hard-stop Organization. A post-result increment never recreates a missing counter at 1; it leaves the rebuild to the next admission.
 
-Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the start of the next calendar month.
+Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the start of the next calendar month plus a fixed per-Organization offset of 0–10 minutes, so hard-stopped Organizations do not all return at 00:00 UTC on the 1st (#403).
 
 <a id="f5-redis-chết-thì-sao--quyết-định-từng-mục"></a>
 <a id="f5-what-happens-when-redis-dies-item-by-item-decisions"></a>

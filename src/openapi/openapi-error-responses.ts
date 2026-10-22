@@ -31,17 +31,13 @@ export function buildErrorResponses(
   for (const [status, codes] of groupedErrors) {
     responses[`Error${status}`] = {
       description: codes.join(' | '),
-      ...(status === 503
-        ? {
-            headers: {
-              'Retry-After': {
-                description:
-                  'Whole seconds to wait before retrying when the error includes retry_after_ms.',
-                schema: { type: 'string', pattern: '^[0-9]+$' },
-              },
-            },
-          }
-        : {}),
+      headers: {
+        'Retry-After': {
+          description:
+            'Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.',
+          schema: { type: 'string', pattern: '^[0-9]+$' },
+        },
+      },
       content: {
         'application/json': { schema: errorResponseSchema(codes) },
       },

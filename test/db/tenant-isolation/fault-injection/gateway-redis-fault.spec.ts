@@ -125,7 +125,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       await redisAnswers(client);
       await expect(
         admission.consume(gradedRequest(organization)),
-      ).resolves.toEqual({ stage: 'admitted' });
+      ).resolves.toMatchObject({ stage: 'admitted' });
     });
 
     it.each(['production', 'sandbox'] as const)(

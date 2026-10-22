@@ -1,5 +1,14 @@
 import { AppError } from '@/common/errors/app-error';
 
+import { stableOffsetMs } from './retry-hint';
+
+/**
+ * How far past the month boundary a quota refusal's hint may point. Each
+ * Organization gets its own fixed offset in this range, so hard-stopped
+ * Organizations do not all come back at 00:00 UTC on the 1st (#403).
+ */
+export const QUOTA_ROLLOVER_SPREAD_MS = 10 * 60_000;
+
 export interface QuotaPeriod {
   readonly year: number;
   /** Zero-based, matching `Date.prototype.getUTCMonth`. */
@@ -63,11 +72,16 @@ export function parseQuotaMonth(label: string): QuotaPeriod | undefined {
   return quotaMonth(year, month - 1);
 }
 
-export function quotaExceededError(now: Date): AppError {
+export function quotaExceededError(
+  now: Date,
+  organizationId: string,
+): AppError {
   return new AppError({
     code: 'QUOTA_EXCEEDED',
     message: 'Monthly request quota exceeded',
     retryable: true,
-    retryAfterMs: quotaPeriod(now).retryAfterMs,
+    retryAfterMs:
+      quotaPeriod(now).retryAfterMs +
+      stableOffsetMs(organizationId, QUOTA_ROLLOVER_SPREAD_MS),
   });
 }

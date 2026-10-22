@@ -120,7 +120,7 @@ export class QuotaGuard implements CanActivate {
           this.idempotency,
         ))
       ) {
-        throw quotaExceededError(this.now());
+        throw quotaExceededError(this.now(), authenticated.organizationId);
       }
       if (
         gradedAdmission.stage === 'admitted' &&
