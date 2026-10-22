@@ -84,6 +84,13 @@ _Avoid_: per-route email cap
 The maximum aggregate request rate AIHUB permits for sends to one email-provider
 account, shared across every AIHUB instance using that account.
 
+**Email Daily Send Budget**:
+A maximum number of outbound email attempts AIHUB may reserve per UTC calendar
+day across all deployments using one provider account. Organization Invitations
+may use only a configured share, preserving capacity for verification,
+password-reset, and MFA email; every attempt counts, including provider failures.
+_Avoid_: Email Send Rate Cap, which limits attempts over a shorter time interval.
+
 **Email Dispatch Fair Share**:
 A maximum share of invitation sends attributable to one Organization or inviter
 while other Organizations or inviters have queued invitation sends.
