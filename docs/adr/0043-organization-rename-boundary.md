@@ -1,6 +1,6 @@
 # Organization rename boundary
 
-Status: accepted
+Status: accepted; the Organization name rule, and the operator `org:create` gap, amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
 
 Date: 2026-09-23; related issue: [#136](https://github.com/AiHub-Ecosystem/aihub-be/issues/136). Supersedes the sentence in [ADR-0035](0035-organization-audit-trail-boundary.md) that makes `target_label` the only column Audit redaction may change.
 

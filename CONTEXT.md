@@ -359,6 +359,7 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 - [ADR-0028: Organization roster read boundary](docs/adr/0028-organization-roster-read-boundary.md)
 - [ADR-0029: Organization membership mutation boundary](docs/adr/0029-organization-membership-mutation-boundary.md)
 - [ADR-0039: Organization invitation send-rate boundary](docs/adr/0039-organization-invitation-send-rate-boundary.md)
+- [ADR-0121: An Organization name cannot turn an invitation email into phishing](docs/adr/0121-organization-name-in-invitation-email.md)
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [ADR-0074: Transactional outbox for account and invitation email](docs/adr/0074-transactional-email-outbox.md)
 - [Email outbox terminal failure runbook](docs/operations/email-outbox.md)

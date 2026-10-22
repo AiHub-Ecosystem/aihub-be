@@ -1,6 +1,6 @@
 # Self-serve Organization creation boundary
 
-Status: accepted
+Status: accepted; the Organization name rule amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
 
 Date: 2026-09-22; related issue: [#133](https://github.com/AiHub-Ecosystem/aihub-be/issues/133). Supersedes the sentence in [ADR-0027](0027-organization-membership-and-key-management.md) that kept Organization creation and first-owner assignment operator-provisioned.
 
