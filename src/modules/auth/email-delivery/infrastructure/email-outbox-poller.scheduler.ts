@@ -11,6 +11,7 @@ import {
   type EmailOutboxBacklogSample,
   type EmailOutboxCancellationSample,
   recordEmailDeliveryFailed,
+  setEmailDailySendBudgetSource,
   setEmailOutboxBacklogSource,
   setEmailOutboxCancellationSource,
 } from '@/common/observability/metrics';
@@ -55,6 +56,10 @@ export class EmailOutboxPollerScheduler
     private readonly cancellations?: () => Promise<
       readonly EmailOutboxCancellationSample[]
     >,
+    private readonly dailyBudget?: () => Promise<{
+      readonly used: number;
+      readonly limit: number;
+    }>,
   ) {}
 
   onModuleInit(): void {
@@ -64,6 +69,9 @@ export class EmailOutboxPollerScheduler
     }
     if (this.cancellations !== undefined) {
       setEmailOutboxCancellationSource(this.cancellations);
+    }
+    if (this.dailyBudget !== undefined) {
+      setEmailDailySendBudgetSource(this.dailyBudget);
     }
     this.timer = setInterval(() => {
       void this.pass();
@@ -94,6 +102,9 @@ export class EmailOutboxPollerScheduler
     }
     if (this.cancellations !== undefined) {
       setEmailOutboxCancellationSource(undefined);
+    }
+    if (this.dailyBudget !== undefined) {
+      setEmailDailySendBudgetSource(undefined);
     }
   }
 

@@ -16,6 +16,9 @@ export const CONTROL_PLANE_PRISMA_CLIENT = Symbol(
 export const CONTROL_PLANE_READ_PRISMA_CLIENT = Symbol(
   'CONTROL_PLANE_READ_PRISMA_CLIENT',
 );
+export const EMAIL_DAILY_BUDGET_PRISMA_CLIENT = Symbol(
+  'EMAIL_DAILY_BUDGET_PRISMA_CLIENT',
+);
 
 export interface PrismaPool {
   readonly totalCount: number;
@@ -30,8 +33,9 @@ export interface PrismaPool {
   };
   query(config: {
     readonly text: string;
+    readonly values?: unknown[];
     readonly query_timeout?: number;
-  }): Promise<unknown>;
+  }): Promise<{ readonly rows: readonly unknown[] }>;
 }
 
 export interface PrismaClientHolder {
@@ -62,11 +66,13 @@ export interface PrismaClientUrls {
   readonly databaseUrl: string | undefined;
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;
+  readonly emailDailyBudgetDatabaseUrl: string | undefined;
 }
 
 export interface SharedPrismaClients {
   readonly runtime: PrismaClientHolder;
   readonly controlPlane: PrismaClientHolder;
   readonly controlPlaneRead: PrismaClientHolder;
+  readonly emailDailyBudget: PrismaClientHolder;
   close(): Promise<void>;
 }

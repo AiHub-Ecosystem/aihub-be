@@ -267,6 +267,28 @@ tests:
         alertname: AIHUBSSHAuthFailureBurst
         exp_alerts: []
 
+  # #375: the budget alert joins used and limit samples with different labels.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_email_daily_send_budget{measurement="used"}'
+        values: "7 8"
+      - series: 'aihub_email_daily_send_budget{measurement="limit"}'
+        values: "10 10"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: AIHUBEmailDailySendBudgetNearLimit
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: AIHUBEmailDailySendBudgetNearLimit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+            exp_annotations:
+              summary: "AIHUB has used 80% of its daily email budget"
+              description: "The shared UTC-day Resend budget has reached the invitation cutoff; protected recovery capacity remains."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#daily-email-budget
+
   # #438: every queued kind is watched at 15 minutes; durable credential
   # expiry samples alert only for that cancellation reason and age out at 15m.
   - interval: 1m

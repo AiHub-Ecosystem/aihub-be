@@ -13,6 +13,7 @@ import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
+import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type { EmailSendRateLimiterPort } from './email-send-rate-limiter.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
@@ -73,6 +74,8 @@ export interface EmailDeliveryPollerOptions {
     readonly kind: EmailDeliveryKind;
     readonly errorCode: EmailDeliveryErrorCode;
   }) => void;
+  /** Runtime dispatch supplies the shared durable account budget. */
+  readonly dailySendBudget?: EmailDailySendBudgetPort;
 }
 
 function isTimeout(error: unknown): boolean {
@@ -351,6 +354,37 @@ export class EmailDeliveryPoller {
           ? retryAfterMs
           : EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       );
+    }
+
+    if (this.options.dailySendBudget !== undefined) {
+      let budgetReservation;
+      try {
+        budgetReservation = await this.options.dailySendBudget.reserve(
+          request.kind,
+        );
+      } catch {
+        return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
+      }
+      if (!budgetReservation.reserved) {
+        const expiresAt = delivery.handler.credential(
+          delivery.payload,
+        )?.expiresAt;
+        const remainingCredentialLifetime =
+          expiresAt === undefined
+            ? Infinity
+            : Date.parse(expiresAt) - now.getTime();
+        return this.defer(
+          request,
+          now,
+          Number.isFinite(remainingCredentialLifetime) &&
+            remainingCredentialLifetime > 0
+            ? Math.min(
+                budgetReservation.retryAfterMs,
+                remainingCredentialLifetime,
+              )
+            : budgetReservation.retryAfterMs,
+        );
+      }
     }
 
     await this.store.reserveAttempt({

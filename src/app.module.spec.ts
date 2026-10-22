@@ -93,6 +93,7 @@ describe('AppModule wiring', () => {
       databaseUrl: undefined,
       controlPlaneDatabaseUrl: undefined,
       controlPlaneReadDatabaseUrl: undefined,
+      emailDailyBudgetDatabaseUrl: undefined,
       redisUrl: undefined,
       sandboxAssertionPrivateKey: undefined,
       sandboxAssertionKeyId: undefined,

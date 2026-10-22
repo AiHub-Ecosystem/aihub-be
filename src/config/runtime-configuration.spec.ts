@@ -213,6 +213,19 @@ describe('runtime configuration', () => {
       secret: true,
       requiredIn: ['staging', 'production'],
     });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_EMAIL_DAILY_SEND_BUDGET,
+    ).toMatchObject({
+      type: 'number',
+      requiredIn: ['staging', 'production'],
+    });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL,
+    ).toMatchObject({
+      type: 'string',
+      secret: true,
+      requiredIn: ['staging', 'production'],
+    });
   });
 
   it('requires the BFF environment secret only for the environment secret source', () => {
@@ -268,6 +281,9 @@ describe('runtime configuration', () => {
         AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
         AIHUB_EMAIL_SEND_RATE_LIMIT: '2',
         AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
+        AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
+          'postgres://budget:fake@db.test.invalid/aihub',
+        AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
         AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
         AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
         AIHUB_PRODUCTION_HOST: 'api.test.invalid',
@@ -279,6 +295,7 @@ describe('runtime configuration', () => {
       expect(config.AIHUB_WEB_SESSION_CLIENT_SECRET).toBeUndefined();
       expect(config.AIHUB_EMAIL_SEND_RATE_LIMIT).toBe(2);
       expect(config.AIHUB_EMAIL_SEND_RATE_DURATION_MS).toBe(1_000);
+      expect(config.AIHUB_EMAIL_DAILY_SEND_BUDGET).toBe(80);
     },
   );
 
@@ -301,6 +318,8 @@ describe('runtime configuration', () => {
           'AIHUB_EMAIL_SEND_RATE_LIMIT',
           'AIHUB_EMAIL_SEND_RATE_DURATION_MS',
           'AIHUB_EMAIL_SEND_RATE_REDIS_URL',
+          'AIHUB_EMAIL_DAILY_SEND_BUDGET',
+          'AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL',
         ]),
       );
     }

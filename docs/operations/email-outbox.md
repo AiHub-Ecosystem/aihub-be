@@ -267,6 +267,45 @@ WHERE expires_at <= now();
 Keep old Email Outbox key versions until queued ciphertext no longer needs them
 and their recipient counters have expired and been removed.
 
+## Daily email budget
+
+Production and Sandbox reserve from the same durable row in the Production
+database through a dedicated least-privilege PostgreSQL login. Set the identical
+AIHUB_EMAIL_DAILY_SEND_BUDGET in both deployments. Provision
+email_send_budget_url in both Vault database bundles with a URL to that shared
+database; the login needs only SELECT, INSERT, and UPDATE on
+email_daily_send_budgets. Keep this URL separate from each environment's outbox
+database URL. The migration creates the table in both app databases, but only
+the shared Production database receives reservations.
+
+The reservation count resets at midnight UTC. Each provider attempt reserves
+one slot before handoff and failures count conservatively. Invitations may use
+at most 80% of the configured budget, reserving the remainder for verification,
+password reset, and MFA email. Over-budget requests stay queued until reset; an
+actionable credential is retried at its expiry so the normal cancellation path
+can erase it.
+
+Resend's [published Free plan](https://resend.com/pricing) currently lists
+100 emails per day and 3,000 per month. The example local budget of 80 leaves
+20% daily headroom and stays below that public monthly ceiling over 31 days.
+These published figures do not prove
+the AIHUB account's current plan or remaining quota. Before production rollout,
+check emails.daily.limit and emails.monthly.limit in the
+[Account Usage API](https://resend.com/changelog/account-usage-api), record the
+account values and date below, and set the same cap in both deployments below
+the verified daily and monthly limits. Do not enable dispatch with a pending
+account check.
+
+| Resend account daily limit                                | Resend account monthly limit                                | Configured daily budget                                                            | Checked on                                               |
+| --------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Pending account Usage API check; published Free plan: 100 | Pending account Usage API check; published Free plan: 3,000 | 80 for the published Free-plan baseline; verify against the account before rollout | Public pricing checked 2026-10-22; account check pending |
+
+The AIHUBEmailDailySendBudgetNearLimit alert fires at 80% of the configured
+budget. That matches the invitation cutoff, so an operator is alerted when
+protected recovery capacity is first held back. The daily metric reports both
+the shared day's reserved sends and its configured cap. The rule is in
+ops/monitoring/alert.rules.yml and follows the #369 alert receiver routes.
+
 ## What never appears in a signal
 
 The dispatch path cannot emit an email address, a token, a message body, a raw

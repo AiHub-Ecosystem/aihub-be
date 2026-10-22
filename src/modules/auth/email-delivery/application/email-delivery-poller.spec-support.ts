@@ -11,6 +11,7 @@ import type {
   EmailDispatchStorePort,
   EmailPayloadCipherPort,
 } from './email-delivery-request.port';
+import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type {
   EmailSendRateLimiterPort,
   EmailSendRateReservation,
@@ -228,6 +229,7 @@ export function harness(
       readonly retryAfterMs?: number;
     };
     rateLimiter?: FakeEmailSendRateLimiter;
+    dailySendBudget?: EmailDailySendBudgetPort;
     onTerminalFailure?: (failure: {
       readonly id: string;
       readonly kind: EmailDeliveryKind;
@@ -266,6 +268,9 @@ export function harness(
       ...(options.onTerminalFailure === undefined
         ? {}
         : { onTerminalFailure: options.onTerminalFailure }),
+      ...(options.dailySendBudget === undefined
+        ? {}
+        : { dailySendBudget: options.dailySendBudget }),
     },
   );
   return { poller, store, credentials, sender };

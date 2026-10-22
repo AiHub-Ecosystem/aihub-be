@@ -60,6 +60,7 @@ function connectionSecrets() {
       url: database,
       sandbox_url: database,
       sandbox_control_plane_read_url: database,
+      email_send_budget_url: database,
     },
     redis: {
       url: redis,
@@ -96,6 +97,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
   AIHUB_EMAIL_SEND_RATE_LIMIT: '1',
   AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
+  AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
   AIHUB_USER_ACCESS_ISSUER: 'https://api.ci-boot.invalid',
   AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
   AIHUB_PRODUCTION_HOST: 'api.ci-boot.invalid',

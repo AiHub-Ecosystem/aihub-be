@@ -120,6 +120,12 @@ const fields = {
     secret: true,
     format: 'uri',
   },
+  AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL: {
+    kind: 'string',
+    secret: true,
+    format: 'uri',
+    requiredIn: PROD_MODES,
+  },
   REDIS_URL: {
     kind: 'string',
     secret: true,
@@ -140,6 +146,12 @@ const fields = {
   AIHUB_EMAIL_SEND_RATE_DURATION_MS: {
     kind: 'number',
     minValue: 1,
+    requiredIn: PROD_MODES,
+  },
+  AIHUB_EMAIL_DAILY_SEND_BUDGET: {
+    kind: 'number',
+    minValue: 1,
+    maxValue: 2_147_483_647,
     requiredIn: PROD_MODES,
   },
   DOWNSTREAM_AI_WRITING_URL: {
@@ -272,6 +284,7 @@ export interface RuntimeConnectionConfiguration {
   readonly databaseUrl: string | undefined;
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;
+  readonly emailDailyBudgetDatabaseUrl: string | undefined;
   readonly redisUrl: string | undefined;
   readonly emailSendRateRedisUrl: string | undefined;
   readonly sandboxAssertionPrivateKey: string | undefined;
@@ -536,6 +549,8 @@ export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfigurat
       configuration.CONTROL_PLANE_READ_DATABASE_URL ??
       configuration.CONTROL_PLANE_DATABASE_URL ??
       configuration.DATABASE_URL,
+    emailDailyBudgetDatabaseUrl:
+      configuration.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL,
     redisUrl: configuration.REDIS_URL,
     emailSendRateRedisUrl: configuration.AIHUB_EMAIL_SEND_RATE_REDIS_URL,
     sandboxAssertionPrivateKey:

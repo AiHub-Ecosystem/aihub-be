@@ -144,6 +144,32 @@ describe('EmailOutboxPollerScheduler', () => {
     );
   });
 
+  it('reports the shared daily budget through metrics and removes the source on shutdown', async () => {
+    const subject = new EmailOutboxPollerScheduler(
+      new ControllablePoller() as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      async () => ({ used: 8, limit: 10 }),
+    );
+    subjects.push(subject);
+
+    subject.onModuleInit();
+
+    expect(await getMetrics()).toContain(
+      'aihub_email_daily_send_budget{measurement="used"} 8',
+    );
+    expect(await getMetrics()).toContain(
+      'aihub_email_daily_send_budget{measurement="limit"} 10',
+    );
+
+    subject.onApplicationShutdown();
+
+    expect(await getMetrics()).not.toContain('aihub_email_daily_send_budget{');
+  });
+
   it('skips a tick while the previous pass is still running', async () => {
     const poller = new ControllablePoller(true);
 

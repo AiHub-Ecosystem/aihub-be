@@ -128,6 +128,17 @@ model AuthEmailRecipientRateLimit {
   @@map("auth_email_recipient_rate_limits")
 }
 
+/// One durable daily reservation count shared by every deployment on the Resend account.
+/// @owner auth
+model EmailDailySendBudget {
+  id             BigInt   @id @default(1)
+  budgetDate     DateTime @map("budget_date") @db.Date
+  dailyBudget    BigInt   @map("daily_budget")
+  reservedSends  BigInt   @map("reserved_sends")
+
+  @@map("email_daily_send_budgets")
+}
+
 /// A pending local sign-up or sign-in verification.
 ///
 /// The partial unique index `email_verification_one_open_token` (one open token

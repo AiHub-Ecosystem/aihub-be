@@ -67,7 +67,12 @@ export function loadRuntimeConnectionEnvironment(
   const redis = asRecord(root.redis, 'Redis runtime secret bundle');
   assertAllowedKeys(
     database,
-    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
+    [
+      'url',
+      'sandbox_url',
+      'sandbox_control_plane_read_url',
+      'email_send_budget_url',
+    ],
     'database runtime secret bundle',
   );
   assertAllowedKeys(
@@ -89,6 +94,11 @@ export function loadRuntimeConnectionEnvironment(
           'sandbox control-plane read URL',
         )
       : (env.CONTROL_PLANE_DATABASE_URL ?? env.DATABASE_URL);
+  env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL = requiredRecordString(
+    database,
+    'email_send_budget_url',
+    'shared email daily budget database URL',
+  );
   env.REDIS_URL = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',

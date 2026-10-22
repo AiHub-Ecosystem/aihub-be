@@ -15,6 +15,7 @@ import { RuntimeConfigurationModule } from '@/config/runtime-configuration.modul
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
 import { normalizeCustomerWebBaseUrl } from '@/modules/auth/email-delivery/application/email-message.composer';
 import {
+  EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
   PersistenceModule,
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
@@ -38,6 +39,10 @@ import {
   type EmailPayloadCipherPort,
 } from './email-delivery/application/email-delivery-request.port';
 import {
+  EMAIL_DAILY_SEND_BUDGET,
+  type EmailDailySendBudgetPort,
+} from './email-delivery/application/email-send-daily-budget.port';
+import {
   EMAIL_SEND_RATE_LIMITER,
   type EmailSendRateLimiterPort,
 } from './email-delivery/application/email-send-rate-limiter.port';
@@ -52,6 +57,7 @@ import {
   reportTerminalEmailDeliveryFailure,
 } from './email-delivery/infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from './email-delivery/infrastructure/email-payload-cipher';
+import { PostgresEmailDailySendBudget } from './email-delivery/infrastructure/postgres-email-daily-send-budget';
 import {
   PostgresEmailDeliveryRequestRepository,
   PostgresEmailDispatchStore,
@@ -368,6 +374,18 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
           configuration.AIHUB_EMAIL_SEND_RATE_DURATION_MS,
         ),
     },
+    {
+      provide: EMAIL_DAILY_SEND_BUDGET,
+      inject: [EMAIL_DAILY_BUDGET_PRISMA_CLIENT, appConfig.KEY],
+      useFactory: (
+        database: PrismaClientHolder,
+        configuration: ConfigType<typeof appConfig>,
+      ): EmailDailySendBudgetPort =>
+        new PostgresEmailDailySendBudget(
+          () => database.pool,
+          configuration.AIHUB_EMAIL_DAILY_SEND_BUDGET ?? 0,
+        ),
+    },
     // The dispatch poller runs in every instance against its own database, so
     // it takes the same pool and key the writers used (ADR-0074). The token
     // hashing is the opaque issuer's, which is the one function all three
@@ -379,6 +397,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         cipher: EmailPayloadCipherPort,
         sender: EmailSenderPort,
         sendRateLimiter: EmailSendRateLimiterPort,
+        dailySendBudget: EmailDailySendBudgetPort,
         configuration: ConfigType<typeof appConfig>,
       ): EmailDeliveryPoller => {
         const isProduction =
@@ -402,6 +421,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
             owner: emailOutboxLeaseOwner(),
             ...(customerWebBaseUrl === undefined ? {} : { customerWebBaseUrl }),
             onTerminalFailure: reportTerminalEmailDeliveryFailure,
+            dailySendBudget,
           },
         );
       },
@@ -410,6 +430,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         EMAIL_PAYLOAD_CIPHER,
         EMAIL_SENDER,
         EMAIL_SEND_RATE_LIMITER,
+        EMAIL_DAILY_SEND_BUDGET,
         appConfig.KEY,
       ],
     },
@@ -419,6 +440,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         poller: EmailDeliveryPoller,
         runtime: PrismaClientHolder,
         configuration: ConfigType<typeof appConfig>,
+        dailyBudget: EmailDailySendBudgetPort,
       ): EmailOutboxPollerScheduler => {
         const store = new PostgresEmailDispatchStore(runtime.prisma);
         return new EmailOutboxPollerScheduler(
@@ -429,9 +451,15 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
           () =>
             pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
           () => store.cancellationTimestamps(),
+          () => dailyBudget.usage(),
         );
       },
-      inject: [EmailDeliveryPoller, RUNTIME_PRISMA_CLIENT, appConfig.KEY],
+      inject: [
+        EmailDeliveryPoller,
+        RUNTIME_PRISMA_CLIENT,
+        appConfig.KEY,
+        EMAIL_DAILY_SEND_BUDGET,
+      ],
     },
     {
       provide: AUTH_RATE_LIMITER,

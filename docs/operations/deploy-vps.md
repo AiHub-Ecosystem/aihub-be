@@ -199,9 +199,9 @@ directories, then provision each directory to its own Vault path:
 
 ```json
 // production/database.json
-{"url":"postgresql://<production-login>:<password>@aihub-db:5432/aihub"}
+{"url":"postgresql://<production-login>:<password>@aihub-db:5432/aihub","email_send_budget_url":"postgresql://<email-budget-login>:<password>@aihub-db:5432/aihub"}
 // sandbox/database.json
-{"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub"}
+{"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub","email_send_budget_url":"postgresql://<email-budget-login>:<password>@aihub-db:5432/aihub"}
 // production/redis.json
 {"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0","email_send_rate_url":"redis://<shared-limiter-user>:<password>@redis.aihubproduction.com:6379/2"}
 // sandbox/redis.json
@@ -215,6 +215,23 @@ URL is passed through Compose interpolation. Set the same dedicated
 database and environment-specific Redis credentials must be valid only for
 their Sandbox data stores. Redis database `/1` alone is not an isolation
 boundary; use an ACL identity limited to Sandbox keys and commands.
+
+The email daily budget URL in both database bundles is the same shared
+Production database, authenticated with a dedicated login. After migration
+0044 creates the table in Production, provision a login that can connect to
+aihub and grant only:
+
+```sql
+GRANT CONNECT ON DATABASE aihub TO aihub_email_budget;
+GRANT USAGE ON SCHEMA public TO aihub_email_budget;
+GRANT SELECT, INSERT, UPDATE ON email_daily_send_budgets TO aihub_email_budget;
+```
+
+The Sandbox database URL remains scoped to aihub_sandbox. Set the same
+AIHUB_EMAIL_DAILY_SEND_BUDGET in both app deployments after checking the account
+daily and monthly limits in the email-outbox runbook. Keep deployment held
+until both Vault bundles point to the shared budget database and migration 0044
+has run against Production.
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
 (`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and
@@ -1000,6 +1017,12 @@ cutover. The connection loader rejects unknown fields, so do not render the new
 `redis.json` shape while an old app image might restart. Restore the old
 connection template and rendered document before restarting an old image during
 rollback.
+
+For #375, prepare the same email_send_budget_url and AIHUB_EMAIL_DAILY_SEND_BUDGET
+for Production and Sandbox alongside the #438 connection bundle. The
+email-budget PostgreSQL login must be granted access after migration 0044 has
+run on the shared Production database. Validate the account plan and daily and
+monthly limits in the email-outbox runbook before enabling the application.
 
 1. Provision the new KV bundle and its read policy first. Keep the live Agent
    templates and rendered documents unchanged; keep new templates outside the

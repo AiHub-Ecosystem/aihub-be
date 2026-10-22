@@ -3,6 +3,7 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
+import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
 import {
   type EmailDeliveryKindLabel,
   registerEmailOutboxCancellationMetric,
@@ -237,7 +238,8 @@ const postgresPoolErrorsTotal = new Counter({
 export type PostgresConnectionRole =
   | 'runtime'
   | 'control-plane'
-  | 'control-plane-read';
+  | 'control-plane-read'
+  | 'email-daily-budget';
 
 export type PostgresPoolName = PostgresConnectionRole | 'integration-test';
 
@@ -501,6 +503,8 @@ export function setEmailOutboxBacklogSource(
 
 export const setEmailOutboxCancellationSource =
   registerEmailOutboxCancellationMetric(registry);
+export const setEmailDailySendBudgetSource =
+  registerEmailDailySendBudgetMetric(registry);
 
 export interface DispatchAttemptUnresolvedSample {
   readonly operation: OperationId | 'other';

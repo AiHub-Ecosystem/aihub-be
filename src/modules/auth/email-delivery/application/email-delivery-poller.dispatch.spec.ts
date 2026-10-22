@@ -169,6 +169,27 @@ describe('EmailDeliveryPoller', () => {
     expect(summary.deferred).toBe(1);
   });
 
+  it('keeps over-budget mail queued until the credential expires or the budget resets', async () => {
+    const reserve = jest.fn().mockResolvedValue({
+      reserved: false,
+      retryAfterMs: 12 * 60 * 60 * 1000,
+    });
+    const { poller, store, sender } = harness({
+      dailySendBudget: { reserve, usage: async () => ({ used: 8, limit: 10 }) },
+    });
+    store.claimResult = [claimed()];
+
+    const summary = await poller.runOnce();
+
+    expect(reserve).toHaveBeenCalledWith('verification_email');
+    expect(store.reserved).toEqual([]);
+    expect(store.deferredUntil).toEqual([
+      new Date(Date.parse(VERIFICATION_PAYLOAD.expiresAt)),
+    ]);
+    expect(sender.sends).toEqual([]);
+    expect(summary.deferred).toBe(1);
+  });
+
   it('spends no attempt on a request it cancels before calling the provider', async () => {
     const { poller, store } = harness({ credential: 'closed' });
     store.claimResult = [claimed()];
