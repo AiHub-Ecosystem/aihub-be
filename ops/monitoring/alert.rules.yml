@@ -80,6 +80,30 @@ groups:
           description: "Candidate threshold pending Redis owner and #412 approval."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
 
+  - name: aihub-email-outbox
+    rules:
+      - alert: AIHUBEmailOutboxQueueAgeAboveBound
+        expr: aihub_email_outbox_oldest_queued_age_seconds > 900
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB email has waited in the outbox for more than 15 minutes"
+          description: "The oldest {{ $labels.kind }} email has been queued for {{ $value | humanizeDuration }}. Check dispatch and the shared Resend rate limiter."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#queue-backlog-when-dispatch-stops
+
+      - alert: AIHUBEmailCredentialExpiredBeforeDispatch
+        expr: time() - aihub_email_delivery_cancelled_timestamp_seconds{reason="credential_expired"} < 900
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB email credential expired before dispatch"
+          description: "A {{ $labels.kind }} credential expired while queued. Check the outbox backlog and shared rate limiter."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#credential-expiry-alerts-other-cancellations-do-not
+
   - name: aihub-certificates-and-clock
     rules:
       - alert: AIHUBHostClockUnsynchronizedOrOffsetAboveBound

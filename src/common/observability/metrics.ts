@@ -3,6 +3,15 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
+import {
+  type EmailDeliveryKindLabel,
+  registerEmailOutboxCancellationMetric,
+} from './email-outbox-cancellation-metric';
+
+export type {
+  EmailDeliveryKindLabel,
+  EmailOutboxCancellationSample,
+} from './email-outbox-cancellation-metric';
 
 /**
  * Shared metric registry. The rejection counter (`aihub_rejected_total`)
@@ -198,9 +207,8 @@ export function recordIdentityCacheCoalescedWait(
 
 /**
  * The bounded email kinds are the whole label domain, so this counter cannot grow
- * a series per recipient. A cancellation is deliberately absent: ADR-0074 calls
- * it expected lifecycle handling, so paging on it would train operators to
- * ignore the counter that does page.
+ * a series per recipient. Cancellation has a separate durable timestamp gauge;
+ * only `credential_expired` pages, while routine lifecycle reasons stay quiet.
  */
 const emailDeliveryFailedTotal = new Counter({
   name: 'aihub_email_delivery_failed_total',
@@ -376,13 +384,6 @@ export function recordPostgresPoolError(
   return sqlstateClass;
 }
 
-export type EmailDeliveryKindLabel =
-  | 'verification_email'
-  | 'password_reset_email'
-  | 'organization_invite_email'
-  | 'mfa_enabled_notification'
-  | 'mfa_removed_notification';
-
 export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
   emailDeliveryFailedTotal.inc({ kind });
 }
@@ -497,6 +498,9 @@ export function setEmailOutboxBacklogSource(
     emailOutboxOldestAge.reset();
   }
 }
+
+export const setEmailOutboxCancellationSource =
+  registerEmailOutboxCancellationMetric(registry);
 
 export interface DispatchAttemptUnresolvedSample {
   readonly operation: OperationId | 'other';

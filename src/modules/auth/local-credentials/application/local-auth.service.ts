@@ -457,7 +457,7 @@ export class LocalAuthService {
    * resolve when it claims the row.
    */
   private emailDeliveryRequest(
-    kind: EmailDeliveryKind,
+    kind: Exclude<EmailDeliveryKind, 'organization_invite_email'>,
     payload: EmailDeliveryPayload,
     now: Date,
   ): InsertEmailDeliveryRequestInput {

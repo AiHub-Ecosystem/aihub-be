@@ -13,6 +13,7 @@ import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
+import type { EmailSendRateLimiterPort } from './email-send-rate-limiter.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
 import type { EmailSenderPort } from './email-sender.port';
 
@@ -31,6 +32,9 @@ export const MAX_DELIVERY_ATTEMPTS = 3;
  * key picks it up well inside the credential's lifetime.
  */
 export const DEFER_RETRY_MS = 5 * 60_000;
+
+/** Retry a reservation outage on the next poll pass without spending an attempt. */
+export const EMAIL_SEND_RATE_LIMIT_RETRY_MS = 5_000;
 
 /**
  * The longest any credential an Email Delivery Request carries stays valid. A
@@ -146,6 +150,7 @@ export class EmailDeliveryPoller {
     private readonly credentials: EmailCredentialActionabilityPort,
     private readonly cipher: EmailPayloadCipherPort,
     private readonly sender: EmailSenderPort,
+    private readonly sendRateLimiter: EmailSendRateLimiterPort,
     private readonly now: () => Date,
     private readonly tokens: { hash(raw: string): string },
     private readonly options: EmailDeliveryPollerOptions,
@@ -331,6 +336,23 @@ export class EmailDeliveryPoller {
     // The attempt is spent before the provider is called, not recorded after it
     // answers: a transition that fails must not hand the same request another
     // pass at the provider.
+    let reservation;
+    try {
+      reservation = await this.sendRateLimiter.reserve();
+    } catch {
+      return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
+    }
+    if (!reservation.reserved) {
+      const retryAfterMs = reservation.retryAfterMs;
+      return this.defer(
+        request,
+        now,
+        Number.isSafeInteger(retryAfterMs) && retryAfterMs > 0
+          ? retryAfterMs
+          : EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      );
+    }
+
     await this.store.reserveAttempt({
       id: request.id,
       attemptedAt: now,
@@ -380,11 +402,12 @@ export class EmailDeliveryPoller {
   private async defer(
     request: EmailDeliveryRequestRecord,
     now: Date,
+    retryAfterMs = DEFER_RETRY_MS,
   ): Promise<'deferred'> {
     await this.store.releaseDeferred({
       id: request.id,
       owner: this.options.owner,
-      retryAt: new Date(now.getTime() + DEFER_RETRY_MS),
+      retryAt: new Date(now.getTime() + retryAfterMs),
     });
     return 'deferred';
   }

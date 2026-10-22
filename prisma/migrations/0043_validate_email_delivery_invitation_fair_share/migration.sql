@@ -1,0 +1,2 @@
+ALTER TABLE email_delivery_requests
+  VALIDATE CONSTRAINT email_delivery_requests_invitation_fair_share_ids_check;

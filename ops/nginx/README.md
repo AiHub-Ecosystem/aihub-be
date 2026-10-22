@@ -39,3 +39,5 @@ writable.
 Run `bash ops/nginx/check-gzip.sh` with nginx, logrotate, and sudo installed to
 prove the access-log fields and query redaction, validate rotation syntax, and
 check the two Speaking grading locations against the captured verdict fixture.
+It also verifies that `/metrics` is served only through the loopback scrape
+listener and remains unavailable on the public API host.

@@ -80,6 +80,16 @@ email address in a 24-hour window, across registration, verification resend, and
 password recovery.
 _Avoid_: per-route email cap
 
+**Email Send Rate Cap**:
+The maximum aggregate request rate AIHUB permits for sends to one email-provider
+account, shared across every AIHUB instance using that account.
+
+**Email Dispatch Fair Share**:
+A maximum share of invitation sends attributable to one Organization or inviter
+while other Organizations or inviters have queued invitation sends.
+_Avoid_: the Organization Invitation Send Limit, which bounds invitation attempts
+when they are created.
+
 **Personal-data classification**:
 An operational description of what personal data represents, such as a direct
 identifier, credential, user content, pseudonymous identifier, or metadata; it

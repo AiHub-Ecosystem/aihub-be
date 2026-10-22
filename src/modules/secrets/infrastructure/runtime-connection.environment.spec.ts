@@ -13,6 +13,7 @@ function document(): string {
     redis: {
       url: 'redis://production/0',
       sandbox_url: 'redis://sandbox/1',
+      email_send_rate_url: 'redis://shared/2',
     },
     'sandbox-assertion': {
       private_key_pem: 'private-key',
@@ -38,6 +39,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(env.DATABASE_URL).toBe('postgresql://production');
     expect(env.CONTROL_PLANE_READ_DATABASE_URL).toBe('postgresql://production');
     expect(env.REDIS_URL).toBe('redis://production/0');
+    expect(env.AIHUB_EMAIL_SEND_RATE_REDIS_URL).toBe('redis://shared/2');
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBeUndefined();
     expect(env.AIHUB_SANDBOX_ASSERTION_KID).toBeUndefined();
   });
@@ -58,6 +60,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
       'postgresql://sandbox-control-read',
     );
     expect(env.REDIS_URL).toBe('redis://sandbox/1');
+    expect(env.AIHUB_EMAIL_SEND_RATE_REDIS_URL).toBe('redis://shared/2');
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBe('private-key');
     expect(env.AIHUB_SANDBOX_ASSERTION_KID).toBe('sandbox-key');
   });

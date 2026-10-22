@@ -203,16 +203,18 @@ directories, then provision each directory to its own Vault path:
 // sandbox/database.json
 {"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub"}
 // production/redis.json
-{"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0"}
+{"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0","email_send_rate_url":"redis://<shared-limiter-user>:<password>@redis.aihubproduction.com:6379/2"}
 // sandbox/redis.json
-{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1"}
+{"url":"redis://<sandbox-only-user>:<password>@redis.aihubproduction.com:6379/1","email_send_rate_url":"redis://<shared-limiter-user>:<password>@redis.aihubproduction.com:6379/2"}
 ```
 
 The application reads only its tier's URLs from Vault Agent at startup; neither
-URL is passed through Compose interpolation. The Sandbox database and Redis
-credentials must be valid only for their Sandbox data stores. Redis database
-`/1` alone is not an isolation boundary; use an ACL identity limited to
-Sandbox keys and commands.
+URL is passed through Compose interpolation. Set the same dedicated
+`email_send_rate_url` in both bundles, separate from the environment-specific
+`url` values, so Production and Sandbox share the account limiter. The Sandbox
+database and environment-specific Redis credentials must be valid only for
+their Sandbox data stores. Redis database `/1` alone is not an isolation
+boundary; use an ACL identity limited to Sandbox keys and commands.
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
 (`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and
@@ -880,7 +882,9 @@ file, the two rendered directories, and the `.env.production` paths before
 starting:
 
 1. Set `AIHUB_SANDBOX_ENABLED=false` in `.env.production` before pushing the
-   release. After CD syncs the new host files, its
+   release. On the monitoring host, set
+   `~/aihub-monitoring/sandbox-targets/targets.yml` to `[]` before stopping the
+   Sandbox app, so Prometheus removes its optional scrape target. After CD syncs the new host files, its
    `prepare-sandbox-cutover` step removes the managed Sandbox nginx route,
    stops both Sandbox slots, and recreates the Production Agent if its rendered
    connection file still contains Sandbox fields. The active Production app
@@ -911,7 +915,14 @@ starting:
 5. Run `ops/status.sh <commit-sha>` and confirm both tiers use that image and
    pass health/readiness checks. Inspect each app's `/run/secrets/aihub` mount
    and confirm the Production and Sandbox source directories differ. Do not
-   print or copy any rendered secret contents.
+   print or copy any rendered secret contents. Then restore the Sandbox scrape
+   target on the monitoring host by setting
+   `~/aihub-monitoring/sandbox-targets/targets.yml` to:
+
+   ```yaml
+   - targets: [172.27.0.1:19104]
+     labels: { host: production, environment: sandbox }
+   ```
 
 ## Start the Vault-backed stack
 
@@ -980,6 +991,15 @@ image still using it. The pre-Web-Session image rejects the new
 `web-session` root key, so rendering that key while an old container can restart
 is unsafe. Production and staging use the following coordinated cutover, with
 planned downtime for the application:
+
+For #438, `redis.json` must contain the same dedicated `email_send_rate_url` in
+the Production and Sandbox Vault bundles. Verify Resend's account `limit` and
+`duration`, then set the positive `AIHUB_EMAIL_SEND_RATE_LIMIT` and
+`AIHUB_EMAIL_SEND_RATE_DURATION_MS` values in `.env.production` before the
+cutover. The connection loader rejects unknown fields, so do not render the new
+`redis.json` shape while an old app image might restart. Restore the old
+connection template and rendered document before restarting an old image during
+rollback.
 
 1. Provision the new KV bundle and its read policy first. Keep the live Agent
    templates and rendered documents unchanged; keep new templates outside the
@@ -1262,10 +1282,12 @@ half of that guarantee the application cannot enforce itself.
 ### Disabling the sandbox tier
 
 Set `AIHUB_SANDBOX_ENABLED=false` and remove `AIHUB_SANDBOX_HOST` and
-`AIHUB_SANDBOX_ORG_IDS` together. The next `main` deployment removes the
-managed nginx Sandbox file and stale `app-sandbox` container. It does not drop
-`aihub_sandbox`; retain that database until its backup and disposal have been
-approved separately.
+`AIHUB_SANDBOX_ORG_IDS` together. Before the deployment stops the Sandbox app,
+set `~/aihub-monitoring/sandbox-targets/targets.yml` to `[]` on the monitoring
+host so its file-based scrape target is removed. The next `main` deployment
+removes the managed nginx Sandbox file and stale `app-sandbox` container. It
+does not drop `aihub_sandbox`; retain that database until its backup and
+disposal have been approved separately.
 
 ## Container stdout and stderr logs (#363)
 

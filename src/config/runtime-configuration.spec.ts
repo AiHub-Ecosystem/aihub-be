@@ -197,6 +197,22 @@ describe('runtime configuration', () => {
     expect(
       runtimeEnvironmentMetadata.DOWNSTREAM_AI_WRITING_URL?.requiredIn,
     ).toEqual(['staging', 'production']);
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_EMAIL_SEND_RATE_LIMIT,
+    ).toMatchObject({
+      type: 'number',
+      requiredIn: ['staging', 'production'],
+    });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_EMAIL_SEND_RATE_DURATION_MS,
+    ).toMatchObject({ type: 'number', requiredIn: ['staging', 'production'] });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_EMAIL_SEND_RATE_REDIS_URL,
+    ).toMatchObject({
+      type: 'string',
+      secret: true,
+      requiredIn: ['staging', 'production'],
+    });
   });
 
   it('requires the BFF environment secret only for the environment secret source', () => {
@@ -249,6 +265,9 @@ describe('runtime configuration', () => {
         AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
         DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
         REDIS_URL: 'redis://redis.test.invalid/0',
+        AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
+        AIHUB_EMAIL_SEND_RATE_LIMIT: '2',
+        AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
         AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
         AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
         AIHUB_PRODUCTION_HOST: 'api.test.invalid',
@@ -258,8 +277,34 @@ describe('runtime configuration', () => {
         CUSTOMER_WEB_BASE_URL: 'https://customer.test.invalid',
       });
       expect(config.AIHUB_WEB_SESSION_CLIENT_SECRET).toBeUndefined();
+      expect(config.AIHUB_EMAIL_SEND_RATE_LIMIT).toBe(2);
+      expect(config.AIHUB_EMAIL_SEND_RATE_DURATION_MS).toBe(1_000);
     },
   );
+
+  it('requires an explicit account-wide email cap and shared Redis connection in deployed modes', () => {
+    for (const mode of ['production', 'staging']) {
+      let names: readonly string[] = [];
+      try {
+        loadRuntimeConfiguration({
+          NODE_ENV: mode,
+          AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+          AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+          AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+          AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+        });
+      } catch (error) {
+        names = (error as RuntimeConfigurationError).variableNames;
+      }
+      expect(names).toEqual(
+        expect.arrayContaining([
+          'AIHUB_EMAIL_SEND_RATE_LIMIT',
+          'AIHUB_EMAIL_SEND_RATE_DURATION_MS',
+          'AIHUB_EMAIL_SEND_RATE_REDIS_URL',
+        ]),
+      );
+    }
+  });
 
   it('keeps secret values out of the Nest application config provider', () => {
     const previousProxyIp = process.env.AIHUB_TRUSTED_PROXY_IP;

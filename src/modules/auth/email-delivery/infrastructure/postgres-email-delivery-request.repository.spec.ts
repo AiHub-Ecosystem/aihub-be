@@ -12,11 +12,17 @@ import { PostgresEmailDeliveryRequestRepository } from './postgres-email-deliver
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 const ROW_ID = 'edr_01J00000000000000000000000';
 
-function clientReturning(row: Record<string, unknown>) {
+function clientReturningRows(rows: readonly Record<string, unknown>[]) {
+  const query = async (): Promise<readonly Record<string, unknown>[]> => rows;
   const fake: QueryFake = {
-    query: async (): Promise<readonly Record<string, unknown>[]> => [row],
+    query,
+    transaction: (callback) => callback({ query }),
   };
   return prismaFromQueryFake(fake);
+}
+
+function clientReturning(row: Record<string, unknown>) {
+  return clientReturningRows([row]);
 }
 
 function queuedRow(
@@ -83,20 +89,43 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
     ]);
   });
 
+  it('stores only opaque invitation scheduling IDs on invitation rows', async () => {
+    const script = new ScriptedPrisma();
+    const transaction = new EmailDeliveryTransactionAdapter(script.client());
+    const input: InsertEmailDeliveryRequestInput = {
+      id: ROW_ID,
+      kind: 'organization_invite_email',
+      organizationId: 'org_opaque',
+      inviterId: 'usr_opaque',
+      payloadCiphertext: 'sealed',
+      createdAt: NOW,
+    };
+
+    await new PostgresEmailDeliveryRequestRepository().insert(
+      transaction,
+      input,
+    );
+
+    expect(script.statements[0]?.args[0]).toMatchObject({
+      data: {
+        organizationId: 'org_opaque',
+        inviterId: 'usr_opaque',
+      },
+    });
+  });
+
   it('skips an unknown kind without failing valid rows in the same claim', async () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
     const knownId = 'edr_01J00000000000000000000001';
-    const client = prismaFromQueryFake({
-      query: async () => [
-        queuedRow({
-          kind: 'carrier_pigeon_email',
-          payloadCiphertext: 'secret',
-        }),
-        queuedRow({ id: knownId }),
-      ],
-    });
+    const client = clientReturningRows([
+      queuedRow({
+        kind: 'carrier_pigeon_email',
+        payloadCiphertext: 'secret',
+      }),
+      queuedRow({ id: knownId }),
+    ]);
 
     try {
       const claimed = await new PostgresEmailDeliveryRequestRepository().claim(

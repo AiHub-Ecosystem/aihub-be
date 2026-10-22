@@ -126,6 +126,22 @@ const fields = {
     format: 'uri',
     requiredIn: PROD_MODES,
   },
+  AIHUB_EMAIL_SEND_RATE_REDIS_URL: {
+    kind: 'string',
+    secret: true,
+    format: 'uri',
+    requiredIn: PROD_MODES,
+  },
+  AIHUB_EMAIL_SEND_RATE_LIMIT: {
+    kind: 'number',
+    minValue: 1,
+    requiredIn: PROD_MODES,
+  },
+  AIHUB_EMAIL_SEND_RATE_DURATION_MS: {
+    kind: 'number',
+    minValue: 1,
+    requiredIn: PROD_MODES,
+  },
   DOWNSTREAM_AI_WRITING_URL: {
     kind: 'string',
     requiredIn: PROD_MODES,
@@ -257,6 +273,7 @@ export interface RuntimeConnectionConfiguration {
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;
   readonly redisUrl: string | undefined;
+  readonly emailSendRateRedisUrl: string | undefined;
   readonly sandboxAssertionPrivateKey: string | undefined;
   readonly sandboxAssertionKeyId: string | undefined;
 }
@@ -520,6 +537,7 @@ export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfigurat
       configuration.CONTROL_PLANE_DATABASE_URL ??
       configuration.DATABASE_URL,
     redisUrl: configuration.REDIS_URL,
+    emailSendRateRedisUrl: configuration.AIHUB_EMAIL_SEND_RATE_REDIS_URL,
     sandboxAssertionPrivateKey:
       configuration.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY,
     sandboxAssertionKeyId: configuration.AIHUB_SANDBOX_ASSERTION_KID,

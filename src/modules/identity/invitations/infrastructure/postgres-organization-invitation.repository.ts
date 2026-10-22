@@ -40,6 +40,7 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { sealOrganizationInvitationEmailPayload } from './seal-organization-invitation-email-payload';
 
 /**
  * Locking the organization row serializes concurrent invitations for the same
@@ -262,7 +263,13 @@ export class PostgresOrganizationInvitationRepository
           {
             id: input.emailDelivery.id,
             kind: 'organization_invite_email',
-            payloadCiphertext: this.sealInvitePayload(input, name),
+            organizationId: input.organizationId,
+            inviterId: input.invitedBy,
+            payloadCiphertext: sealOrganizationInvitationEmailPayload(
+              this.payloadCipher,
+              input,
+              name,
+            ),
             createdAt: input.emailDelivery.createdAt,
           },
         );
@@ -273,26 +280,6 @@ export class PostgresOrganizationInvitationRepository
       if (error instanceof AppError) throw error;
       throw identityStoreUnavailable(error);
     }
-  }
-
-  /**
-   * What the worker needs to send the message, and nothing more: the
-   * credential travels only as authenticated ciphertext under a key version it
-   * resolves itself from the envelope.
-   */
-  private sealInvitePayload(
-    input: CreateOrganizationInvitationInput,
-    name: string,
-  ): string {
-    return this.payloadCipher.encrypt(
-      JSON.stringify({
-        email: input.email,
-        organizationName: name,
-        role: input.role,
-        token: input.emailDelivery.token,
-        expiresAt: input.expiresAt.toISOString(),
-      }),
-    );
   }
 
   async listOpenInvitations(

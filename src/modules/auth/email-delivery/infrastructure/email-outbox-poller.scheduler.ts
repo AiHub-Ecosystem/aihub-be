@@ -9,8 +9,10 @@ import {
 import {
   type EmailDeliveryKindLabel,
   type EmailOutboxBacklogSample,
+  type EmailOutboxCancellationSample,
   recordEmailDeliveryFailed,
   setEmailOutboxBacklogSource,
+  setEmailOutboxCancellationSource,
 } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
 
@@ -50,12 +52,18 @@ export class EmailOutboxPollerScheduler
     >,
     private readonly enabled = true,
     private readonly pruneExpiredRecipientLimits?: () => Promise<number>,
+    private readonly cancellations?: () => Promise<
+      readonly EmailOutboxCancellationSample[]
+    >,
   ) {}
 
   onModuleInit(): void {
     if (!this.enabled) return;
     if (this.backlog !== undefined) {
       setEmailOutboxBacklogSource(this.backlog);
+    }
+    if (this.cancellations !== undefined) {
+      setEmailOutboxCancellationSource(this.cancellations);
     }
     this.timer = setInterval(() => {
       void this.pass();
@@ -83,6 +91,9 @@ export class EmailOutboxPollerScheduler
     }
     if (this.backlog !== undefined) {
       setEmailOutboxBacklogSource(undefined);
+    }
+    if (this.cancellations !== undefined) {
+      setEmailOutboxCancellationSource(undefined);
     }
   }
 

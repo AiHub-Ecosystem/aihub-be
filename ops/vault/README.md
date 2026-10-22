@@ -120,6 +120,10 @@ directory must also contain `database.json`, `redis.json`, and
 Postgres login for the sandbox process: it can select the Organization,
 API-key, and identity-configuration columns used for request authentication,
 and update only `api_keys.last_used_at`. It cannot change control-plane data.
+`redis.json` also contains `email_send_rate_url`, the dedicated shared Redis
+connection for the Resend account-wide email pace. Provision the same URL in the
+Production and Sandbox bundles, separate from both environment-specific Redis
+URLs.
 Deliver the Role ID to Vault Agent through the deployment secret channel; never
 commit or paste it into an issue. There is no Agent `secret_id` to rotate.
 
