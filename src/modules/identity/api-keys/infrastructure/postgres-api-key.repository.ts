@@ -8,6 +8,7 @@ import type {
 import {
   dateValue,
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -187,8 +188,8 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
       return (await identityRows(this.client, API_KEY_LOOKUP_SQL, [
         Buffer.from(hashHex, 'hex'),
       ])) as readonly ApiKeyLookupRow[];
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -202,8 +203,8 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
         },
         data: { lastUsedAt: usedAt },
       });
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
   }
 }

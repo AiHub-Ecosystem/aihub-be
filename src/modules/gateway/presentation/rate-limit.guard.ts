@@ -119,6 +119,7 @@ export class RateLimitGuard implements CanActivate {
           authenticated.environment === 'sandbox'
             ? null
             : authenticated.monthlyRequestQuota,
+        hardStopOnQuota: authenticated.hardStopOnQuota,
       });
       request.aihubGradedAdmission = decision;
 

@@ -12,6 +12,7 @@ import {
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   membershipRoleValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -52,7 +53,7 @@ export class PostgresOrganizationFirstOwnerRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 

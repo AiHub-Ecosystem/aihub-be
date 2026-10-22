@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   RateLimitDecision,
@@ -82,6 +83,7 @@ export class RedisRateLimiter implements RateLimiterPort {
    * with an identical line rather than alert on anything.
    */
   private reportDegraded(error: unknown): void {
+    recordRedisUnavailable('rate_limit');
     if (this.redisIsDegraded) {
       return;
     }

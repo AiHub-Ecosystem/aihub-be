@@ -14,6 +14,7 @@ import {
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -196,8 +197,6 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
   }
 
   private storeError(error: unknown): AppError {
-    return error instanceof AppError
-      ? error
-      : identityStoreError('Identity store is unavailable');
+    return error instanceof AppError ? error : identityStoreUnavailable(error);
   }
 }

@@ -12,6 +12,7 @@ import {
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   organizationStatusValue,
   stringValue,
@@ -53,7 +54,7 @@ export class PostgresOrganizationStatusRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 

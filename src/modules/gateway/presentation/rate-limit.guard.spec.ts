@@ -70,6 +70,7 @@ describe('RateLimitGuard', () => {
       requestId: 'req_01JGRADINGADMISSION0000000000',
       operation,
       monthlyRequestQuota: authenticated.monthlyRequestQuota,
+      hardStopOnQuota: authenticated.hardStopOnQuota,
     });
     expect(rateConsume).not.toHaveBeenCalled();
   });

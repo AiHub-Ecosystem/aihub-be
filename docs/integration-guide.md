@@ -943,7 +943,8 @@ so you do not have to infer it from the status.
 `RATE_LIMITED` (until the minute window frees a request), `CONCURRENCY_LIMIT`
 (500 ms), and `QUOTA_EXCEEDED` (until the next UTC month starts, which can be
 weeks). A Redis outage during graded admission or concurrency returns
-`REDIS_UNAVAILABLE` with a short 1000 ms hint. Other errors,
+`REDIS_UNAVAILABLE` with a short 1000 ms hint, and a database outage returns
+`DATABASE_UNAVAILABLE` with the same hint. Other errors,
 `AI_SERVICE_TIMEOUT` included, do not carry it; use your own backoff. A quota
 refusal is `retryable`, but only after that wait, so do not spend retry attempts
 on it.
@@ -978,6 +979,7 @@ separate table below.
 |  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                                                      | Do not retry. Report it with the `request_id`                                                                      |
 |  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                     | Back off and retry                                                                                                 |
 |  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                                                       | Retry with backoff                                                                                                 |
+|  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement      | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |
 |  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode    | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
 |  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely check graded admission or acquire/release its concurrency permit      | Retry after `retry_after_ms`; AIHUB does not admit using local counters                                            |
 |  503 | `RETRY_BUDGET_UNAVAILABLE`      | AIHUB cannot check the Organization retry budget because Redis is unavailable                | Retry after `retry_after_ms`                                                                                       |

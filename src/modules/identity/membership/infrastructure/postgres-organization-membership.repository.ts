@@ -41,6 +41,7 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   membershipRoleValue,
   membershipStatusValue,
@@ -563,10 +564,8 @@ async function rethrowMutationFailure(
   if (refused !== undefined) {
     await recordOrganizationAuditDenial(client, stamp, refused);
   }
-  if (error instanceof AppError) {
-    throw error;
-  }
-  throw identityStoreError('Identity store is unavailable');
+  if (error instanceof AppError) throw error;
+  throw identityStoreUnavailable(error);
 }
 
 function prepareMembershipMutation(
@@ -788,8 +787,8 @@ export class PostgresOrganizationMembershipRepository
         input.userId,
         input.organizationId,
       ]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     const first = rows[0];
@@ -824,8 +823,8 @@ export class PostgresOrganizationMembershipRepository
     let rows: readonly unknown[];
     try {
       rows = await identityRows(this.client, LIST_ROSTER_SQL, [input.userId]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     return groupRosterRows(rows);
@@ -857,8 +856,8 @@ export class PostgresOrganizationMembershipRepository
         admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
         input.status,
       ]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     return mapOrganizationMembershipListRows(rows, input.status);

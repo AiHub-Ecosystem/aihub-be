@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import Redis from 'ioredis';
 
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
@@ -100,6 +101,7 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
       } catch {
         // Redis is protection state; a bounded local fallback keeps auth
         // available while the shared counter recovers.
+        recordRedisUnavailable('auth_rate_limit');
       }
     }
     return this.consumeFallback(hashed, input.limit, input.windowMs);
@@ -123,6 +125,7 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
       } catch {
         // Redis is protection state; a bounded local fallback keeps auth
         // available while the shared counter recovers.
+        recordRedisUnavailable('auth_rate_limit');
       }
     }
     return this.checkFallback(hashed, input.limit);

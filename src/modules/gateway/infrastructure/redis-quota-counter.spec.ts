@@ -1,6 +1,4 @@
-import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
 import {
-  QUOTA_TTL_SECONDS,
   RedisQuotaCounter,
   type RedisQuotaCounterClient,
 } from './redis-quota-counter';
@@ -8,21 +6,19 @@ import {
 class FakeRedis implements RedisQuotaCounterClient {
   readonly values = new Map<string, string>();
   readonly reads: string[] = [];
-  readonly expirations = new Map<string, number>();
   failAfterIncrement = false;
 
+  // The counter's only script increments a counter that already exists.
   async eval(
-    script: string,
+    _script: string,
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<number> {
-    if (script !== INCREMENT_WITH_EXPIRY_SCRIPT || numberOfKeys !== 1) {
-      throw new Error('unexpected quota script');
-    }
+    if (numberOfKeys !== 1) throw new Error('unexpected quota script');
     const key = String(args[0]);
-    const seconds = Number(args[1]);
-    this.expirations.set(key, seconds);
-    const next = Number(this.values.get(key) ?? '0') + 1;
+    const current = this.values.get(key);
+    if (current === undefined) return 0;
+    const next = Number(current) + 1;
     this.values.set(key, String(next));
     if (this.failAfterIncrement) throw new Error('redis result was ambiguous');
     return next;
@@ -65,6 +61,19 @@ class FakeLogger {
   }
 }
 
+/** Rebuilds a lost counter from a durable count, as RedisQuotaSeeder does. */
+function seederFor(redis: FakeRedis, durable: number) {
+  return {
+    seed: jest.fn(async (organizationId: string, at: Date) => {
+      const month = at.toISOString().slice(0, 7);
+      redis.values.set(
+        `aihub:v1:quota:${organizationId}:${month}`,
+        String(durable),
+      );
+    }),
+  };
+}
+
 describe('RedisQuotaCounter', () => {
   let current = new Date('2026-09-16T21:00:00.000Z');
   const now = () => new Date(current.getTime());
@@ -73,19 +82,42 @@ describe('RedisQuotaCounter', () => {
     current = new Date('2026-09-16T21:00:00.000Z');
   });
 
-  it('reads a UTC organization-month key and treats a missing key as zero', async () => {
+  it('reads a UTC organization-month key', async () => {
     const redis = new FakeRedis();
     redis.values.set('aihub:v1:quota:org_acme:2026-09', '4');
     const counter = new RedisQuotaCounter(redis, now);
 
     await expect(counter.read({ organizationId: 'org_acme' })).resolves.toBe(4);
-    await expect(counter.read({ organizationId: 'org_other' })).resolves.toBe(
-      0,
+    expect(redis.reads).toEqual(['aihub:v1:quota:org_acme:2026-09']);
+  });
+
+  it('never reads a missing counter as zero usage', async () => {
+    const counter = new RedisQuotaCounter(new FakeRedis(), now);
+
+    await expect(counter.read({ organizationId: 'org_lost' })).rejects.toThrow(
+      'Redis quota counter is missing',
     );
-    expect(redis.reads).toEqual([
-      'aihub:v1:quota:org_acme:2026-09',
-      'aihub:v1:quota:org_other:2026-09',
-    ]);
+  });
+
+  it('rebuilds a missing counter from durable usage before reading it', async () => {
+    const redis = new FakeRedis();
+    const seeder = seederFor(redis, 37);
+    const counter = new RedisQuotaCounter(redis, now, undefined, seeder);
+
+    await expect(counter.read({ organizationId: 'org_lost' })).resolves.toBe(
+      37,
+    );
+    expect(seeder.seed).toHaveBeenCalledWith('org_lost', now());
+  });
+
+  it('treats the quota as unverified when the rebuild fails', async () => {
+    const counter = new RedisQuotaCounter(new FakeRedis(), now, undefined, {
+      seed: async () => Promise.reject(new Error('db down')),
+    });
+
+    await expect(counter.read({ organizationId: 'org_lost' })).rejects.toThrow(
+      'db down',
+    );
   });
 
   it.each(['', '-1', '1.5', 'NaN', '9007199254740992'])(
@@ -101,30 +133,37 @@ describe('RedisQuotaCounter', () => {
     },
   );
 
-  it('increments the billable counter and maintains its 40-day TTL', async () => {
+  it('increments an existing billable counter', async () => {
     const redis = new FakeRedis();
+    redis.values.set('aihub:v1:quota:org_acme:2026-09', '9');
     const counter = new RedisQuotaCounter(redis, now);
 
     await counter.increment({ organizationId: 'org_acme' });
 
-    expect(redis.values.get('aihub:v1:quota:org_acme:2026-09')).toBe('1');
-    expect(redis.expirations.get('aihub:v1:quota:org_acme:2026-09')).toBe(
-      QUOTA_TTL_SECONDS,
-    );
+    expect(redis.values.get('aihub:v1:quota:org_acme:2026-09')).toBe('10');
   });
 
-  it('keeps the organization counter across adapter instances and months', async () => {
+  it('does not restart a missing counter at one', async () => {
     const redis = new FakeRedis();
-    const first = new RedisQuotaCounter(redis, now);
+    const counter = new RedisQuotaCounter(redis, now);
 
+    await expect(
+      counter.increment({ organizationId: 'org_lost' }),
+    ).rejects.toThrow('Redis quota counter is missing');
+    expect(redis.values.size).toBe(0);
+  });
+
+  it('keeps the organization counter across adapter instances and starts each month from durable usage', async () => {
+    const redis = new FakeRedis();
+    const seeder = seederFor(redis, 0);
+    const first = new RedisQuotaCounter(redis, now, undefined, seeder);
+
+    await expect(first.read({ organizationId: 'org_acme' })).resolves.toBe(0);
     await first.increment({ organizationId: 'org_acme' });
 
-    const restarted = new RedisQuotaCounter(redis, now);
+    const restarted = new RedisQuotaCounter(redis, now, undefined, seeder);
     await expect(restarted.read({ organizationId: 'org_acme' })).resolves.toBe(
       1,
-    );
-    await expect(restarted.read({ organizationId: 'org_other' })).resolves.toBe(
-      0,
     );
 
     current = new Date('2026-10-01T00:00:00.000Z');
@@ -138,21 +177,28 @@ describe('RedisQuotaCounter', () => {
   // `2026-13` would make January start on a count December had already spent.
   it('rolls the month key from December into January', async () => {
     const redis = new FakeRedis();
-    const counter = new RedisQuotaCounter(redis, now);
+    const counter = new RedisQuotaCounter(
+      redis,
+      now,
+      undefined,
+      seederFor(redis, 0),
+    );
 
     current = new Date('2026-12-31T23:59:59.000Z');
+    await counter.read({ organizationId: 'org_acme' });
     await counter.increment({ organizationId: 'org_acme' });
-
-    expect([...redis.values.keys()]).toEqual([
-      'aihub:v1:quota:org_acme:2026-12',
-    ]);
 
     current = new Date('2027-01-01T00:00:01.000Z');
     await expect(counter.read({ organizationId: 'org_acme' })).resolves.toBe(0);
+    expect([...redis.values.entries()]).toEqual([
+      ['aihub:v1:quota:org_acme:2026-12', '1'],
+      ['aihub:v1:quota:org_acme:2027-01', '0'],
+    ]);
   });
 
   it('reports an ambiguous increment result after the atomic mutation', async () => {
     const redis = new FakeRedis();
+    redis.values.set('aihub:v1:quota:org_acme:2026-09', '0');
     redis.failAfterIncrement = true;
     const logger = new FakeLogger();
     const counter = new RedisQuotaCounter(redis, now, logger);
@@ -169,6 +215,7 @@ describe('RedisQuotaCounter', () => {
     const logger = new FakeLogger();
     const failing = new FailingRedis();
     const healthy = new FakeRedis();
+    healthy.values.set('aihub:v1:quota:org_acme:2026-09', '0');
     let current: RedisQuotaCounterClient = failing;
     const counter = new RedisQuotaCounter(
       {

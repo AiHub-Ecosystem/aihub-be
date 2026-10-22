@@ -13,7 +13,7 @@ import {
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
-  identityStoreError,
+  identityStoreUnavailable,
   isRecord,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
@@ -107,7 +107,7 @@ export class PostgresOrganizationCreationRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 }

@@ -1,13 +1,8 @@
-import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
-import { type Server, createServer, request as httpRequest } from 'node:http';
-import { join } from 'node:path';
-import { createInterface } from 'node:readline';
+import { type Server, createServer } from 'node:http';
 
 import { ulid } from 'ulid';
 
-import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { calculateUsageRetentionCutoff } from '@/modules/metering/application/usage-retention';
 import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/postgres-dispatch-attempt.repository';
 import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
@@ -15,169 +10,42 @@ import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/
 import {
   createSandboxTestRedis,
   createTestPool,
-  sandboxTestRedisUrl,
   testDatabaseUrl,
 } from '../shared/database';
 import {
-  createTenantIdentity,
-  signUserAssertion,
-} from '../tenant-isolation/fixtures';
-
-interface TestWorker {
-  readonly child: ChildProcess;
-  readonly url: string;
-  stop(): Promise<void>;
-}
+  type HttpAnswer,
+  type TestWorker,
+  WRITING_TASK1_PATH,
+  deleteGradingOrganization,
+  killWorker,
+  listen,
+  monthKey,
+  seedGradingOrganization,
+  sendRequest,
+  startWorker,
+} from './app-worker';
 
 const ESSAY_MARKER = 'dispatch-attempt-crash-essay-marker';
-const OPERATION_PATH = '/v1/ielts/writing/task1/grade';
-
-function listen(server: Server): Promise<string> {
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        reject(new Error('mock AI Service did not expose a port'));
-        return;
-      }
-      resolve(`http://127.0.0.1:${address.port}`);
-    });
-  });
-}
-
-async function startWorker(configuration: {
-  readonly downstreamUrl: string;
-}): Promise<TestWorker> {
-  const worker = spawn(
-    process.execPath,
-    [
-      join(process.cwd(), 'node_modules/jest/bin/jest.js'),
-      '--config',
-      'jest.config.db-worker.cjs',
-      '--runInBand',
-      '--runTestsByPath',
-      join(__dirname, 'dispatch-attempt-crash.worker.spec.ts'),
-    ],
-    {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        AIHUB_RUNTIME_SECRET_SOURCE: 'env',
-        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
-        DATABASE_URL: testDatabaseUrl(),
-        CONTROL_PLANE_DATABASE_URL: testDatabaseUrl(),
-        CONTROL_PLANE_READ_DATABASE_URL: testDatabaseUrl(),
-        REDIS_URL: sandboxTestRedisUrl(),
-        DOWNSTREAM_AI_WRITING_URL: configuration.downstreamUrl,
-        DOWNSTREAM_AI_SPEAKING_URL: configuration.downstreamUrl,
-        AIHUB_PRODUCTION_HOST: 'api.production.test',
-        AIHUB_STAGING_HOST: 'api.staging.test',
-        AIHUB_DEVELOPMENT_HOST: 'api.development.test',
-        AIHUB_SANDBOX_HOST: 'api.sandbox.test',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-
-  let stderr = '';
-  worker.stderr?.on('data', (chunk: Buffer) => {
-    stderr += chunk.toString();
-  });
-  const ready = new Promise<number>((resolve, reject) => {
-    const lines = createInterface({ input: worker.stdout! });
-    const timeout = setTimeout(() => {
-      lines.close();
-      reject(new Error(`AIHUB test worker did not start: ${stderr}`));
-    }, 45_000);
-    lines.on('line', (line) => {
-      const port = Number(line.match(/^AIHUB_TEST_READY:(\d+)$/)?.[1]);
-      if (Number.isSafeInteger(port) && port > 0) {
-        clearTimeout(timeout);
-        lines.close();
-        resolve(port);
-      }
-    });
-    worker.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    worker.once('exit', (code) => {
-      clearTimeout(timeout);
-      reject(
-        new Error(`AIHUB test worker exited before ready (${code}): ${stderr}`),
-      );
-    });
-  });
-  let port: number;
-  try {
-    port = await ready;
-  } catch (error) {
-    if (worker.exitCode === null && worker.signalCode === null) {
-      worker.kill('SIGKILL');
-      await once(worker, 'exit').catch(() => undefined);
-    }
-    throw error;
-  }
-  return {
-    child: worker,
-    url: `http://127.0.0.1:${port}`,
-    async stop() {
-      if (worker.exitCode !== null || worker.signalCode !== null) return;
-      const exited = once(worker, 'exit');
-      worker.kill('SIGTERM');
-      await exited;
-    },
-  };
-}
-
-function monthKey(now: Date): string {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 function sendGradingRequest(
   appUrl: string,
   apiKey: string,
   assertion: string,
   idempotencyKey: string,
-): Promise<{ status: number; body: string } | undefined> {
-  const app = new URL(appUrl);
-  return new Promise((resolve) => {
-    const request = httpRequest(
-      {
-        hostname: app.hostname,
-        port: Number(app.port),
-        path: OPERATION_PATH,
-        method: 'POST',
-        headers: {
-          host: 'api.production.test',
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'x-user-identity': assertion,
-          'idempotency-key': idempotencyKey,
-        },
-      },
-      (response) => {
-        let body = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk: string) => {
-          body += chunk;
-        });
-        response.on('end', () =>
-          resolve({ status: response.statusCode ?? 0, body }),
-        );
-      },
-    );
-    request.on('error', () => resolve(undefined));
-    request.end(
-      JSON.stringify({
-        question: 'Crash durability test',
-        chart_type: 'Bar Chart',
-        essay: ESSAY_MARKER,
-        image_url: 'https://example.com/chart.png',
-      }),
-    );
+): Promise<HttpAnswer | undefined> {
+  return sendRequest(appUrl, {
+    path: WRITING_TASK1_PATH,
+    headers: {
+      'x-api-key': apiKey,
+      'x-user-identity': assertion,
+      'idempotency-key': idempotencyKey,
+    },
+    body: {
+      question: 'Crash durability test',
+      chart_type: 'Bar Chart',
+      essay: ESSAY_MARKER,
+      image_url: 'https://example.com/chart.png',
+    },
   });
 }
 
@@ -200,31 +68,7 @@ describe('durable dispatch-attempt evidence', () => {
       provider = undefined;
     }
     if (crashOrganizationId !== undefined) {
-      await pool.query('DELETE FROM usage_records WHERE organization_id = $1', [
-        crashOrganizationId,
-      ]);
-      await pool.query(
-        'DELETE FROM dispatch_attempts WHERE organization_id = $1',
-        [crashOrganizationId],
-      );
-      await pool.query(
-        'DELETE FROM idempotency_records WHERE organization_id = $1',
-        [crashOrganizationId],
-      );
-      await pool.query(
-        'DELETE FROM sandbox_dispatch_reservations WHERE organization_id = $1',
-        [crashOrganizationId],
-      );
-      await pool.query('DELETE FROM api_keys WHERE organization_id = $1', [
-        crashOrganizationId,
-      ]);
-      await pool.query(
-        'DELETE FROM organization_identity_configs WHERE organization_id = $1',
-        [crashOrganizationId],
-      );
-      await pool.query('DELETE FROM organizations WHERE id = $1', [
-        crashOrganizationId,
-      ]);
+      await deleteGradingOrganization(pool, crashOrganizationId);
       crashOrganizationId = undefined;
     }
   });
@@ -235,8 +79,6 @@ describe('durable dispatch-attempt evidence', () => {
   });
 
   it('survives a real AIHUB Nest process kill and restart without usage or quota', async () => {
-    const organizationId = `org_dispatch_crash_${ulid().toLowerCase()}`;
-    crashOrganizationId = organizationId;
     const baselineRepository = new PostgresDispatchAttemptRepository(
       createPostgresMeteringClient(testDatabaseUrl()),
     );
@@ -245,34 +87,16 @@ describe('durable dispatch-attempt evidence', () => {
       baseline.find((sample) => sample.operation === 'writing.task1.grade')
         ?.count ?? 0;
     await baselineRepository.close();
-    const apiKey = generateApiKey(`ak_dispatch_crash_${ulid().toLowerCase()}`);
-    const identity = await createTenantIdentity(
-      'https://identity.dispatch-crash.test',
-      `dispatch-crash-${ulid().toLowerCase()}`,
+    const { organizationId, apiKey, assertion } = await seedGradingOrganization(
+      pool,
+      {
+        label: 'dispatch_crash',
+        maxConcurrent: 20,
+        monthlyQuota: 10,
+        hardStop: true,
+      },
     );
-    const assertion = await signUserAssertion(identity, new Date());
-    await pool.query(
-      `INSERT INTO organizations
-         (id, name, entitlements, rate_limit_rpm, max_concurrent,
-          monthly_request_quota, hard_stop_on_quota)
-       VALUES ($1, 'Dispatch crash test', ARRAY['writing'], 600, 20, 10, true)`,
-      [organizationId],
-    );
-    await pool.query(
-      `INSERT INTO api_keys
-         (id, organization_id, key_hash, key_prefix, name, scopes,
-          allowed_environments, status)
-       VALUES ($1, $2, decode($3, 'hex'), $4, 'Dispatch crash test',
-         ARRAY['writing.grade'], ARRAY['production'], 'active')`,
-      [apiKey.id, organizationId, apiKey.hash, apiKey.prefix],
-    );
-    await pool.query(
-      `INSERT INTO organization_identity_configs
-         (organization_id, issuer, jwks_url, public_keys_jwks,
-          allowed_algorithms, max_assertion_ttl_seconds, status)
-       VALUES ($1, $2, NULL, $3::jsonb, ARRAY['RS256'], 300, 'active')`,
-      [organizationId, identity.issuer, JSON.stringify(identity.jwks)],
-    );
+    crashOrganizationId = organizationId;
     let resolveProviderReceived!: () => void;
     const providerReceived = new Promise<void>((resolve) => {
       resolveProviderReceived = resolve;
@@ -316,9 +140,7 @@ describe('durable dispatch-attempt evidence', () => {
       );
     }
 
-    const workerExit = once(dispatchWorker.child, 'exit');
-    dispatchWorker.child.kill('SIGKILL');
-    await workerExit;
+    await killWorker(dispatchWorker);
     dispatchWorker = undefined;
     await customerResponse;
 
@@ -346,11 +168,13 @@ describe('durable dispatch-attempt evidence', () => {
         attempt.rows[0]?.request_id,
       ]),
     ).toMatchObject({ rowCount: 0 });
+    // Admission rebuilt the deleted counter from durable usage (#371); the
+    // killed request never added to it.
     expect(
       await redis.get(
         `aihub:v1:quota:${organizationId}:${monthKey(new Date())}`,
       ),
-    ).toBeNull();
+    ).toBe('0');
 
     await pool.query(
       `UPDATE dispatch_attempts

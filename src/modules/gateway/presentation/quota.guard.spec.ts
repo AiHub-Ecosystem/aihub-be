@@ -277,10 +277,12 @@ describe('QuotaGuard', () => {
     const request = requestFor({ ...baseAuthenticated, hardStopOnQuota: true });
     const guard = new QuotaGuard(counter, now);
 
+    // An unverifiable quota is not a quota refusal: no next-month hint (#373).
     await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
-      code: 'QUOTA_EXCEEDED',
-      httpStatus: 429,
-      retryAfterMs: 1_252_800_000,
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1_000,
     });
 
     expect(getMeteringEvidence(request)).toEqual(
@@ -332,8 +334,8 @@ describe('QuotaGuard', () => {
       await expect(
         guard.canActivate(contextFor(request)),
       ).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-        httpStatus: 429,
+        code: 'REDIS_UNAVAILABLE',
+        httpStatus: 503,
         retryable: true,
       });
     } finally {

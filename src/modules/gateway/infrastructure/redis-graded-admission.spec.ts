@@ -13,6 +13,8 @@ class FakeRedis implements RedisGradedAdmissionClient {
     args: readonly (string | number)[];
   }[] = [];
   result = 0;
+  /** Results for the next calls, before falling back to `result`. */
+  queued: number[] = [];
   failure: Error | undefined;
 
   async eval(
@@ -22,7 +24,7 @@ class FakeRedis implements RedisGradedAdmissionClient {
   ): Promise<number> {
     this.calls.push({ script, numberOfKeys, args });
     if (this.failure !== undefined) throw this.failure;
-    return this.result;
+    return this.queued.shift() ?? this.result;
   }
 
   async quit(): Promise<void> {}
@@ -36,6 +38,7 @@ const request: GradedAdmissionRequest = {
   operation: 'writing.task1.grade',
   idempotencyKey: 'same-key',
   monthlyRequestQuota: 100,
+  hardStopOnQuota: false,
 };
 
 describe('RedisGradedAdmission', () => {
@@ -103,6 +106,7 @@ describe('RedisGradedAdmission', () => {
       requestId: request.requestId,
       operation: 'speaking.grading',
       monthlyRequestQuota: null,
+      hardStopOnQuota: false,
     });
 
     expect(redis.calls).toHaveLength(1);
@@ -125,6 +129,81 @@ describe('RedisGradedAdmission', () => {
       code: 'REDIS_UNAVAILABLE',
       httpStatus: 503,
       retryable: true,
+      retryAfterMs: 1_000,
+    });
+    expect(redis.calls).toHaveLength(1);
+  });
+
+  it('checks the quota counter exists before the script writes anything', () => {
+    const exists = GRADED_ADMISSION_SCRIPT.indexOf("redis.call('EXISTS'");
+    expect(exists).toBeGreaterThan(-1);
+    expect(exists).toBeLessThan(GRADED_ADMISSION_SCRIPT.indexOf("'INCR'"));
+  });
+
+  it('rebuilds a missing quota counter from durable usage, then admits through the quota check', async () => {
+    const redis = new FakeRedis();
+    redis.queued = [5, 0];
+    const seed = jest.fn(async () => undefined);
+    const admission = new RedisGradedAdmission(
+      redis,
+      () => 1_782_000_000_000,
+      Math.random,
+      undefined,
+      { seed },
+    );
+
+    await expect(admission.consume(request)).resolves.toEqual({
+      stage: 'admitted',
+    });
+    expect(seed).toHaveBeenCalledWith('org_1', new Date(1_782_000_000_000));
+    expect(redis.calls).toHaveLength(2);
+    expect(redis.calls[1]?.args).toEqual(redis.calls[0]?.args);
+  });
+
+  it.each([
+    [
+      'the rebuild fails',
+      { seed: async () => Promise.reject(new Error('db down')) },
+    ],
+    ['no durable source is configured', undefined],
+  ])(
+    'admits without the quota check and marks it unverified when %s',
+    async (_name, seeder) => {
+      const redis = new FakeRedis();
+      redis.queued = [5, 0];
+      const admission = new RedisGradedAdmission(
+        redis,
+        () => 1_782_000_000_000,
+        Math.random,
+        undefined,
+        seeder,
+      );
+
+      await expect(admission.consume(request)).resolves.toEqual({
+        stage: 'admitted',
+        quotaUnverified: true,
+      });
+      expect(redis.calls).toHaveLength(2);
+      expect(redis.calls[1]?.args.at(-1)).toBe('');
+    },
+  );
+
+  it('refuses a hard-stop Organization with a retryable 503 when the lost counter cannot be rebuilt', async () => {
+    const redis = new FakeRedis();
+    redis.queued = [5];
+    const admission = new RedisGradedAdmission(
+      redis,
+      () => 1_782_000_000_000,
+      Math.random,
+      undefined,
+      { seed: async () => Promise.reject(new Error('db down')) },
+    );
+
+    await expect(
+      admission.consume({ ...request, hardStopOnQuota: true }),
+    ).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
       retryAfterMs: 1_000,
     });
     expect(redis.calls).toHaveLength(1);

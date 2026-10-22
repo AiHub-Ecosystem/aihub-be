@@ -10,7 +10,11 @@ import type {
   RotateOrganizationApiKeyRecordInput,
   RotateOrganizationApiKeyRecordResult,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
-import { dateValue } from '@/modules/identity/shared/infrastructure/identity-row';
+import {
+  dateValue,
+  identityStoreError,
+  identityStoreUnavailable,
+} from '@/modules/identity/shared/infrastructure/identity-row';
 
 import {
   auditStamp,
@@ -99,10 +103,6 @@ const LOCK_API_KEY_FOR_REVOKE_SQL = `
     AND organization_id = $2
   FOR UPDATE
 `;
-
-function identityStoreError(message: string): AppError {
-  return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -307,7 +307,7 @@ export class PostgresOrganizationApiKeyRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -392,7 +392,7 @@ export class PostgresOrganizationApiKeyRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -421,8 +421,8 @@ export class PostgresOrganizationApiKeyRepository
         select: INVENTORY_SELECT,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     // An invalid projection fails the whole request rather than quietly
@@ -521,7 +521,7 @@ export class PostgresOrganizationApiKeyRepository
       if (error instanceof AppError) {
         throw error;
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 }

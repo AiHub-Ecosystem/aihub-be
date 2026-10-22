@@ -8,10 +8,12 @@ export interface GradedAdmissionRequest {
   readonly operation: OperationId;
   readonly idempotencyKey?: string;
   readonly monthlyRequestQuota: number | null;
+  readonly hardStopOnQuota: boolean;
 }
 
 export type GradedAdmissionDecision =
-  | { readonly stage: 'admitted' }
+  /** `quotaUnverified`: the quota counter was lost and could not be rebuilt. */
+  | { readonly stage: 'admitted'; readonly quotaUnverified?: true }
   | { readonly stage: 'rate_limit'; readonly retryAfterMs: number }
   | { readonly stage: 'retry_budget'; readonly retryAfterMs: number }
   | { readonly stage: 'quota'; readonly quota: number };
