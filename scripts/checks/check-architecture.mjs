@@ -343,6 +343,27 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   visit(sourceFile);
 }
 
+// ADR-0054 / #784: every statement that stores a session takes a
+// SessionAdmission, and the second-factor check mints it. The one other way to
+// get one, `admitSessionContinuation`, skips that check because it continues a
+// session that already exists, so only the Refresh Token rotation may name it.
+// The type system cannot see who calls an exported function, so check the
+// source text.
+const SESSION_CONTINUATION_USERS = new Set([
+  'src/modules/auth/mfa/infrastructure/auth-mfa-session.guard.ts',
+  'src/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository.ts',
+]);
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (file.endsWith('.spec.ts')) continue;
+  const relativePath = relative(root, file).replace(/\\/g, '/');
+  if (SESSION_CONTINUATION_USERS.has(relativePath)) continue;
+  if (/\badmitSessionContinuation\b/.test(readFileSync(file, 'utf8'))) {
+    fail(
+      `${relativePath} names admitSessionContinuation, which stores a session without the second-factor check; only the Refresh Token rotation may continue a session this way (ADR-0054)`,
+    );
+  }
+}
+
 if (process.exitCode !== undefined) {
   process.exit(process.exitCode);
 }

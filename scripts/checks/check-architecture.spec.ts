@@ -680,6 +680,43 @@ describe('request bodies reach their contract through parseRequestBody', () => {
   });
 });
 
+describe('a session is stored only with the second-factor check', () => {
+  it('fails a file that continues a session without it', () => {
+    const fixtureRoot = mkdtempSync(
+      join(process.cwd(), 'src', 'modules', 'auth', '.tmp-session-admission-'),
+    );
+
+    try {
+      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
+      writeFileSync(
+        join(fixtureRoot, 'infrastructure', 'probe.ts'),
+        `import { admitSessionContinuation } from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';\nexport const admission = admitSessionContinuation('usr_1');\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(
+        `${result.stdout.toString()}\n${result.stderr.toString()}`,
+      ).toContain('only the Refresh Token rotation may continue a session');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('query parameters reach parseRequestQuery at the controller boundary', () => {
   const srcRoot = join(__dirname, '..', '..', 'src');
 
