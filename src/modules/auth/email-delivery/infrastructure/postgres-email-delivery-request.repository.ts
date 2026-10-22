@@ -2,6 +2,7 @@
 import { createHmac, hkdfSync } from 'node:crypto';
 import { AppError } from '@/common/errors/app-error';
 import type {
+  CancelStaleEmailDeliveryRequestsInput,
   ClaimEmailDeliveryRequestsInput,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
@@ -619,11 +620,7 @@ export class PostgresEmailDeliveryRequestRepository
 
   async cancelStale(
     client: AuthSqlClient,
-    input: {
-      at: Date;
-      createdAtOrBefore: Date;
-      kinds: readonly EmailDeliveryKind[];
-    },
+    input: CancelStaleEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     const rows = await authQueryRows(
       client,
@@ -796,11 +793,9 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     await this.requests.releaseDeferred(this.client, input);
   }
 
-  cancelStale(input: {
-    readonly at: Date;
-    readonly createdAtOrBefore: Date;
-    readonly kinds: readonly EmailDeliveryKind[];
-  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+  cancelStale(
+    input: CancelStaleEmailDeliveryRequestsInput,
+  ): Promise<readonly EmailDeliveryRequestRecord[]> {
     return this.requests.cancelStale(this.client, input);
   }
 

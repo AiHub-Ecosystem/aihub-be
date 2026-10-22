@@ -242,6 +242,13 @@ export interface EmailDeliveryRequestRecord {
   readonly completedAt: Date | null;
 }
 
+/** Queued rows of `kinds` created at or before `createdAtOrBefore`. */
+export interface CancelStaleEmailDeliveryRequestsInput {
+  readonly at: Date;
+  readonly createdAtOrBefore: Date;
+  readonly kinds: readonly EmailDeliveryKind[];
+}
+
 /**
  * One poller's share of the queue. `owner` names this instance and appears on
  * every row it holds, so a lease can be released or recognised after a restart;
@@ -325,11 +332,9 @@ export interface EmailDispatchStorePort {
    * Email Delivery Request carries has expired by then, so the request can never
    * be sent; this is what erases a payload no instance can decrypt (ADR-0074).
    */
-  cancelStale(input: {
-    readonly at: Date;
-    readonly createdAtOrBefore: Date;
-    readonly kinds: readonly EmailDeliveryKind[];
-  }): Promise<readonly EmailDeliveryRequestRecord[]>;
+  cancelStale(
+    input: CancelStaleEmailDeliveryRequestsInput,
+  ): Promise<readonly EmailDeliveryRequestRecord[]>;
   /**
    * Requests that spent their last attempt without a recorded outcome, whose
    * lease has lapsed. They are given up as `failed` rather than dispatched
