@@ -88,6 +88,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Entitlement:** a service capability configured for an Organization, such as `writing` or `speaking`, which bounds the scopes its API keys may carry. Effective use also requires an active Organization and a matching API key scope.
 - **API key status:** the lifecycle an API key is in — `active` while it may authenticate, `expired` once its expiry moment has passed, `revoked` once it has been withdrawn; expiry arrives on its own without anyone acting, revocation does not.
 - **API key rotation:** replacing an API key's credential while preserving the authority it carried; the replacement is a new key, the old one is withdrawn in the same act, and no window exists in which both work.
+- **Notification Kind:** one member of the closed set of things AIHUB can tell an Organization it noticed on its own, such as an API key nearing its expiry; it is distinct from an email that follows a user's own act, such as a verification or an invitation.
+- **Notification Event:** the record that AIHUB observed one occurrence of a Notification Kind for an Organization, such as one API key and the expiry it carried; it is recorded once per occurrence, and each channel that tells the Organization about it, email first, is a delivery of that event rather than a new event.
 - **Environment:** the request tier derived from its deployment hostname; an API key may be restricted to a set of allowed environments.
 - **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing. Under the approved design in [ADR-0056](docs/adr/0056-customer-sandbox-test-tier.md), Organization, key, and identity-configuration data use the production control plane, while sandbox usage, idempotency, and dispatch reservations use the separate sandbox database and Redis logical database `/1`.
 - **Deployment secret realm:** the environment scope used to select runtime credentials; `sandbox` is not a separate realm and sandbox traffic uses the enclosing deployment's credentials.
@@ -360,6 +362,7 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 - [ADR-0024: Rotating refresh-session boundary](docs/adr/0024-rotating-refresh-session-boundary.md)
 - [ADR-0074: Transactional outbox for account and invitation email](docs/adr/0074-transactional-email-outbox.md)
 - [Email outbox terminal failure runbook](docs/operations/email-outbox.md)
+- [ADR-0119: Notification Event catalog](docs/adr/0119-notification-event-catalog.md)
 - [ADR-0053: Optional end-user identity verification per Organization](docs/adr/0053-optional-user-identity-verification.md)
 - [ADR-0054: Sign in on email verification only in the browser that signed up](docs/adr/0054-verification-sign-in-bound-to-signup-browser.md)
 - [ADR-0056: Customer API-key sandbox test tier](docs/adr/0056-customer-sandbox-test-tier.md)
