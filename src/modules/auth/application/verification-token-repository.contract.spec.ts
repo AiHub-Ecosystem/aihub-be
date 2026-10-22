@@ -55,6 +55,15 @@ verificationTokenRepositoryContract({
   getTokenSignedInAt: async (hash: string) => {
     return state.verificationTokens.get(hash)?.signedInAt;
   },
+  enableSecondFactor: async () => {
+    state.mfaFactors.set(USER_ID, {
+      factorId: 'mfa_1',
+      status: 'enabled',
+      email: EMAIL,
+      secret: 'secret',
+    });
+  },
+  sessionCount: async () => state.refreshTokens.size + state.webSessions.size,
   setFailSessionWrite: (value: boolean) => {
     repo.failSessionWrite = value;
   },

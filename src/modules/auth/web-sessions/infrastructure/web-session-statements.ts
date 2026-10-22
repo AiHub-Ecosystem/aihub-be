@@ -1,3 +1,7 @@
+import {
+  type SessionAdmission,
+  assertAdmitted,
+} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
 import type { Prisma } from '@prisma-client/client';
 
 type WebSessions = Pick<Prisma.TransactionClient, 'webSession'>;
@@ -20,7 +24,9 @@ export async function insertWebSession(
     readonly createdAt: Date;
     readonly expiresAt: Date;
   },
+  admission: SessionAdmission,
 ): Promise<void> {
+  assertAdmitted(admission, input.userId);
   await client.webSession.create({
     data: {
       id: input.id,

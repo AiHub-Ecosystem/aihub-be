@@ -105,6 +105,24 @@ verificationTokenRepositoryContract({
     );
     return rows[0]?.signed_in_at ?? undefined;
   },
+  enableSecondFactor: async () => {
+    await pool.query(
+      `INSERT INTO user_mfa_factors (
+         factor_id, user_account_id, secret_key_id, secret_ciphertext,
+         status, created_at, updated_at
+       ) VALUES ($1, $2, 'test-key', 'ciphertext', 'enabled', $3, $3)`,
+      [`mfa_${ulid()}`, USER_ID, NOW],
+    );
+  },
+  sessionCount: async () => {
+    const { rows } = await pool.query<{ count: number }>(
+      `SELECT (SELECT count(*) FROM refresh_tokens WHERE user_account_id = $1)
+            + (SELECT count(*) FROM web_sessions WHERE user_account_id = $1)
+              AS count`,
+      [USER_ID],
+    );
+    return Number(rows[0]?.count ?? 0);
+  },
   setFailSessionWrite: () => {
     // Not supported for the Postgres repo.
   },

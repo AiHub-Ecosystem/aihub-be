@@ -4,6 +4,10 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import {
+  type SessionAdmission,
+  assertAdmitted,
+} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
+import {
   type AuthSqlClient,
   type AuthTransactionClient,
   authQueryRows,
@@ -88,7 +92,9 @@ export async function insertEmailDelivery(
 export async function insertRefreshSession(
   client: AuthSqlClient,
   input: RefreshSessionRowInput,
+  admission: SessionAdmission,
 ): Promise<void> {
+  assertAdmitted(admission, input.userId);
   await client.refreshToken.create({
     data: {
       id: input.token.id,

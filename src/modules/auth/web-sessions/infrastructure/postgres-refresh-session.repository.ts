@@ -3,7 +3,10 @@ import {
   insertRefreshSession,
   passwordHashIsCurrent,
 } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
-import { authorizeMfaSession } from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
+import {
+  admitSessionContinuation,
+  authorizeMfaSession,
+} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
   type AuthTransactionClient,
@@ -63,13 +66,13 @@ export class PostgresRefreshSessionRepository
     input: CreateRefreshSessionInput,
   ): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      const authorized = await authorizeMfaSession(
+      const admission = await authorizeMfaSession(
         transaction,
         input.userId,
         input.mfaProof,
         input.issuedAt,
       );
-      if (!authorized) return false;
+      if (admission === undefined) return false;
       if (
         !(await passwordHashIsCurrent(
           transaction,
@@ -79,7 +82,7 @@ export class PostgresRefreshSessionRepository
       ) {
         return false;
       }
-      await insertRefreshSession(transaction, input);
+      await insertRefreshSession(transaction, input, admission);
       return true;
     });
   }
@@ -143,11 +146,15 @@ export class PostgresRefreshSessionRepository
         where: { id: input.tokenId, usedAt: null, revokedAt: null },
         data: { usedAt: input.now },
       });
-      await insertRefreshSession(transaction, {
-        userId: record.userId,
-        token: input.successor,
-        issuedAt: input.now,
-      });
+      await insertRefreshSession(
+        transaction,
+        {
+          userId: record.userId,
+          token: input.successor,
+          issuedAt: input.now,
+        },
+        admitSessionContinuation(record.userId),
+      );
       return { kind: 'rotated', userId: record.userId };
     });
   }

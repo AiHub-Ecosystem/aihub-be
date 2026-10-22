@@ -111,6 +111,11 @@ export class InMemoryVerificationTokenAdapter
       return VERIFIED;
     }
 
+    // ADR-0054: an account with a second factor verifies without a session.
+    if (this.state.mfaFactors.get(token.userId)?.status === 'enabled') {
+      return VERIFIED;
+    }
+
     token.signedInAt = input.now;
     try {
       if (input.signInSession.kind === 'refresh') {

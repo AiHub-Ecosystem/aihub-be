@@ -20,15 +20,13 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
 
   async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      if (
-        !(await authorizeMfaSession(
-          transaction,
-          input.userId,
-          input.mfaProof,
-          input.now,
-        ))
-      )
-        return false;
+      const admission = await authorizeMfaSession(
+        transaction,
+        input.userId,
+        input.mfaProof,
+        input.now,
+      );
+      if (admission === undefined) return false;
 
       if (
         !(await passwordHashIsCurrent(
@@ -39,13 +37,17 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
       ) {
         return false;
       }
-      await insertWebSession(transaction, {
-        id: input.sessionId,
-        userId: input.userId,
-        tokenHash: input.token.hash,
-        createdAt: input.now,
-        expiresAt: input.token.expiresAt,
-      });
+      await insertWebSession(
+        transaction,
+        {
+          id: input.sessionId,
+          userId: input.userId,
+          tokenHash: input.token.hash,
+          createdAt: input.now,
+          expiresAt: input.token.expiresAt,
+        },
+        admission,
+      );
       return true;
     });
   }

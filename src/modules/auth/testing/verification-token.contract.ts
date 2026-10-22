@@ -32,6 +32,10 @@ export interface VerificationTokenContractHarness {
   }): Promise<void>;
   setAccountStatus(userId: string, status: string): Promise<void>;
   getTokenSignedInAt(hash: string): Promise<Date | undefined>;
+  /** Enrols the seeded account in an enabled second factor. */
+  enableSecondFactor(): Promise<void>;
+  /** How many Refresh Sessions and Web Sessions the seeded account holds. */
+  sessionCount(): Promise<number>;
   setFailSessionWrite?(value: boolean): void;
 }
 
@@ -206,6 +210,77 @@ export function verificationTokenRepositoryContract(
       },
     });
     expect(outcome).toEqual({ kind: 'verified' });
+  });
+
+  it.each([
+    [
+      'refresh',
+      (): Parameters<
+        typeof repo.consumeVerificationToken
+      >[0]['signInSession'] => ({
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      }),
+    ],
+    [
+      'web-session',
+      (): Parameters<
+        typeof repo.consumeVerificationToken
+      >[0]['signInSession'] => ({
+        kind: 'web-session',
+        sessionId: 'sess_factor',
+        token: { raw: 'r', hash: 'wh_factor', expiresAt },
+        issuedAt: now,
+      }),
+    ],
+  ])(
+    'a %s sign-in for an account that enrolled a second factor verifies but creates no session',
+    async (_kind, signInSession) => {
+      const hash = '3'.repeat(64);
+      await harness.insertToken({
+        hash,
+        expiresAt,
+        consumedAt: now,
+        consumedReason: 'verified',
+        bindingHash: binding,
+      });
+      await harness.setAccountStatus(userId, 'active');
+      await harness.enableSecondFactor();
+
+      const outcome = await repo.consumeVerificationToken({
+        tokenHash: hash,
+        browserBindingHash: binding,
+        now,
+        signInSession: signInSession(),
+      });
+
+      expect(outcome).toEqual({ kind: 'verified' });
+      expect(await harness.sessionCount()).toBe(0);
+      // No sign-in happened, so the token's one sign-in is not spent.
+      expect(await harness.getTokenSignedInAt(hash)).toBeUndefined();
+    },
+  );
+
+  it('an account that enrolled a factor before its first verification verifies without a session', async () => {
+    const hash = '4'.repeat(64);
+    await harness.insertToken({ hash, expiresAt, bindingHash: binding });
+    await harness.enableSecondFactor();
+
+    const outcome = await repo.consumeVerificationToken({
+      tokenHash: hash,
+      browserBindingHash: binding,
+      now,
+      signInSession: {
+        kind: 'refresh',
+        token: issuedRefresh(expiresAt),
+        issuedAt: now,
+      },
+    });
+
+    expect(outcome).toEqual({ kind: 'verified' });
+    expect(await harness.sessionCount()).toBe(0);
+    expect(await harness.getTokenSignedInAt(hash)).toBeUndefined();
   });
 
   it('failed session write rolls back the claim', async () => {

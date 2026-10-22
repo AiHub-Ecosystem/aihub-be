@@ -51,6 +51,17 @@ function openToken(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * What the session admission reads after the token is locked: the account's
+ * status, then its enabled second factor, if any.
+ */
+function admitted(options: { readonly factorId?: string } = {}): unknown[] {
+  return [
+    [{ status: 'active' }],
+    options.factorId === undefined ? [] : [{ factor_id: options.factorId }],
+  ];
+}
+
 describe('PostgresVerificationTokenRepository', () => {
   it('invalidates open tokens before inserting a resend token for pending accounts', async () => {
     const script = new ScriptedPrisma();
@@ -104,7 +115,11 @@ describe('PostgresVerificationTokenRepository', () => {
 
   it('commits the Verification Sign-in claim and its Refresh Session in one transaction', async () => {
     const script = new ScriptedPrisma();
-    script.inside = [[{ id: USER_ID, status: 'active' }], [openToken()]];
+    script.inside = [
+      [{ id: USER_ID, status: 'active' }],
+      [openToken()],
+      ...admitted(),
+    ];
 
     await expect(
       repositoryOver(script).consumeVerificationToken({
@@ -119,18 +134,48 @@ describe('PostgresVerificationTokenRepository', () => {
       }),
     ).resolves.toEqual({ kind: 'signed_in', userId: USER_ID });
 
-    expect(script.statements.map(({ name }) => name).slice(2)).toEqual([
-      'emailVerificationToken.updateMany',
-      'refreshToken.create',
-    ]);
+    expect(
+      script.statements
+        .map(({ name }) => name)
+        .filter((name) => /^\w+\.\w+$/.test(name)),
+    ).toEqual(['emailVerificationToken.updateMany', 'refreshToken.create']);
     expect(script.opened).toBe(1);
     expect(
       script.statements.every(({ transaction }) => transaction === 1),
     ).toBe(true);
-    expect(JSON.stringify(script.statements[3]?.args)).toContain(
-      refreshToken.hash,
-    );
+    expect(
+      JSON.stringify(
+        script.statements.find(({ name }) => name === 'refreshToken.create')
+          ?.args,
+      ),
+    ).toContain(refreshToken.hash);
     expect(allArgs(script)).not.toContain(refreshToken.raw);
+  });
+
+  it('verifies without a session, and spends no claim, for an account with a second factor', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [{ id: USER_ID, status: 'active' }],
+      [openToken()],
+      ...admitted({ factorId: 'mfa_01J00000000000000000000000' }),
+    ];
+
+    await expect(
+      repositoryOver(script).consumeVerificationToken({
+        tokenHash: input.tokenHash,
+        browserBindingHash: 'binding-hash',
+        signInSession: {
+          kind: 'refresh',
+          token: refreshToken,
+          issuedAt: input.now,
+        },
+        now: input.now,
+      }),
+    ).resolves.toEqual({ kind: 'verified' });
+
+    const names = script.statements.map(({ name }) => name);
+    expect(names).not.toContain('emailVerificationToken.updateMany');
+    expect(names).not.toContain('refreshToken.create');
   });
 
   it('stops without a session when another request already claimed the sign-in', async () => {
@@ -138,6 +183,7 @@ describe('PostgresVerificationTokenRepository', () => {
     script.inside = [
       [{ id: USER_ID, status: 'active' }],
       [openToken()],
+      ...admitted(),
       { count: 0 },
     ];
 

@@ -39,7 +39,7 @@ describe('authorizeMfaSession', () => {
 
     await expect(
       authorizeMfaSession(client, USER_ID, totp(FACTOR_ID), NOW),
-    ).resolves.toBe(false);
+    ).resolves.toBeUndefined();
   });
 
   it('admits an account without a factor only when no proof is claimed', async () => {
@@ -47,10 +47,10 @@ describe('authorizeMfaSession', () => {
 
     await expect(
       authorizeMfaSession(client, USER_ID, undefined, NOW),
-    ).resolves.toBe(true);
+    ).resolves.toBeDefined();
     await expect(
       authorizeMfaSession(client, USER_ID, totp(FACTOR_ID), NOW),
-    ).resolves.toBe(false);
+    ).resolves.toBeUndefined();
   });
 
   it('refuses an account with an enabled factor and no proof', async () => {
@@ -58,7 +58,7 @@ describe('authorizeMfaSession', () => {
 
     await expect(
       authorizeMfaSession(client, USER_ID, undefined, NOW),
-    ).resolves.toBe(false);
+    ).resolves.toBeUndefined();
   });
 
   it('admits a TOTP proof only for the factor that is enabled now', async () => {
@@ -66,7 +66,7 @@ describe('authorizeMfaSession', () => {
 
     await expect(
       authorizeMfaSession(client, USER_ID, totp(FACTOR_ID), NOW),
-    ).resolves.toBe(true);
+    ).resolves.toBeDefined();
     // A proof made against a factor since removed and re-enrolled.
     await expect(
       authorizeMfaSession(
@@ -75,7 +75,7 @@ describe('authorizeMfaSession', () => {
         totp('mfa_01J00000000000000000000099'),
         NOW,
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBeUndefined();
   });
 
   it('admits a Recovery Code proof only when this transaction consumes the code', async () => {
@@ -86,7 +86,7 @@ describe('authorizeMfaSession', () => {
     });
     await expect(
       authorizeMfaSession(unused.client, USER_ID, recovery, NOW),
-    ).resolves.toBe(true);
+    ).resolves.toBeDefined();
     expect(unused.updateMany).toHaveBeenCalledWith({
       where: {
         userAccountId: USER_ID,
@@ -99,6 +99,6 @@ describe('authorizeMfaSession', () => {
     const spent = transaction({ status: 'active', factorId: FACTOR_ID });
     await expect(
       authorizeMfaSession(spent.client, USER_ID, recovery, NOW),
-    ).resolves.toBe(false);
+    ).resolves.toBeUndefined();
   });
 });

@@ -6,6 +6,10 @@ import {
   insertEmailDelivery,
   insertRefreshSession,
 } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
+import {
+  type SessionAdmission,
+  authorizeMfaSession,
+} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import {
   type AuthRepositoryClient,
@@ -176,6 +180,18 @@ export class PostgresVerificationTokenRepository
         ) {
           return VERIFIED;
         }
+        // The admission login needs, with no proof to offer (ADR-0054): an
+        // account with a second factor verifies but gets no session, and the
+        // claim stays unspent because no sign-in happened.
+        const admission = await authorizeMfaSession(
+          transaction,
+          accountId,
+          undefined,
+          input.now,
+        );
+        if (admission === undefined) {
+          return VERIFIED;
+        }
         const claimed = await transaction.emailVerificationToken.updateMany({
           where: {
             id: tokenId,
@@ -193,17 +209,26 @@ export class PostgresVerificationTokenRepository
         // caller's to pick; the claim is the only one of its kind, so a token
         // spends its single session whichever route arrives first.
         if (input.signInSession.kind === 'refresh') {
-          await insertRefreshSession(transaction, {
-            userId: accountId,
-            token: input.signInSession.token,
-            issuedAt: input.signInSession.issuedAt,
-          });
+          await insertRefreshSession(
+            transaction,
+            {
+              userId: accountId,
+              token: input.signInSession.token,
+              issuedAt: input.signInSession.issuedAt,
+            },
+            admission,
+          );
         } else {
-          await this.insertWebSession(transaction, accountId, {
-            sessionId: input.signInSession.sessionId,
-            token: input.signInSession.token,
-            issuedAt: input.signInSession.issuedAt,
-          });
+          await this.insertWebSession(
+            transaction,
+            accountId,
+            {
+              sessionId: input.signInSession.sessionId,
+              token: input.signInSession.token,
+              issuedAt: input.signInSession.issuedAt,
+            },
+            admission,
+          );
         }
         return { kind: 'signed_in', userId: accountId };
       };
@@ -248,13 +273,18 @@ export class PostgresVerificationTokenRepository
       readonly token: IssuedWebSessionToken;
       readonly issuedAt: Date;
     },
+    admission: SessionAdmission,
   ): Promise<void> {
-    await insertWebSession(transaction, {
-      id: session.sessionId,
-      userId,
-      tokenHash: session.token.hash,
-      createdAt: session.issuedAt,
-      expiresAt: session.token.expiresAt,
-    });
+    await insertWebSession(
+      transaction,
+      {
+        id: session.sessionId,
+        userId,
+        tokenHash: session.token.hash,
+        createdAt: session.issuedAt,
+        expiresAt: session.token.expiresAt,
+      },
+      admission,
+    );
   }
 }
