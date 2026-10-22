@@ -182,6 +182,23 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
     });
   });
 
+  it('reads the permanent provider rejection code before the writer rollout', async () => {
+    const failures =
+      await new PostgresEmailDeliveryRequestRepository().claimUnreportedFailures(
+        clientReturning(
+          queuedRow({
+            status: 'failed',
+            payloadCiphertext: null,
+            lastErrorCode: 'provider_permanent_rejection',
+            completedAt: NOW,
+          }),
+        ),
+        { limit: 1, now: NOW, leaseMs: 30_000 },
+      );
+
+    expect(failures[0]?.lastErrorCode).toBe('provider_permanent_rejection');
+  });
+
   it.each([
     ['a non-string kind', { kind: 42 }],
     ['a status outside the table vocabulary', { status: 'dispatched' }],

@@ -213,6 +213,7 @@ export type EmailDeliveryRequestStatus =
 export const EMAIL_DELIVERY_ERROR_CODES = [
   'timeout',
   'provider_rejected',
+  'provider_permanent_rejection',
   'outcome_unknown',
 ] as const;
 
