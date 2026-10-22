@@ -49,15 +49,14 @@ import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
   emailOutboxLeaseOwner,
+  reportEmailProviderConfigurationFailure,
   reportTerminalEmailDeliveryFailure,
 } from './infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
 import { PostgresEmailDailySendBudget } from './infrastructure/postgres-email-daily-send-budget';
-import {
-  PostgresEmailDeliveryRequestRepository,
-  PostgresEmailDispatchStore,
-  pruneExpiredAuthEmailRecipientLimits,
-} from './infrastructure/postgres-email-delivery-request.repository';
+import { pruneExpiredAuthEmailRecipientLimits } from './infrastructure/postgres-email-delivery-request.repository';
+import { PostgresEmailDeliveryRequestRepository } from './infrastructure/postgres-email-delivery-request.repository';
+import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-dispatch-store';
 import { RedisEmailSendRateLimiter } from './infrastructure/redis-email-send-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 
@@ -162,6 +161,8 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
             owner: emailOutboxLeaseOwner(),
             ...(customerWebBaseUrl === undefined ? {} : { customerWebBaseUrl }),
             onTerminalFailure: reportTerminalEmailDeliveryFailure,
+            onProviderConfigurationFailure:
+              reportEmailProviderConfigurationFailure,
             dailySendBudget,
             notices,
           },

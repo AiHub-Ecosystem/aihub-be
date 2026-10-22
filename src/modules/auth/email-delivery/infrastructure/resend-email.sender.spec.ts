@@ -16,7 +16,7 @@ describe('ResendEmailSender', () => {
       'AIHUB <no-reply@example.com>',
       async (input, init) => {
         calls.push({ input, init });
-        return { ok: true };
+        return { status: 200, headers: { get: () => null } };
       },
     );
 
@@ -56,7 +56,7 @@ describe('ResendEmailSender', () => {
           throw new Error('Expected a serialized Resend request body');
         }
         body = init.body;
-        return { ok: true };
+        return { status: 200, headers: { get: () => null } };
       },
     );
 
@@ -74,23 +74,50 @@ describe('ResendEmailSender', () => {
     });
   });
 
-  it('maps provider rejection to a safe error', async () => {
+  it('returns safe metadata for provider rejection without exposing its body', async () => {
     const sender = new ResendEmailSender(
       { apiKey: 'resend-secret' },
       'no-reply@example.com',
-      async () => ({ ok: false, body: 'provider-private-response' }),
+      async () => ({
+        status: 422,
+        headers: { get: () => null },
+        body: 'provider-private-response',
+      }),
     );
 
-    await expect(sender.send(message)).rejects.toThrow(
-      'Resend email delivery failed',
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 422,
+      retryAfter: undefined,
+    });
+  });
+
+  it('returns only the provider status and Retry-After header', async () => {
+    const response = {
+      ok: false,
+      status: 429,
+      headers: {
+        get: (name: string) => (name === 'retry-after' ? '30' : null),
+      },
+      body: 'provider-private-response',
+    };
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => response,
     );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 429,
+      retryAfter: '30',
+    });
   });
 
   it('requires a non-empty sender address', () => {
     expect(
       () =>
         new ResendEmailSender({ apiKey: 'resend-secret' }, '   ', async () => ({
-          ok: true,
+          status: 200,
+          headers: { get: () => null },
         })),
     ).toThrow('RESEND_FROM is required');
   });

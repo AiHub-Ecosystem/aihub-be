@@ -22,8 +22,17 @@ export interface EmailDispatchOptions {
   readonly idempotencyKey?: string;
 }
 
+/** The only response metadata dispatch policy may inspect or retain. */
+export interface EmailProviderResponse {
+  readonly status: number;
+  readonly retryAfter: string | undefined;
+}
+
 export interface EmailSenderPort {
-  send(message: EmailMessage, options?: EmailDispatchOptions): Promise<void>;
+  send(
+    message: EmailMessage,
+    options?: EmailDispatchOptions,
+  ): Promise<EmailProviderResponse>;
 }
 
 export const EMAIL_SENDER = Symbol('EMAIL_SENDER');

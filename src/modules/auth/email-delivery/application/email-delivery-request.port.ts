@@ -262,6 +262,14 @@ export interface ClaimEmailDeliveryRequestsInput {
   readonly now: Date;
 }
 
+export interface ReleaseUnspentEmailAttemptInput {
+  readonly id: string;
+  readonly owner: string;
+  readonly previousAttempts: number;
+  readonly previousAttemptAt: Date | null;
+  readonly retryAt: Date;
+}
+
 /**
  * The outbox as the dispatcher sees it: lease-protected claims in, terminal
  * transitions out. Every method is safe to call on a row another instance has
@@ -291,6 +299,8 @@ export interface EmailDispatchStorePort {
     readonly attemptedAt: Date;
     readonly owner: string;
   }): Promise<void>;
+  /** Reverts a known non-consuming provider response and defers the row atomically. */
+  releaseUnspentAttempt(input: ReleaseUnspentEmailAttemptInput): Promise<void>;
   markProviderAccepted(input: {
     readonly id: string;
     readonly attemptedAt: Date;

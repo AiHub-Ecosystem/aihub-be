@@ -1,9 +1,11 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
+import { Logger } from '@nestjs/common';
 
 import {
   EmailOutboxPollerScheduler,
   emailOutboxLeaseOwner,
+  reportEmailProviderConfigurationFailure,
   reportTerminalEmailDeliveryFailure,
 } from './email-outbox-poller.scheduler';
 
@@ -260,6 +262,29 @@ describe('reportTerminalEmailDeliveryFailure', () => {
       ).toBe(
         `email delivery request edr_01J00000000000000000000000 exhausted its attempts kind=${kind} error=${errorCode}`,
       );
+    },
+  );
+});
+
+describe('reportEmailProviderConfigurationFailure', () => {
+  it.each([401, 403] as const)(
+    'emits a bounded configuration signal for status %s',
+    (status) => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      try {
+        reportEmailProviderConfigurationFailure({ status });
+        expect(error).toHaveBeenCalledWith(
+          `email provider credentials rejected status=${status}; dispatch paused`,
+        );
+        expect(JSON.stringify(error.mock.calls)).not.toMatch(
+          /person@example\.com|token|body|response/i,
+        );
+      } finally {
+        error.mockRestore();
+      }
     },
   );
 });

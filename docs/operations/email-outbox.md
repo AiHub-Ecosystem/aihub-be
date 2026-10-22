@@ -15,7 +15,7 @@ abstraction, because there is no runtime that owns a delivery to an alert
 backend. ADR-0074 requires that a terminal failure _trigger an alert_; it does
 not require the application to be the thing that pages.
 
-AIHUB emits the two signals an alerting rule consumes and stops there:
+AIHUB emits the signals monitoring consumes and stops there:
 
 | Signal                                                                     | Where it is read                        |
 | -------------------------------------------------------------------------- | --------------------------------------- |
@@ -23,6 +23,7 @@ AIHUB emits the two signals an alerting rule consumes and stops there:
 | `aihub_email_outbox_oldest_queued_age_seconds{kind="..."}`                 | `/metrics`, read from Postgres          |
 | `aihub_email_delivery_cancelled_timestamp_seconds{kind,reason}`            | `/metrics`, read from durable rows      |
 | one `ERROR` log line per terminal failure, context `[EmailOutboxDispatch]` | the instance log                        |
+| one `ERROR` log line per provider credential outage, same context          | the instance log                        |
 
 Prometheus scrapes each environment's `/metrics` endpoint through a dedicated
 loopback-only Nginx listener on the Production host and the restricted SSH
@@ -151,11 +152,45 @@ six flows (`verification_email`, `password_reset_email`,
 `mfa_removed_notification`, `api_key_near_expiry_notification`); a `kind`-specific rise points at that flow's
 recipient domain or its `from` address, which is the usual cause.
 
-The `error=` value is one of three codes. `timeout` means the attempt ran past
+The `error=` value is one of four codes. `timeout` means the attempt ran past
 the five-second provider timeout; `provider_rejected` means the provider
-declined the API request; `outcome_unknown` means a process died after
-reserving the last attempt, so no answer was recorded (see above). Nothing else
-about the provider's answer survives to this point, by design.
+declined the API request; `provider_permanent_rejection` means a `400` or `422`
+response ended the request after one attempt; `outcome_unknown` means a process
+died after reserving the last attempt, so no answer was recorded (see above).
+Nothing else about the provider's answer survives to this point, by design.
+
+## Provider response classification
+
+The Resend adapter passes only the HTTP status and `Retry-After` header to the
+poller. It never reads or stores the response body.
+
+- `400` and `422` are terminal. The request fails after one attempt with
+  `provider_permanent_rejection`, then uses the existing durable terminal
+  failure signal.
+- `401` and `403` indicate a provider credential configuration problem. The
+  attempt count and previous `last_attempt_at` are restored, the request stays
+  queued for five minutes, and that poller pauses the rest of its claimed batch
+  and skips new claims for the same interval. It emits one bounded
+  `ERROR [EmailOutboxDispatch]` configuration signal until a send succeeds.
+- `429` restores the attempt count and defers at least until `Retry-After`.
+  Delta-seconds and HTTP dates are accepted; an absent or invalid value uses a
+  60-second delay. The retry timestamp is stored in the lease expiry so the row
+  cannot be claimed early.
+- Other non-success responses, including unclassified `4xx`, retain the normal
+  bounded retry schedule and `provider_rejected` code.
+
+### Release order for the permanent rejection code
+
+The current reader rejects an unknown `last_error_code`, which can abort a
+claim of unreported terminal failures. Add `provider_permanent_rejection` to
+the reader's accepted vocabulary in a reader-only release while continuing to
+write `provider_rejected`. After that release is deployed to every instance,
+release the writer that stores `provider_permanent_rejection` for `400` and
+`422`. Do not deploy the new writer while any older reader remains active.
+
+The configuration pause and its one-alert suppression are per poller process.
+If several application instances independently observe the same credential
+problem, each can emit one signal until one of its sends succeeds.
 
 ## Credential expiry alerts; other cancellations do not
 

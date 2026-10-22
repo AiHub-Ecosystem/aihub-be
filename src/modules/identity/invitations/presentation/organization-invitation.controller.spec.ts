@@ -9,6 +9,7 @@ import { AppError } from '@/common/errors/app-error';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_SENDER,
+  type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import {
@@ -133,7 +134,10 @@ describe('Organization invitation HTTP flow', () => {
       send: jest.fn(
         async (
           _message: Parameters<EmailSenderPort['send']>[0],
-        ): Promise<void> => undefined,
+        ): Promise<EmailProviderResponse> => ({
+          status: 202,
+          retryAfter: undefined,
+        }),
       ),
     };
 

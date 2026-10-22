@@ -159,6 +159,15 @@ export function reportTerminalEmailDeliveryFailure(failure: {
   );
 }
 
+/** Emits one bounded signal when the provider rejects its configured credentials. */
+export function reportEmailProviderConfigurationFailure(failure: {
+  readonly status: 401 | 403;
+}): void {
+  new Logger('EmailOutboxDispatch').error(
+    `email provider credentials rejected status=${failure.status}; dispatch paused`,
+  );
+}
+
 /** Distinguishes two instances of the same deployment in the lease column. */
 export function emailOutboxLeaseOwner(): string {
   return `outbox-${randomUUID()}`;

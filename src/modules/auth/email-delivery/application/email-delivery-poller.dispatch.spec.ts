@@ -20,6 +20,7 @@ import {
   unreadableCipher,
 } from './email-delivery-poller.spec-support';
 import type { EmailDeliveryPayload } from './email-delivery-request.port';
+import { EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS } from './email-provider-retry-after.policy';
 import type { EmailSenderPort } from './email-sender.port';
 
 describe('EmailDeliveryPoller', () => {
@@ -214,6 +215,227 @@ describe('EmailDeliveryPoller', () => {
     expect(summary.failed).toBe(0);
   });
 
+  it.each([400, 422] as const)(
+    'fails a %s response after one provider attempt',
+    async (status) => {
+      const terminalFailures: unknown[] = [];
+      const { poller, store, sender } = harness({
+        onTerminalFailure: (failure) => terminalFailures.push(failure),
+      });
+      store.claimResult = [claimed()];
+      sender.response = { status, retryAfter: undefined };
+
+      const summary = await poller.runOnce();
+
+      expect(sender.sends).toHaveLength(1);
+      expect(store.failed).toEqual([
+        { id: ROW_ID, errorCode: 'provider_permanent_rejection' },
+      ]);
+      expect(store.attempts).toEqual([]);
+      expect(summary.failed).toBe(1);
+      expect(terminalFailures).toEqual([
+        {
+          id: ROW_ID,
+          kind: 'verification_email',
+          errorCode: 'provider_permanent_rejection',
+        },
+      ]);
+    },
+  );
+
+  it.each([401, 403] as const)(
+    'holds the queue and emits one configuration alert for %s',
+    async (status) => {
+      const alerts: { status: number }[] = [];
+      const { poller, store, sender } = harness({
+        onProviderConfigurationFailure: (failure) => alerts.push(failure),
+      });
+      store.claimResult = [claimed(), claimed({ id: 'edr_second' })];
+      sender.response = { status, retryAfter: undefined };
+
+      const summary = await poller.runOnce();
+
+      expect(sender.sends).toHaveLength(1);
+      expect(store.unspent).toEqual([
+        {
+          id: ROW_ID,
+          previousAttempts: 0,
+          previousAttemptAt: null,
+          retryAt: new Date(NOW.getTime() + DEFER_RETRY_MS),
+        },
+      ]);
+      expect(store.deferred).toEqual([ROW_ID, 'edr_second']);
+      expect(alerts).toEqual([{ status }]);
+      expect(summary.deferred).toBe(2);
+
+      await poller.runOnce();
+
+      expect(sender.sends).toHaveLength(1);
+      expect(alerts).toEqual([{ status }]);
+    },
+  );
+
+  it('alerts and retries the attempt rollback before exhausted-row reconciliation', async () => {
+    const alerts: { status: number }[] = [];
+    const { poller, store, sender } = harness({
+      onProviderConfigurationFailure: (failure) => alerts.push(failure),
+    });
+    store.claimResult = [claimed({ attempts: 2 })];
+    sender.response = { status: 401, retryAfter: undefined };
+    const order: string[] = [];
+    let releaseCalls = 0;
+    const releaseUnspentAttempt = store.releaseUnspentAttempt.bind(store);
+    store.releaseUnspentAttempt = async (input) => {
+      releaseCalls += 1;
+      if (releaseCalls === 1) throw new Error('store is unavailable');
+      order.push('release');
+      await releaseUnspentAttempt(input);
+    };
+    store.failExhausted = async () => {
+      order.push('exhausted');
+      return [];
+    };
+
+    await poller.runOnce();
+    await poller.runOnce();
+
+    expect(sender.sends).toHaveLength(1);
+    expect(alerts).toEqual([{ status: 401 }]);
+    expect(order).toEqual(['exhausted', 'release', 'exhausted']);
+    expect(store.unspent).toHaveLength(1);
+  });
+
+  it('defers 429 without spending an attempt and honours Retry-After', async () => {
+    const { poller, store, sender } = harness();
+    const previousAttemptAt = new Date(NOW.getTime() - 60_000);
+    store.claimResult = [
+      claimed({ attempts: 1, lastAttemptAt: previousAttemptAt }),
+    ];
+    sender.response = { status: 429, retryAfter: '30' };
+
+    const summary = await poller.runOnce();
+
+    expect(store.unspent).toEqual([
+      {
+        id: ROW_ID,
+        previousAttempts: 1,
+        previousAttemptAt,
+        retryAt: new Date(NOW.getTime() + 30_000),
+      },
+    ]);
+    expect(store.attempts).toEqual([]);
+    expect(summary.deferred).toBe(1);
+
+    await poller.runOnce();
+
+    expect(store.claims[1]?.now).toEqual(NOW);
+    expect(sender.sends).toHaveLength(1);
+  });
+
+  it('measures delta Retry-After from when the provider responds', async () => {
+    let currentTime = NOW;
+    const { poller, store, sender } = harness({ now: () => currentTime });
+    store.claimResult = [claimed()];
+    jest.spyOn(sender, 'send').mockImplementation(async () => {
+      currentTime = new Date(NOW.getTime() + 20_000);
+      return { status: 429, retryAfter: '30' };
+    });
+
+    await poller.runOnce();
+
+    expect(store.deferredUntil).toEqual([new Date(NOW.getTime() + 50_000)]);
+  });
+
+  it('accepts Retry-After HTTP dates and defaults for absent or invalid values', async () => {
+    const httpDate = harness();
+    httpDate.store.claimResult = [claimed()];
+    httpDate.sender.response = {
+      status: 429,
+      retryAfter: 'Mon, 05 Oct 2026 12:00:30 GMT',
+    };
+
+    await httpDate.poller.runOnce();
+
+    expect(httpDate.store.deferredUntil).toEqual([
+      new Date(NOW.getTime() + 30_000),
+    ]);
+
+    for (const retryAfter of [
+      'Monday, 05-Oct-26 12:00:30 GMT',
+      'Mon Oct  5 12:00:30 2026',
+    ]) {
+      const obsoleteHttpDate = harness();
+      obsoleteHttpDate.store.claimResult = [claimed()];
+      obsoleteHttpDate.sender.response = { status: 429, retryAfter };
+
+      await obsoleteHttpDate.poller.runOnce();
+
+      expect(obsoleteHttpDate.store.deferredUntil).toEqual([
+        new Date(NOW.getTime() + 30_000),
+      ]);
+    }
+
+    for (const retryAfter of [
+      undefined,
+      'not-a-date',
+      '10/05/2026 12:00:30 PM',
+      'Tue, 05 Oct 2026 12:00:30 GMT',
+    ]) {
+      const defaultDelay = harness();
+      defaultDelay.store.claimResult = [claimed()];
+      defaultDelay.sender.response = { status: 429, retryAfter };
+
+      await defaultDelay.poller.runOnce();
+
+      expect(defaultDelay.store.deferredUntil).toEqual([
+        new Date(NOW.getTime() + EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS),
+      ]);
+    }
+
+    const overFiftyYears = harness();
+    overFiftyYears.store.claimResult = [claimed()];
+    overFiftyYears.sender.response = {
+      status: 429,
+      retryAfter: 'Saturday, 23-Oct-76 12:00:30 GMT',
+    };
+    await overFiftyYears.poller.runOnce();
+    expect(overFiftyYears.store.deferredUntil).toEqual([NOW]);
+
+    const exactlyFiftyYears = harness();
+    exactlyFiftyYears.store.claimResult = [claimed()];
+    exactlyFiftyYears.sender.response = {
+      status: 429,
+      retryAfter: 'Monday, 05-Oct-76 12:00:00 GMT',
+    };
+    await exactlyFiftyYears.poller.runOnce();
+    expect(exactlyFiftyYears.store.deferredUntil).toEqual([
+      new Date('2076-10-05T12:00:00.000Z'),
+    ]);
+  });
+
+  it('clamps oversized numeric Retry-After values to the maximum date', async () => {
+    const { poller, store, sender } = harness();
+    store.claimResult = [claimed()];
+    sender.response = { status: 429, retryAfter: '9'.repeat(400) };
+
+    await poller.runOnce();
+
+    expect(store.deferredUntil).toEqual([new Date(8_640_000_000_000_000)]);
+  });
+
+  it('retries unclassified 4xx responses under the bounded default policy', async () => {
+    const { poller, store, sender } = harness();
+    store.claimResult = [claimed()];
+    sender.response = { status: 404, retryAfter: undefined };
+
+    await poller.runOnce();
+
+    expect(store.attempts).toEqual([
+      { id: ROW_ID, errorCode: 'provider_rejected' },
+    ]);
+    expect(store.failed).toEqual([]);
+  });
+
   it('gives up on the third attempt instead of scheduling a fourth', async () => {
     const { poller, store, sender } = harness();
     store.claimResult = [claimed({ attempts: 2 })];
@@ -324,6 +546,7 @@ describe('EmailDeliveryPoller', () => {
       async send() {
         call += 1;
         if (call === 1) throw new Error('Resend email delivery failed');
+        return { status: 202, retryAfter: undefined };
       },
     } as EmailSenderPort;
     const store = new FakeStore();

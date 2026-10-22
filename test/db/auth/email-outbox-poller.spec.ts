@@ -19,11 +19,12 @@ import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/
 import type {
   EmailDispatchOptions,
   EmailMessage,
+  EmailProviderResponse,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { reportTerminalEmailDeliveryFailure } from '@/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
-import { PostgresEmailDispatchStore } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { PostgresEmailDispatchStore } from '@/modules/auth/email-delivery/infrastructure/postgres-email-dispatch-store';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { PostgresEmailCredentialRepository } from '@/modules/auth/local-credentials/infrastructure/postgres-email-credential.repository';
 import {
@@ -299,9 +300,10 @@ class RecordingSender implements EmailSenderPort {
   async send(
     message: EmailMessage,
     options?: EmailDispatchOptions,
-  ): Promise<void> {
+  ): Promise<EmailProviderResponse> {
     this.sends.push({ message, idempotencyKey: options?.idempotencyKey });
     if (this.failure !== undefined) throw this.failure;
+    return { status: 202, retryAfter: undefined };
   }
 }
 
@@ -1129,6 +1131,7 @@ describe('email outbox dispatch poller', () => {
       const unreachable: EmailDispatchStorePort = {
         claim: (input) => store.claim(input),
         reserveAttempt: (input) => store.reserveAttempt(input),
+        releaseUnspentAttempt: (input) => store.releaseUnspentAttempt(input),
         markProviderAccepted: async () => {
           throw new Error('store is unavailable');
         },
@@ -1215,6 +1218,7 @@ describe('email outbox dispatch poller', () => {
       const sender: EmailSenderPort = {
         async send(message) {
           delivered.push(message);
+          return { status: 202, retryAfter: undefined };
         },
       };
 

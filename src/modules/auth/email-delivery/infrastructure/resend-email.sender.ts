@@ -1,6 +1,7 @@
 import type {
   EmailDispatchOptions,
   EmailMessage,
+  EmailProviderResponse,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from '@/modules/auth/email-delivery/application/email-sender.port';
@@ -9,7 +10,8 @@ import type { ResendRuntimeSecrets } from '@/modules/secrets/application/runtime
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 interface ResendResponse {
-  readonly ok: boolean;
+  readonly status: number;
+  readonly headers: Pick<Headers, 'get'>;
 }
 
 export type ResendFetch = (
@@ -44,7 +46,7 @@ export class ResendEmailSender implements EmailSenderPort {
   async send(
     message: EmailMessage,
     options?: EmailDispatchOptions,
-  ): Promise<void> {
+  ): Promise<EmailProviderResponse> {
     const response = await this.fetcher(RESEND_ENDPOINT, {
       method: 'POST',
       headers: this.headers(options),
@@ -58,8 +60,9 @@ export class ResendEmailSender implements EmailSenderPort {
       signal: AbortSignal.timeout(EMAIL_ATTEMPT_TIMEOUT_MS),
     });
 
-    if (!response.ok) {
-      throw new Error('Resend email delivery failed');
-    }
+    return {
+      status: response.status,
+      retryAfter: response.headers.get('retry-after') ?? undefined,
+    };
   }
 }

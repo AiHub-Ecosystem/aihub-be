@@ -13,6 +13,7 @@ import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastru
 import { EMAIL_PAYLOAD_CIPHER } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
+  type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
@@ -43,7 +44,9 @@ import {
 const PASSWORD = 'correct horse battery staple';
 
 class DiscardingSender implements EmailSenderPort {
-  async send(): Promise<void> {}
+  async send(): Promise<EmailProviderResponse> {
+    return { status: 202, retryAfter: undefined };
+  }
 }
 
 class RateLimiterFake implements AuthRateLimiterPort {

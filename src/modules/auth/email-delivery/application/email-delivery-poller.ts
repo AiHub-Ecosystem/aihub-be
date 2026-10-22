@@ -9,6 +9,7 @@ import type {
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
   EmailNoticeResolvers,
+  ReleaseUnspentEmailAttemptInput,
 } from './email-delivery-request.port';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
@@ -18,11 +19,16 @@ import {
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
+import { emailProviderRetryAfterMs } from './email-provider-retry-after.policy';
 import { emailDailySendBudgetCategory } from './email-send-daily-budget.policy';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type { EmailSendRateLimiterPort } from './email-send-rate-limiter.port';
 import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
-import type { EmailMessage, EmailSenderPort } from './email-sender.port';
+import type {
+  EmailMessage,
+  EmailProviderResponse,
+  EmailSenderPort,
+} from './email-sender.port';
 
 /**
  * A request gets this many provider attempts before it is given up on
@@ -103,6 +109,10 @@ export interface EmailDeliveryPollerOptions {
     readonly kind: EmailDeliveryKind;
     readonly errorCode: EmailDeliveryErrorCode;
   }) => void;
+  /** One safe signal per credential outage, reset by the next accepted send. */
+  readonly onProviderConfigurationFailure?: (failure: {
+    readonly status: 401 | 403;
+  }) => void;
   /** Runtime dispatch supplies the shared durable account budget. */
   readonly dailySendBudget?: EmailDailySendBudgetPort;
 }
@@ -117,9 +127,8 @@ function isTimeout(error: unknown): boolean {
 }
 
 /**
- * Only two outcomes are worth keeping: the attempt ran out of time, or the
- * provider declined it. Anything the provider said about itself stays in the
- * provider, and the table admits no third code.
+ * Transport errors get one bounded code. HTTP rejection classes are mapped
+ * from response metadata separately; provider details stay in the adapter.
  */
 function errorCodeOf(error: unknown): EmailDeliveryErrorCode {
   return isTimeout(error) ? 'timeout' : 'provider_rejected';
@@ -176,6 +185,13 @@ export class EmailDeliveryPoller {
 
   private readonly batchSize: number;
   private readonly leaseMs: number;
+  private providerPausedUntil = 0;
+  private providerConfigurationAlerted = false;
+  // shortcut: retries survive only this process, durable recovery needs an attempt-outcome journal.
+  private readonly pendingUnspentAttempts = new Map<
+    string,
+    ReleaseUnspentEmailAttemptInput
+  >();
 
   constructor(
     private readonly store: EmailDispatchStorePort,
@@ -194,33 +210,58 @@ export class EmailDeliveryPoller {
 
   async runOnce(): Promise<EmailDispatchSummary> {
     const stale = await this.cancelStaleRequests();
-    const exhausted = await this.failExhaustedRequests();
-    const claimed = await this.store.claim({
-      owner: this.options.owner,
-      limit: this.batchSize,
-      leaseMs: this.leaseMs,
-      now: this.now(),
-    });
+    for (const id of stale) this.pendingUnspentAttempts.delete(id);
+    await this.retryPendingUnspentAttempts();
+    const exhausted =
+      this.pendingUnspentAttempts.size === 0
+        ? await this.failExhaustedRequests()
+        : 0;
+    const claimAt = this.now();
+    const claimed =
+      this.pendingUnspentAttempts.size > 0 ||
+      claimAt.getTime() < this.providerPausedUntil
+        ? []
+        : await this.store.claim({
+            owner: this.options.owner,
+            limit: this.batchSize,
+            leaseMs: this.leaseMs,
+            now: claimAt,
+          });
 
     const summary = {
       claimed: claimed.length,
       providerAccepted: 0,
-      cancelled: stale,
+      cancelled: stale.length,
       failed: exhausted,
       deferred: 0,
     };
+    let pauseBatch = false;
     for (const request of claimed) {
+      if (pauseBatch) {
+        try {
+          await this.defer(request, this.now(), DEFER_RETRY_MS);
+          summary.deferred += 1;
+        } catch {
+          // Its lease lapses if the store cannot hand it back.
+        }
+        continue;
+      }
       try {
         const outcome = await this.dispatch(request);
         if (outcome === 'provider_accepted') summary.providerAccepted += 1;
         if (outcome === 'cancelled') summary.cancelled += 1;
         if (outcome === 'failed') summary.failed += 1;
         if (outcome === 'deferred') summary.deferred += 1;
+        if (outcome === 'configuration_failure') {
+          summary.deferred += 1;
+          pauseBatch = true;
+        }
       } catch {
         // The store is unreachable, or a transition lost a race with another
         // instance. The row keeps its lease and its payload, so the next pass
         // picks it up again; swallowing here is what keeps one bad row from
         // stranding the rest of the batch.
+        if (this.now().getTime() < this.providerPausedUntil) pauseBatch = true;
       }
     }
     await this.reportUnreportedFailures();
@@ -233,9 +274,9 @@ export class EmailDeliveryPoller {
    * dispatched — one sealed under a key version no instance holds, or one whose
    * credential check keeps failing — so its payload is still erased.
    */
-  private async cancelStaleRequests(): Promise<number> {
+  private async cancelStaleRequests(): Promise<string[]> {
     const now = this.now();
-    let total = 0;
+    const cancelledIds: string[] = [];
     for (const cutoff of STALE_CUTOFFS) {
       try {
         const cancelled = await this.store.cancelStale({
@@ -243,12 +284,12 @@ export class EmailDeliveryPoller {
           createdAtOrBefore: new Date(now.getTime() - cutoff.ageMs),
           kinds: cutoff.kinds,
         });
-        total += cancelled.length;
+        cancelledIds.push(...cancelled.map(({ id }) => id));
       } catch {
         // The next pass retries; a stale row stays unsendable either way.
       }
     }
-    return total;
+    return cancelledIds;
   }
 
   /**
@@ -337,7 +378,12 @@ export class EmailDeliveryPoller {
   private async dispatch(
     request: EmailDeliveryRequestRecord,
   ): Promise<
-    'provider_accepted' | 'cancelled' | 'failed' | 'retried' | 'deferred'
+    | 'provider_accepted'
+    | 'cancelled'
+    | 'failed'
+    | 'retried'
+    | 'deferred'
+    | 'configuration_failure'
   > {
     const now = this.now();
     let delivery: ValidatedEmailDelivery | undefined;
@@ -439,10 +485,48 @@ export class EmailDeliveryPoller {
       owner: this.options.owner,
     });
 
+    let response: EmailProviderResponse;
     try {
-      await this.deliver(request, message);
+      response = await this.deliver(request, message);
     } catch (error) {
       return this.recordFailure(request, errorCodeOf(error), now);
+    }
+
+    const responseReceivedAt = this.now();
+
+    if (response.status === 401 || response.status === 403) {
+      this.providerPausedUntil = responseReceivedAt.getTime() + DEFER_RETRY_MS;
+      this.reportProviderConfigurationFailure(response.status);
+      await this.releaseUnspentAttempt(
+        request,
+        new Date(this.providerPausedUntil),
+      );
+      return 'configuration_failure';
+    }
+
+    if (response.status === 429) {
+      await this.releaseUnspentAttempt(
+        request,
+        new Date(
+          responseReceivedAt.getTime() +
+            emailProviderRetryAfterMs(response.retryAfter, responseReceivedAt),
+        ),
+      );
+      return 'deferred';
+    }
+
+    if (response.status === 400 || response.status === 422) {
+      await this.store.markFailed({
+        id: request.id,
+        failedAt: now,
+        errorCode: 'provider_permanent_rejection',
+        owner: this.options.owner,
+      });
+      return 'failed';
+    }
+
+    if (response.status < 200 || response.status >= 300) {
+      return this.recordFailure(request, 'provider_rejected', now);
     }
 
     await this.store.markProviderAccepted({
@@ -450,6 +534,7 @@ export class EmailDeliveryPoller {
       attemptedAt: now,
       owner: this.options.owner,
     });
+    this.providerConfigurationAlerted = false;
     return 'provider_accepted';
   }
 
@@ -495,11 +580,50 @@ export class EmailDeliveryPoller {
   private async deliver(
     request: EmailDeliveryRequestRecord,
     message: EmailMessage,
-  ): Promise<void> {
+  ): Promise<EmailProviderResponse> {
     // The row's own id is the provider idempotency key: it is already unique,
     // already durable, and already what every attempt of this request has
     // used, so an uncertain handoff can be retried without a second email.
-    await this.sender.send(message, { idempotencyKey: request.id });
+    return this.sender.send(message, { idempotencyKey: request.id });
+  }
+
+  private async releaseUnspentAttempt(
+    request: EmailDeliveryRequestRecord,
+    retryAt: Date,
+  ): Promise<void> {
+    const input = {
+      id: request.id,
+      owner: this.options.owner,
+      previousAttempts: request.attempts,
+      previousAttemptAt: request.lastAttemptAt,
+      retryAt,
+    };
+    this.pendingUnspentAttempts.set(request.id, input);
+    await this.store.releaseUnspentAttempt(input);
+    this.pendingUnspentAttempts.delete(request.id);
+  }
+
+  private async retryPendingUnspentAttempts(): Promise<void> {
+    for (const [id, input] of this.pendingUnspentAttempts) {
+      try {
+        await this.store.releaseUnspentAttempt(input);
+        this.pendingUnspentAttempts.delete(id);
+      } catch {
+        // Keep the known non-consuming outcome ahead of the exhausted sweep.
+      }
+    }
+  }
+
+  private reportProviderConfigurationFailure(status: 401 | 403): void {
+    if (this.providerConfigurationAlerted) return;
+    try {
+      this.options.onProviderConfigurationFailure?.({ status });
+      if (this.options.onProviderConfigurationFailure !== undefined) {
+        this.providerConfigurationAlerted = true;
+      }
+    } catch {
+      // A failed alert callback does not turn a held request into a delivery attempt.
+    }
   }
 
   /**

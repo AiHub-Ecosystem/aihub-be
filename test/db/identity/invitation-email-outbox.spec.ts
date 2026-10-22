@@ -14,6 +14,7 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
+  type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
@@ -86,8 +87,9 @@ class SwitchableIdentityClient {
 class RecordingSender implements EmailSenderPort {
   calls: string[] = [];
 
-  async send(): Promise<void> {
+  async send(): Promise<EmailProviderResponse> {
     this.calls.push('send');
+    return { status: 202, retryAfter: undefined };
   }
 }
 

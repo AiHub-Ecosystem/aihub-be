@@ -11,6 +11,7 @@ import type {
   EmailDispatchStorePort,
   EmailNoticeResolvers,
   EmailPayloadCipherPort,
+  ReleaseUnspentEmailAttemptInput,
 } from './email-delivery-request.port';
 import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
 import type {
@@ -20,6 +21,7 @@ import type {
 import type {
   EmailDispatchOptions,
   EmailMessage,
+  EmailProviderResponse,
   EmailSenderPort,
 } from './email-sender.port';
 
@@ -42,6 +44,10 @@ export class FakeStore implements EmailDispatchStorePort {
   failed: { id: string; errorCode: string }[] = [];
   attempts: { id: string; errorCode: string }[] = [];
   reserved: string[] = [];
+  unspent: Pick<
+    ReleaseUnspentEmailAttemptInput,
+    'id' | 'previousAttempts' | 'previousAttemptAt' | 'retryAt'
+  >[] = [];
   deferred: string[] = [];
   unreported: EmailDeliveryRequestRecord[] = [];
   exhausted: EmailDeliveryRequestRecord[] = [];
@@ -54,7 +60,12 @@ export class FakeStore implements EmailDispatchStorePort {
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     this.claims.push(input);
-    return this.claimResult;
+    return this.claimResult.filter((request) => {
+      const deferredAt = this.deferred.lastIndexOf(request.id);
+      const retryAt =
+        deferredAt < 0 ? undefined : this.deferredUntil[deferredAt];
+      return retryAt === undefined || retryAt.getTime() <= input.now.getTime();
+    });
   }
 
   async markProviderAccepted(input: { id: string }): Promise<void> {
@@ -92,6 +103,19 @@ export class FakeStore implements EmailDispatchStorePort {
 
   async reserveAttempt(input: { id: string }): Promise<void> {
     this.reserved.push(input.id);
+  }
+
+  async releaseUnspentAttempt(
+    input: ReleaseUnspentEmailAttemptInput,
+  ): Promise<void> {
+    this.unspent.push({
+      id: input.id,
+      previousAttempts: input.previousAttempts,
+      previousAttemptAt: input.previousAttemptAt,
+      retryAt: input.retryAt,
+    });
+    this.deferred.push(input.id);
+    this.deferredUntil.push(input.retryAt);
   }
 
   deferredUntil: Date[] = [];
@@ -162,13 +186,18 @@ export interface RecordedSend {
 export class RecordingSender implements EmailSenderPort {
   sends: RecordedSend[] = [];
   failure: Error | undefined;
+  response: EmailProviderResponse = {
+    status: 202,
+    retryAfter: undefined,
+  };
 
   async send(
     message: EmailMessage,
     options?: EmailDispatchOptions,
-  ): Promise<void> {
+  ): Promise<EmailProviderResponse> {
     this.sends.push({ message, idempotencyKey: options?.idempotencyKey });
     if (this.failure !== undefined) throw this.failure;
+    return this.response;
   }
 }
 
@@ -238,11 +267,15 @@ export function harness(
     };
     rateLimiter?: FakeEmailSendRateLimiter;
     dailySendBudget?: EmailDailySendBudgetPort;
+    now?: () => Date;
     notices?: EmailNoticeResolvers;
     onTerminalFailure?: (failure: {
       readonly id: string;
       readonly kind: EmailDeliveryKind;
       readonly errorCode: string;
+    }) => void;
+    onProviderConfigurationFailure?: (failure: {
+      readonly status: number;
     }) => void;
   } = {},
 ): {
@@ -270,7 +303,7 @@ export function harness(
     sealed(options.payload ?? VERIFICATION_PAYLOAD),
     sender,
     rateLimiter,
-    (): Date => NOW,
+    options.now ?? ((): Date => NOW),
     { hash: () => TOKEN_HASH },
     {
       owner: 'instance-a',
@@ -278,6 +311,12 @@ export function harness(
       ...(options.onTerminalFailure === undefined
         ? {}
         : { onTerminalFailure: options.onTerminalFailure }),
+      ...(options.onProviderConfigurationFailure === undefined
+        ? {}
+        : {
+            onProviderConfigurationFailure:
+              options.onProviderConfigurationFailure,
+          }),
       ...(options.dailySendBudget === undefined
         ? {}
         : { dailySendBudget: options.dailySendBudget }),

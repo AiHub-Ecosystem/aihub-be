@@ -10,7 +10,6 @@ import type {
   EmailDeliveryRequestRecord,
   EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
-  EmailDispatchStorePort,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
@@ -39,7 +38,6 @@ import {
 } from '@/modules/auth/shared/infrastructure/auth-row';
 import { claimEmailDeliveryRequests } from './email-delivery-claim';
 import { CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL } from './email-delivery-stale-cancellation';
-import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';
 
 /**
  * A request that spent its last attempt but whose outcome was never written:
@@ -717,120 +715,5 @@ export class PostgresEmailDeliveryRequestRepository
       throw storeError('Email delivery request is unavailable');
     }
     return toRecord(row);
-  }
-}
-
-/**
- * Claims run in a short transaction; dispatch runs outside it, so no database
- * connection is held while a provider call is in flight.
- */
-export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
-  constructor(
-    private readonly client: Parameters<typeof claimEmailDeliveryRequests>[0],
-    private readonly requests: PostgresEmailDeliveryRequestRepository = new PostgresEmailDeliveryRequestRepository(),
-  ) {}
-
-  claim(
-    input: ClaimEmailDeliveryRequestsInput,
-  ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    return this.requests.claim(this.client, input);
-  }
-
-  async markProviderAccepted(input: {
-    readonly id: string;
-    readonly attemptedAt: Date;
-    readonly owner: string;
-  }): Promise<void> {
-    await this.requests.markProviderAccepted(this.client, input);
-  }
-
-  async markFailed(input: {
-    readonly id: string;
-    readonly failedAt: Date;
-    readonly errorCode: EmailDeliveryErrorCode;
-    readonly owner: string;
-  }): Promise<void> {
-    await this.requests.markFailed(this.client, input);
-  }
-
-  async failExhausted(input: {
-    readonly at: Date;
-  }): Promise<readonly EmailDeliveryRequestRecord[]> {
-    return this.requests.failExhausted(this.client, input);
-  }
-
-  async markCancelled(input: {
-    readonly id: string;
-    readonly cancelledAt: Date;
-    readonly reason: EmailDeliveryCancelReason;
-    readonly owner: string;
-  }): Promise<void> {
-    await this.requests.markCancelled(this.client, input);
-  }
-
-  async recordFailedAttempt(input: {
-    readonly id: string;
-    readonly attemptedAt: Date;
-    readonly errorCode: EmailDeliveryErrorCode;
-    readonly owner: string;
-  }): Promise<void> {
-    await this.requests.recordFailedAttempt(this.client, input);
-  }
-
-  async reserveAttempt(input: {
-    readonly id: string;
-    readonly attemptedAt: Date;
-    readonly owner: string;
-  }): Promise<void> {
-    await this.requests.reserveAttempt(this.client, input);
-  }
-
-  async releaseDeferred(input: {
-    readonly id: string;
-    readonly owner: string;
-    readonly retryAt: Date;
-  }): Promise<void> {
-    await this.requests.releaseDeferred(this.client, input);
-  }
-
-  cancelStale(
-    input: CancelStaleEmailDeliveryRequestsInput,
-  ): Promise<readonly EmailDeliveryRequestRecord[]> {
-    return this.requests.cancelStale(this.client, input);
-  }
-
-  /** Not part of the dispatch port: only the backlog metrics read it. */
-  backlog(input: {
-    readonly now: Date;
-  }): Promise<readonly EmailDeliveryBacklogRow[]> {
-    return this.requests.backlog(this.client, input);
-  }
-
-  /** Durable bounded cancellation samples for alerting. */
-  cancellationTimestamps(): ReturnType<
-    typeof readEmailOutboxCancellationTimestamps
-  > {
-    return readEmailOutboxCancellationTimestamps(this.client);
-  }
-
-  claimUnreportedFailures(input: {
-    readonly limit: number;
-    readonly now: Date;
-    readonly leaseMs: number;
-  }): Promise<readonly EmailDeliveryRequestRecord[]> {
-    return this.requests.claimUnreportedFailures(this.client, input);
-  }
-
-  async markFailureReported(input: {
-    readonly id: string;
-    readonly reportedAt: Date;
-  }): Promise<void> {
-    await this.requests.markFailureReported(this.client, input);
-  }
-
-  async releaseFailureNotification(input: {
-    readonly id: string;
-  }): Promise<void> {
-    await this.requests.releaseFailureNotification(this.client, input);
   }
 }

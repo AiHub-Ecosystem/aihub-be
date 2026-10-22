@@ -8,6 +8,7 @@ import { AppModule } from '@/app.module';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_SENDER,
+  type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
@@ -53,7 +54,10 @@ describe('Organization invitation acceptance HTTP flow', () => {
       })),
     };
     const emailSender: EmailSenderPort = {
-      send: async () => undefined,
+      send: async (): Promise<EmailProviderResponse> => ({
+        status: 202,
+        retryAfter: undefined,
+      }),
     };
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {

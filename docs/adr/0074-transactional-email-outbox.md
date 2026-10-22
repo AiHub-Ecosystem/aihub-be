@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for requests without a credential amended by [ADR-0120](0120-notification-event-catalog.md)
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for requests without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)
@@ -20,6 +20,20 @@ Registration and invitation creation keep their `201` success status and add `em
 An Email Delivery Request is `queued` after durable acceptance, `provider_accepted` after the email provider accepts the API request, `failed` after bounded attempts stop without provider acceptance, or `cancelled` when its credential is superseded, expired, revoked, or otherwise no longer actionable before provider handoff. `provider_accepted` does not mean inbox delivery. The worker checks that the credential is still actionable before dispatch. Cancellations for superseded, revoked, and other non-expiry reasons are expected lifecycle handling and do not page; [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md) adds an alert for queued credentials cancelled as `credential_expired`.
 
 Each attempt has an explicit five-second timeout. A request receives at most three attempts total, with retries after one minute and five minutes, and no attempt runs after the token expires. A stable Resend `Idempotency-Key` is used for each outbox item so an uncertain timeout can be retried without sending the same email twice; Resend documents 24-hour key retention, which exceeds this retry window ([Resend documentation](https://resend.com/changelog/idempotency-keys)).
+
+The Resend adapter passes only the HTTP status and `Retry-After` header to the
+poller; it never reads or retains a response body. Responses `400` and `422`
+fail the request immediately with `provider_permanent_rejection`, and the
+existing durable terminal-failure notification reports that failure once.
+Responses `401` and `403` do not consume an attempt: the poller restores the
+previous attempt count and timestamp, defers the request for five minutes, and
+pauses the rest of its claimed batch and subsequent passes for that interval.
+It emits one bounded credential-configuration alert per poller until a send is
+accepted. Response `429` also does not consume an attempt and is deferred for
+the provider's `Retry-After` delta-seconds or HTTP date, with a 60-second default
+when the header is absent or invalid. Other non-success statuses, including
+unclassified `4xx`, use the existing bounded retry policy and
+`provider_rejected` code.
 
 Each existing application instance runs the poller against its own environment database (Production or Sandbox). PostgreSQL claims use `FOR UPDATE SKIP LOCKED` plus a lease to coordinate concurrent instances; the stable provider idempotency key covers retries after an uncertain handoff. No separate worker container is added. On provider acceptance, retry exhaustion, or cancellation, the encrypted message payload is erased while delivery state and attempt evidence remain available for operations. Terminal `failed` items produce a safe structured event and metric and trigger an alert; logs contain no email address, token, message body, or raw provider response. Cancellations remain routine except when a queued credential expires before dispatch; [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md) adds a bounded alert signal for `credential_expired`.
 
