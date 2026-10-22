@@ -557,6 +557,7 @@ jobs:
         env:
           AIHUB_EMAIL_SEND_RATE_LIMIT: "1"
           AIHUB_EMAIL_SEND_RATE_DURATION_MS: "1000"
+          AIHUB_EMAIL_DAILY_SEND_BUDGET: "80"
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
@@ -566,6 +567,7 @@ jobs:
         env:
           AIHUB_EMAIL_SEND_RATE_LIMIT: "1"
           AIHUB_EMAIL_SEND_RATE_DURATION_MS: "1000"
+          AIHUB_EMAIL_DAILY_SEND_BUDGET: "80"
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
