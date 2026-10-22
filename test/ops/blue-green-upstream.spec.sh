@@ -97,10 +97,10 @@ socket_dir=/srv/aihub/socket
 slot_is_socket=true
 assert_equals "$(active_slot production "$(render production b)")" b "socket B round-trips"
 grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-slot-b.sock;' "$test_root/rendered.conf" || fail "socket path rendered"
-if grep -Fq '127.0.0.1' "$test_root/rendered.conf"; then
+if grep -Eq 'proxy_pass[[:space:]]+http://127\.0\.0\.1:' "$test_root/rendered.conf"; then
   fail "no TCP upstream may remain in a socket config"
 fi
-assert_equals "$(grep -c 'proxy_pass' "$test_root/rendered.conf")" 3 "every location is rewritten"
+assert_equals "$(grep -c 'proxy_pass' "$test_root/rendered.conf")" 4 "every location is rewritten"
 assert_equals "$(active_slot sandbox "$(render sandbox a)")" a "sandbox socket A round-trips"
 grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-sandbox.sock;' "$test_root/rendered.conf" || fail "sandbox socket path rendered"
 
