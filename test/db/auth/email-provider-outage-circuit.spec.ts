@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+
 import {
   EMAIL_PROVIDER_OUTAGE_STATE_KEY,
   RedisEmailSendRateLimiter,
@@ -13,7 +15,11 @@ describe('shared email provider outage circuit in Redis', () => {
   beforeAll(async () => {
     redisA = createSandboxTestRedis();
     redisB = createSandboxTestRedis();
-    await Promise.all([redisA.ping(), redisB.ping()]);
+    await Promise.all(
+      [redisA, redisB].map(async (redis) => {
+        if (redis.status !== 'ready') await once(redis, 'ready');
+      }),
+    );
     circuitA = new RedisEmailSendRateLimiter('', 1, 1_000, redisA, () => 0);
     circuitB = new RedisEmailSendRateLimiter('', 1, 1_000, redisB, () => 0);
   });
