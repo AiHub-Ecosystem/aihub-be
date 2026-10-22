@@ -286,19 +286,19 @@ actionable credential is retried at its expiry so the normal cancellation path
 can erase it.
 
 Resend's [published Free plan](https://resend.com/pricing) currently lists
-100 emails per day and 3,000 per month. The example local budget of 80 leaves
-20% daily headroom and stays below that public monthly ceiling over 31 days.
-These published figures do not prove
-the AIHUB account's current plan or remaining quota. Before production rollout,
-check emails.daily.limit and emails.monthly.limit in the
-[Account Usage API](https://resend.com/changelog/account-usage-api), record the
-account values and date below, and set the same cap in both deployments below
-the verified daily and monthly limits. Do not enable dispatch with a pending
+100 emails per day and 3,000 per month. On 2026-10-22, the authenticated
+Production Resend credential returned those daily and monthly limits from the
+[Account Usage API](https://resend.com/changelog/account-usage-api). The
+selected budget of 80 leaves 20% daily headroom and stays below the monthly
+limit over 31 days. Before production rollout, check
+`emails.daily.limit` and `emails.monthly.limit` for the account, record the
+values and date below, and set the same cap in both deployments below the
+verified daily and monthly limits. Do not enable dispatch with a pending
 account check.
 
-| Resend account daily limit                                | Resend account monthly limit                                | Configured daily budget                                                            | Checked on                                               |
-| --------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Pending account Usage API check; published Free plan: 100 | Pending account Usage API check; published Free plan: 3,000 | 80 for the published Free-plan baseline; verify against the account before rollout | Public pricing checked 2026-10-22; account check pending |
+| Resend account daily limit | Resend account monthly limit | Selected daily budget                | Checked on |
+| -------------------------- | ---------------------------- | ------------------------------------ | ---------- |
+| 100                        | 3,000                        | 80 (at most 2,480 in a 31-day month) | 2026-10-22 |
 
 The AIHUBEmailDailySendBudgetNearLimit alert fires at 80% of the configured
 budget. That matches the invitation cutoff, so an operator is alerted when
