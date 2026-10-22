@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+
 import {
   EMAIL_SEND_RATE_RESERVATION_KEY,
   RedisEmailSendRateLimiter,
@@ -23,13 +25,10 @@ describe('shared email send rate limiter', () => {
     secondRedis,
   );
 
-  // The offline queue is off, so a command sent before the connection is up fails.
   beforeAll(async () => {
     await Promise.all(
       [firstRedis, secondRedis].map(async (redis) => {
-        if (redis.status !== 'ready') {
-          await new Promise((resolve) => redis.once('ready', resolve));
-        }
+        if (redis.status !== 'ready') await once(redis, 'ready');
       }),
     );
   });
@@ -39,9 +38,12 @@ describe('shared email send rate limiter', () => {
   });
 
   afterAll(async () => {
-    await firstRedis.del(EMAIL_SEND_RATE_RESERVATION_KEY);
-    first.onModuleDestroy();
-    second.onModuleDestroy();
+    try {
+      await firstRedis.del(EMAIL_SEND_RATE_RESERVATION_KEY);
+    } finally {
+      first.onModuleDestroy();
+      second.onModuleDestroy();
+    }
   });
 
   it('shares one no-burst reservation across two independent Redis clients', async () => {
