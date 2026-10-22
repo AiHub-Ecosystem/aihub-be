@@ -23,6 +23,17 @@ describe('shared email send rate limiter', () => {
     secondRedis,
   );
 
+  // The offline queue is off, so a command sent before the connection is up fails.
+  beforeAll(async () => {
+    await Promise.all(
+      [firstRedis, secondRedis].map(async (redis) => {
+        if (redis.status !== 'ready') {
+          await new Promise((resolve) => redis.once('ready', resolve));
+        }
+      }),
+    );
+  });
+
   beforeEach(async () => {
     await firstRedis.del(EMAIL_SEND_RATE_RESERVATION_KEY);
   });
