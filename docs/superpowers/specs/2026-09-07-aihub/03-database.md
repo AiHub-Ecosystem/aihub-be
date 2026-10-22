@@ -156,13 +156,13 @@ ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
 RETURNING request_id;
 ```
 
-| Result                          | Handling                                                                                              |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Returns row (`RETURNING`)       | We are the first requester → proceed with execution                                                   |
-| No row, different `fingerprint` | `409 IDEMPOTENCY_CONFLICT`                                                                            |
-| No row, `state=completed`       | Replay stored `response_body` with header `Idempotent-Replay: true`                                   |
-| No row, `state=pending`         | `409` (in progress). **Do not block/wait** — waiting holds connections and risks cascading starvation |
-| No row, `state=failed`          | Permit retry                                                                                          |
+| Result                          | Handling                                                                                                                                           |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Returns row (`RETURNING`)       | We are the first requester → proceed with execution                                                                                                |
+| No row, different `fingerprint` | `409 IDEMPOTENCY_CONFLICT`                                                                                                                         |
+| No row, `state=completed`       | Replay stored `response_body` with header `Idempotent-Replay: true`                                                                                |
+| No row, `state=pending`         | `409` (in progress), retryable with a jittered 2–3 s hint (#403). **Do not block/wait** — waiting holds connections and risks cascading starvation |
+| No row, `state=failed`          | Permit retry                                                                                                                                       |
 
 Postgres primary keys resolve races natively. **No Redis lock, no Redlock.**
 

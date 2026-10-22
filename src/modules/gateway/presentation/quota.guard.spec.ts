@@ -6,7 +6,7 @@ import {
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
 import { QUOTA_ROLLOVER_SPREAD_MS } from '@/modules/gateway/application/quota-period';
-import { stableOffsetMs } from '@/modules/gateway/application/retry-hint';
+import { stableOffsetMs } from '@/modules/gateway/application/stable-offset';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {

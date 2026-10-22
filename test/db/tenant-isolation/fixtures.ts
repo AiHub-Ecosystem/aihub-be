@@ -11,7 +11,7 @@ import { ulid } from 'ulid';
 
 import {
   type RedisGatewayClient,
-  numbers,
+  integerArrayReply,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
@@ -138,7 +138,7 @@ export function createTenantIsolationRedisClients(): TenantIsolationRedisClients
       return result;
     },
     evalNumbers: async (script, numberOfKeys, ...args) =>
-      numbers(await raw.eval(script, numberOfKeys, ...args)),
+      integerArrayReply(await raw.eval(script, numberOfKeys, ...args)),
     zrem: (key, member) => raw.zrem(key, member),
     quit: () => raw.quit(),
   };

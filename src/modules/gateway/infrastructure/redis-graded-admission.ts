@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   GradedAdmissionDecision,
@@ -12,12 +13,17 @@ import type {
 import { quotaUnverifiableError } from '@/modules/gateway/application/quota-admission';
 import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
-import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
-import type { RateLimitStanding } from '@/modules/gateway/application/rate-limiter.port';
-import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
+import {
+  rateLimitStanding,
+  rateLimitWindow,
+} from '@/modules/gateway/application/rate-limit-window';
 import type { RedisGatewayClient } from './redis-gateway.client';
-import { ORGANIZATION_RETRY_SEEN_CAP } from './redis-organization-retry-budget';
+import {
+  ORGANIZATION_RETRY_SEEN_CAP,
+  RETRY_BUDGET_WINDOW_MS,
+} from './redis-organization-retry-budget';
 import { quotaKeyForMonth } from './redis-quota-counter';
+import { rateLimitKey } from './redis-rate-limiter';
 
 const QUOTA_COUNTER_MISSING = 5;
 const UNAVAILABLE_RETRY_AFTER_MS = 1_000;
@@ -130,13 +136,9 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
     const now = this.now();
     const window = rateLimitWindow(request.apiKeyId, now);
     const quota = request.monthlyRequestQuota;
-    let [result, rateCount] = await this.evaluate(
-      client,
-      request,
-      window.index,
-      now,
-      quota,
-    );
+    const evaluate = (checkedQuota: number | null) =>
+      this.evaluate(client, request, window.index, now, checkedQuota);
+    let [result, rateCount] = await evaluate(quota);
     let quotaUnverified = false;
     // The script stops before any write when the quota counter is missing,
     // so it can run again once the counter is rebuilt (#371).
@@ -146,36 +148,20 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
           throw new Error('No quota counter source is configured');
         }
         await this.seeder.seed(request.organizationId, new Date(now));
-        [result, rateCount] = await this.evaluate(
-          client,
-          request,
-          window.index,
-          now,
-          quota,
-        );
+        [result, rateCount] = await evaluate(quota);
         if (result === QUOTA_COUNTER_MISSING) {
           throw new Error('Redis quota counter is missing');
         }
       } catch (cause) {
         if (cause instanceof AppError) throw cause;
         if (request.hardStopOnQuota) throw quotaUnverifiableError();
-        [result, rateCount] = await this.evaluate(
-          client,
-          request,
-          window.index,
-          now,
-          null,
-        );
+        [result, rateCount] = await evaluate(null);
         quotaUnverified = true;
       }
     }
 
     this.reportRecovered();
-    const rate: RateLimitStanding = {
-      limit: request.rateLimitRpm,
-      remaining: Math.max(0, request.rateLimitRpm - rateCount),
-      resetInMs: window.resetInMs,
-    };
+    const rate = rateLimitStanding(request.rateLimitRpm, rateCount, window);
     switch (result) {
       case 0:
         return quotaUnverified
@@ -190,7 +176,10 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
       case 2:
         return {
           stage: 'retry_budget',
-          retryAfterMs: jitteredRetryAfterMs(60_000, this.random),
+          retryAfterMs: jitteredRetryAfterMs(
+            RETRY_BUDGET_WINDOW_MS,
+            this.random,
+          ),
           rate,
         };
       case 3:
@@ -222,7 +211,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
       reply = await client.evalNumbers(
         GRADED_ADMISSION_SCRIPT,
         5,
-        `aihub:v1:rl:${request.apiKeyId}:${window}`,
+        rateLimitKey(request.apiKeyId, window),
         `${retryPrefix}:first`,
         `${retryPrefix}:repeats`,
         `${retryPrefix}:seen`,

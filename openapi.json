@@ -70,15 +70,6 @@
     "responses": {
       "Error400": {
         "description": "INVALID_REQUEST | IDENTITY_JWKS_URL_UNSAFE | IDENTITY_JWKS_INVALID | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID | ORGANIZATION_INVITE_TOKEN_INVALID",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -146,15 +137,6 @@
       },
       "Error401": {
         "description": "UNAUTHORIZED | USER_IDENTITY_REQUIRED | INVALID_USER_IDENTITY | AUTH_CREDENTIALS_INVALID | AUTH_REFRESH_TOKEN_INVALID | AUTH_USER_ACCESS_TOKEN_REQUIRED | AUTH_USER_ACCESS_TOKEN_INVALID | AUTH_WEB_SESSION_INVALID",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -230,15 +212,6 @@
       },
       "Error403": {
         "description": "FORBIDDEN | ENVIRONMENT_NOT_ALLOWED",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -290,15 +263,6 @@
       },
       "Error404": {
         "description": "NOT_FOUND",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -426,15 +390,6 @@
       },
       "Error413": {
         "description": "PAYLOAD_TOO_LARGE",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -478,15 +433,6 @@
       },
       "Error422": {
         "description": "AUDIO_UNREADABLE",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -536,6 +482,18 @@
             "schema": {
               "type": "string",
               "pattern": "^[0-9]+$"
+            }
+          },
+          "RateLimit-Policy": {
+            "description": "Advisory. The per-minute limit of the API key, for example `\"per-key\";q=600;w=60`. Present on routes the per-key limit applies to.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "RateLimit": {
+            "description": "Advisory. What the API key has left of its current window and the whole seconds until it resets, for example `\"per-key\";r=0;t=13`.",
+            "schema": {
+              "type": "string"
             }
           }
         },
@@ -594,15 +552,6 @@
       },
       "Error500": {
         "description": "INTERNAL_ERROR",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -646,15 +595,6 @@
       },
       "Error502": {
         "description": "AI_SERVICE_CONTRACT_VIOLATION | AI_SERVICE_ERROR",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
@@ -810,15 +750,6 @@
       },
       "Error504": {
         "description": "AI_SERVICE_TIMEOUT",
-        "headers": {
-          "Retry-After": {
-            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {

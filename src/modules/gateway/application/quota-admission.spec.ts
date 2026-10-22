@@ -2,7 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import { admitMonthlyQuota } from './quota-admission';
 import type { QuotaCounterPort } from './quota-counter.port';
 import { QUOTA_ROLLOVER_SPREAD_MS } from './quota-period';
-import { stableOffsetMs } from './retry-hint';
+import { stableOffsetMs } from './stable-offset';
 
 const now = () => new Date('2026-09-16T12:00:00.000Z');
 

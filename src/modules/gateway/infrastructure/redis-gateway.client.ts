@@ -28,7 +28,8 @@ export interface RedisGatewayClient {
 
 export const REDIS_GATEWAY_CLIENT = Symbol('REDIS_GATEWAY_CLIENT');
 
-export function numbers(result: unknown): readonly number[] {
+/** An `EVAL` reply that must be an array of integers; anything else throws. */
+export function integerArrayReply(result: unknown): readonly number[] {
   if (
     !Array.isArray(result) ||
     !result.every((item): item is number => typeof item === 'number')
@@ -84,7 +85,9 @@ class IoredisGatewayClient implements RedisGatewayClient {
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<readonly number[]> {
-    return this.client.eval(script, numberOfKeys, ...args).then(numbers);
+    return this.client
+      .eval(script, numberOfKeys, ...args)
+      .then(integerArrayReply);
   }
 
   zrem(key: string, member: string): Promise<number> {

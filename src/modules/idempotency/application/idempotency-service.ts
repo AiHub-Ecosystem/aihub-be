@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   type IdempotencyFingerprintInput,
   createIdempotencyFingerprint,
@@ -41,12 +42,28 @@ function isOptionalIdempotency(
   return mode === 'optional';
 }
 
-function conflictError(): AppError {
+/** How long a caller whose identical request is still running should wait. */
+export const IN_FLIGHT_RETRY_AFTER_MS = 2_000;
+
+/**
+ * A different body under the key will never succeed. An identical request
+ * still running will replay once it completes, so that caller is told to retry
+ * the same key, with jitter so callers refused together do not return together.
+ */
+function conflictError(
+  reason: 'fingerprint' | 'pending',
+  random: () => number,
+): AppError {
   return new AppError({
     code: 'IDEMPOTENCY_CONFLICT',
     message:
       'The idempotency key is already used for a different or pending request',
-    retryable: false,
+    ...(reason === 'pending'
+      ? {
+          retryable: true,
+          retryAfterMs: jitteredRetryAfterMs(IN_FLIGHT_RETRY_AFTER_MS, random),
+        }
+      : { retryable: false }),
   });
 }
 
@@ -104,6 +121,7 @@ export class IdempotencyService implements IdempotencyServicePort {
   constructor(
     private readonly repository: IdempotencyRepositoryPort,
     private readonly now: () => number = Date.now,
+    private readonly random: () => number = Math.random,
   ) {}
 
   async findCompletedReplay(input: CompletedReplayLookupInput) {
@@ -176,7 +194,7 @@ export class IdempotencyService implements IdempotencyServicePort {
     });
 
     if (reservation.kind === 'conflict') {
-      throw conflictError();
+      throw conflictError(reservation.reason, this.random);
     }
 
     if (reservation.kind === 'replay') {

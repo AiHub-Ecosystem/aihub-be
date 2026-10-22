@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   ConcurrencyDecision,
@@ -8,7 +9,6 @@ import type {
   ConcurrencyLimiterPort,
   ConcurrencyRequest,
 } from '@/modules/gateway/application/concurrency-limiter.port';
-import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<

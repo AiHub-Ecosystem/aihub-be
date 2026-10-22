@@ -1,6 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 
-import { stableOffsetMs } from './retry-hint';
+import { stableOffsetMs } from './stable-offset';
 
 /**
  * How far past the month boundary a quota refusal's hint may point. Each

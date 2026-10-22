@@ -3,19 +3,20 @@ import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   OrganizationRetryBudgetDecision,
   OrganizationRetryBudgetPort,
   OrganizationRetryBudgetRequest,
 } from '@/modules/gateway/application/organization-retry-budget.port';
-import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from './redis-gateway.client';
 
-const WINDOW_MS = 60_000;
+/** How long a same-key repeat is refused for: one window of first attempts. */
+export const RETRY_BUDGET_WINDOW_MS = 60_000;
 
 /**
  * How many distinct Idempotency-Keys one Organization's retry budget remembers.
@@ -154,7 +155,7 @@ export class RedisOrganizationRetryBudget
   private rejection(): OrganizationRetryBudgetDecision {
     return {
       allowed: false,
-      retryAfterMs: jitteredRetryAfterMs(WINDOW_MS, this.random),
+      retryAfterMs: jitteredRetryAfterMs(RETRY_BUDGET_WINDOW_MS, this.random),
     };
   }
 

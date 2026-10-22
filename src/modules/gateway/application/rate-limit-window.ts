@@ -1,4 +1,7 @@
-import { stableOffsetMs } from './retry-hint';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
+
+import type { RateLimitDecision, RateLimitStanding } from './rate-limiter.port';
+import { stableOffsetMs } from './stable-offset';
 
 export const RATE_WINDOW_MS = 60_000;
 
@@ -21,4 +24,37 @@ export function rateLimitWindow(keyId: string, now: number): RateLimitWindow {
     index,
     resetInMs: (index + 1) * RATE_WINDOW_MS - shifted,
   };
+}
+
+/** What a key has left of its window after `count` requests in it. */
+export function rateLimitStanding(
+  limit: number,
+  count: number,
+  window: RateLimitWindow,
+): RateLimitStanding {
+  return {
+    limit,
+    remaining: Math.max(0, limit - count),
+    resetInMs: window.resetInMs,
+  };
+}
+
+/**
+ * Admits the `count`-th request of a window up to `limit`. A refusal is told
+ * to come back once the key's window resets, plus jitter.
+ */
+export function rateLimitDecision(
+  limit: number,
+  count: number,
+  window: RateLimitWindow,
+  random: () => number,
+): RateLimitDecision {
+  const standing = rateLimitStanding(limit, count, window);
+  return count <= limit
+    ? { allowed: true, standing }
+    : {
+        allowed: false,
+        retryAfterMs: jitteredRetryAfterMs(window.resetInMs, random),
+        standing,
+      };
 }

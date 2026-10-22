@@ -175,6 +175,34 @@ describe('RedisRateLimiter', () => {
     ).resolves.toMatchObject({ allowed: true });
   });
 
+  it('keeps each key counted in-process when keys are in different windows', async () => {
+    // Keys' windows are offset, so at one instant two keys can be in
+    // consecutive windows; neither may reset the other's count.
+    const MID_MINUTE = 1_782_000_030_000;
+    const keys = Array.from({ length: 50 }, (_, key) => `ak_${key}`);
+    const index = (keyId: string): number =>
+      rateLimitWindow(keyId, MID_MINUTE).index;
+    const behind = keys.find((keyId) => index(keyId) < index('ak_backend'));
+    const ahead = keys.find((keyId) => index(keyId) > index('ak_backend'));
+    const other = behind ?? ahead;
+    expect(other).toBeDefined();
+    const limiter = new RedisRateLimiter(
+      '',
+      new FailingRedis(),
+      () => MID_MINUTE,
+    );
+
+    await limiter.consume({ keyId: 'ak_backend', limit: 1 });
+    await limiter.consume({ keyId: String(other), limit: 1 });
+
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 1 }),
+    ).resolves.toMatchObject({ allowed: false });
+    await expect(
+      limiter.consume({ keyId: String(other), limit: 1 }),
+    ).resolves.toMatchObject({ allowed: false });
+  });
+
   it('warns once when Redis becomes unreachable, not on every request', async () => {
     const logger = new FakeLogger();
     const limiter = new RedisRateLimiter(

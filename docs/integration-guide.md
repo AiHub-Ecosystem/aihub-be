@@ -864,8 +864,10 @@ essay would be worse than an error.
 
 If an identical request is already in flight, the second request returns
 `409 IDEMPOTENCY_CONFLICT` immediately; AIHUB does not hold the connection open.
-Wait for the first attempt to finish, then retry with the same key and identical
-body. A successful first attempt is returned as a replay.
+That refusal is `retryable` and carries `retry_after_ms` and `Retry-After`:
+wait, then retry with the same key and identical body. A successful first
+attempt is returned as a replay. A different body is never retryable and carries
+no hint.
 
 Client errors are not stored. If a request fails validation, you may fix the
 body and reuse the same key.
@@ -952,6 +954,7 @@ are not all told to come back at the same instant:
 | `RATE_LIMITED` (per-key rate)               | Until your key's window resets, plus 0–999 ms                                   |
 | `RATE_LIMITED` (same-key retry budget)      | 60 s, plus 0–999 ms                                                             |
 | `CONCURRENCY_LIMIT`                         | 500–999 ms                                                                      |
+| `IDEMPOTENCY_CONFLICT` (request in flight)  | 2000–2999 ms                                                                    |
 | `QUOTA_EXCEEDED`                            | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset |
 | `REDIS_UNAVAILABLE`, `DATABASE_UNAVAILABLE` | 1000 ms                                                                         |
 
@@ -975,7 +978,7 @@ separate table below.
 |  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                       | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key                      |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                        | Use the key issued for that environment                                                                            |
 |  404 | `NOT_FOUND`                     | No such route                                                                                | Check path and method                                                                                              |
-|  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running | Different body: use a new key; in-flight request: wait, then retry the same key and body                           |
+|  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running | Different body: use a new key; in-flight request: wait for `Retry-After`, then retry the same key and body         |
 |  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                  | Reduce the essay or audio size to fit the route limit                                                              |
 |  422 | `AUDIO_UNREADABLE`              | The Speaking audio could not be decoded (`retryable: false`)                                 | Check the file is a real recording in a supported format, then send a new one; resending the same file fails again |
 |  429 | `RATE_LIMITED`                  | Request rate or Organization same-key retry budget exceeded                                  | Wait for `Retry-After` (the same wait as `retry_after_ms`) before retrying                                         |
@@ -1044,6 +1047,12 @@ RateLimit: "per-key";r=41;t=13
 - Each key has a fixed one-minute window that starts at its own offset into the
   minute, so different keys do not reset together. When `r` reaches `0`, a new
   window starts after `t` seconds.
+- On a `429` for the per-key rate, `Retry-After` can be one second later than
+  `t`: it adds jitter on top of the reset and is never earlier. Wait for
+  `Retry-After`.
+- A `429` for the same-key retry budget or the monthly quota also carries
+  these fields. There `r` can be above `0`, because that refusal was not about
+  the per-minute rate.
 
 The fields describe your own key only. They are advisory while the draft is not
 final, so the syntax may change with a later revision. Use them to slow down

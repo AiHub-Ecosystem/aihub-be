@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import {
-  type RateLimitWindow,
+  rateLimitDecision,
   rateLimitWindow,
 } from '@/modules/gateway/application/rate-limit-window';
 import type {
@@ -11,11 +11,15 @@ import type {
   RateLimitRequest,
   RateLimiterPort,
 } from '@/modules/gateway/application/rate-limiter.port';
-import { jitteredRetryAfterMs } from '@/modules/gateway/application/retry-hint';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from './redis-gateway.client';
+
+/** One counter per API key and window, shared with graded admission. */
+export function rateLimitKey(keyId: string, windowIndex: number): string {
+  return `aihub:v1:rl:${keyId}:${windowIndex}`;
+}
 
 export type RedisRateLimitClient = Pick<RedisGatewayClient, 'eval' | 'quit'>;
 
@@ -58,7 +62,7 @@ export class RedisRateLimiter implements RateLimiterPort {
     }
 
     const window = rateLimitWindow(request.keyId, this.now());
-    const bucket = `aihub:v1:rl:${request.keyId}:${window.index}`;
+    const bucket = rateLimitKey(request.keyId, window.index);
     let count: number;
     try {
       count = await incrementRedisCounterWithExpiry(
@@ -73,7 +77,7 @@ export class RedisRateLimiter implements RateLimiterPort {
     }
 
     this.reportRecovered();
-    return this.decide(request, count, window);
+    return rateLimitDecision(request.limit, count, window, this.random);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -120,34 +124,19 @@ export class RedisRateLimiter implements RateLimiterPort {
     });
     this.pruneStaleFallbackWindows(window.index);
 
-    return this.decide(request, count, window);
+    return rateLimitDecision(request.limit, count, window, this.random);
   }
 
-  /** Keeps the fallback map from growing for the lifetime of an outage. */
-  private pruneStaleFallbackWindows(currentMinute: number): void {
+  /**
+   * Keeps the fallback map from growing for the lifetime of an outage. Keys'
+   * windows are offset within the minute, so another key's current window can
+   * be one behind this one; only windows older than that are over.
+   */
+  private pruneStaleFallbackWindows(currentWindow: number): void {
     for (const [keyId, window] of this.fallbackWindows) {
-      if (window.windowStart !== currentMinute) {
+      if (window.windowStart < currentWindow - 1) {
         this.fallbackWindows.delete(keyId);
       }
     }
-  }
-
-  private decide(
-    request: RateLimitRequest,
-    count: number,
-    window: RateLimitWindow,
-  ): RateLimitDecision {
-    const standing = {
-      limit: request.limit,
-      remaining: Math.max(0, request.limit - count),
-      resetInMs: window.resetInMs,
-    };
-    return count <= request.limit
-      ? { allowed: true, standing }
-      : {
-          allowed: false,
-          retryAfterMs: jitteredRetryAfterMs(window.resetInMs, this.random),
-          standing,
-        };
   }
 }
