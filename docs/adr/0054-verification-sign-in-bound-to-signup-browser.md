@@ -1,6 +1,6 @@
 # ADR-0054: Sign in on email verification only in the browser that signed up
 
-- Status: Accepted
+- Status: Accepted; second-factor rule added by [issue #784](https://github.com/AiHub-Ecosystem/aihub-be/issues/784)
 - Amends: ADR-0022, ADR-0024
 
 After a customer verifies their email, the Customer Web should land them in the console without asking for their password again. A verification link that signs in whoever opens it would turn a harmless "verify on someone's behalf" link into account takeover. Three cases show why: an attacker who pre-registers a victim's email with the attacker's own password would get the victim working inside the attacker's account (pre-account takeover); a forwarded or leaked link would grant a session for 24 hours; and a mail scanner that runs JavaScript would sign itself in. So a verification token signs in only the browser holding its **Signup Browser Binding**: a random nonce the Customer Web sets in a `__Host-` HttpOnly cookie when that browser registers or resends, which AIHUB stores only as a hash on the token.
@@ -25,3 +25,21 @@ Verification keeps its existing consumption: the first verification marks the to
 
 - Clients that send no binding, and tokens issued before this change, keep today's behaviour: verify only, `204`. The backend can therefore deploy before the Customer Web.
 - Each token is bound to the browser that requested it. A resend from another browser rebinds the new token to that browser, or leaves it unbound; an attacker who resends cannot receive the link, because it goes to the owner's mailbox.
+
+## Second factor (added by #784)
+
+Verification Sign-in runs through the same session issuance as login, so it
+honors an enrolled second factor (ADR-0087). The link carries no code, so an
+account with an enabled second factor verifies and gets no session. The response
+is the same `204` as a request that only verifies, and the account signs in the
+usual way with its password and code. Because no sign-in happened, the token's
+one sign-in is not spent. A factor enrolled between verification and the
+browser's claim is the case this covers.
+
+The rule is enforced by the types rather than by each caller remembering it:
+every statement that stores a Refresh Session or a Web Session takes a
+`SessionAdmission` for the account it stores for. The second-factor check mints
+it, and a path that stores a session without one does not compile. Rotating a
+Refresh Token names its own admission, `admitSessionContinuation`, because it
+continues a session that already exists; a review looks for that name. A factor
+enrolled while an older session stays alive is #586's.
