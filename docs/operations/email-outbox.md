@@ -69,7 +69,7 @@ deploy the release while the verification record below is pending.
 
 | Resend Usage API limit | Duration | Configured cap | Verified on |
 | ---------------------- | -------- | -------------- | ----------- |
-| Not verified yet       | —        | Pending        | Pending     |
+| 10 requests            | 1000 ms  | 10             | 2026-10-22  |
 
 The limiter fails closed: if it cannot reserve a send slot, the request stays
 queued without spending an attempt. Do not configure a per-instance fallback.
