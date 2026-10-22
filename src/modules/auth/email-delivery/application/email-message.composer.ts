@@ -23,6 +23,7 @@ export interface OrganizationInviteEmailInput {
   readonly role: 'owner' | 'admin' | 'member';
   readonly token: string;
   readonly expiresAt: Date;
+  readonly inviterUsername?: string;
 }
 
 export interface MfaSecurityNotificationInput {
@@ -248,11 +249,16 @@ export function composeOrganizationInviteEmail(
   const url = deepLink(customerWebBaseUrl, '/invite', input.token);
   const expiresAt = formatVietnameseDateTime(input.expiresAt);
   const role = INVITATION_ROLE_LABELS[input.role];
-  const invitationSentence = `Bạn được mời tham gia tổ chức ${input.organizationName} trên AIHUB với vai trò ${role}.`;
+  // The name may hold the curly quotes that frame it; a straight quote cannot
+  // close them early and turn the rest of the name into AIHUB's own wording.
+  const quotedName = `“${input.organizationName.replace(/[“”]/g, '"')}”`;
+  const inviter =
+    input.inviterUsername === undefined ? '' : `${input.inviterUsername} `;
+  const invitationSentence = `${inviter}mời bạn tham gia tổ chức ${quotedName} trên AIHUB với vai trò ${role}.`;
   if (url === undefined) {
     return {
       recipient: input.email,
-      subject: `Lời mời tham gia ${input.organizationName} trên AIHUB`,
+      subject: 'Lời mời tham gia một tổ chức trên AIHUB',
       text: [
         invitationSentence,
         '',
@@ -265,7 +271,7 @@ export function composeOrganizationInviteEmail(
   }
   return {
     recipient: input.email,
-    subject: `Lời mời tham gia ${input.organizationName} trên AIHUB`,
+    subject: 'Lời mời tham gia một tổ chức trên AIHUB',
     text: [
       'Chào bạn,',
       '',

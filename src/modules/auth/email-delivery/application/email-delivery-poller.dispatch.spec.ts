@@ -101,6 +101,7 @@ describe('EmailDeliveryPoller', () => {
         ...VERIFICATION_PAYLOAD,
         organizationName: 'Resonance',
         role: 'admin',
+        inviterUsername: 'alice',
       },
     });
     store.claimResult = [
@@ -110,11 +111,35 @@ describe('EmailDeliveryPoller', () => {
     await poller.runOnce();
 
     expect(sender.sends[0]?.message.subject).toBe(
-      'Lời mời tham gia Resonance trên AIHUB',
+      'Lời mời tham gia một tổ chức trên AIHUB',
     );
-    expect(sender.sends[0]?.message.text).toContain('quản trị viên');
+    expect(sender.sends[0]?.message.text).toContain(
+      'alice mời bạn tham gia tổ chức “Resonance” trên AIHUB với vai trò quản trị viên.',
+    );
     expect(sender.sends[0]?.message.text).toContain(TOKEN);
     expect(sender.sends[0]?.idempotencyKey).toBe('edr_invite');
+  });
+
+  it('still sends a request queued before the inviter was sealed into its payload', async () => {
+    const { poller, store, sender } = harness({
+      payload: {
+        ...VERIFICATION_PAYLOAD,
+        organizationName: 'Resonance',
+        role: 'admin',
+      },
+    });
+    store.claimResult = [
+      claimed({ id: 'edr_invite', kind: 'organization_invite_email' }),
+    ];
+
+    await poller.runOnce();
+
+    expect(sender.sends[0]?.message.subject).toBe(
+      'Lời mời tham gia một tổ chức trên AIHUB',
+    );
+    expect(sender.sends[0]?.message.text).toContain(
+      'mời bạn tham gia tổ chức “Resonance” trên AIHUB với vai trò quản trị viên.',
+    );
   });
 
   it('carries the same provider idempotency key on every attempt of one request', async () => {

@@ -3,6 +3,7 @@ import { organizationName } from './organization-name';
 describe('organizationName', () => {
   it('stores the trimmed name, emoji sequences included', () => {
     expect(organizationName('  Acme Ltd  ')).toBe('Acme Ltd');
+    expect(organizationName('\u00A0Acme\u00A0')).toBe('Acme');
     expect(organizationName('Acme 👨‍👩‍👧')).toBe('Acme 👨‍👩‍👧');
     expect(organizationName('Trường Anh Ngữ')).toBe('Trường Anh Ngữ');
   });

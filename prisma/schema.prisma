@@ -312,7 +312,8 @@ model OrganizationMembership {
 ///
 /// Trigger `organizations_set_updated_at` is owned by migration 0002. `CHECK`
 /// constraints are owned by migration 0001 (status, rate limit, concurrency,
-/// quota), with status extended by 0016 (suspension). The partial index
+/// quota), with status extended by 0016 (suspension). The display-text check on
+/// `name` is added by migration 0047 and validated by 0048. The partial index
 /// `organizations_created_by_idx` is owned by migration 0014.
 /// @owner identity
 model Organization {

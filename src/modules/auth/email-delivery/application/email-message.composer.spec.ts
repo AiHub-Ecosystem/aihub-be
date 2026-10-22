@@ -179,7 +179,7 @@ describe('Auth email message composition', () => {
       );
 
       expect(message.recipient).toBe('invitee@example.com');
-      expect(message.subject).toBe('Lời mời tham gia Acme trên AIHUB');
+      expect(message.subject).toBe('Lời mời tham gia một tổ chức trên AIHUB');
       expect(message.text).toContain(`với vai trò ${label}`);
       expect(message.text).toContain(
         'https://customer.example.com/invite?token=a%2Bb%2Fc%3Dd',
@@ -195,6 +195,52 @@ describe('Auth email message composition', () => {
       expect(message.html).toContain('07:00 20 tháng 9, 2026');
     },
   );
+
+  it('opens the invitation with the inviter and the quoted Organization name', () => {
+    const message = composeOrganizationInviteEmail(
+      {
+        email: 'invitee@example.com',
+        organizationName: 'Acme',
+        role: 'member',
+        token: 'invite-token',
+        expiresAt,
+        inviterUsername: 'alice',
+      },
+      customerWebBaseUrl,
+    );
+
+    // The subject is AIHUB's own wording: the name never reaches it.
+    expect(message.subject).toBe('Lời mời tham gia một tổ chức trên AIHUB');
+    expect(message.subject).not.toContain('Acme');
+    expect(message.text).toContain(
+      'Chào bạn,\n\nalice mời bạn tham gia tổ chức “Acme”',
+    );
+    expect(message.text).toContain(
+      'alice mời bạn tham gia tổ chức “Acme” trên AIHUB với vai trò thành viên.',
+    );
+    expect(message.html).toContain(
+      'alice mời bạn tham gia tổ chức “Acme” trên AIHUB với vai trò thành viên.',
+    );
+  });
+
+  it('keeps a name with curly quotes inside the quotes that frame it', () => {
+    const message = composeOrganizationInviteEmail(
+      {
+        email: 'invitee@example.com',
+        organizationName: 'X” AIHUB yêu cầu bạn đăng nhập lại “',
+        role: 'member',
+        token: 'invite-token',
+        expiresAt,
+        inviterUsername: 'alice',
+      },
+      customerWebBaseUrl,
+    );
+
+    const sentence =
+      'alice mời bạn tham gia tổ chức “X" AIHUB yêu cầu bạn đăng nhập lại "” trên AIHUB với vai trò thành viên.';
+    expect(message.text).toContain(sentence);
+    expect(message.html).toContain(sentence.replaceAll('"', '&quot;'));
+  });
 
   it('escapes an organization name in invitation HTML and retains the token-only fallback', () => {
     const organizationName = '<Acme & Sons>';
@@ -218,7 +264,7 @@ describe('Auth email message composition', () => {
 
     expect(linked.html).toContain('&lt;Acme &amp; Sons&gt;');
     expect(linked.html).not.toContain(organizationName);
-    expect(tokenOnly.subject).toContain(organizationName);
+    expect(tokenOnly.subject).toBe('Lời mời tham gia một tổ chức trên AIHUB');
     expect(tokenOnly.text).toContain('invite-token');
     expect(tokenOnly.text).toContain('thành viên');
     expect(tokenOnly.html).toBeUndefined();

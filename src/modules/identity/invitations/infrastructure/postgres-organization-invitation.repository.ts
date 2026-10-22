@@ -1,4 +1,3 @@
-// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked in #965.
 import { AppError } from '@/common/errors/app-error';
 import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
@@ -40,6 +39,7 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { mapOpenOrganizationInvitation } from './map-open-organization-invitation';
 import { sealOrganizationInvitationEmailPayload } from './seal-organization-invitation-email-payload';
 
 /**
@@ -123,41 +123,6 @@ function organizationName(value: unknown): string | undefined {
   return isRecord(value) ? stringValue(value, 'name') : undefined;
 }
 
-function mapOpenInvitation(
-  value: unknown,
-): OpenOrganizationInvitationRecord | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const invitationId = stringValue(value, 'id');
-  const email = stringValue(value, 'email');
-  const role = membershipRoleValue(value, 'role');
-  const invitedByUsername = stringValue(value, 'invitedByUsername');
-  const createdAt = dateValue(value, 'createdAt');
-  const expiresAt = dateValue(value, 'expiresAt');
-
-  if (
-    invitationId === undefined ||
-    email === undefined ||
-    role === undefined ||
-    invitedByUsername === undefined ||
-    createdAt == null ||
-    expiresAt == null
-  ) {
-    return undefined;
-  }
-
-  return {
-    invitationId,
-    email,
-    role,
-    invitedByUsername,
-    createdAt,
-    expiresAt,
-  };
-}
-
 export class PostgresOrganizationInvitationRepository
   implements OrganizationInvitationPort
 {
@@ -195,6 +160,18 @@ export class PostgresOrganizationInvitationRepository
         );
         const name = organizationName(organizationRows[0]);
         if (name === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+
+        // The inviter is read here, inside the transaction that commits the
+        // invitation and its Email Delivery Request, so the message can name
+        // who sent it (ADR-0121).
+        const inviter = await transaction.userAccount.findUnique({
+          where: { id: input.invitedBy },
+          select: { username: true },
+        });
+        const inviterUsername = inviter?.username;
+        if (inviterUsername === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
 
@@ -269,6 +246,7 @@ export class PostgresOrganizationInvitationRepository
               this.payloadCipher,
               input,
               name,
+              inviterUsername,
             ),
             createdAt: input.emailDelivery.createdAt,
           },
@@ -334,7 +312,7 @@ export class PostgresOrganizationInvitationRepository
 
     const invitations: OpenOrganizationInvitationRecord[] = [];
     for (const row of rows) {
-      const invitation = mapOpenInvitation(row);
+      const invitation = mapOpenOrganizationInvitation(row);
       if (invitation === undefined) {
         throw identityStoreError('Identity data is invalid');
       }

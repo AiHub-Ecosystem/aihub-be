@@ -236,6 +236,7 @@ function sealedPayload(row: SealedRequest | undefined): {
   readonly role: string;
   readonly token: string;
   readonly expiresAt: string;
+  readonly inviterUsername: string;
 } {
   if (row?.payload_ciphertext === null || row === undefined) {
     throw new Error('the request carried no ciphertext');
@@ -246,6 +247,7 @@ function sealedPayload(row: SealedRequest | undefined): {
     role: string;
     token: string;
     expiresAt: string;
+    inviterUsername: string;
   };
 }
 
@@ -278,6 +280,9 @@ describe('organization invitation email outbox over HTTP', () => {
       email: INVITEE,
       organizationName: 'Acme',
       role: 'member',
+      // The inviter travels with the payload, so the email can name who sent
+      // the invitation (ADR-0121).
+      inviterUsername: `owner-${ownerId.slice(4, 16).toLowerCase()}`,
     });
     expect(sealedPayload(requests[0]).token).toEqual(expect.any(String));
     // The provider is no longer called in the request path.

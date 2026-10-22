@@ -91,7 +91,13 @@ function create(
 }
 
 describe('CreateOrganizationApiKey', () => {
-  it.each(['   ', 'Demo\nkey', 'Demo \u202Eyek', 'Demo\u2028key'])(
+  it.each([
+    '   ',
+    'Demo\nkey',
+    'Demo \u202Eyek',
+    'Demo\u2028key',
+    'Demo\u200Bkey',
+  ])(
     'refuses the name %j, which is blank or does not show as written',
     async (name) => {
       const { useCase, apiKeys } = createUseCase();

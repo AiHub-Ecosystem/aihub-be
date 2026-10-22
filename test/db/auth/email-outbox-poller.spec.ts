@@ -1226,7 +1226,7 @@ describe('email outbox dispatch poller', () => {
 
       expect(delivered).toEqual([
         expect.objectContaining({
-          subject: 'Lời mời tham gia Resonance trên AIHUB',
+          subject: 'Lời mời tham gia một tổ chức trên AIHUB',
           text: expect.stringContaining('chủ sở hữu'),
         }),
       ]);

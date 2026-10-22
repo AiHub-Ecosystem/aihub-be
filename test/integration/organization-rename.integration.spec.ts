@@ -174,6 +174,9 @@ describe('Organization rename over HTTP', () => {
     ['a blank name', { name: '   ' }],
     ['an empty name', { name: '' }],
     ['an oversized name', { name: 'a'.repeat(101) }],
+    ['a name with a line break', { name: 'Acme\nLtd' }],
+    ['a name with a bidirectional override', { name: 'Acme \u202Edtl' }],
+    ['a name with a zero width space', { name: 'Acme\u200BLtd' }],
     ['no name', {}],
   ])(
     'rejects a request carrying %s without touching the Organization',

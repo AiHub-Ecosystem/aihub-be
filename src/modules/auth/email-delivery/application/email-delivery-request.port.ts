@@ -91,6 +91,7 @@ export interface OrganizationInviteEmailDeliveryPayload
    * rather than imported from it, because the composer reads this port.
    */
   readonly role: 'owner' | 'admin' | 'member';
+  readonly inviterUsername?: string;
 }
 
 export interface MfaSecurityNotificationPayload {

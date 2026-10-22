@@ -5,6 +5,7 @@ export function sealOrganizationInvitationEmailPayload(
   cipher: EmailPayloadCipherPort,
   input: CreateOrganizationInvitationInput,
   organizationName: string,
+  inviterUsername: string,
 ): string {
   return cipher.encrypt(
     JSON.stringify({
@@ -13,6 +14,7 @@ export function sealOrganizationInvitationEmailPayload(
       role: input.role,
       token: input.emailDelivery.token,
       expiresAt: input.expiresAt.toISOString(),
+      inviterUsername,
     }),
   );
 }

@@ -74,7 +74,9 @@ function isOrganizationInvitePayload(
     isNonEmptyString(value.token) &&
     isNonEmptyString(value.expiresAt) &&
     isNonEmptyString(value.organizationName) &&
-    isInvitationRole(value.role)
+    isInvitationRole(value.role) &&
+    (value.inviterUsername === undefined ||
+      isNonEmptyString(value.inviterUsername))
   );
 }
 
@@ -194,6 +196,9 @@ export const EMAIL_KIND_HANDLERS: Readonly<
           role: payload.role,
           token: payload.token,
           expiresAt: new Date(Date.parse(payload.expiresAt)),
+          ...(payload.inviterUsername === undefined
+            ? {}
+            : { inviterUsername: payload.inviterUsername }),
         },
         customerWebBaseUrl,
       ),

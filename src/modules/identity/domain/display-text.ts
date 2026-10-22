@@ -7,7 +7,7 @@
  * Joiners stay allowed, so emoji sequences still work.
  */
 const LAYOUT_CONTROL =
-  /[\p{Cc}\u061C\u200E\u200F\u2028\u2029\u202A-\u202E\u2066-\u2069]/u;
+  /[\p{Cc}\u00AD\u061C\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/u;
 
 /** Whether an owner-chosen name shows as exactly the characters it holds. */
 export function isDisplayText(value: string): boolean {
