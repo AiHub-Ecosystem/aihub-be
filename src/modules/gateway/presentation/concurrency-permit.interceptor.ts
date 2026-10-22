@@ -5,8 +5,7 @@ import {
   Injectable,
   type NestInterceptor,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
-import { type Observable, finalize } from 'rxjs';
+import { type Observable, defer, from, lastValueFrom } from 'rxjs';
 
 import { AppError } from '@/common/errors/app-error';
 import {
@@ -17,6 +16,7 @@ import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
+import { markGradedCompletionSettled } from '@/modules/metering/public/graded-request-timing';
 import { createConcurrencyPermit } from './concurrency-permit';
 
 function concurrencyLimited(retryAfterMs: number): AppError {
@@ -46,7 +46,6 @@ export class ConcurrencyPermitInterceptor implements NestInterceptor {
     next: CallHandler,
   ): Promise<Observable<unknown>> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const reply = context.switchToHttp().getResponse<FastifyReply>();
     const authenticated = getAuthenticatedApiKey(request);
     const decision = await this.limiter.acquire({
       organizationId: authenticated.organizationId,
@@ -61,24 +60,22 @@ export class ConcurrencyPermitInterceptor implements NestInterceptor {
 
     const permit = createConcurrencyPermit(decision.lease);
     request.aihubConcurrency = permit;
+    return defer(() => from(handleWithPermit(next, permit, request)));
+  }
+}
 
-    // The permit is closed over by the release half, so releasing is
-    // structurally impossible to separate from acquiring — there is no
-    // read-back that a wiring fault could invalidate. The request property is
-    // kept because the Writing controller reads the background lifecycle from
-    // it; it is not what releases the slot.
-    const onResponseFinished = (): void => {
-      void permit.responseFinished().catch(() => undefined);
-    };
-    reply.raw.once('finish', onResponseFinished);
-    reply.raw.once('close', onResponseFinished);
-
-    return next.handle().pipe(
-      finalize(() => {
-        reply.raw.off('finish', onResponseFinished);
-        reply.raw.off('close', onResponseFinished);
-        void permit.requestFinished().catch(() => undefined);
-      }),
-    );
+async function handleWithPermit(
+  next: CallHandler,
+  permit: ReturnType<typeof createConcurrencyPermit>,
+  request: AuthenticatedRequest,
+): Promise<unknown> {
+  try {
+    return await lastValueFrom(next.handle());
+  } finally {
+    try {
+      await permit.requestFinished();
+    } finally {
+      if (permit.isReleased()) markGradedCompletionSettled(request);
+    }
   }
 }

@@ -41,6 +41,7 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   membershipRoleValue,
   membershipStatusValue,
@@ -59,7 +60,7 @@ import {
 
 type IdentitySqlClient = Parameters<typeof identityRows>[0];
 
-const RESOLVE_MEMBERSHIP_SQL = `
+export const RESOLVE_MEMBERSHIP_SQL = `
   SELECT
     membership.organization_id,
     membership.user_account_id,
@@ -74,7 +75,7 @@ const RESOLVE_MEMBERSHIP_SQL = `
   LIMIT 1
 `;
 
-const LIST_ROSTER_SQL = `
+export const LIST_ROSTER_SQL = `
   SELECT
     caller.organization_id,
     organization.name AS organization_name,
@@ -123,7 +124,7 @@ const MEMBERSHIP_LIST_ADMISSION = ORGANIZATION_READ_ADMISSION.membership_list;
 // Authorization stays inside this query because ADR-0051 requires it and the
 // rows to come from one point-in-time snapshot. The policy it enforces is read
 // from the shared table rather than repeated here.
-const LIST_ORGANIZATION_MEMBERS_SQL = `
+export const LIST_ORGANIZATION_MEMBERS_SQL = `
   SELECT
     authority.allowed AS authorized,
     member_account.username AS member_username,
@@ -563,10 +564,8 @@ async function rethrowMutationFailure(
   if (refused !== undefined) {
     await recordOrganizationAuditDenial(client, stamp, refused);
   }
-  if (error instanceof AppError) {
-    throw error;
-  }
-  throw identityStoreError('Identity store is unavailable');
+  if (error instanceof AppError) throw error;
+  throw identityStoreUnavailable(error);
 }
 
 function prepareMembershipMutation(
@@ -788,8 +787,8 @@ export class PostgresOrganizationMembershipRepository
         input.userId,
         input.organizationId,
       ]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     const first = rows[0];
@@ -824,8 +823,8 @@ export class PostgresOrganizationMembershipRepository
     let rows: readonly unknown[];
     try {
       rows = await identityRows(this.client, LIST_ROSTER_SQL, [input.userId]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     return groupRosterRows(rows);
@@ -857,8 +856,8 @@ export class PostgresOrganizationMembershipRepository
         admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
         input.status,
       ]);
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
 
     return mapOrganizationMembershipListRows(rows, input.status);

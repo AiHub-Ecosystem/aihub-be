@@ -120,6 +120,24 @@ directory must also contain `database.json`, `redis.json`, and
 Postgres login for the sandbox process: it can select the Organization,
 API-key, and identity-configuration columns used for request authentication,
 and update only `api_keys.last_used_at`. It cannot change control-plane data.
+`redis.json` also contains `email_send_rate_url`, the dedicated shared Redis
+connection for the Resend account-wide email pace. Provision the same URL in the
+Production and Sandbox bundles, separate from both environment-specific Redis
+URLs.
+email_send_budget_url is also present in both bundles and must point at the
+same Production database through a dedicated login with access only to
+email_daily_send_budgets. The daily counter is shared by every deployment using
+the Resend account; provision the same URL in Production and Sandbox, separate
+from the outbox database URLs.
+
+Use a dedicated Redis ACL user limited to the exact key
+`aihub:resend:email-send-rate:last-reservation-ms`. Allow `SELECT` only for the
+limiter database, `EVAL`, `TIME`, `GET`, and `SET`; ioredis also needs
+`CLIENT SETINFO` and `INFO` for connection setup and its ready check. Persist the
+user with `ACL SAVE` against a configured, durable ACL file before storing its
+URL in Vault. Verify authentication and a read-only script with that user,
+and use `ACL DRYRUN` to verify `SET` access without reserving a real send slot.
+
 Deliver the Role ID to Vault Agent through the deployment secret channel; never
 commit or paste it into an issue. There is no Agent `secret_id` to rotate.
 

@@ -33,11 +33,14 @@ export class UserIdentityResolver implements UserIdentityResolverPort {
   async resolve(input: UserIdentityInput): Promise<ResolvedUserIdentity> {
     const config = await this.loadConfig(input.organizationId);
     if (config !== null) {
-      return this.verifier.verify({
-        signedAssertion: input.value,
-        organizationId: input.organizationId,
-        config,
-      });
+      return {
+        ...(await this.verifier.verify({
+          signedAssertion: input.value,
+          organizationId: input.organizationId,
+          config,
+        })),
+        mode: 'signed_assertion',
+      };
     }
 
     if (!isEndUserId(input.value)) {
@@ -48,6 +51,7 @@ export class UserIdentityResolver implements UserIdentityResolverPort {
       userId: input.value,
       organizationId: input.organizationId,
       scopes: [],
+      mode: 'declared_id',
     };
   }
 

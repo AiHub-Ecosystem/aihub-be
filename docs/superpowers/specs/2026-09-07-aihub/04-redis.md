@@ -10,18 +10,18 @@
 
 Prefix `aihub:v1:` — evolving the cache schema later only requires bumping to `v2`, avoiding manual cleanup of stale keys.
 
-| Key                             | Type    | TTL            | Source of Truth        | When Redis Dies                            |
-| ------------------------------- | ------- | -------------- | ---------------------- | ------------------------------------------ |
-| `v1:key:<sha256hex>`            | JSON    | 60s            | Postgres               | Falls through directly to Postgres         |
-| `v1:key:miss:<sha256hex>`       | `1`     | 30s            | Postgres               | Same as above                              |
-| `v1:jwks:<org_id>`              | JSON    | 15m            | Customer JWKS endpoint | Fetches directly (with SSRF guards)        |
-| `v1:authfail:<ip>`              | counter | 300s           | —                      | **Fail open** + emit alert                 |
-| `v1:rl:<key_id>:<minute>`       | counter | 120s           | —                      | **Fail open** + local in-memory backstop   |
-| `v1:inflight:<org_id>`          | zset    | self-cleaning  | —                      | **Fail open** + local in-memory backstop   |
-| `v1:quota:<org_id>:<YYYY-MM>`   | counter | 40 days        | `usage_records`        | **Fail open** + mark unverified            |
-| `v1:org-retry:{org_id}:first`   | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers |
-| `v1:org-retry:{org_id}:repeats` | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers |
-| `v1:org-retry:{org_id}:seen`    | zset    | 24h, refreshed | —                      | **Fail closed** (refuse) until it recovers |
+| Key                             | Type    | TTL            | Source of Truth        | When Redis Dies                                                        |
+| ------------------------------- | ------- | -------------- | ---------------------- | ---------------------------------------------------------------------- |
+| `v1:key:<sha256hex>`            | JSON    | 60s            | Postgres               | Falls through directly to Postgres                                     |
+| `v1:key:miss:<sha256hex>`       | `1`     | 30s            | Postgres               | Same as above                                                          |
+| `v1:jwks:<org_id>`              | JSON    | 15m            | Customer JWKS endpoint | Fetches directly (with SSRF guards)                                    |
+| `v1:authfail:<ip>`              | counter | 300s           | —                      | **Fail open** + emit alert                                             |
+| `v1:rl:<key_id>:<window>`       | counter | 120s           | —                      | Graded: **fail closed** (503); other: local backstop                   |
+| `v1:inflight:<org_id>`          | zset    | self-cleaning  | —                      | **Fail closed** (503) until it recovers                                |
+| `v1:quota:<org_id>:<YYYY-MM>`   | counter | 40 days        | `usage_records`        | Graded: **fail closed** (503); other: unverified, or 503 for hard stop |
+| `v1:org-retry:{org_id}:first`   | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                             |
+| `v1:org-retry:{org_id}:repeats` | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                             |
+| `v1:org-retry:{org_id}:seen`    | zset    | 24h, refreshed | —                      | **Fail closed** (refuse) until it recovers                             |
 
 **Zero keys dedicated to idempotency.** The brief suggested "Redis + durable fallback"; this design eliminates Redis from that path entirely. Postgres's `ON CONFLICT` handles race conditions natively ([03 §E.4](03-database.md#e4-handling-idempotency-race-conditions-without-distributed-locks)), and introducing Redis would create dual sources of truth for the one mechanism that must never desynchronize.
 
@@ -33,12 +33,17 @@ The retry-budget ledger is the one structure here whose size follows traffic. `s
 ## F.2 Rate Limiting: Fixed Window, No Lua
 
 ```ts
-const bucket = `v1:rl:${keyId}:${Math.floor(Date.now() / 60000)}`;
+// Each key's one-minute windows start at its own offset into the minute (#403).
+const offset = sha256(keyId).readUInt32BE(0) % 60_000;
+const window = Math.floor((Date.now() - offset) / 60_000);
+const bucket = `v1:rl:${keyId}:${window}`;
 const n = await redis.incr(bucket);
 if (n === 1) await redis.expire(bucket, 120);
 if (n > org.rate_limit_rpm)
-  throw new RateLimitedError({ retryAfterMs: msToNextMinute() });
+  throw new RateLimitedError({ retryAfterMs: msToWindowEnd() + jitter(1_000) });
 ```
+
+A fixed window aligned to the wall-clock minute would reset every key at the same instant and send every refused caller back then too. The per-key offset spreads the resets across the minute, and the hint adds 0–999 ms of jitter on top of the time to reset, so two callers refused in the same millisecond are told different instants. The limit enforced per window is unchanged. Responses report the key's standing in the `RateLimit-Policy` and `RateLimit` fields (draft-ietf-httpapi-ratelimit-headers-11), and every hint is also sent as `Retry-After` ([integration guide §8](../../../integration-guide.md#8-errors)).
 
 ```
 Trade-off: fixed window -> maximum burst of 2x rate_limit_rpm across minute boundaries.
@@ -69,7 +74,7 @@ try {
 
 We utilize a sorted set (zset) instead of `INCR`/`DECR` because sorted sets are **self-healing**: if a worker process crashes mid-execution, `finally` never runs, `DECR` is permanently lost, and counters drift upwards until that organization is indefinitely locked out. `zremrangebyscore` cleans up zombie entries older than 120 seconds automatically.
 
-Default `max_concurrent = 20`/org → triggers `429 CONCURRENCY_LIMIT` with a short `retry_after_ms` (~500ms).
+Default `max_concurrent = 20`/org → triggers `429 CONCURRENCY_LIMIT` with a short `retry_after_ms`: 500 ms plus 0–499 ms of jitter, so a burst refused together does not retry together (#403).
 
 <a id="f4-quota"></a>
 
@@ -84,24 +89,28 @@ Nightly job:    SELECT count(*) FROM usage_records
 
 The Redis counter acts as a **fast gating heuristic**; `usage_records` is the definitive number used for invoicing. The nightly job reconciles the counter against truth, ensuring any intraday drift never impacts billing.
 
-Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the start of the next calendar month.
+**A missing counter is never zero usage (#371).** The shared Redis can lose a key to a restart, eviction, or `FLUSHDB` (#348). When the current month's key is absent, admission rebuilds it from `usage_records` with the reconciliation job's filter and writes it with `SET NX`, so concurrent requests seed it once (one durable read per process, the first writer across processes). `aihub_quota_counter_seeds_total{outcome}` counts each rebuild. If the durable read fails, the request is admitted as `quota_unverified`, or refused with retryable `503 REDIS_UNAVAILABLE` for a hard-stop Organization. A post-result increment never recreates a missing counter at 1; it leaves the rebuild to the next admission.
+
+Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the start of the next calendar month plus a fixed per-Organization offset of 0–10 minutes, so hard-stopped Organizations do not all return at 00:00 UTC on the 1st (#403).
 
 <a id="f5-redis-chết-thì-sao--quyết-định-từng-mục"></a>
 <a id="f5-what-happens-when-redis-dies-item-by-item-decisions"></a>
 
 ## F.5 What Happens When Redis Dies — Item-by-Item Decisions
 
-| Lost Capability          | Selected Behavior                      | Rationale                                                                        |
-| ------------------------ | -------------------------------------- | -------------------------------------------------------------------------------- |
-| API key cache            | Fallback to Postgres                   | Completely correct, only slightly higher latency. Postgres easily handles 50 RPS |
-| Brute-force protection   | **Allow through** + emit alert         | 256-bit entropy keys cannot be brute-forced during a transient Redis outage      |
-| Rate limiting            | **Allow through** + local backstop     | Fail-closed means a Redis crash becomes an AIHUB total outage. Not acceptable    |
-| Concurrency limiting     | **Allow through** + local backstop     | Same as above                                                                    |
-| Quotas                   | **Allow through** + `quota_unverified` | See detailed justification below                                                 |
-| JWKS cache               | Fetch directly from upstream           | Slower, but fully secure                                                         |
-| **Auth & Authorization** | **Zero Redis dependency**              | No branch ever allows "Redis is down, so grant access"                           |
+| Lost Capability          | Selected Behavior                                                                             | Rationale                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| API key cache            | Fallback to Postgres                                                                          | Completely correct, only slightly higher latency. Postgres easily handles 50 RPS           |
+| Brute-force protection   | **Allow through** + emit alert                                                                | 256-bit entropy keys cannot be brute-forced during a transient Redis outage                |
+| Rate limiting            | Graded: **refuse** 503; other: **allow through** + local backstop                             | ADR-0116 for graded routes; a non-graded route keeps a process-local ceiling               |
+| Concurrency limiting     | **Refuse** 503 `REDIS_UNAVAILABLE`                                                            | ADR-0116: no permit without a verified Redis decision; permits exist only on graded routes |
+| Quotas                   | Graded: **refuse** 503; other: **allow through** + `quota_unverified`, or 503 for a hard stop | See detailed justification below; #373 for the hard-stop answer                            |
+| JWKS cache               | Fetch directly from upstream                                                                  | Slower, but fully secure                                                                   |
+| **Auth & Authorization** | **Zero Redis dependency**                                                                     | No branch ever allows "Redis is down, so grant access"                                     |
 
 The last line represents an absolute boundary: failing open on rate limiting risks _money_; failing open on authorization risks _customer data_.
+
+> **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE` (`retry_after_ms: 1000`); no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and to local-auth rate limits. A post-result quota increment failure still marks usage `quota_unverified`. The fault-injection tests in `test/db/tenant-isolation/fault-injection/` (#328) cover every row of this table as amended.
 
 ### Why Quotas Fail Open
 
@@ -114,9 +123,8 @@ Rejecting requests does the opposite: a student attempts to submit an essay, rec
 Quantifying real downside exposure:
 
 ```
-Redis crashes -> local in-memory concurrency backstop remains active
-1 rogue runaway org ≈ 20 concurrent × ~2s latency ≈ 600 req/min
-10-minute Redis outage ≈ 6,000 excess requests worst-case for 1 malicious tenant
+Non-graded route, Redis down -> local per-minute rate ceiling remains active
+Graded route, Redis down -> refused with 503 REDIS_UNAVAILABLE (ADR-0116), so no unmetered grading
 ```
 
 A few tens of dollars in AI model fees in exchange for 10 minutes of zero customer rejection. That trade-off is overwhelmingly favorable.
@@ -130,7 +138,7 @@ ALTER TABLE organizations
 
 ```ts
 // Redis unreachable + quota cannot be verified:
-if (org.hard_stop_on_quota) throw new QuotaExceededError(); // fail closed specifically for this org
+if (org.hard_stop_on_quota) throw redisUnavailable(); // fail closed: retryable 503, 1 s hint (#373)
 metering.flag("quota_unverified"); // for everyone else: allow and flag
 ```
 
@@ -146,15 +154,9 @@ Otherwise, failing open becomes a silent leakage vector:
 
 ### Local In-Memory Backstop
 
-Mitigates the risk of failing open. Each Node process maintains a coarse in-memory counter:
+Mitigates the risk of failing open where AIHUB still fails open. A non-graded route's rate limiter keeps a coarse per-key, per-minute counter in each process, and local-auth rate limits keep their own bounded fallback. Neither is shared across replicas.
 
-```ts
-// Safe guard: safety net when Redis is dead, not a precision rate limiter.
-// Unshared across instances, does not guarantee fairness across orgs.
-const GLOBAL_MAX_INFLIGHT = 200; // per Node process
-```
-
-Even if Redis collapses, a runaway client can hold at most 200 concurrent connections per process instead of an unbounded pool. ~10 lines of code providing the operational cushion needed to safely choose "fail open" above.
+The process-wide in-flight backstop (`GLOBAL_MAX_INFLIGHT = 200`) is gone: under ADR-0116 a graded request never runs without a verified Redis permit, so a Redis outage refuses grading instead of capping it.
 
 ## F.6 Two Operational Details Frequently Missed
 
@@ -167,6 +169,8 @@ new Redis({
   enableOfflineQueue: false,
 });
 ```
+
+The gateway client (graded admission, concurrency, retry budgets) uses `commandTimeout: 200` and `connectTimeout: 1000`, calibrated from the Production app-to-Redis round trip; the identity and auth clients keep 100 ms.
 
 A **hung** Redis is far more dangerous than a **dead** Redis. A dead Redis triggers an immediate connection refusal and activates fallback logic. A hung Redis without timeouts causes every incoming request to hang indefinitely — turning a Redis hiccup into a total system stall. `enableOfflineQueue: false` forces commands to error immediately rather than accumulating in Node RAM.
 

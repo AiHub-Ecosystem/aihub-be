@@ -19,12 +19,12 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import type {
   DispatchResult,
   OperationDispatcherPort,
 } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import type {
@@ -229,8 +229,8 @@ describe('application shutdown drain', () => {
       .useValue(quota)
       .overrideProvider(USAGE_REPOSITORY)
       .useValue(usageRepository)
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
+      .overrideProvider(GRADED_ADMISSION)
+      .useValue({ consume: async () => ({ stage: 'admitted' }) })
       .compile();
 
     const app = moduleRef.createNestApplication<NestFastifyApplication>(

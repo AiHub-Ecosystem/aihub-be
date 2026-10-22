@@ -6,18 +6,22 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { lastLines, runProcess } from './capacity-benchmark-process.mjs';
 import {
   appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
+  gradedPathSampleAdequacy,
   hasCompleteLoadDelivery,
   hasMinimumRouteSamples,
   highestPassingRate,
   jsonAfterPrefix,
+  k6ProcessTimeoutMs,
   metricValue,
   minimumGradingHoldSeconds,
   overloadRate,
   parseDockerImageIdentity,
   parseDockerStats,
+  summarizeGradedPathTimings,
 } from './capacity-benchmark-utils.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -232,8 +236,7 @@ try {
   }
 
   await controlArgon2Probe(appContainerId, '/reset');
-  await new Promise((resolve) => setTimeout(resolve, 5000));
-  const idleArgon2Probe = await controlArgon2Probe(appContainerId, '/burst');
+  const idleArgon2Probe = await waitForIdleProbeSamples(appContainerId);
   /** @type {number | undefined} */
   let argon2BurstStartedAt;
   /** @type {number | undefined} */
@@ -570,7 +573,15 @@ try {
     },
     note: 'Isolated workload only. It is not an exact capacity claim for the shared 2-vCPU Production host.',
   };
-  const resultPath = path.join(artifactDirectory, 'results.json');
+  // A run whose acceptance checks failed is not a repetition, so it never
+  // takes the results.json name the repetitions summary reads.
+  if (!argon2Contention.allChecksPassed) {
+    report.benchmark.error = 'Argon2 contention acceptance checks did not pass';
+  }
+  const resultPath = path.join(
+    artifactDirectory,
+    argon2Contention.allChecksPassed ? 'results.json' : 'partial-results.json',
+  );
   await writeFile(resultPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`Benchmark report written to ${resultPath}\n`);
   if (!argon2Contention.allChecksPassed) {
@@ -578,19 +589,45 @@ try {
     process.exitCode = 1;
   }
 } catch (error) {
-  process.stderr.write(
-    `Capacity benchmark failed: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`Capacity benchmark failed: ${message}\n`);
   process.exitCode = 1;
+  // Keep the stages that did complete for diagnosis. The repetitions summary
+  // reads only results.json, so a failed run never counts as a repetition.
+  await writeFile(
+    path.join(artifactDirectory, 'partial-results.json'),
+    `${JSON.stringify(
+      {
+        benchmark: {
+          startedAt: startedAt.toISOString(),
+          failedAt: new Date().toISOString(),
+          repetition,
+          runtimeCommit: benchmarkRevision,
+          error: message,
+        },
+        runs,
+        sampledResources: {
+          appContainer: statsWatcher?.samples ?? [],
+          host: hostWatcher?.samples ?? [],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  ).catch(() => undefined);
 } finally {
   statsWatcher?.stop();
   hostWatcher?.stop();
   process.stdout.write('Cleaning up benchmark Compose project...\n');
   await dockerCompose(['down', '--volumes', '--remove-orphans'], {
     timeout: 60_000,
+    killSignal: 'SIGKILL',
+    killProcessGroup: true,
+    stdio: 'ignore',
   }).catch((error) => {
-    process.stderr.write(`Benchmark cleanup failed: ${error.message}\n`);
-    process.exitCode = 1;
+    process.stderr.write(`Benchmark cleanup warning: ${error.message}\n`);
+    // GitHub discards its hosted runner after the already-written report uploads.
+    if (process.env.GITHUB_ACTIONS !== 'true') process.exitCode = 1;
   });
 }
 
@@ -667,55 +704,19 @@ async function controlArgon2Probe(containerId, pathName) {
   return JSON.parse(result.stdout);
 }
 
-function runProcess(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: repositoryRoot,
-      env: options.env ?? process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: options.timeout,
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout = appendLimited(stdout, chunk);
-      options.onStdout?.(chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr = appendLimited(stderr, chunk);
-      options.onStderr?.(chunk);
-    });
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      if (code !== 0 && !options.allowNonZeroExit) {
-        reject(
-          new Error(
-            `${command} ${
-              code === null ? `was terminated by ${signal}` : `exited ${code}`
-            }: ${lastLines(stderr || stdout, 30)}`,
-          ),
-        );
-        return;
+// Samples keep accumulating while the probe refuses to start the burst, so a
+// slow idle window gets more time instead of discarding the stages already run.
+async function waitForIdleProbeSamples(containerId) {
+  for (let attempt = 1; ; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    try {
+      return await controlArgon2Probe(containerId, '/burst');
+    } catch (error) {
+      if (attempt >= 6 || !error.message.includes('insufficient idle probe')) {
+        throw error;
       }
-      resolve({ stdout, stderr, exitCode: code });
-    });
-  });
-}
-
-function appendLimited(current, chunk) {
-  const result = current + chunk;
-  return result.length > 8_000_000 ? result.slice(-8_000_000) : result;
-}
-
-function lastLines(value, limit) {
-  return value
-    .split(/\r?\n/)
-    .slice(-limit)
-    .map((line) => (line.length > 2000 ? '[omitted long output line]' : line))
-    .join('\n')
-    .trim();
+    }
+  }
 }
 
 async function waitForHealthyApp() {
@@ -762,7 +763,12 @@ async function dockerRestartCount(containerId) {
   const result = await runProcess(
     'docker',
     ['inspect', '--format', '{{.RestartCount}}', containerId],
-    { env: benchmarkEnvironment },
+    {
+      timeout: 30_000,
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
+      env: benchmarkEnvironment,
+    },
   );
   const count = Number(result.stdout.trim());
   if (!Number.isSafeInteger(count) || count < 0) {
@@ -805,14 +811,17 @@ async function runK6({
   isRecovery = false,
 }) {
   if (routeNames.includes('refresh')) {
-    await dockerCompose([
-      'run',
-      '--rm',
-      '--no-deps',
-      'seed',
-      'node',
-      'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
-    ]);
+    await dockerCompose(
+      [
+        'run',
+        '--rm',
+        '--no-deps',
+        'seed',
+        'node',
+        'scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs',
+      ],
+      { timeout: 60_000, killProcessGroup: true, killSignal: 'SIGKILL' },
+    );
   }
   const restartCountBefore = await dockerRestartCount(appContainerId);
   const startMs = Date.now();
@@ -855,6 +864,9 @@ async function runK6({
       '/scripts/capacity-benchmark-k6.js',
     ],
     {
+      timeout: k6ProcessTimeoutMs(Number.parseInt(runDuration, 10)),
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
       onStdout: loadStartScanner(),
       onStderr: loadStartScanner(),
     },
@@ -897,6 +909,21 @@ async function runK6({
   const appResourcePeak = peak(appSamples);
   const hostResourcePeak = peak(hostSamples);
   const restartCountAfter = await dockerRestartCount(appContainerId);
+  const pathSamples = Object.fromEntries(
+    routeNames
+      .filter((name) => gradingRouteNames.includes(name))
+      .map((name) => [
+        name,
+        gradedPathSampleAdequacy(
+          name,
+          routeResults[name].timingsByPath,
+          minimumGradingSamples,
+        ),
+      ]),
+  );
+  const pathSamplesAdequate = Object.values(pathSamples).every((paths) =>
+    Object.values(paths).every(({ status }) => status === 'sufficient'),
+  );
 
   return {
     workload,
@@ -915,7 +942,7 @@ async function runK6({
             { routes: routeResults },
             routeNames.filter((name) => gradingRouteNames.includes(name)),
             minimumGradingSamples,
-          )
+          ) && pathSamplesAdequate
           ? 'sufficient'
           : 'inconclusive'
         : 'not_applicable',
@@ -933,6 +960,7 @@ async function runK6({
             : { count: routeResults[name].count, status: 'not_applicable' },
         ]),
       ),
+      paths: pathSamples,
     },
     appResourceSampleCount: appSamples.length,
     hostResourceSampleCount: hostSamples.length,
@@ -991,7 +1019,14 @@ function routeSummary(metrics, name, logTiming) {
   const pathName = routePaths[name];
   const p99Ms = finite(latency['p(99)']);
   const p95Ms = finite(latency['p(95)']);
-  const timing = logTiming ?? { totalMs: [], admissionMs: [] };
+  const accepted = metrics[`benchmark_accepted_latency_${name}`]?.values ?? {};
+  const timing = logTiming ?? {
+    totalMs: [],
+    admissionMs: [],
+    completionMs: [],
+    paths: {},
+    errorsByCode: {},
+  };
   return {
     path: pathName,
     count:
@@ -999,10 +1034,23 @@ function routeSummary(metrics, name, logTiming) {
     p50Ms: finite(latency.med),
     p95Ms,
     p99Ms,
+    acceptedLatencyMs: {
+      p50: finite(accepted.med),
+      p95: finite(accepted['p(95)']),
+      p99: finite(accepted['p(99)']),
+    },
     errorCount:
       metricValue(metrics, `benchmark_api_errors_${name}`, 'count') ?? 0,
+    // Keyed `<http_status> <error_code>` from the gateway's completion log;
+    // transport errors never reached it, so they are counted separately.
+    errorsByCode: timing.errorsByCode,
+    transportErrorCount:
+      metricValue(metrics, `benchmark_api_transport_errors_${name}`, 'count') ??
+      0,
     correctedTotalMs: percentileSet(timing.totalMs),
     admissionMs: percentileSet(timing.admissionMs),
+    completionMs: percentileSet(timing.completionMs),
+    timingsByPath: summarizeGradedPathTimings(timing.paths),
     downstreamMs: {
       p50: finite(metrics[`benchmark_downstream_${name}`]?.values?.med),
       p95: finite(metrics[`benchmark_downstream_${name}`]?.values?.['p(95)']),
@@ -1024,7 +1072,12 @@ async function requestTimingLogs(containerId, since, sinceMs) {
   const output = await runProcess(
     'docker',
     ['logs', `--since=${since}`, containerId],
-    { env: benchmarkEnvironment },
+    {
+      timeout: 60_000,
+      killProcessGroup: true,
+      killSignal: 'SIGKILL',
+      env: benchmarkEnvironment,
+    },
   ).catch(() => ({ stdout: '' }));
   const results = {};
   const byPath = {
@@ -1057,10 +1110,40 @@ async function requestTimingLogs(containerId, since, sinceMs) {
       }).find(([operation]) => operation === event.operation)?.[1] ??
       byPath[event.route];
     if (name === undefined) continue;
-    const record = (results[name] ??= { totalMs: [], admissionMs: [] });
+    const record = (results[name] ??= {
+      totalMs: [],
+      admissionMs: [],
+      completionMs: [],
+      paths: {},
+      errorsByCode: {},
+    });
+    if (Number.isInteger(event.http_status) && event.http_status >= 400) {
+      const key = `${event.http_status} ${event.error_code ?? 'NO_ERROR_CODE'}`;
+      record.errorsByCode[key] = (record.errorsByCode[key] ?? 0) + 1;
+    }
     if (Number.isFinite(event.total_ms)) record.totalMs.push(event.total_ms);
     if (Number.isFinite(event.admission_ms)) {
       record.admissionMs.push(event.admission_ms);
+    }
+    if (Number.isFinite(event.completion_ms)) {
+      record.completionMs.push(event.completion_ms);
+    }
+    if (
+      (event.identity_mode === 'declared_id' ||
+        event.identity_mode === 'signed_assertion') &&
+      (event.retry_budget === 'keyed_writing' || event.retry_budget === 'none')
+    ) {
+      const path = `${event.identity_mode}:${event.retry_budget}`;
+      const sample = (record.paths[path] ??= {
+        admissionMs: [],
+        completionMs: [],
+      });
+      if (Number.isFinite(event.admission_ms)) {
+        sample.admissionMs.push(event.admission_ms);
+      }
+      if (Number.isFinite(event.completion_ms)) {
+        sample.completionMs.push(event.completion_ms);
+      }
     }
   }
   return results;
@@ -1129,7 +1212,15 @@ function watchDockerStats(containerId) {
       }
     }
   });
-  return { samples, stop: () => child.kill() };
+  return {
+    samples,
+    stop: () => {
+      // The stats CLI can outlive Compose teardown and keep Node's pipe open.
+      child.kill('SIGKILL');
+      child.stdout.destroy();
+      child.unref();
+    },
+  };
 }
 
 function watchHostResources() {

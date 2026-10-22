@@ -29,7 +29,10 @@ project down.
 
 The stub returns the checked-in AI Writing Task 1 and Task 2 response fixtures
 and the checked-in AI Speaking response fixture for both Speaking transports.
-Its fixed delay and deterministic error rate are configurable. A local TCP
+Its fixed delay and deterministic error rate are configurable. It serves AI
+Writing on port 8080 and AI Speaking on port 8081, because Production reaches
+the two services at separate origins and the gateway keeps one 10-connection
+pool per origin; one shared stub origin would halve that ceiling. A local TCP
 proxy adds 30 ms in each direction to Redis by default, for a configured 60 ms
 round trip. The report records the configured RTT; it is not a one-way delay.
 
@@ -67,7 +70,9 @@ error rate, and maximum VUs use `BENCHMARK_REDIS_RTT_MS`,
 
 The `Capacity benchmark` GitHub Actions workflow runs only through
 `workflow_dispatch`. It runs three repetitions at 8, 16, 32, and 64 offered
-requests per second on a fresh `ubuntu-24.04` GitHub-hosted VM, with the same 1,000
+requests per second, in parallel, each on its own fresh `ubuntu-24.04`
+GitHub-hosted VM, so the p99 spread includes VM-to-VM variance. A summary job
+then combines them. Each repetition uses the same 1,000
 sample minimum, 60 ms Redis RTT, and 2,000 ms stub latency. It is not a pull
 request gate. The workflow records the runner hardware and Docker engine,
 uploads each raw JSON result, and includes the p99 min/median/max spread across
@@ -78,7 +83,11 @@ that shape when comparing the measured 1.5-CPU AIHUB container with the shared
 During each stage, k6 scrapes `/metrics` once per second. The report includes
 offered and completed rates (completed rate uses the configured hold interval),
 route p50/p95/p99, response shares, and per-route error counts,
-injected stub failures, process RSS and heap, event-loop lag, Postgres pool
+error counts by HTTP status and AIHUB error code (`errorsByCode`, read from the
+gateway's request completion log), transport errors that never reached the
+gateway, p50/p95/p99 for accepted (2xx) responses alone so a fast refusal
+cannot improve a percentile, injected stub failures, process RSS and heap,
+event-loop lag, Postgres pool
 waiting clients, downstream queue counts, and the corrected grading
 `total_ms`, `admission_ms`, and `downstream_ms`. It also records Docker CPU and
 memory samples for AIHUB and host CPU and memory observations. The p99 targets
@@ -88,6 +97,13 @@ deadlines, app CPU and memory below 80% of their configured limits, host CPU
 below 80%, host memory use below 80%, and zero Postgres pool waiting clients.
 These are local benchmark operating thresholds that leave headroom; they do
 not establish Production tenant capacity.
+
+The report also includes admission and post-result completion p50/p95/p99 by
+the observed `identity_mode` and `retry_budget` pair, plus the sample count for
+each pair. Route and observed-path sample counts below the configured minimum
+make the stage inconclusive. A run reports only the paths it exercised; use an
+active identity configuration and keyed Writing requests to measure the signed
+assertion and retry-budget paths.
 
 At the highest mixed-grading rate that met all four p99 deadlines and delivered
 its full offered load, the harness runs quota reconciliation and usage
@@ -109,7 +125,11 @@ The final stage runs a login burst intended to saturate the per-process Argon2
 cap (defaults: 16 requests/s with a cap of two and `UV_THREADPOOL_SIZE=4`); it
 fails unless the burst records an actual queue wait. An in-process
 probe measures `dns.lookup('benchmark-support')` and RS256 `jose.jwtVerify`
-every 100 ms during a five-second idle window and the burst. When the probe
+every 100 ms during an idle window and the burst. The idle window starts only
+after every downstream pool queue left by the preceding stages has drained
+(the run fails if they are still queued after two minutes). It lasts five
+seconds and extends in five-second steps, up to 30 seconds, until it has ten
+samples of each probe. When the probe
 observes Argon2 queue work, it runs one image through the production Writing
 chart sanitizer and its serialized processing queue, tying the chart
 verification to actual hash contention. The report records login
@@ -121,10 +141,64 @@ with `BENCHMARK_ARGON2_MAX_CONCURRENCY`,
 `BENCHMARK_ARGON2_THREADPOOL_SIZE`, and `BENCHMARK_ARGON2_BURST_RATE_RPS`.
 
 Each JSON result is written to the ignored
-`artifacts/capacity-benchmark/<run-id>/results.json`. The GitHub workflow also
+`artifacts/capacity-benchmark/<run-id>/results.json`. A run that fails, or
+whose Argon2 contention checks do not all pass, writes its completed stages and
+the error to `partial-results.json` instead, so a late failure still leaves
+evidence; it never counts as a repetition. The GitHub workflow also
 writes `repetitions-summary.json` and `repetitions-summary.md` beside those run
 directories. Keep the environment, commit, rate schedule, workload mix, and
 host details with any baseline shared with issues #268, #273, #328, #398, or
 #224 (#114 is closed and superseded). A result describes only this workload
 and its recorded runner; it is not an exact capacity claim for the shared
 2-vCPU Production host.
+
+## When to rerun
+
+The benchmark has no schedule. It is rerun by hand, with the `Capacity
+benchmark` workflow's `full` profile, whenever one of the invalidation triggers
+below fires. A scheduled run that nobody compares costs runner time and teaches
+nothing. Each trigger names a recorded input of the baseline, so a fired
+trigger is exactly the case where the recorded numbers stop describing the
+code. Do not add a `schedule:` until #713 bounds every Docker, k6, and probe
+child and always tears the stack down. Without that, an unattended hung run
+burns the 300-minute job limit and leaves a stack on the runner.
+
+Invalidation triggers:
+
+- The runner image (`ubuntu-24.04`) or the pinned generator
+  (`grafana/k6:0.54.0`) changes. Keep the benchmark pinned even where
+  `ci.yml` uses `ubuntu-latest`; the pin keeps repetitions comparable.
+- A Compose image changes: `postgres:16-alpine`, `redis:7.4.2-alpine`, or
+  `node:22.23.2-bookworm-slim`.
+- The AIHUB container limits change (1.5 CPU, 768 MiB), or ADR-0080's 614 MiB
+  RSS gate changes.
+- A declared constant changes: `BENCHMARK_REDIS_RTT_MS` (60),
+  `BENCHMARK_STUB_LATENCY_MS` (2000), `BENCHMARK_MAX_VUS` (256), or the 1,000
+  sample minimum.
+- Code behind a measured ceiling changes: the downstream connection pool, the
+  grading admission chain (rate limit, quota, concurrency, retry budget), or the
+  Argon2 profile and its concurrency cap.
+- The Production host topology changes. The first question of the review checklist in
+  `docs/reliability-maturity.md` section D asks this against the topology in
+  section C: host size, slot count, a new shared dependency, a pool or
+  `connection_limit`, or a pooler.
+
+Whoever lands the change that fires a trigger dispatches the run. They compare
+its `repetitions-summary.md` with the baseline record in
+[`capacity-baseline.md`](capacity-baseline.md) before the triggering issue
+closes. Do not compare it with memory or an expired artifact; the workflow
+keeps artifacts for 30 days. A new baseline replaces that record in the same
+change, together with the commit and the triggers that were true at that
+commit.
+
+A rerun is a regression, and opens a follow-up issue, when any of these is
+true:
+
+- For any stage and grading route, the median p99 across three repetitions
+  exceeds the recorded baseline's maximum p99 for that stage and route.
+- A route that had enough samples in the baseline is now inconclusive.
+- The highest passing mixed-grading rate drops, or the first observed ceiling
+  changes.
+
+The follow-up issue links the run and is posted to the baseline's consumers:
+#268, #273, #328, and #398.

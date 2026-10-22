@@ -9,7 +9,10 @@ import {
 } from 'jose';
 import { ulid } from 'ulid';
 
-import type { RedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
+import {
+  type RedisGatewayClient,
+  integerArrayReply,
+} from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
 import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
@@ -134,6 +137,8 @@ export function createTenantIsolationRedisClients(): TenantIsolationRedisClients
       }
       return result;
     },
+    evalNumbers: async (script, numberOfKeys, ...args) =>
+      integerArrayReply(await raw.eval(script, numberOfKeys, ...args)),
     zrem: (key, member) => raw.zrem(key, member),
     quit: () => raw.quit(),
   };

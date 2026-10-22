@@ -172,6 +172,7 @@ describe('tenant isolation for identity boundaries', () => {
       userId: 'student_456',
       organizationId: ORGANIZATION_A,
       scopes: [],
+      mode: 'declared_id',
     });
     await expect(
       resolver.resolve({
@@ -238,6 +239,7 @@ describe('tenant isolation for identity boundaries', () => {
       userId: 'shared-subject',
       organizationId: ORGANIZATION_A,
       scopes: [],
+      mode: 'signed_assertion',
     });
     await expect(
       verifier.resolve({
@@ -254,6 +256,7 @@ describe('tenant isolation for identity boundaries', () => {
       userId: 'shared-subject',
       organizationId: ORGANIZATION_B,
       scopes: [],
+      mode: 'signed_assertion',
     });
     await verifier.resolve({
       value: assertionB,

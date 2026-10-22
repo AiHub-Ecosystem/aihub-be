@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -23,6 +24,12 @@ function validExporterCompose() {
           target: 9090,
           published: '9094',
           protocol: 'tcp',
+        },
+      ],
+      volumes: [
+        {
+          target: '/etc/prometheus/sandbox-targets',
+          read_only: true,
         },
       ],
       networks: { monitoring: { ipv4_address: '172.27.0.12' } },
@@ -71,6 +78,10 @@ function validExporterCompose() {
       build: { args: { AIHUB_MONITORING_UID_GID: '1004:1004' } },
       network_mode: 'host',
       user: '1004:1004',
+      command: [
+        '172.27.0.1:19103:127.0.0.1:19103',
+        '172.27.0.1:19104:127.0.0.1:19104',
+      ],
       mem_limit: '32m',
       cpus: 0.05,
     },
@@ -177,6 +188,42 @@ void test('validates the exporter Compose file and Prometheus config and rules',
       '--config.file=/etc/prometheus/blackbox.yml',
     ],
   });
+});
+
+void test('scrapes both application metrics endpoints through private forwards', () => {
+  const prometheus = readFileSync(
+    path.resolve(__dirname, '../../../ops/monitoring/prometheus.yml'),
+    'utf8',
+  );
+  assert.match(
+    prometheus,
+    /job_name: aihub-production-app\s+metrics_path: \/metrics\s+static_configs:\s+- targets: \[172\.27\.0\.1:19103\]/,
+  );
+  assert.match(
+    prometheus,
+    /job_name: aihub-sandbox-app\s+metrics_path: \/metrics\s+file_sd_configs:\s+- files: \[\/etc\/prometheus\/sandbox-targets\/targets\.yml\]/,
+  );
+  const sandboxTargets = readFileSync(
+    path.resolve(
+      __dirname,
+      '../../../ops/monitoring/sandbox-targets/targets.yml',
+    ),
+    'utf8',
+  );
+  assert.match(sandboxTargets, /targets: \[172\.27\.0\.1:19104\]/);
+  assert.throws(
+    () =>
+      validateExporterCompose({
+        services: {
+          ...validExporterCompose().services,
+          'ssh-tunnel': {
+            ...validExporterCompose().services['ssh-tunnel'],
+            command: ['172.27.0.1:19103:127.0.0.1:19103'],
+          },
+        },
+      }),
+    /app metrics forward :19104/,
+  );
 });
 
 void test('stops at the first invalid monitoring config', () => {

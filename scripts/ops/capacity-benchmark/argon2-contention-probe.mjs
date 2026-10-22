@@ -48,6 +48,16 @@ export function parseArgon2QueueMetrics(metricsText) {
   };
 }
 
+export function parseDownstreamQueued(metricsText) {
+  let queued = 0;
+  for (const match of metricsText.matchAll(
+    /^aihub_downstream_pool_queued(?:\{[^}]*\})?\s+([0-9]+(?:\.[0-9]+)?)$/gm,
+  )) {
+    queued += Number(match[1]);
+  }
+  return queued;
+}
+
 function emptySamples() {
   return {
     dnsLookupMs: [],
@@ -63,10 +73,26 @@ async function timed(operation) {
   return performance.now() - start;
 }
 
-async function currentArgon2QueueMetrics() {
+async function appMetricsText() {
   const response = await fetch('http://127.0.0.1:3000/metrics');
-  if (!response.ok) throw new Error('could not read Argon2 queue metrics');
-  return parseArgon2QueueMetrics(await response.text());
+  if (!response.ok) throw new Error('could not read app metrics');
+  return response.text();
+}
+
+async function currentArgon2QueueMetrics() {
+  return parseArgon2QueueMetrics(await appMetricsText());
+}
+
+// The idle window must measure an idle process. A preceding overload stage can
+// leave over a hundred requests queued per downstream pool, and draining them
+// keeps the CPU-limited process too busy to take idle samples.
+async function waitForDownstreamDrain() {
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    const queued = parseDownstreamQueued(await appMetricsText());
+    if (queued === 0 || Date.now() > deadline) return queued;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
 }
 
 async function waitForArgon2QueueWait() {
@@ -96,7 +122,9 @@ async function startProbeServer() {
   const token = await new SignJWT({ sub: 'capacity-probe' })
     .setProtectedHeader({ alg: 'RS256', kid: 'capacity-probe' })
     .setIssuedAt()
-    .setExpirationTime('1h')
+    // Signed once at app start and verified when the Argon2 stage runs, which
+    // is more than an hour later in the full profile; outlive any run.
+    .setExpirationTime('12h')
     .sign(signingKey);
 
   const [
@@ -179,6 +207,15 @@ async function handleControlRequest(request, response) {
     return;
   }
   if (request.url === '/reset') {
+    phase = 'off';
+    const downstreamQueued = await waitForDownstreamDrain();
+    if (downstreamQueued > 0) {
+      sendJson(response, 409, {
+        error: 'downstream pools did not drain',
+        downstreamQueued,
+      });
+      return;
+    }
     phaseSamples.idle = emptySamples();
     phaseSamples.burst = emptySamples();
     chartVerification = undefined;
@@ -191,7 +228,10 @@ async function handleControlRequest(request, response) {
   if (request.url === '/burst') {
     const idle = summarizeProbeSamples(phaseSamples.idle);
     if (idle.dnsLookupSampleCount < 10 || idle.jwtVerifySampleCount < 10) {
-      sendJson(response, 409, { error: 'insufficient idle probe samples' });
+      sendJson(response, 409, {
+        error: 'insufficient idle probe samples',
+        ...idle,
+      });
       return;
     }
     phaseSamples.burst = emptySamples();

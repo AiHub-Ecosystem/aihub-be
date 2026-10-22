@@ -218,6 +218,7 @@ export class UserAssertionVerifier {
       userId: claims.userId,
       organizationId: input.organizationId,
       scopes: [],
+      mode: 'signed_assertion',
     };
   }
 

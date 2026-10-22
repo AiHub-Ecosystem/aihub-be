@@ -32,7 +32,7 @@ export type CompletedReplayLookupInput = Pick<
 
 export interface IdempotencyBackgroundLifecycle {
   started(): void;
-  settled(): void;
+  settled(): void | Promise<void>;
   /**
    * The work that outlived its response finished and its result is stored, so
    * a replay will now deliver it. Called at most once and awaited before

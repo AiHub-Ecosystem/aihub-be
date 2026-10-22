@@ -3,10 +3,21 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
+import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
+import {
+  type EmailDeliveryKindLabel,
+  registerEmailOutboxCancellationMetric,
+} from './email-outbox-cancellation-metric';
+
+export type {
+  EmailDeliveryKindLabel,
+  EmailOutboxCancellationSample,
+} from './email-outbox-cancellation-metric';
 
 /**
- * Shared metric registry. The rejection and Redis-unavailable counters
- * (`aihub_rejected_total`, `aihub_redis_unavailable_total`) belong to #200.
+ * Shared metric registry. The rejection counter (`aihub_rejected_total`)
+ * belongs to #200; `aihub_redis_unavailable_total` lives in
+ * `redis-unavailable-metric.ts`.
  */
 export const METRICS_ROUTE_PATH = '/metrics';
 
@@ -151,14 +162,6 @@ const downstreamRetryEventsTotal = new Counter({
   registers: [registry],
 });
 
-const admissionDuration = new Histogram({
-  name: 'aihub_admission_duration_seconds',
-  help: 'Time from request receipt to gateway dispatch admission, in seconds.',
-  labelNames: ['operation'],
-  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
-  registers: [registry],
-});
-
 const tokensTotal = new Counter({
   name: 'aihub_tokens_total',
   help: 'Aggregate tokens reported by the downstream AI service.',
@@ -205,9 +208,8 @@ export function recordIdentityCacheCoalescedWait(
 
 /**
  * The bounded email kinds are the whole label domain, so this counter cannot grow
- * a series per recipient. A cancellation is deliberately absent: ADR-0074 calls
- * it expected lifecycle handling, so paging on it would train operators to
- * ignore the counter that does page.
+ * a series per recipient. Cancellation has a separate durable timestamp gauge;
+ * only `credential_expired` pages, while routine lifecycle reasons stay quiet.
  */
 const emailDeliveryFailedTotal = new Counter({
   name: 'aihub_email_delivery_failed_total',
@@ -236,7 +238,8 @@ const postgresPoolErrorsTotal = new Counter({
 export type PostgresConnectionRole =
   | 'runtime'
   | 'control-plane'
-  | 'control-plane-read';
+  | 'control-plane-read'
+  | 'email-daily-budget';
 
 export type PostgresPoolName = PostgresConnectionRole | 'integration-test';
 
@@ -383,13 +386,6 @@ export function recordPostgresPoolError(
   return sqlstateClass;
 }
 
-export type EmailDeliveryKindLabel =
-  | 'verification_email'
-  | 'password_reset_email'
-  | 'organization_invite_email'
-  | 'mfa_enabled_notification'
-  | 'mfa_removed_notification';
-
 export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
   emailDeliveryFailedTotal.inc({ kind });
 }
@@ -505,6 +501,11 @@ export function setEmailOutboxBacklogSource(
   }
 }
 
+export const setEmailOutboxCancellationSource =
+  registerEmailOutboxCancellationMetric(registry);
+export const setEmailDailySendBudgetSource =
+  registerEmailDailySendBudgetMetric(registry);
+
 export interface DispatchAttemptUnresolvedSample {
   readonly operation: OperationId | 'other';
   readonly count: number;
@@ -574,8 +575,6 @@ export interface CompletedRequestMetrics {
   readonly totalMs?: number;
   /** Downstream wait in milliseconds, already timed by the dispatcher. */
   readonly downstreamMs?: number;
-  /** Time to pass guards and body validation, before gateway dispatch. */
-  readonly admissionMs?: number;
   readonly tokens?: number;
   readonly meteringStatus?: string;
 }
@@ -599,11 +598,6 @@ export function recordCompletedRequest(request: CompletedRequestMetrics): void {
   const downstreamSeconds = secondsOf(request.downstreamMs ?? Number.NaN);
   if (downstreamSeconds !== undefined) {
     downstreamDuration.observe({ operation }, downstreamSeconds);
-  }
-
-  const admissionSeconds = secondsOf(request.admissionMs ?? Number.NaN);
-  if (admissionSeconds !== undefined) {
-    admissionDuration.observe({ operation }, admissionSeconds);
   }
 
   if (

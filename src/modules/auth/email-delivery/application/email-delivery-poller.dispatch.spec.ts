@@ -5,6 +5,7 @@ import {
 } from './email-delivery-poller';
 import {
   FakeCredentials,
+  FakeEmailSendRateLimiter,
   FakeStore,
   NOW,
   ROW_ID,
@@ -152,6 +153,43 @@ describe('EmailDeliveryPoller', () => {
     expect(store.accepted).toEqual([]);
   });
 
+  it('keeps a request queued without spending an attempt when the shared rate cap is full', async () => {
+    const { poller, store, sender } = harness({
+      rateReservation: { reserved: false, retryAfterMs: 750 },
+    });
+    store.claimResult = [claimed()];
+
+    const summary = await poller.runOnce();
+
+    expect(store.reserved).toEqual([]);
+    expect(store.attempts).toEqual([]);
+    expect(store.deferred).toEqual([ROW_ID]);
+    expect(store.deferredUntil).toEqual([new Date(NOW.getTime() + 750)]);
+    expect(sender.sends).toEqual([]);
+    expect(summary.deferred).toBe(1);
+  });
+
+  it('keeps over-budget mail queued until the credential expires or the budget resets', async () => {
+    const reserve = jest.fn().mockResolvedValue({
+      reserved: false,
+      retryAfterMs: 12 * 60 * 60 * 1000,
+    });
+    const { poller, store, sender } = harness({
+      dailySendBudget: { reserve, usage: async () => ({ used: 8, limit: 10 }) },
+    });
+    store.claimResult = [claimed()];
+
+    const summary = await poller.runOnce();
+
+    expect(reserve).toHaveBeenCalledWith('priority');
+    expect(store.reserved).toEqual([]);
+    expect(store.deferredUntil).toEqual([
+      new Date(Date.parse(VERIFICATION_PAYLOAD.expiresAt)),
+    ]);
+    expect(sender.sends).toEqual([]);
+    expect(summary.deferred).toBe(1);
+  });
+
   it('spends no attempt on a request it cancels before calling the provider', async () => {
     const { poller, store } = harness({ credential: 'closed' });
     store.claimResult = [claimed()];
@@ -294,6 +332,7 @@ describe('EmailDeliveryPoller', () => {
       new FakeCredentials(),
       sealed(VERIFICATION_PAYLOAD),
       failingThenWorking,
+      new FakeEmailSendRateLimiter(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -326,6 +365,7 @@ describe('EmailDeliveryPoller', () => {
       new FakeCredentials(),
       unknownKeyVersionCipher(),
       sender,
+      new FakeEmailSendRateLimiter(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -356,6 +396,7 @@ describe('EmailDeliveryPoller', () => {
       new FakeCredentials(),
       unknownKeyVersionCipher(),
       new RecordingSender(),
+      new FakeEmailSendRateLimiter(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -451,6 +492,7 @@ describe('EmailDeliveryPoller', () => {
       new FakeCredentials(),
       unreadableCipher(),
       sender,
+      new FakeEmailSendRateLimiter(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },
@@ -475,6 +517,7 @@ describe('EmailDeliveryPoller', () => {
       new FakeCredentials(),
       sealed(VERIFICATION_PAYLOAD),
       sender,
+      new FakeEmailSendRateLimiter(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
       { owner: 'instance-a' },

@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import {
   type RedisConcurrencyClient,
   RedisConcurrencyLimiter,
@@ -62,7 +63,7 @@ class FakeLogger {
 describe('RedisConcurrencyLimiter', () => {
   it('atomically acquires an organization lease and releases its request member', async () => {
     const redis = new FakeRedis();
-    const limiter = new RedisConcurrencyLimiter(redis, () => 10_000);
+    const limiter = new RedisConcurrencyLimiter(redis);
 
     const decision = await limiter.acquire({
       organizationId: 'org_acme',
@@ -97,10 +98,10 @@ describe('RedisConcurrencyLimiter', () => {
     ]);
   });
 
-  it('rejects an atomic acquisition with the concurrency error hint', async () => {
+  it('rejects an atomic acquisition with a jittered concurrency hint', async () => {
     const redis = new FakeRedis();
     redis.nextEvaluation = 0;
-    const limiter = new RedisConcurrencyLimiter(redis);
+    const limiter = new RedisConcurrencyLimiter(redis, undefined, () => 0.5);
 
     await expect(
       limiter.acquire({
@@ -108,7 +109,30 @@ describe('RedisConcurrencyLimiter', () => {
         maxConcurrent: 1,
         requestId: 'req_01JCONCURRENCYFULL000000000000',
       }),
-    ).resolves.toEqual({ allowed: false, retryAfterMs: 500 });
+    ).resolves.toEqual({ allowed: false, retryAfterMs: 750 });
+  });
+
+  it('tells a burst refused together different instants between 500 and 1000 ms', async () => {
+    const redis = new FakeRedis();
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    const hints: number[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      redis.nextEvaluation = 0;
+      const decision = await limiter.acquire({
+        organizationId: 'org_acme',
+        maxConcurrent: 1,
+        requestId: `req_01JCONCURRENCYFULL${String(index).padStart(12, '0')}`,
+      });
+      if (!decision.allowed) hints.push(decision.retryAfterMs);
+    }
+
+    expect(hints).toHaveLength(20);
+    expect(new Set(hints).size).toBeGreaterThan(1);
+    for (const hint of hints) {
+      expect(hint).toBeGreaterThanOrEqual(500);
+      expect(hint).toBeLessThan(1_000);
+    }
   });
 
   it('atomically enforces Sandbox limits for the Organization and whole environment', async () => {
@@ -144,52 +168,47 @@ describe('RedisConcurrencyLimiter', () => {
     ]);
   });
 
-  it('uses a global process-local backstop and releases fallback leases', async () => {
-    const limiter = new RedisConcurrencyLimiter(
-      new FailingRedis(),
-      () => 10_000,
-    );
+  it('returns retryable unavailable when Redis cannot acquire a permit', async () => {
+    const limiter = new RedisConcurrencyLimiter(new FailingRedis());
 
-    const first = await limiter.acquire({
-      organizationId: 'org_acme',
-      maxConcurrent: 1,
-      requestId: 'req_01JBACKSTOP00000000000000000',
-    });
-    expect(first.allowed).toBe(true);
-    if (!first.allowed) {
-      throw new Error('expected a fallback concurrency lease');
-    }
-
-    await first.lease.release();
-
-    await expect(
-      limiter.acquire({
-        organizationId: 'org_other',
-        maxConcurrent: 1,
-        requestId: 'req_01JBACKSTOP00000000000000001',
-      }),
-    ).resolves.toMatchObject({ allowed: true });
-  });
-
-  it('prunes stale fallback leases before applying the process cap', async () => {
-    let now = 120_000;
-    const limiter = new RedisConcurrencyLimiter(new FailingRedis(), () => now);
-
-    const first = await limiter.acquire({
-      organizationId: 'org_acme',
-      maxConcurrent: 1,
-      requestId: 'req_01JSTALE0000000000000000000',
-    });
-    expect(first.allowed).toBe(true);
-
-    now = 240_001;
     await expect(
       limiter.acquire({
         organizationId: 'org_acme',
         maxConcurrent: 1,
-        requestId: 'req_01JSTALE0000000000000000001',
+        requestId: 'req_01JBACKSTOP00000000000000000',
       }),
-    ).resolves.toMatchObject({ allowed: true });
+    ).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1_000,
+    } satisfies Partial<AppError>);
+  });
+
+  it('returns retryable unavailable when releasing a permit has an ambiguous result', async () => {
+    const redis = new FakeRedis();
+    const zrem = jest.fn(() => Promise.reject(new Error('redis timeout')));
+    redis.zrem = zrem;
+    const limiter = new RedisConcurrencyLimiter(redis);
+    const decision = await limiter.acquire({
+      organizationId: 'org_acme',
+      maxConcurrent: 1,
+      requestId: 'req_release_timeout',
+    });
+
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) throw new Error('expected a concurrency lease');
+
+    await expect(decision.lease.release()).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+      retryAfterMs: 1_000,
+    } satisfies Partial<AppError>);
+    await expect(decision.lease.release()).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+    });
+    expect(zrem).toHaveBeenCalledTimes(1);
   });
 
   it('logs one outage and one recovery without exposing request identifiers', async () => {
@@ -207,20 +226,23 @@ describe('RedisConcurrencyLimiter', () => {
         zrem: (key: string, member: string) => current.zrem(key, member),
         quit: () => current.quit(),
       },
-      Date.now,
       logger,
     );
 
-    await limiter.acquire({
-      organizationId: 'org_secret',
-      maxConcurrent: 1,
-      requestId: 'req_secret',
-    });
-    await limiter.acquire({
-      organizationId: 'org_secret',
-      maxConcurrent: 1,
-      requestId: 'req_secret_2',
-    });
+    await expect(
+      limiter.acquire({
+        organizationId: 'org_secret',
+        maxConcurrent: 1,
+        requestId: 'req_secret',
+      }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
+    await expect(
+      limiter.acquire({
+        organizationId: 'org_secret',
+        maxConcurrent: 1,
+        requestId: 'req_secret_2',
+      }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
     expect(logger.warnings).toHaveLength(1);
     expect(logger.warnings[0]).not.toContain('org_secret');
     expect(logger.warnings[0]).not.toContain('req_secret');

@@ -1,9 +1,11 @@
-# Email outbox: terminal failure evidence
+# Email outbox: dispatch and operational signals
 
-This runbook describes what an operator sees when an Email Delivery Request
-stops without provider acceptance, and what to alert on. The outbox itself is
-decided in [ADR-0074](../adr/0074-transactional-email-outbox.md); this document
-covers the operational signal only.
+This runbook describes the Email Delivery Request lifecycle, the accepted
+dispatch controls in [ADR-0117](../adr/0117-prioritize-and-pace-email-outbox-dispatch.md),
+and the operational signals to alert on. The outbox lifecycle is decided in
+[ADR-0074](../adr/0074-transactional-email-outbox.md). ADR-0117's dispatch
+controls and alert rules are implemented in this release; they become active
+when the release and migration are deployed.
 
 ## The alerting boundary
 
@@ -18,7 +20,14 @@ AIHUB emits the two signals an alerting rule consumes and stops there:
 | Signal                                                                     | Where it is read                        |
 | -------------------------------------------------------------------------- | --------------------------------------- |
 | `aihub_email_delivery_failed_total{kind="..."}`                            | `/metrics` on each application instance |
+| `aihub_email_outbox_oldest_queued_age_seconds{kind="..."}`                 | `/metrics`, read from Postgres          |
+| `aihub_email_delivery_cancelled_timestamp_seconds{kind,reason}`            | `/metrics`, read from durable rows      |
 | one `ERROR` log line per terminal failure, context `[EmailOutboxDispatch]` | the instance log                        |
+
+Prometheus scrapes each environment's `/metrics` endpoint through a dedicated
+loopback-only Nginx listener on the Production host and the restricted SSH
+tunnel. Public API and Sandbox `/metrics` paths remain blocked; see the scrape
+and firewall setup in [aihub-observability.md](aihub-observability.md).
 
 Configuring the rule that turns those into a page is deployment-owned
 ([`deploy-vps.md`](deploy-vps.md)). That split is deliberate: adding a broker to
@@ -28,10 +37,58 @@ indistinguishable from the delivery failure it was reporting.
 
 The seam is a single function,
 `reportTerminalEmailDeliveryFailure` in
-`src/modules/auth/infrastructure/email-outbox-poller.scheduler.ts`. It is the
+`src/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler.ts`. It is the
 one place a terminal failure becomes observable, so a change to alerting
 plumbing has one function to move rather than a policy scattered across the
 dispatch path.
+
+## Accepted #438 dispatch controls
+
+The controls keep one poller and database per environment while sharing a
+send-rate reservation across Production and Sandbox. They require the #438
+release and migration in each enabled environment.
+
+Before enabling the shared cap, an operator must:
+
+1. Check the Resend team's current `rate_limit.limit` and
+   `rate_limit.duration` in the [Account Usage API](https://resend.com/changelog/account-usage-api).
+2. Set `AIHUB_EMAIL_SEND_RATE_LIMIT` to a positive cap no greater than the
+   verified limit, and `AIHUB_EMAIL_SEND_RATE_DURATION_MS` to the verified
+   duration converted to milliseconds. The limiter spaces reservations by
+   `ceil(duration_ms / limit)`; use the same values in Production and Sandbox.
+   AIHUB will not query Resend at runtime.
+3. Point both environments at the same dedicated limiter Redis URL/keyspace.
+   Keep it separate from the environment-specific `REDIS_URL` values.
+4. Record the verified limit, duration, configured cap, and date checked here.
+   Do not record the Resend API key.
+
+Production and Sandbox require the same positive
+`AIHUB_EMAIL_SEND_RATE_LIMIT` and `AIHUB_EMAIL_SEND_RATE_DURATION_MS` values.
+The runtime fails startup if either is missing in production mode. Do not
+deploy the release while the verification record below is pending.
+
+| Resend Usage API limit | Duration | Configured cap | Verified on |
+| ---------------------- | -------- | -------------- | ----------- |
+| 10 requests            | 1000 ms  | 10             | 2026-10-22  |
+
+The limiter fails closed: if it cannot reserve a send slot, the request stays
+queued without spending an attempt. Do not configure a per-instance fallback.
+Once implemented, the queue-age rule below alerts on this condition. The cap
+covers both environments, while priority and invitation fair share apply only
+within each environment; Sandbox can consume account send capacity also used by
+Production.
+
+Dispatch order within each environment is password reset, verification
+(registration and resend share the same kind), MFA enabled/removed notices, then
+invitations. Rows within a priority tier remain oldest first. When invitation
+groups compete, a ten-row batch allows at most five invitation rows for any one
+Organization and at most five for any one inviter while another group still
+has eligible invitations. If a competing group's entire queue fits within its
+share, the remaining group can use those slots to fill the batch. Queued rows
+carry opaque Organization and inviter IDs and clear them at terminal state.
+Older invitation rows without those IDs are
+temporarily treated as one legacy group; their ciphertext is not opened for a
+backfill.
 
 ## What is emitted
 
@@ -100,23 +157,26 @@ declined the API request; `outcome_unknown` means a process died after
 reserving the last attempt, so no answer was recorded (see above). Nothing else
 about the provider's answer survives to this point, by design.
 
-## Cancellation is not an alert
+## Credential expiry alerts; other cancellations do not
 
 A request is `cancelled` when its credential is superseded, expired, revoked, or
 otherwise no longer actionable before handoff — a user resends a verification
-email, or an invitation is revoked. ADR-0074 calls this expected lifecycle
-handling. It emits no metric and no event.
+email, or an invitation is revoked. Superseded, revoked, and other non-expiry
+cancellations remain expected lifecycle handling and do not alert.
 
-That is a load-bearing distinction: an alert rule that fired on cancellation
-would page on routine user behaviour and train operators to ignore the one event
-that matters. `summary.cancelled` in the per-pass log line
-(`email outbox pass claimed=... cancelled=N failed=N deferred=N`) is the
-visibility for it.
+Credential expiry is different: an increase in queued credentials expiring
+before dispatch is an operational failure signal. The bounded cancellation
+metric labeled by `kind` and `reason` reads durable outbox state, and the alert
+selects only `reason="credential_expired"`. A process restart after the
+database transition does not lose the signal. `summary.cancelled` in the per-pass log line
+(`email outbox pass claimed=... cancelled=N failed=N deferred=N`) remains the
+visibility for routine cancellations.
 
-A queued request older than the longest credential lifetime (24 hours) is also
-cancelled as `credential_expired`, at the start of every pass and without being
-opened. Its credential can no longer work, so it can never be sent; cancelling it
-is what erases a payload that no instance can decrypt.
+A credential-bearing request older than the longest credential lifetime (24
+hours) is also cancelled as `credential_expired`, at the start of every pass
+and without being opened. MFA notices have no credential; an equally old MFA
+notice is cancelled as `not_actionable`. Both paths erase the queued payload
+without opening it.
 
 ## Queue backlog: when dispatch stops
 
@@ -133,10 +193,11 @@ up, and that counter stays flat. Two gauges cover that case:
 Both are read from the table at scrape time rather than from the poller, so they
 keep rising while dispatch is stopped. If the table cannot be read, the series
 disappear instead of repeating their last value, so an `absent()` rule catches
-that too. `kind` is the only label.
+that too. For these two gauges, `kind` is the only label.
 
-Suggested alert condition: the oldest queued age exceeds 15 minutes for any
-`kind`. A healthy request is sent on its first pass (every 5 seconds) or retried
+A #438 alert fires when oldest queued age exceeds 15 minutes for any `kind`.
+The Prometheus rule is in `ops/monitoring/alert.rules.yml`. A healthy request
+is sent on its first pass (every 5 seconds) or retried
 at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A request
 held back because its payload is sealed with a key version this instance lacks
 waits 5 minutes between claims, so a key removed too early shows up here too.
@@ -205,6 +266,45 @@ WHERE expires_at <= now();
 
 Keep old Email Outbox key versions until queued ciphertext no longer needs them
 and their recipient counters have expired and been removed.
+
+## Daily email budget
+
+Production and Sandbox reserve from the same durable row in the Production
+database through a dedicated least-privilege PostgreSQL login. Set the identical
+AIHUB_EMAIL_DAILY_SEND_BUDGET in both deployments. Provision
+email_send_budget_url in both Vault database bundles with a URL to that shared
+database; the login needs only SELECT, INSERT, and UPDATE on
+email_daily_send_budgets. Keep this URL separate from each environment's outbox
+database URL. The migration creates the table in both app databases, but only
+the shared Production database receives reservations.
+
+The reservation count resets at midnight UTC. Each provider attempt reserves
+one slot before handoff and failures count conservatively. Invitations may use
+at most 80% of the configured budget, reserving the remainder for verification,
+password reset, and MFA email. Over-budget requests stay queued until reset; an
+actionable credential is retried at its expiry so the normal cancellation path
+can erase it.
+
+Resend's [published Free plan](https://resend.com/pricing) currently lists
+100 emails per day and 3,000 per month. On 2026-10-22, the authenticated
+Production Resend credential returned those daily and monthly limits from the
+[Account Usage API](https://resend.com/changelog/account-usage-api). The
+selected budget of 80 leaves 20% daily headroom and stays below the monthly
+limit over 31 days. Before production rollout, check
+`emails.daily.limit` and `emails.monthly.limit` for the account, record the
+values and date below, and set the same cap in both deployments below the
+verified daily and monthly limits. Do not enable dispatch with a pending
+account check.
+
+| Resend account daily limit | Resend account monthly limit | Selected daily budget                | Checked on |
+| -------------------------- | ---------------------------- | ------------------------------------ | ---------- |
+| 100                        | 3,000                        | 80 (at most 2,480 in a 31-day month) | 2026-10-22 |
+
+The AIHUBEmailDailySendBudgetNearLimit alert fires at 80% of the configured
+budget. That matches the invitation cutoff, so an operator is alerted when
+protected recovery capacity is first held back. The daily metric reports both
+the shared day's reserved sends and its configured cap. The rule is in
+ops/monitoring/alert.rules.yml and follows the #369 alert receiver routes.
 
 ## What never appears in a signal
 

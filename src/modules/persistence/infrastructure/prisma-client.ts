@@ -43,6 +43,7 @@ import { isLifecycleProperty } from './prisma-raw';
  * - `control-plane`: the Identity write pool (10) and the one transaction
  *   runner that replaces the Identity repositories' own clients (10).
  * - `control-plane-read`: the Identity read pool (10).
+ * - `email-daily-budget`: the single shared account-budget row.
  *
  * #383 owns tuning; `aihub_postgres_pool_waiting` is the signal.
  */
@@ -50,6 +51,7 @@ const POOL_CONNECTIONS: Readonly<Record<PostgresPoolName, number>> = {
   runtime: 44,
   'control-plane': 20,
   'control-plane-read': 10,
+  'email-daily-budget': 1,
   'integration-test': 10,
 };
 
@@ -168,6 +170,7 @@ export function createSharedPrismaClients(
     ['runtime', urls.databaseUrl],
     ['control-plane', urls.controlPlaneDatabaseUrl],
     ['control-plane-read', urls.controlPlaneReadDatabaseUrl],
+    ['email-daily-budget', urls.emailDailyBudgetDatabaseUrl],
   ];
   const rolesFor = (url: string): readonly PostgresConnectionRole[] =>
     roleUrls.flatMap(([role, candidate]) => (candidate === url ? [role] : []));
@@ -198,11 +201,16 @@ export function createSharedPrismaClients(
     'control-plane-read',
     urls.controlPlaneReadDatabaseUrl,
   );
+  const emailDailyBudget = holderFor(
+    'email-daily-budget',
+    urls.emailDailyBudgetDatabaseUrl,
+  );
 
   return {
     runtime,
     controlPlane,
     controlPlaneRead,
+    emailDailyBudget,
     close: async () => {
       for (const holder of new Set(pools.values())) {
         await holder.close();

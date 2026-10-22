@@ -2,6 +2,7 @@ import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   ApiKeyCachePort,
@@ -90,8 +91,10 @@ class IoredisIdentityClient implements RedisIdentityClient {
     return this.client.expire(key, seconds);
   }
 
+  // A quit that cannot reach Redis leaves ioredis reconnecting, which keeps
+  // a shutting-down process alive; drop the connection instead.
   quit(): Promise<unknown> {
-    return this.client.quit();
+    return this.client.quit().catch(() => this.client.disconnect());
   }
 }
 
@@ -230,6 +233,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       this.rememberApiKey(hashHex, null, lookupStartedAt + remainingMs);
       return null;
     } catch {
+      recordRedisUnavailable('api_key_cache');
       return undefined;
     }
   }
@@ -315,6 +319,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       this.rememberJwks(organizationId, configVersion, generation, entry);
       return { generation, entry };
     } catch {
+      recordRedisUnavailable('jwks_cache');
       return (
         this.readLocalJwks(organizationId, configVersion) ?? {
           generation: '0',
@@ -376,6 +381,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       );
       return { acquired: result === 'OK', available: true };
     } catch {
+      recordRedisUnavailable('jwks_cache');
       return { acquired: false, available: false };
     }
   }
@@ -491,6 +497,7 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
   }
 
   private reportDegraded(operation: 'read' | 'write'): void {
+    recordRedisUnavailable('auth_failure_counter');
     const wasDegraded = this.degradedOperations.size > 0;
     this.degradedOperations.add(operation);
     if (wasDegraded) {

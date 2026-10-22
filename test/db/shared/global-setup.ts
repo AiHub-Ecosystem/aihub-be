@@ -149,6 +149,11 @@ export default async function globalSetup(): Promise<void> {
           ) {
             return;
           }
+          if (existing.is_template) {
+            await admin.query(
+              `ALTER DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH IS_TEMPLATE false`,
+            );
+          }
           await admin.query(
             `DROP DATABASE ${DATABASE_LANE_TEMPLATE_NAME} WITH (FORCE)`,
           );

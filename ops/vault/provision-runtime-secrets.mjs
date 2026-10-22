@@ -137,10 +137,15 @@ const bundles = [
   ['seaweedfs.json', ['access_key_id', 'secret_access_key'], 'seaweedfs'],
   [
     'database.json',
-    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
+    [
+      'url',
+      'sandbox_url',
+      'sandbox_control_plane_read_url',
+      'email_send_budget_url',
+    ],
     'database',
   ],
-  ['redis.json', ['url', 'sandbox_url'], 'redis'],
+  ['redis.json', ['url', 'sandbox_url', 'email_send_rate_url'], 'redis'],
   [
     'sandbox-assertion.json',
     ['private_key_pem', 'key_id'],

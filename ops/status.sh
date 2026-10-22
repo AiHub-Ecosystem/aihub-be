@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only report of what is deployed on the production host: for each AIHUB
-# container, the commit it runs, its health, restarts, and error-like log lines
-# since it started. Changes nothing.
+# container, the commit it runs, dependency readiness, restarts, and error-like
+# log lines since it started. Changes nothing.
 #
 # Nothing is installed on the host; the script travels over stdin:
 #
@@ -94,22 +94,74 @@ for label in production sandbox; do
   health_probe=$("${docker[@]}" exec "$container" node -e \
     "fetch('http://127.0.0.1:3000/health').then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" \
     </dev/null 2>&1 | tail -n 1)
-  readiness_probe=$("${docker[@]}" exec "$container" node -e \
-    "fetch('http://127.0.0.1:3000/ready').then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" \
-    </dev/null 2>&1 | tail -n 1)
+  readiness_result=$("${docker[@]}" exec "$container" node -e '
+    const unavailable = (status = "ERR") =>
+      console.log(`${status}|unavailable|fail`);
+
+    fetch("http://127.0.0.1:3000/ready", {
+      signal: AbortSignal.timeout(2_000),
+    }).then(async (response) => {
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        unavailable(response.status);
+        return;
+      }
+
+      const isRecord = typeof body === "object" && body !== null && !Array.isArray(body);
+      const dependencies = isRecord ? body.dependencies : null;
+      const entries =
+        typeof dependencies === "object" && dependencies !== null && !Array.isArray(dependencies)
+          ? Object.entries(dependencies)
+          : [];
+      const valid =
+        isRecord &&
+        ["ok", "error"].includes(body.status) &&
+        entries.length > 0 &&
+        // HealthModule always registers these; control-plane probes can be deduplicated by URL.
+        ["runtime-postgres", "redis"].every((required) =>
+          entries.some(([name]) => name === required)
+        ) &&
+        entries.every(([name, state]) =>
+          /^[a-z0-9][a-z0-9-]{0,63}$/.test(name) && ["up", "down"].includes(state)
+        );
+      if (!valid) {
+        unavailable(response.status);
+        return;
+      }
+
+      const states = entries.map(([name, state]) => `${name}=${state}`).join(",");
+      const healthy =
+        response.status === 200 &&
+        body.status === "ok" &&
+        entries.every(([, state]) => state === "up");
+      console.log(`${response.status}|${states}|${healthy ? "ok" : "fail"}`);
+    }).catch(() => unavailable());
+  ' </dev/null 2>&1 | tail -n 1)
+  IFS='|' read -r readiness_probe readiness_dependencies readiness_verdict <<<"$readiness_result"
+  if [[ ! "$readiness_probe" =~ ^(ERR|[0-9]{3})$ ||
+    ! "$readiness_verdict" =~ ^(ok|fail)$ ||
+    ( "$readiness_dependencies" != unavailable &&
+      ! "$readiness_dependencies" =~ ^[a-z0-9-]+=(up|down)(,[a-z0-9-]+=(up|down))*$ ) ]]; then
+    readiness_probe=ERR
+    readiness_dependencies=unavailable
+    readiness_verdict=fail
+  fi
 
   verdict=ok
   [ "$state" = running ] || verdict=FAIL
   [ "$health" = healthy ] || verdict=FAIL
   [ "$health_probe" = 200 ] || verdict=FAIL
   [ "$readiness_probe" = 200 ] || verdict=FAIL
+  [ "$readiness_verdict" = ok ] || verdict=FAIL
   if [ -n "$expected" ] && [ "${revision#"$expected"}" = "$revision" ]; then
     verdict=FAIL
   fi
   [ "$verdict" = ok ] || status=1
 
-  printf '%-10s %-4s revision=%s state=%s health=%s health_probe=%s readiness_probe=%s restarts=%s errors=%s since=%s\n' \
-    "$label" "$verdict" "${revision:0:7}" "$state" "$health" "$health_probe" "$readiness_probe" "$restarts" "$errors" "$started"
+  printf '%-10s %-4s revision=%s state=%s health=%s health_probe=%s readiness_probe=%s readiness_dependencies=%s restarts=%s errors=%s since=%s\n' \
+    "$label" "$verdict" "${revision:0:7}" "$state" "$health" "$health_probe" "$readiness_probe" "$readiness_dependencies" "$restarts" "$errors" "$started"
 done
 
 exit "$status"

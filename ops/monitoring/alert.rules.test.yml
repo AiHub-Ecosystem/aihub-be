@@ -266,3 +266,66 @@ tests:
       - eval_time: 14m
         alertname: AIHUBSSHAuthFailureBurst
         exp_alerts: []
+
+  # #375: the budget alert joins used and limit samples with different labels.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_email_daily_send_budget{measurement="used"}'
+        values: "7 8"
+      - series: 'aihub_email_daily_send_budget{measurement="limit"}'
+        values: "10 10"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: AIHUBEmailDailySendBudgetNearLimit
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: AIHUBEmailDailySendBudgetNearLimit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+            exp_annotations:
+              summary: "AIHUB has used 80% of its daily email budget"
+              description: "The shared UTC-day Resend budget has reached the invitation cutoff; protected recovery capacity remains."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#daily-email-budget
+
+  # #438: every queued kind is watched at 15 minutes; durable credential
+  # expiry samples alert only for that cancellation reason and age out at 15m.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_email_outbox_oldest_queued_age_seconds{kind="organization_invite_email"}'
+        values: "0 901x16 0x5"
+      - series: 'aihub_email_delivery_cancelled_timestamp_seconds{kind="verification_email",reason="credential_expired"}'
+        values: "_ 60x20"
+      - series: 'aihub_email_delivery_cancelled_timestamp_seconds{kind="organization_invite_email",reason="credential_revoked"}'
+        values: "_ 60x20"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: AIHUBEmailOutboxQueueAgeAboveBound
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: AIHUBEmailOutboxQueueAgeAboveBound
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              kind: organization_invite_email
+            exp_annotations:
+              summary: "An AIHUB email has waited in the outbox for more than 15 minutes"
+              description: "The oldest organization_invite_email email has been queued for 15m 1s. Check dispatch and the shared Resend rate limiter."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#queue-backlog-when-dispatch-stops
+      - eval_time: 14m
+        alertname: AIHUBEmailCredentialExpiredBeforeDispatch
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              kind: verification_email
+              reason: credential_expired
+            exp_annotations:
+              summary: "An AIHUB email credential expired before dispatch"
+              description: "A verification_email credential expired while queued. Check the outbox backlog and shared rate limiter."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#credential-expiry-alerts-other-cancellations-do-not
+      - eval_time: 16m
+        alertname: AIHUBEmailCredentialExpiredBeforeDispatch
+        exp_alerts: []

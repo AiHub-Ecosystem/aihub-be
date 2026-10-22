@@ -9,6 +9,7 @@ import {
   RedisQuotaCounter,
   quotaKeyForMonth,
 } from '@/modules/gateway/infrastructure/redis-quota-counter';
+import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
 import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
@@ -44,6 +45,18 @@ function quotaContext(organizationId: string): ExecutionContextHost {
   ]);
 }
 
+/** A quota counter that rebuilds a missing month from no durable usage. */
+function quotaCounter(): RedisQuotaCounter {
+  return new RedisQuotaCounter(
+    redisClients.gateway,
+    () => TEST_NOW,
+    NOOP_LOGGER,
+    new RedisQuotaSeeder(redisClients.gateway, {
+      billableCount: async () => 0,
+    }),
+  );
+}
+
 let pool: ReturnType<typeof createTestPool>;
 let redisClients: TenantIsolationRedisClients;
 
@@ -71,12 +84,10 @@ afterAll(async () => {
 describe('tenant isolation for Redis counters', () => {
   // Presence-shaped: the counts on each Organization's own counter.
   it('keeps quota consumption and allowance state separate for the same month', async () => {
-    const counter = new RedisQuotaCounter(
-      redisClients.gateway,
-      () => TEST_NOW,
-      NOOP_LOGGER,
-    );
+    const counter = quotaCounter();
 
+    // Admission rebuilds each month's counter before anything increments it.
+    await counter.read({ organizationId: ORGANIZATION_A });
     await counter.increment({ organizationId: ORGANIZATION_A });
     await counter.increment({ organizationId: ORGANIZATION_A });
 
@@ -87,6 +98,7 @@ describe('tenant isolation for Redis counters', () => {
       redisClients.raw.get(quotaKeyForMonth(ORGANIZATION_B, SHARED_MONTH)),
     ).resolves.toBeNull();
 
+    await counter.read({ organizationId: ORGANIZATION_B });
     await counter.increment({ organizationId: ORGANIZATION_B });
 
     await expect(
@@ -105,11 +117,8 @@ describe('tenant isolation for Redis counters', () => {
 
   // Refusal-shaped: an exhausted Organization refuses, a different one is admitted.
   it('does not use one Organization exhaustion to block another Organization admission', async () => {
-    const counter = new RedisQuotaCounter(
-      redisClients.gateway,
-      () => TEST_NOW,
-      NOOP_LOGGER,
-    );
+    const counter = quotaCounter();
+    await counter.read({ organizationId: ORGANIZATION_A });
     await counter.increment({ organizationId: ORGANIZATION_A });
     const guard = new QuotaGuard(counter, () => TEST_NOW);
 
@@ -125,7 +134,6 @@ describe('tenant isolation for Redis counters', () => {
   it('does not let one Organization consume another Organization concurrency lease', async () => {
     const limiter = new RedisConcurrencyLimiter(
       redisClients.gateway,
-      () => TEST_NOW.getTime(),
       NOOP_LOGGER,
     );
 
@@ -149,7 +157,7 @@ describe('tenant isolation for Redis counters', () => {
     expect(firstB.allowed).toBe(true);
     expect(secondA).toEqual({
       allowed: false,
-      retryAfterMs: 500,
+      retryAfterMs: expect.any(Number),
     });
     if (firstA.allowed) {
       await firstA.lease.release();

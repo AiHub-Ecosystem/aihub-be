@@ -1,0 +1,2 @@
+- targets: [172.27.0.1:19104]
+  labels: { host: production, environment: sandbox }

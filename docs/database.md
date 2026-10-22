@@ -60,6 +60,10 @@ pnpm db:seed
 The Prisma CLI runs this seed only when `pnpm db:seed` is invoked explicitly;
 it is not part of `pnpm migrate`, `prisma migrate dev`, or application startup.
 
+For the synthetic execution-plan baseline across the hot control-plane query
+set, use the isolated runner in
+[`docs/operations/postgres-query-plan-baseline.md`](operations/postgres-query-plan-baseline.md).
+
 ## Changing the schema
 
 1. Edit `prisma/schema.prisma`. Model and field names are the TypeScript names

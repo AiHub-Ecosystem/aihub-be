@@ -621,7 +621,6 @@ describe('HttpOperationDispatcher', () => {
       dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).rejects.toMatchObject({
       code: 'AI_SERVICE_UNAVAILABLE',
-      retryAfterHeader: true,
     });
 
     expect(request).toHaveBeenCalledTimes(1);
@@ -731,7 +730,6 @@ describe('HttpOperationDispatcher', () => {
       code: 'AI_SERVICE_ERROR',
       downstreamStatus: 503,
       retryAfterMs: 1_000,
-      retryAfterHeader: true,
     });
 
     expect(request).toHaveBeenCalledTimes(1);

@@ -1,4 +1,8 @@
 import { AppError } from '@/common/errors/app-error';
+import {
+  databaseUnavailableError,
+  isPostgresUnavailable,
+} from '@/common/postgres/postgres-unavailable-error';
 import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type {
   OrganizationMembershipRole,
@@ -12,8 +16,24 @@ import type {
  * unchecked cast.
  */
 
+/** Identity data that broke an invariant: never retryable. */
 export function identityStoreError(message: string): AppError {
   return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
+}
+
+/**
+ * A failed identity-store call. A Postgres that could not be reached or
+ * stopped answering is a retryable outage (ADR-0118); anything else stays an
+ * internal error.
+ */
+export function identityStoreUnavailable(cause: unknown): AppError {
+  if (isPostgresUnavailable(cause)) return databaseUnavailableError(cause);
+  return new AppError({
+    code: 'INTERNAL_ERROR',
+    message: 'Identity store is unavailable',
+    retryable: false,
+    cause,
+  });
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

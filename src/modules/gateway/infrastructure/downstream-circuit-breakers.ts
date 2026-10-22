@@ -70,7 +70,6 @@ export class DownstreamCircuitBreakers implements OnModuleDestroy {
         message: 'AI service is temporarily unavailable',
         retryable: true,
         retryAfterMs,
-        retryAfterHeader: true,
         cause: error,
       });
     }

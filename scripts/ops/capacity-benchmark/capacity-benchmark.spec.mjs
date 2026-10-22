@@ -1,26 +1,32 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 import test from 'node:test';
 
 import {
   parseArgon2QueueMetrics,
+  parseDownstreamQueued,
   percentile,
   summarizeProbeSamples,
 } from './argon2-contention-probe.mjs';
+import { runProcess } from './capacity-benchmark-process.mjs';
 import {
   appendStreamingMarkerChunk,
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
+  gradedPathSampleAdequacy,
   hasCompleteLoadDelivery,
   hasMinimumRouteSamples,
   hasOneUserPerVu,
   highestPassingRate,
   jsonAfterPrefix,
+  k6ProcessTimeoutMs,
   metricValue,
   minimumGradingHoldSeconds,
   overloadRate,
   parseDockerImageIdentity,
   parseDockerStats,
+  summarizeGradedPathTimings,
   summarizeRepetitions,
   taggedMetricValues,
   task1PayloadFromFixture,
@@ -36,6 +42,19 @@ await test('reads Argon2 queue counters from Prometheus exposition', () => {
     { waits: 7, refusals: 2 },
   );
   assert.deepEqual(parseArgon2QueueMetrics(''), { waits: 0, refusals: 0 });
+});
+
+await test('sums queued requests across every downstream pool origin', () => {
+  assert.equal(
+    parseDownstreamQueued(
+      '# HELP aihub_downstream_pool_queued queued\n' +
+        'aihub_downstream_pool_queued{origin="http://writing:8080"} 7\n' +
+        'aihub_downstream_pool_queued{origin="http://speaking:8081"} 3\n' +
+        'aihub_downstream_pool_queued_other 99\n',
+    ),
+    10,
+  );
+  assert.equal(parseDownstreamQueued(''), 0);
 });
 
 await test('reports nearest-rank p95 for in-process contention probes', () => {
@@ -151,6 +170,43 @@ await test('requires enough completed route samples before a stage can pass', ()
   );
 });
 
+await test('summarizes admission and completion by the bounded identity and retry path', () => {
+  assert.deepEqual(
+    summarizeGradedPathTimings({
+      'declared_id:keyed_writing': {
+        admissionMs: [4, 1, 3, 2],
+        completionMs: [40, 10, 30, 20],
+      },
+    }),
+    {
+      'declared_id:keyed_writing': {
+        admissionMs: { count: 4, p50: 2, p95: 4, p99: 4 },
+        completionMs: { count: 4, p50: 20, p95: 40, p99: 40 },
+      },
+    },
+  );
+});
+
+await test('marks every missing graded identity and retry path inconclusive', () => {
+  const adequacy = gradedPathSampleAdequacy(
+    'writing_task1',
+    {
+      'declared_id:keyed_writing': {
+        admissionMs: { count: 1000 },
+        completionMs: { count: 1000 },
+      },
+    },
+    1000,
+  );
+
+  assert.deepEqual(adequacy, {
+    'declared_id:keyed_writing': { count: 1000, status: 'sufficient' },
+    'declared_id:none': { count: 0, status: 'inconclusive' },
+    'signed_assertion:keyed_writing': { count: 0, status: 'inconclusive' },
+    'signed_assertion:none': { count: 0, status: 'inconclusive' },
+  });
+});
+
 await test('holds grading stages long enough to reach the route sample minimum', () => {
   assert.equal(minimumGradingHoldSeconds('writing_task1', 32, 1000, 15), 32);
   assert.equal(minimumGradingHoldSeconds('mixed_grading', 32, 1000, 15), 125);
@@ -186,10 +242,34 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
             p50Ms: 10,
             p95Ms: 15,
             p99Ms,
+            timingsByPath: {
+              'declared_id:keyed_writing': {
+                admissionMs: { p50: 5, p99: 9 },
+                completionMs: { p50: 20, p99: 30 },
+              },
+            },
+            acceptedLatencyMs: { p50: 9, p95: 14, p99: p99Ms - 1 },
+            errorCount: repetition,
           },
         },
         sampleAdequacy: {
           routes: { writing_task1: { status } },
+          paths: {
+            writing_task1: Object.fromEntries(
+              [
+                'declared_id:keyed_writing',
+                'declared_id:none',
+                'signed_assertion:keyed_writing',
+                'signed_assertion:none',
+              ].map((path) => [
+                path,
+                {
+                  count: status === 'sufficient' ? 1000 : 999,
+                  status,
+                },
+              ]),
+            ),
+          },
         },
       },
     ],
@@ -202,7 +282,23 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.min, 10);
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.median, 15);
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.max, 20);
+  assert.deepEqual(summary.stages[0].routes.writing_task1.acceptedP99Ms, {
+    min: 9,
+    median: 14,
+    max: 19,
+  });
+  assert.deepEqual(
+    summary.stages[0].routes.writing_task1.samples.map(
+      ({ errorCount }) => errorCount,
+    ),
+    [1, 2],
+  );
   assert.equal(summary.stages[0].verdict, 'sufficient');
+  assert.equal(
+    summary.stages[0].paths.writing_task1['declared_id:keyed_writing']
+      .completionP99Ms.median,
+    30,
+  );
   assert.equal(
     summarizeRepetitions(
       [report(1, 10, 'sufficient'), report(2, 20, 'inconclusive')],
@@ -211,6 +307,39 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
     'inconclusive',
   );
   assert.throws(() => summarizeRepetitions([report(1, 10, 'sufficient')], 2));
+
+  const onSeparateVm = (repetition, totalMemoryBytes) => {
+    const result = report(repetition, 10, 'sufficient');
+    result.benchmark.host.totalMemoryBytes = totalMemoryBytes;
+    return result;
+  };
+  const gib = 1024 ** 3;
+  summarizeRepetitions(
+    [onSeparateVm(1, 16 * gib), onSeparateVm(2, 16 * gib - 3 * 1024 ** 2)],
+    2,
+  );
+  assert.throws(() =>
+    summarizeRepetitions(
+      [onSeparateVm(1, 16 * gib), onSeparateVm(2, 8 * gib)],
+      2,
+    ),
+  );
+
+  const missingSignedPath = report(1, 10, 'sufficient');
+  delete missingSignedPath.runs[0].sampleAdequacy.paths.writing_task1[
+    'signed_assertion:keyed_writing'
+  ];
+  const missingPathSummary = summarizeRepetitions(
+    [missingSignedPath, report(2, 20, 'sufficient')],
+    2,
+  );
+  assert.equal(missingPathSummary.stages[0].verdict, 'inconclusive');
+  assert.equal(
+    missingPathSummary.stages[0].paths.writing_task1[
+      'signed_assertion:keyed_writing'
+    ].samples[0].status,
+    'inconclusive',
+  );
 });
 
 await test('places the controlled overload stage above the highest passing stage', () => {
@@ -329,6 +458,10 @@ await test('reads tagged k6 metrics and Docker resource samples', () => {
     { cpuPercent: 150.25, memoryBytes: 402653184 },
   );
   assert.deepEqual(
+    parseDockerStats('[2J[H{"CPUPerc":"12.5%","MemUsage":"1GiB / 768MiB"}[K'),
+    { cpuPercent: 12.5, memoryBytes: 1073741824 },
+  );
+  assert.deepEqual(
     parseDockerImageIdentity(
       'postgres:16-alpine',
       'sha256:abc ["postgres@sha256:def"]',
@@ -354,4 +487,31 @@ await test('reads JSON from plain output and escaped k6 console logs', () => {
     requests: {},
     errors: {},
   });
+});
+
+await test('does not wait for detached descendants to close timed-out pipes', async (t) => {
+  if (process.platform === 'win32')
+    return t.skip('requires POSIX process groups');
+
+  const startedAt = Date.now();
+  await assert.rejects(
+    runProcess(
+      process.execPath,
+      [
+        '-e',
+        "const { spawn } = require('node:child_process'); spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { detached: true, stdio: ['ignore', 1, 2] }).unref(); setInterval(() => {}, 1000);",
+      ],
+      { timeout: 50, killProcessGroup: true, killSignal: 'SIGKILL' },
+    ),
+    /timed out after 50ms/,
+  );
+  assert.ok(
+    Date.now() - startedAt < 750,
+    'timeout must not wait for inherited pipes',
+  );
+});
+
+await test('bounds k6 stage processes after their duration and graceful stop', () => {
+  assert.equal(k6ProcessTimeoutMs(84), 179_000);
+  assert.equal(k6ProcessTimeoutMs(667), 762_000);
 });

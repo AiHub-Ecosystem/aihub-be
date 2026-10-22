@@ -1,6 +1,8 @@
 import { AppError } from '@/common/errors/app-error';
 import { admitMonthlyQuota } from './quota-admission';
 import type { QuotaCounterPort } from './quota-counter.port';
+import { QUOTA_ROLLOVER_SPREAD_MS } from './quota-period';
+import { stableOffsetMs } from './stable-offset';
 
 const now = () => new Date('2026-09-16T12:00:00.000Z');
 
@@ -45,7 +47,12 @@ describe('admitMonthlyQuota', () => {
     );
 
     expect(error.code).toBe('QUOTA_EXCEEDED');
-    expect(error.retryAfterMs).toBe(14 * 24 * 3_600_000 + 12 * 3_600_000);
+    // Next month's start, plus this Organization's share of the rollover spread.
+    expect(error.retryAfterMs).toBe(
+      14 * 24 * 3_600_000 +
+        12 * 3_600_000 +
+        stableOffsetMs('org_test', QUOTA_ROLLOVER_SPREAD_MS),
+    );
   });
 
   it.each([
@@ -71,6 +78,10 @@ describe('admitMonthlyQuota', () => {
       ),
     );
 
-    expect(error.code).toBe('QUOTA_EXCEEDED');
+    expect(error).toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryable: true,
+      retryAfterMs: 1_000,
+    });
   });
 });

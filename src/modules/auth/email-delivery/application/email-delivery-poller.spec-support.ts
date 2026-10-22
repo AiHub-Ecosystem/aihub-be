@@ -11,6 +11,11 @@ import type {
   EmailDispatchStorePort,
   EmailPayloadCipherPort,
 } from './email-delivery-request.port';
+import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
+import type {
+  EmailSendRateLimiterPort,
+  EmailSendRateReservation,
+} from './email-send-rate-limiter.port';
 import type {
   EmailDispatchOptions,
   EmailMessage,
@@ -159,6 +164,18 @@ export class RecordingSender implements EmailSenderPort {
   }
 }
 
+export class FakeEmailSendRateLimiter implements EmailSendRateLimiterPort {
+  reservations = 0;
+  result: EmailSendRateReservation = { reserved: true };
+  failure: Error | undefined;
+
+  async reserve(): Promise<EmailSendRateReservation> {
+    this.reservations += 1;
+    if (this.failure !== undefined) throw this.failure;
+    return this.result;
+  }
+}
+
 export function claimed(
   overrides: Partial<EmailDeliveryRequestRecord> = {},
 ): EmailDeliveryRequestRecord {
@@ -207,6 +224,12 @@ export function harness(
     payload?: EmailDeliveryPayload;
     sender?: RecordingSender;
     credential?: EmailCredentialState;
+    rateReservation?: {
+      readonly reserved: boolean;
+      readonly retryAfterMs?: number;
+    };
+    rateLimiter?: FakeEmailSendRateLimiter;
+    dailySendBudget?: EmailDailySendBudgetPort;
     onTerminalFailure?: (failure: {
       readonly id: string;
       readonly kind: EmailDeliveryKind;
@@ -223,11 +246,21 @@ export function harness(
   const credentials = new FakeCredentials();
   credentials.state = options.credential ?? 'actionable';
   const sender = options.sender ?? new RecordingSender();
+  const rateLimiter = options.rateLimiter ?? new FakeEmailSendRateLimiter();
+  if (options.rateReservation !== undefined) {
+    rateLimiter.result = options.rateReservation.reserved
+      ? { reserved: true }
+      : {
+          reserved: false,
+          retryAfterMs: options.rateReservation.retryAfterMs ?? 5_000,
+        };
+  }
   const poller = new EmailDeliveryPoller(
     store,
     credentials,
     sealed(options.payload ?? VERIFICATION_PAYLOAD),
     sender,
+    rateLimiter,
     (): Date => NOW,
     { hash: () => TOKEN_HASH },
     {
@@ -235,6 +268,9 @@ export function harness(
       ...(options.onTerminalFailure === undefined
         ? {}
         : { onTerminalFailure: options.onTerminalFailure }),
+      ...(options.dailySendBudget === undefined
+        ? {}
+        : { dailySendBudget: options.dailySendBudget }),
     },
   );
   return { poller, store, credentials, sender };

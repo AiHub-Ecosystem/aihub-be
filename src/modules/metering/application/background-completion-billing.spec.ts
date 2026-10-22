@@ -61,15 +61,59 @@ describe('billBackgroundCompletion', () => {
     expect(finalized[0]?.idempotentReplay).toBeUndefined();
   });
 
-  it('writes nothing until the work completes, and keeps the permit lifecycle', () => {
+  it('writes nothing until the work completes, and keeps the permit lifecycle', async () => {
     const { finalized, inner, lifecycle } = setup();
 
     lifecycle?.started();
-    lifecycle?.settled();
+    await lifecycle?.settled();
 
     expect(finalized).toEqual([]);
     expect(inner.started).toHaveBeenCalledTimes(1);
     expect(inner.settled).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies completion only after background permit settlement', async () => {
+    const onCompletionSettled = jest.fn();
+    let permitSettled = false;
+    const settledLifecycle = billBackgroundCompletion({
+      requestId: 'req_late',
+      receivedAt: new Date(1_000),
+      evidence: evidence(),
+      finalizer: { finalize: async () => undefined },
+      inner: {
+        started: () => undefined,
+        settled: async () => {
+          permitSettled = true;
+        },
+      },
+      onCompletionSettled: () => {
+        expect(permitSettled).toBe(true);
+        onCompletionSettled();
+      },
+    });
+
+    await settledLifecycle?.settled();
+    expect(onCompletionSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not record completion when background permit settlement fails', async () => {
+    const onCompletionSettled = jest.fn();
+    const lifecycle = billBackgroundCompletion({
+      requestId: 'req_late',
+      receivedAt: new Date(1_000),
+      evidence: evidence(),
+      finalizer: { finalize: async () => undefined },
+      inner: {
+        started: () => undefined,
+        settled: async () => {
+          throw new Error('redis timeout');
+        },
+      },
+      onCompletionSettled,
+    });
+
+    await expect(lifecycle?.settled()).rejects.toThrow('redis timeout');
+    expect(onCompletionSettled).not.toHaveBeenCalled();
   });
 
   it('leaves the lifecycle untouched for a request with no Metering evidence', () => {

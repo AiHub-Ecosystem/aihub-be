@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { recordIdentityCacheCoalescedWait } from '@/common/observability/metrics';
+import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 import { hashApiKey } from './organization-api-key-generator';
 
@@ -65,13 +66,10 @@ function rateLimited(): AppError {
 }
 
 function apiKeyLookupCapacityExceeded(): AppError {
-  return new AppError({
-    code: 'DATABASE_UNAVAILABLE',
-    message: 'API-key lookup capacity is temporarily unavailable',
-    retryable: true,
-    retryAfterMs: 1_000,
-    retryAfterHeader: true,
-  });
+  return databaseUnavailableError(
+    undefined,
+    'API-key lookup capacity is temporarily unavailable',
+  );
 }
 
 export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {

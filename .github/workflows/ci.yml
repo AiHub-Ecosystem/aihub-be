@@ -158,6 +158,9 @@ jobs:
       - name: Exercise nginx upstream selection for port and socket slots
         run: bash test/ops/blue-green-upstream.spec.sh
 
+      - name: Exercise deployed status readiness reporting with stubs
+        run: bash test/ops/status-readiness.spec.sh
+
       - name: Exercise blue-green readiness probes across image revisions
         run: bash test/ops/blue-green-readiness.spec.sh
 
@@ -551,12 +554,20 @@ jobs:
         run: node scripts/ops/monitoring/check-monitoring-config.cjs
 
       - name: Check production container log bounds
+        env:
+          AIHUB_EMAIL_SEND_RATE_LIMIT: "1"
+          AIHUB_EMAIL_SEND_RATE_DURATION_MS: "1000"
+          AIHUB_EMAIL_DAILY_SEND_BUDGET: "80"
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
             | node scripts/ci/check-production-compose-logs.cjs
 
       - name: Check trusted proxy matches the pinned backend gateway
+        env:
+          AIHUB_EMAIL_SEND_RATE_LIMIT: "1"
+          AIHUB_EMAIL_SEND_RATE_DURATION_MS: "1000"
+          AIHUB_EMAIL_DAILY_SEND_BUDGET: "80"
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \

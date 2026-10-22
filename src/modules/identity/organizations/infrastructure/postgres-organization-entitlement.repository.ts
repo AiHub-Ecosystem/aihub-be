@@ -11,6 +11,7 @@ import type {
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -93,7 +94,7 @@ export class PostgresOrganizationEntitlementRepository
       });
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 

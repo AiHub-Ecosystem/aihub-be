@@ -75,6 +75,17 @@ function validateExporterCompose(compose) {
   if (services['redis-exporter'].user !== services['ssh-tunnel'].user) {
     throw new Error('redis-exporter must use the monitoring host account');
   }
+  for (const forward of [':19103:127.0.0.1:19103', ':19104:127.0.0.1:19104']) {
+    if (
+      !(services['ssh-tunnel'].command ?? []).some((arg) =>
+        arg.endsWith(forward),
+      )
+    ) {
+      throw new Error(
+        `ssh-tunnel must include the app metrics forward ${forward}`,
+      );
+    }
+  }
   if (
     services['ssh-tunnel'].build?.args?.AIHUB_MONITORING_UID_GID !==
     services['ssh-tunnel'].user
@@ -211,6 +222,17 @@ function validateExporterCompose(compose) {
       ) {
         throw new Error(
           'prometheus-aihub must use its private config and network',
+        );
+      }
+      if (
+        !service.volumes?.some(
+          (volume) =>
+            volume.target === '/etc/prometheus/sandbox-targets' &&
+            volume.read_only === true,
+        )
+      ) {
+        throw new Error(
+          'prometheus-aihub must mount the optional Sandbox app targets read-only',
         );
       }
       continue;

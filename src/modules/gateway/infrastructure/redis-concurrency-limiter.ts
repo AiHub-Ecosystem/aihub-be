@@ -1,5 +1,8 @@
 import { Logger } from '@nestjs/common';
 
+import { AppError } from '@/common/errors/app-error';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   ConcurrencyDecision,
   ConcurrencyLease,
@@ -13,9 +16,12 @@ export type RedisConcurrencyClient = Pick<
   'eval' | 'zrem' | 'quit'
 >;
 
+/** A refused permit is told to wait this long, plus up to as long again. */
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 export const CONCURRENCY_STALE_LEASE_MS = 120_000;
-export const GLOBAL_MAX_INFLIGHT = 200;
+export const LEASE_REMOVAL_RETRY_MS = 1_000;
+const LEASE_REMOVAL_ATTEMPTS = 5;
+const UNAVAILABLE_RETRY_AFTER_MS = 1_000;
 
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
 local server_time = redis.call('TIME')
@@ -53,32 +59,20 @@ end
 return 1
 `;
 
-interface FallbackLease {
-  readonly startedAt: number;
-}
-
 interface LoggerLike {
   warn(message: string): void;
   log(message: string): void;
 }
 
-function denied(): ConcurrencyDecision {
-  return { allowed: false, retryAfterMs: CONCURRENCY_RETRY_AFTER_MS };
-}
-
 export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
-  // ponytail: a process-local global ceiling while Redis is unavailable; it
-  // is deliberately coarse across organizations and replicas, and the Redis
-  // script restores per-organization fairness when the dependency recovers.
-  private readonly fallbackLeases = new Map<string, FallbackLease>();
   private redisIsDegraded = false;
 
   constructor(
     private readonly client: RedisConcurrencyClient | undefined,
-    private readonly now: () => number = () => Date.now(),
     private readonly logger: LoggerLike = new Logger(
       RedisConcurrencyLimiter.name,
     ),
+    private readonly random: () => number = Math.random,
   ) {}
 
   async acquire(request: ConcurrencyRequest): Promise<ConcurrencyDecision> {
@@ -86,11 +80,13 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       !Number.isInteger(request.maxConcurrent) ||
       request.maxConcurrent <= 0
     ) {
-      return denied();
+      return this.denied();
     }
 
-    if (this.client === undefined) {
-      return this.acquireFallback(request);
+    const client = this.client;
+    if (client === undefined) {
+      this.reportDegraded();
+      throw this.unavailableError();
     }
 
     const sandbox = request.environment === 'sandbox';
@@ -98,7 +94,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     const sandboxKey = 'aihub:v1:inflight:sandbox';
     const keys = sandbox ? [organizationKey, sandboxKey] : [organizationKey];
     try {
-      const result = await this.client.eval(
+      const result = await client.eval(
         sandbox
           ? ACQUIRE_SANDBOX_CONCURRENCY_SCRIPT
           : ACQUIRE_CONCURRENCY_SCRIPT,
@@ -114,7 +110,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       );
       if (result === 0) {
         this.reportRecovered();
-        return denied();
+        return this.denied();
       }
       if (result !== 1) {
         throw new Error('Redis concurrency response is invalid');
@@ -123,11 +119,13 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       this.reportRecovered();
       return {
         allowed: true,
-        lease: this.remoteLease(this.client, keys, request.requestId),
+        lease: this.remoteLease(client, keys, request.requestId),
       };
     } catch (error) {
+      // A slow reply can time out after Redis already added the lease.
+      this.removeLater(client, keys, request.requestId);
       this.reportDegraded(error);
-      return this.acquireFallback(request);
+      throw this.unavailableError(error);
     }
   }
 
@@ -140,67 +138,68 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     keys: readonly string[],
     requestId: string,
   ): ConcurrencyLease {
-    let released = false;
+    let releaseAttempt: Promise<void> | undefined;
     return {
-      release: async () => {
-        if (released) {
-          return;
-        }
-        released = true;
-        try {
-          await Promise.all(keys.map((key) => client.zrem(key, requestId)));
-          this.reportRecovered();
-        } catch (error) {
-          this.reportDegraded(error);
-        }
+      release: () => {
+        releaseAttempt ??= Promise.resolve().then(async () => {
+          try {
+            await Promise.all(keys.map((key) => client.zrem(key, requestId)));
+            this.reportRecovered();
+            return undefined;
+          } catch (error) {
+            this.removeLater(client, keys, requestId);
+            this.reportDegraded(error);
+            throw this.unavailableError(error);
+          }
+        });
+        return releaseAttempt;
       },
     };
   }
 
-  private acquireFallback(request: ConcurrencyRequest): ConcurrencyDecision {
-    const now = this.now();
-    this.pruneFallbackLeases(now);
-    if (this.fallbackLeases.size >= GLOBAL_MAX_INFLIGHT) {
-      return denied();
-    }
-
-    const lease = { startedAt: now };
-    this.fallbackLeases.set(request.requestId, lease);
-    let released = false;
-    return {
-      allowed: true,
-      lease: {
-        release: async () => {
-          if (released) {
-            return;
-          }
-          released = true;
-          if (this.fallbackLeases.get(request.requestId) === lease) {
-            this.fallbackLeases.delete(request.requestId);
+  // ponytail: a few timed retries, not a durable queue. A lease they miss
+  // still expires through the stale-lease prune after CONCURRENCY_STALE_LEASE_MS.
+  private removeLater(
+    client: RedisConcurrencyClient,
+    keys: readonly string[],
+    requestId: string,
+    attempt = 1,
+  ): void {
+    const timer = setTimeout(() => {
+      void Promise.all(keys.map((key) => client.zrem(key, requestId))).then(
+        () => this.reportRecovered(),
+        () => {
+          recordRedisUnavailable('concurrency');
+          if (attempt < LEASE_REMOVAL_ATTEMPTS) {
+            this.removeLater(client, keys, requestId, attempt + 1);
           }
         },
-      },
+      );
+    }, LEASE_REMOVAL_RETRY_MS);
+    timer.unref();
+  }
+
+  private denied(): ConcurrencyDecision {
+    return {
+      allowed: false,
+      retryAfterMs: jitteredRetryAfterMs(
+        CONCURRENCY_RETRY_AFTER_MS,
+        this.random,
+        CONCURRENCY_RETRY_AFTER_MS,
+      ),
     };
   }
 
-  private pruneFallbackLeases(now: number): void {
-    const threshold = now - CONCURRENCY_STALE_LEASE_MS;
-    for (const [requestId, lease] of this.fallbackLeases) {
-      if (lease.startedAt <= threshold) {
-        this.fallbackLeases.delete(requestId);
-      }
-    }
-  }
-
-  private reportDegraded(error: unknown): void {
+  private reportDegraded(error?: unknown): void {
+    recordRedisUnavailable('concurrency');
     if (this.redisIsDegraded) {
       return;
     }
 
     this.redisIsDegraded = true;
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = error instanceof Error ? error.message : 'Redis unavailable';
     this.logger.warn(
-      `Redis concurrency limiter unreachable (${reason}); falling back to a process-local ceiling until it recovers`,
+      `Redis concurrency limiter unreachable (${reason}); refusing requests until it recovers`,
     );
   }
 
@@ -211,5 +210,16 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
 
     this.redisIsDegraded = false;
     this.logger.log('Redis concurrency limiter recovered');
+  }
+
+  private unavailableError(cause?: unknown): AppError {
+    return new AppError({
+      code: 'REDIS_UNAVAILABLE',
+      message: 'Grading controls are temporarily unavailable',
+      retryable: true,
+      retryAfterMs: UNAVAILABLE_RETRY_AFTER_MS,
+      diagnostic: 'graded-concurrency-redis-unavailable',
+      ...(cause === undefined ? {} : { cause }),
+    });
   }
 }

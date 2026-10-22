@@ -32,6 +32,7 @@ function guard(
       userId: 'user_123',
       organizationId: 'org_acme',
       scopes: [],
+      mode: 'declared_id',
     }),
   },
   configuration: RequestEnvironmentConfig = {
@@ -85,6 +86,7 @@ describe('UserIdentityGuard', () => {
       userId: 'local-development',
       organizationId: 'local-development',
       scopes: [],
+      mode: 'declared_id',
     });
   });
 

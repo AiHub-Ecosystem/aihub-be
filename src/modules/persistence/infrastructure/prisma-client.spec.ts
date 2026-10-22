@@ -13,10 +13,12 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: equal,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
     });
 
     expect(clients.runtime).toBe(clients.controlPlane);
     expect(clients.controlPlane).toBe(clients.controlPlaneRead);
+    expect(clients.controlPlaneRead).toBe(clients.emailDailyBudget);
 
     await clients.close();
   });
@@ -26,6 +28,7 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: distinct,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
     });
 
     expect(clients.runtime).not.toBe(clients.controlPlane);
@@ -39,17 +42,19 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: equal,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
     });
     const split = createSharedPrismaClients({
       databaseUrl: distinct,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
     });
 
-    // runtime 44 + control-plane 20 + control-plane-read 10
-    expect(shared.runtime.pool.options.max).toBe(74);
+    // runtime 44 + control-plane 20 + control-plane-read 10 + daily budget 1
+    expect(shared.runtime.pool.options.max).toBe(75);
     expect(split.runtime.pool.options.max).toBe(44);
-    expect(split.controlPlane.pool.options.max).toBe(30);
+    expect(split.controlPlane.pool.options.max).toBe(31);
 
     await shared.close();
     await split.close();
@@ -60,6 +65,7 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: equal,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
     });
 
     const pool = clients.runtime.pool;
@@ -74,6 +80,7 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: 'postgres://runtime',
       controlPlaneDatabaseUrl: 'postgres://control-plane',
       controlPlaneReadDatabaseUrl: 'postgres://control-plane-read',
+      emailDailyBudgetDatabaseUrl: 'postgres://budget',
     });
 
     try {
@@ -81,6 +88,7 @@ describe('createSharedPrismaClients', () => {
         clients.runtime,
         clients.controlPlane,
         clients.controlPlaneRead,
+        clients.emailDailyBudget,
       ]) {
         expect(holder.pool.options.statement_timeout).toBe(4_000);
         expect(holder.pool.options.lock_timeout).toBe(1_000);
@@ -98,6 +106,7 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: equal,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
     });
 
     const query = jest
@@ -119,6 +128,7 @@ describe('createSharedPrismaClients', () => {
       databaseUrl: undefined,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: undefined,
+      emailDailyBudgetDatabaseUrl: undefined,
     });
 
     // Handing the client out must not throw: the module graph still builds.

@@ -20,10 +20,10 @@ export class RuntimeConnectionConfigurationError extends Error {
  * Loads connection and sandbox signing material rendered by Vault Agent.
  *
  * The existing typed runtime-secret provider owns downstream credentials. This
- * loader covers the process-level settings that are needed before Nest wiring
- * exists (database, Redis, and the sandbox assertion signer). Local development
- * remains compatible with the explicit .env source because an absent connection
- * file is a no-op.
+ * loader covers the process-level settings needed before Nest wiring exists
+ * (database, cache and email-rate Redis, and the sandbox assertion signer). Local
+ * development remains compatible with the explicit .env source because an
+ * absent connection file is a no-op.
  */
 export function loadRuntimeConnectionEnvironment(
   options: RuntimeConnectionEnvironmentOptions,
@@ -67,12 +67,17 @@ export function loadRuntimeConnectionEnvironment(
   const redis = asRecord(root.redis, 'Redis runtime secret bundle');
   assertAllowedKeys(
     database,
-    ['url', 'sandbox_url', 'sandbox_control_plane_read_url'],
+    [
+      'url',
+      'sandbox_url',
+      'sandbox_control_plane_read_url',
+      'email_send_budget_url',
+    ],
     'database runtime secret bundle',
   );
   assertAllowedKeys(
     redis,
-    ['url', 'sandbox_url'],
+    ['url', 'sandbox_url', 'email_send_rate_url'],
     'Redis runtime secret bundle',
   );
 
@@ -89,10 +94,20 @@ export function loadRuntimeConnectionEnvironment(
           'sandbox control-plane read URL',
         )
       : (env.CONTROL_PLANE_DATABASE_URL ?? env.DATABASE_URL);
+  env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL = requiredRecordString(
+    database,
+    'email_send_budget_url',
+    'shared email daily budget database URL',
+  );
   env.REDIS_URL = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox Redis URL' : 'Redis URL',
+  );
+  env.AIHUB_EMAIL_SEND_RATE_REDIS_URL = requiredRecordString(
+    redis,
+    'email_send_rate_url',
+    'email send rate Redis URL',
   );
 
   // shortcut: the shared JSON is parsed; upgrade once #351 splits Vault mounts.

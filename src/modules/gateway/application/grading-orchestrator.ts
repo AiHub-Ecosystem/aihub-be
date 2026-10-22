@@ -167,16 +167,20 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       work?: IdempotencyWorkContext,
     ): Promise<DispatchResult<ResponseForCommand<C>>> => {
       command.onDispatchStart?.();
-      return this.dispatcher.dispatch(
-        command.operation,
-        // TS cannot correlate a generic command's `operation` with its own
-        // `input`; the constraint on `BaseGradingCommand` already ties them,
-        // so this narrows the union one generic command carries.
-        command.input as RequestFor<C['operation']>,
-        work === undefined
-          ? context
-          : { ...context, signal: work.signal, deadlineAt: work.deadlineAt },
-      ) as Promise<DispatchResult<ResponseForCommand<C>>>;
+      return (async () => {
+        const result = (await this.dispatcher.dispatch(
+          command.operation,
+          // TS cannot correlate a generic command's `operation` with its own
+          // `input`; the constraint on `BaseGradingCommand` already ties them,
+          // so this narrows the union one generic command carries.
+          command.input as RequestFor<C['operation']>,
+          work === undefined
+            ? context
+            : { ...context, signal: work.signal, deadlineAt: work.deadlineAt },
+        )) as DispatchResult<ResponseForCommand<C>>;
+        command.onAiServiceResultAvailable?.();
+        return result;
+      })();
     };
 
     const preloadedReplay = (

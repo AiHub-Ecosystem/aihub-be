@@ -66,7 +66,7 @@ export class SandboxAdmission {
       throw error;
     }
     if (!admitted) {
-      throw quotaExceededError(new Date());
+      throw quotaExceededError(new Date(), organizationId);
     }
     return reservation;
   }

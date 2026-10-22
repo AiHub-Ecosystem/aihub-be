@@ -108,14 +108,14 @@ describe('ConcurrencyPermitInterceptor', () => {
       contextFor(request, { raw }),
       next,
     );
-    const subscription = observable.subscribe();
+    const completion = firstValueFrom(observable).catch(() => undefined);
 
     raw.emit('close');
     await Promise.resolve();
     expect(release).not.toHaveBeenCalled();
 
     subject.complete();
-    subscription.unsubscribe();
+    await completion;
     expect(release).toHaveBeenCalledTimes(1);
   });
 
@@ -138,9 +138,9 @@ describe('ConcurrencyPermitInterceptor', () => {
       contextFor(request, { raw }),
       next,
     );
-    observable.subscribe({ error: () => undefined });
+    const completion = firstValueFrom(observable).catch(() => undefined);
     subject.error(new Error('handler failed'));
-    await Promise.resolve();
+    await completion;
 
     expect(release).toHaveBeenCalledTimes(1);
   });

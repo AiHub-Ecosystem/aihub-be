@@ -156,6 +156,7 @@ describe('sandbox assertion round trip', () => {
       userId: 'student_456',
       organizationId: SANDBOX_ORG,
       scopes: [],
+      mode: 'signed_assertion',
     });
 
     await expect(

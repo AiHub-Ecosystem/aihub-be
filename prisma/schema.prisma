@@ -106,6 +106,8 @@ model EmailDeliveryRequest {
   leaseExpiresAt                  DateTime? @map("lease_expires_at") @db.Timestamptz(6)
   failureReportedAt               DateTime? @map("failure_reported_at") @db.Timestamptz(6)
   failureNotifyLeaseExpiresAt     DateTime? @map("failure_notify_lease_expires_at") @db.Timestamptz(6)
+  organizationId                  String?  @map("organization_id")
+  inviterId                       String?  @map("inviter_id")
 
   @@index([status, createdAt], map: "email_delivery_requests_status_created_idx")
   @@map("email_delivery_requests")
@@ -124,6 +126,18 @@ model AuthEmailRecipientRateLimit {
   @@id([keyVersion, addressHmac], map: "auth_email_recipient_rate_limits_pkey")
   @@index([expiresAt], map: "auth_email_recipient_rate_limits_expires_idx")
   @@map("auth_email_recipient_rate_limits")
+}
+
+/// One durable daily reservation count shared by every deployment on the Resend account.
+/// @owner auth
+model EmailDailySendBudget {
+  id             BigInt   @id @default(1)
+  budgetDate     DateTime @map("budget_date") @db.Date
+  dailyBudget    BigInt   @map("daily_budget")
+  invitationBudget BigInt @map("invitation_budget")
+  reservedSends  BigInt   @map("reserved_sends")
+
+  @@map("email_daily_send_budgets")
 }
 
 /// A pending local sign-up or sign-in verification.

@@ -155,6 +155,24 @@ and [socket-pool guidance](https://docs.aws.amazon.com/sdk-for-javascript/v3/dev
 `throwOnRequestTimeout: true` makes the configured request timeout reject rather
 than merely warn.
 
+## I.8 Postgres degraded mode
+
+The Postgres row of the #372 matrix, decided in
+[ADR-0118](../../../adr/0118-postgres-outage-answers-retryable-503.md) and
+proven by `test/db/tenant-isolation/fault-injection/postgres-fault.spec.ts`
+(#328).
+
+| Postgres                                 | Bound                                                                                  | Client answer                                                         |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Refusing or unreachable                  | `connectionTimeoutMillis` (1 s) per new connection                                     | `503 DATABASE_UNAVAILABLE`, `retryable: true`, `retry_after_ms: 1000` |
+| Not answering an open connection         | Client `query_timeout`: the pool's `statement_timeout` plus 1 s (5 s on request paths) | `503 DATABASE_UNAVAILABLE`, `retryable: true`, `retry_after_ms: 1000` |
+| Answering, but a statement or lock waits | Server `statement_timeout` (4 s) and `lock_timeout` (1 s) on request paths             | `503 DATABASE_UNAVAILABLE`, `retryable: true`, `retry_after_ms: 1000` |
+| Slow but answering                       | Served; each round trip adds its delay until one of the bounds above fires             | The normal answer                                                     |
+
+A cached API key keeps authenticating for the rest of its cache TTL, because
+the cache answers before Postgres is asked. When Postgres returns, the pool
+drops broken connections and reconnects; no connection stays checked out.
+
 ---
 
 # J. Unified Error Model
@@ -180,29 +198,31 @@ than merely warn.
 
 ## J.2 Error Code Inventory v1
 
-| HTTP Status | Error Code                      | Condition                                        | Retryable                 |
-| ----------: | ------------------------------- | ------------------------------------------------ | ------------------------- |
-|         400 | `INVALID_REQUEST`               | Schema violation, unknown properties             | No                        |
-|         401 | `UNAUTHORIZED`                  | Missing or invalid API key                       | No                        |
-|         401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation lacks user identity        | No                        |
-|         401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, or invalid claims        | No                        |
-|         403 | `FORBIDDEN`                     | Insufficient scopes / entitlements               | No                        |
-|         403 | `ENVIRONMENT_NOT_ALLOWED`       | API key not authorized for this environment      | No                        |
-|         404 | `NOT_FOUND`                     | Endpoint or resource does not exist              | No                        |
-|         409 | `IDEMPOTENCY_CONFLICT`          | Reused key with divergent payload or in-flight   | No                        |
-|         413 | `PAYLOAD_TOO_LARGE`             | Exceeds operation `maxBodyBytes`                 | No                        |
-|         422 | `AUDIO_UNREADABLE`              | AI Speaking could not decode the audio (#248)    | No                        |
-|         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit             | Yes                       |
-|         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests         | Yes (immediate)           |
-|         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                 | Next month                |
-|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx                          | Potentially               |
-|         502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream returned unparseable shape            | No                        |
-|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open   | Yes                       |
-|         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled  | Yes                       |
-|         503 | `AUTH_ARGON2_CAPACITY`          | Bounded password-hash queue is full or timed out | Yes                       |
-|         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys             | Yes                       |
-|         503 | `RETRY_BUDGET_UNAVAILABLE`      | Redis retry budget unavailable                   | Yes                       |
-|         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget               | Only with Idempotency-Key |
+| HTTP Status | Error Code                      | Condition                                         | Retryable                                            |
+| ----------: | ------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+|         400 | `INVALID_REQUEST`               | Schema violation, unknown properties              | No                                                   |
+|         401 | `UNAUTHORIZED`                  | Missing or invalid API key                        | No                                                   |
+|         401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation lacks user identity         | No                                                   |
+|         401 | `INVALID_USER_IDENTITY`         | Bad signature, expired, or invalid claims         | No                                                   |
+|         403 | `FORBIDDEN`                     | Insufficient scopes / entitlements                | No                                                   |
+|         403 | `ENVIRONMENT_NOT_ALLOWED`       | API key not authorized for this environment       | No                                                   |
+|         404 | `NOT_FOUND`                     | Endpoint or resource does not exist               | No                                                   |
+|         409 | `IDEMPOTENCY_CONFLICT`          | Reused key with divergent payload or in-flight    | In-flight only, after the jittered 2–3 s hint (#403) |
+|         413 | `PAYLOAD_TOO_LARGE`             | Exceeds operation `maxBodyBytes`                  | No                                                   |
+|         422 | `AUDIO_UNREADABLE`              | AI Speaking could not decode the audio (#248)     | No                                                   |
+|         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit              | Yes                                                  |
+|         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests          | Yes (immediate)                                      |
+|         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                  | Next month                                           |
+|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx                           | Potentially                                          |
+|         502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream returned unparseable shape             | No                                                   |
+|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open    | Yes                                                  |
+|         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled   | Yes                                                  |
+|         503 | `AUTH_ARGON2_CAPACITY`          | Bounded password-hash queue is full or timed out  | Yes                                                  |
+|         503 | `DATABASE_UNAVAILABLE`          | Postgres unreachable, unanswered, or timed out    | Yes                                                  |
+|         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys              | Yes                                                  |
+|         503 | `REDIS_UNAVAILABLE`             | Graded Redis admission or concurrency unavailable | Yes                                                  |
+|         503 | `RETRY_BUDGET_UNAVAILABLE`      | Redis retry budget unavailable                    | Yes                                                  |
+|         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget                | Only with Idempotency-Key                            |
 
 ### Six Error Codes Added Beyond Initial D1 Specs
 

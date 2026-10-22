@@ -13,6 +13,7 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - ./sandbox-targets:/etc/prometheus/sandbox-targets:ro
       - aihub_prometheus_data:/prometheus
     ports:
       - 127.0.0.1:9094:9090
@@ -182,6 +183,10 @@ services:
       - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19101:127.0.0.1:19101
       - -L
       - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19102:127.0.0.1:9187
+      - -L
+      - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19103:127.0.0.1:19103
+      - -L
+      - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19104:127.0.0.1:19104
       - ${AIHUB_TUNNEL_USER:?set the restricted tunnel user}@${AIHUB_PRODUCTION_HOST:?set the Production host}
     volumes:
       - ${AIHUB_MONITORING_SSH_KEY_FILE:?set the restricted tunnel key}:/run/secrets/id_ed25519:ro

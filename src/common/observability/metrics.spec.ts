@@ -12,6 +12,7 @@ import {
   setDispatchAttemptUnresolvedSource,
   setDownstreamPoolQueuedSource,
   setEmailOutboxBacklogSource,
+  setEmailOutboxCancellationSource,
   setPostgresPoolStatsSource,
 } from './metrics';
 
@@ -159,24 +160,6 @@ describe('request lifecycle metrics', () => {
     expect(total).toBeLessThan(100);
     expect(downstream).toBeGreaterThan(1);
     expect(downstream).toBeLessThan(100);
-  });
-
-  it('records admission duration under the bounded operation label', async () => {
-    recordCompletedRequest({
-      operation: GRADE,
-      statusCode: 200,
-      outcome: 'success',
-      admissionMs: 75,
-    });
-
-    expect(
-      Number(
-        await sample('aihub_admission_duration_seconds_sum', {
-          operation: GRADE,
-        }),
-      ),
-    ).toBeCloseTo(0.075);
-    expect(await getMetrics()).not.toContain('org_id');
   });
 
   it('never emits a series carrying an organization identifier', async () => {
@@ -354,6 +337,66 @@ describe('email outbox backlog metrics', () => {
     healthy = false;
 
     expect(await getMetrics()).not.toContain('aihub_email_outbox_queued{');
+  });
+});
+
+describe('email outbox cancellation metrics', () => {
+  afterEach(() => {
+    setEmailOutboxCancellationSource(undefined);
+  });
+
+  it('reads durable cancellation timestamps with bounded kind and reason labels', async () => {
+    setEmailOutboxCancellationSource(async () => [
+      {
+        kind: 'verification_email',
+        reason: 'credential_expired',
+        timestampSeconds: 1_797_000_000,
+      },
+      {
+        kind: 'organization_invite_email',
+        reason: 'credential_revoked',
+        timestampSeconds: 1_797_000_030,
+      },
+    ]);
+
+    expect(
+      await sample('aihub_email_delivery_cancelled_timestamp_seconds', {
+        kind: 'verification_email',
+        reason: 'credential_expired',
+      }),
+    ).toBe('1797000000');
+    expect(
+      await sample('aihub_email_delivery_cancelled_timestamp_seconds', {
+        kind: 'organization_invite_email',
+        reason: 'credential_revoked',
+      }),
+    ).toBe('1797000030');
+  });
+
+  it('drops durable cancellation series if the database read fails', async () => {
+    let healthy = true;
+    setEmailOutboxCancellationSource(async () => {
+      if (!healthy) throw new Error('database unavailable');
+      return [
+        {
+          kind: 'verification_email',
+          reason: 'credential_expired',
+          timestampSeconds: 1_797_000_000,
+        },
+      ];
+    });
+    expect(
+      await sample('aihub_email_delivery_cancelled_timestamp_seconds', {
+        kind: 'verification_email',
+        reason: 'credential_expired',
+      }),
+    ).toBe('1797000000');
+
+    healthy = false;
+
+    expect(await getMetrics()).not.toContain(
+      'aihub_email_delivery_cancelled_timestamp_seconds{',
+    );
   });
 });
 

@@ -7,6 +7,7 @@ import { SecretsModule } from '@/modules/secrets/secrets.module';
 import {
   CONTROL_PLANE_PRISMA_CLIENT,
   CONTROL_PLANE_READ_PRISMA_CLIENT,
+  EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
   type PrismaClientHolder,
   type PrismaClientUrls,
   RUNTIME_PRISMA_CLIENT,
@@ -59,6 +60,12 @@ class SharedPrismaClientsLifecycle implements OnApplicationShutdown {
         clients.controlPlaneRead,
     },
     {
+      provide: EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
+      inject: [PRISMA_CLIENTS],
+      useFactory: (clients: SharedPrismaClients): PrismaClientHolder =>
+        clients.emailDailyBudget,
+    },
+    {
       provide: SharedPrismaClientsLifecycle,
       inject: [PRISMA_CLIENTS],
       useFactory: (clients: SharedPrismaClients) =>
@@ -69,6 +76,7 @@ class SharedPrismaClientsLifecycle implements OnApplicationShutdown {
     RUNTIME_PRISMA_CLIENT,
     CONTROL_PLANE_PRISMA_CLIENT,
     CONTROL_PLANE_READ_PRISMA_CLIENT,
+    EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
   ],
 })
 export class PersistenceModule {}
@@ -80,9 +88,13 @@ export class PersistenceModule {}
 export {
   CONTROL_PLANE_PRISMA_CLIENT,
   CONTROL_PLANE_READ_PRISMA_CLIENT,
+  EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
   RUNTIME_PRISMA_CLIENT,
 } from './infrastructure/persistence-client';
-export type { PrismaClientHolder } from './infrastructure/persistence-client';
+export type {
+  PrismaClientHolder,
+  PrismaPool,
+} from './infrastructure/persistence-client';
 export { createPrismaClient } from './infrastructure/prisma-client';
 export {
   isLifecycleProperty,

@@ -17,6 +17,7 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
+import { quotaExceededError } from '@/modules/gateway/application/quota-period';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
@@ -109,6 +110,27 @@ export class QuotaGuard implements CanActivate {
       return true;
     }
 
+    const gradedAdmission = request.aihubGradedAdmission;
+    if (gradedAdmission !== undefined) {
+      if (
+        gradedAdmission.stage === 'quota' &&
+        !(await isCompletedWritingReplay(
+          request,
+          authenticated,
+          this.idempotency,
+        ))
+      ) {
+        throw quotaExceededError(this.now(), authenticated.organizationId);
+      }
+      if (
+        gradedAdmission.stage === 'admitted' &&
+        gradedAdmission.quotaUnverified
+      ) {
+        addMeteringEvidence(request, { quotaUnverified: true });
+      }
+      return true;
+    }
+
     let admission: Awaited<ReturnType<typeof admitMonthlyQuota>>;
     try {
       admission = await admitMonthlyQuota(
@@ -121,9 +143,12 @@ export class QuotaGuard implements CanActivate {
         this.now,
       );
     } catch (error) {
+      // A confirmed completed replay costs no quota, so it passes whether the
+      // quota is exhausted or could not be verified.
       if (
         error instanceof AppError &&
-        error.code === 'QUOTA_EXCEEDED' &&
+        (error.code === 'QUOTA_EXCEEDED' ||
+          error.code === 'REDIS_UNAVAILABLE') &&
         (await isCompletedWritingReplay(
           request,
           authenticated,

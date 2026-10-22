@@ -23,14 +23,15 @@ flowchart LR
   Prom --> Net
   Net --> Mon
   Net --> AM
-  Prom -->|172.27.0.1:19100-19102| Tunnel
+  Prom -->|172.27.0.1:19100-19104| Tunnel
   Tunnel -->|SSH, fixed loopback destinations| Prod
+  Prod -->|loopback Nginx metrics listeners| App[Production and Sandbox app slots]
   Prom -->|blackbox TLS probes every hour| Public
 ```
 
-The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19102`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. Existing Prometheus, Grafana, Alertmanager, and their files are not recreated or modified. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
+The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19104`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. Existing Prometheus, Grafana, Alertmanager, and their files are not recreated or modified. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
 
-On Production, node_exporter listens on `127.0.0.1:9100`, cAdvisor on `127.0.0.1:19101`, and postgres_exporter on `127.0.0.1:9187`. A key restricted by `authorized_keys` may forward only to those three destinations. The monitoring-host tunnel binds the forwards to `172.27.0.1:19100`, `:19101`, and `:19102`. The SSH host key is pinned in a separate `known_hosts` file.
+On Production, node_exporter listens on `127.0.0.1:9100`, cAdvisor on `127.0.0.1:19101`, postgres_exporter on `127.0.0.1:9187`, and Nginx exposes app metrics on loopback ports `19103` (Production) and `19104` (Sandbox). Those Nginx listeners proxy only the exact `/metrics` path to the active app slot; all other paths return 404. Public API and Sandbox listeners continue to return 404 for `/metrics`. The restricted key's `authorized_keys` `permitopen` list must allow only the five approved loopback destinations `9100`, `19101`, `9187`, `19103`, and `19104`. The monitoring-host tunnel binds the forwards to `172.27.0.1:19100-19104`. The SSH host key is pinned in a separate `known_hosts` file.
 
 On the monitoring host, node_exporter listens on `172.27.0.1:9100`. Redis exporter and blackbox exporter have no published ports and join only their required private Docker networks. The certificate job probes `api.aihubproduction.com`, `sandbox.aihubproduction.com`, `aihubproduction.com`, `www.aihubproduction.com`, and `s3.wispace.app` once per hour.
 
@@ -60,7 +61,7 @@ Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL aggr
 
 On Production, set `AIHUB_METRICS_BIND_IP=127.0.0.1`, `AIHUB_POSTGRES_EXPORTER_URI=127.0.0.1:5433/aihub?sslmode=disable`, the secret-file path, and `AIHUB_HOST_JOB_METRICS_DIR` to the operator's `~/.aihub-host-job-metrics` (absolute path). On the monitoring host, point `AIHUB_HOST_JOB_METRICS_DIR` at an empty directory. Enable `production` and `container-metrics` profiles. On the monitoring host, set `AIHUB_METRICS_BIND_IP=172.27.0.1`, the observed Redis address `redis://redis:6379`, the restricted SSH identity, and its pinned host key; enable the `monitoring` profile. The `.env` file on each host must satisfy Compose interpolation for the complete file, including fields for inactive profiles.
 
-Start Production exporters and monitoring-host node/Redis/blackbox exporters first. Verify their loopback or private-network `/metrics` endpoints. Start the restricted SSH tunnel and check its three forwarded endpoints. Start `prometheus-aihub` last so the initial target set is available before alert evaluation.
+Before the tunnel starts, update the restricted key's `permitopen` entries and the monitoring-host UFW rule for forwarded ports `19103` and `19104`. Keep `sandbox-targets/targets.yml` aligned with `AIHUB_SANDBOX_ENABLED`: leave its target in place when Sandbox is enabled, and replace its contents with `[]` while Sandbox is disabled. Prometheus watches the mounted directory and updates the target set without a restart. Start Production exporters and monitoring-host node/Redis/blackbox exporters first. Verify their loopback or private-network `/metrics` endpoints. Start the restricted SSH tunnel and check all five forwarded endpoints when Sandbox is enabled, or the four active endpoints when it is disabled. Verify `curl http://127.0.0.1:19103/metrics` on Production, and verify other paths on that port return 404. When Sandbox is enabled, also check `curl http://127.0.0.1:19104/metrics` and verify other paths return 404. Check both public API hosts still return 404 for `/metrics`. Start `prometheus-aihub` last so the initial target set is available before alert evaluation.
 
 Run the repository config checks before rollout:
 
@@ -82,11 +83,13 @@ redis_commands_duration_seconds_total{job="aihub-redis"}
 probe_ssl_earliest_cert_expiry{job="aihub-certificate-expiry"}
 probe_success{job="aihub-edge-health"}
 aihub_host_job_last_success_timestamp_seconds{job="aihub-production-node"}
+aihub_email_outbox_oldest_queued_age_seconds{job=~"aihub-(production|sandbox)-app"}
+aihub_email_delivery_cancelled_timestamp_seconds{job=~"aihub-(production|sandbox)-app",reason="credential_expired"}
 ```
 
 Also confirm the Postgres scrape exposes only the custom aggregate families and the Redis exporter has no key/config access. cAdvisor's read-only Docker and containerd sockets still give it root-equivalent runtime API access; its metric relabel filter keeps only container names beginning `aihub`.
 
-From a workstation outside both hosts, probe `9100`, `9115`, `9121`, `9187`, `9094`, and `19100-19102` on both hosts. All must be closed or filtered while the host remains reachable. A `closed` result is valid for the loopback Prometheus UI; its operator access is through SSH.
+From a workstation outside both hosts, probe `9100`, `9115`, `9121`, `9187`, `9094`, and `19100-19104` on both hosts. All must be closed or filtered while the host remains reachable. A `closed` result is valid for the loopback Prometheus UI; its operator access is through SSH. Ports `19103` and `19104` bind only to Production loopback and are reachable to Prometheus through the restricted SSH forwards.
 
 Compare per-container `docker stats` and `free -m`/disk use with the ceilings above before and after rollout. Record the values and check that no unrelated container restarted. Certificate target configuration is hourly; verify a new sample on a later scrape as well as the initial sample.
 

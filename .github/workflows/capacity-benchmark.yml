@@ -2,6 +2,16 @@ name: Capacity benchmark
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: >-
+          Quick: 32/64 RPS once. Full: 8/16/32/64 RPS three times.
+        required: true
+        type: choice
+        options:
+          - quick
+          - full
+        default: quick
 
 permissions:
   contents: read
@@ -11,10 +21,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Each repetition runs on its own fresh VM in parallel, so a full profile
+  # takes one repetition's time instead of three.
   benchmark:
-    name: Isolated capacity baseline
+    name: Isolated capacity baseline (repetition ${{ matrix.repetition }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 300
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: ${{ fromJSON(inputs.profile == 'full' && '[1,2,3]' || '[1]') }}
 
     steps:
       - name: Check out repository
@@ -32,6 +48,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Test capacity benchmark process timeout handling
+        run: pnpm test:capacity-benchmark
+
       - name: Record runner hardware and Docker engine
         run: |
           mkdir -p artifacts/capacity-benchmark
@@ -41,30 +60,68 @@ jobs:
             df -h /
             docker version
             docker info
-          } > artifacts/capacity-benchmark/runner-info.txt
+          } > "artifacts/capacity-benchmark/runner-info-${{ matrix.repetition }}.txt"
 
-      - name: Run three repeatable staged baselines
+      - name: Run selected staged baseline profile
         env:
-          BENCHMARK_STAGE_RATES_RPS: 8,16,32,64
+          BENCHMARK_STAGE_RATES_RPS: ${{ inputs.profile == 'full' && '8,16,32,64' || '32,64' }}
           BENCHMARK_MINIMUM_GRADING_SAMPLES: 1000
+          BENCHMARK_REPETITION: ${{ matrix.repetition }}
           BENCHMARK_RUNNER_DESCRIPTION: GitHub-hosted ubuntu-24.04
           BENCHMARK_REDIS_RTT_MS: 60
           BENCHMARK_STUB_LATENCY_MS: 2000
           BENCHMARK_STUB_ERROR_RATE: 0
           BENCHMARK_MAX_VUS: 256
-        run: |
-          set -euo pipefail
-          for repetition in 1 2 3; do
-            BENCHMARK_REPETITION="$repetition" pnpm capacity:benchmark
-          done
-          node scripts/ops/capacity-benchmark/summarize-repetitions.mjs 3 artifacts/capacity-benchmark
-          cat artifacts/capacity-benchmark/repetitions-summary.md >> "$GITHUB_STEP_SUMMARY"
+        run: pnpm capacity:benchmark
 
-      - name: Upload raw runs and repetition summary
+      - name: Upload raw run
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: capacity-benchmark-${{ github.run_id }}
+          name: capacity-benchmark-${{ github.run_id }}-repetition-${{ matrix.repetition }}
           path: artifacts/capacity-benchmark/
+          if-no-files-found: error
+          retention-days: 30
+
+  summary:
+    name: Repetition summary
+    needs: benchmark
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Download raw runs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: capacity-benchmark-${{ github.run_id }}-repetition-*
+          path: artifacts/capacity-benchmark
+          merge-multiple: true
+
+      - name: Summarize repetitions
+        env:
+          BENCHMARK_REPETITIONS: ${{ inputs.profile == 'full' && '3' || '1' }}
+        run: |
+          set -euo pipefail
+          node scripts/ops/capacity-benchmark/summarize-repetitions.mjs "$BENCHMARK_REPETITIONS" artifacts/capacity-benchmark
+          cat artifacts/capacity-benchmark/repetitions-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload repetition summary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: capacity-benchmark-${{ github.run_id }}-summary
+          path: |
+            artifacts/capacity-benchmark/repetitions-summary.json
+            artifacts/capacity-benchmark/repetitions-summary.md
           if-no-files-found: error
           retention-days: 30

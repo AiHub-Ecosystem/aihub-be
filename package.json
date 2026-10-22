@@ -22,6 +22,7 @@
     "generate:postman": "tsx scripts/generate/generate-postman.ts && biome format --write aihub.postman_collection.json",
     "canary:ai-writing": "tsx scripts/ops/canary/canary-ai-writing.ts",
     "capacity:benchmark": "node scripts/ops/capacity-benchmark/capacity-benchmark.mjs",
+    "benchmark:postgres-plans": "tsx scripts/ops/postgres-query-plan-baseline/run.ts",
     "test:capacity-benchmark": "node --test scripts/ops/capacity-benchmark/capacity-benchmark.spec.mjs",
     "test:monitoring-config": "node --test scripts/ops/monitoring/check-monitoring-config.spec.cjs",
     "check:monitoring-config": "node scripts/ops/monitoring/check-monitoring-config.cjs",

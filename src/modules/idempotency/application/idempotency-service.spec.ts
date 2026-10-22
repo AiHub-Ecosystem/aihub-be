@@ -9,6 +9,7 @@ import type {
 } from './idempotency-repository.port';
 import {
   IDEMPOTENCY_RETENTION_MS,
+  IN_FLIGHT_RETRY_AFTER_MS,
   IdempotencyService,
 } from './idempotency-service';
 
@@ -197,14 +198,47 @@ describe('IdempotencyService', () => {
         async () => ({ value: 'unused' }),
         () => ({ value: 'unused' }),
       ),
-    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', httpStatus: 409 });
+    ).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_CONFLICT',
+      httpStatus: 409,
+      retryable: false,
+      retryAfterMs: undefined,
+    });
     await expect(
       service.execute(
         input(),
         async () => ({ value: 'unused' }),
         () => ({ value: 'unused' }),
       ),
-    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', httpStatus: 409 });
+    ).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_CONFLICT',
+      httpStatus: 409,
+      retryable: true,
+    });
+  });
+
+  it('tells callers refused while the same request runs different instants within the jitter range', async () => {
+    const repository = new FakeRepository();
+    const service = new IdempotencyService(repository);
+
+    const hints: unknown[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      repository.nextReservations.push({ kind: 'conflict', reason: 'pending' });
+      const refusal = await service
+        .execute(
+          input(),
+          async () => ({ value: 'unused' }),
+          () => ({ value: 'unused' }),
+        )
+        .catch((error: unknown) => error);
+      hints.push(refusal instanceof AppError ? refusal.retryAfterMs : -1);
+    }
+
+    expect(new Set(hints).size).toBeGreaterThan(1);
+    for (const hint of hints) {
+      expect(hint).toBeGreaterThanOrEqual(IN_FLIGHT_RETRY_AFTER_MS);
+      expect(hint).toBeLessThan(IN_FLIGHT_RETRY_AFTER_MS + 1_000);
+    }
   });
 
   it('deletes the reservation for a client error and keeps retryable failures failed', async () => {

@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   OrganizationRetryBudgetDecision,
   OrganizationRetryBudgetPort,
@@ -13,8 +15,8 @@ import {
   createRedisGatewayClient,
 } from './redis-gateway.client';
 
-const WINDOW_MS = 60_000;
-const RETRY_HINT_JITTER_MS = 1_000;
+/** How long a same-key repeat is refused for: one window of first attempts. */
+export const RETRY_BUDGET_WINDOW_MS = 60_000;
 
 /**
  * How many distinct Idempotency-Keys one Organization's retry budget remembers.
@@ -136,6 +138,7 @@ export class RedisOrganizationRetryBudget
   }
 
   private reportDegraded(): void {
+    recordRedisUnavailable('retry_budget');
     if (this.redisIsDegraded) return;
     this.redisIsDegraded = true;
     this.logger.warn(
@@ -150,10 +153,9 @@ export class RedisOrganizationRetryBudget
   }
 
   private rejection(): OrganizationRetryBudgetDecision {
-    const jitter = Math.floor(this.random() * RETRY_HINT_JITTER_MS);
     return {
       allowed: false,
-      retryAfterMs: WINDOW_MS + jitter,
+      retryAfterMs: jitteredRetryAfterMs(RETRY_BUDGET_WINDOW_MS, this.random),
     };
   }
 

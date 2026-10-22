@@ -24,6 +24,29 @@ export function errorResponseSchema(codes: readonly ErrorCode[]): TSchema {
   );
 }
 
+/** Statuses whose errors can carry `retry_after_ms`, and so `Retry-After`. */
+const RETRY_HINT_STATUSES: ReadonlySet<HttpStatus> = new Set([409, 429, 503]);
+
+const RETRY_AFTER_HEADER = {
+  description:
+    'Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.',
+  schema: { type: 'string', pattern: '^[0-9]+$' },
+};
+
+/** The per-key limit, in draft-ietf-httpapi-ratelimit-headers-11 syntax. */
+const RATE_LIMIT_HEADERS = {
+  'RateLimit-Policy': {
+    description:
+      'Advisory. The per-minute limit of the API key, for example `"per-key";q=600;w=60`. Present on routes the per-key limit applies to.',
+    schema: { type: 'string' },
+  },
+  RateLimit: {
+    description:
+      'Advisory. What the API key has left of its current window and the whole seconds until it resets, for example `"per-key";r=0;t=13`.',
+    schema: { type: 'string' },
+  },
+};
+
 export function buildErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
@@ -31,14 +54,11 @@ export function buildErrorResponses(
   for (const [status, codes] of groupedErrors) {
     responses[`Error${status}`] = {
       description: codes.join(' | '),
-      ...(status === 503
+      ...(RETRY_HINT_STATUSES.has(status)
         ? {
             headers: {
-              'Retry-After': {
-                description:
-                  'Whole seconds to wait before retrying when the error includes retry_after_ms.',
-                schema: { type: 'string', pattern: '^[0-9]+$' },
-              },
+              'Retry-After': RETRY_AFTER_HEADER,
+              ...(status === 429 ? RATE_LIMIT_HEADERS : {}),
             },
           }
         : {}),

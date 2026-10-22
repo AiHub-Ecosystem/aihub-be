@@ -1,3 +1,4 @@
+import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -18,6 +19,8 @@ describe('AIHUB crash worker', () => {
     app.enableShutdownHooks();
     const fastify = app.getHttpAdapter().getInstance();
     registerRequestHooks(fastify, undefined);
+    // As in main.ts, so the auth routes can read and clear their cookies.
+    await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
     registerMetricsRoute(fastify);
     await app.init();
     await fastify.ready();

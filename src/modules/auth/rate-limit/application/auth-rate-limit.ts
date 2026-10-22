@@ -11,17 +11,16 @@ type AuthRateLimitDecision = Awaited<
  * promises the same answer on every route: `429 RATE_LIMITED`, retryable, the
  * wait in `retry_after_ms`, and `Retry-After` on the response.
  *
- * The header is asked for here rather than by each caller, so an integrator that
- * honours it cannot tell login from verification from password recovery. The
- * filter emits it only when there is a wait to send, which is why a refusal that
- * knows no wait carries no `retry_after_ms` either.
+ * The refusal is built here rather than by each caller, so an integrator cannot
+ * tell login from verification from password recovery. The filter sends the
+ * header whenever there is a wait, and a refusal that knows no wait carries
+ * neither.
  */
 function authRateLimited(retryAfterMs: number | undefined): AppError {
   return new AppError({
     code: 'RATE_LIMITED',
     message: 'Too many requests',
     retryable: true,
-    retryAfterHeader: true,
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   });
 }

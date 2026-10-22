@@ -9,6 +9,7 @@ export interface ResolvedUserIdentity {
   readonly userId: string;
   readonly organizationId: string;
   readonly scopes: readonly string[];
+  readonly mode: 'declared_id' | 'signed_assertion';
 }
 
 export interface UserIdentityResolverPort {

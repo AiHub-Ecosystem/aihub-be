@@ -67,14 +67,13 @@ const exempt = new Map([
 // the issue named in each file's `ponytail:` header.
 const grandfathered = new Map([
   ['src/openapi/build-openapi-document.ts', 2130],
-  ['src/postman/build-postman-collection.ts', 983],
   [
     'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
-    959,
+    958,
   ],
   [
     'src/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository.ts',
-    744,
+    714,
   ],
   [
     'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts',
@@ -82,7 +81,7 @@ const grandfathered = new Map([
   ],
   [
     'src/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository.ts',
-    513,
+    505,
   ],
 ]);
 

@@ -2,6 +2,7 @@ import exec from 'k6/execution';
 import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
 import {
+  K6_GRACEFUL_STOP_SECONDS,
   authAndGradingWorkload,
   hasOneUserPerVu,
   task1PayloadFromFixture,
@@ -24,9 +25,13 @@ const gradingRoutes = [
 ];
 const routeResponseCounts = {};
 const routeErrorCounts = {};
+const routeTransportErrorCounts = {};
 for (const name of allRoutes) {
   routeResponseCounts[name] = new Counter(`benchmark_api_responses_${name}`);
   routeErrorCounts[name] = new Counter(`benchmark_api_errors_${name}`);
+  routeTransportErrorCounts[name] = new Counter(
+    `benchmark_api_transport_errors_${name}`,
+  );
 }
 function trends(names, prefix, isTime) {
   const result = {};
@@ -36,6 +41,8 @@ function trends(names, prefix, isTime) {
   return result;
 }
 const apiLatency = trends(allRoutes, 'benchmark_latency_', true);
+// Accepted (2xx) responses only, so a fast refusal cannot improve a percentile.
+const acceptedLatency = trends(allRoutes, 'benchmark_accepted_latency_', true);
 const gatewayTotal = trends(gradingRoutes, 'benchmark_gateway_total_', true);
 const downstream = trends(gradingRoutes, 'benchmark_downstream_', true);
 const processRss = new Gauge('benchmark_process_rss_bytes');
@@ -86,7 +93,7 @@ export const options = {
       duration,
       preAllocatedVUs: Math.min(maxVUs, Math.max(16, rate * 3)),
       maxVUs,
-      gracefulStop: '65s',
+      gracefulStop: `${K6_GRACEFUL_STOP_SECONDS}s`,
       exec: 'load',
     },
     metrics: {
@@ -289,7 +296,12 @@ function recordResponse(name, response) {
   ) {
     routeErrorCounts[name].add(1);
   }
+  // No HTTP status means the gateway never answered, so its log has no code.
+  if (response.status === 0) routeTransportErrorCounts[name].add(1);
   apiLatency[name].add(response.timings.duration);
+  if (response.status >= 200 && response.status < 300) {
+    acceptedLatency[name].add(response.timings.duration);
+  }
 }
 
 function captureRefreshToken(response) {

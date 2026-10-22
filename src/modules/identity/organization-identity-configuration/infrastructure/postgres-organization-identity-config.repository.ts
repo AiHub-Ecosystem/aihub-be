@@ -20,6 +20,7 @@ import {
 import {
   dateValue,
   identityStoreError,
+  identityStoreUnavailable,
   isRecord,
   membershipRoleValue,
   membershipStatusValue,
@@ -386,7 +387,7 @@ export class PostgresOrganizationIdentityConfigRepository
           retryable: false,
         });
       }
-      throw identityStoreError('Identity store is unavailable');
+      throw identityStoreUnavailable(error);
     }
   }
 
@@ -405,8 +406,8 @@ export class PostgresOrganizationIdentityConfigRepository
         select: status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,
       });
       return first ?? undefined;
-    } catch {
-      throw identityStoreError('Identity store is unavailable');
+    } catch (error) {
+      throw identityStoreUnavailable(error);
     }
   }
 }
