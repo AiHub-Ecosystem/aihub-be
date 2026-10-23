@@ -85,6 +85,11 @@ function errorCodeOf(error: unknown): EmailDeliveryErrorCode {
   return isTimeout(error) ? 'timeout' : 'provider_rejected';
 }
 
+function isCredentialExpired(expiresAt: string, at: Date): boolean {
+  const expiry = Date.parse(expiresAt);
+  return !Number.isFinite(expiry) || expiry <= at.getTime();
+}
+
 function cancelReasonOf(
   state: Exclude<EmailCredentialState, 'actionable'>,
 ): EmailDeliveryCancelReason {
@@ -252,8 +257,7 @@ export class EmailDeliveryPoller {
 
     const credential = delivery.handler.credential(delivery.payload);
     if (credential !== undefined) {
-      const expiry = Date.parse(credential.expiresAt);
-      if (!Number.isFinite(expiry) || expiry <= now.getTime()) {
+      if (isCredentialExpired(credential.expiresAt, now)) {
         return this.maintenance.cancel(request, 'credential_expired', now);
       }
 
@@ -358,6 +362,17 @@ export class EmailDeliveryPoller {
     } catch (error) {
       await this.releaseProbe(sendPermit);
       throw error;
+    }
+
+    // The waits above can outlast the credential; this is the last check
+    // before the provider call, not a promise about a concurrent revocation.
+    const handoffAt = this.now();
+    if (
+      credential !== undefined &&
+      isCredentialExpired(credential.expiresAt, handoffAt)
+    ) {
+      await this.releaseProbe(sendPermit);
+      return this.maintenance.cancel(request, 'credential_expired', handoffAt);
     }
 
     let response: EmailProviderResponse;
