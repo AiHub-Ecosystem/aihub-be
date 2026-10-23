@@ -130,13 +130,25 @@ email_daily_send_budgets. The daily counter is shared by every deployment using
 the Resend account; provision the same URL in Production and Sandbox, separate
 from the outbox database URLs.
 
-Use a dedicated Redis ACL user limited to the exact key
-`aihub:resend:email-send-rate:last-reservation-ms`. Allow `SELECT` only for the
-limiter database, `EVAL`, `TIME`, `GET`, and `SET`; ioredis also needs
-`CLIENT SETINFO` and `INFO` for connection setup and its ready check. Persist the
-user with `ACL SAVE` against a configured, durable ACL file before storing its
-URL in Vault. Verify authentication and a read-only script with that user,
-and use `ACL DRYRUN` to verify `SET` access without reserving a real send slot.
+Use a dedicated Redis ACL user limited to the two keys the limiter touches: the
+pacing key `aihub:resend:email-send-rate:last-reservation-ms` and the
+provider-outage state `aihub:resend:email-provider-outage` (ADR-0122). Create it
+with exactly this grant, replacing `<password>` and `<limiter-db>`:
+
+```text
+ACL SETUSER aihub_email_limiter on ><password> resetkeys ~aihub:resend:email-send-rate:last-reservation-ms ~aihub:resend:email-provider-outage -@all +select|<limiter-db> +client|setinfo +info +eval +time +get +set +hget +hmget +hset +hdel +pexpire +del
+```
+
+`SELECT` is limited to the limiter database; `CLIENT SETINFO` and `INFO` are
+what ioredis sends on connect; the rest are the commands the limiter's scripts
+call. `redis-email-send-rate-limiter.acl.spec.ts` compares this line with the
+keys and commands in the source, so a script that reads a new key or runs a new
+command fails CI until this grant is updated. Redis refuses an ungranted key with
+`NOPERM` and the limiter then reports itself unavailable, so no email is sent;
+apply any change to this line to the running Redis too. Persist the user with
+`ACL SAVE` against a configured, durable ACL file before storing its URL in
+Vault. Verify authentication and a read-only script with that user, and use
+`ACL DRYRUN` to verify `SET` access without reserving a real send slot.
 
 Deliver the Role ID to Vault Agent through the deployment secret channel; never
 commit or paste it into an issue. There is no Agent `secret_id` to rotate.
