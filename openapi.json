@@ -10010,7 +10010,7 @@
             "description": "Email verified; no Web Session created."
           },
           "400": {
-            "description": "Malformed request or invalid verification token",
+            "description": "Malformed request, invalid verification token, or a registration password that is missing or does not match",
             "content": {
               "application/json": {
                 "schema": {

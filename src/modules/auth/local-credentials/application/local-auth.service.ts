@@ -45,6 +45,12 @@ import {
   type UserAccessTokenIssuerPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
+  invalidPasswordResetToken,
+  invalidRefreshToken,
+  invalidUserAccessToken,
+  invalidVerificationToken,
+} from './local-auth-errors';
+import {
   type IssuedSession,
   type LoginOutcome,
   RefreshRotationCommittedError,
@@ -97,30 +103,6 @@ export interface LocalAuthServiceClock {
 }
 
 export const AUTH_CLOCK = Symbol('AUTH_CLOCK');
-
-function invalidRefreshToken(): AppError {
-  return new AppError({
-    code: 'AUTH_REFRESH_TOKEN_INVALID',
-    message: 'Refresh token is invalid',
-    retryable: false,
-  });
-}
-
-function invalidPasswordResetToken(): AppError {
-  return new AppError({
-    code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID',
-    message: 'Password reset token is invalid',
-    retryable: false,
-  });
-}
-
-function invalidUserAccessToken(): AppError {
-  return new AppError({
-    code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
-    message: 'User access token is invalid',
-    retryable: false,
-  });
-}
 
 /**
  * Built by the auth module's composition root, which passes every port
@@ -250,11 +232,7 @@ export class LocalAuthService {
       throw verificationPasswordInvalid();
     }
     if (outcome.kind === 'invalid') {
-      throw new AppError({
-        code: 'AUTH_VERIFICATION_TOKEN_INVALID',
-        message: 'Verification token is invalid',
-        retryable: false,
-      });
+      throw invalidVerificationToken();
     }
     if (outcome.kind === 'verified') {
       return undefined;

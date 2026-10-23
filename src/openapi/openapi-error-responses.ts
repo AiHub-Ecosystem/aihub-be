@@ -24,6 +24,17 @@ export function errorResponseSchema(codes: readonly ErrorCode[]): TSchema {
   );
 }
 
+/** One documented error response: its description and the codes it can carry. */
+export function errorResponse(
+  description: string,
+  codes: readonly ErrorCode[],
+): Record<string, unknown> {
+  return {
+    description,
+    content: { 'application/json': { schema: errorResponseSchema(codes) } },
+  };
+}
+
 /** Statuses whose errors can carry `retry_after_ms`, and so `Retry-After`. */
 const RETRY_HINT_STATUSES: ReadonlySet<HttpStatus> = new Set([409, 429, 503]);
 

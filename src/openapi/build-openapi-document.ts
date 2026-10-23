@@ -44,6 +44,7 @@ import {
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
 import {
   buildErrorResponses,
+  errorResponse,
   errorResponseSchema,
 } from './openapi-error-responses';
 import { toOpenApiPath } from './openapi-path';
@@ -492,19 +493,14 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
         'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
     },
     ...routeErrorResponsesOf('auth.verify_email'),
-    '400': {
-      description:
-        'Malformed request, invalid verification token, or (ADR-0123) a registration password that is missing for a token that needs it or does not match',
-      content: {
-        'application/json': {
-          schema: errorResponseSchema([
-            'INVALID_REQUEST',
-            'AUTH_VERIFICATION_TOKEN_INVALID',
-            'AUTH_VERIFICATION_PASSWORD_INVALID',
-          ]),
-        },
-      },
-    },
+    '400': errorResponse(
+      'Malformed request, invalid verification token, or (ADR-0123) a registration password that is missing for a token that needs it or does not match',
+      [
+        'INVALID_REQUEST',
+        'AUTH_VERIFICATION_TOKEN_INVALID',
+        'AUTH_VERIFICATION_PASSWORD_INVALID',
+      ],
+    ),
   };
   const resendResponses = {
     '202': { description: 'Verification resend accepted' },
@@ -858,26 +854,17 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
         responses: {
           '201': createResponses['201'],
           ...routeErrorResponsesOf('auth.web_sessions.verification'),
-          '400': {
-            description: 'Malformed request or invalid verification token',
-            content: {
-              'application/json': {
-                schema: errorResponseSchema([
-                  'INVALID_REQUEST',
-                  'AUTH_VERIFICATION_TOKEN_INVALID',
-                  'AUTH_VERIFICATION_PASSWORD_INVALID',
-                ]),
-              },
-            },
-          },
-          '401': {
-            description: 'Client secret missing or wrong',
-            content: {
-              'application/json': {
-                schema: errorResponseSchema(['UNAUTHORIZED']),
-              },
-            },
-          },
+          '400': errorResponse(
+            'Malformed request, invalid verification token, or a registration password that is missing or does not match',
+            [
+              'INVALID_REQUEST',
+              'AUTH_VERIFICATION_TOKEN_INVALID',
+              'AUTH_VERIFICATION_PASSWORD_INVALID',
+            ],
+          ),
+          '401': errorResponse('Client secret missing or wrong', [
+            'UNAUTHORIZED',
+          ]),
           // 204 is not an error: the email is verified and no session was
           // granted, which is the same answer POST /v1/auth/verify-email gives.
           '204': { description: 'Email verified; no Web Session created.' },
@@ -955,14 +942,9 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
           // The client secret, and nothing about the session: logout has no
           // session failure to report, so a missing or wrong secret is the only
           // 401 here.
-          '401': {
-            description: 'Client secret missing or wrong',
-            content: {
-              'application/json': {
-                schema: errorResponseSchema(['UNAUTHORIZED']),
-              },
-            },
-          },
+          '401': errorResponse('Client secret missing or wrong', [
+            'UNAUTHORIZED',
+          ]),
         },
       },
     },
