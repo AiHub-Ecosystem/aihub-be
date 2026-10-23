@@ -2,6 +2,7 @@ import { EmailDeliveryPoller } from './email-delivery-poller';
 import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
 import type {
   ClaimEmailDeliveryRequestsInput,
+  ClaimedFailureReport,
   EmailCredentialActionabilityPort,
   EmailCredentialState,
   EmailDeliveryErrorCode,
@@ -150,21 +151,45 @@ export class FakeStore implements EmailDispatchStorePort {
     return this.exhausted;
   }
 
+  /** Each claim's identity, in the order handed out. */
+  claimsHandedOut: Date[] = [];
+  reportedClaims: Date[] = [];
+  releasedClaims: Date[] = [];
+  /** How many acknowledgements fail before one succeeds. */
+  failMarkReported = 0;
+  private claimSequence = 0;
+
   async claimUnreportedFailures(input: {
     limit: number;
-  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+  }): Promise<readonly ClaimedFailureReport[]> {
     this.reconcileLimits.push(input.limit);
-    const claimed = this.unreported.slice(0, input.limit);
+    const claimed = this.unreported.slice(0, input.limit).map((row) => {
+      this.claimSequence += 1;
+      return {
+        ...row,
+        claim: new Date(Date.UTC(2030, 0, 1) + this.claimSequence),
+      };
+    });
     this.claimed.push(...claimed.map((row) => row.id));
+    this.claimsHandedOut.push(...claimed.map((row) => row.claim));
     return claimed;
   }
 
-  async markFailureReported(input: { id: string }): Promise<void> {
+  async markFailureReported(input: { id: string; claim: Date }): Promise<void> {
+    if (this.failMarkReported > 0) {
+      this.failMarkReported -= 1;
+      throw new Error('the outbox store is unavailable');
+    }
     this.reported.push(input.id);
+    this.reportedClaims.push(input.claim);
   }
 
-  async releaseFailureNotification(input: { id: string }): Promise<void> {
+  async releaseFailureNotification(input: {
+    id: string;
+    claim: Date;
+  }): Promise<void> {
     this.released.push(input.id);
+    this.releasedClaims.push(input.claim);
   }
 }
 

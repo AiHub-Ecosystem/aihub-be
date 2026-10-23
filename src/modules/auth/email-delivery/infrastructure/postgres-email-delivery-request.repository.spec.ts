@@ -10,6 +10,7 @@ import {
 import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
 
 const NOW = new Date('2026-10-05T12:00:00.000Z');
+const CLAIM = new Date(NOW.getTime() + 30_000);
 const ROW_ID = 'edr_01J00000000000000000000000';
 
 function clientReturningRows(rows: readonly Record<string, unknown>[]) {
@@ -185,18 +186,53 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
   it('reads the permanent provider rejection code before the writer rollout', async () => {
     const failures =
       await new PostgresEmailDeliveryRequestRepository().claimUnreportedFailures(
-        clientReturning(
-          queuedRow({
+        clientReturning({
+          ...queuedRow({
             status: 'failed',
             payloadCiphertext: null,
             lastErrorCode: 'provider_permanent_rejection',
             completedAt: NOW,
           }),
-        ),
+          claim: CLAIM,
+        }),
         { limit: 1, now: NOW, leaseMs: 30_000 },
       );
 
     expect(failures[0]?.lastErrorCode).toBe('provider_permanent_rejection');
+  });
+
+  it('returns each failure claim with the lease it wrote, which identifies the claim (#989)', async () => {
+    const failures =
+      await new PostgresEmailDeliveryRequestRepository().claimUnreportedFailures(
+        clientReturning({
+          ...queuedRow({
+            status: 'failed',
+            payloadCiphertext: null,
+            lastErrorCode: 'timeout',
+            completedAt: NOW,
+          }),
+          claim: CLAIM,
+        }),
+        { limit: 1, now: NOW, leaseMs: 30_000 },
+      );
+
+    expect(failures[0]?.claim).toEqual(CLAIM);
+  });
+
+  it('refuses a failure claim with no lease rather than inventing one', async () => {
+    await expect(
+      new PostgresEmailDeliveryRequestRepository().claimUnreportedFailures(
+        clientReturning(
+          queuedRow({
+            status: 'failed',
+            payloadCiphertext: null,
+            lastErrorCode: 'timeout',
+            completedAt: NOW,
+          }),
+        ),
+        { limit: 1, now: NOW, leaseMs: 30_000 },
+      ),
+    ).rejects.toThrow('Email delivery failure claim is invalid');
   });
 
   it.each([

@@ -137,6 +137,63 @@ describe('terminal failure reporting', () => {
     expect(store.reported).toEqual([ROW_ID]);
   });
 
+  it('emits again on a later pass when the report cannot be recorded after the signal went out', async () => {
+    // At least once, not exactly once: the signal and the database are not one
+    // transaction. A recorded report is what stops it; a lost acknowledgement
+    // only repeats the signal for the same request (#989).
+    const failures: unknown[] = [];
+    const { poller, store } = harness({
+      onTerminalFailure: (failure) => failures.push(failure),
+    });
+    store.unreported = [
+      claimed({
+        status: 'failed',
+        attempts: 3,
+        payloadCiphertext: null,
+        lastErrorCode: 'timeout',
+        completedAt: NOW,
+      }),
+    ];
+    store.failMarkReported = 1;
+
+    await poller.runOnce();
+
+    expect(failures).toHaveLength(1);
+    expect(store.released).toEqual([ROW_ID]);
+    expect(store.reported).toEqual([]);
+
+    await poller.runOnce();
+
+    expect(failures).toEqual([
+      { id: ROW_ID, kind: 'verification_email', errorCode: 'timeout' },
+      { id: ROW_ID, kind: 'verification_email', errorCode: 'timeout' },
+    ]);
+    expect(store.reported).toEqual([ROW_ID]);
+  });
+
+  it('acknowledges and releases with the identity of the claim it holds', async () => {
+    const { poller, store } = harness({
+      onTerminalFailure: () => undefined,
+    });
+    store.unreported = [
+      claimed({
+        status: 'failed',
+        attempts: 3,
+        payloadCiphertext: null,
+        lastErrorCode: 'timeout',
+        completedAt: NOW,
+      }),
+    ];
+    store.failMarkReported = 1;
+
+    await poller.runOnce();
+    await poller.runOnce();
+
+    const [firstClaim, secondClaim] = store.claimsHandedOut;
+    expect(store.releasedClaims).toEqual([firstClaim]);
+    expect(store.reportedClaims).toEqual([secondClaim]);
+  });
+
   it('stops reporting a terminal failure once the notification is recorded', async () => {
     // The store no longer returns a reported row, so a second pass over the
     // same durable state is silent: one event per terminal failure, not one

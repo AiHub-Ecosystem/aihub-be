@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import type {
   CancelStaleEmailDeliveryRequestsInput,
   ClaimEmailDeliveryRequestsInput,
+  ClaimedFailureReport,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
   EmailDeliveryRequestRecord,
@@ -162,12 +163,13 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     readonly limit: number;
     readonly now: Date;
     readonly leaseMs: number;
-  }): Promise<readonly EmailDeliveryRequestRecord[]> {
+  }): Promise<readonly ClaimedFailureReport[]> {
     return this.requests.claimUnreportedFailures(this.client, input);
   }
 
   async markFailureReported(input: {
     readonly id: string;
+    readonly claim: Date;
     readonly reportedAt: Date;
   }): Promise<void> {
     await this.requests.markFailureReported(this.client, input);
@@ -175,6 +177,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
 
   async releaseFailureNotification(input: {
     readonly id: string;
+    readonly claim: Date;
   }): Promise<void> {
     await this.requests.releaseFailureNotification(this.client, input);
   }

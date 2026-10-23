@@ -93,7 +93,8 @@ backfill.
 
 ## What is emitted
 
-Exactly one event per terminal failure, and one increment per terminal failure:
+One event and one increment per terminal failure, normally exactly once and at
+least once (see the end of this section):
 
 ```text
 aihub_email_delivery_failed_total{kind="verification_email"} 1
@@ -127,7 +128,7 @@ terminal, so no later pass claims it. The row therefore records when its
 notification went out (`failure_reported_at`), and every pass reconciles the
 terminal rows that have no such record before it ends. A pass that starts after
 the one that failed a request still emits its event, and a request whose
-notification is already recorded is never reported twice.
+notification is already recorded is not claimed again.
 
 Reconciling takes a lease (`failure_notify_lease_expires_at`) rather than
 recording the report immediately, because both halves matter. Two instances
@@ -143,6 +144,21 @@ reclaimed, and the instance that lost the row may still be holding it in memory.
 Every transition after a claim therefore requires that `lease_owner` still be
 this instance, so the stale one's update matches nothing instead of spending an
 attempt the new owner is spending or clearing the new owner's lease.
+
+The notification lease is fenced the same way (#989). Each claim's identity is
+the lease expiry it wrote: a later claim is only possible once that instant has
+passed, and writes a strictly later one. Recording the report and handing the
+claim back both require the row's lease to still be that value, so a reporter
+whose lease lapsed while another instance claimed the row changes nothing; it
+neither records nor releases the newer claim.
+
+Reporting is therefore at least once, not exactly once. The signal is emitted
+before the report is recorded, and the metric, the log line and the database are
+not one transaction: if recording fails after the signal went out, or the
+process stops in between, the row is claimed again and the same request id is
+reported again. A rare repeat is the price of never losing a terminal failure.
+Treat the request id in the log line as the key when counting distinct
+failures.
 
 ## Terminal delivery failure
 

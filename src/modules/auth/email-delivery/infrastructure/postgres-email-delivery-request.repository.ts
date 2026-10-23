@@ -4,6 +4,7 @@ import { AppError } from '@/common/errors/app-error';
 import type {
   CancelStaleEmailDeliveryRequestsInput,
   ClaimEmailDeliveryRequestsInput,
+  ClaimedFailureReport,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
   EmailDeliveryKind,
@@ -21,6 +22,10 @@ import {
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { Logger } from '@nestjs/common';
 import { EmailDeliveryTransactionAdapter } from './email-delivery-transaction.adapter';
+import {
+  CLAIM_UNREPORTED_FAILURES_SQL,
+  withFailureClaims,
+} from './email-failure-report-claim';
 
 import {
   type AuthSqlClient,
@@ -159,42 +164,6 @@ export async function pruneExpiredAuthEmailRecipientLimits(
   );
   return rows.length;
 }
-
-/**
- * Terminal requests whose alert never went out. A request only reaches `failed`
- * by spending its third attempt, so this is a bounded and normally empty set;
- * it becomes non-empty exactly when a process exited between that commit and the
- * callback, which is the gap the runbook's alert depends on not existing.
- *
- * Claiming is one atomic step, so two instances reconciling at once do not both
- * report the same failure. The claim writes a lease rather than the reported
- * stamp, because the row has to stay claimable if this instance dies before it
- * emits: a stamp written here would lose that alert for good, while a lease only
- * delays it until the lease lapses.
- */
-const CLAIM_UNREPORTED_FAILURES_SQL = `
-  UPDATE email_delivery_requests
-  SET failure_notify_lease_expires_at = $3
-  WHERE id IN (
-    SELECT id
-    FROM email_delivery_requests
-    WHERE status = 'failed'
-      AND kind = ANY($4::text[])
-      AND failure_reported_at IS NULL
-      AND last_error_code IS NOT NULL
-      AND (failure_notify_lease_expires_at IS NULL
-           OR failure_notify_lease_expires_at <= $2)
-    ORDER BY completed_at, id
-    LIMIT $1
-    FOR UPDATE SKIP LOCKED
-  )
-  RETURNING id, kind, status,
-            payload_ciphertext AS "payloadCiphertext", attempts,
-            last_attempt_at AS "lastAttemptAt",
-            last_error_code AS "lastErrorCode",
-            cancel_reason AS "cancelReason",
-            created_at AS "createdAt", completed_at AS "completedAt"
-`;
 
 function storeError(message: string): AppError {
   return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
@@ -653,26 +622,32 @@ export class PostgresEmailDeliveryRequestRepository
   async claimUnreportedFailures(
     client: AuthSqlClient,
     input: { limit: number; now: Date; leaseMs: number },
-  ): Promise<readonly EmailDeliveryRequestRecord[]> {
+  ): Promise<readonly ClaimedFailureReport[]> {
     const rows = await authQueryRows(client, CLAIM_UNREPORTED_FAILURES_SQL, [
       input.limit,
       input.now,
       new Date(input.now.getTime() + input.leaseMs),
       EMAIL_DELIVERY_KINDS,
     ]);
-    return toKnownRecords(rows);
+    return withFailureClaims(rows, toKnownRecords(rows));
   }
 
   async markFailureReported(
     client: AuthSqlClient,
-    input: { id: string; reportedAt: Date },
+    input: { id: string; claim: Date; reportedAt: Date },
   ): Promise<EmailDeliveryRequestRecord> {
     // Written only after the signal was emitted, and it takes the lease with
     // it, so a reported row is never claimed again. It requires the row to
-    // still be `failed`, which a terminal state can never leave.
+    // still be `failed`, which a terminal state can never leave, and the
+    // lease to still be this claim's: a reporter whose lease lapsed and was
+    // claimed again matches nothing (#989).
     return this.apply(client, input.id, () =>
       client.emailDeliveryRequest.updateMany({
-        where: { id: input.id, status: 'failed' },
+        where: {
+          id: input.id,
+          status: 'failed',
+          failureNotifyLeaseExpiresAt: input.claim,
+        },
         data: {
           failureReportedAt: input.reportedAt,
           failureNotifyLeaseExpiresAt: null,
@@ -683,13 +658,18 @@ export class PostgresEmailDeliveryRequestRepository
 
   async releaseFailureNotification(
     client: AuthSqlClient,
-    input: { id: string },
+    input: { id: string; claim: Date },
   ): Promise<EmailDeliveryRequestRecord> {
     // Gives up a claim without emitting, so a callback that threw does not
-    // lock the row out until the lease lapses.
+    // lock the row out until the lease lapses. Only the current claim can.
     return this.apply(client, input.id, () =>
       client.emailDeliveryRequest.updateMany({
-        where: { id: input.id, status: 'failed', failureReportedAt: null },
+        where: {
+          id: input.id,
+          status: 'failed',
+          failureReportedAt: null,
+          failureNotifyLeaseExpiresAt: input.claim,
+        },
         data: { failureNotifyLeaseExpiresAt: null },
       }),
     );

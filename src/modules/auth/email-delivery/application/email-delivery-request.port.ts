@@ -244,6 +244,16 @@ export interface EmailDeliveryRequestRecord {
   readonly completedAt: Date | null;
 }
 
+/**
+ * A terminal request claimed for its failure report. `claim` is the lease
+ * expiry the claim wrote. A later claim is only possible once that instant has
+ * passed, and writes a strictly later one, so it identifies this claim and no
+ * other: acknowledging and releasing require it (#989).
+ */
+export interface ClaimedFailureReport extends EmailDeliveryRequestRecord {
+  readonly claim: Date;
+}
+
 /** Queued rows of `kinds` created at or before `createdAtOrBefore`. */
 export interface CancelStaleEmailDeliveryRequestsInput {
   readonly at: Date;
@@ -366,22 +376,33 @@ export interface EmailDispatchStorePort {
    * them reported: two instances reconciling at once produce one event between
    * them, while an instance that dies before emitting leaves the row claimable
    * again when the lease lapses. `markFailureReported` is what ends the sequence.
+   *
+   * Reporting is at least once, not exactly once: the signal is emitted before
+   * the report is recorded, and they are not one transaction. A report whose
+   * record fails is claimed and emitted again (#989).
    */
   claimUnreportedFailures(input: {
     readonly limit: number;
     readonly now: Date;
     readonly leaseMs: number;
-  }): Promise<readonly EmailDeliveryRequestRecord[]>;
+  }): Promise<readonly ClaimedFailureReport[]>;
+  /**
+   * Records the report, only while `claim` is still the row's claim: a
+   * reporter whose lease lapsed and was claimed again changes nothing.
+   */
   markFailureReported(input: {
     readonly id: string;
+    readonly claim: Date;
     readonly reportedAt: Date;
   }): Promise<void>;
   /**
    * Hands a claim back without emitting, for a callback that threw. Without it
-   * the row would stay invisible until the lease lapsed.
+   * the row would stay invisible until the lease lapsed. Only the current
+   * claim can hand it back.
    */
   releaseFailureNotification(input: {
     readonly id: string;
+    readonly claim: Date;
   }): Promise<void>;
 }
 

@@ -1,6 +1,7 @@
 import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 
 import type {
+  ClaimedFailureReport,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
   EmailDeliveryKind,
@@ -58,7 +59,7 @@ export class EmailDeliveryPollerMaintenance {
   }
 
   async reportUnreportedFailures(): Promise<void> {
-    let pending: readonly EmailDeliveryRequestRecord[];
+    let pending: readonly ClaimedFailureReport[];
     try {
       pending = await this.store.claimUnreportedFailures({
         limit: this.batchSize,
@@ -78,10 +79,13 @@ export class EmailDeliveryPollerMaintenance {
         });
         await this.store.markFailureReported({
           id: failure.id,
+          claim: failure.claim,
           reportedAt: this.now(),
         });
       } catch {
-        await this.releaseNotification(failure.id);
+        // The signal may already be out: the next claim emits it again, which
+        // is the at-least-once the runbook states (#989).
+        await this.releaseNotification(failure);
       }
     }
   }
@@ -177,9 +181,14 @@ export class EmailDeliveryPollerMaintenance {
     }
   }
 
-  private async releaseNotification(id: string): Promise<void> {
+  private async releaseNotification(
+    failure: ClaimedFailureReport,
+  ): Promise<void> {
     try {
-      await this.store.releaseFailureNotification({ id });
+      await this.store.releaseFailureNotification({
+        id: failure.id,
+        claim: failure.claim,
+      });
     } catch {
       // The lease still lapses on its own, so this is a delay, not a loss.
     }
