@@ -22,20 +22,45 @@ describe('shared durable Resend daily budget', () => {
     await Promise.all([firstPool.end(), secondPool.end()]);
   });
 
-  it('shares one atomic daily budget across independent deployment connections', async () => {
-    const reservations = await Promise.all([
-      ...Array.from({ length: 8 }, () => firstDeployment.reserve('invitation')),
-      ...Array.from({ length: 5 }, () => secondDeployment.reserve('priority')),
+  it('keeps reservations within the shared caps when invitations and priority mail race across two connections', async () => {
+    const [invitations, priority] = await Promise.all([
+      Promise.all(
+        Array.from({ length: 8 }, () => firstDeployment.reserve('invitation')),
+      ),
+      Promise.all(
+        Array.from({ length: 5 }, () => secondDeployment.reserve('priority')),
+      ),
     ]);
+    const reservedInvitations = invitations.filter(({ reserved }) => reserved);
+    const reservedPriority = priority.filter(({ reserved }) => reserved);
+    const reserved = reservedInvitations.length + reservedPriority.length;
+
+    // How many of the thirteen win depends on the order they reach the row: the
+    // invitations stop at eight, and priority mail takes what is left of ten. So
+    // the split is not asserted, only what holds in every order.
+    expect(reserved).toBeLessThanOrEqual(10);
+    expect(reserved).toBeGreaterThanOrEqual(8);
+    expect(reservedInvitations.length).toBeLessThanOrEqual(8);
+    await expect(secondDeployment.usage()).resolves.toEqual({
+      used: reserved,
+      limit: 10,
+    });
+  });
+
+  it('lets priority mail take the shared budget first, leaving invitations only what remains under their cap', async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await secondDeployment.reserve('priority');
+    }
+    const invitations = [];
+    for (let index = 0; index < 8; index += 1) {
+      invitations.push(await firstDeployment.reserve('invitation'));
+    }
 
     expect(
-      reservations.filter((reservation) => reservation.reserved),
-    ).toHaveLength(10);
-    expect(
-      reservations.filter((reservation) => !reservation.reserved),
+      invitations.filter((reservation) => reservation.reserved),
     ).toHaveLength(3);
-    await expect(secondDeployment.usage()).resolves.toEqual({
-      used: 10,
+    await expect(firstDeployment.usage()).resolves.toEqual({
+      used: 8,
       limit: 10,
     });
   });
