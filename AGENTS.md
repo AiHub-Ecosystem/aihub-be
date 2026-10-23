@@ -76,18 +76,13 @@ Before checking what is live in production, changing nginx, or assessing host ac
 
 Treat implementation and release as separate authorizations. VPS credentials do not authorize pushing, enabling deployment gates, or triggering production deployment; do those only when the user explicitly requests them.
 
+### Review
+
+A reviewer reads `AGENTS.md`, the `.claude/rules/` files whose `paths` match the diff, and the ADRs the diff touches. The mechanical gates have run by then, so review judgement calls the checks cannot make.
+
 ### Required verification
 
-Use the narrowest check while iterating, then run the full loop before handoff:
-
-```text
-pnpm test -- focused-file.spec.ts
-pnpm test:related <file>
-pnpm check:changed
-pnpm type-check
-pnpm arch-check
-pnpm verify
-```
+After each batch of edits run `pnpm check:changed`: it reads the changed files from git and runs the gates they can break (`oxlint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, and `prettier` for docs). Run `pnpm verify` once, at the end, before handoff. `pnpm test -- focused-file.spec.ts` runs one spec.
 
 `pnpm build` is a pure SWC transform; type ownership lives in `type-check` (via `pnpm verify`).
 
