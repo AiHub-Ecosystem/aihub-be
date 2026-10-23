@@ -510,6 +510,49 @@ describe('LocalAuthService', () => {
     expect(state.emailDeliveryRequests).toHaveLength(1);
   });
 
+  describe('one address has one form (#394)', () => {
+    const input = { username: 'person_01', password: 'correct horse battery' };
+
+    it('treats the Unicode and punycode spellings of one domain as one account', async () => {
+      const { local, state } = service();
+      await local.register(
+        { ...input, email: 'user@bücher.de' },
+        '203.0.113.7',
+      );
+      const [account] = [...state.accounts.values()];
+      if (account === undefined) throw new Error('no account was registered');
+      account.status = 'active';
+
+      await expect(
+        local.register(
+          { ...input, username: 'person_02', email: 'USER@xn--bcher-kva.de' },
+          '203.0.113.7',
+        ),
+      ).rejects.toMatchObject({ code: 'AUTH_IDENTITY_UNAVAILABLE' });
+      expect(
+        [...state.accounts.values()].map((stored) => stored.email),
+      ).toEqual(['user@xn--bcher-kva.de']);
+    });
+
+    it('refuses a look-alike address on every email route with the same validation error', async () => {
+      const { local, state, limiter, queueAges } = service();
+      const lookAlike = 'user@аpple.com';
+
+      await expect(
+        local.register({ ...input, email: lookAlike }, '203.0.113.7'),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+      await expect(
+        local.resend(lookAlike, '203.0.113.7'),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+      await expect(
+        local.forgotPassword({ email: lookAlike }, '203.0.113.7'),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+      expect(limiter.calls).toEqual([]);
+      expect(queueAges).toEqual([]);
+      expect(state.accounts.size).toBe(0);
+    });
+  });
+
   describe('registering again on a pending email', () => {
     const first = {
       email: 'person@example.com',

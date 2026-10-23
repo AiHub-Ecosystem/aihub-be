@@ -10,8 +10,8 @@ import {
 
 describe('local auth domain', () => {
   it('canonicalizes email and username without provider-specific folding', () => {
-    expect(normalizeEmail('  E\u0301xample@Example.COM ')).toBe(
-      'éxample@example.com',
+    expect(normalizeEmail('  Example@Example.COM ')).toBe(
+      'example@example.com',
     );
     expect(normalizeUsername('  Alice._-01 ')).toBe('alice._-01');
     expect(normalizeEmail('first.last+tag@gmail.com')).toBe(
@@ -22,11 +22,96 @@ describe('local auth domain', () => {
   it.each([
     'person@example.co.uk',
     "o'brien+tag@example.com",
-    'người@ví-dụ.vn',
     'a@xn--vd-ola.vn',
     `${'a'.repeat(64)}@example.com`,
   ])('accepts the deliverable address %j', (email) => {
     expect(normalizeEmail(email)).toBe(email);
+  });
+
+  describe('one address has one form (#394)', () => {
+    it.each([
+      [
+        'a Unicode domain and its punycode form',
+        'user@bücher.de',
+        'user@xn--bcher-kva.de',
+      ],
+      [
+        'an upper-case Unicode domain',
+        'user@BÜCHER.de',
+        'user@xn--bcher-kva.de',
+      ],
+      [
+        'a decomposed Unicode domain',
+        'user@bu\u0308cher.de',
+        'user@xn--bcher-kva.de',
+      ],
+      [
+        'a fullwidth ASCII domain',
+        'user@ｅｘａｍｐｌｅ.com',
+        'user@example.com',
+      ],
+      ['a Vietnamese domain', 'user@ví-dụ.vn', 'user@xn--v-d-rma6749a.vn'],
+      [
+        'a Japanese domain mixing Han and kana',
+        'user@例え.jp',
+        'user@xn--r8jz45g.jp',
+      ],
+    ])('maps %s to one canonical address', (_label, email, canonical) => {
+      expect(normalizeEmail(email)).toBe(canonical);
+    });
+
+    it('gives the Unicode and punycode spellings of one mailbox the same form', () => {
+      expect(normalizeEmail('user@bücher.de')).toBe(
+        normalizeEmail('USER@XN--BCHER-KVA.DE'),
+      );
+    });
+
+    it.each([
+      ['a Cyrillic letter inside a Latin domain label', 'user@аpple.com'],
+      [
+        'a Cyrillic letter inside a Latin label given as punycode',
+        'user@xn--pple-43d.com',
+      ],
+      ['a Greek letter inside a Latin domain label', 'user@exαmple.com'],
+      ['a Latin letter inside a Han label', 'user@例a.jp'],
+      ['a non-ASCII local part', 'người@example.com'],
+      ['a Cyrillic local part', 'аdmin@example.com'],
+      ['a punycode label that does not decode', 'user@xn--a.com'],
+      ['a numeric top-level domain', 'user@example.123'],
+      ['an IPv4 address in hexadecimal form', 'user@0x7f.1'],
+      ['a dotted IPv4 address', 'user@1.2.3.4'],
+      ['a space in the local part', 'us er@example.com'],
+      ['a quote in the local part', 'us"er@example.com'],
+      [
+        'a label with hyphens in the third and fourth places',
+        'user@ab--cd.com',
+      ],
+      [
+        'a punycode label that decodes to a leading hyphen',
+        'user@xn---bcher-kva.de',
+      ],
+      ['a percent escape in the domain', 'user@ex%41mple.com'],
+      ['a one-letter top-level domain', 'user@example.c'],
+      ['a top-level domain mixing letters and digits', 'user@example.c1'],
+      ['an emoji domain', 'user@😀.com'],
+      [
+        'a slash left over a Latin letter in the domain',
+        'user@example.co\u0338m',
+      ],
+      ['a slash in the domain', 'user@example.com/path'],
+      ['an ideographic full stop between labels', 'user@example\u3002com'],
+    ])('refuses %s', (_label, email) => {
+      expect(() => normalizeEmail(email)).toThrow(LocalAuthValidationError);
+    });
+
+    it.each(['user@аpple.com', 'người@example.com', 'user@1.2.3.4'])(
+      'refuses %s with the one validation error, which names no account',
+      (email) => {
+        expect(() => normalizeEmail(email)).toThrow(
+          new LocalAuthValidationError(),
+        );
+      },
+    );
   });
 
   it.each([

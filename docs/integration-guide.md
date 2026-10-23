@@ -65,6 +65,13 @@ its email is verified, and sends a verification link to that address.
   answers `409 AUTH_IDENTITY_UNAVAILABLE`.
 - **A registration that is never verified expires after seven days.** Its email
   and username become free to register again.
+- **An email address has one form.** The local part must be ASCII (letters,
+  digits, and the usual atom characters, with single dots between them), and the
+  domain is stored in its ASCII (punycode) form, so `user@bücher.de` and
+  `user@xn--bcher-kva.de` are the same address. A domain label that mixes scripts
+  (a Cyrillic letter among Latin ones), a non-ASCII local part, and a numeric
+  top-level domain answer `400 INVALID_REQUEST`, like any other malformed
+  address, on registration, login, resend, password recovery, and invitation.
 
 The link's token is verified either by the browser through
 `POST /v1/auth/verify-email`, or by the Customer Web BFF through
