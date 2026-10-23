@@ -101,6 +101,11 @@ const notificationsSweepDescriptor = cliRunnerDescriptor(
   'runNotificationsSweepCommand',
   'notifications sweep command is unavailable',
 );
+const registrationsSweepDescriptor = cliRunnerDescriptor(
+  'registrations-sweep',
+  'runRegistrationsSweepCommand',
+  'registrations sweep command is unavailable',
+);
 const speakingAudioUploadSweepDescriptor = cliRunnerDescriptor(
   'speaking-audio-upload-sweep',
   'runSpeakingAudioUploadSweepCommand',
@@ -838,6 +843,16 @@ async function sweepAvatarsCommand(options) {
 // Records a Notification Event for each API key expiring within 14 days and
 // queues its email (ADR-0120). The summary is one JSON line of counts; a
 // failure leaves the exit status non-zero so cron alerts. Run it daily.
+async function sweepRegistrationsCommand(options) {
+  if (options.size > 0) {
+    usageError();
+  }
+
+  await runCliCommand(registrationsSweepDescriptor, {
+    databaseUrl: process.env.DATABASE_URL ?? '',
+  });
+}
+
 async function sweepNotificationsCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -1076,6 +1091,10 @@ async function main() {
   }
   if (command === 'speaking:audio-upload-sweep') {
     await sweepSpeakingAudioUploadsCommand(options);
+    return;
+  }
+  if (command === 'registrations:sweep') {
+    await sweepRegistrationsCommand(options);
     return;
   }
   if (command === 'notifications:sweep') {

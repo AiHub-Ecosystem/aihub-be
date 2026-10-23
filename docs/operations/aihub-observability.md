@@ -162,12 +162,12 @@ Every scheduled run of `scripts/ops/host-jobs/host-scheduled-job.sh` and `script
 - `aihub_host_job_last_success_timestamp_seconds{task}` and `aihub_host_job_max_age_seconds{task}`, written on success;
 - `aihub_host_job_last_failure_timestamp_seconds{task}`, written on failure.
 
-| Task                                                                                         | Window before `AIHUBScheduledJobMissed` |
-| -------------------------------------------------------------------------------------------- | --------------------------------------- |
-| `quota`, `prune`, `ttl-audit`, `avatar-sweep`, `speaking-upload-sweep`, `notification-sweep` | 25 hours                                |
-| `report`, `postgres-backup`                                                                  | 2 hours 20 minutes                      |
-| `chart-upload-sweep`                                                                         | 50 minutes                              |
-| `sandbox-mint-probe` (monitoring host, below)                                                | 5 minutes                               |
+| Task                                                                                                               | Window before `AIHUBScheduledJobMissed` |
+| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| `quota`, `prune`, `ttl-audit`, `avatar-sweep`, `speaking-upload-sweep`, `notification-sweep`, `registration-sweep` | 25 hours                                |
+| `report`, `postgres-backup`                                                                                        | 2 hours 20 minutes                      |
+| `chart-upload-sweep`                                                                                               | 50 minutes                              |
+| `sandbox-mint-probe` (monitoring host, below)                                                                      | 5 minutes                               |
 
 `AIHUBScheduledJobFailed` fires as soon as a run's failure is newer than its last success, and clears on the next success. `AIHUBScheduledJobMissed` fires when no success arrived inside the window, which covers a stopped cron, a schedule CD left suspended, a deferred run (`deferred reason=host_job_active` is not a failure), and a host that is down. Faster jobs get two cadences so one run skipped during a deploy does not page.
 

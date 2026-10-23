@@ -295,7 +295,7 @@ if [[ -n "$REAL_FLOCK" ]]; then
   wait "$first_pid"
 fi
 
-for job_and_limits in 'quota 900 90000' 'prune 1800 90000' 'report 180 8400' 'ttl-audit 900 90000' 'avatar-sweep 1800 90000' 'chart-upload-sweep 1800 3000' 'speaking-upload-sweep 1800 90000' 'notification-sweep 900 90000'; do
+for job_and_limits in 'quota 900 90000' 'prune 1800 90000' 'report 180 8400' 'ttl-audit 900 90000' 'avatar-sweep 1800 90000' 'chart-upload-sweep 1800 3000' 'speaking-upload-sweep 1800 90000' 'notification-sweep 900 90000' 'registration-sweep 900 90000'; do
   read -r job expected_timeout expected_max_age <<<"$job_and_limits"
   : >"$FAKE_DOCKER_CALLS"
   APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$job" \
@@ -426,10 +426,11 @@ assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' avatar-sweep"
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' chart-upload-sweep"
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' speaking-upload-sweep"
 assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' notification-sweep"
+assert_contains "$FAKE_CRONTAB_FILE" "host-scheduled-job.sh' registration-sweep"
 assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-ops-job.sh'
 assert_not_contains "$FAKE_CRONTAB_FILE" 'aihub-avatar-sweep.sh'
 [[ "$(grep -c '^# BEGIN AIHUB MANAGED JOBS$' "$FAKE_CRONTAB_FILE")" == 1 ]]
-[[ "$(grep -c 'host-scheduled-job.sh' "$FAKE_CRONTAB_FILE")" == 8 ]]
+[[ "$(grep -c 'host-scheduled-job.sh' "$FAKE_CRONTAB_FILE")" == 9 ]]
 # A second install keeps one separator line instead of adding another.
 [[ "$(grep -c '^$' "$FAKE_CRONTAB_FILE")" == 1 ]]
 

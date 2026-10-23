@@ -581,6 +581,9 @@ The schedule uses the VPS's UTC clock:
 - `speaking-upload-sweep` runs `speaking:audio-upload-sweep` at 04:20 daily.
 - `notification-sweep` runs `notifications:sweep` at 01:15 daily, recording
   API keys that expire within 14 days and queueing their email (ADR-0120).
+- `registration-sweep` runs `registrations:sweep` at 01:35 daily, deleting
+  registrations that stayed unverified for seven days
+  ([Pending registration expiry](#pending-registration-expiry), ADR-0123).
 
 `idempotency:cleanup` is the one cleanup command not scheduled yet (#272).
 `scripts/ci/cleanup-commands-scheduled.spec.ts` fails when a sweep, prune, or
@@ -604,6 +607,7 @@ and on a run that did not succeed in time
 | --------------------------------------- | ---------------------------------------- |
 | `quota`, `prune`, `report`, `ttl-audit` | `~/aihub-ops-job.log`                    |
 | `notification-sweep`                    | `~/aihub-ops-job.log`                    |
+| `registration-sweep`                    | `~/aihub-ops-job.log`                    |
 | `avatar-sweep`                          | `~/aihub-avatar-sweep.log`               |
 | `chart-upload-sweep`                    | `~/aihub-writing-chart-upload-sweep.log` |
 | `speaking-upload-sweep`                 | `~/aihub-speaking-upload-sweep.log`      |
@@ -632,6 +636,7 @@ and does not prevent the Sandbox invocation.
 | `chart-upload-sweep`    |           30 minutes |
 | `speaking-upload-sweep` |           30 minutes |
 | `notification-sweep`    |           15 minutes |
+| `registration-sweep`    |           15 minutes |
 
 The wrapper also caps deployment-status lookup at 30 seconds. The in-container
 CLI stops at its listed deadline; if Docker exec has not returned 15 seconds
@@ -1351,6 +1356,31 @@ The expected values are `json-file`, `max-size: 10m`, and `max-file: 3` for
 each returned AIHUB container.
 
 ## Verify and operate
+
+### Pending registration expiry
+
+A registration that is never verified would hold its email and username for
+ever, so `registration-sweep` deletes it, with its identity and verification
+tokens, once seven days have passed since it was made or last replaced by a new
+registration for the same email (ADR-0123). The window is
+`PENDING_REGISTRATION_LIFETIME_MS` in
+`src/modules/auth/accounts/application/expire-pending-registrations.ts`;
+changing it is a code change and a deploy. A run deletes in batches of 500 and
+stops after 100 batches, so a larger backlog finishes on the next day.
+
+Each run prints one line of counts, with no address or username:
+
+```text
+{"deleted":4,"batches":1}
+```
+
+To run it by hand, use the operator command form in
+[Incident response](incident-response.md) with `registrations:sweep` and no
+options. A run that fails because
+a pending account is still referenced by another table (a session or a
+membership, which a pending account should not have) reports the foreign-key
+error and `AIHUBScheduledJobFailed` fires; find that account before running
+again.
 
 ### Checking deployed state
 
