@@ -52,6 +52,39 @@ queue is full or your request waits too long, AIHUB returns retryable
 `503 AUTH_ARGON2_CAPACITY` with `Retry-After` and `error.retry_after_ms`; wait
 for that interval before retrying the password operation.
 
+## AIHUB account registration and email verification
+
+`POST /v1/auth/register` creates an AIHUB User Account that stays pending until
+its email is verified, and sends a verification link to that address.
+
+- **Registering again before verifying replaces the pending registration.** A
+  registration for an email whose account is still pending takes the new
+  username and password, makes every earlier verification link unusable, and
+  sends a new one. The answer is the same `201` a new email gets. Only an email
+  whose account is already active, or a username another account holds,
+  answers `409 AUTH_IDENTITY_UNAVAILABLE`.
+- **A registration that is never verified expires after seven days.** Its email
+  and username become free to register again.
+
+The link's token is verified either by the browser through
+`POST /v1/auth/verify-email`, or by the Customer Web BFF through
+`POST /v1/auth/web-sessions/verification`. Both take the same optional field:
+
+- `password`: the password chosen in the registration the link belongs to.
+  AIHUB is introducing a rule that a verification link needs it, so that the
+  person who owns the mailbox activates an account only with a password they
+  chose or know. A link issued while the rule is on is refused without it.
+  Until then, links verify without a password, and a password you send must
+  still match.
+
+A missing or wrong password answers `400 AUTH_VERIFICATION_PASSWORD_INVALID`.
+The link stays usable: ask the user to check the password they registered with.
+After five wrong passwords the link stops working, and the user registers again
+with the same email to get a new one. A link that is unknown, already used,
+replaced or expired answers `400 AUTH_VERIFICATION_TOKEN_INVALID` as before.
+Collect the password on the page the link opens, keep it only in form memory,
+and never put it in a URL, storage, telemetry or a log.
+
 ## 1. How the pieces fit
 
 AIHUB sits between your backend and the private AI services. Your end users
