@@ -466,10 +466,14 @@ export class LocalAuthService {
     payload: EmailDeliveryPayload,
     now: Date,
   ): InsertEmailDeliveryRequestInput {
+    const id = this.newEmailDeliveryId(now);
     return {
-      id: this.newEmailDeliveryId(now),
+      id,
       kind,
-      payloadCiphertext: this.payloadCipher.encrypt(JSON.stringify(payload)),
+      payloadCiphertext: this.payloadCipher.encrypt(JSON.stringify(payload), {
+        id,
+        kind,
+      }),
       createdAt: now,
     };
   }

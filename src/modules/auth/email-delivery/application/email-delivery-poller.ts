@@ -479,7 +479,12 @@ export class EmailDeliveryPoller {
     if (ciphertext === null) return undefined;
     let parsed: unknown;
     try {
-      parsed = JSON.parse(this.cipher.decrypt(ciphertext));
+      parsed = JSON.parse(
+        this.cipher.decrypt(ciphertext, {
+          id: request.id,
+          kind: request.kind,
+        }),
+      );
     } catch (error) {
       if (error instanceof EnvelopeCipherError && error.kind === 'unknown-key')
         throw error;

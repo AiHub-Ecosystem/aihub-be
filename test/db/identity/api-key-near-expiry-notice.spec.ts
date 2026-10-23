@@ -160,15 +160,22 @@ async function events(): Promise<readonly string[]> {
 async function queuedNotices(): Promise<
   readonly ApiKeyNearExpiryNotificationPayload[]
 > {
-  const result = await pool.query<{ kind: string; payload: string }>(
-    `SELECT kind, payload_ciphertext AS payload FROM email_delivery_requests
+  const result = await pool.query<{
+    id: string;
+    kind: string;
+    payload: string;
+  }>(
+    `SELECT id, kind, payload_ciphertext AS payload FROM email_delivery_requests
      WHERE status = 'queued'`,
   );
   return result.rows
     .map((row) => {
       expect(row.kind).toBe('api_key_near_expiry_notification');
       return JSON.parse(
-        cipher.decrypt(row.payload),
+        cipher.decrypt(row.payload, {
+          id: row.id,
+          kind: 'api_key_near_expiry_notification',
+        }),
       ) as ApiKeyNearExpiryNotificationPayload;
     })
     .sort((left, right) =>

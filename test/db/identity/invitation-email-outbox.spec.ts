@@ -11,7 +11,10 @@ import { ulid } from 'ulid';
 import { AppModule } from '@/app.module';
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { generateRequestId } from '@/common/request-context/request-id';
-import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type {
+  EmailDeliveryKind,
+  EmailPayloadCipherPort,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   EMAIL_SENDER,
   type EmailProviderResponse,
@@ -107,7 +110,8 @@ class CountingRateLimiter implements AuthRateLimiterPort {
 }
 
 interface SealedRequest {
-  readonly kind: string;
+  readonly id: string;
+  readonly kind: EmailDeliveryKind;
   readonly status: string;
   readonly payload_ciphertext: string | null;
 }
@@ -217,7 +221,7 @@ function invite(headers: Record<string, string> = {}) {
 
 async function queuedRequests(): Promise<readonly SealedRequest[]> {
   const result = await pool.query<SealedRequest>(
-    'SELECT kind, status, payload_ciphertext FROM email_delivery_requests ORDER BY created_at',
+    'SELECT id, kind, status, payload_ciphertext FROM email_delivery_requests ORDER BY created_at',
   );
   return result.rows;
 }
@@ -241,7 +245,9 @@ function sealedPayload(row: SealedRequest | undefined): {
   if (row?.payload_ciphertext === null || row === undefined) {
     throw new Error('the request carried no ciphertext');
   }
-  return JSON.parse(cipher.decrypt(row.payload_ciphertext)) as {
+  return JSON.parse(
+    cipher.decrypt(row.payload_ciphertext, { id: row.id, kind: row.kind }),
+  ) as {
     email: string;
     organizationName: string;
     role: string;

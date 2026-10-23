@@ -223,6 +223,31 @@ write `provider_rejected`. After that release is deployed to every instance,
 release the writer that stores `provider_permanent_rejection` for `400` and
 `422`. Do not deploy the new writer while any older reader remains active.
 
+### Release order for the bound payload envelope (#439)
+
+A payload is sealed in an envelope that names its version. Version `v1` carries
+no associated data. Version `v2` authenticates the request it belongs to, so a
+ciphertext copied onto another row or kind does not open. A `v1` reader cannot
+open `v2`, and a poller that cannot open a payload cancels the request without
+a signal, so the order of releases decides whether a deploy can lose mail:
+
+1. **Reader release.** Every instance opens `v1` and `v2` and accepts the error
+   code `payload_unreadable`, and still writes `v1`. The poller still cancels a
+   payload it cannot open.
+2. **Writer release**, only after the reader release is running on every
+   instance of Production and Sandbox, and the previous slot has stopped. Instances
+   write `v2`, and the poller fails an unreadable payload with
+   `payload_unreadable` instead of cancelling it.
+3. **Drain.** Rows sealed as `v1` leave the queue within 24 hours for the
+   credential kinds (the longest credential lifetime) and within 14 days for
+   `api_key_near_expiry_notification` (its notice window), plus one sweep
+   interval. Keep the `v1` reader until then.
+
+Never deploy the writer release while an older reader can still claim a row. The
+operator CLI seals notices too (`src/cli/operator-notification-client.ts`), and
+it runs from the same image: move it through the same two releases in the same
+order, and do not run its sweep from an older image after the writer release.
+
 The configuration pause and its one-alert suppression are per poller process.
 If several application instances independently observe the same credential
 problem, each can emit one signal until one of its sends succeeds.

@@ -86,6 +86,8 @@ Generate a key with
 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`.
 To rotate, add the new id to `keys`, point `current_key_id` at it, and keep the
 old id until no queued request still needs it (see the email outbox runbook).
+Never reuse an id for different key material: an envelope sealed under the old
+material no longer opens, and the outbox treats such a payload as unreadable.
 
 `AIHUB_VAULT_AGENT_CIDR` is the address **Vault records as the login source**.
 That is not the Agent container's IP. The Agent and Vault sit on separate Docker

@@ -127,7 +127,12 @@ async function queuedNotices(): Promise<
   );
   return result.rows.map((row) => ({
     id: row.id,
-    payload: JSON.parse(cipher.decrypt(row.payload)),
+    payload: JSON.parse(
+      cipher.decrypt(row.payload, {
+        id: row.id,
+        kind: 'api_key_near_expiry_notification',
+      }),
+    ),
   }));
 }
 

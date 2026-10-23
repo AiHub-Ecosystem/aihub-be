@@ -16,5 +16,6 @@ export function sealOrganizationInvitationEmailPayload(
       expiresAt: input.expiresAt.toISOString(),
       inviterUsername,
     }),
+    { id: input.emailDelivery.id, kind: 'organization_invite_email' },
   );
 }

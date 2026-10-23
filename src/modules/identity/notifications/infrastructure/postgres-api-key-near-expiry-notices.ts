@@ -201,11 +201,14 @@ export class PostgresApiKeyNearExpiryNotices
           client: transaction,
         } as EmailDeliveryTransaction;
         for (const payload of notices) {
+          const id = input.newEmailDeliveryId(input.now);
+          const kind = 'api_key_near_expiry_notification';
           await this.emailRequests.insert(emailTransaction, {
-            id: input.newEmailDeliveryId(input.now),
-            kind: 'api_key_near_expiry_notification',
+            id,
+            kind,
             payloadCiphertext: this.payloadCipher.encrypt(
               JSON.stringify(payload),
+              { id, kind },
             ),
             createdAt: input.now,
           });

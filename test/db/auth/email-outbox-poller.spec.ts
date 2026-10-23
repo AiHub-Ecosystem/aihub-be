@@ -214,7 +214,10 @@ async function seedRequest(options: SeedOptions = {}): Promise<SeededRequest> {
     [
       id,
       kind,
-      (options.sealedWith ?? cipher).encrypt(JSON.stringify(payload)),
+      (options.sealedWith ?? cipher).encrypt(JSON.stringify(payload), {
+        id,
+        kind,
+      }),
       createdAt,
       schedulingOrganizationId,
       schedulingInviterId,
@@ -433,7 +436,14 @@ describe('email outbox dispatch poller', () => {
         `INSERT INTO email_delivery_requests (
            id, kind, status, payload_ciphertext, attempts, created_at
          ) VALUES ($1, 'api_key_near_expiry_notification', 'queued', $2, 0, $3)`,
-        [notice, cipher.encrypt('{}'), new Date(NOW.getTime() - 2 * MINUTE)],
+        [
+          notice,
+          cipher.encrypt('{}', {
+            id: notice,
+            kind: 'api_key_near_expiry_notification',
+          }),
+          new Date(NOW.getTime() - 2 * MINUTE),
+        ],
       );
       const invitation = await seedRequest({
         kind: 'organization_invite_email',
@@ -674,7 +684,11 @@ describe('email outbox dispatch poller', () => {
         `INSERT INTO email_delivery_requests (
            id, kind, status, payload_ciphertext, attempts, created_at
          ) VALUES ($1, 'mfa_enabled_notification', 'queued', $2, 0, $3)`,
-        [id, cipher.encrypt('{}'), staleAt],
+        [
+          id,
+          cipher.encrypt('{}', { id, kind: 'mfa_enabled_notification' }),
+          staleAt,
+        ],
       );
 
       await store.cancelStale({
@@ -707,7 +721,14 @@ describe('email outbox dispatch poller', () => {
         `INSERT INTO email_delivery_requests (
            id, kind, status, payload_ciphertext, attempts, created_at
          ) VALUES ($1, 'api_key_near_expiry_notification', 'queued', $2, 0, $3)`,
-        [notice, cipher.encrypt('{}'), staleAt],
+        [
+          notice,
+          cipher.encrypt('{}', {
+            id: notice,
+            kind: 'api_key_near_expiry_notification',
+          }),
+          staleAt,
+        ],
       );
 
       await store.cancelStale({

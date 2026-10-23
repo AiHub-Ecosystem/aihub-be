@@ -167,8 +167,17 @@ export type InsertEmailDeliveryRequestInput =
  * Named for the record it owns, the way every other durable record port is.
  */
 export interface EmailPayloadCipherPort {
-  encrypt(plaintext: string): string;
-  decrypt(envelope: string): string;
+  encrypt(plaintext: string, context: EmailPayloadContext): string;
+  decrypt(envelope: string, context: EmailPayloadContext): string;
+}
+
+/**
+ * What a sealed payload belongs to. An envelope is authenticated against it, so
+ * a ciphertext moved to another row or kind does not open (ADR-0074).
+ */
+export interface EmailPayloadContext {
+  readonly id: string;
+  readonly kind: EmailDeliveryKind;
 }
 
 /**
@@ -222,6 +231,7 @@ export const EMAIL_DELIVERY_ERROR_CODES = [
   'provider_rejected',
   'provider_permanent_rejection',
   'outcome_unknown',
+  'payload_unreadable',
 ] as const;
 
 export type EmailDeliveryErrorCode =

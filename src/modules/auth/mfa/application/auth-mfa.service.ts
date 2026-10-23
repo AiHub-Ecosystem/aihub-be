@@ -233,10 +233,14 @@ export class AuthMfaService implements AuthMfaServicePort {
     payload: { readonly email: string },
     now: Date,
   ): InsertEmailDeliveryRequestInput {
+    const id = this.newEmailDeliveryId(now);
     return {
-      id: this.newEmailDeliveryId(now),
+      id,
       kind,
-      payloadCiphertext: this.emailCipher.encrypt(JSON.stringify(payload)),
+      payloadCiphertext: this.emailCipher.encrypt(JSON.stringify(payload), {
+        id,
+        kind,
+      }),
       createdAt: now,
     };
   }
