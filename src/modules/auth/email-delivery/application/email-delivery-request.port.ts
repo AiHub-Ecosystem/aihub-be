@@ -51,6 +51,12 @@ export interface ApiKeyNearExpiryNotificationInput {
  * or no listed key is still active.
  */
 export interface ApiKeyNearExpiryNoticeResolverPort {
+  /**
+   * The facts to compose the notice from, or nothing when it is not actionable.
+   * When the Organization is no longer active, it also withdraws the notice's
+   * events, so restoring the Organization inside the window notifies it again
+   * (#996).
+   */
   resolve(
     payload: ApiKeyNearExpiryNotificationPayload,
     now: Date,

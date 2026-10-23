@@ -95,6 +95,25 @@ const RECIPIENT_SQL = `
     AND organization.status = 'active'
 `;
 
+const ORGANIZATION_STATUS_SQL = `
+  SELECT status FROM organizations WHERE id = $1
+`;
+
+/**
+ * Withdraws the events of a notice that cannot be sent because its Organization
+ * is no longer active (#996). Without this, an event recorded for a key whose
+ * Organization was suspended before dispatch would stop every later sweep from
+ * recording it, and restoring the Organization inside the window would never
+ * notify it. Only unexpired events go: an expired key is never notified again.
+ */
+const WITHDRAW_EVENTS_SQL = `
+  DELETE FROM notification_events
+  WHERE kind = $1
+    AND organization_id = $2
+    AND api_key_id = ANY($3::text[])
+    AND subject_expires_at > $4
+`;
+
 const STILL_ACTIVE_KEYS_SQL = `
   SELECT id, name, expires_at
   FROM api_keys
@@ -226,7 +245,10 @@ export class PostgresApiKeyNearExpiryNotices
         payload.userAccountId,
       ])
     )[0];
-    if (recipient === undefined) return undefined;
+    if (recipient === undefined) {
+      await this.withdrawIfOrganizationInactive(payload, now);
+      return undefined;
+    }
 
     const apiKeys = (
       await identityRows(this.client, STILL_ACTIVE_KEYS_SQL, [
@@ -247,5 +269,33 @@ export class PostgresApiKeyNearExpiryNotices
       organizationName: requiredString(recipient, 'name'),
       apiKeys,
     };
+  }
+
+  /**
+   * A recipient who no longer qualifies leaves the event alone: the Organization
+   * was told, and recording it again would tell the other recipients twice. An
+   * Organization that is no longer active was not told, so its event goes.
+   */
+  private async withdrawIfOrganizationInactive(
+    payload: ApiKeyNearExpiryNotificationPayload,
+    now: Date,
+  ): Promise<void> {
+    const organization = (
+      await identityRows(this.client, ORGANIZATION_STATUS_SQL, [
+        payload.organizationId,
+      ])
+    )[0];
+    if (
+      organization === undefined ||
+      requiredString(organization, 'status') === 'active'
+    ) {
+      return;
+    }
+    await identityRows(this.client, WITHDRAW_EVENTS_SQL, [
+      KIND,
+      payload.organizationId,
+      [...payload.apiKeyIds],
+      now,
+    ]);
   }
 }

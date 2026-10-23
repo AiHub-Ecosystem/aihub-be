@@ -1,6 +1,6 @@
 # ADR-0120: Notification Event catalog
 
-- Status: Accepted
+- Status: Accepted; an event is withdrawn when its Organization is not active at dispatch, added by [#996](https://github.com/AiHub-Ecosystem/aihub-be/issues/996)
 - Date: 2026-10-22
 - Related issue: [#608](https://github.com/AiHub-Ecosystem/aihub-be/issues/608), [#976](https://github.com/AiHub-Ecosystem/aihub-be/issues/976), [#977](https://github.com/AiHub-Ecosystem/aihub-be/issues/977), [#980](https://github.com/AiHub-Ecosystem/aihub-be/issues/980), [#986](https://github.com/AiHub-Ecosystem/aihub-be/issues/986)
 - Amends: [ADR-0074](0074-transactional-email-outbox.md) (actionability and stale cancellation for requests that carry no credential), [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md) (dispatch priority only), [ADR-0119](0119-shared-durable-email-daily-budget.md) (daily budget category only)
@@ -50,6 +50,36 @@ Auth remains the only writer and dispatcher of the outbox, and its per-kind hand
 Immediately before an attempt, the handler rechecks that the Organization is active, the recipient still holds an active `owner` or `admin` membership with an active User Account, and each listed key is still active. The email lists only keys that remain active. When no key remains, or the recipient or Organization no longer qualifies, the request is cancelled with the existing `not_actionable` reason. The one-day stale cutoff does not apply to a notice: it is stale, and cancelled as `not_actionable` without being opened, once it is older than the 14-day notice window, by which time every key it lists has expired.
 
 The notice does not reserve from the authentication recipient budget (`reserveAuthenticationEmailRecipient`), which protects authentication mail from abuse. The shared daily budget of [ADR-0119](0119-shared-durable-email-daily-budget.md) counts the notice in its invitation share, so recovery and verification mail keep the fifth reserved for them.
+
+### Withdrawal when the Organization is not active at dispatch (added by #996)
+
+"A key of a suspended Organization is not recorded" held only when the
+Organization was already suspended when the sweep read it. A suspension that
+committed between the sweep's read and its write, or after the sweep committed
+and before dispatch, left an event whose emails dispatch then cancelled. The
+event is unique by key and expiry, so no later sweep recorded the key again, and
+restoring the Organization inside the window never notified it. A PostgreSQL
+test reproduced both schedules.
+
+When dispatch finds a notice's Organization no longer active, the resolver
+withdraws (deletes) the unexpired events of the keys that notice lists, and the
+notice is cancelled as `not_actionable` as before. The next sweep after a
+restoration inside the window records a new event and queues one notice per
+recipient. A notice cancelled for any other reason, a recipient who is no longer
+an owner or admin or keys that are no longer active, keeps its event: the
+Organization was told.
+
+Locking the Organization during the sweep was not chosen: it only moves the
+suspension to after the sweep commits, where the notice is lost the same way.
+Deferring the notice while the Organization is suspended was not chosen: a
+notice waiting days would keep the 15-minute queue-age alert firing.
+
+An event's ID is therefore stable only while its notice can be delivered: a
+withdrawn event's later replacement has a new ID. No channel stores event IDs
+yet. If the Organization is restored before every recipient's email of the
+withdrawn event has been dispatched, those emails still go out and the new
+sweep queues another, so a recipient can get the notice twice; that needs a
+restoration within seconds of the suspension.
 
 ### Priority
 
