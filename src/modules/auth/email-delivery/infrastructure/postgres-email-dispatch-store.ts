@@ -99,11 +99,11 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
         },
       });
     } catch (error) {
-      if (await this.isReleasedUnspentAttempt(input)) return;
+      if ((await this.unspentAttemptState(input)) !== 'still_owed') return;
       throw error;
     }
-    if (updated.count > 0 || (await this.isReleasedUnspentAttempt(input)))
-      return;
+    if (updated.count > 0) return;
+    if ((await this.unspentAttemptState(input)) !== 'still_owed') return;
     throw new AppError({
       code: 'INTERNAL_ERROR',
       message: 'Email delivery request is not in a queued state',
@@ -111,9 +111,18 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     });
   }
 
-  private async isReleasedUnspentAttempt(
+  /**
+   * Whether a refund still has anything to do, read after the fenced update
+   * could not show it. `released`: an earlier attempt of this refund committed.
+   * `not_ours`: the row is gone, terminal, or held by another claimant, so there
+   * is nothing this worker may refund; treating that as a failure would keep the
+   * refund pending forever and stop this poller claiming any mail (#1033).
+   * `still_owed`: the row is queued and still this worker's, so the refund is
+   * genuinely outstanding. A failed read throws, which keeps it pending.
+   */
+  private async unspentAttemptState(
     input: ReleaseUnspentEmailAttemptInput,
-  ): Promise<boolean> {
+  ): Promise<'released' | 'not_ours' | 'still_owed'> {
     const row = await this.client.emailDeliveryRequest.findUnique({
       where: { id: input.id },
       select: {
@@ -121,14 +130,20 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
         attempts: true,
         lastAttemptAt: true,
         leaseExpiresAt: true,
+        leaseOwner: true,
       },
     });
-    return (
+    if (
       row?.status === 'queued' &&
       row.attempts === input.previousAttempts &&
       row.lastAttemptAt?.getTime() === input.previousAttemptAt?.getTime() &&
       row.leaseExpiresAt?.getTime() === input.retryAt.getTime()
-    );
+    ) {
+      return 'released';
+    }
+    return row?.status === 'queued' && row.leaseOwner === input.owner
+      ? 'still_owed'
+      : 'not_ours';
   }
 
   async releaseDeferred(input: {

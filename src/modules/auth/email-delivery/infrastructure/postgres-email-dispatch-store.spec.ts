@@ -79,4 +79,88 @@ describe('PostgresEmailDispatchStore', () => {
     expect(updateMany).toHaveBeenCalledTimes(2);
     expect(findUnique).toHaveBeenCalledTimes(2);
   });
+
+  describe('a refund for a row this worker no longer holds (#1033)', () => {
+    const input = {
+      id: ROW_ID,
+      owner: 'instance-a',
+      previousAttempts: 1,
+      previousAttemptAt: PREVIOUS_ATTEMPT_AT,
+      retryAt: RETRY_AT,
+    };
+
+    function storeOver(
+      updateMany: jest.Mock,
+      findUnique: jest.Mock,
+    ): PostgresEmailDispatchStore {
+      return new PostgresEmailDispatchStore({
+        emailDeliveryRequest: { updateMany, findUnique },
+      } as unknown as ConstructorParameters<
+        typeof PostgresEmailDispatchStore
+      >[0]);
+    }
+
+    it.each([
+      [
+        'completed by another worker',
+        {
+          status: 'provider_accepted',
+          attempts: 2,
+          lastAttemptAt: RETRY_AT,
+          leaseExpiresAt: null,
+          leaseOwner: null,
+        },
+      ],
+      [
+        'held by another worker',
+        {
+          status: 'queued',
+          attempts: 2,
+          lastAttemptAt: RETRY_AT,
+          leaseExpiresAt: RETRY_AT,
+          leaseOwner: 'instance-b',
+        },
+      ],
+      ['gone', null],
+    ])(
+      'settles without changing a row %s, so the pending refund can be dropped',
+      async (_case, row) => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+        const findUnique = jest.fn().mockResolvedValue(row);
+
+        await expect(
+          storeOver(updateMany, findUnique).releaseUnspentAttempt(input),
+        ).resolves.toBeUndefined();
+        expect(updateMany).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('still fails when the refund could not be written to a row this worker holds', async () => {
+      const updateMany = jest
+        .fn()
+        .mockRejectedValue(new Error('connection lost before commit'));
+      const findUnique = jest.fn().mockResolvedValue({
+        status: 'queued',
+        attempts: 2,
+        lastAttemptAt: RETRY_AT,
+        leaseExpiresAt: RETRY_AT,
+        leaseOwner: 'instance-a',
+      });
+
+      await expect(
+        storeOver(updateMany, findUnique).releaseUnspentAttempt(input),
+      ).rejects.toThrow('connection lost before commit');
+    });
+
+    it('still fails when the row cannot be read to tell', async () => {
+      const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+      const findUnique = jest
+        .fn()
+        .mockRejectedValue(new Error('database read failed'));
+
+      await expect(
+        storeOver(updateMany, findUnique).releaseUnspentAttempt(input),
+      ).rejects.toThrow('database read failed');
+    });
+  });
 });

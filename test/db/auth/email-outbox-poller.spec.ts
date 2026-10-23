@@ -1558,4 +1558,109 @@ describe('email outbox dispatch poller', () => {
       expect(emitted).toContain('error=provider_rejected');
     });
   });
+
+  describe('an attempt refund after another worker took the row (#1033)', () => {
+    // Past A's 105-second lease, and before the seeded credentials expire at
+    // NOW + 1 hour.
+    const LATER = new Date(NOW.getTime() + 10 * 60_000);
+    const LATER_STILL = new Date(NOW.getTime() + 20 * 60_000);
+
+    /** Answers 429 once, as a provider-wide throttle that refunds the attempt. */
+    class ThrottledOnceSender extends RecordingSender {
+      private throttled = false;
+
+      override async send(
+        message: EmailMessage,
+        options?: EmailDispatchOptions,
+      ): Promise<EmailProviderResponse> {
+        const response = await super.send(message, options);
+        if (this.throttled) return response;
+        this.throttled = true;
+        return { status: 429, retryAfter: '1' };
+      }
+    }
+
+    /** Worker A's store: its first refund write is lost with the connection. */
+    function storeLosingFirstRefund(): PostgresEmailDispatchStore {
+      const losing = new PostgresEmailDispatchStore(client);
+      const release = losing.releaseUnspentAttempt.bind(losing);
+      let lost = false;
+      losing.releaseUnspentAttempt = async (input) => {
+        if (!lost) {
+          lost = true;
+          throw new Error('connection lost before the refund committed');
+        }
+        await release(input);
+      };
+      return losing;
+    }
+
+    function workerA(sender: EmailSenderPort, now: () => Date) {
+      return new EmailDeliveryPoller(
+        storeLosingFirstRefund(),
+        new PostgresEmailCredentialRepository(client),
+        cipher,
+        sender,
+        allowSendRateReservation,
+        allowProviderOutagePermit,
+        now,
+        { hash },
+        {
+          owner: OWNER_A,
+          onTerminalFailure: reportTerminalEmailDeliveryFailure,
+        },
+      );
+    }
+
+    it('drops the refund once another worker completed the row, and claims new mail without a restart', async () => {
+      const taken = await seedRequest();
+      let now = NOW;
+      const senderA = new ThrottledOnceSender();
+      const a = workerA(senderA, () => now);
+
+      // A reserves an attempt, the provider throttles, and the refund is lost.
+      await a.runOnce();
+      expect((await rowOf(taken.id)).attempts).toBe(1);
+
+      // A's lease lapses and B takes the row and delivers it.
+      await poller(OWNER_B, new RecordingSender(), () => LATER).runOnce();
+      const completed = await rowOf(taken.id);
+      expect(completed.status).toBe('provider_accepted');
+
+      // A recovers with unrelated mail waiting.
+      const waiting = await seedRequest();
+      now = LATER_STILL;
+      await a.runOnce();
+
+      expect(await rowOf(taken.id)).toEqual(completed);
+      expect((await rowOf(waiting.id)).status).toBe('provider_accepted');
+      expect(senderA.sends).toHaveLength(2);
+    });
+
+    it("leaves a newer claimant's attempt and lease alone, and claims other mail", async () => {
+      const taken = await seedRequest();
+      let now = NOW;
+      const senderA = new ThrottledOnceSender();
+      const a = workerA(senderA, () => now);
+
+      await a.runOnce();
+
+      // B claims the row after A's lease lapsed and is still working on it.
+      await claim(OWNER_B, { now: LATER, leaseMs: 60 * 60_000 });
+      await store.reserveAttempt({
+        id: taken.id,
+        attemptedAt: LATER,
+        owner: OWNER_B,
+      });
+      const held = await rowOf(taken.id);
+      expect(held).toMatchObject({ lease_owner: OWNER_B, attempts: 2 });
+
+      const waiting = await seedRequest();
+      now = LATER_STILL;
+      await a.runOnce();
+
+      expect(await rowOf(taken.id)).toEqual(held);
+      expect((await rowOf(waiting.id)).status).toBe('provider_accepted');
+    });
+  });
 });
