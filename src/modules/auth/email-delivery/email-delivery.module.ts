@@ -49,6 +49,7 @@ import {
   EMAIL_SENDER,
   type EmailSenderPort,
 } from './application/email-sender.port';
+import { pruneExpiredAuthEmailRecipientLimits } from './infrastructure/auth-email-recipient-limit';
 import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
@@ -58,7 +59,6 @@ import {
 } from './infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
 import { PostgresEmailDailySendBudget } from './infrastructure/postgres-email-daily-send-budget';
-import { pruneExpiredAuthEmailRecipientLimits } from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresEmailDeliveryRequestRepository } from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-dispatch-store';
 import { RedisEmailSendRateLimiter } from './infrastructure/redis-email-send-rate-limiter';

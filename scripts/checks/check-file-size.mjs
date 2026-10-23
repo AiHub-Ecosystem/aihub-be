@@ -72,10 +72,6 @@ const grandfathered = new Map([
     958,
   ],
   [
-    'src/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository.ts',
-    609,
-  ],
-  [
     'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts',
     818,
   ],

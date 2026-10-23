@@ -20,11 +20,9 @@ import {
   type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
+import { pruneExpiredAuthEmailRecipientLimits } from '@/modules/auth/email-delivery/infrastructure/auth-email-recipient-limit';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
-import {
-  PostgresEmailDeliveryRequestRepository,
-  pruneExpiredAuthEmailRecipientLimits,
-} from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import {
   PASSWORD_HASHER,
