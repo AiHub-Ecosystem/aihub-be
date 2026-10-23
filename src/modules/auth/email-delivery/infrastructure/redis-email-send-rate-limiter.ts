@@ -12,6 +12,10 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-send-rate-limiter.port';
 
 const RETRY_WHEN_UNAVAILABLE_MS = 5_000;
+// The shared Redis host is a separate machine, about 100 ms away from the
+// application. The dispatcher runs in the background, so the wait costs no
+// request; a shorter timeout fails every permit and reservation and nothing is sent.
+const REDIS_COMMAND_TIMEOUT_MS = 500;
 export const EMAIL_SEND_RATE_RESERVATION_KEY =
   'aihub:resend:email-send-rate:last-reservation-ms';
 
@@ -145,7 +149,7 @@ export class RedisEmailSendRateLimiter
         enableOfflineQueue: false,
         maxRetriesPerRequest: 1,
         connectTimeout: 1_000,
-        commandTimeout: 100,
+        commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
       });
       redis.on('error', () => undefined);
       this.redis = redis;

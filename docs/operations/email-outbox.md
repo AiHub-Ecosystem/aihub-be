@@ -285,9 +285,17 @@ at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A request
 held back because its payload is sealed with a key version this instance lacks
 waits 5 minutes between claims, so a key removed too early shows up here too.
 
-`deferred=N` in the per-pass log line counts requests handed back for that
-reason. A steadily non-zero value means a key version was removed while queued
-requests still needed it; restore the key before those requests age out.
+`deferred=N` in the per-pass log line counts requests handed back without an
+attempt. A steadily non-zero value has two usual causes, and a queued row with
+`attempts = 0` and a `lease_expires_at` a few seconds ahead of now points at
+the second:
+
+- A key version was removed while queued requests still needed it; restore the
+  key before those requests age out.
+- The send-rate Redis answers more slowly than its command timeout, or not at
+  all, so no send permit or reservation is granted. Every pass hands the request
+  back after 5 seconds and nothing is sent. Measure a round trip to that Redis
+  from the application container before changing anything else.
 
 ## What an operator can read
 
