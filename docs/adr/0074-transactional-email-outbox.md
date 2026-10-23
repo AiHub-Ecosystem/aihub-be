@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for a request without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider-wide failure attempts and retry behavior amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md); accepted addresses amended by [ADR-0124](0124-one-email-address-has-one-canonical-form.md); request-boundary backpressure amended by [issue #635](https://github.com/AiHub-Ecosystem/aihub-be/issues/635); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449); credential expiry rechecked at provider handoff amended by [issue #1034](https://github.com/AiHub-Ecosystem/aihub-be/issues/1034); Organization Invitation email copy and payload amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for a request without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider-wide failure attempts and retry behavior amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md); payload envelope binding amended by [issue #439](https://github.com/AiHub-Ecosystem/aihub-be/issues/439); accepted addresses amended by [ADR-0124](0124-one-email-address-has-one-canonical-form.md); request-boundary backpressure amended by [issue #635](https://github.com/AiHub-Ecosystem/aihub-be/issues/635); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449); credential expiry rechecked at provider handoff amended by [issue #1034](https://github.com/AiHub-Ecosystem/aihub-be/issues/1034); Organization Invitation email copy and payload amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)
@@ -14,6 +14,19 @@ Registration, verification resend, password recovery, and organization invitatio
 Each affected operation writes its Email Delivery Request in the same PostgreSQL transaction as its account, token, or invitation mutation; invitation audit evidence stays in that transaction as well. A failed transaction commits neither the mutation nor the request. The HTTP request returns after this commit and never waits for Resend. Redis is not used as a queue because it is ephemeral protection/cache state, not durable control-plane storage.
 
 Registration and invitation creation keep their `201` success status and add `emailDeliveryStatus: "queued"`. That value is the acceptance-time result: it confirms AIHUB accepted the request for dispatch, not that a provider accepted it or that it reached an inbox. Authentication registration can return `suppressed` when the recipient ceiling in ADR-0096 is full; it still commits the pending account without an outbox item. Verification resend remains a generic bodyless `202`. Password recovery remains a generic `202` for known, unknown, pending, and disabled accounts; its copy says that AIHUB accepted a request to send instructions only if the account is eligible and does not confirm email delivery. These two generic routes do not expose whether an outbox item exists. Provider delivery failure is no longer a synchronous `503`; a failure to commit durable state and its outbox request remains a safe `5xx`.
+
+## Payload binding (#439)
+
+The sealed payload is authenticated against the request it belongs to: envelope
+version `v2` carries the request id and kind as associated data, so a ciphertext
+copied onto another row or kind does not open. `v1` envelopes, which carry no
+associated data, are still read until the rows sealed under them leave the queue.
+A payload that cannot be opened, or that no handler accepts, ends the request as
+`failed` with `payload_unreadable` and raises the terminal-failure signal, where
+it used to be cancelled as `not_actionable` without one. A key version the
+instance holds no key for is unchanged: the row stays queued. A `v1` reader cannot
+open `v2`, so the reader ships first (runbook, "Release order for the bound
+payload envelope").
 
 ## Backpressure at the request boundary (#635)
 

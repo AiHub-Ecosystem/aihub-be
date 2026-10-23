@@ -9,11 +9,9 @@ import {
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { EnvelopeCipher } from './envelope-cipher';
 
-// v1 carries no associated data. v2 authenticates the request the payload
-// belongs to. Both are read; only v1 is written until every instance can read
-// v2 (docs/operations/email-outbox.md, "Release order", #439), then
-// `WRITE_BOUND` flips and v1 drains.
-const WRITE_BOUND = false;
+// v1 carries no associated data and is only read, until the rows sealed under it
+// drain (docs/operations/email-outbox.md, "Release order", #439). v2
+// authenticates the request the payload belongs to, and is the one written.
 const LEGACY_VERSION = 'v1';
 const BOUND_VERSION = 'v2';
 
@@ -52,9 +50,7 @@ export function createEmailPayloadCipher(
   );
   return {
     encrypt(plaintext: string, context: EmailPayloadContext): string {
-      return WRITE_BOUND
-        ? bound.seal(plaintext, boundTo(context))
-        : legacy.seal(plaintext);
+      return bound.seal(plaintext, boundTo(context));
     },
     decrypt(envelope: string, context: EmailPayloadContext): string {
       try {

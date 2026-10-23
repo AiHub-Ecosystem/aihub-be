@@ -126,10 +126,18 @@ describe('the email payload envelope can bind a payload to its request', () => {
     expect(cipher.decrypt(legacy, OTHER_ROW)).toBe('legacy payload');
   });
 
-  it('seals in the format every instance can already read', () => {
+  it('seals bound to the row and kind it is given', () => {
     const envelope = cipher.encrypt('payload', ROW);
 
-    expect(envelope.startsWith('v1.')).toBe(true);
-    expect(cipher.decrypt(envelope, OTHER_ROW)).toBe('payload');
+    expect(envelope.startsWith('v2.')).toBe(true);
+    expect(cipher.decrypt(envelope, ROW)).toBe('payload');
+    expect(thrownBy(() => cipher.decrypt(envelope, OTHER_ROW))).toMatchObject(
+      UNREADABLE,
+    );
+    expect(
+      thrownBy(() =>
+        cipher.decrypt(envelope, { ...ROW, kind: 'password_reset_email' }),
+      ),
+    ).toMatchObject(UNREADABLE);
   });
 });

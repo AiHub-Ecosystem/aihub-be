@@ -70,6 +70,17 @@ const foreignCipher = createEmailPayloadCipher({
   keys: { 'unseen-2026-11': randomBytes(32).toString('base64') },
 });
 
+/**
+ * The key id this instance holds, re-provisioned with different material: the
+ * Vault mistake that opens no envelope sealed before it.
+ */
+const outboxKeyId =
+  createCliRuntimeSecretProvider().getSnapshot().emailOutbox.currentKeyId;
+const reprovisionedCipher = createEmailPayloadCipher({
+  currentKeyId: outboxKeyId,
+  keys: { [outboxKeyId]: randomBytes(32).toString('base64') },
+});
+
 const MINUTE = 60_000;
 
 /** sha256 hex, the one shape all three credential tables store. */
@@ -1083,6 +1094,58 @@ describe('email outbox dispatch poller', () => {
       expect(
         (await claim(OWNER_B, { now: retryAt })).map((row) => row.id),
       ).toEqual([seeded.id]);
+    });
+
+    it('fails a request whose ciphertext was moved from another row, with its own code, and still sends the row it belongs to', async () => {
+      const genuine = await seedRequest();
+      const forged = await seedRequest();
+      await pool.query(
+        `UPDATE email_delivery_requests SET payload_ciphertext = (
+           SELECT payload_ciphertext FROM email_delivery_requests WHERE id = $1
+         ) WHERE id = $2`,
+        [genuine.id, forged.id],
+      );
+      const sender = new RecordingSender();
+
+      const summary = await poller(OWNER_A, sender).runOnce();
+
+      // The copy would have sent the genuine message to its own recipient a
+      // second time; it opens only on the row it was sealed for, so the copy is
+      // failed, not cancelled, and the genuine row is delivered once.
+      expect(sender.sends).toHaveLength(1);
+      expect(sender.sends[0]?.message.recipient).toBe(genuine.email);
+      expect(summary).toMatchObject({
+        claimed: 2,
+        providerAccepted: 1,
+        failed: 1,
+        cancelled: 0,
+      });
+      expect(await rowOf(genuine.id)).toMatchObject({
+        status: 'provider_accepted',
+      });
+      expect(await rowOf(forged.id)).toMatchObject({
+        status: 'failed',
+        last_error_code: 'payload_unreadable',
+        cancel_reason: null,
+        payload_ciphertext: null,
+      });
+    });
+
+    it('fails and reports a request sealed under a key id that now holds other material', async () => {
+      const seeded = await seedRequest({ sealedWith: reprovisionedCipher });
+      const sender = new RecordingSender();
+
+      const summary = await poller(OWNER_A, sender).runOnce();
+
+      expect(sender.sends).toEqual([]);
+      expect(summary).toMatchObject({ claimed: 1, failed: 1, cancelled: 0 });
+      const row = await rowOf(seeded.id);
+      expect(row).toMatchObject({
+        status: 'failed',
+        last_error_code: 'payload_unreadable',
+        payload_ciphertext: null,
+      });
+      expect(row.failure_reported_at).not.toBeNull();
     });
 
     it('does not let deferred rows starve newer requests', async () => {

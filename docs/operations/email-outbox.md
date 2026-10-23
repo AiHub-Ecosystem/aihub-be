@@ -182,17 +182,32 @@ First steps:
 1. Read the failed rows with the query in
    [What an operator can read](#what-an-operator-can-read). Quote the `id`, never
    an address.
-2. Read `last_error_code`. It is one of four codes. `timeout` means the attempt
+2. Read `last_error_code`. It is one of five codes. `timeout` means the attempt
    ran past the five-second provider timeout; `provider_rejected` means the
    provider declined the API request; `provider_permanent_rejection` means a
    `400` or `422` response ended the request after one attempt;
    `outcome_unknown` means a process died after reserving the last attempt, so no
-   answer was recorded (see above). Nothing else about the provider's answer
-   survives to this point, by design.
+   answer was recorded (see above); `payload_unreadable` means the stored payload
+   never reached the provider because it could not be opened (see below). Nothing
+   else about the provider's answer survives to this point, by design.
 3. If `EmailProviderOutage` is also firing, the provider is the cause; follow
    [Provider-wide outage backoff](#provider-wide-outage-backoff-adr-0122-410).
 4. If one `kind` fails and the others do not, check that flow's recipient domain
    and the `from` address first.
+
+### A payload that cannot be opened (`payload_unreadable`, #439)
+
+A request whose payload fails authentication or is not the shape its kind needs
+is failed with `payload_unreadable`, not cancelled, so it raises the same
+terminal-failure counter, log line and `AIHUBEmailDeliveryTerminalFailure` alert
+as a provider failure. Its payload is erased and nothing is sent. The causes are
+a ciphertext copied from another row or kind, an altered ciphertext, a key id in
+Vault that now holds other material than when the row was sealed (a key id is
+never reused, see `ops/vault/README.md`), and plaintext that no handler accepts.
+A key version this instance holds no key for is not one of them: that row stays
+queued for an instance that has the key. The log line for this failure reads
+"exhausted its attempts" like any terminal failure, though no attempt was made:
+the code in the line is what tells them apart.
 
 ## Provider response classification
 
@@ -223,6 +238,10 @@ write `provider_rejected`. After that release is deployed to every instance,
 release the writer that stores `provider_permanent_rejection` for `400` and
 `422`. Do not deploy the new writer while any older reader remains active.
 
+The configuration pause and its one-alert suppression are per poller process.
+If several application instances independently observe the same credential
+problem, each can emit one signal until one of its sends succeeds.
+
 ### Release order for the bound payload envelope (#439)
 
 A payload is sealed in an envelope that names its version. Version `v1` carries
@@ -243,14 +262,12 @@ a signal, so the order of releases decides whether a deploy can lose mail:
    `api_key_near_expiry_notification` (its notice window), plus one sweep
    interval. Keep the `v1` reader until then.
 
-Never deploy the writer release while an older reader can still claim a row. The
+Never deploy the writer release while an older reader can still claim a row, and
+never roll back past the reader release while `v2` rows are queued: an image
+that cannot open `v2` cancels them without a signal. The
 operator CLI seals notices too (`src/cli/operator-notification-client.ts`), and
 it runs from the same image: move it through the same two releases in the same
 order, and do not run its sweep from an older image after the writer release.
-
-The configuration pause and its one-alert suppression are per poller process.
-If several application instances independently observe the same credential
-problem, each can emit one signal until one of its sends succeeds.
 
 ## Provider-wide outage backoff (ADR-0122, #410)
 

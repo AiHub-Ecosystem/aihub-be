@@ -1,3 +1,4 @@
+import { readEmailPayload } from './email-delivery-payload.reader';
 import { EmailDeliveryPollerMaintenance } from './email-delivery-poller-maintenance';
 import type { EmailDeliveryPollerMaintenanceOptions } from './email-delivery-poller-maintenance';
 import type {
@@ -9,9 +10,7 @@ import type {
   EmailDispatchStorePort,
   EmailNoticeResolvers,
 } from './email-delivery-request.port';
-import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
-import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
 export { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller-maintenance';
 import type {
@@ -249,15 +248,27 @@ export class EmailDeliveryPoller {
     | 'configuration_failure'
   > {
     const now = this.now();
-    let delivery: ValidatedEmailDelivery | undefined;
+    let delivery: ValidatedEmailDelivery | 'unreadable' | undefined;
     try {
-      delivery = this.readPayload(request);
+      delivery = readEmailPayload(this.cipher, request);
     } catch {
       return this.defer(request, now);
     }
+    if (delivery === 'unreadable') {
+      // A payload this instance cannot open or make sense of will never be
+      // sendable, so waiting would claim the row forever. It is a failure to
+      // report, not a cancellation: nothing about the credential changed, and a
+      // re-provisioned key or a moved ciphertext should reach an operator.
+      await this.store.markFailed({
+        id: request.id,
+        failedAt: now,
+        errorCode: 'payload_unreadable',
+        owner: this.options.owner,
+      });
+      return 'failed';
+    }
     if (delivery === undefined) {
-      // A payload this instance cannot open will never open, so waiting would
-      // claim the row forever without ever making it deliverable.
+      // Nothing was left to send: the payload was erased before it was claimed.
       return this.maintenance.cancel(request, 'not_actionable', now);
     }
 
@@ -469,37 +480,6 @@ export class EmailDeliveryPoller {
     });
     this.providerConfigurationAlerted = false;
     return 'provider_accepted';
-  }
-
-  /**
-   * `undefined` is a payload that will never open: absent, an envelope this
-   * instance cannot make sense of, or plaintext that is not the shape its kind
-   * needs. An unknown key version is not that, and is rethrown so the row can
-   * go back with its ciphertext instead of being cancelled out from under an
-   * instance that holds the key.
-   */
-  private readPayload(
-    request: EmailDeliveryRequestRecord,
-  ): ValidatedEmailDelivery | undefined {
-    const ciphertext = request.payloadCiphertext;
-    if (ciphertext === null) return undefined;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(
-        this.cipher.decrypt(ciphertext, {
-          id: request.id,
-          kind: request.kind,
-        }),
-      );
-    } catch (error) {
-      if (error instanceof EnvelopeCipherError && error.kind === 'unknown-key')
-        throw error;
-      return undefined;
-    }
-    const handler = EMAIL_KIND_HANDLERS[request.kind];
-    return handler !== undefined && handler.isPayload(parsed)
-      ? { handler, payload: parsed }
-      : undefined;
   }
 
   private async defer(

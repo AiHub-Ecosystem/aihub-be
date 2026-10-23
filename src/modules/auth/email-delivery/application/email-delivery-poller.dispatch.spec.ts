@@ -786,7 +786,7 @@ describe('EmailDeliveryPoller', () => {
     ['an empty expiry', { ...VERIFICATION_PAYLOAD, expiresAt: '' }],
     ['a JSON array', []],
   ])(
-    'cancels a request whose payload has %s, without sending or checking it',
+    'fails a request whose payload has %s, without sending or checking it',
     async (_case, payload) => {
       const { poller, store, credentials, sender } = harness({
         payload: payload as unknown as EmailDeliveryPayload,
@@ -798,16 +798,17 @@ describe('EmailDeliveryPoller', () => {
       // A payload that cannot be sent never will be; reaching the credential
       // check with it is what used to throw before the attempt was reserved and
       // leave the row to be claimed again on every pass.
-      expect(store.cancelled).toEqual([
-        { id: ROW_ID, reason: 'not_actionable' },
+      expect(store.failed).toEqual([
+        { id: ROW_ID, errorCode: 'payload_unreadable' },
       ]);
+      expect(store.cancelled).toEqual([]);
       expect(store.reserved).toEqual([]);
       expect(credentials.checked).toEqual([]);
       expect(sender.sends).toEqual([]);
     },
   );
 
-  it('cancels an invitation whose payload lacks its organization or role', async () => {
+  it('fails an invitation whose payload lacks its organization or role', async () => {
     const { poller, store, sender } = harness({
       payload: {
         ...VERIFICATION_PAYLOAD,
@@ -821,9 +822,10 @@ describe('EmailDeliveryPoller', () => {
 
     await poller.runOnce();
 
-    expect(store.cancelled).toEqual([
-      { id: 'edr_invite', reason: 'not_actionable' },
+    expect(store.failed).toEqual([
+      { id: 'edr_invite', errorCode: 'payload_unreadable' },
     ]);
+    expect(store.cancelled).toEqual([]);
     expect(sender.sends).toEqual([]);
   });
 
@@ -846,7 +848,7 @@ describe('EmailDeliveryPoller', () => {
     expect(MAX_CREDENTIAL_LIFETIME_MS).toBe(24 * 60 * 60 * 1000);
   });
 
-  it('cancels a request whose payload can no longer be read', async () => {
+  it('fails a request whose payload can no longer be read, so it is reported and not mistaken for a cancellation', async () => {
     const store = new FakeStore();
     const sender = new RecordingSender();
     const poller = new EmailDeliveryPoller(
@@ -865,8 +867,12 @@ describe('EmailDeliveryPoller', () => {
     const summary = await poller.runOnce();
 
     expect(sender.sends).toEqual([]);
-    expect(store.cancelled).toEqual([{ id: ROW_ID, reason: 'not_actionable' }]);
-    expect(summary.cancelled).toBe(1);
+    expect(store.failed).toEqual([
+      { id: ROW_ID, errorCode: 'payload_unreadable' },
+    ]);
+    expect(store.cancelled).toEqual([]);
+    expect(store.unreported.map(({ id }) => id)).toEqual([ROW_ID]);
+    expect(summary).toMatchObject({ failed: 1, cancelled: 0 });
   });
 
   it('leaves a request alone when the store refuses to move it, and finishes the batch', async () => {
