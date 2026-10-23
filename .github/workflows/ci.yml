@@ -149,6 +149,9 @@ jobs:
       - name: Exercise the external port probe with stubs
         run: bash scripts/ops/monitoring/probe-public-ports.spec.sh
 
+      - name: Exercise the alert rule drift check with stubs
+        run: bash scripts/ops/monitoring/check-alert-rule-drift.spec.sh
+
       - name: Exercise the published-port guard in a throwaway network namespace
         run: bash scripts/ops/firewall/docker-user-guard.spec.sh
 

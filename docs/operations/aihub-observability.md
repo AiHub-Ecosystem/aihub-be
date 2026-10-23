@@ -168,6 +168,7 @@ Every scheduled run of `scripts/ops/host-jobs/host-scheduled-job.sh` and `script
 | `report`, `postgres-backup`                                                                                        | 2 hours 20 minutes                      |
 | `chart-upload-sweep`                                                                                               | 50 minutes                              |
 | `sandbox-mint-probe` (monitoring host, below)                                                                      | 5 minutes                               |
+| `alert-rule-drift` (monitoring host, below)                                                                        | 2 hours 20 minutes                      |
 
 `AIHUBScheduledJobFailed` fires as soon as a run's failure is newer than its last success, and clears on the next success. `AIHUBScheduledJobMissed` fires when no success arrived inside the window, which covers a stopped cron, a schedule CD left suspended, a deferred run (`deferred reason=host_job_active` is not a failure), and a host that is down. Faster jobs get two cadences so one run skipped during a deploy does not page.
 
@@ -185,6 +186,57 @@ Host setup, once:
 - The script copied to `~/aihub-monitoring/ops/probe-sandbox-mint.sh`, mode `0755`, and the crontab line `* * * * * $HOME/aihub-monitoring/ops/probe-sandbox-mint.sh >/dev/null 2>&1`.
 
 A `403 FORBIDDEN` means the key's Organization left `AIHUB_SANDBOX_ORG_IDS`; a `401` means the key was revoked. Issue a new key rather than widening the allowlist.
+
+### Alert rule changes
+
+CD deploys the application, not the monitoring stack: a change to
+`ops/monitoring/alert.rules.yml` merged to `main` reaches the monitoring
+Prometheus only when an operator copies it. Do that after every merge that
+touches the rules or their tests:
+
+1. Copy `alert.rules.yml` and `alert.rules.test.yml` to a new staging directory
+   under `~/aihub-monitoring` on the monitoring host (mode `0755`, so the
+   `nobody` user of the Prometheus image can read it).
+2. Run `promtool check rules` and `promtool test rules` on the staged files with
+   `prom/prometheus:v3.13.4`. Stop if either fails.
+3. Keep a dated backup of both files in `~/aihub-monitoring/ops/monitoring`.
+4. Replace the files **in place** (`cat staged > alert.rules.yml`). Each file
+   is bind-mounted on its own, so a new inode (`mv`, `cp` over a new file) is
+   not seen by the container.
+5. Reload with `docker kill -s HUP aihub-monitoring-exporters-prometheus-aihub-1`
+   (the container has no lifecycle API).
+6. Read `http://127.0.0.1:9094/api/v1/rules` and confirm the rule count matches
+   the file and every rule reports `health: ok`. Remove the staging directory.
+
+### Alert rule drift
+
+`scripts/ops/monitoring/check-alert-rule-drift.sh` runs every hour from the
+monitoring host's crontab, between the `AIHUB ALERT RULE DRIFT` markers (#1016).
+It only reports; copying and reloading stay the steps above. It fails when:
+
+- the host's `alert.rules.yml` differs from the one on `main`
+  (`reason=repo_differs`, with the alert names missing or extra on the host and
+  both short hashes; a changed expression under the same name shows as no names
+  and different hashes);
+- an alert in that file is not loaded in Prometheus, or Prometheus has one the
+  file does not (`reason=not_loaded`): the copy was not reloaded;
+- `main`, the file or Prometheus cannot be read.
+
+It reports as task `alert-rule-drift` in the scheduled-job format to the
+monitoring host's node exporter, so `AIHUBScheduledJobFailed` fires on a drift
+and `AIHUBScheduledJobMissed` when the check stops running. A failure is logged
+to `~/aihub-alert-rule-drift.log`. After a merge that changes the rules, expect
+it to fire within the hour until the copy above is done.
+
+Host setup, once: copy the script to
+`~/aihub-monitoring/ops/check-alert-rule-drift.sh`, mode `0755`, and add between
+the markers:
+
+```text
+# BEGIN AIHUB ALERT RULE DRIFT
+50 * * * * $HOME/aihub-monitoring/ops/check-alert-rule-drift.sh >/dev/null 2>&1
+# END AIHUB ALERT RULE DRIFT
+```
 
 ## Deployment evidence
 
