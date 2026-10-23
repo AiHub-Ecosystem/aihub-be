@@ -723,6 +723,75 @@ describe('email outbox dispatch poller', () => {
       expect(await rowOf(invite.id)).toMatchObject({ status: 'queued' });
     });
 
+    it('cancels a stale request deferred behind a future retry time, before that time and without a provider call', async () => {
+      const staleAt = new Date(NOW.getTime() - 24 * HOUR - 1);
+      const seeded = await seedRequest({
+        createdAt: staleAt,
+        expiresAt: new Date(NOW.getTime() - HOUR),
+      });
+      await claim(OWNER_A);
+      const retryAt = new Date(NOW.getTime() + 6 * HOUR);
+      await store.releaseDeferred({
+        id: seeded.id,
+        owner: OWNER_A,
+        retryAt,
+      });
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'queued',
+        lease_owner: null,
+        lease_expires_at: retryAt,
+      });
+      const sender = new RecordingSender();
+
+      const summary = await poller(OWNER_B, sender).runOnce();
+
+      expect(sender.sends).toEqual([]);
+      expect(summary).toMatchObject({ cancelled: 1, providerAccepted: 0 });
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'cancelled',
+        cancel_reason: 'credential_expired',
+        payload_ciphertext: null,
+        completed_at: NOW,
+        lease_owner: null,
+        lease_expires_at: null,
+      });
+    });
+
+    it('keeps a fresh deferred request unclaimable and uncancelled until its retry time', async () => {
+      const seeded = await seedRequest();
+      await claim(OWNER_A);
+      const retryAt = new Date(NOW.getTime() + 6 * HOUR);
+      await store.releaseDeferred({ id: seeded.id, owner: OWNER_A, retryAt });
+
+      const cancelled = await store.cancelStale({
+        at: NOW,
+        createdAtOrBefore: new Date(NOW.getTime() - 24 * HOUR),
+        kinds: EMAIL_DELIVERY_KINDS,
+      });
+
+      expect(cancelled).toEqual([]);
+      expect(await claim(OWNER_B)).toEqual([]);
+      expect(await claim(OWNER_B, { now: retryAt })).toHaveLength(1);
+    });
+
+    it('does not cancel a stale request while another instance still holds its lease', async () => {
+      const staleAt = new Date(NOW.getTime() - 24 * HOUR - 1);
+      const seeded = await seedRequest({ createdAt: staleAt });
+      await claim(OWNER_A);
+
+      const cancelled = await store.cancelStale({
+        at: NOW,
+        createdAtOrBefore: staleAt,
+        kinds: EMAIL_DELIVERY_KINDS,
+      });
+
+      expect(cancelled).toEqual([]);
+      expect(await rowOf(seeded.id)).toMatchObject({
+        status: 'queued',
+        lease_owner: OWNER_A,
+      });
+    });
+
     it('clears scheduling IDs when an exhausted invitation request is reconciled', async () => {
       const seeded = await seedRequest({ kind: 'organization_invite_email' });
       await setAttemptEvidence(

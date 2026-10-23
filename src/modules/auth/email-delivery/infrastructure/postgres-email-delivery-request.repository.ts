@@ -402,7 +402,8 @@ export class PostgresEmailDeliveryRequestRepository
     // no attempt, no attempt time, no terminal state. The lease time moves to
     // the retry time rather than being cleared, because the claim treats a
     // lease in the future as held, so the row stays out of every batch until
-    // then instead of coming straight back on the next pass.
+    // then instead of coming straight back on the next pass. Stale
+    // cancellation does not: an ownerless row is cancellable at any time.
     return this.apply(client, input.id, () =>
       client.emailDeliveryRequest.updateMany({
         where: { id: input.id, status: 'queued', leaseOwner: input.owner },

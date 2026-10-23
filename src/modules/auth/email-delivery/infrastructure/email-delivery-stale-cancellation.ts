@@ -2,7 +2,10 @@
  * Removes queued rows of the given kinds created at or before the cutoff the
  * caller chose for them. Credential-bearing kinds are expired; notices have no
  * credential and are not actionable. Both paths erase the queued payload.
- * A row still under a live lease is left to the instance that holds it.
+ * A row an instance is working on, one with a lease owner and a live lease,
+ * is left to that instance. A deferred row has no owner: its lease time only
+ * holds it back until its retry time (a Retry-After, a rate wait), so it stays
+ * eligible here and is never sent after its credential expires (#1007).
  */
 export const CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL = `
   UPDATE email_delivery_requests
@@ -19,7 +22,9 @@ export const CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL = `
   WHERE status = 'queued'
     AND kind = ANY($3::text[])
     AND created_at <= $2
-    AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+    AND (lease_owner IS NULL
+         OR lease_expires_at IS NULL
+         OR lease_expires_at <= $1)
   RETURNING id, kind, status,
             payload_ciphertext AS "payloadCiphertext", attempts,
             last_attempt_at AS "lastAttemptAt",
