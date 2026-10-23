@@ -327,7 +327,8 @@ First steps:
    change there.
 4. A command that takes longer than the limiter's command timeout fails every
    time. Compare the timeout with the application's round trip to that Redis
-   before changing anything else.
+   ([Redis round trip and command timeouts](redis-round-trip.md)) before
+   changing anything else.
 
 ## What an operator can read
 
