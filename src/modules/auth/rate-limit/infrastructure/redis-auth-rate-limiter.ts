@@ -8,6 +8,10 @@ import type {
   AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
+// docs/operations/redis-round-trip.md: at least three times the measured p95
+// round trip to Redis, rounded up to 100 ms.
+const REDIS_COMMAND_TIMEOUT_MS = 400;
+
 const WINDOW_SCRIPT = `
 local current = redis.call('INCR', KEYS[1])
 if current == 1 then
@@ -75,7 +79,7 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
       enableOfflineQueue: false,
       maxRetriesPerRequest: 1,
       connectTimeout: 1_000,
-      commandTimeout: 100,
+      commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
     });
     redis.on('error', () => undefined);
     this.redis = redis;

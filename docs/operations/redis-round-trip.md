@@ -41,9 +41,9 @@ command failing; the p95 rather than the median keeps ordinary jitter, like the
 | Client                      | Command timeout | Meets 400 ms | Tracked |
 | --------------------------- | --------------- | ------------ | ------- |
 | Email send-rate limiter     | 500 ms          | yes          | #1008   |
-| Authentication rate limiter | 100 ms          | no           | #1012   |
-| Identity store              | 100 ms          | no           | #1013   |
-| Gateway client              | 200 ms          | no           | #1014   |
+| Authentication rate limiter | 400 ms          | yes          | #1012   |
+| Identity store              | 400 ms          | yes          | #1013   |
+| Gateway client              | 400 ms          | yes          | #1014   |
 
 ## Measuring again
 

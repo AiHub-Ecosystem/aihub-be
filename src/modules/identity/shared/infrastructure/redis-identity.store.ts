@@ -98,13 +98,17 @@ class IoredisIdentityClient implements RedisIdentityClient {
   }
 }
 
+// docs/operations/redis-round-trip.md: at least three times the measured p95
+// round trip to Redis, rounded up to 100 ms.
+const REDIS_COMMAND_TIMEOUT_MS = 400;
+
 function connect(url: string): RedisIdentityClient | undefined {
   if (url.trim().length === 0) {
     return undefined;
   }
 
   const client = new Redis(url, {
-    commandTimeout: 100,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
   });

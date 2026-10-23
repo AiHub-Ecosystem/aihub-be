@@ -101,6 +101,10 @@ class IoredisGatewayClient implements RedisGatewayClient {
   }
 }
 
+// docs/operations/redis-round-trip.md: at least three times the measured p95
+// round trip to Redis, rounded up to 100 ms. Re-measured 2026-10-23: p95 108 ms.
+const REDIS_COMMAND_TIMEOUT_MS = 400;
+
 export function createRedisGatewayClient(
   url: string,
 ): RedisGatewayClient | undefined {
@@ -111,7 +115,7 @@ export function createRedisGatewayClient(
   const client = new Redis(url, {
     // Calibrated 2026-10-21 from Production app to remote Redis: ready p99 265.537 ms (100 samples), PING p99 71.184 ms (1,000).
     connectTimeout: 1_000,
-    commandTimeout: 200,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
     autoResendUnfulfilledCommands: false,
