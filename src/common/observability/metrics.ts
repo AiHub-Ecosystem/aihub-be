@@ -426,6 +426,13 @@ const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [
   'api_key_near_expiry_notification',
 ];
 
+// A series that first appears at 1 has no earlier sample, so Prometheus'
+// `increase()` reads the first failure of a kind after a restart as 0 and the
+// terminal-failure alert would stay silent. Exposing every kind at 0 avoids that.
+for (const kind of EMAIL_DELIVERY_KIND_LABELS) {
+  emailDeliveryFailedTotal.inc({ kind }, 0);
+}
+
 const EMAIL_OUTBOX_BACKLOG_KIND_LABELS: readonly (
   | EmailDeliveryKindLabel
   | 'unknown'

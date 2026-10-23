@@ -91,7 +91,7 @@ groups:
         annotations:
           summary: "The shared Resend provider circuit has stayed open for more than five minutes"
           description: "Queued AIHUB email is waiting while the account-wide Resend circuit remains open. Check the provider status and email-outbox runbook."
-          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#provider-wide-outage-backoff
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#provider-wide-outage-backoff-adr-0122-410
 
       - alert: AIHUBEmailOutboxQueueAgeAboveBound
         expr: aihub_email_outbox_oldest_queued_age_seconds > 900
@@ -103,6 +103,18 @@ groups:
           summary: "An AIHUB email has waited in the outbox for more than 15 minutes"
           description: "The oldest {{ $labels.kind }} email has been queued for {{ $value | humanizeDuration }}. Check dispatch and the shared Resend rate limiter."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#queue-backlog-when-dispatch-stops
+
+      # Attempts run at 0, +1 and +5 minutes, so a 15-minute window covers a whole retry schedule.
+      - alert: AIHUBEmailDeliveryTerminalFailure
+        expr: sum by (job, kind) (increase(aihub_email_delivery_failed_total[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB email gave up without provider acceptance"
+          description: "A {{ $labels.kind }} email on {{ $labels.job }} used all its attempts in the last 15 minutes and was never accepted by the provider. Check the error code and the recipient domain or from address for that kind."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#terminal-delivery-failure
 
       # Invitations stop at 80% to reserve recovery capacity; alert at cutoff.
       - alert: AIHUBEmailDailySendBudgetNearLimit

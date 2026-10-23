@@ -144,20 +144,39 @@ Every transition after a claim therefore requires that `lease_owner` still be
 this instance, so the stale one's update matches nothing instead of spending an
 attempt the new owner is spending or clearing the new owner's lease.
 
-Suggested alert condition: any increase of `aihub_email_delivery_failed_total`
-over a window long enough to cover the retry schedule (attempts run at 0, +1
-minute, and +5 minutes, so 15 minutes is a safe minimum). `kind` separates the
-six flows (`verification_email`, `password_reset_email`,
-`organization_invite_email`, `mfa_enabled_notification`,
-`mfa_removed_notification`, `api_key_near_expiry_notification`); a `kind`-specific rise points at that flow's
-recipient domain or its `from` address, which is the usual cause.
+## Terminal delivery failure
 
-The `error=` value is one of four codes. `timeout` means the attempt ran past
-the five-second provider timeout; `provider_rejected` means the provider
-declined the API request; `provider_permanent_rejection` means a `400` or `422`
-response ended the request after one attempt; `outcome_unknown` means a process
-died after reserving the last attempt, so no answer was recorded (see above).
-Nothing else about the provider's answer survives to this point, by design.
+`AIHUBEmailDeliveryTerminalFailure` fires when
+`aihub_email_delivery_failed_total` increases in a 15-minute window, summed per
+`job` and `kind`. Attempts run at 0, +1 minute, and +5 minutes, so the window
+covers one whole retry schedule. It is `warning`, the same as the other email
+alerts. The counter is exposed at 0 for every kind when the application starts;
+without that, Prometheus reads the first failure of a kind after a restart as no
+increase.
+
+`kind` separates the six flows (`verification_email`,
+`password_reset_email`, `organization_invite_email`,
+`mfa_enabled_notification`, `mfa_removed_notification`,
+`api_key_near_expiry_notification`). `job` says whether it was Production or
+Sandbox. A `kind`-specific rise points at that flow's recipient domain or its
+`from` address, which is the usual cause.
+
+First steps:
+
+1. Read the failed rows with the query in
+   [What an operator can read](#what-an-operator-can-read). Quote the `id`, never
+   an address.
+2. Read `last_error_code`. It is one of four codes. `timeout` means the attempt
+   ran past the five-second provider timeout; `provider_rejected` means the
+   provider declined the API request; `provider_permanent_rejection` means a
+   `400` or `422` response ended the request after one attempt;
+   `outcome_unknown` means a process died after reserving the last attempt, so no
+   answer was recorded (see above). Nothing else about the provider's answer
+   survives to this point, by design.
+3. If `EmailProviderOutage` is also firing, the provider is the cause; follow
+   [Provider-wide outage backoff](#provider-wide-outage-backoff-adr-0122-410).
+4. If one `kind` fails and the others do not, check that flow's recipient domain
+   and the `from` address first.
 
 ## Provider response classification
 

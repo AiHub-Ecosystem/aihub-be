@@ -306,7 +306,7 @@ tests:
             exp_annotations:
               summary: "The shared Resend provider circuit has stayed open for more than five minutes"
               description: "Queued AIHUB email is waiting while the account-wide Resend circuit remains open. Check the provider status and email-outbox runbook."
-              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#provider-wide-outage-backoff
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#provider-wide-outage-backoff-adr-0122-410
   - interval: 1m
     input_series:
       - series: "aihub_email_provider_outage_duration_seconds"
@@ -357,4 +357,49 @@ tests:
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#credential-expiry-alerts-other-cancellations-do-not
       - eval_time: 16m
         alertname: AIHUBEmailCredentialExpiredBeforeDispatch
+        exp_alerts: []
+
+  # #902: a terminal email failure fires per job and kind for the 15-minute
+  # window, summing the instances of one job. The counter is exposed at 0
+  # before any failure, so the first failure of a kind is an increase.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_email_delivery_failed_total{job="aihub-production-app",instance="a",kind="verification_email"}'
+        values: "0x5 1x30"
+      - series: 'aihub_email_delivery_failed_total{job="aihub-production-app",instance="b",kind="verification_email"}'
+        values: "0x5 1x30"
+      - series: 'aihub_email_delivery_failed_total{job="aihub-production-app",instance="a",kind="password_reset_email"}'
+        values: "0x35"
+      - series: 'aihub_email_delivery_failed_total{job="aihub-sandbox-app",instance="s",kind="organization_invite_email"}'
+        values: "0x35"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AIHUBEmailDeliveryTerminalFailure
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: AIHUBEmailDeliveryTerminalFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-app
+              kind: verification_email
+            exp_annotations:
+              summary: "An AIHUB email gave up without provider acceptance"
+              description: "A verification_email email on aihub-production-app used all its attempts in the last 15 minutes and was never accepted by the provider. Check the error code and the recipient domain or from address for that kind."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#terminal-delivery-failure
+      - eval_time: 25m
+        alertname: AIHUBEmailDeliveryTerminalFailure
+        exp_alerts: []
+
+  # A series that first appears already at 1 has no earlier sample to compare,
+  # so Prometheus reads no increase. This is why the application exposes every
+  # kind at 0 on start; the alert cannot see a failure of a kind that does not.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_email_delivery_failed_total{job="aihub-production-app",instance="a",kind="mfa_enabled_notification"}'
+        values: "_x5 1x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AIHUBEmailDeliveryTerminalFailure
         exp_alerts: []

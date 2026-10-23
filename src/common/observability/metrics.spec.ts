@@ -173,7 +173,7 @@ describe('request lifecycle metrics', () => {
 
     const payload = await getMetrics();
     expect(payload).not.toContain('org_id');
-    expect(payload).not.toContain('organization');
+    expect(payload).not.toMatch(/organization\w*=/);
   });
 
   it('exposes the scrape path as /metrics', () => {
@@ -192,6 +192,29 @@ describe('request lifecycle metrics', () => {
     // Must not throw, and must not produce NaN in the exposition payload.
     expect(await getMetrics()).not.toContain('NaN');
   });
+});
+
+describe('email delivery failure series before any failure', () => {
+  it.each([
+    'verification_email',
+    'password_reset_email',
+    'organization_invite_email',
+    'mfa_enabled_notification',
+    'mfa_removed_notification',
+    'api_key_near_expiry_notification',
+  ])(
+    'exposes %s at zero, so its first failure is an increase',
+    async (kind) => {
+      // A fresh module, so the failures other specs record in the shared registry do not count.
+      await jest.isolateModulesAsync(async () => {
+        const fresh = await import('./metrics');
+
+        expect(await fresh.getMetrics()).toContain(
+          `aihub_email_delivery_failed_total{kind="${kind}"} 0`,
+        );
+      });
+    },
+  );
 });
 
 describe('email delivery failure metric', () => {
