@@ -176,6 +176,48 @@ describe('layer rules on feature-first Identity paths', () => {
 });
 
 /**
+ * dependency-cruiser reports a Node built-in as `url` or `fs`, never as
+ * `node:url`, so a rule that lists `^node:` as a path never matches. Domain code
+ * used to be able to import a runtime module and pass this check; the rule has
+ * to name the dependency type, and only a run over a real file proves it does.
+ */
+describe('domain layer purity', () => {
+  it.each([
+    ['a node: prefixed built-in', "import { domainToASCII } from 'node:url';"],
+    ['an unprefixed built-in', "import { readFileSync } from 'fs';"],
+  ])('rejects %s imported into a domain file', (_name, importLine) => {
+    const fixtureRoot = mkdtempSync(
+      join(process.cwd(), 'src', 'modules', 'identity', '.tmp-domain-purity-'),
+    );
+    try {
+      const domainDirectory = join(fixtureRoot, 'domain');
+      mkdirSync(domainDirectory, { recursive: true });
+      writeFileSync(
+        join(domainDirectory, 'probe.ts'),
+        `${importLine}\nexport const probe = 1;\n`,
+      );
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(
+        `${result.stdout.toString()}\n${result.stderr.toString()}`,
+      ).toContain('domain-no-runtime-modules');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
  * The rule's own shape is not enough to know it works: dependency-cruiser is
  * what resolves the group placeholder and evaluates the path. This runs the
  * real check over the real tree and pins the count, so a rule that silently

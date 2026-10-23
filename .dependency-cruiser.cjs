@@ -335,6 +335,17 @@ module.exports = {
       },
     },
     {
+      // dependency-cruiser reports a Node built-in as `url` or `fs`, never as
+      // `node:url`, so `^node:` in the rule above matches nothing. The type is
+      // what identifies a built-in; the domain layer imports none.
+      name: 'domain-no-runtime-modules',
+      severity: 'error',
+      comment:
+        'Domain code imports no Node built-in: a pure function or a small decoder written in the domain replaces it.',
+      from: { path: '^src/.*/domain/' },
+      to: { dependencyTypes: ['core'] },
+    },
+    {
       name: 'application-no-outer-layers',
       severity: 'error',
       comment:
