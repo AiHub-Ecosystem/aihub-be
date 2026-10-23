@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common';
 
 import {
+  backgroundWorkSettled,
+  backgroundWorkStarted,
+  isShuttingDown,
+} from '@/common/http/background-work-drain';
+import {
   type EmailDeliveryKindLabel,
   type EmailOutboxBacklogSample,
   type EmailOutboxCancellationSample,
@@ -120,10 +125,15 @@ export class EmailOutboxPollerScheduler
    * One pass, skipped while an earlier one is still running. A batch can take
    * longer than the interval, and stacking passes would claim rows this instance
    * is already sending.
+   *
+   * A pass is background work: closing the server waits for it, within the
+   * shutdown drain, before any connection it uses is closed. None starts once
+   * shutdown has begun (#833).
    */
   private async pass(): Promise<void> {
-    if (this.running) return;
+    if (this.running || isShuttingDown()) return;
     this.running = true;
+    backgroundWorkStarted();
     try {
       const summary = await this.poller.runOnce();
       if (summary.claimed > 0 || summary.cancelled > 0 || summary.failed > 0) {
@@ -137,6 +147,7 @@ export class EmailOutboxPollerScheduler
       );
     } finally {
       this.running = false;
+      backgroundWorkSettled();
     }
   }
 

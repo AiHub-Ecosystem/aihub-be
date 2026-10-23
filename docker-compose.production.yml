@@ -70,6 +70,10 @@ x-app-service: &app-service
   networks: *app-database-networks
   restart: unless-stopped
   # 60s HTTP drain + at most 75s background drain + 5s telemetry flush = 140s.
+  # The background drain also covers an email outbox pass in flight (#833): shutdown
+  # stops new passes, and a running pass hands back the requests it has not started,
+  # so it ends after the request with the provider: at most the 5s attempt timeout
+  # plus a few short writes, well inside the 75s.
   stop_grace_period: 150s
   volumes:
     - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro

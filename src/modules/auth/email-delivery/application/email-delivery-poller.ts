@@ -60,6 +60,8 @@ export interface EmailDeliveryPollerOptions
   readonly notices?: EmailNoticeResolvers;
   readonly batchSize?: number;
   readonly leaseMs?: number;
+  /** True once shutdown has begun: no claim, and no provider call, after it. */
+  readonly shouldStop?: () => boolean;
   /** One safe signal per credential outage, reset by the next accepted send. */
   readonly onProviderConfigurationFailure?: (failure: {
     readonly status: 401 | 403;
@@ -173,6 +175,7 @@ export class EmailDeliveryPoller {
     const claimAt = this.now();
     const claimed =
       this.maintenance.hasPendingAttemptReleases ||
+      this.options.shouldStop?.() === true ||
       claimAt.getTime() < this.providerPausedUntil
         ? []
         : await this.store.claim({
@@ -191,6 +194,9 @@ export class EmailDeliveryPoller {
     };
     let pauseBatch = false;
     for (const request of claimed) {
+      // Shutdown hands the rest of the batch back, as an outage does: no
+      // provider call starts after it begins (#833).
+      if (this.options.shouldStop?.() === true) pauseBatch = true;
       if (pauseBatch) {
         const now = this.now();
         const retryAfterMs = Math.max(

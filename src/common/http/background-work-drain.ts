@@ -1,7 +1,23 @@
 const MAX_BACKGROUND_DRAIN_MS = 75_000;
 
 let pendingWork = 0;
+let shuttingDown = false;
 const drainWaiters = new Set<() => void>();
+
+/**
+ * Shutdown has begun: background loops start no new round, and a round already
+ * running hands back what it has not started. It is set before the server
+ * closes, so the drain below waits for work that is ending, not for work that
+ * keeps being started. It is one-way and process-wide: a spec that needs it
+ * clear loads a fresh copy of this module (`jest.isolateModulesAsync`).
+ */
+export function beginShutdown(): void {
+  shuttingDown = true;
+}
+
+export function isShuttingDown(): boolean {
+  return shuttingDown;
+}
 
 export function backgroundWorkStarted(): void {
   pendingWork += 1;

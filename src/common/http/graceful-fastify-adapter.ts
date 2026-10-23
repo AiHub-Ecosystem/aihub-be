@@ -1,7 +1,7 @@
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyServerOptions } from 'fastify';
 
-import { waitForBackgroundWork } from './background-work-drain';
+import { beginShutdown, waitForBackgroundWork } from './background-work-drain';
 
 export class GracefulFastifyAdapter extends FastifyAdapter {
   constructor(
@@ -16,6 +16,7 @@ export class GracefulFastifyAdapter extends FastifyAdapter {
   // Nest awaits this at runtime before module destroy hooks, despite the base
   // adapter's declaration returning void.
   override beforeClose(): void {
+    beginShutdown();
     return this.close().then(() => this.flushTelemetry()) as unknown as void;
   }
 }

@@ -372,6 +372,34 @@ first, then the provider circuit and the send-rate limiter in the sections
 around this one. The refusals end by themselves once the oldest request is sent
 or expires.
 
+## Shutdown (#833)
+
+Every instance that serves requests also runs the outbox poller, so a deploy
+stops pollers while they may be mid-pass. Shutdown is ordered so that nothing is
+sent after the connections it needs have closed:
+
+1. The server begins closing and marks shutdown as begun, before it waits for
+   anything. No new pass starts, and a pass that has claimed nothing yet claims
+   nothing.
+2. A pass in flight finishes the request it has with the provider, records that
+   outcome, and hands the rest of its batch back without spending an attempt
+   (they are claimable again in about five seconds, by this or another instance).
+   The pass counts as background work, so closing the server waits for it inside
+   the 75-second background drain of the shutdown budget in
+   [deploy-vps.md](deploy-vps.md).
+3. Only then do the Redis clients and the Postgres pools close.
+
+A normal shutdown therefore logs no `email outbox pass failed` line and spends
+no attempt. The pass is bounded: one request with the provider takes at most the
+five-second attempt timeout, plus a few short writes, and handing back the rest of
+the batch is one write per remaining request (at most nine).
+
+The drain itself has a limit. If background work outlasts the 75 seconds, closing
+the server fails, the process exits with status 1, and the Redis and Postgres close
+hooks do not run. That is how every kind of background work behaves, not only the
+outbox. A request left mid-send is recoverable: its lease lapses, and the stable
+provider idempotency key keeps a retry from sending the message twice.
+
 ## Send-rate limiter Redis unavailable
 
 `AIHUBEmailSendRateRedisUnavailable` fires when

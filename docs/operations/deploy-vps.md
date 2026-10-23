@@ -1970,9 +1970,10 @@ startup or smoke; this triggers rollback while the old service is still
 available. Confirm rollback with the same dependency smoke on the restored
 service. Retain the old service until smoke passes, then wait for Compose's
 150-second stop grace. The budget is 60 seconds for HTTP drain, 75 seconds for
-background idempotent work, and 5 seconds for telemetry export, with 10 seconds
-of margin. This drain relies on the background-work shutdown behavior and
-lifecycle coverage completed in #284. The validated upstream is the active-slot
+background work (idempotent requests and the email outbox pass in flight, see
+[email outbox](email-outbox.md#shutdown-833)), and 5 seconds for telemetry
+export, with 10 seconds of margin. This drain relies on the background-work
+shutdown behavior and lifecycle coverage completed in #284. The validated upstream is the active-slot
 source of truth; the immutable image SHA and helper history identify the
 release. `.env.production` is not the last-good release record.
 
