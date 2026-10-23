@@ -354,7 +354,7 @@ describe('LocalAuthService', () => {
     expect(limiter.calls).toHaveLength(2);
   });
 
-  it('reports a taken email or username as the one generic identity conflict', async () => {
+  it('reports an active account or a username held by another account as the one generic identity conflict', async () => {
     const { local, state } = service();
     const input = {
       email: 'person@example.com',
@@ -362,13 +362,101 @@ describe('LocalAuthService', () => {
       password: 'correct horse battery',
     };
     await local.register(input, '203.0.113.7');
+    const [account] = [...state.accounts.values()];
+    if (account === undefined) throw new Error('no account was registered');
+    account.status = 'active';
 
     await expect(local.register(input, '203.0.113.7')).rejects.toMatchObject({
       code: 'AUTH_IDENTITY_UNAVAILABLE',
       httpStatus: 409,
     });
+    await expect(
+      local.register({ ...input, email: 'other@example.com' }, '203.0.113.7'),
+    ).rejects.toMatchObject({
+      code: 'AUTH_IDENTITY_UNAVAILABLE',
+      httpStatus: 409,
+    });
     expect(state.accounts.size).toBe(1);
     expect(state.emailDeliveryRequests).toHaveLength(1);
+  });
+
+  describe('registering again on a pending email', () => {
+    const first = {
+      email: 'person@example.com',
+      username: 'person_01',
+      password: 'first password value',
+    };
+    const second = {
+      email: 'person@example.com',
+      username: 'person_02',
+      password: 'second password value',
+    };
+
+    it('replaces the pending credential and username and supersedes the open token', async () => {
+      const { local, state, tokenIssuer } = service();
+      await local.register(first, '203.0.113.7');
+
+      await local.register(second, '203.0.113.7');
+
+      expect([...state.accounts.values()]).toEqual([
+        expect.objectContaining({
+          email: 'person@example.com',
+          username: 'person_02',
+          status: 'pending_verification',
+          passwordHash: 'argon2:second password value',
+        }),
+      ]);
+      expect([...state.verificationTokens.entries()]).toEqual([
+        [
+          tokenIssuer.hash('opaque-token-1'),
+          expect.objectContaining({ consumedReason: 'superseded' }),
+        ],
+        [
+          tokenIssuer.hash('opaque-token-2'),
+          expect.objectContaining({ consumedReason: undefined }),
+        ],
+      ]);
+      expect(state.emailDeliveryRequests).toHaveLength(2);
+    });
+
+    it('answers exactly as it does for an email nobody has registered', async () => {
+      const fresh = service();
+      const replaced = service();
+      await replaced.local.register(first, '203.0.113.7');
+
+      const answerForNewEmail = await fresh.local.register(
+        second,
+        '203.0.113.8',
+      );
+      const answerForPendingEmail = await replaced.local.register(
+        second,
+        '203.0.113.7',
+      );
+
+      expect(answerForPendingEmail).toEqual(answerForNewEmail);
+    });
+
+    it('leaves the pending account unchanged when the new username is held by another account', async () => {
+      const { local, state } = service();
+      await local.register(first, '203.0.113.7');
+      await local.register(
+        { ...first, email: 'other@example.com', username: 'person_02' },
+        '203.0.113.7',
+      );
+
+      await expect(local.register(second, '203.0.113.7')).rejects.toMatchObject(
+        { code: 'AUTH_IDENTITY_UNAVAILABLE' },
+      );
+
+      expect(
+        [...state.accounts.values()].find(
+          (account) => account.email === 'person@example.com',
+        ),
+      ).toMatchObject({
+        username: 'person_01',
+        passwordHash: 'argon2:first password value',
+      });
+    });
   });
 
   it('returns a generic resend result for unknown addresses', async () => {

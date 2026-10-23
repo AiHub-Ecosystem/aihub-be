@@ -1,4 +1,5 @@
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
+import { LOCK_PASSWORD_IDENTITY_SQL } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresUserAccountRepository } from './postgres-user-account.repository';
 
@@ -34,6 +35,7 @@ describe('PostgresUserAccountRepository', () => {
     await repositoryOver(script).register(input);
 
     expect(script.statements.map(({ name }) => name)).toEqual([
+      LOCK_PASSWORD_IDENTITY_SQL,
       'userAccount.create',
       'authIdentity.create',
       'emailVerificationToken.create',
@@ -42,13 +44,66 @@ describe('PostgresUserAccountRepository', () => {
     expect(
       script.statements.every(({ transaction }) => transaction === 1),
     ).toBe(true);
-    expect(JSON.stringify(script.statements[1]?.args)).toContain(
+    expect(JSON.stringify(script.statements[2]?.args)).toContain(
       input.passwordHash,
     );
-    expect(JSON.stringify(script.statements[2]?.args)).toContain(
+    expect(JSON.stringify(script.statements[3]?.args)).toContain(
       input.tokenHash,
     );
   });
+
+  it('replaces the credential and username of a pending account for the same email in one transaction', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [
+        {
+          id: USER_ID,
+          canonical_email: input.email,
+          status: 'pending_verification',
+        },
+      ],
+    ];
+
+    await repositoryOver(script).register(input);
+
+    expect(script.statements.map(({ name }) => name)).toEqual([
+      LOCK_PASSWORD_IDENTITY_SQL,
+      'userAccount.update',
+      'authIdentity.updateMany',
+      'emailVerificationToken.updateMany',
+      'emailVerificationToken.create',
+    ]);
+    expect(script.opened).toBe(1);
+    expect(
+      script.statements.every(({ transaction }) => transaction === 1),
+    ).toBe(true);
+    expect(JSON.stringify(script.statements[1]?.args)).toContain(
+      input.username,
+    );
+    expect(JSON.stringify(script.statements[2]?.args)).toContain(
+      input.passwordHash,
+    );
+    expect(JSON.stringify(script.statements[3]?.args)).toContain('superseded');
+    expect(JSON.stringify(script.statements[4]?.args)).toContain(
+      input.tokenHash,
+    );
+  });
+
+  it.each(['active', 'disabled'])(
+    'refuses an email whose account is %s and writes nothing',
+    async (status) => {
+      const script = new ScriptedPrisma();
+      script.inside = [[{ id: USER_ID, canonical_email: input.email, status }]];
+
+      await expect(
+        repositoryOver(script).register(input),
+      ).rejects.toMatchObject({ name: 'AuthIdentityConflictError' });
+
+      expect(script.statements.map(({ name }) => name)).toEqual([
+        LOCK_PASSWORD_IDENTITY_SQL,
+      ]);
+    },
+  );
 
   it.each([
     ['a raw SQLSTATE', { code: '23505', detail: 'private database detail' }],

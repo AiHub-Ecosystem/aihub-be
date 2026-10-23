@@ -1,6 +1,6 @@
 # ADR-0054: Sign in on email verification only in the browser that signed up
 
-- Status: Accepted; second-factor rule added by [issue #784](https://github.com/AiHub-Ecosystem/aihub-be/issues/784)
+- Status: Accepted; second-factor rule added by [issue #784](https://github.com/AiHub-Ecosystem/aihub-be/issues/784); what verification proves about the credential amended by [ADR-0123](0123-pending-registration-is-replaced-and-verification-reenters-its-password.md)
 - Amends: ADR-0022, ADR-0024
 
 After a customer verifies their email, the Customer Web should land them in the console without asking for their password again. A verification link that signs in whoever opens it would turn a harmless "verify on someone's behalf" link into account takeover. Three cases show why: an attacker who pre-registers a victim's email with the attacker's own password would get the victim working inside the attacker's account (pre-account takeover); a forwarded or leaked link would grant a session for 24 hours; and a mail scanner that runs JavaScript would sign itself in. So a verification token signs in only the browser holding its **Signup Browser Binding**: a random nonce the Customer Web sets in a `__Host-` HttpOnly cookie when that browser registers or resends, which AIHUB stores only as a hash on the token.

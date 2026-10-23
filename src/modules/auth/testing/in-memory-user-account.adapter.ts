@@ -13,15 +13,21 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
   async register(
     input: RegisterLocalAccountInput,
   ): Promise<'queued' | 'suppressed'> {
-    const taken = [...this.state.accounts.values()].some(
-      (account) =>
-        account.email === input.email || account.username === input.username,
+    const accounts = [...this.state.accounts.values()];
+    const sameEmail = accounts.find((account) => account.email === input.email);
+    const sameUsername = accounts.find(
+      (account) => account.username === input.username,
     );
-    if (taken) {
+    if (
+      (sameEmail !== undefined &&
+        sameEmail.status !== 'pending_verification') ||
+      (sameUsername !== undefined && sameUsername.userId !== sameEmail?.userId)
+    ) {
       throw new AuthIdentityConflictError();
     }
 
-    const userId = `usr_in_memory_${this.state.accounts.size + 1}`;
+    const userId =
+      sameEmail?.userId ?? `usr_in_memory_${this.state.accounts.size + 1}`;
     this.state.accounts.set(userId, {
       userId,
       username: input.username,
@@ -29,6 +35,12 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
       status: 'pending_verification',
       passwordHash: input.passwordHash,
     });
+    for (const token of this.state.verificationTokens.values()) {
+      if (token.userId === userId && token.consumedAt === undefined) {
+        token.consumedAt = input.now;
+        token.consumedReason = 'superseded';
+      }
+    }
     this.state.verificationTokens.set(input.tokenHash, {
       tokenId: input.tokenId,
       userId,
