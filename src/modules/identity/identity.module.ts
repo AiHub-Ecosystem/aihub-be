@@ -19,6 +19,10 @@ import {
   type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
+  ADMIT_EMAIL_REQUEST,
+  type AdmitEmailRequestPort,
+} from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
+import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
@@ -448,6 +452,7 @@ type IdentityTransactionClient = ReturnType<
         tokenIssuer: OrganizationInviteTokenPort,
         rateLimiter: AuthRateLimiterPort,
         newEmailDeliveryId: IdMinter,
+        emailBackpressure: AdmitEmailRequestPort,
       ) =>
         new InviteOrganizationMember(
           membership,
@@ -455,6 +460,7 @@ type IdentityTransactionClient = ReturnType<
           tokenIssuer,
           rateLimiter,
           newEmailDeliveryId,
+          emailBackpressure,
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,
@@ -462,6 +468,7 @@ type IdentityTransactionClient = ReturnType<
         ORGANIZATION_INVITE_TOKEN,
         AUTH_RATE_LIMITER,
         EMAIL_DELIVERY_ID,
+        ADMIT_EMAIL_REQUEST,
       ],
     },
     {

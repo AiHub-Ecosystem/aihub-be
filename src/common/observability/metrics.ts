@@ -4,6 +4,7 @@ import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
 import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
+import { registerEmailOutboxBackpressureMetric } from './email-outbox-backpressure-metric';
 import {
   type EmailDeliveryKindLabel,
   registerEmailOutboxCancellationMetric,
@@ -512,6 +513,8 @@ export function setEmailOutboxBacklogSource(
 
 export const setEmailOutboxCancellationSource =
   registerEmailOutboxCancellationMetric(registry);
+export const recordEmailOutboxBackpressureRefusal =
+  registerEmailOutboxBackpressureMetric(registry);
 export const setEmailDailySendBudgetSource =
   registerEmailDailySendBudgetMetric(registry);
 export const setEmailProviderOutageDurationSource =

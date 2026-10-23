@@ -209,7 +209,7 @@ function context(organizationId: string, requestId: string): RequestContext {
 }
 
 class RateLimiterFake implements AuthRateLimiterPort {
-  private readonly counts = new Map<string, number>();
+  readonly counts = new Map<string, number>();
   rejectScope: AuthRateLimitScope | undefined;
 
   async check(): Promise<{ readonly allowed: true }> {
@@ -226,6 +226,15 @@ class RateLimiterFake implements AuthRateLimiterPort {
       ? { allowed: false, retryAfterMs: 12_345 }
       : { allowed: true };
   }
+}
+
+async function refuseBacklogged(): Promise<void> {
+  throw new AppError({
+    code: 'EMAIL_DELIVERY_BACKLOGGED',
+    message: 'Email delivery is delayed; try again later',
+    retryable: true,
+    retryAfterMs: 60_000,
+  });
 }
 
 function storeUnavailable(): AppError {
@@ -252,8 +261,10 @@ describe('organization invitation management idempotency seam', () => {
   let tokenIssuer: OrganizationInviteTokenPort;
   let rateLimiter: RateLimiterFake;
   let issuedTokenCount: number;
+  let admitEmail: () => Promise<void>;
 
   beforeEach(() => {
+    admitEmail = async () => undefined;
     repository = new ManagementRepository();
     service = new IdempotencyService(repository);
     rateLimiter = new RateLimiterFake();
@@ -307,6 +318,7 @@ describe('organization invitation management idempotency seam', () => {
       tokenIssuer,
       rateLimiter,
       prefixedIdGenerator('edr_'),
+      { admit: () => admitEmail() },
     );
   });
 
@@ -447,6 +459,32 @@ describe('organization invitation management idempotency seam', () => {
 
     expect(issuedTokenCount).toBe(3);
     expect(invitationCreateInputs).toHaveLength(3);
+  });
+
+  it('refuses when the email outbox is backlogged, before spending an allowance or writing', async () => {
+    admitEmail = refuseBacklogged;
+
+    await expect(execute({})).rejects.toMatchObject({
+      code: 'EMAIL_DELIVERY_BACKLOGGED',
+      retryAfterMs: 60_000,
+    });
+
+    expect(rateLimiter.counts.size).toBe(0);
+    expect(issuedTokenCount).toBe(0);
+    expect(invitationCreateInputs).toEqual([]);
+  });
+
+  it('lets the same Idempotency-Key retry once the outbox has recovered', async () => {
+    admitEmail = refuseBacklogged;
+    await expect(execute({ idempotencyKey: 'invite-1' })).rejects.toMatchObject(
+      { code: 'EMAIL_DELIVERY_BACKLOGGED' },
+    );
+    admitEmail = async () => undefined;
+
+    const retry = await execute({ idempotencyKey: 'invite-1' });
+
+    expect(retry.replay).toBe(false);
+    expect(invitationCreateInputs).toHaveLength(1);
   });
 
   it('lets a missing key retain the existing non-idempotent behavior', async () => {

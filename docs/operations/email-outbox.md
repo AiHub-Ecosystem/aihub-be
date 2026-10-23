@@ -321,6 +321,32 @@ the second:
   back after 5 seconds and nothing is sent. Measure a round trip to that Redis
   from the application container before changing anything else.
 
+## Backpressure refusals (#635)
+
+The queue-age gauges above are what an operator reads; the API reads the same
+queue to decide whether a new request can still be honoured. `POST
+/v1/auth/register`, `POST /v1/auth/resend-verification`, `POST
+/v1/auth/forgot-password` and `POST /v1/organizations/{organization_id}/invitations`
+ask the outbox for the age of its oldest queued request of the kind they would
+add. When that age has used 75% of the credential lifetime, the route answers
+`503 EMAIL_DELIVERY_BACKLOGGED` with `Retry-After` and writes nothing: no
+account, token, invitation or delivery request, and no rate-limit budget is
+spent. A 24-hour verification or invitation token therefore refuses past an
+18-hour backlog, and a one-hour reset token past 45 minutes.
+
+`Retry-After` is the time the oldest request has left before it expires, held
+between 30 seconds and 15 minutes so a client checks again soon. The age is read
+from the same query as the gauges, shared for 10 seconds between requests. When
+that read fails the request is admitted as before: a missing signal does not
+refuse sign-ups.
+
+`aihub_email_outbox_backpressure_refusals_total{kind}` counts refusals, and
+`AIHUBEmailOutboxBackpressureRefusing` warns when it rises. A rising count
+means dispatch is not keeping up: read `AIHUBEmailOutboxQueueAgeAboveBound`
+first, then the provider circuit and the send-rate limiter in the sections
+around this one. The refusals end by themselves once the oldest request is sent
+or expires.
+
 ## Send-rate limiter Redis unavailable
 
 `AIHUBEmailSendRateRedisUnavailable` fires when

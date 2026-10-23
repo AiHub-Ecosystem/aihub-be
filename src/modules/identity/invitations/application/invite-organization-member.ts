@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
+import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import { normalizeEmail } from '@/modules/auth/public/local-auth';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
@@ -82,6 +83,7 @@ export class InviteOrganizationMember {
     private readonly tokenIssuer: OrganizationInviteTokenPort,
     private readonly rateLimiter: AuthRateLimiterPort,
     private readonly newEmailDeliveryId: IdMinter,
+    private readonly emailBackpressure: AdmitEmailRequestPort,
   ) {}
 
   async authorize(input: InviteOrganizationMemberInput): Promise<void> {
@@ -100,6 +102,8 @@ export class InviteOrganizationMember {
       throw invalidRequest(error);
     }
 
+    // Before the limits are spent: an outage is not the caller's fault.
+    await this.emailBackpressure.admit('organization_invite_email');
     await this.enforceRateLimits(input, email);
 
     const now = new Date();

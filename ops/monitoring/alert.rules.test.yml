@@ -392,6 +392,34 @@ tests:
         alertname: AIHUBEmailDeliveryTerminalFailure
         exp_alerts: []
 
+  # #635: refusals of one gated kind fire per job and kind for the 15-minute
+  # window; a flat counter and a series that starts already at 1 do not.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_email_outbox_backpressure_refusals_total{job="aihub-production-app",instance="a",kind="verification_email"}'
+        values: "0x5 3x30"
+      - series: 'aihub_email_outbox_backpressure_refusals_total{job="aihub-production-app",instance="a",kind="password_reset_email"}'
+        values: "0x35"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AIHUBEmailOutboxBackpressureRefusing
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: AIHUBEmailOutboxBackpressureRefusing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-app
+              kind: verification_email
+            exp_annotations:
+              summary: "AIHUB is refusing email-sending requests because the outbox is backlogged"
+              description: "aihub-production-app refused verification_email requests in the last 15 minutes because the oldest queued email has used 75% of its credential lifetime. Check dispatch, the provider circuit, and the shared rate limiter."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#backpressure-refusals-635
+      - eval_time: 25m
+        alertname: AIHUBEmailOutboxBackpressureRefusing
+        exp_alerts: []
+
   # A series that first appears already at 1 has no earlier sample to compare,
   # so Prometheus reads no increase. This is why the application exposes every
   # kind at 0 on start; the alert cannot see a failure of a kind that does not.

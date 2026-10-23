@@ -410,8 +410,8 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['403']).toBeDefined();
     expect(operation?.responses['409']).toBeDefined();
     expect(operation?.responses['429']).toBeDefined();
-    // No 503: an email provider failure is no longer a synchronous result here.
-    expect(operation?.responses['503']).toBeUndefined();
+    // The 503 is the outbox backlog refusal, not a synchronous provider failure.
+    expect(operation?.responses['503']).toBeDefined();
     expect(operation?.['x-idempotency']).toBe('optional');
     expect(operation?.parameters).toEqual([
       { $ref: '#/components/parameters/CorrelationId' },
@@ -1179,9 +1179,10 @@ describe('buildOpenApiDocument', () => {
     );
   });
 
-  // Registration has a 503 for bounded Argon2 admission, but email delivery is
-  // still outside the request after the outbox change (ADR-0074).
-  it('publishes Argon2 capacity without reviving request-time email failures', () => {
+  // Registration has a 503 for bounded Argon2 admission. Email delivery is
+  // still outside the request after the outbox change (ADR-0074); the only
+  // email 503 is the backlog refusal, taken before anything is written.
+  it('publishes Argon2 capacity and the backlog refusal without reviving request-time email failures', () => {
     const doc = build();
 
     expect(JSON.stringify(doc)).not.toContain(
@@ -1190,9 +1191,16 @@ describe('buildOpenApiDocument', () => {
     expect(
       JSON.stringify(doc.paths['/v1/auth/register']?.post?.responses['503']),
     ).toContain('Error503');
-    expect(
-      doc.paths[ORGANIZATION_INVITATION_PATH]?.post?.responses['503'],
-    ).toBeUndefined();
+    for (const path of [
+      ORGANIZATION_INVITATION_PATH,
+      '/v1/auth/resend-verification',
+      '/v1/auth/forgot-password',
+    ]) {
+      expect(doc.paths[path]?.post?.responses['503']).toBeDefined();
+    }
+    expect(JSON.stringify(doc.components.responses.Error503)).toContain(
+      'EMAIL_DELIVERY_BACKLOGGED',
+    );
   });
 
   it('documents stable retry fields on every error response', () => {

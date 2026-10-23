@@ -16,6 +16,7 @@ import {
   type EmailPayloadCipherPort,
   type InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import {
   type AuthMfaServicePort,
   type MfaSessionProof,
@@ -125,6 +126,8 @@ export class LocalAuthService {
     private readonly clock: LocalAuthServiceClock,
     private readonly newEmailDeliveryId: IdMinter,
     private readonly mfa: AuthMfaServicePort,
+    /** Sheds a request the outbox cannot deliver within its credential's lifetime. */
+    private readonly emailBackpressure: AdmitEmailRequestPort,
     /** Tokens issued from now on need the registration password (ADR-0123). */
     private readonly requireVerificationPassword: boolean,
   ) {}
@@ -149,6 +152,8 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
+    // Before the limits are spent: an outage is not the caller's fault.
+    await this.emailBackpressure.admit('verification_email');
     await enforceAuthRateLimits(this.rateLimiter, [
       { ...LOCAL_AUTH_RATE_LIMITS.register.ip, key: ip },
       {
@@ -253,6 +258,7 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
+    await this.emailBackpressure.admit('verification_email');
     await enforceAuthRateLimits(this.rateLimiter, [
       { ...LOCAL_AUTH_RATE_LIMITS.resend.ip, key: ip },
       {
@@ -298,6 +304,7 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
+    await this.emailBackpressure.admit('password_reset_email');
     await enforceAuthRateLimits(this.rateLimiter, [
       {
         ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.ip,

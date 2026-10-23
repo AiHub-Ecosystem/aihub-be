@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
+import { recordEmailOutboxBackpressureRefusal } from '@/common/observability/metrics';
 import { hashOpaqueToken } from '@/common/security/opaque-token-issuer';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
@@ -32,6 +33,8 @@ import {
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
+import { EmailOutboxBackpressureGate } from './application/email-outbox-backpressure.gate';
+import { ADMIT_EMAIL_REQUEST } from './application/email-outbox-backpressure.port';
 import {
   EMAIL_PROVIDER_OUTAGE_CIRCUIT,
   type EmailProviderOutageCircuitPort,
@@ -61,6 +64,7 @@ import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher'
 import { PostgresEmailDailySendBudget } from './infrastructure/postgres-email-daily-send-budget';
 import { PostgresEmailDeliveryRequestRepository } from './infrastructure/postgres-email-delivery-request.repository';
 import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-dispatch-store';
+import { PostgresEmailOutboxQueueAge } from './infrastructure/postgres-email-outbox-queue-age';
 import { RedisEmailSendRateLimiter } from './infrastructure/redis-email-send-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
 
@@ -70,6 +74,17 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
     {
       provide: EMAIL_DELIVERY_ID,
       useFactory: () => prefixedIdGenerator('edr_'),
+    },
+    {
+      provide: ADMIT_EMAIL_REQUEST,
+      useFactory: (runtime: PrismaClientHolder): EmailOutboxBackpressureGate =>
+        new EmailOutboxBackpressureGate(
+          new PostgresEmailOutboxQueueAge(
+            new PostgresEmailDispatchStore(runtime.prisma),
+          ),
+          recordEmailOutboxBackpressureRefusal,
+        ),
+      inject: [RUNTIME_PRISMA_CLIENT],
     },
     {
       provide: EMAIL_SENDER,
@@ -222,6 +237,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
   ],
   exports: [
     EMAIL_DELIVERY_ID,
+    ADMIT_EMAIL_REQUEST,
     EMAIL_DELIVERY_REQUEST_WRITER,
     EMAIL_NOTICE_RESOLVERS,
     EMAIL_PAYLOAD_CIPHER,

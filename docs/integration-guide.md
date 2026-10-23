@@ -85,6 +85,39 @@ replaced or expired answers `400 AUTH_VERIFICATION_TOKEN_INVALID` as before.
 Collect the password on the page the link opens, keep it only in form memory,
 and never put it in a URL, storage, telemetry or a log.
 
+### When email delivery is backed up
+
+`POST /v1/auth/register`, `POST /v1/auth/resend-verification`,
+`POST /v1/auth/forgot-password` and
+`POST /v1/organizations/{organization_id}/invitations` send a link that works
+for a limited time: 24 hours for a verification or an invitation, one hour for a
+password reset. AIHUB queues the email and sends it in the background. If the
+queue is so far behind that a new email would very likely arrive after its link
+expired, the route refuses the request instead of accepting it:
+
+```json
+{
+  "error": {
+    "code": "EMAIL_DELIVERY_BACKLOGGED",
+    "message": "Email delivery is delayed; try again later",
+    "retryable": true,
+    "retry_after_ms": 300000
+  }
+}
+```
+
+The status is `503`, and `Retry-After` (whole seconds) repeats
+`retry_after_ms`. AIHUB refuses once the oldest waiting email of that kind has
+waited three quarters of the link's lifetime: 18 hours for a verification or an
+invitation, 45 minutes for a password reset. Nothing is created by a refused
+request, and it does not count against the route's rate limit, so retry it
+after the wait with the same input. The wait is capped at 15 minutes; if the
+queue is still behind, the next attempt is refused again.
+
+Show the user a "try again later" message, not a failure of the address they
+typed. The refusal depends only on the state of the queue, never on whether an
+account exists for the email.
+
 ## 1. How the pieces fit
 
 AIHUB sits between your backend and the private AI services. Your end users
@@ -1002,31 +1035,32 @@ try to list every error from account, Organization, or other control-plane
 routes. Signed identity configuration has additional setup errors in the
 separate table below.
 
-| HTTP | Code                            | What happened                                                                                | What to do                                                                                                         |
-| ---: | ------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-|  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                                          | Fix the request. Retrying is pointless                                                                             |
-|  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                                                | Check the credential                                                                                               |
-|  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without `X-User-Identity`                                       | Send `X-User-Identity`                                                                                             |
-|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification           | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                             |
-|  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                       | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key                      |
-|  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                        | Use the key issued for that environment                                                                            |
-|  404 | `NOT_FOUND`                     | No such route                                                                                | Check path and method                                                                                              |
-|  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running | Different body: use a new key; in-flight request: wait for `Retry-After`, then retry the same key and body         |
-|  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                  | Reduce the essay or audio size to fit the route limit                                                              |
-|  422 | `AUDIO_UNREADABLE`              | The Speaking audio could not be decoded (`retryable: false`)                                 | Check the file is a real recording in a supported format, then send a new one; resending the same file fails again |
-|  429 | `RATE_LIMITED`                  | Request rate or Organization same-key retry budget exceeded                                  | Wait for `Retry-After` (the same wait as `retry_after_ms`) before retrying                                         |
-|  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                                          | Reduce parallelism; retry after `Retry-After` (500–999 ms)                                                         |
-|  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                      | Wait for the reset or contact AIHUB about your quota                                                               |
-|  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                                                 | Retry later if `retryable` is true                                                                                 |
-|  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                                                      | Do not retry. Report it with the `request_id`                                                                      |
-|  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                     | Back off and retry                                                                                                 |
-|  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                                                       | Retry with backoff                                                                                                 |
-|  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement      | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |
-|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode    | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
-|  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely check graded admission or acquire/release its concurrency permit      | Retry after `retry_after_ms`; AIHUB does not admit using local counters                                            |
-|  503 | `RETRY_BUDGET_UNAVAILABLE`      | AIHUB cannot check the Organization retry budget because Redis is unavailable                | Retry after `retry_after_ms`                                                                                       |
-|  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                  | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable              |
-|  500 | `INTERNAL_ERROR`                | Fault on our side                                                                            | Retry later; report with the `request_id`                                                                          |
+| HTTP | Code                            | What happened                                                                                                               | What to do                                                                                                         |
+| ---: | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+|  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                                                                         | Fix the request. Retrying is pointless                                                                             |
+|  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                                                                               | Check the credential                                                                                               |
+|  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without `X-User-Identity`                                                                      | Send `X-User-Identity`                                                                                             |
+|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification                                          | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                             |
+|  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                                                      | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key                      |
+|  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                                                       | Use the key issued for that environment                                                                            |
+|  404 | `NOT_FOUND`                     | No such route                                                                                                               | Check path and method                                                                                              |
+|  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running                                | Different body: use a new key; in-flight request: wait for `Retry-After`, then retry the same key and body         |
+|  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                                                 | Reduce the essay or audio size to fit the route limit                                                              |
+|  422 | `AUDIO_UNREADABLE`              | The Speaking audio could not be decoded (`retryable: false`)                                                                | Check the file is a real recording in a supported format, then send a new one; resending the same file fails again |
+|  429 | `RATE_LIMITED`                  | Request rate or Organization same-key retry budget exceeded                                                                 | Wait for `Retry-After` (the same wait as `retry_after_ms`) before retrying                                         |
+|  429 | `CONCURRENCY_LIMIT`             | Too many requests in flight at once                                                                                         | Reduce parallelism; retry after `Retry-After` (500–999 ms)                                                         |
+|  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                                                     | Wait for the reset or contact AIHUB about your quota                                                               |
+|  502 | `AI_SERVICE_ERROR`              | AI service returned an error                                                                                                | Retry later if `retryable` is true                                                                                 |
+|  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                                                                                     | Do not retry. Report it with the `request_id`                                                                      |
+|  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                                                    | Back off and retry                                                                                                 |
+|  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable                                                                                                      | Retry with backoff                                                                                                 |
+|  503 | `EMAIL_DELIVERY_BACKLOGGED`     | The email queue is too far behind to deliver a link before it expires (registration, resend, password recovery, invitation) | Retry after `retry_after_ms`; the refused request created nothing and used no rate limit                           |
+|  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement                                     | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |
+|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode                                   | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
+|  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely check graded admission or acquire/release its concurrency permit                                     | Retry after `retry_after_ms`; AIHUB does not admit using local counters                                            |
+|  503 | `RETRY_BUDGET_UNAVAILABLE`      | AIHUB cannot check the Organization retry budget because Redis is unavailable                                               | Retry after `retry_after_ms`                                                                                       |
+|  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                                                 | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable              |
+|  500 | `INTERNAL_ERROR`                | Fault on our side                                                                                                           | Retry later; report with the `request_id`                                                                          |
 
 ### Signed identity configuration errors
 

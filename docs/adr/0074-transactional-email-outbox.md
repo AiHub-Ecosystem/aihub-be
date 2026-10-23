@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for a request without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider-wide failure attempts and retry behavior amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449); credential expiry rechecked at provider handoff amended by [issue #1034](https://github.com/AiHub-Ecosystem/aihub-be/issues/1034); Organization Invitation email copy and payload amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); actionability and stale cancellation for a request without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider-wide failure attempts and retry behavior amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md); request-boundary backpressure amended by [issue #635](https://github.com/AiHub-Ecosystem/aihub-be/issues/635); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449); credential expiry rechecked at provider handoff amended by [issue #1034](https://github.com/AiHub-Ecosystem/aihub-be/issues/1034); Organization Invitation email copy and payload amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)
@@ -14,6 +14,20 @@ Registration, verification resend, password recovery, and organization invitatio
 Each affected operation writes its Email Delivery Request in the same PostgreSQL transaction as its account, token, or invitation mutation; invitation audit evidence stays in that transaction as well. A failed transaction commits neither the mutation nor the request. The HTTP request returns after this commit and never waits for Resend. Redis is not used as a queue because it is ephemeral protection/cache state, not durable control-plane storage.
 
 Registration and invitation creation keep their `201` success status and add `emailDeliveryStatus: "queued"`. That value is the acceptance-time result: it confirms AIHUB accepted the request for dispatch, not that a provider accepted it or that it reached an inbox. Authentication registration can return `suppressed` when the recipient ceiling in ADR-0096 is full; it still commits the pending account without an outbox item. Verification resend remains a generic bodyless `202`. Password recovery remains a generic `202` for known, unknown, pending, and disabled accounts; its copy says that AIHUB accepted a request to send instructions only if the account is eligible and does not confirm email delivery. These two generic routes do not expose whether an outbox item exists. Provider delivery failure is no longer a synchronous `503`; a failure to commit durable state and its outbox request remains a safe `5xx`.
+
+## Backpressure at the request boundary (#635)
+
+The four routes that queue a credential email (registration, verification
+resend, password recovery, and organization invitation) refuse a request with
+retryable `503 EMAIL_DELIVERY_BACKLOGGED` and `Retry-After` when the oldest
+queued request of their kind has waited 75% of the credential's lifetime,
+instead of acknowledging mail the outbox would later cancel as
+`credential_expired`. The check reads the queue age the backlog gauge already
+reads, runs before the rate limits are spent and before the transaction, and
+writes nothing. A queue age that cannot be read admits the request: a missing
+signal must not refuse every sign-up. The refusal depends on the queue and never
+on the address, so the generic routes still do not reveal whether an account
+exists.
 
 ## Delivery lifecycle and retry
 

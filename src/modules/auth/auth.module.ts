@@ -33,6 +33,7 @@ import {
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
 } from './email-delivery/application/email-delivery-request.port';
+import { ADMIT_EMAIL_REQUEST } from './email-delivery/application/email-outbox-backpressure.port';
 import { EmailDeliveryModule } from './email-delivery/email-delivery.module';
 import { PostgresEmailDeliveryRequestRepository } from './email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { LOCAL_AUTH_SERVICE } from './local-credentials/application/local-auth-service.port';
@@ -366,6 +367,7 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
         AUTH_CLOCK,
         EMAIL_DELIVERY_ID,
         AUTH_MFA_SERVICE,
+        ADMIT_EMAIL_REQUEST,
         EMAIL_VERIFICATION_REQUIRES_PASSWORD,
       ],
     },

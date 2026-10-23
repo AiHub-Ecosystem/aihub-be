@@ -7,6 +7,7 @@ import {
   recordDispatchCancelledByDeadline,
   recordDownstreamRetryEvent,
   recordEmailDeliveryFailed,
+  recordEmailOutboxBackpressureRefusal,
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
   setDispatchAttemptUnresolvedSource,
@@ -234,6 +235,41 @@ describe('email delivery failure metric', () => {
     expect(await getMetrics()).not.toContain(
       'aihub_email_delivery_failed_total{kind="cancelled"}',
     );
+  });
+});
+
+describe('email outbox backpressure metric', () => {
+  it.each([
+    'verification_email',
+    'password_reset_email',
+    'organization_invite_email',
+  ])(
+    'exposes %s at zero, so its first refusal is an increase',
+    async (kind) => {
+      await jest.isolateModulesAsync(async () => {
+        const fresh = await import('./metrics');
+
+        expect(await fresh.getMetrics()).toContain(
+          `aihub_email_outbox_backpressure_refusals_total{kind="${kind}"} 0`,
+        );
+      });
+    },
+  );
+
+  it('counts a refusal under the kind of the route', async () => {
+    const before = Number(
+      (await sample('aihub_email_outbox_backpressure_refusals_total', {
+        kind: 'password_reset_email',
+      })) ?? 0,
+    );
+
+    recordEmailOutboxBackpressureRefusal('password_reset_email');
+
+    expect(
+      await sample('aihub_email_outbox_backpressure_refusals_total', {
+        kind: 'password_reset_email',
+      }),
+    ).toBe(String(before + 1));
   });
 });
 

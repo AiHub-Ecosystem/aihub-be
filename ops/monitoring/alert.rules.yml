@@ -142,6 +142,20 @@ groups:
           description: "The shared UTC-day Resend budget has reached the invitation cutoff; protected recovery capacity remains."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#daily-email-budget
 
+      # A refusal means the outbox cannot get mail out within its credential's
+      # lifetime (#635). The counter is exposed at 0 for each gated kind, so the
+      # first refusal after a restart is an increase.
+      - alert: AIHUBEmailOutboxBackpressureRefusing
+        expr: sum by (job, kind) (increase(aihub_email_outbox_backpressure_refusals_total[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB is refusing email-sending requests because the outbox is backlogged"
+          description: "{{ $labels.job }} refused {{ $labels.kind }} requests in the last 15 minutes because the oldest queued email has used 75% of its credential lifetime. Check dispatch, the provider circuit, and the shared rate limiter."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#backpressure-refusals-635
+
       - alert: AIHUBEmailCredentialExpiredBeforeDispatch
         expr: time() - aihub_email_delivery_cancelled_timestamp_seconds{reason="credential_expired"} < 900
         for: 0m

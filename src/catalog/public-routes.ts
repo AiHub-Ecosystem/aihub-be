@@ -293,7 +293,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'optional',
     requestSchema: CreateOrganizationInvitationRequestSchema,
     responseSchema: CreateOrganizationInvitationResponseSchema,
-    errorStatuses: [400, 401, 403, 409, 429, 500],
+    errorStatuses: [400, 401, 403, 409, 429, 500, 503],
   },
   'organizations.invitations.list': {
     method: 'GET',
@@ -498,7 +498,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: ResendVerificationRequestSchema,
     responseSchema: null,
-    errorStatuses: [400, 429, 500],
+    errorStatuses: [400, 429, 500, 503],
   },
   'auth.forgot_password': {
     method: 'POST',
@@ -510,7 +510,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: ForgotPasswordRequestSchema,
     responseSchema: ForgotPasswordResponseSchema,
-    errorStatuses: [400, 429, 500],
+    errorStatuses: [400, 429, 500, 503],
   },
   'auth.reset_password': {
     method: 'POST',

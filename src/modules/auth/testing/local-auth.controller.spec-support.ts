@@ -13,6 +13,12 @@ import {
   EMAIL_PAYLOAD_CIPHER,
   type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
+import {
+  ADMIT_EMAIL_REQUEST,
+  type BackpressureEmailKind,
+  type EmailOutboxQueueAgePort,
+} from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
@@ -245,6 +251,24 @@ export class RefreshTokenIssuerFake implements RefreshTokenIssuerPort {
   }
 }
 
+/** What the email outbox reports for the age of its oldest queued request. */
+export class QueueAgeFake implements EmailOutboxQueueAgePort {
+  ageMs: number | undefined = 0;
+  failure: Error | undefined;
+  refusals: BackpressureEmailKind[] = [];
+
+  async oldestQueuedAgeSeconds(): Promise<number | undefined> {
+    if (this.failure !== undefined) throw this.failure;
+    return this.ageMs === undefined ? undefined : this.ageMs / 1000;
+  }
+
+  reset(): void {
+    this.ageMs = 0;
+    this.failure = undefined;
+    this.refusals = [];
+  }
+}
+
 export interface LocalAuthTestContext {
   app: NestFastifyApplication;
   state: InMemoryAuthState;
@@ -255,6 +279,7 @@ export interface LocalAuthTestContext {
   cipher: PayloadCipherFake;
   hasher: HasherFake;
   limiter: LimiterFake;
+  queueAge: QueueAgeFake;
   tokenIssuer: TokenFake;
   passwordResetTokenIssuer: PasswordResetTokenFake;
   refreshTokenIssuer: RefreshTokenIssuerFake;
@@ -272,6 +297,7 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
   const cipher = new PayloadCipherFake();
   const hasher = new HasherFake();
   const limiter = new LimiterFake();
+  const queueAge = new QueueAgeFake();
   const tokenIssuer = new TokenFake();
   const passwordResetTokenIssuer = new PasswordResetTokenFake();
   const refreshTokenIssuer = new RefreshTokenIssuerFake();
@@ -306,6 +332,14 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     .useValue(passwordResetTokenIssuer)
     .overrideProvider(AUTH_RATE_LIMITER)
     .useValue(limiter)
+    .overrideProvider(ADMIT_EMAIL_REQUEST)
+    .useValue(
+      new EmailOutboxBackpressureGate(
+        queueAge,
+        (kind) => queueAge.refusals.push(kind),
+        () => 0,
+      ),
+    )
     .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
     .useValue(accessTokenIssuer)
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
@@ -332,6 +366,7 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     hasher.result = true;
     hasher.verifyByHash = false;
     limiter.reset();
+    queueAge.reset();
     accessTokenIssuer.fail = false;
     refreshSessions.failCreateRefreshSession = false;
     refreshSessions.failFindRefreshToken = false;
@@ -351,6 +386,7 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     cipher,
     hasher,
     limiter,
+    queueAge,
     tokenIssuer,
     passwordResetTokenIssuer,
     refreshTokenIssuer,

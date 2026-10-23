@@ -1,6 +1,15 @@
+import { AppError } from '@/common/errors/app-error';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
-import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type {
+  EmailDeliveryKind,
+  EmailPayloadCipherPort,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
+import type {
+  BackpressureEmailKind,
+  EmailOutboxQueueAgePort,
+} from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import type { AuthMfaServicePort } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type {
   IssuedPasswordResetToken,
@@ -209,8 +218,13 @@ function sessionOf(outcome: Awaited<ReturnType<LocalAuthService['login']>>) {
 }
 
 function service(
-  options: { readonly requireVerificationPassword?: boolean } = {},
+  options: {
+    readonly requireVerificationPassword?: boolean;
+    readonly queueAge?: EmailOutboxQueueAgePort['oldestQueuedAgeSeconds'];
+  } = {},
 ) {
+  const refusals: BackpressureEmailKind[] = [];
+  const queueAges: EmailDeliveryKind[] = [];
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
   const verificationTokens = new InMemoryVerificationTokenAdapter(state);
@@ -239,6 +253,16 @@ function service(
     clock,
     prefixedIdGenerator('edr_'),
     mfa,
+    new EmailOutboxBackpressureGate(
+      {
+        oldestQueuedAgeSeconds: async (kind) => {
+          queueAges.push(kind);
+          return (options.queueAge ?? (async () => 0))(kind);
+        },
+      },
+      (kind) => refusals.push(kind),
+      () => 0,
+    ),
     options.requireVerificationPassword ?? false,
   );
   return {
@@ -253,6 +277,8 @@ function service(
     hasher,
     clock,
     mfa,
+    refusals,
+    queueAges,
   };
 }
 
@@ -313,6 +339,107 @@ function issuedVerificationExpiresAt(
 }
 
 describe('LocalAuthService', () => {
+  describe('email outbox backpressure', () => {
+    const BACKLOGGED = 24 * 60 * 60;
+    const backlogged = { queueAge: async () => BACKLOGGED };
+
+    async function refusal(attempt: Promise<unknown>): Promise<AppError> {
+      const error = await attempt.then(
+        () => undefined,
+        (rejected: unknown) => rejected,
+      );
+      if (!(error instanceof AppError)) throw new Error('expected a refusal');
+      return error;
+    }
+
+    it('refuses a registration with a retryable 503 before any rate limit or durable write', async () => {
+      const { local, state, limiter, refusals } = service(backlogged);
+
+      const error = await refusal(
+        local.register(
+          { email: EMAIL, username: 'person_01', password: 'exact password' },
+          '203.0.113.7',
+        ),
+      );
+
+      expect(error).toMatchObject({
+        code: 'EMAIL_DELIVERY_BACKLOGGED',
+        httpStatus: 503,
+        retryable: true,
+      });
+      expect(error.retryAfterMs).toBeGreaterThan(0);
+      expect(limiter.calls).toEqual([]);
+      expect(state.accounts.size).toBe(0);
+      expect(state.verificationTokens.size).toBe(0);
+      expect(state.emailDeliveryRequests).toEqual([]);
+      expect(refusals).toEqual(['verification_email']);
+    });
+
+    it('refuses a verification resend the same way, without spending its limits', async () => {
+      const { local, state, limiter, refusals } = service(backlogged);
+
+      await expect(
+        refusal(local.resend(EMAIL, '203.0.113.7')),
+      ).resolves.toMatchObject({ code: 'EMAIL_DELIVERY_BACKLOGGED' });
+
+      expect(limiter.calls).toEqual([]);
+      expect(state.emailDeliveryRequests).toEqual([]);
+      expect(refusals).toEqual(['verification_email']);
+    });
+
+    it('refuses a password recovery request for every address, known or not', async () => {
+      const { local, state, limiter, refusals } = service(backlogged);
+      seedActiveAccount(state);
+
+      await expect(
+        refusal(local.forgotPassword({ email: EMAIL }, '203.0.113.7')),
+      ).resolves.toMatchObject({ code: 'EMAIL_DELIVERY_BACKLOGGED' });
+      await expect(
+        refusal(
+          local.forgotPassword({ email: 'nobody@example.com' }, '203.0.113.7'),
+        ),
+      ).resolves.toMatchObject({ code: 'EMAIL_DELIVERY_BACKLOGGED' });
+
+      expect(limiter.calls).toEqual([]);
+      expect(state.passwordResetTokens.size).toBe(0);
+      expect(state.emailDeliveryRequests).toEqual([]);
+      expect(refusals).toEqual([
+        'password_reset_email',
+        'password_reset_email',
+      ]);
+    });
+
+    it('proceeds as before when the queue age cannot be read', async () => {
+      const { local, state, limiter, refusals } = service({
+        queueAge: async () => {
+          throw new Error('database down');
+        },
+      });
+
+      await local.register(
+        { email: EMAIL, username: 'person_01', password: 'exact password' },
+        '203.0.113.7',
+      );
+
+      expect(state.emailDeliveryRequests).toHaveLength(1);
+      expect(limiter.calls).toHaveLength(2);
+      expect(refusals).toEqual([]);
+    });
+
+    it('does not ask about the queue for an invalid request', async () => {
+      const { local, queueAges } = service(backlogged);
+
+      await expect(
+        local.register(
+          { email: 'not an email', username: 'person_01', password: 'x' },
+          '203.0.113.7',
+        ),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+
+      expect(queueAges).toEqual([]);
+    });
+  });
+
   it('registers a canonical pending account and queues its verification email', async () => {
     const { local, state, cipher, limiter, tokenIssuer } = service();
 
