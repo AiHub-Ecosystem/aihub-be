@@ -2963,7 +2963,7 @@
         "auth": null,
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
+          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\",\n  \"password\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -3440,7 +3440,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\"\n}",
+          "raw": "{\n  \"token\": \"<string>\",\n  \"browser_binding\": \"<string>\",\n  \"password\": \"<string>\"\n}",
           "options": {
             "raw": {
               "language": "json"
