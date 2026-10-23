@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   EmailProviderOutageCircuitPort,
   EmailProviderSendPermit,
@@ -185,12 +186,7 @@ export class RedisEmailSendRateLimiter
   }
 
   async acquireSendPermit(): Promise<EmailProviderSendPermit> {
-    if (this.redis === undefined) {
-      return {
-        allowed: false as const,
-        retryAfterMs: RETRY_WHEN_UNAVAILABLE_MS,
-      };
-    }
+    if (this.redis === undefined) return this.unavailablePermit();
     const probeToken = randomUUID();
     try {
       const result = await this.redis.eval(
@@ -223,7 +219,7 @@ export class RedisEmailSendRateLimiter
     } catch {
       // Redis outage coordination fails closed; the existing limiter does too.
     }
-    return { allowed: false as const, retryAfterMs: RETRY_WHEN_UNAVAILABLE_MS };
+    return this.unavailablePermit();
   }
 
   async releaseProbe(probeToken: string): Promise<void> {
@@ -241,9 +237,7 @@ export class RedisEmailSendRateLimiter
     retryAfterMs: number,
     probeToken?: string,
   ): Promise<number> {
-    if (this.redis === undefined) {
-      return Math.max(RETRY_WHEN_UNAVAILABLE_MS, retryAfterMs);
-    }
+    if (this.redis === undefined) return this.localPause(retryAfterMs);
     const sample = this.random();
     const jitter =
       Number.isFinite(sample) && sample >= 0 && sample < 1 ? sample : 0.5;
@@ -269,7 +263,7 @@ export class RedisEmailSendRateLimiter
     } catch {
       // The caller keeps a short process-local pause if shared state is down.
     }
-    return Math.max(RETRY_WHEN_UNAVAILABLE_MS, retryAfterMs);
+    return this.localPause(retryAfterMs);
   }
 
   async recordProviderReachable(): Promise<void> {
@@ -306,10 +300,24 @@ export class RedisEmailSendRateLimiter
     this.redis?.disconnect();
   }
 
+  // Each answer below stands for shared state this limiter could not read or
+  // write, as opposed to a real denial from Redis. They are counted because the
+  // dispatcher only sees "deferred" and nothing says why (#1010).
   private unavailable(): EmailSendRateReservation {
+    recordRedisUnavailable('email_send_rate');
     return {
       reserved: false,
       retryAfterMs: RETRY_WHEN_UNAVAILABLE_MS,
     };
+  }
+
+  private unavailablePermit(): EmailProviderSendPermit {
+    recordRedisUnavailable('email_send_rate');
+    return { allowed: false as const, retryAfterMs: RETRY_WHEN_UNAVAILABLE_MS };
+  }
+
+  private localPause(retryAfterMs: number): number {
+    recordRedisUnavailable('email_send_rate');
+    return Math.max(RETRY_WHEN_UNAVAILABLE_MS, retryAfterMs);
   }
 }

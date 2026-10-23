@@ -285,6 +285,14 @@ at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A request
 held back because its payload is sealed with a key version this instance lacks
 waits 5 minutes between claims, so a key removed too early shows up here too.
 
+Read `aihub_redis_unavailable_total{seam="email_send_rate"}` first: it counts
+every time the send-rate limiter could not get a send permit, a rate
+reservation or a recorded provider failure from Redis (Redis absent, a command
+that failed or timed out, or a reply the script never returns). A real denial,
+such as the next send slot not being due yet or the provider cooling down, is
+not counted. A counter that rises with `deferred` means the limiter's Redis, not
+the provider, is what stops dispatch.
+
 `deferred=N` in the per-pass log line counts requests handed back without an
 attempt. A steadily non-zero value has two usual causes, and a queued row with
 `attempts = 0` and a `lease_expires_at` a few seconds ahead of now points at

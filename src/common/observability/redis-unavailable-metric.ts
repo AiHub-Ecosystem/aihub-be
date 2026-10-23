@@ -12,7 +12,8 @@ export type RedisProtectionSeam =
   | 'api_key_cache'
   | 'auth_failure_counter'
   | 'auth_rate_limit'
-  | 'jwks_cache';
+  | 'jwks_cache'
+  | 'email_send_rate';
 
 const redisUnavailableTotal = new Counter({
   name: 'aihub_redis_unavailable_total',
