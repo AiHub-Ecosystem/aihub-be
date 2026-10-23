@@ -305,6 +305,30 @@ the second:
   back after 5 seconds and nothing is sent. Measure a round trip to that Redis
   from the application container before changing anything else.
 
+## Send-rate limiter Redis unavailable
+
+`AIHUBEmailSendRateRedisUnavailable` fires when
+`aihub_redis_unavailable_total{seam="email_send_rate"}` has risen for 10
+minutes. The send-rate limiter keeps its pacing and the provider-outage state in
+a Redis shared by every environment. When it cannot get an answer from that
+Redis it refuses to send and hands the request back, so email queues up without
+a single terminal failure. The queue-age alert fires too if it lasts 15 minutes.
+
+First steps:
+
+1. Confirm `deferred` stays above zero in the per-pass log line and that queued
+   rows have `attempts = 0`.
+2. Check the Redis answers at all from the application host: the counter counts a
+   Redis that is absent, a command that fails or times out, and a reply the
+   script never returns.
+3. A refused key or command (`NOPERM`) is swallowed, so the log shows nothing.
+   Compare the Redis user's access list with the line in
+   `ops/vault/README.md`; a change to the limiter's scripts needs the matching
+   change there.
+4. A command that takes longer than the limiter's command timeout fails every
+   time. Compare the timeout with the application's round trip to that Redis
+   before changing anything else.
+
 ## What an operator can read
 
 The durable row keeps delivery state and attempt evidence after the payload is

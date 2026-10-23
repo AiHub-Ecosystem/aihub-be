@@ -116,6 +116,20 @@ groups:
           description: "A {{ $labels.kind }} email on {{ $labels.job }} used all its attempts in the last 15 minutes and was never accepted by the provider. Check the error code and the recipient domain or from address for that kind."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#terminal-delivery-failure
 
+      # A request the limiter cannot decide is handed back every 10 seconds, so a
+      # real outage raises the counter continuously. Five minutes of increase held
+      # for ten means a single blip, which stays inside the window, never pages.
+      - alert: AIHUBEmailSendRateRedisUnavailable
+        expr: sum by (job) (increase(aihub_redis_unavailable_total{seam="email_send_rate"}[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "The email send-rate limiter cannot use its Redis"
+          description: "The send-rate limiter on {{ $labels.job }} has failed to get a send permit, a rate reservation or a recorded provider failure from Redis for 10 minutes, so email is handed back instead of sent. Check the counter, the Redis access list and the command timeout."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#send-rate-limiter-redis-unavailable
+
       # Invitations stop at 80% to reserve recovery capacity; alert at cutoff.
       - alert: AIHUBEmailDailySendBudgetNearLimit
         expr: aihub_email_daily_send_budget{measurement="used"} / ignoring(measurement) aihub_email_daily_send_budget{measurement="limit"} >= 0.8

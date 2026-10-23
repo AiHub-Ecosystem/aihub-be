@@ -22,6 +22,15 @@ const redisUnavailableTotal = new Counter({
   registers: [registry],
 });
 
+// A series that first appears at 1 has no earlier sample, so `increase()`
+// reads the first unavailable answer after a restart as 0 and an alert on it
+// stays silent. The email send-rate seam is exposed at 0 for that alert; the
+// request-path seams keep appearing on their first answer.
+redisUnavailableTotal.inc(
+  { seam: 'email_send_rate' satisfies RedisProtectionSeam },
+  0,
+);
+
 export function recordRedisUnavailable(seam: RedisProtectionSeam): void {
   try {
     redisUnavailableTotal.inc({ seam });
