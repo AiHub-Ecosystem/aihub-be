@@ -31,6 +31,8 @@ export interface LocalAuthServicePort {
     token: string,
     ip: string,
     browserBinding?: string,
+    /** The registration password, for a token that needs it (ADR-0123). */
+    password?: string,
   ): Promise<IssuedSession | undefined>;
   resend(email: string, ip: string, browserBinding?: string): Promise<void>;
   forgotPassword(

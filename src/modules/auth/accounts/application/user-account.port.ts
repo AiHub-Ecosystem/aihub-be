@@ -9,6 +9,8 @@ export interface RegisterLocalAccountInput {
   readonly tokenId: string;
   readonly tokenHash: string;
   readonly tokenExpiresAt: Date;
+  /** Whether verifying the token needs the registration password (ADR-0123). */
+  readonly requiresPassword: boolean;
   /** Hash of the requesting browser's Signup Browser Binding, if any. */
   readonly browserBindingHash?: string;
   readonly now: Date;

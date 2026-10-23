@@ -13,6 +13,11 @@ export interface ResendVerificationTarget {
  */
 export type VerificationOutcome =
   | { readonly kind: 'invalid' }
+  /**
+   * The token needs the registration password and the caller did not prove it
+   * (ADR-0123). Nothing was consumed.
+   */
+  | { readonly kind: 'password_required' }
   | { readonly kind: 'verified' }
   | { readonly kind: 'signed_in'; readonly userId: string };
 
@@ -22,14 +27,30 @@ export interface RotateVerificationTokenInput {
   readonly tokenHash: string;
   readonly tokenExpiresAt: Date;
   readonly browserBindingHash?: string;
+  /** Whether verifying this token needs the registration password (ADR-0123). */
+  readonly requiresPassword: boolean;
   readonly now: Date;
   /** Written in the same transaction as the rotation, or nowhere. */
   readonly emailDelivery?: InsertEmailDeliveryRequestInput;
 }
 
+/** What a caller needs to prove a token's password before consuming it. */
+export interface VerificationCredential {
+  readonly requiresPassword: boolean;
+  /** The pending account's stored password hash. */
+  readonly passwordHash: string;
+}
+
 export interface ConsumeVerificationTokenInput {
   readonly tokenHash: string;
   readonly browserBindingHash?: string;
+  /**
+   * The stored password hash the caller verified a submitted password against
+   * (ADR-0123). A token that requires the password is consumed only when this
+   * equals the hash stored now, under the account lock, so a registration that
+   * replaced the credential after the check is seen.
+   */
+  readonly verifiedPasswordHash?: string;
   /**
    * The pre-issued session a Verification Sign-in commits together with its
    * claim and the verification that precedes it (ADR-0054). It is stored only
@@ -74,6 +95,24 @@ export interface VerificationTokenRepositoryPort {
   consumeVerificationToken(
     input: ConsumeVerificationTokenInput,
   ): Promise<VerificationOutcome>;
+  /**
+   * The open, unexpired token's password requirement and the pending account's
+   * stored hash, or nothing for a token that is unknown, spent, expired, or
+   * whose account is no longer pending.
+   */
+  readVerificationCredential(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<VerificationCredential | undefined>;
+  /**
+   * Counts one wrong password against an open token in a single statement, and
+   * spends the token when the count reaches `limit`.
+   */
+  recordWrongVerificationPassword(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+    readonly limit: number;
+  }): Promise<void>;
 }
 
 export const VERIFICATION_TOKEN_REPOSITORY = Symbol(

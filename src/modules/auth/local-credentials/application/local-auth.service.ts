@@ -26,6 +26,10 @@ import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/aut
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import {
+  proveVerificationPassword,
+  verificationPasswordInvalid,
+} from '@/modules/auth/verification/application/verification-password';
+import {
   browserBindingHash,
   enforceVerificationRateLimit,
 } from '@/modules/auth/verification/application/verification-sign-in';
@@ -139,6 +143,8 @@ export class LocalAuthService {
     private readonly clock: LocalAuthServiceClock,
     private readonly newEmailDeliveryId: IdMinter,
     private readonly mfa: AuthMfaServicePort,
+    /** Tokens issued from now on need the registration password (ADR-0123). */
+    private readonly requireVerificationPassword: boolean,
   ) {}
 
   async currentUser(userId: string): Promise<{ readonly username: string }> {
@@ -182,6 +188,7 @@ export class LocalAuthService {
         tokenId: issued.id,
         tokenHash: issued.hash,
         tokenExpiresAt: issued.expiresAt,
+        requiresPassword: this.requireVerificationPassword,
         ...browserBindingHash(this.tokenIssuer, browserBinding),
         // Committed with the account or not at all (ADR-0074).
         emailDelivery: this.emailDeliveryRequest(
@@ -218,6 +225,7 @@ export class LocalAuthService {
     token: string,
     ip: string,
     browserBinding?: string,
+    password?: string,
   ): Promise<IssuedSession | undefined> {
     await enforceVerificationRateLimit(this.rateLimiter, ip);
 
@@ -226,12 +234,21 @@ export class LocalAuthService {
     // Refresh Session together (ADR-0054). A write failure rolls the claim
     // back, leaving the sign-in available while the token is unexpired.
     const refreshToken = this.refreshTokenIssuer.issue(now);
+    const tokenHash = this.tokenIssuer.hash(token);
+    const proof = await proveVerificationPassword(
+      { store: this.verificationTokens, hasher: this.passwordHasher },
+      { tokenHash, password, now },
+    );
     const outcome = await this.verificationTokens.consumeVerificationToken({
-      tokenHash: this.tokenIssuer.hash(token),
+      tokenHash,
       ...browserBindingHash(this.tokenIssuer, browserBinding),
+      ...proof,
       signInSession: { kind: 'refresh', token: refreshToken, issuedAt: now },
       now,
     });
+    if (outcome.kind === 'password_required') {
+      throw verificationPasswordInvalid();
+    }
     if (outcome.kind === 'invalid') {
       throw new AppError({
         code: 'AUTH_VERIFICATION_TOKEN_INVALID',
@@ -277,6 +294,7 @@ export class LocalAuthService {
       tokenId: issued.id,
       tokenHash: issued.hash,
       tokenExpiresAt: issued.expiresAt,
+      requiresPassword: this.requireVerificationPassword,
       ...browserBindingHash(this.tokenIssuer, browserBinding),
       emailDelivery: this.emailDeliveryRequest(
         'verification_email',

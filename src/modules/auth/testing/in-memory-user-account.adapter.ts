@@ -49,6 +49,8 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
       consumedAt: undefined,
       consumedReason: undefined,
       signedInAt: undefined,
+      requiresPassword: input.requiresPassword,
+      passwordFailures: 0,
     });
     if (input.emailDelivery !== undefined) {
       this.state.emailDeliveryRequests.push(input.emailDelivery);

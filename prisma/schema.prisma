@@ -178,6 +178,8 @@ model EmailVerificationToken {
   consumedReason     String?     @map("consumed_reason")
   browserBindingHash String?     @map("browser_binding_hash")
   signedInAt         DateTime?   @map("signed_in_at") @db.Timestamptz(6)
+  requiresPassword   Boolean     @default(false) @map("requires_password")
+  passwordFailures   Int         @default(0) @map("password_failures")
   userAccount        UserAccount @relation(fields: [userAccountId], references: [id], onUpdate: NoAction)
 
   @@map("email_verification_tokens")

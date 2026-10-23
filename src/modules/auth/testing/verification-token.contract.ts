@@ -17,6 +17,8 @@ export interface VerificationTokenContractHarness {
   readonly now: Date;
   readonly expiresAt: Date;
   readonly expiredAt: Date;
+  /** The password hash the seeded account stores. */
+  readonly passwordHash: string;
   createRepo(): VerificationTokenRepositoryPort & {
     failSessionWrite?: boolean;
   };
@@ -29,7 +31,13 @@ export interface VerificationTokenContractHarness {
     readonly consumedReason?: 'verified' | 'superseded';
     readonly bindingHash?: string;
     readonly signedInAt?: Date;
+    readonly requiresPassword?: boolean;
   }): Promise<void>;
+  /** Consumption state and wrong-password count of a stored token. */
+  readToken(hash: string): Promise<{
+    readonly consumedReason: string | undefined;
+    readonly passwordFailures: number;
+  }>;
   setAccountStatus(userId: string, status: string): Promise<void>;
   getTokenSignedInAt(hash: string): Promise<Date | undefined>;
   /** Enrols the seeded account in an enabled second factor. */
@@ -52,7 +60,7 @@ function issuedRefresh(expiresAt: Date): IssuedRefreshToken {
 export function verificationTokenRepositoryContract(
   harness: VerificationTokenContractHarness,
 ): void {
-  const { userId, binding, now, expiresAt, expiredAt } = harness;
+  const { userId, binding, now, expiresAt, expiredAt, passwordHash } = harness;
 
   let repo: ReturnType<VerificationTokenContractHarness['createRepo']>;
 
@@ -302,5 +310,134 @@ export function verificationTokenRepositoryContract(
     ).rejects.toThrow();
     expect(await harness.getTokenSignedInAt(hash)).toBeUndefined();
     harness.setFailSessionWrite?.(false);
+  });
+  describe('password requirement (ADR-0123)', () => {
+    const consume = (hash: string, verifiedPasswordHash?: string) =>
+      repo.consumeVerificationToken({
+        tokenHash: hash,
+        now,
+        ...(verifiedPasswordHash === undefined ? {} : { verifiedPasswordHash }),
+        signInSession: {
+          kind: 'refresh',
+          token: issuedRefresh(expiresAt),
+          issuedAt: now,
+        },
+      });
+
+    it('reads the requirement and stored hash of an open token', async () => {
+      const hash = '5'.repeat(64);
+      await harness.insertToken({ hash, expiresAt, requiresPassword: true });
+
+      await expect(
+        repo.readVerificationCredential({ tokenHash: hash, now }),
+      ).resolves.toEqual({ requiresPassword: true, passwordHash });
+
+      await harness.setAccountStatus(userId, 'active');
+      await expect(
+        repo.readVerificationCredential({ tokenHash: hash, now }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('reads nothing for an unknown, spent or expired token', async () => {
+      await expect(
+        repo.readVerificationCredential({ tokenHash: 'nope', now }),
+      ).resolves.toBeUndefined();
+
+      const spent = '6'.repeat(64);
+      await harness.insertToken({
+        hash: spent,
+        expiresAt,
+        consumedAt: now,
+        consumedReason: 'superseded',
+      });
+      await expect(
+        repo.readVerificationCredential({ tokenHash: spent, now }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('reads nothing for an expired token', async () => {
+      const hash = '7'.repeat(64);
+      await harness.insertToken({ hash, expiresAt: expiredAt });
+
+      await expect(
+        repo.readVerificationCredential({ tokenHash: hash, now }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not consume a token that needs the password when none was proved', async () => {
+      const hash = '8'.repeat(64);
+      await harness.insertToken({ hash, expiresAt, requiresPassword: true });
+
+      await expect(consume(hash)).resolves.toEqual({
+        kind: 'password_required',
+      });
+      await expect(consume(hash, `${passwordHash}other`)).resolves.toEqual({
+        kind: 'password_required',
+      });
+
+      await expect(harness.readToken(hash)).resolves.toMatchObject({
+        consumedReason: undefined,
+      });
+      await expect(consume(hash, passwordHash)).resolves.toEqual({
+        kind: 'verified',
+      });
+    });
+
+    it('consumes a token that does not need the password as before', async () => {
+      const hash = '9'.repeat(64);
+      await harness.insertToken({ hash, expiresAt });
+
+      await expect(consume(hash)).resolves.toEqual({ kind: 'verified' });
+    });
+
+    it('counts wrong passwords and spends the token at the limit', async () => {
+      const hash = 'd'.repeat(64);
+      await harness.insertToken({ hash, expiresAt, requiresPassword: true });
+
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        await repo.recordWrongVerificationPassword({
+          tokenHash: hash,
+          now,
+          limit: 5,
+        });
+        await expect(harness.readToken(hash)).resolves.toEqual({
+          consumedReason: undefined,
+          passwordFailures: attempt,
+        });
+      }
+      await repo.recordWrongVerificationPassword({
+        tokenHash: hash,
+        now,
+        limit: 5,
+      });
+
+      await expect(harness.readToken(hash)).resolves.toEqual({
+        consumedReason: 'password_attempts',
+        passwordFailures: 5,
+      });
+      await expect(consume(hash, passwordHash)).resolves.toEqual({
+        kind: 'invalid',
+      });
+    });
+
+    it('does not count a wrong password against a token that is already spent', async () => {
+      const hash = 'e'.repeat(64);
+      await harness.insertToken({
+        hash,
+        expiresAt,
+        consumedAt: now,
+        consumedReason: 'verified',
+      });
+
+      await repo.recordWrongVerificationPassword({
+        tokenHash: hash,
+        now,
+        limit: 5,
+      });
+
+      await expect(harness.readToken(hash)).resolves.toMatchObject({
+        passwordFailures: 0,
+      });
+    });
   });
 }

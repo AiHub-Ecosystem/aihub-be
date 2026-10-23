@@ -19,6 +19,7 @@ const input = {
   tokenId: 'evt_01J00000000000000000000000',
   tokenHash: 'a'.repeat(64),
   tokenExpiresAt: new Date('2026-09-20T00:00:00.000Z'),
+  requiresPassword: false,
   now: new Date('2026-09-19T00:00:00.000Z'),
 };
 

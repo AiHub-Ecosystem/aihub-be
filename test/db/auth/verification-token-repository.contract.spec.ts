@@ -45,13 +45,14 @@ async function insertToken(options: {
   consumedReason?: 'verified' | 'superseded';
   bindingHash?: string;
   signedInAt?: Date;
+  requiresPassword?: boolean;
 }) {
   const id = `evt_${ulid()}`;
   await pool.query(
     `INSERT INTO email_verification_tokens (
        id, user_account_id, token_hash, expires_at, consumed_at, consumed_reason,
-       created_at, browser_binding_hash, signed_in_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       created_at, browser_binding_hash, signed_in_at, requires_password
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       id,
       USER_ID,
@@ -62,6 +63,7 @@ async function insertToken(options: {
       NOW,
       options.bindingHash ?? null,
       options.signedInAt ?? null,
+      options.requiresPassword ?? false,
     ],
   );
 }
@@ -82,6 +84,7 @@ verificationTokenRepositoryContract({
   now: NOW,
   expiresAt: EXPIRES_AT,
   expiredAt: EXPIRED_AT,
+  passwordHash: PASSWORD_HASH,
   createRepo: () => new PostgresVerificationTokenRepository(client),
   reset: async () => {
     await resetIdentityTables(pool);
@@ -91,6 +94,20 @@ verificationTokenRepositoryContract({
   },
   insertToken: async (options: any) => {
     await insertToken(options);
+  },
+  readToken: async (hash: string) => {
+    const { rows } = await pool.query<{
+      consumed_reason: string | null;
+      password_failures: number;
+    }>(
+      `SELECT consumed_reason, password_failures
+       FROM email_verification_tokens WHERE token_hash = $1`,
+      [hash],
+    );
+    return {
+      consumedReason: rows[0]?.consumed_reason ?? undefined,
+      passwordFailures: Number(rows[0]?.password_failures ?? 0),
+    };
   },
   setAccountStatus: async (_userId: string, status: string) => {
     await pool.query('UPDATE user_accounts SET status = $1 WHERE id = $2', [

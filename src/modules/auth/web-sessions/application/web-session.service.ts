@@ -15,6 +15,10 @@ import type {
 import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import {
+  proveVerificationPassword,
+  verificationPasswordInvalid,
+} from '@/modules/auth/verification/application/verification-password';
+import {
   browserBindingHash,
   enforceWebSessionVerificationRateLimit,
 } from '@/modules/auth/verification/application/verification-sign-in';
@@ -149,6 +153,7 @@ export class WebSessionService implements WebSessionServicePort {
   async createWebSessionFromVerification(input: {
     readonly token: string;
     readonly browserBinding: string | undefined;
+    readonly password?: string | undefined;
   }): Promise<CreatedWebSession | undefined> {
     // BFF requests share a proxy address. Bound repeat attempts by the token
     // hash instead, using the same verification attempt budget.
@@ -162,11 +167,17 @@ export class WebSessionService implements WebSessionServicePort {
     // the claim it won. A write failure rolls the claim back and the sign-in
     // stays available while the token is unexpired.
     const token = this.tokenIssuer.issue(now);
+    const tokenHash = this.verificationTokens.hash(input.token);
+    const proof = await proveVerificationPassword(
+      { store: this.verificationTokenStore, hasher: this.passwordHasher },
+      { tokenHash, password: input.password, now },
+    );
     let outcome;
     try {
       outcome = await this.verificationTokenStore.consumeVerificationToken({
-        tokenHash: this.verificationTokens.hash(input.token),
+        tokenHash,
         ...browserBindingHash(this.verificationTokens, input.browserBinding),
+        ...proof,
         signInSession: {
           kind: 'web-session',
           sessionId: this.newSessionId(now),
@@ -180,6 +191,9 @@ export class WebSessionService implements WebSessionServicePort {
       throw webSessionUnavailable(error);
     }
 
+    if (outcome.kind === 'password_required') {
+      throw verificationPasswordInvalid();
+    }
     if (outcome.kind === 'invalid') {
       throw invalidVerificationToken();
     }

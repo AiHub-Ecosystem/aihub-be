@@ -110,6 +110,7 @@ export class PostgresUserAccountRepository
             expiresAt: input.tokenExpiresAt,
             createdAt: input.now,
             browserBindingHash: input.browserBindingHash ?? null,
+            requiresPassword: input.requiresPassword,
           },
         });
         if (recipientAllowed) {

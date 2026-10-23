@@ -107,6 +107,11 @@ import {
 import { PostgresRefreshSessionRepository } from './web-sessions/infrastructure/postgres-refresh-session.repository';
 import { PostgresWebSessionRepository } from './web-sessions/infrastructure/postgres-web-session.repository';
 
+/** Whether a new verification token needs the registration password (ADR-0123). */
+const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
+  'EMAIL_VERIFICATION_REQUIRES_PASSWORD',
+);
+
 @Module({
   imports: [
     RuntimeConfigurationModule,
@@ -336,6 +341,12 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
       useExisting: USER_ACCESS_TOKEN_CRYPTO,
     },
     {
+      provide: EMAIL_VERIFICATION_REQUIRES_PASSWORD,
+      inject: [appConfig.KEY],
+      useFactory: (configuration: ConfigType<typeof appConfig>): boolean =>
+        configuration.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD,
+    },
+    {
       provide: LOCAL_AUTH_SERVICE,
       useFactory: (
         ...ports: ConstructorParameters<typeof LocalAuthService>
@@ -355,6 +366,7 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
         AUTH_CLOCK,
         EMAIL_DELIVERY_ID,
         AUTH_MFA_SERVICE,
+        EMAIL_VERIFICATION_REQUIRES_PASSWORD,
       ],
     },
     UserAccessJwtGuard,

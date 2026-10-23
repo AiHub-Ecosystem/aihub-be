@@ -52,7 +52,7 @@ class FakeHasher implements PasswordHasherPort {
     return `argon2:${password}`;
   }
 
-  async verify(password: string): Promise<boolean> {
+  async verify(password: string, _encodedHash?: string): Promise<boolean> {
     this.verified.push(password);
     return this.result;
   }
@@ -208,7 +208,9 @@ function sessionOf(outcome: Awaited<ReturnType<LocalAuthService['login']>>) {
   return outcome.session;
 }
 
-function service() {
+function service(
+  options: { readonly requireVerificationPassword?: boolean } = {},
+) {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
   const verificationTokens = new InMemoryVerificationTokenAdapter(state);
@@ -237,6 +239,7 @@ function service() {
     clock,
     prefixedIdGenerator('edr_'),
     mfa,
+    options.requireVerificationPassword ?? false,
   );
   return {
     local,
@@ -633,6 +636,159 @@ describe('LocalAuthService', () => {
       local.verify('bad-token', '203.0.113.7'),
     ).rejects.toMatchObject({
       code: 'AUTH_VERIFICATION_TOKEN_INVALID',
+    });
+  });
+
+  describe('verification password (ADR-0123)', () => {
+    const registration = {
+      email: EMAIL,
+      username: 'person_01',
+      password: 'correct horse battery',
+    };
+
+    async function registered(requireVerificationPassword: boolean) {
+      const context = service({ requireVerificationPassword });
+      // The shared fake accepts any password; these tests need it to compare.
+      context.hasher.verify = async (password, encodedHash) =>
+        encodedHash === `argon2:${password}`;
+      await context.local.register(registration, '203.0.113.7');
+      return { ...context, rawToken: issuedToken(context.tokenIssuer.issued) };
+    }
+
+    function accountStatus(context: { state: InMemoryAuthState }) {
+      return [...context.state.accounts.values()][0]?.status;
+    }
+
+    it('marks the token of a registration made while the setting is on', async () => {
+      const { state } = await registered(true);
+
+      expect(
+        [...state.verificationTokens.values()].map((t) => t.requiresPassword),
+      ).toEqual([true]);
+    });
+
+    it('marks no token while the setting is off', async () => {
+      const { state } = await registered(false);
+
+      expect(
+        [...state.verificationTokens.values()].map((t) => t.requiresPassword),
+      ).toEqual([false]);
+    });
+
+    it('refuses a token that needs the password when none is sent, and verifies with it', async () => {
+      const context = await registered(true);
+
+      await expect(
+        context.local.verify(context.rawToken, '203.0.113.7'),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+      expect(accountStatus(context)).toBe('pending_verification');
+
+      await expect(
+        context.local.verify(
+          context.rawToken,
+          '203.0.113.7',
+          undefined,
+          registration.password,
+        ),
+      ).resolves.toBeUndefined();
+      expect(accountStatus(context)).toBe('active');
+    });
+
+    it('counts wrong passwords and spends the token on the fifth', async () => {
+      const context = await registered(true);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await expect(
+          context.local.verify(
+            context.rawToken,
+            '203.0.113.7',
+            undefined,
+            'a wrong password',
+          ),
+        ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+      }
+
+      await expect(
+        context.local.verify(
+          context.rawToken,
+          '203.0.113.7',
+          undefined,
+          registration.password,
+        ),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_TOKEN_INVALID' });
+      expect(accountStatus(context)).toBe('pending_verification');
+    });
+
+    it('verifies a token that does not need the password with or without one, but refuses a wrong one', async () => {
+      const context = await registered(false);
+
+      await expect(
+        context.local.verify(
+          context.rawToken,
+          '203.0.113.7',
+          undefined,
+          'a wrong password',
+        ),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+      await expect(
+        context.local.verify(context.rawToken, '203.0.113.7'),
+      ).resolves.toBeUndefined();
+      expect(accountStatus(context)).toBe('active');
+    });
+
+    it('issues a resent token that needs the password while the setting is on', async () => {
+      const context = await registered(true);
+
+      await context.local.resend(EMAIL, '203.0.113.7');
+
+      expect(
+        [...context.state.verificationTokens.values()].map((t) => [
+          t.consumedReason,
+          t.requiresPassword,
+        ]),
+      ).toEqual([
+        ['superseded', true],
+        [undefined, true],
+      ]);
+    });
+
+    it('needs the password of the latest registration after a pending email registers again', async () => {
+      const context = await registered(true);
+      const firstToken = context.rawToken;
+      await context.local.register(
+        {
+          ...registration,
+          username: 'person_02',
+          password: 'second password!',
+        },
+        '203.0.113.7',
+      );
+      const secondToken = issuedToken(context.tokenIssuer.issued, 1);
+
+      await expect(
+        context.local.verify(
+          firstToken,
+          '203.0.113.7',
+          undefined,
+          registration.password,
+        ),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_TOKEN_INVALID' });
+      await expect(
+        context.local.verify(
+          secondToken,
+          '203.0.113.7',
+          undefined,
+          registration.password,
+        ),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+      await expect(
+        context.local.verify(
+          secondToken,
+          '203.0.113.7',
+          undefined,
+          'second password!',
+        ),
+      ).resolves.toBeUndefined();
     });
   });
 

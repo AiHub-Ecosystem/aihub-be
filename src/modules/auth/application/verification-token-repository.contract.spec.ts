@@ -11,6 +11,7 @@ const EXPIRED_AT = new Date('2026-09-22T00:00:00.000Z');
 const EMAIL = 'verify@example.com';
 const BINDING = 'a'.repeat(64);
 const USER_ID = 'usr_1';
+const PASSWORD_HASH = 'hash';
 
 let state = createInMemoryAuthState();
 let repo: InMemoryVerificationTokenAdapter;
@@ -22,6 +23,7 @@ verificationTokenRepositoryContract({
   now: NOW,
   expiresAt: EXPIRES_AT,
   expiredAt: EXPIRED_AT,
+  passwordHash: PASSWORD_HASH,
   createRepo: () => {
     repo = new InMemoryVerificationTokenAdapter(state);
     return repo;
@@ -33,7 +35,7 @@ verificationTokenRepositoryContract({
     seedAccountHelper(state, {
       userId: USER_ID,
       email: EMAIL,
-      passwordHash: 'hash',
+      passwordHash: PASSWORD_HASH,
       status: status as any,
     });
   },
@@ -46,8 +48,14 @@ verificationTokenRepositoryContract({
       consumedAt: options.consumedAt,
       consumedReason: options.consumedReason,
       signedInAt: options.signedInAt,
+      requiresPassword: options.requiresPassword ?? false,
+      passwordFailures: 0,
     });
   },
+  readToken: async (hash: string) => ({
+    consumedReason: state.verificationTokens.get(hash)?.consumedReason,
+    passwordFailures: state.verificationTokens.get(hash)?.passwordFailures ?? 0,
+  }),
   setAccountStatus: async (_userId: string, status: string) => {
     const account = state.accounts.get(USER_ID);
     if (account) (account as any).status = status;

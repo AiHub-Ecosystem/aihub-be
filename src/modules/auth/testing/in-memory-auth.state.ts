@@ -16,8 +16,10 @@ export interface InMemoryVerificationToken {
   readonly expiresAt: Date;
   readonly browserBindingHash: string | undefined;
   consumedAt: Date | undefined;
-  consumedReason: 'verified' | 'superseded' | undefined;
+  consumedReason: 'verified' | 'superseded' | 'password_attempts' | undefined;
   signedInAt: Date | undefined;
+  requiresPassword?: boolean;
+  passwordFailures?: number;
 }
 
 export interface InMemoryPasswordResetToken {

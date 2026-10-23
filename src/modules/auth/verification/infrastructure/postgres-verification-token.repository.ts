@@ -22,6 +22,7 @@ import type {
   ConsumeVerificationTokenInput,
   ResendVerificationTarget,
   RotateVerificationTokenInput,
+  VerificationCredential,
   VerificationOutcome,
   VerificationTokenRepositoryPort,
 } from '@/modules/auth/verification/application/verification-token-repository.port';
@@ -30,6 +31,7 @@ import { insertWebSession } from '@/modules/auth/web-sessions/infrastructure/web
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
+const PASSWORD_REQUIRED: VerificationOutcome = { kind: 'password_required' };
 
 /**
  * One Verification Token: rotation on resend, and consumption, whose outcome
@@ -92,6 +94,7 @@ export class PostgresVerificationTokenRepository
             expiresAt: input.tokenExpiresAt,
             createdAt: input.now,
             browserBindingHash: input.browserBindingHash ?? null,
+            requiresPassword: input.requiresPassword,
           },
         });
         await insertEmailDelivery(
@@ -140,7 +143,7 @@ export class PostgresVerificationTokenRepository
         transaction,
         `
           SELECT id, expires_at, consumed_at, consumed_reason,
-                 browser_binding_hash, signed_in_at
+                 browser_binding_hash, signed_in_at, requires_password
           FROM email_verification_tokens
           WHERE user_account_id = $1 AND token_hash = $2
           FOR UPDATE
@@ -158,7 +161,8 @@ export class PostgresVerificationTokenRepository
             Number.isNaN(token.consumed_at.getTime()))) ||
         (token.consumed_reason !== null &&
           token.consumed_reason !== 'verified' &&
-          token.consumed_reason !== 'superseded') ||
+          token.consumed_reason !== 'superseded' &&
+          token.consumed_reason !== 'password_attempts') ||
         (token.browser_binding_hash !== null &&
           typeof token.browser_binding_hash !== 'string') ||
         (token.signed_in_at !== null &&
@@ -244,6 +248,17 @@ export class PostgresVerificationTokenRepository
         return INVALID;
       }
 
+      if (
+        token.requires_password === true &&
+        !(await this.holdsVerifiedPassword(
+          transaction,
+          accountId,
+          input.verifiedPasswordHash,
+        ))
+      ) {
+        return PASSWORD_REQUIRED;
+      }
+
       const consumed = await transaction.emailVerificationToken.updateMany({
         where: { id: tokenId, consumedAt: null },
         data: { consumedAt: input.now, consumedReason: 'verified' },
@@ -258,6 +273,78 @@ export class PostgresVerificationTokenRepository
       });
       return activated.count > 0 ? signInIfBound() : INVALID;
     });
+  }
+
+  async readVerificationCredential(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<VerificationCredential | undefined> {
+    const rows = await authQueryRows(
+      this.client,
+      `
+        SELECT token.requires_password, identity.password_hash
+        FROM email_verification_tokens token
+        JOIN user_accounts account ON account.id = token.user_account_id
+        JOIN auth_identities identity
+          ON identity.user_account_id = account.id AND identity.provider = 'password'
+        WHERE token.token_hash = $1
+          AND token.consumed_at IS NULL
+          AND token.expires_at > $2
+          AND account.status = 'pending_verification'
+      `,
+      [input.tokenHash, input.now],
+    );
+    const row = rows[0];
+    if (
+      row === undefined ||
+      typeof row.requires_password !== 'boolean' ||
+      typeof row.password_hash !== 'string'
+    ) {
+      return undefined;
+    }
+    return {
+      requiresPassword: row.requires_password,
+      passwordHash: row.password_hash,
+    };
+  }
+
+  async recordWrongVerificationPassword(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+    readonly limit: number;
+  }): Promise<void> {
+    // One statement, so concurrent wrong passwords each count once and exactly
+    // one of them spends the token.
+    await authQueryRows(
+      this.client,
+      `
+        UPDATE email_verification_tokens
+        SET password_failures = password_failures + 1,
+            consumed_at = CASE WHEN password_failures + 1 >= $3 THEN $2::timestamptz END,
+            consumed_reason = CASE WHEN password_failures + 1 >= $3 THEN 'password_attempts' END
+        WHERE token_hash = $1 AND consumed_at IS NULL
+        RETURNING id
+      `,
+      [input.tokenHash, input.now, input.limit],
+    );
+  }
+
+  /** The stored hash, read under the account lock, is the one the caller verified. */
+  private async holdsVerifiedPassword(
+    transaction: AuthTransactionClient,
+    accountId: string,
+    verifiedPasswordHash: string | undefined,
+  ): Promise<boolean> {
+    if (verifiedPasswordHash === undefined) return false;
+    const rows = await authQueryRows(
+      transaction,
+      `
+        SELECT password_hash FROM auth_identities
+        WHERE user_account_id = $1 AND provider = 'password'
+      `,
+      [accountId],
+    );
+    return rows[0]?.password_hash === verifiedPasswordHash;
   }
 
   /**

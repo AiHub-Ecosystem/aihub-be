@@ -28,6 +28,8 @@ export interface WebSessionServicePort {
   createWebSessionFromVerification(input: {
     readonly token: string;
     readonly browserBinding: string | undefined;
+    /** The registration password, for a token that needs it (ADR-0123). */
+    readonly password?: string | undefined;
   }): Promise<CreatedWebSession | undefined>;
   /**
    * Trade a Web Session for a User Access JWT. `token` is `undefined` when the

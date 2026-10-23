@@ -121,6 +121,7 @@ export class WebSessionController {
     const created = await this.service.createWebSessionFromVerification({
       token: input.token,
       browserBinding: input.browser_binding,
+      password: input.password,
     });
 
     // A binding that does not match still verified the email. The BFF signs the

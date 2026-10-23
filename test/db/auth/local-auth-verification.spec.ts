@@ -176,6 +176,7 @@ describe('local email verification against PostgreSQL', () => {
         tokenId: `evt_${ulid()}`,
         tokenHash: replacementHash,
         tokenExpiresAt: EXPIRES_AT,
+        requiresPassword: false,
         now: NOW,
       }),
     ).resolves.toEqual({ email: EMAIL });
@@ -313,6 +314,7 @@ describe('local email verification against PostgreSQL', () => {
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
         tokenExpiresAt: EXPIRES_AT,
+        requiresPassword: false,
         now: NOW,
       });
       await waitForBlockedBy(pool, verificationPid);
@@ -354,6 +356,7 @@ describe('local email verification against PostgreSQL', () => {
         tokenId: `evt_${ulid()}`,
         tokenHash: replacementHash,
         tokenExpiresAt: EXPIRES_AT,
+        requiresPassword: false,
         now: NOW,
       });
       const resendPid = await waitForBlockedBy(pool, holderPid);
@@ -395,6 +398,7 @@ describe('local email verification against PostgreSQL', () => {
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
         tokenExpiresAt: EXPIRES_AT,
+        requiresPassword: false,
         browserBindingHash: registerBinding,
         now: NOW,
       });
@@ -404,6 +408,7 @@ describe('local email verification against PostgreSQL', () => {
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
         tokenExpiresAt: EXPIRES_AT,
+        requiresPassword: false,
         browserBindingHash: resendBinding,
         now: new Date(NOW.getTime() + 1_000),
       });
@@ -600,6 +605,7 @@ describe('local email verification against PostgreSQL', () => {
         tokenId: `evt_${ulid()}`,
         tokenHash: tokenHash(),
         tokenExpiresAt: EXPIRES_AT,
+        requiresPassword: false,
         now: new Date(NOW.getTime() + 1_000),
       });
       await expect(
@@ -679,6 +685,7 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
       tokenId: `evt_${ulid()}`,
       tokenHash: tokenHash(),
       tokenExpiresAt: EXPIRES_AT,
+      requiresPassword: false,
       browserBindingHash: tokenHash(),
       now: NOW,
     });

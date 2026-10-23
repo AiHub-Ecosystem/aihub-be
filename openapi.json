@@ -69,7 +69,7 @@
     },
     "responses": {
       "Error400": {
-        "description": "INVALID_REQUEST | IDENTITY_JWKS_URL_UNSAFE | IDENTITY_JWKS_INVALID | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID | ORGANIZATION_INVITE_TOKEN_INVALID",
+        "description": "INVALID_REQUEST | IDENTITY_JWKS_URL_UNSAFE | IDENTITY_JWKS_INVALID | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_VERIFICATION_PASSWORD_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID | ORGANIZATION_INVITE_TOKEN_INVALID",
         "content": {
           "application/json": {
             "schema": {
@@ -98,6 +98,10 @@
                         },
                         {
                           "const": "AUTH_VERIFICATION_TOKEN_INVALID",
+                          "type": "string"
+                        },
+                        {
+                          "const": "AUTH_VERIFICATION_PASSWORD_INVALID",
                           "type": "string"
                         },
                         {
@@ -9038,6 +9042,12 @@
                     "pattern": "^[A-Za-z0-9_-]{43}$",
                     "description": "Signup Browser Binding: 32 random bytes, base64url. Optional; binds the issued verification token to the requesting browser.",
                     "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "The password chosen at registration. Required when the verification token needs it; a wrong password answers AUTH_VERIFICATION_PASSWORD_INVALID.",
+                    "type": "string"
                   }
                 }
               }
@@ -9107,7 +9117,64 @@
             "description": "Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds."
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "description": "Malformed request, invalid verification token, or (ADR-0123) a registration password that is missing for a token that needs it or does not match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "anyOf": [
+                            {
+                              "const": "INVALID_REQUEST",
+                              "type": "string"
+                            },
+                            {
+                              "const": "AUTH_VERIFICATION_TOKEN_INVALID",
+                              "type": "string"
+                            },
+                            {
+                              "const": "AUTH_VERIFICATION_PASSWORD_INVALID",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "retry_after_ms": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/AuthRateLimited"
@@ -9876,6 +9943,12 @@
                     "pattern": "^[A-Za-z0-9_-]{43}$",
                     "description": "Signup Browser Binding: 32 random bytes, base64url. Optional; binds the issued verification token to the requesting browser.",
                     "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "The password chosen at registration. Required when the verification token needs it; a wrong password answers AUTH_VERIFICATION_PASSWORD_INVALID.",
+                    "type": "string"
                   }
                 }
               }
@@ -9963,6 +10036,10 @@
                             },
                             {
                               "const": "AUTH_VERIFICATION_TOKEN_INVALID",
+                              "type": "string"
+                            },
+                            {
+                              "const": "AUTH_VERIFICATION_PASSWORD_INVALID",
                               "type": "string"
                             }
                           ]

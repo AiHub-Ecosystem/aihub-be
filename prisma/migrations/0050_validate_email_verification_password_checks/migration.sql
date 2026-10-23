@@ -1,0 +1,5 @@
+ALTER TABLE email_verification_tokens
+  VALIDATE CONSTRAINT email_verification_password_failures_check;
+
+ALTER TABLE email_verification_tokens
+  VALIDATE CONSTRAINT email_verification_consumption_reason_v2_check;

@@ -327,6 +327,7 @@ export class LocalAuthController {
       input.token,
       requestIp(request),
       input.browser_binding,
+      input.password,
     );
     if (session === undefined) {
       reply.status(204);

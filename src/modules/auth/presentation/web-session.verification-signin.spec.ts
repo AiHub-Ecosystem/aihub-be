@@ -225,6 +225,82 @@ describe('web session HTTP boundary', () => {
     log.reset();
   });
 
+  describe('verification password (ADR-0123)', () => {
+    beforeEach(() => {
+      seedAccount(state, {
+        userId: USER_ID,
+        email: EMAIL,
+        passwordHash: '$argon2id$fake',
+        status: 'pending_verification',
+      });
+      state.verificationTokens.set(`hash:${VERIFICATION_TOKEN_VALUE}`, {
+        tokenId: 'evt_01J00000000000000000000000',
+        userId: USER_ID,
+        expiresAt: new Date(NOW.getTime() + 86_400_000),
+        browserBindingHash: `hash:${BINDING}`,
+        consumedAt: undefined,
+        consumedReason: undefined,
+        signedInAt: undefined,
+        requiresPassword: true,
+        passwordFailures: 0,
+      });
+    });
+
+    const post = (url: string, body: Record<string, unknown>) =>
+      app.inject({
+        method: 'POST',
+        url,
+        headers: {
+          'content-type': 'application/json',
+          'x-aihub-client-secret': CLIENT_SECRET,
+        },
+        payload: { token: VERIFICATION_TOKEN_VALUE, ...body },
+      });
+
+    describe.each([
+      ['verify-email', VERIFY_EMAIL_URL],
+      ['the Web Session verification route', VERIFICATION_URL],
+    ])('on %s', (_name, url) => {
+      it('refuses a token that needs the password when none is sent, and verifies nothing', async () => {
+        const response = await post(url, { browser_binding: BINDING });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe(
+          'AUTH_VERIFICATION_PASSWORD_INVALID',
+        );
+        expect(state.accounts.get(USER_ID)?.status).toBe(
+          'pending_verification',
+        );
+        expect(state.webSessions.size + state.refreshTokens.size).toBe(0);
+      });
+
+      it('refuses and counts a wrong password', async () => {
+        hasher.result = false;
+
+        const response = await post(url, { password: 'not it' });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe(
+          'AUTH_VERIFICATION_PASSWORD_INVALID',
+        );
+        expect(
+          state.verificationTokens.get(`hash:${VERIFICATION_TOKEN_VALUE}`)
+            ?.passwordFailures,
+        ).toBe(1);
+        expect(state.accounts.get(USER_ID)?.status).toBe(
+          'pending_verification',
+        );
+      });
+
+      it('verifies with the registration password', async () => {
+        const response = await post(url, { password: 'registered password' });
+
+        expect(response.statusCode).toBe(204);
+        expect(state.accounts.get(USER_ID)?.status).toBe('active');
+      });
+    });
+  });
+
   describe('Verification Sign-in', () => {
     beforeEach(() => {
       seedAccount(state, {

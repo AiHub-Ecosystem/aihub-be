@@ -942,9 +942,22 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(operation?.responses['201'])).toContain('no-store');
     const request = JSON.stringify(operation?.requestBody);
     expect(request).toContain('browser_binding');
-    // The email itself is a credential: the published request must not carry
-    // one, and the published response must not leak the raw token elsewhere.
-    expect(request).not.toContain('password');
+    // ADR-0123: the registration password is optional, and it is compared with
+    // the stored one, so the request publishes no password policy to re-state.
+    const requestBody = operation?.requestBody as {
+      content: {
+        'application/json': {
+          schema: { properties: Record<string, Record<string, unknown>> };
+        };
+      };
+    };
+    const properties =
+      requestBody.content['application/json'].schema.properties;
+    expect(properties.password).toBeDefined();
+    expect(properties.password).not.toHaveProperty('format');
+    expect(JSON.stringify(operation?.responses['400'])).toContain(
+      'AUTH_VERIFICATION_PASSWORD_INVALID',
+    );
   });
 
   it('documents the exchange as the same server-to-server group', () => {

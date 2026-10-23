@@ -5,6 +5,7 @@ import {
   BrowserBindingSchema,
   MfaRequiredResponseSchema,
   PasswordSchema,
+  VerificationPasswordSchema,
 } from '@/contracts/auth/local-auth';
 
 /**
@@ -50,6 +51,7 @@ export const CreateWebSessionFromVerificationRequestSchema = Type.Object(
         'The verification token AIHUB emailed. One token creates at most one session, whatever its kind.',
     }),
     browser_binding: Type.Optional(BrowserBindingSchema),
+    password: Type.Optional(VerificationPasswordSchema),
   },
   { additionalProperties: false },
 );

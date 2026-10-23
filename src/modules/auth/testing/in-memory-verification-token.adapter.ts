@@ -3,6 +3,7 @@ import type {
   ConsumeVerificationTokenInput,
   ResendVerificationTarget,
   RotateVerificationTokenInput,
+  VerificationCredential,
   VerificationOutcome,
   VerificationTokenRepositoryPort,
 } from '@/modules/auth/verification/application/verification-token-repository.port';
@@ -13,6 +14,7 @@ import type {
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
+const PASSWORD_REQUIRED: VerificationOutcome = { kind: 'password_required' };
 
 export class InMemoryVerificationTokenAdapter
   implements VerificationTokenRepositoryPort
@@ -49,11 +51,49 @@ export class InMemoryVerificationTokenAdapter
       consumedAt: undefined,
       consumedReason: undefined,
       signedInAt: undefined,
+      requiresPassword: input.requiresPassword,
+      passwordFailures: 0,
     });
     if (input.emailDelivery !== undefined) {
       this.state.emailDeliveryRequests.push(input.emailDelivery);
     }
     return { email: account.email };
+  }
+
+  async readVerificationCredential(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+  }): Promise<VerificationCredential | undefined> {
+    const token = this.state.verificationTokens.get(input.tokenHash);
+    const account =
+      token === undefined ? undefined : this.state.accounts.get(token.userId);
+    if (
+      token === undefined ||
+      account === undefined ||
+      account.status !== 'pending_verification' ||
+      token.consumedAt !== undefined ||
+      token.expiresAt.getTime() <= input.now.getTime()
+    ) {
+      return undefined;
+    }
+    return {
+      requiresPassword: token.requiresPassword ?? false,
+      passwordHash: account.passwordHash,
+    };
+  }
+
+  async recordWrongVerificationPassword(input: {
+    readonly tokenHash: string;
+    readonly now: Date;
+    readonly limit: number;
+  }): Promise<void> {
+    const token = this.state.verificationTokens.get(input.tokenHash);
+    if (token === undefined || token.consumedAt !== undefined) return;
+    token.passwordFailures = (token.passwordFailures ?? 0) + 1;
+    if (token.passwordFailures >= input.limit) {
+      token.consumedAt = input.now;
+      token.consumedReason = 'password_attempts';
+    }
   }
 
   async consumeVerificationToken(
@@ -83,6 +123,12 @@ export class InMemoryVerificationTokenAdapter
 
     if (token.consumedAt !== undefined || token.consumedReason !== undefined) {
       return INVALID;
+    }
+    if (
+      token.requiresPassword === true &&
+      input.verifiedPasswordHash !== account.passwordHash
+    ) {
+      return PASSWORD_REQUIRED;
     }
     token.consumedAt = input.now;
     token.consumedReason = 'verified';

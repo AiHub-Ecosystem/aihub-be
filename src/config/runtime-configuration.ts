@@ -81,6 +81,15 @@ const fields = {
     values: ['production', 'sandbox'],
     defaultValue: 'production',
   },
+  /**
+   * ADR-0123: verification tokens issued while this is true need the
+   * registration password to verify. Leave it false until the Customer Web
+   * sends the password, then turn it on.
+   */
+  AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD: {
+    kind: 'boolean',
+    defaultValue: false,
+  },
   AIHUB_USER_ACCESS_ISSUER: {
     kind: 'string',
     requiredIn: MODES,

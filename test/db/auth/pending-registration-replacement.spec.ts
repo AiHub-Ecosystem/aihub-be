@@ -48,6 +48,7 @@ function register(options: {
     tokenId: `evt_${ulid()}`,
     tokenHash: options.tokenHash,
     tokenExpiresAt: EXPIRES_AT,
+    requiresPassword: false,
     now: options.now,
   });
 }

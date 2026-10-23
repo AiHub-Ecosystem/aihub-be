@@ -33,6 +33,19 @@ export const PasswordSchema = Type.String({
  * Exported so a second route that forwards the binding composes this shape
  * rather than restating the pattern.
  */
+/**
+ * The password of the registration a verification token belongs to (ADR-0123).
+ * Required for a token issued while the deployment setting is on; a password
+ * sent for any other token must still match. Length only: the stored password
+ * already met the policy, and a mismatch is not an invalid request.
+ */
+export const VerificationPasswordSchema = Type.String({
+  minLength: 1,
+  maxLength: PASSWORD_RUNTIME_MAX_CODE_UNITS,
+  description:
+    'The password chosen at registration. Required when the verification token needs it; a wrong password answers AUTH_VERIFICATION_PASSWORD_INVALID.',
+});
+
 export const BrowserBindingSchema = Type.String({
   pattern: '^[A-Za-z0-9_-]{43}$',
   description:
@@ -55,6 +68,7 @@ export const VerifyEmailRequestSchema = Type.Object(
   {
     token: Type.String({ minLength: 1, maxLength: 512 }),
     browser_binding: Type.Optional(BrowserBindingSchema),
+    password: Type.Optional(VerificationPasswordSchema),
   },
   { additionalProperties: false },
 );

@@ -492,6 +492,19 @@ function localAuthPathItems(): Record<string, Record<string, unknown>> {
         'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
     },
     ...routeErrorResponsesOf('auth.verify_email'),
+    '400': {
+      description:
+        'Malformed request, invalid verification token, or (ADR-0123) a registration password that is missing for a token that needs it or does not match',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema([
+            'INVALID_REQUEST',
+            'AUTH_VERIFICATION_TOKEN_INVALID',
+            'AUTH_VERIFICATION_PASSWORD_INVALID',
+          ]),
+        },
+      },
+    },
   };
   const resendResponses = {
     '202': { description: 'Verification resend accepted' },
@@ -831,9 +844,10 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
           required: true,
           content: {
             'application/json': {
-              // No `publishedLocalAuthRequestSchema`: this request carries no
-              // password, so there is no policy to re-state for a generated
-              // client.
+              // No `publishedLocalAuthRequestSchema`: the optional password
+              // (ADR-0123) is checked against the stored registration, not
+              // against the password policy, so there is no policy to re-state
+              // for a generated client.
               schema: routeSchemaOf(
                 'auth.web_sessions.verification',
                 'request',
@@ -851,6 +865,7 @@ function webSessionPathItems(): Record<string, Record<string, unknown>> {
                 schema: errorResponseSchema([
                   'INVALID_REQUEST',
                   'AUTH_VERIFICATION_TOKEN_INVALID',
+                  'AUTH_VERIFICATION_PASSWORD_INVALID',
                 ]),
               },
             },

@@ -12,7 +12,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | EmailDeliveryRequest        | auth        | 16      |
 | AuthEmailRecipientRateLimit | auth        | 5       |
 | EmailDailySendBudget        | auth        | 5       |
-| EmailVerificationToken      | auth        | 10      |
+| EmailVerificationToken      | auth        | 12      |
 | IdempotencyRecord           | idempotency | 12      |
 | OrganizationAuditEvent      | identity    | 13      |
 | OrganizationIdentityConfig  | identity    | 11      |
@@ -152,6 +152,8 @@ Owner: `auth`
 | consumedReason     | String?     | @map("consumed_reason")                                                                                        |
 | browserBindingHash | String?     | @map("browser_binding_hash")                                                                                   |
 | signedInAt         | DateTime?   | @map("signed_in_at") @db.Timestamptz(6)                                                                        |
+| requiresPassword   | Boolean     | @default(false) @map("requires_password")                                                                      |
+| passwordFailures   | Int         | @default(0) @map("password_failures")                                                                          |
 | userAccount        | UserAccount | @relation(fields: [userAccountId], references: [id], onUpdate: NoAction)                                       |
 
 ## IdempotencyRecord
