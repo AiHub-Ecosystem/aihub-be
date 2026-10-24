@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
@@ -43,6 +44,7 @@ export class ApiKeyUserIdentityGuard implements CanActivate {
     const header = request.headers['x-user-identity'];
 
     if (header === undefined) {
+      recordRejected('auth');
       throw userIdentityRequired();
     }
     if (typeof header !== 'string' || header.trim().length === 0) {
@@ -54,6 +56,7 @@ export class ApiKeyUserIdentityGuard implements CanActivate {
       organizationId: authenticated.organizationId,
     });
     if (identity.organizationId !== authenticated.organizationId) {
+      recordRejected('auth');
       throw invalidUserIdentity();
     }
 

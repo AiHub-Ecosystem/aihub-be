@@ -8,6 +8,7 @@ import {
 import { type Observable, defer, from, lastValueFrom } from 'rxjs';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
@@ -55,6 +56,7 @@ export class ConcurrencyPermitInterceptor implements NestInterceptor {
     });
 
     if (!decision.allowed) {
+      recordRejected('concurrency');
       throw concurrencyLimited(decision.retryAfterMs);
     }
 

@@ -1,3 +1,5 @@
+import type { ApiKeyCacheInvalidationSeam } from '@/common/observability/redis-unavailable-metric';
+
 export interface ApiKeyCredential {
   readonly value: string;
   readonly environment: string;
@@ -52,7 +54,10 @@ export interface ApiKeyCachePort {
   get(hashHex: string): Promise<ApiKeyRecord | null | undefined>;
   set(hashHex: string, record: ApiKeyRecord): Promise<void>;
   setMiss(hashHex: string): Promise<void>;
-  delete(hashHex: string): Promise<void>;
+  delete(
+    hashHex: string,
+    invalidationSeam?: ApiKeyCacheInvalidationSeam,
+  ): Promise<void>;
 }
 
 export const API_KEY_CACHE = Symbol('API_KEY_CACHE');

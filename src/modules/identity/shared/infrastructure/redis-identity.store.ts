@@ -2,7 +2,10 @@ import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import {
+  type ApiKeyCacheInvalidationSeam,
+  recordRedisUnavailable,
+} from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   ApiKeyCachePort,
@@ -257,7 +260,9 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     });
     await this.client
       .set(apiKeyCacheKey(hashHex), serialized, 'EX', ttlSeconds)
-      .catch(() => undefined);
+      .catch(() => {
+        recordRedisUnavailable('api_key_cache');
+      });
   }
 
   async setMiss(hashHex: string): Promise<void> {
@@ -267,16 +272,24 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
     await this.client
       .set(apiKeyCacheMissKey(hashHex), '1', 'EX', ttlSeconds)
-      .catch(() => undefined);
+      .catch(() => {
+        recordRedisUnavailable('api_key_cache');
+      });
   }
 
-  async delete(hashHex: string): Promise<void> {
+  async delete(
+    hashHex: string,
+    invalidationSeam?: ApiKeyCacheInvalidationSeam,
+  ): Promise<void> {
     this.localApiKeys.delete(hashHex);
     if (this.client === undefined) return;
 
     await this.client
       .del(apiKeyCacheKey(hashHex), apiKeyCacheMissKey(hashHex))
-      .catch(() => 0);
+      .catch(() => {
+        recordRedisUnavailable(invalidationSeam ?? 'api_key_cache');
+        return 0;
+      });
   }
 
   async getJwks(

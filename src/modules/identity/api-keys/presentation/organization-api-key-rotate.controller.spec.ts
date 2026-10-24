@@ -223,7 +223,10 @@ describe('Organization API key rotation HTTP flow', () => {
   it('purges the identity cache entry of the retired key', async () => {
     await rotate();
 
-    expect(cache.delete.mock.calls).toContainEqual([RETIRED_HASH]);
+    expect(cache.delete.mock.calls).toContainEqual([
+      RETIRED_HASH,
+      'api_key_cache_invalidation_rotate',
+    ]);
   });
 
   it('still returns the replacement when the cache purge fails', async () => {

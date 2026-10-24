@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { getMetrics } from '@/common/observability/metrics';
 import {
   AUTH_FAILURE_LIMIT,
   ApiKeyAuthenticator,
@@ -12,6 +13,15 @@ import type {
 } from './api-key-authenticator.port';
 
 const VALID_KEY = `aihub_sk_${'A'.repeat(43)}`;
+
+async function rejectedAuthCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 const activeRecord: ApiKeyRecord = {
   organizationId: 'org_acme',
@@ -112,6 +122,7 @@ describe('ApiKeyAuthenticator', () => {
   });
 
   it('hashes, looks up, validates, and returns effective organization identity', async () => {
+    const before = await rejectedAuthCount();
     const { authenticator, repository, cache } = createAuthenticator();
 
     await expect(
@@ -134,9 +145,11 @@ describe('ApiKeyAuthenticator', () => {
 
     expect(repository.calls).toBe(1);
     expect(cache.setCalls).toBe(1);
+    expect(await rejectedAuthCount()).toBe(before);
   });
 
   it('rejects a missing or malformed key without touching the database', async () => {
+    const before = await rejectedAuthCount();
     const { authenticator, repository, failures } = createAuthenticator();
 
     const error = await authenticator
@@ -151,9 +164,11 @@ describe('ApiKeyAuthenticator', () => {
     expect((error as AppError).code).toBe('UNAUTHORIZED');
     expect(repository.calls).toBe(0);
     expect(failures.failures).toBe(1);
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('rejects a key outside its environment without counting it as brute-force auth failure', async () => {
+    const before = await rejectedAuthCount();
     const { authenticator, failures } = createAuthenticator({
       ...activeRecord,
       allowedEnvironments: ['production'],
@@ -170,6 +185,7 @@ describe('ApiKeyAuthenticator', () => {
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe('ENVIRONMENT_NOT_ALLOWED');
     expect(failures.failures).toBe(0);
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it.each([
@@ -195,6 +211,7 @@ describe('ApiKeyAuthenticator', () => {
   );
 
   it('rejects revoked and expired keys as unauthorized credentials', async () => {
+    const before = await rejectedAuthCount();
     const revoked = createAuthenticator({ ...activeRecord, status: 'revoked' });
     await expect(
       revoked.authenticator.authenticate({
@@ -221,9 +238,11 @@ describe('ApiKeyAuthenticator', () => {
         clientIp: '203.0.113.10',
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(await rejectedAuthCount()).toBe(before + 2);
   });
 
   it('denies suspended organizations without counting them as invalid keys', async () => {
+    const before = await rejectedAuthCount();
     const { authenticator, failures } = createAuthenticator({
       ...activeRecord,
       organizationStatus: 'suspended',
@@ -237,6 +256,7 @@ describe('ApiKeyAuthenticator', () => {
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(failures.failures).toBe(0);
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('caches a negative lookup and rejects it without repeated Postgres queries', async () => {

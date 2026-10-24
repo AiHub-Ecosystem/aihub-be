@@ -1,3 +1,4 @@
+import { getMetrics } from '@/common/observability/metrics';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusInput,
@@ -25,6 +26,15 @@ class OrganizationStatusFake implements OrganizationStatusPort {
   async close(): Promise<void> {
     this.closed = true;
   }
+}
+
+async function redisUnavailableCount(seam: string): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith(`aihub_redis_unavailable_total{seam="${seam}"} `),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
 }
 
 function run(
@@ -101,6 +111,9 @@ describe('runOrganizationStatusCommand', () => {
   });
 
   it('keeps a committed act when the purge fails and says what that leaves open', async () => {
+    const before = await redisUnavailableCount(
+      'api_key_cache_invalidation_suspension',
+    );
     const { outcome, lines } = run(
       { kind: 'changed', keyHashes: ['aa'] },
       {
@@ -115,6 +128,9 @@ describe('runOrganizationStatusCommand', () => {
     expect(lines.join('\n')).toContain(
       'identity cache was not purged; its API keys may keep their previous status for up to 60 seconds',
     );
+    expect(
+      await redisUnavailableCount('api_key_cache_invalidation_suspension'),
+    ).toBe(before + 1);
   });
 
   it('reports an unset REDIS_URL instead of purging', async () => {

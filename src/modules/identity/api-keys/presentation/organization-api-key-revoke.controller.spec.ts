@@ -221,7 +221,10 @@ describe('Organization API key revocation HTTP flow', () => {
   it('purges the identity cache entry of the withdrawn key', async () => {
     await revoke();
 
-    expect(cache.delete.mock.calls).toContainEqual([KEY_HASH]);
+    expect(cache.delete.mock.calls).toContainEqual([
+      KEY_HASH,
+      'api_key_cache_invalidation_revoke',
+    ]);
   });
 
   it('purges again on a repeated withdrawal, so a retry closes a window a failed purge left open', async () => {
@@ -229,7 +232,10 @@ describe('Organization API key revocation HTTP flow', () => {
     await revoke();
 
     expect(cache.delete.mock.calls).toHaveLength(2);
-    expect(cache.delete.mock.calls.at(-1)).toEqual([KEY_HASH]);
+    expect(cache.delete.mock.calls.at(-1)).toEqual([
+      KEY_HASH,
+      'api_key_cache_invalidation_revoke',
+    ]);
   });
 
   it('succeeds on a repeated withdrawal rather than reporting a conflict', async () => {

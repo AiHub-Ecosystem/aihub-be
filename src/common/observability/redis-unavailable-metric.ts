@@ -10,10 +10,16 @@ export type RedisProtectionSeam =
   | 'quota'
   | 'retry_budget'
   | 'api_key_cache'
+  | ApiKeyCacheInvalidationSeam
   | 'auth_failure_counter'
   | 'auth_rate_limit'
   | 'jwks_cache'
   | 'email_send_rate';
+
+export type ApiKeyCacheInvalidationSeam =
+  | 'api_key_cache_invalidation_revoke'
+  | 'api_key_cache_invalidation_rotate'
+  | 'api_key_cache_invalidation_suspension';
 
 const redisUnavailableTotal = new Counter({
   name: 'aihub_redis_unavailable_total',

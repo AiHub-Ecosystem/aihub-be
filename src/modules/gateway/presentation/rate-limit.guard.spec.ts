@@ -2,6 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { getMetrics } from '@/common/observability/metrics';
 import type { GradedAdmissionPort } from '@/modules/gateway/application/graded-admission.port';
 import type { RateLimiterPort } from '@/modules/gateway/application/rate-limiter.port';
 import { RateLimitGuard } from './rate-limit.guard';
@@ -33,6 +34,15 @@ function contextFor(
 }
 
 const standing = { limit: 600, remaining: 41, resetInMs: 12_001 };
+
+async function rejectedCount(reason: string): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith(`aihub_rejected_total{reason="${reason}"} `),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 function requestFor(
   operation: keyof typeof OPERATION_CATALOG,
@@ -121,6 +131,7 @@ describe('RateLimitGuard', () => {
   });
 
   it('reports the standing on a 429 too, next to the retry hint', async () => {
+    const before = await rejectedCount('rate_limit');
     const headers = new Map<string, string>();
     const guard = new RateLimitGuard({
       consume: async () => ({
@@ -138,6 +149,25 @@ describe('RateLimitGuard', () => {
       guard.canActivate(contextFor(request, headers)),
     ).rejects.toMatchObject({ code: 'RATE_LIMITED', retryAfterMs: 12_500 });
     expect(headers.get('RateLimit')).toBe('"per-key";r=0;t=13');
+    expect(await rejectedCount('rate_limit')).toBe(before + 1);
+  });
+
+  it('counts a graded-admission rate-limit refusal once', async () => {
+    const before = await rejectedCount('rate_limit');
+    const guard = new RateLimitGuard(
+      { consume: async () => ({ allowed: true }) },
+      {
+        consume: async () => ({
+          stage: 'rate_limit',
+          retryAfterMs: 1_000,
+        }),
+      },
+    );
+
+    await expect(
+      guard.canActivate(contextFor(requestFor('writing.task1.grade'))),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    expect(await rejectedCount('rate_limit')).toBe(before + 1);
   });
 
   it('fails closed when graded admission is not wired', async () => {

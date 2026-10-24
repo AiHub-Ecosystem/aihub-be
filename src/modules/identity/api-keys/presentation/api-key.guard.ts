@@ -13,6 +13,7 @@ import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ClientIpSource } from '@/common/http/client-ip-source';
 import { clientSecretFrom } from '@/common/http/client-secret-header';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import { appConfig } from '@/config/runtime-configuration';
 import {
@@ -61,6 +62,7 @@ function visitorIpForBffRequest(
     throw configurationError('bff-client-secret-not-configured');
   }
   if (!constantTimeEquals(presented, expected)) {
+    recordRejected('auth');
     throw new AppError({
       code: 'UNAUTHORIZED',
       message: 'Client secret is missing or invalid',

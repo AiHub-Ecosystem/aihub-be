@@ -1,3 +1,4 @@
+import { getMetrics } from '@/common/observability/metrics';
 import type {
   CreateOperatorApiKeyInput,
   CreateOperatorApiKeyResult,
@@ -48,6 +49,15 @@ class OperatorApiKeyFake implements OperatorApiKeyPort {
 }
 
 const NOW = new Date('2026-10-02T10:00:00.000Z');
+
+async function redisUnavailableCount(seam: string): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith(`aihub_redis_unavailable_total{seam="${seam}"} `),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 function create(
   result?: CreateOperatorApiKeyResult,
@@ -174,6 +184,9 @@ describe('runRevokeOperatorApiKeyCommand', () => {
   });
 
   it('keeps the revocation and says what is left open when the purge fails', async () => {
+    const before = await redisUnavailableCount(
+      'api_key_cache_invalidation_revoke',
+    );
     const { outcome, lines } = revoke(undefined, {
       purge: async () => {
         throw new Error('redis down');
@@ -184,6 +197,9 @@ describe('runRevokeOperatorApiKeyCommand', () => {
     expect(lines).toEqual([
       'Revoked ak_01, but could not purge the identity cache; the key may still be accepted for up to 60 seconds.',
     ]);
+    expect(
+      await redisUnavailableCount('api_key_cache_invalidation_revoke'),
+    ).toBe(before + 1);
   });
 
   it('reports an unset REDIS_URL instead of purging', async () => {

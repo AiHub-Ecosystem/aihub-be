@@ -125,7 +125,9 @@ export class RotateOrganizationApiKey {
     // of a credential the caller now has to use, while the key it replaces is
     // already revoked. The resulting ceiling is the known operational risk
     // ADR-0027 accepted, not a grace window.
-    await this.cache.delete(result.retiredKeyHash).catch(() => undefined);
+    await this.cache
+      .delete(result.retiredKeyHash, 'api_key_cache_invalidation_rotate')
+      .catch(() => undefined);
 
     return {
       apiKey: generated.raw,

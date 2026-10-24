@@ -1,5 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 
+import { getMetrics } from '@/common/observability/metrics';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
@@ -31,6 +32,15 @@ const resolved: ResolvedUserIdentity = {
   scopes: [],
   mode: 'declared_id',
 };
+
+async function rejectedAuthCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 function request(headers: Record<string, unknown> = {}) {
   return {
@@ -101,9 +111,11 @@ describe('ApiKeyUserIdentityGuard', () => {
   });
 
   it('refuses a request with no X-User-Identity header', async () => {
+    const before = await rejectedAuthCount();
     await expect(
       guard().canActivate(context(request({ 'x-user-identity': undefined }))),
     ).rejects.toMatchObject({ code: 'USER_IDENTITY_REQUIRED' });
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('refuses an X-User-Identity that is not a usable string', async () => {
@@ -122,6 +134,7 @@ describe('ApiKeyUserIdentityGuard', () => {
   // assertion minted for another tenant would otherwise resolve successfully
   // and let one Organization record another tenant's End-User ID.
   it('refuses an identity that resolves to another Organization', async () => {
+    const before = await rejectedAuthCount();
     const value = request();
 
     await expect(
@@ -135,6 +148,7 @@ describe('ApiKeyUserIdentityGuard', () => {
       }).canActivate(context(value)),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     expect(value).not.toHaveProperty('aihubIdentity');
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('lets an authentication failure surface unchanged', async () => {
@@ -150,6 +164,7 @@ describe('ApiKeyUserIdentityGuard', () => {
   });
 
   it('lets an identity-provider outage surface as retryable', async () => {
+    const before = await rejectedAuthCount();
     await expect(
       guard({
         resolver: {
@@ -162,5 +177,6 @@ describe('ApiKeyUserIdentityGuard', () => {
         },
       }).canActivate(context(request())),
     ).rejects.toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+    expect(await rejectedAuthCount()).toBe(before);
   });
 });

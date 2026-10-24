@@ -76,7 +76,9 @@ export class RevokeOrganizationApiKey {
     // something: an earlier purge can have failed without telling anyone, and
     // running the withdrawal again is the only way an operator can close the
     // window it left open. Its failure must not fail work already committed.
-    await this.cache.delete(result.keyHash).catch(() => undefined);
+    await this.cache
+      .delete(result.keyHash, 'api_key_cache_invalidation_revoke')
+      .catch(() => undefined);
 
     const key = result.key;
     return {

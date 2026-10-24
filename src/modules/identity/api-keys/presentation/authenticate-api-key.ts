@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
@@ -12,6 +13,7 @@ import {
 } from '@/modules/identity/shared/presentation/request-environment';
 
 export function forbidden(): AppError {
+  recordRejected('auth');
   return new AppError({
     code: 'FORBIDDEN',
     message: 'API key is not authorized for this operation',

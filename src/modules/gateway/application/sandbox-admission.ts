@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { requireTimeLeft } from './dispatch-deadline';
 import { quotaExceededError } from './quota-period';
@@ -66,6 +67,7 @@ export class SandboxAdmission {
       throw error;
     }
     if (!admitted) {
+      recordRejected('quota');
       throw quotaExceededError(new Date(), organizationId);
     }
     return reservation;

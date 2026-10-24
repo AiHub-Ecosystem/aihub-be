@@ -2,6 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 
 import { AppError } from '@/common/errors/app-error';
+import { getMetrics } from '@/common/observability/metrics';
 import type { WebSessionClientSecretPort } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import type {
   ApiKeyAuthenticatorPort,
@@ -13,6 +14,15 @@ import { ApiKeyGuard } from './api-key.guard';
 // writing.task1.grade requires the `writing.grade` Scope.
 const OPERATION_ID = 'writing.task1.grade';
 const requiredScope = 'writing.grade';
+
+async function rejectedAuthCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 const baseKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',
@@ -128,6 +138,7 @@ describe('ApiKeyGuard scope check', () => {
   });
 
   it('rejects a forged BFF secret before API-key authentication', async () => {
+    const before = await rejectedAuthCount();
     const authenticate = jest.fn(async () => baseKey);
     const value = request({
       headers: {
@@ -144,6 +155,7 @@ describe('ApiKeyGuard scope check', () => {
       ),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(authenticate).not.toHaveBeenCalled();
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('logs the failing stage for internal errors without logging error contents', async () => {
@@ -213,11 +225,13 @@ describe('ApiKeyGuard scope check', () => {
   });
 
   it('refuses a key without the operation requiredScope', async () => {
+    const before = await rejectedAuthCount();
     await expect(
       guard({
         authenticate: async () => ({ ...baseKey, scopes: ['speaking.grade'] }),
         // `speaking.grade` does not cover `writing.task1.grade`.
       }).canActivate(context(request())),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 });

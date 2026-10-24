@@ -169,12 +169,12 @@ aihub_admission_duration_seconds{operation,identity_mode,retry_budget} histogram
 aihub_graded_completion_duration_seconds{operation,identity_mode,retry_budget} histogram
 aihub_downstream_duration_seconds{operation}       histogram
 aihub_tokens_total{operation}                       counter
-aihub_rejected_total{reason}                       rate_limit|quota|concurrency|auth
 aihub_argon2_queue_waits_total                      counter
 aihub_argon2_queue_refusals_total                   counter
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
+aihub_rejected_total{reason}                         counter
 aihub_metering_incomplete_total{operation}
-aihub_redis_unavailable_total
+aihub_redis_unavailable_total{seam}                   counter
 aihub_process_resident_memory_bytes
 aihub_process_heap_used_bytes
 aihub_event_loop_lag_seconds
@@ -187,6 +187,29 @@ aihub_downstream_pool_queued{origin}
 The Argon2 counters record process-wide queue waits and refusals without
 request or tenant labels. Refusals use their own counter; `aihub_rejected_total`
 remains owned by #200.
+
+`aihub_rejected_total` counts a request once at the admission decision that
+refuses it, not by re-deriving a reason from its response. Its fixed `reason`
+values are `rate_limit`, `quota`, `concurrency`, and `auth`. `auth` covers API
+key authentication and operation authorization, including organization
+suspension, environment or scope denial, and a rejected required Signed User
+Assertion. It does not count membership authorization on user-management
+routes, request validation, unmatched routes, downstream failures, or Redis
+unavailability. A rejected response may also increment `aihub_requests_total`
+once in that separate metric family as specified by #240.
+
+`aihub_redis_unavailable_total` increments once when a request-path protection
+or cache seam reports a failed Redis operation, and does not increment for a
+successful operation. Its fixed `seam` values are `graded_admission`,
+`concurrency`, `rate_limit`, `quota`, `retry_budget`, `api_key_cache`,
+`api_key_cache_invalidation_revoke`, `api_key_cache_invalidation_rotate`,
+`api_key_cache_invalidation_suspension`, `auth_failure_counter`,
+`auth_rate_limit`, `jwks_cache`, and `email_send_rate`. The three
+invalidation values distinguish best-effort API-key cache deletion after
+revocation, rotation, or suspension; other API-key cache command failures use
+`api_key_cache`. Recording a Redis failure does not change the customer-facing
+response. Neither metric carries organization, user, request, API-key, signed
+assertion, or essay-content labels.
 
 The operation label comes from the bounded operation catalog. `gateway_overhead`
 **requires no dedicated metric** — it is derived directly from total and

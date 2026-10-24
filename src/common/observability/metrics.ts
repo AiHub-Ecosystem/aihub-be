@@ -17,9 +17,8 @@ export type {
 } from './email-outbox-cancellation-metric';
 
 /**
- * Shared metric registry. The rejection counter (`aihub_rejected_total`)
- * belongs to #200; `aihub_redis_unavailable_total` lives in
- * `redis-unavailable-metric.ts`.
+ * Shared metric registry. Protection rejection and Redis failure counters live
+ * in `rejected-metric.ts` and `redis-unavailable-metric.ts`.
  */
 export const METRICS_ROUTE_PATH = '/metrics';
 

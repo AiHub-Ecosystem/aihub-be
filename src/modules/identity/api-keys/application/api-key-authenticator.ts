@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { recordIdentityCacheCoalescedWait } from '@/common/observability/metrics';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 import { hashApiKey } from './organization-api-key-generator';
@@ -133,10 +134,12 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     if (record.organizationStatus !== 'active') {
+      recordRejected('auth');
       throw organizationSuspended();
     }
 
     if (!record.allowedEnvironments.includes(credentials.environment)) {
+      recordRejected('auth');
       throw environmentNotAllowed();
     }
     void this.repository
@@ -213,6 +216,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       // Redis only protects the hot path; authentication remains Postgres-backed.
     }
 
+    recordRejected('auth');
     return failures >= AUTH_FAILURE_LIMIT ? rateLimited() : unauthorized();
   }
 }

@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import {
   type OrganizationStatus,
   apiKeyCacheKey,
@@ -124,6 +125,11 @@ export async function runOrganizationStatusCommand(
     await purge(result.keyHashes);
     emit(`Purged the identity cache of ${result.keyHashes.length} API keys.`);
   } catch {
+    recordRedisUnavailable(
+      input.status === 'suspended'
+        ? 'api_key_cache_invalidation_suspension'
+        : 'api_key_cache',
+    );
     emit(`The identity cache was not purged; ${CACHE_CEILING}.`);
   }
 

@@ -1,3 +1,4 @@
+import { recordRejected } from '@/common/observability/rejected-metric';
 import type {
   SandboxDemoEnvironment,
   SandboxDemoScope,
@@ -68,13 +69,15 @@ export class ValidateSandboxDemoKey {
   async validate(
     input: ValidateSandboxDemoKeyInput,
   ): Promise<SandboxDemoKeyEligibility> {
-    if (
-      input.authenticatedEnvironment !== input.environment ||
-      !input.allowedEnvironments.includes(input.environment)
-    ) {
+    if (!input.allowedEnvironments.includes(input.environment)) {
+      recordRejected('auth');
+      throw forbidden(NOT_AUTHORIZED);
+    }
+    if (input.authenticatedEnvironment !== input.environment) {
       throw forbidden(NOT_AUTHORIZED);
     }
     if (!input.grantedScopes.includes(input.scope)) {
+      recordRejected('auth');
       throw forbidden(NOT_AUTHORIZED);
     }
 

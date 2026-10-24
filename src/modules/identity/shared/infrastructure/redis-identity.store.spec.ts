@@ -1,3 +1,4 @@
+import { getMetrics } from '@/common/observability/metrics';
 import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
 import type { ApiKeyRecord } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
@@ -34,12 +35,23 @@ const record: ApiKeyRecord = {
   hardStopOnQuota: false,
 };
 
+async function redisUnavailableCount(seam: string): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith(`aihub_redis_unavailable_total{seam="${seam}"} `),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
+
 class FakeRedis implements RedisIdentityClient {
   readonly values = new Map<string, string>();
   readonly expirations = new Map<string, number>();
   readonly expiresAt = new Map<string, number>();
   getCalls = 0;
   failReads = false;
+  failWrites = false;
+  failDeletes = false;
   failTtlSetup = false;
 
   get(key: string): Promise<string | null> {
@@ -63,6 +75,9 @@ class FakeRedis implements RedisIdentityClient {
     seconds: number,
     condition?: 'NX',
   ): Promise<'OK' | null> {
+    if (this.failWrites) {
+      return Promise.reject(new Error('redis down'));
+    }
     if (condition === 'NX' && this.values.has(key)) {
       return Promise.resolve(null);
     }
@@ -82,6 +97,9 @@ class FakeRedis implements RedisIdentityClient {
   }
 
   del(...keys: string[]): Promise<number> {
+    if (this.failDeletes) {
+      return Promise.reject(new Error('redis down'));
+    }
     let deleted = 0;
     for (const key of keys) {
       if (this.values.delete(key)) {
@@ -144,6 +162,55 @@ describe('RedisIdentityStore', () => {
     expect(
       redis.expirations.get(`aihub:v1:key:${'a'.repeat(64)}`),
     ).toBeGreaterThanOrEqual(30);
+  });
+
+  it.each(['set', 'setMiss', 'delete'] as const)(
+    'counts a failed API-key cache %s once without throwing',
+    async (operation) => {
+      const before = await redisUnavailableCount('api_key_cache');
+      const redis = new FakeRedis();
+      const store = new RedisIdentityStore('', redis);
+      let operationResult: Promise<void>;
+      if (operation === 'set') {
+        redis.failWrites = true;
+        operationResult = store.set('a'.repeat(64), record);
+      } else if (operation === 'setMiss') {
+        redis.failWrites = true;
+        operationResult = store.setMiss('a'.repeat(64));
+      } else {
+        redis.failDeletes = true;
+        operationResult = store.delete('a'.repeat(64));
+      }
+
+      await expect(operationResult).resolves.toBeUndefined();
+      expect(await redisUnavailableCount('api_key_cache')).toBe(before + 1);
+    },
+  );
+
+  it('does not count successful API-key cache commands as unavailable', async () => {
+    const before = await redisUnavailableCount('api_key_cache');
+    const redis = new FakeRedis();
+    const store = new RedisIdentityStore('', redis);
+
+    await store.set('a'.repeat(64), record);
+    await store.setMiss('b'.repeat(64));
+    await store.delete('a'.repeat(64));
+
+    expect(await redisUnavailableCount('api_key_cache')).toBe(before);
+  });
+
+  it('uses the action-specific seam when an API-key invalidation fails', async () => {
+    const seam = 'api_key_cache_invalidation_revoke';
+    const before = await redisUnavailableCount(seam);
+    const genericBefore = await redisUnavailableCount('api_key_cache');
+    const redis = new FakeRedis();
+    redis.failDeletes = true;
+    const store = new RedisIdentityStore('', redis);
+
+    await expect(store.delete('a'.repeat(64), seam)).resolves.toBeUndefined();
+
+    expect(await redisUnavailableCount(seam)).toBe(before + 1);
+    expect(await redisUnavailableCount('api_key_cache')).toBe(genericBefore);
   });
 
   it('stores and reads a positive API-key cache entry with an expiry date', async () => {

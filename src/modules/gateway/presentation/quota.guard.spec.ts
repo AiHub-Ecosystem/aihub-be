@@ -1,6 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
+import { getMetrics } from '@/common/observability/metrics';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -18,6 +19,15 @@ import { QuotaGuard } from './quota.guard';
 
 /** This Organization's fixed share of the rollover spread. */
 const ROLLOVER_OFFSET_MS = stableOffsetMs('org_acme', QUOTA_ROLLOVER_SPREAD_MS);
+
+async function rejectedQuotaCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="quota"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 class FakeQuotaCounter implements QuotaCounterPort {
   current = 0;
@@ -167,6 +177,7 @@ describe('QuotaGuard', () => {
   });
 
   it('rejects a zero quota with an empty counter', async () => {
+    const before = await rejectedQuotaCount();
     const counter = new FakeQuotaCounter();
     const request = requestFor({
       ...baseAuthenticated,
@@ -179,6 +190,20 @@ describe('QuotaGuard', () => {
       httpStatus: 429,
       retryAfterMs: 1_252_800_000 + ROLLOVER_OFFSET_MS,
     });
+    expect(await rejectedQuotaCount()).toBe(before + 1);
+  });
+
+  it('counts a quota refusal returned by graded admission once', async () => {
+    const before = await rejectedQuotaCount();
+    const request = Object.assign(requestFor(), {
+      aihubGradedAdmission: { stage: 'quota' },
+    });
+    const guard = new QuotaGuard(new FakeQuotaCounter(), now);
+
+    await expect(guard.canActivate(contextFor(request))).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+    });
+    expect(await rejectedQuotaCount()).toBe(before + 1);
   });
 
   it.each([

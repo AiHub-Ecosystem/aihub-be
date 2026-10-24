@@ -8,6 +8,7 @@ import {
 
 import { AppError } from '@/common/errors/app-error';
 import { parseRequestBody } from '@/common/http/parse-request-body';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import {
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
@@ -120,6 +121,7 @@ export class QuotaGuard implements CanActivate {
           this.idempotency,
         ))
       ) {
+        recordRejected('quota');
         throw quotaExceededError(this.now(), authenticated.organizationId);
       }
       if (
@@ -156,6 +158,9 @@ export class QuotaGuard implements CanActivate {
         ))
       ) {
         return true;
+      }
+      if (error instanceof AppError && error.code === 'QUOTA_EXCEEDED') {
+        recordRejected('quota');
       }
       throw error;
     }

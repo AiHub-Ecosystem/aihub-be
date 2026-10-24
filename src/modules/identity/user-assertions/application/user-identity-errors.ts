@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { recordRejected } from '@/common/observability/rejected-metric';
 
 /** A header that is not a usable string, before the mode is known. */
 export function invalidUserIdentity(): AppError {
@@ -24,6 +25,7 @@ export function invalidDeclaredUserId(): AppError {
  * failed.
  */
 export function invalidSignedUserAssertion(cause?: unknown): AppError {
+  recordRejected('auth');
   return new AppError({
     code: 'INVALID_USER_IDENTITY',
     message:

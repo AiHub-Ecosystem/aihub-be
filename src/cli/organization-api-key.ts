@@ -1,3 +1,4 @@
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   CreateOperatorApiKeyResult,
   OperatorApiKeyPort,
@@ -151,6 +152,7 @@ export async function runRevokeOperatorApiKeyCommand(
     await purge([result.keyHash]);
     emit(`Revoked ${input.apiKeyId} and purged its identity cache entry.`);
   } catch {
+    recordRedisUnavailable('api_key_cache_invalidation_revoke');
     emit(
       `Revoked ${input.apiKeyId}, but could not purge the identity cache; ${CACHE_CEILING}.`,
     );

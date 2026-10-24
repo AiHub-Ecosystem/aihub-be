@@ -10,6 +10,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import { appConfig } from '@/config/runtime-configuration';
 import { invalidUserIdentity } from '@/modules/identity/user-assertions/application/user-identity-errors';
 import {
@@ -76,6 +77,7 @@ export class UserIdentityGuard implements CanActivate {
         return true;
       }
 
+      recordRejected('auth');
       throw userIdentityRequired();
     }
 

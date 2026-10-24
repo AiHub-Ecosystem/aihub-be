@@ -1,3 +1,4 @@
+import { getMetrics } from '@/common/observability/metrics';
 import type {
   SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,
@@ -9,6 +10,15 @@ import type {
 import { ValidateSandboxDemoKey } from './validate-sandbox-demo-key';
 
 const CONFIG = { organizationId: 'org_demo' } as OrganizationIdentityConfig;
+
+async function rejectedAuthCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 function validator(
   find: OrganizationIdentityConfigRepositoryPort['findActiveByOrganizationId'],
@@ -96,21 +106,29 @@ describe('ValidateSandboxDemoKey', () => {
   });
 
   it('refuses a selection the key is not stored for', async () => {
+    const before = await rejectedAuthCount();
     await expect(
       validate(
         validator(async () => null),
         { environment: 'production' },
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('refuses a selection that does not match the authenticated host', async () => {
+    const before = await rejectedAuthCount();
     await expect(
       validate(
         validator(async () => null),
-        { environment: 'production', authenticatedEnvironment: 'sandbox' },
+        {
+          environment: 'production',
+          authenticatedEnvironment: 'sandbox',
+          allowedEnvironments: ['production'],
+        },
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await rejectedAuthCount()).toBe(before);
   });
 
   it('admits a legacy key whose stored environments include the selection', async () => {
@@ -125,6 +143,7 @@ describe('ValidateSandboxDemoKey', () => {
   });
 
   it('refuses a scope the key does not carry', async () => {
+    const before = await rejectedAuthCount();
     await expect(
       validate(
         validator(async () => null),
@@ -143,6 +162,7 @@ describe('ValidateSandboxDemoKey', () => {
         },
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('admits an Organization with an active Identity Configuration and reports signed assertion', async () => {

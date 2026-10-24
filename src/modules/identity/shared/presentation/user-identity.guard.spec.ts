@@ -1,5 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 
+import { getMetrics } from '@/common/observability/metrics';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { UserIdentityResolverPort } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import type { RequestEnvironmentConfig } from './request-environment';
@@ -16,6 +17,15 @@ const authenticated: AuthenticatedApiKey = {
   hardStopOnQuota: false,
   allowedEnvironments: ['production'],
 };
+
+async function rejectedAuthCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 function context(request: Record<string, unknown>): ExecutionContext {
   return {
@@ -53,6 +63,7 @@ function guard(
 
 describe('UserIdentityGuard', () => {
   it('rejects a missing user identity for user-scoped operations', async () => {
+    const before = await rejectedAuthCount();
     const request: Record<string, unknown> = {
       headers: {},
       aihubAuth: authenticated,
@@ -64,6 +75,7 @@ describe('UserIdentityGuard', () => {
       code: 'USER_IDENTITY_REQUIRED',
       httpStatus: 401,
     });
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('uses the synthetic actor only for the local development bypass', async () => {
@@ -91,6 +103,7 @@ describe('UserIdentityGuard', () => {
   });
 
   it('rejects a blank user identity instead of treating it as missing', async () => {
+    const before = await rejectedAuthCount();
     const request: Record<string, unknown> = {
       headers: { 'x-user-identity': '   ' },
       aihubAuth: authenticated,
@@ -100,5 +113,6 @@ describe('UserIdentityGuard', () => {
       guard('writing.task1.grade').canActivate(context(request)),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY', httpStatus: 401 });
     expect(request.aihubIdentity).toBeUndefined();
+    expect(await rejectedAuthCount()).toBe(before);
   });
 });

@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Subject, firstValueFrom, of } from 'rxjs';
 
+import { getMetrics } from '@/common/observability/metrics';
 import type {
   ConcurrencyLease,
   ConcurrencyLimiterPort,
@@ -32,6 +33,15 @@ function allowingLimiter(release: jest.Mock): ConcurrencyLimiterPort {
   return {
     acquire: async () => ({ allowed: true, lease: { release } }),
   };
+}
+
+async function rejectedConcurrencyCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="concurrency"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
 }
 
 describe('ConcurrencyPermitInterceptor', () => {
@@ -67,6 +77,7 @@ describe('ConcurrencyPermitInterceptor', () => {
   });
 
   it('maps a denied lease to CONCURRENCY_LIMIT', async () => {
+    const before = await rejectedConcurrencyCount();
     const acquire: ConcurrencyLimiterPort['acquire'] = async () => ({
       allowed: false,
       retryAfterMs: 500,
@@ -87,6 +98,7 @@ describe('ConcurrencyPermitInterceptor', () => {
       retryable: true,
       retryAfterMs: 500,
     });
+    expect(await rejectedConcurrencyCount()).toBe(before + 1);
   });
 
   it('waits for handler settlement after an early response close', async () => {

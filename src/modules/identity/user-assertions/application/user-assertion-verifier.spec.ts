@@ -8,6 +8,7 @@ import {
   importJWK,
 } from 'jose';
 
+import { getMetrics } from '@/common/observability/metrics';
 import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-identity-config';
 import type { OrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
@@ -19,6 +20,15 @@ import { UserAssertionVerifier } from './user-assertion-verifier';
 import type { ResolvedUserIdentity } from './user-identity-resolver.port';
 
 const NOW = 1_700_000_000;
+
+async function rejectedAuthCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -217,6 +227,7 @@ describe('UserAssertionVerifier', () => {
   });
 
   it('rejects a tampered signature and unsecured algorithm before trusting claims', async () => {
+    const before = await rejectedAuthCount();
     const fixture = await rsaFixture();
     const assertion = await token(fixture.privateKey, { jti: 'jti-1' });
     const parts = assertion.split('.');
@@ -237,6 +248,7 @@ describe('UserAssertionVerifier', () => {
         organizationId: 'org_acme',
       }),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    expect(await rejectedAuthCount()).toBe(before + 2);
   });
 
   it('allows a key without kid only when one usable key matches', async () => {

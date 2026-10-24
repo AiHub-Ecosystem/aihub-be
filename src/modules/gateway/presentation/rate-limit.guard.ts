@@ -11,6 +11,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
@@ -149,6 +150,7 @@ export class RateLimitGuard implements CanActivate {
       reportStanding(context, decision.rate);
 
       if (decision.stage === 'rate_limit') {
+        recordRejected('rate_limit');
         throw rateLimited(decision.retryAfterMs);
       }
       return true;
@@ -161,6 +163,7 @@ export class RateLimitGuard implements CanActivate {
     reportStanding(context, decision.standing);
 
     if (!decision.allowed) {
+      recordRejected('rate_limit');
       throw rateLimited(decision.retryAfterMs);
     }
 
