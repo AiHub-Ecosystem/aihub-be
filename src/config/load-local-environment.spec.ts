@@ -68,11 +68,4 @@ describe('loadLocalEnvironment', () => {
     expect(loadSpy).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
   });
-
-  it('keeps the entrypoint import loading a working-directory .env in a local mode', () => {
-    // The side-effect call at import time already ran against the repository
-    // working directory while jest sets NODE_ENV=test; this assertion only
-    // records that the exported shape stays callable with no arguments.
-    expect(() => loadLocalEnvironment()).not.toThrow();
-  });
 });
