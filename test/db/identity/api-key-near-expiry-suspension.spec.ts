@@ -99,6 +99,62 @@ function pausedAfterRead(): {
   return { client: paused, read, release };
 }
 
+/**
+ * Holds the resolver at each statement matching `match` until the test resumes
+ * it. That is the gap a suspension or a restoration can commit in (#996,
+ * #1128). `pause(n)` resolves once the nth matching statement has parked.
+ */
+function pausedWhile(match: (text: string) => boolean): {
+  readonly client: IdentityFixtureClient;
+  readonly pause: (occurrence: number) => Promise<void>;
+  readonly resume: (occurrence: number) => void;
+} {
+  const gates: { go: () => void }[] = [];
+  const paused = new Proxy(client, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (
+        (property === '$queryRawUnsafe' || property === '$executeRawUnsafe') &&
+        typeof value === 'function'
+      ) {
+        return async (text: string, ...values: unknown[]) => {
+          if (match(text)) {
+            await new Promise<void>((resolveGo) => {
+              gates.push({ go: resolveGo });
+            });
+          }
+          return value.call(target, text, ...values);
+        };
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const pause = async (occurrence: number): Promise<void> => {
+    for (let attempt = 0; gates.length < occurrence; attempt += 1) {
+      if (attempt > 500) {
+        throw new Error('the paused statement never ran');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  };
+  const resume = (occurrence: number): void => {
+    gates[occurrence - 1]?.go();
+  };
+  return { client: paused, pause, resume };
+}
+
+/** What the poller does to a request whose resolver answered `undefined`. */
+async function cancelNotice(id: string, at: Date): Promise<void> {
+  await pool.query(
+    `UPDATE email_delivery_requests
+     SET status = 'cancelled', cancel_reason = 'not_actionable',
+         payload_ciphertext = NULL, completed_at = $2,
+         lease_owner = NULL, lease_expires_at = NULL
+     WHERE id = $1`,
+    [id, at],
+  );
+}
+
 function sweep(notices: PostgresApiKeyNearExpiryNotices, now: Date) {
   return notices.recordDue({
     now,
@@ -222,6 +278,159 @@ beforeEach(async () => {
                'Expiring key', 'active', $3, NULL, false)`,
     [KEY, ORG, new Date(NOW.getTime() + 5 * DAY)],
   );
+});
+
+describe("near-expiry notices across a restore between the resolver's reads (#1128)", () => {
+  const WITHDRAWAL = (text: string) =>
+    text.includes('DELETE FROM notification_events');
+
+  it('sends the only notice instead of cancelling it when the restore commits between the recipient read and the withdrawal', async () => {
+    // The single-recipient Organization: the common small-org shape where the
+    // race would otherwise take the only notice there is.
+    await pool.query(
+      `UPDATE organization_members SET role = 'member' WHERE user_account_id = $1`,
+      [ADMIN],
+    );
+    await sweep(noticesOver(client), NOW);
+    await setOrganizationStatus('suspended');
+
+    // The recipient read runs on the suspended snapshot and finds nobody; the
+    // restoration commits before the withdrawal statement runs.
+    const queued = await queuedNotices();
+    const notice = queued[0];
+    if (notice === undefined) {
+      throw new Error('the sweep queued no notice to dispatch');
+    }
+    const paused = pausedWhile(WITHDRAWAL);
+    const resolving = noticesOver(paused.client).resolve(notice.payload, NOW);
+    await paused.pause(1);
+    await setOrganizationStatus('active');
+    paused.resume(1);
+    const facts = await resolving;
+
+    expect(facts).toMatchObject({
+      email: `${OWNER.toLowerCase()}@example.com`,
+      organizationId: ORG,
+    });
+    await expect(dispatch(NOW)).resolves.toBe(1);
+
+    // The event was never withdrawn, so the later sweep re-queues nothing and
+    // the recipient is not told twice.
+    await sweep(noticesOver(client), LATER);
+    expect(await queuedNotices()).toHaveLength(1);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
+      [KEY],
+    );
+    expect(rows[0]?.events).toBe(1);
+  });
+
+  it('still withdraws and re-records when the restore commits only after the withdrawal', async () => {
+    await sweep(noticesOver(client), NOW);
+    await setOrganizationStatus('suspended');
+
+    // The withdrawal runs while the Organization is suspended, and the
+    // restoration lands after the resolver already answered.
+    await expect(dispatch(NOW)).resolves.toBe(0);
+    const { rows: withdrawn } = await pool.query(
+      `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
+      [KEY],
+    );
+    expect(withdrawn[0]?.events).toBe(0);
+
+    await setOrganizationStatus('active');
+    await sweep(noticesOver(client), LATER);
+
+    await expect(actionableNotices(LATER)).resolves.toBe(2);
+  });
+
+  it('cancels the sibling notice instead of sending twice when an earlier notice already withdrew the shared events', async () => {
+    await sweep(noticesOver(client), NOW);
+    await setOrganizationStatus('suspended');
+
+    // Notice B starts on the suspended snapshot and parks before its
+    // withdrawal; notice A runs to completion and withdraws the shared events.
+    const queued = await queuedNotices();
+    const sibling = queued[0];
+    const earlier = queued[1];
+    if (sibling === undefined || earlier === undefined) {
+      throw new Error('the sweep queued no notices to dispatch');
+    }
+    const paused = pausedWhile(WITHDRAWAL);
+    const resolvingSibling = noticesOver(paused.client).resolve(
+      sibling.payload,
+      NOW,
+    );
+    await paused.pause(1);
+    await expect(
+      noticesOver(client).resolve(earlier.payload, NOW),
+    ).resolves.toBeUndefined();
+    await setOrganizationStatus('active');
+    paused.resume(1);
+
+    // The events are already gone, so the sibling must not be sent now: the
+    // next sweep records them again and tells every recipient exactly once.
+    await expect(resolvingSibling).resolves.toBeUndefined();
+    await cancelNotice(sibling.id, NOW);
+    await cancelNotice(earlier.id, NOW);
+
+    await sweep(noticesOver(client), LATER);
+    expect(await queuedNotices()).toHaveLength(2);
+    await expect(actionableNotices(LATER)).resolves.toBe(2);
+  });
+
+  it('hands the events back when the Organization is suspended again between the withdrawal and the re-run', async () => {
+    await pool.query(
+      `UPDATE organization_members SET role = 'member' WHERE user_account_id = $1`,
+      [ADMIN],
+    );
+    await sweep(noticesOver(client), NOW);
+    await setOrganizationStatus('suspended');
+
+    // The withdrawal and the re-run park in order (the first recipient read
+    // runs straight through). A restore lands before the withdrawal and a
+    // second suspension lands before the re-run.
+    const queued = await queuedNotices();
+    const notice = queued[0];
+    if (notice === undefined) {
+      throw new Error('the sweep queued no notice to dispatch');
+    }
+    let recipientReads = 0;
+    let withdrawals = 0;
+    const paused = pausedWhile((text) => {
+      if (WITHDRAWAL(text)) {
+        withdrawals += 1;
+        return withdrawals === 1;
+      }
+      if (text.includes('member.role IN')) {
+        recipientReads += 1;
+        return recipientReads > 1;
+      }
+      return false;
+    });
+    const resolving = noticesOver(paused.client).resolve(notice.payload, NOW);
+    await paused.pause(1); // the withdrawal, after a read on the suspended snapshot
+    await setOrganizationStatus('active');
+    paused.resume(1);
+    await paused.pause(2); // the re-run, about to read a re-suspended org
+    await setOrganizationStatus('suspended');
+    paused.resume(2);
+    await expect(resolving).resolves.toBeUndefined();
+
+    // The guard withdrew on the second suspension, so the events are back with
+    // the sweep instead of stranding the dedupe key: after the next
+    // restoration the only notice is queued and sent once.
+    const { rows: events } = await pool.query(
+      `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
+      [KEY],
+    );
+    expect(events[0]?.events).toBe(0);
+    await cancelNotice(notice.id, NOW);
+    await setOrganizationStatus('active');
+    await sweep(noticesOver(client), LATER);
+    expect(await queuedNotices()).toHaveLength(1);
+    await expect(actionableNotices(LATER)).resolves.toBe(1);
+  });
 });
 
 describe('near-expiry notices across an Organization suspension (#996)', () => {

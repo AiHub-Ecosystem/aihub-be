@@ -95,23 +95,42 @@ const RECIPIENT_SQL = `
     AND organization.status = 'active'
 `;
 
-const ORGANIZATION_STATUS_SQL = `
-  SELECT status FROM organizations WHERE id = $1
-`;
-
 /**
  * Withdraws the events of a notice that cannot be sent because its Organization
  * is no longer active (#996). Without this, an event recorded for a key whose
  * Organization was suspended before dispatch would stop every later sweep from
  * recording it, and restoring the Organization inside the window would never
  * notify it. Only unexpired events go: an expired key is never notified again.
+ *
+ * The status check and the delete share one statement snapshot, and the answer
+ * reports both sides of it: `inactive` is the status the delete acted on, and
+ * `remaining` counts the unexpired events still standing afterwards. A
+ * restoration committing around the statement is either visible (nothing is
+ * withdrawn) or invisible (the withdrawal happened while the Organization
+ * really was inactive) — the caller never has to guess which (#1128).
  */
 const WITHDRAW_EVENTS_SQL = `
-  DELETE FROM notification_events
-  WHERE kind = $1
-    AND organization_id = $2
-    AND api_key_id = ANY($3::text[])
-    AND subject_expires_at > $4
+  WITH organization AS (
+    SELECT status <> 'active' AS inactive
+    FROM organizations
+    WHERE id = $2
+  ),
+  withdrawn AS (
+    DELETE FROM notification_events
+    WHERE kind = $1
+      AND organization_id = $2
+      AND api_key_id = ANY($3::text[])
+      AND subject_expires_at > $4
+      AND (SELECT inactive FROM organization)
+    RETURNING 1
+  )
+  SELECT
+    COALESCE((SELECT inactive FROM organization), false) AS inactive,
+    (SELECT count(*)::int FROM notification_events
+      WHERE kind = $1
+        AND organization_id = $2
+        AND api_key_id = ANY($3::text[])
+        AND subject_expires_at > $4) AS remaining
 `;
 
 const STILL_ACTIVE_KEYS_SQL = `
@@ -242,16 +261,24 @@ export class PostgresApiKeyNearExpiryNotices
     payload: ApiKeyNearExpiryNotificationPayload,
     now: Date,
   ): Promise<ApiKeyNearExpiryNotificationInput | undefined> {
-    const recipient = (
-      await identityRows(this.client, RECIPIENT_SQL, [
-        payload.organizationId,
-        payload.userAccountId,
-      ])
-    )[0];
+    let recipient = await this.readRecipient(payload);
     if (recipient === undefined) {
-      await this.withdrawIfOrganizationInactive(payload, now);
-      return undefined;
+      const events = await this.withdrawIfOrganizationInactive(payload, now);
+      // The event is still standing and the Organization was active at the
+      // withdrawal's snapshot, so the recipient read above ran on a suspended
+      // snapshot that a restoration has since replaced: the lookup runs again
+      // instead of cancelling the only notice this Organization gets (#1128).
+      if (!events.inactive && events.remaining > 0) {
+        recipient = await this.readRecipient(payload);
+        if (recipient === undefined) {
+          // A suspension that landed between the two reads leaves the events
+          // standing while cancelling anyway; one more withdrawal makes the
+          // cancellation safe by handing the events back to the next sweep.
+          await this.withdrawIfOrganizationInactive(payload, now);
+        }
+      }
     }
+    if (recipient === undefined) return undefined;
 
     const apiKeys = (
       await identityRows(this.client, STILL_ACTIVE_KEYS_SQL, [
@@ -274,31 +301,42 @@ export class PostgresApiKeyNearExpiryNotices
     };
   }
 
+  private async readRecipient(
+    payload: ApiKeyNearExpiryNotificationPayload,
+  ): Promise<Record<string, unknown> | undefined> {
+    return (
+      await identityRows(this.client, RECIPIENT_SQL, [
+        payload.organizationId,
+        payload.userAccountId,
+      ])
+    )[0];
+  }
+
   /**
-   * A recipient who no longer qualifies leaves the event alone: the Organization
-   * was told, and recording it again would tell the other recipients twice. An
-   * Organization that is no longer active was not told, so its event goes.
+   * A recipient who no longer qualifies leaves the event alone: the
+   * Organization was told, and recording it again would tell the other
+   * recipients twice. An Organization that is no longer active was not told,
+   * so its events go in the same statement that observed the status. The
+   * answer's `remaining` is what stands afterwards: zero also covers the
+   * sibling notice that already withdrew the shared events (#1098), where
+   * cancelling is equally safe because the next sweep records them again.
    */
   private async withdrawIfOrganizationInactive(
     payload: ApiKeyNearExpiryNotificationPayload,
     now: Date,
-  ): Promise<void> {
-    const organization = (
-      await identityRows(this.client, ORGANIZATION_STATUS_SQL, [
+  ): Promise<{ readonly inactive: boolean; readonly remaining: number }> {
+    const row = (
+      await identityRows(this.client, WITHDRAW_EVENTS_SQL, [
+        KIND,
         payload.organizationId,
+        [...payload.apiKeyIds],
+        now,
       ])
     )[0];
-    if (
-      organization === undefined ||
-      requiredString(organization, 'status') === 'active'
-    ) {
-      return;
-    }
-    await identityRows(this.client, WITHDRAW_EVENTS_SQL, [
-      KIND,
-      payload.organizationId,
-      [...payload.apiKeyIds],
-      now,
-    ]);
+    return {
+      inactive: isRecord(row) && row.inactive === true,
+      remaining:
+        isRecord(row) && typeof row.remaining === 'number' ? row.remaining : 0,
+    };
   }
 }
