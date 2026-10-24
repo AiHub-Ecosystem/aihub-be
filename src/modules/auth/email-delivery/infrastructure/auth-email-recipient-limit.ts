@@ -86,6 +86,16 @@ export async function pruneExpiredAuthEmailRecipientLimits(
   return rows.length;
 }
 
+/** A keyring that dropped a version its counters still depend on (#1130). */
+export class RetiredKeyVersionLiveError extends Error {
+  constructor(detail: string) {
+    super(
+      `email outbox keyring no longer retains key versions with live authentication-email recipient windows: ${detail}. Keep every retired version in the keyring until its windows expire, or wait for the expiry before pruning (ADR-0096, #1130).`,
+    );
+    this.name = 'RetiredKeyVersionLiveError';
+  }
+}
+
 /**
  * Boot gate for the ADR-0096 retention invariant: every counter window still
  * inside its 24 hours must fingerprint under a key version the keyring still
@@ -93,7 +103,8 @@ export async function pruneExpiredAuthEmailRecipientLimits(
  * the reservation — every address under the pruned version gets a fresh
  * window and the ceiling resets, the one consumer where early key removal
  * fails open (#1130). Refusing to boot with the versions named turns that
- * into a refusal the operator sees.
+ * into a refusal the operator sees. A table that cannot be read is not a
+ * verdict: the caller decides how to defer that case.
  */
 export async function assertRetainedKeyVersionsCoverLiveWindows(
   client: AuthSqlClient,
@@ -120,9 +131,7 @@ export async function assertRetainedKeyVersionsCoverLiveWindows(
           `${row.key_version} (windows live until ${counterDate(row.expires_at).toISOString()})`,
       )
       .join(', ');
-    throw new Error(
-      `email outbox keyring no longer retains key versions with live authentication-email recipient windows: ${detail}. Keep every retired version in the keyring until its windows expire, or wait for the expiry before pruning (ADR-0096, #1130).`,
-    );
+    throw new RetiredKeyVersionLiveError(detail);
   }
 }
 

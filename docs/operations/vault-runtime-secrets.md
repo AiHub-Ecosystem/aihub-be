@@ -72,10 +72,12 @@ Rotation is startup-only:
    This retention rule is enforced, not remembered: an instance that boots with
    a keyring missing a version whose counters are still inside their 24-hour
    window refuses to start (#1130), with a log line naming each dropped key
-   version and the time its windows expire. The gate reads the counter table
-   at startup, so a restart while the database is unreachable also fails (with
-   the query's own error); the instance restarts and passes once the read
-   succeeds — fail closed either way. If a restart fails with
+   version and the time its windows expire. An instance that boots while the
+   database is unreachable still serves health - the image-boot contract - but
+   its keyring gate stays unresolved, one error line is logged, and no outbox
+   pass runs until the counter table becomes readable and the gate passes, so
+   the ceiling is never reset either way; the queue-age alert is what surfaces
+   a stuck gate. If a restart fails with
    `email outbox keyring no longer retains key versions with live
 authentication-email recipient windows`, restore the dropped version to the
    keyring and restart, or wait for the named expiry and let the hourly

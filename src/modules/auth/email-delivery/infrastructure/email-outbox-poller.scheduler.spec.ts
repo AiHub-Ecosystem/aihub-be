@@ -1,6 +1,7 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
 import { Logger } from '@nestjs/common';
+import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 
 import {
   EmailOutboxPollerScheduler,
@@ -128,8 +129,8 @@ describe('EmailOutboxPollerScheduler', () => {
       undefined,
       undefined,
       async () => {
-        throw new Error(
-          'email outbox keyring no longer retains key versions with live authentication-email recipient windows: v1 (windows live until 2026-10-25T00:00:00.000Z). Keep every retired version in the keyring until its windows expire, or wait for the expiry before pruning (ADR-0096, #1130).',
+        throw new RetiredKeyVersionLiveError(
+          'v1 (windows live until 2026-10-25T00:00:00.000Z)',
         );
       },
     );
@@ -140,6 +141,49 @@ describe('EmailOutboxPollerScheduler', () => {
     );
     expect(poller.calls).toBe(0);
     subject.onApplicationShutdown();
+  });
+
+  it('boots with the gate deferred while the counter table cannot be read, and holds every pass until it resolves', async () => {
+    const poller = new ControllablePoller();
+    let tableReadable = false;
+    const subject = new EmailOutboxPollerScheduler(
+      poller as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      async () => {
+        if (!tableReadable) {
+          // The image-boot contract boots without a database: an unreadable
+          // counter table defers the verdict instead of failing startup.
+          throw new Error("Can't reach database server at database.invalid");
+        }
+      },
+    );
+    subjects.push(subject);
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+
+    try {
+      await expect(subject.onModuleInit()).resolves.toBeUndefined();
+      await delay(INTERVAL_MS * 12);
+      // The gate has not passed: no pass may run, so no ceiling can reset.
+      expect(poller.calls).toBe(0);
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('email outbox keyring gate not passed'),
+      );
+
+      // The table becomes readable: the next tick passes the gate and the
+      // outbox resumes, with the deferral logged exactly once.
+      tableReadable = true;
+      await delay(INTERVAL_MS * 12);
+      expect(poller.calls).toBeGreaterThan(0);
+      expect(error).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('serves durable cancellation timestamps through metrics and removes the source on shutdown', async () => {

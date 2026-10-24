@@ -22,6 +22,7 @@ import {
   setEmailProviderOutageDurationSource,
 } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
+import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 
 /** How often an instance looks for work. The lease, not this, bounds overlap. */
 export const EMAIL_OUTBOX_POLL_INTERVAL_MS = 5_000;
@@ -46,6 +47,8 @@ export class EmailOutboxPollerScheduler
   private cleanupTimer: NodeJS.Timeout | undefined;
   private running = false;
   private pruning = false;
+  private recipientKeyGatePassed = false;
+  private recipientKeyGateReported = false;
 
   /**
    * `backlog` feeds the queue-age gauges. It is registered beside the timer
@@ -72,10 +75,13 @@ export class EmailOutboxPollerScheduler
   ) {}
 
   /**
-   * The keyring retention check runs before any timer starts, so a keyring
-   * that dropped a version with live recipient windows refuses the boot
-   * instead of silently resetting every ceiling under it (#1130). Nest awaits
-   * this hook; its rejection fails startup.
+   * The keyring retention check runs before any timer starts: a keyring that
+   * dropped a version with live recipient windows refuses the boot instead of
+   * silently resetting every ceiling under it (#1130). Nest awaits this hook,
+   * so its rejection fails startup. A counter table that cannot be read - the
+   * image-boot contract boots without a database - defers the verdict instead:
+   * the gate retries before every pass, and no pass runs until it resolves,
+   * so the ceiling is never reset either way.
    */
   async onModuleInit(): Promise<void> {
     if (!this.enabled) return;
@@ -91,7 +97,7 @@ export class EmailOutboxPollerScheduler
     if (this.providerOutageDuration !== undefined) {
       setEmailProviderOutageDurationSource(this.providerOutageDuration);
     }
-    await this.verifyRecipientKeyVersions?.();
+    await this.runRecipientKeyGate(true);
     this.timer = setInterval(() => {
       void this.pass();
     }, this.intervalMs);
@@ -105,6 +111,38 @@ export class EmailOutboxPollerScheduler
     // A pending claim must not hold the process open on shutdown; the lease
     // releases it once it lapses.
     this.timer.unref();
+  }
+
+  /**
+   * Runs the keyring gate once it has not passed. A confirmed retired version
+   * refuses the boot when `booting`; afterwards it keeps every pass held with
+   * one error line, and the queue-age alert is what carries it to an operator.
+   * Any other failure means the counter table could not be read, and the gate
+   * simply stays unresolved until a pass tick can read it.
+   */
+  private async runRecipientKeyGate(booting: boolean): Promise<boolean> {
+    if (
+      this.verifyRecipientKeyVersions === undefined ||
+      this.recipientKeyGatePassed
+    ) {
+      return true;
+    }
+    try {
+      await this.verifyRecipientKeyVersions();
+      this.recipientKeyGatePassed = true;
+      return true;
+    } catch (error) {
+      if (booting && error instanceof RetiredKeyVersionLiveError) {
+        throw error;
+      }
+      if (!this.recipientKeyGateReported) {
+        this.recipientKeyGateReported = true;
+        this.logger.error(
+          `email outbox keyring gate not passed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+      return false;
+    }
   }
 
   onApplicationShutdown(): void {
@@ -141,6 +179,7 @@ export class EmailOutboxPollerScheduler
    */
   private async pass(): Promise<void> {
     if (this.running || isShuttingDown()) return;
+    if (!(await this.runRecipientKeyGate(false))) return;
     this.running = true;
     backgroundWorkStarted();
     try {
