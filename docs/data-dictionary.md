@@ -7,6 +7,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | Table (model)               | Owner       | Columns |
 | --------------------------- | ----------- | ------- |
 | ApiKey                      | identity    | 15      |
+| OperatorRedisFailure        | identity    | 2       |
 | NotificationEvent           | identity    | 8       |
 | AuthIdentity                | auth        | 8       |
 | EmailDeliveryRequest        | auth        | 16      |
@@ -59,6 +60,15 @@ Owner: `identity`
 | internal            | Boolean             | @default(false)                                                                               |
 | organization        | Organization        | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
 | notificationEvents  | NotificationEvent[] |                                                                                               |
+
+## OperatorRedisFailure
+
+Owner: `identity`
+
+| Column | Type   | Attributes  |
+| ------ | ------ | ----------- |
+| seam   | String | @id         |
+| total  | BigInt | @default(0) |
 
 ## NotificationEvent
 

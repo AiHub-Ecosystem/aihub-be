@@ -1,6 +1,5 @@
 import Redis from 'ioredis';
 
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import {
   type OrganizationStatus,
   apiKeyCacheKey,
@@ -11,8 +10,10 @@ import type {
   SetOrganizationStatusResult,
 } from '@/modules/identity/organizations/application/organization-status.port';
 import { PostgresOrganizationStatusRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-status.repository';
+import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
+import { reportOperatorRedisFailure } from './operator-redis-failure';
 
 export interface OrganizationStatusCliInput {
   readonly databaseUrl: string;
@@ -22,6 +23,7 @@ export interface OrganizationStatusCliInput {
   readonly status: OrganizationStatus;
   readonly repository?: OrganizationStatusPort;
   readonly purge?: (keyHashes: readonly string[]) => Promise<void>;
+  readonly recordRedisFailure?: OperatorRedisFailurePort['recordFailure'];
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
 }
@@ -125,10 +127,13 @@ export async function runOrganizationStatusCommand(
     await purge(result.keyHashes);
     emit(`Purged the identity cache of ${result.keyHashes.length} API keys.`);
   } catch {
-    recordRedisUnavailable(
+    await reportOperatorRedisFailure(
+      input.databaseUrl,
       input.status === 'suspended'
         ? 'api_key_cache_invalidation_suspension'
         : 'api_key_cache',
+      emit,
+      input.recordRedisFailure,
     );
     emit(`The identity cache was not purged; ${CACHE_CEILING}.`);
   }

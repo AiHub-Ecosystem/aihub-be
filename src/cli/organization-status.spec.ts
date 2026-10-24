@@ -1,4 +1,3 @@
-import { getMetrics } from '@/common/observability/metrics';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusInput,
@@ -28,21 +27,13 @@ class OrganizationStatusFake implements OrganizationStatusPort {
   }
 }
 
-async function redisUnavailableCount(seam: string): Promise<number> {
-  const line = (await getMetrics())
-    .split('\n')
-    .find((sample) =>
-      sample.startsWith(`aihub_redis_unavailable_total{seam="${seam}"} `),
-    );
-  return Number(line?.split(' ').at(-1) ?? 0);
-}
-
 function run(
   result: SetOrganizationStatusResult,
   overrides: Partial<OrganizationStatusCliInput> = {},
 ) {
   const repository = new OrganizationStatusFake(result);
   const purged: string[][] = [];
+  const failures: string[] = [];
   const lines: string[] = [];
   const outcome = runOrganizationStatusCommand({
     databaseUrl: 'postgres://unused',
@@ -54,16 +45,19 @@ function run(
     purge: async (hashes) => {
       purged.push([...hashes]);
     },
+    recordRedisFailure: async (seam) => {
+      failures.push(seam);
+    },
     emit: (line) => lines.push(line),
     now: () => new Date('2026-09-23T10:00:00.000Z'),
     ...overrides,
   });
-  return { outcome, repository, purged, lines };
+  return { outcome, repository, purged, failures, lines };
 }
 
 describe('runOrganizationStatusCommand', () => {
   it('suspends, names the request it recorded, and purges every key of the Organization', async () => {
-    const { outcome, repository, purged, lines } = run({
+    const { outcome, repository, purged, failures, lines } = run({
       kind: 'changed',
       keyHashes: ['aa', 'bb'],
     });
@@ -78,6 +72,7 @@ describe('runOrganizationStatusCommand', () => {
     });
     expect(call?.requestId).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(purged).toEqual([['aa', 'bb']]);
+    expect(failures).toEqual([]);
     expect(lines.join('\n')).toContain(
       `Suspended org_acme; recorded as ${call?.requestId}.`,
     );
@@ -110,28 +105,29 @@ describe('runOrganizationStatusCommand', () => {
     expect(purged).toEqual([['aa']]);
   });
 
-  it('keeps a committed act when the purge fails and says what that leaves open', async () => {
-    const before = await redisUnavailableCount(
-      'api_key_cache_invalidation_suspension',
-    );
-    const { outcome, lines } = run(
-      { kind: 'changed', keyHashes: ['aa'] },
-      {
-        purge: async () => {
-          throw new Error('redis down');
+  it.each([
+    ['suspended', 'api_key_cache_invalidation_suspension'],
+    ['active', 'api_key_cache'],
+  ] as const)(
+    'persists a failed %s purge without changing the committed act',
+    async (status, seam) => {
+      const { outcome, failures, lines } = run(
+        { kind: 'changed', keyHashes: ['aa'] },
+        {
+          status,
+          purge: async () => {
+            throw new Error('redis down');
+          },
         },
-      },
-    );
+      );
 
-    await expect(outcome).resolves.toBe('changed');
-    expect(lines.join('\n')).toContain('Suspended org_acme');
-    expect(lines.join('\n')).toContain(
-      'identity cache was not purged; its API keys may keep their previous status for up to 60 seconds',
-    );
-    expect(
-      await redisUnavailableCount('api_key_cache_invalidation_suspension'),
-    ).toBe(before + 1);
-  });
+      await expect(outcome).resolves.toBe('changed');
+      expect(lines.join('\n')).toContain(
+        'identity cache was not purged; its API keys may keep their previous status for up to 60 seconds',
+      );
+      expect(failures).toEqual([seam]);
+    },
+  );
 
   it('reports an unset REDIS_URL instead of purging', async () => {
     const { outcome, purged, lines } = run(

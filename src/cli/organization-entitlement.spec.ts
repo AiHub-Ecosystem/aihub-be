@@ -80,6 +80,7 @@ describe('runGrantOrganizationEntitlementCommand', () => {
       keyHashes: ['aa'],
     });
     const lines: string[] = [];
+    const failures: string[] = [];
     await expect(
       runGrantOrganizationEntitlementCommand({
         databaseUrl: 'postgres://unused',
@@ -91,9 +92,13 @@ describe('runGrantOrganizationEntitlementCommand', () => {
         purge: async () => {
           throw new Error('Redis unavailable');
         },
+        recordRedisFailure: async (seam) => {
+          failures.push(seam);
+        },
         emit: (line) => lines.push(line),
       }),
     ).resolves.toBe('granted');
     expect(lines.join('\n')).toContain('changes may take up to 60 seconds');
+    expect(failures).toEqual(['api_key_cache']);
   });
 });

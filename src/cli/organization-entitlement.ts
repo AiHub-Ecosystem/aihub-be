@@ -8,9 +8,11 @@ import type {
   OrganizationEntitlementPort,
 } from '@/modules/identity/organizations/application/organization-entitlement.port';
 import { PostgresOrganizationEntitlementRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-entitlement.repository';
+import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';
 import Redis from 'ioredis';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
+import { reportOperatorRedisFailure } from './operator-redis-failure';
 
 export interface GrantOrganizationEntitlementCliInput {
   readonly databaseUrl: string;
@@ -20,6 +22,7 @@ export interface GrantOrganizationEntitlementCliInput {
   readonly entitlement: string;
   readonly repository?: OrganizationEntitlementPort;
   readonly purge?: (hashes: readonly string[]) => Promise<void>;
+  readonly recordRedisFailure?: OperatorRedisFailurePort['recordFailure'];
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
 }
@@ -107,6 +110,12 @@ export async function runGrantOrganizationEntitlementCommand(
     );
     emit(`Purged the identity cache of ${result.keyHashes.length} API keys.`);
   } catch {
+    await reportOperatorRedisFailure(
+      input.databaseUrl,
+      'api_key_cache',
+      emit,
+      input.recordRedisFailure,
+    );
     emit(
       'The API key identity cache was not purged; changes may take up to 60 seconds to take effect.',
     );

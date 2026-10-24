@@ -38,6 +38,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetIdentityTables(pool);
+  await pool.query('UPDATE operator_redis_failures SET total = 0');
 });
 
 function cli(...args: string[]) {
@@ -171,6 +172,51 @@ withBuild('operator CLI against PostgreSQL', () => {
         "SELECT 1 FROM organization_audit_events WHERE action = 'api_key.revoked'",
       ),
     ).toHaveLength(1);
+  });
+
+  it('persists failed cache purges across separate revoke processes', async () => {
+    await seedOperator('ops-alice');
+    const organizationId = await organization();
+    cli(
+      'key:create',
+      '--org',
+      organizationId,
+      '--actor',
+      'ops-alice',
+      '--name',
+      'k',
+    );
+    const [key] = await rows('SELECT id FROM api_keys');
+    const keyId = String(key?.id);
+
+    const first = runCli({ REDIS_URL: 'redis://127.0.0.1:1' }, [
+      'key:revoke',
+      '--key',
+      keyId,
+      '--actor',
+      'ops-alice',
+    ]);
+    const repeat = runCli({ REDIS_URL: 'redis://127.0.0.1:1' }, [
+      'key:revoke',
+      '--key',
+      keyId,
+      '--actor',
+      'ops-alice',
+    ]);
+
+    expect(first.status).toBe(0);
+    expect(repeat.status).toBe(0);
+    expect(first.stderr).toContain('could not purge the identity cache');
+    expect(first.stderr).not.toContain('could not be persisted for monitoring');
+    expect(
+      await rows(
+        `SELECT seam, total::text AS total FROM operator_redis_failures
+         WHERE seam = 'api_key_cache_invalidation_revoke'`,
+      ),
+    ).toEqual([{ seam: 'api_key_cache_invalidation_revoke', total: '2' }]);
+    expect(await rows('SELECT status FROM api_keys')).toEqual([
+      { status: 'revoked' },
+    ]);
   });
 
   // quota:reconcile failed on production against a remote Redis and then never

@@ -1,12 +1,13 @@
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   CreateOperatorApiKeyResult,
   OperatorApiKeyPort,
   RevokeOperatorApiKeyResult,
 } from '@/modules/identity/api-keys/application/operator-api-key.port';
 import { PostgresOperatorApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-operator-api-key.repository';
+import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
+import { reportOperatorRedisFailure } from './operator-redis-failure';
 import { purgeApiKeyCache } from './organization-status';
 
 /**
@@ -44,6 +45,7 @@ export interface RevokeOperatorApiKeyCliInput {
   readonly actorUsername: string;
   readonly repository?: OperatorApiKeyPort;
   readonly purge?: (keyHashes: readonly string[]) => Promise<void>;
+  readonly recordRedisFailure?: OperatorRedisFailurePort['recordFailure'];
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
 }
@@ -152,7 +154,12 @@ export async function runRevokeOperatorApiKeyCommand(
     await purge([result.keyHash]);
     emit(`Revoked ${input.apiKeyId} and purged its identity cache entry.`);
   } catch {
-    recordRedisUnavailable('api_key_cache_invalidation_revoke');
+    await reportOperatorRedisFailure(
+      input.databaseUrl,
+      'api_key_cache_invalidation_revoke',
+      emit,
+      input.recordRedisFailure,
+    );
     emit(
       `Revoked ${input.apiKeyId}, but could not purge the identity cache; ${CACHE_CEILING}.`,
     );

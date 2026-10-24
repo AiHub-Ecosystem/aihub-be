@@ -23,7 +23,7 @@ export type ApiKeyCacheInvalidationSeam =
 
 const redisUnavailableTotal = new Counter({
   name: 'aihub_redis_unavailable_total',
-  help: 'Redis commands a request-path protection seam could not complete, by seam.',
+  help: 'Redis commands an AIHUB protection or cache seam could not complete, by seam.',
   labelNames: ['seam'],
   registers: [registry],
 });

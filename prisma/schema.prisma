@@ -65,6 +65,16 @@ model ApiKey {
   @@map("api_keys")
 }
 
+/// Aggregate Redis failures from one-shot Operator commands, scraped by postgres_exporter.
+/// CHECK constraints are owned by migration 0051.
+/// @owner identity
+model OperatorRedisFailure {
+  seam  String @id
+  total BigInt @default(0)
+
+  @@map("operator_redis_failures")
+}
+
 /// One observed occurrence of a Notification Kind for an Organization
 /// (ADR-0120). It holds references only; channels deliver it.
 ///

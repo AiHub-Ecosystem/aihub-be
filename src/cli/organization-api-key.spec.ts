@@ -1,4 +1,3 @@
-import { getMetrics } from '@/common/observability/metrics';
 import type {
   CreateOperatorApiKeyInput,
   CreateOperatorApiKeyResult,
@@ -50,15 +49,6 @@ class OperatorApiKeyFake implements OperatorApiKeyPort {
 
 const NOW = new Date('2026-10-02T10:00:00.000Z');
 
-async function redisUnavailableCount(seam: string): Promise<number> {
-  const line = (await getMetrics())
-    .split('\n')
-    .find((sample) =>
-      sample.startsWith(`aihub_redis_unavailable_total{seam="${seam}"} `),
-    );
-  return Number(line?.split(' ').at(-1) ?? 0);
-}
-
 function create(
   result?: CreateOperatorApiKeyResult,
   overrides: Partial<CreateOperatorApiKeyCliInput> = {},
@@ -94,6 +84,7 @@ function revoke(
 ) {
   const repository = new OperatorApiKeyFake(undefined, result);
   const purged: string[][] = [];
+  const failures: string[] = [];
   const lines: string[] = [];
   const outcome = runRevokeOperatorApiKeyCommand({
     databaseUrl: 'postgres://unused',
@@ -104,11 +95,14 @@ function revoke(
     purge: async (hashes) => {
       purged.push([...hashes]);
     },
+    recordRedisFailure: async (seam) => {
+      failures.push(seam);
+    },
     emit: (line) => lines.push(line),
     now: () => NOW,
     ...overrides,
   });
-  return { outcome, repository, purged, lines };
+  return { outcome, repository, purged, failures, lines };
 }
 
 describe('runCreateOperatorApiKeyCommand', () => {
@@ -153,7 +147,7 @@ describe('runCreateOperatorApiKeyCommand', () => {
 
 describe('runRevokeOperatorApiKeyCommand', () => {
   it('revokes with the operator as actor and purges the key', async () => {
-    const { outcome, repository, purged, lines } = revoke();
+    const { outcome, repository, purged, failures, lines } = revoke();
 
     await expect(outcome).resolves.toBe('revoked');
     const [call] = repository.revoked;
@@ -164,6 +158,7 @@ describe('runRevokeOperatorApiKeyCommand', () => {
     });
     expect(call?.requestId).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(purged).toEqual([['aa']]);
+    expect(failures).toEqual([]);
     expect(lines).toEqual([
       'Revoked ak_01 and purged its identity cache entry.',
     ]);
@@ -184,10 +179,7 @@ describe('runRevokeOperatorApiKeyCommand', () => {
   });
 
   it('keeps the revocation and says what is left open when the purge fails', async () => {
-    const before = await redisUnavailableCount(
-      'api_key_cache_invalidation_revoke',
-    );
-    const { outcome, lines } = revoke(undefined, {
+    const { outcome, failures, lines } = revoke(undefined, {
       purge: async () => {
         throw new Error('redis down');
       },
@@ -197,9 +189,24 @@ describe('runRevokeOperatorApiKeyCommand', () => {
     expect(lines).toEqual([
       'Revoked ak_01, but could not purge the identity cache; the key may still be accepted for up to 60 seconds.',
     ]);
-    expect(
-      await redisUnavailableCount('api_key_cache_invalidation_revoke'),
-    ).toBe(before + 1);
+    expect(failures).toEqual(['api_key_cache_invalidation_revoke']);
+  });
+
+  it('keeps a committed revocation when failure telemetry cannot be saved', async () => {
+    const { outcome, lines } = revoke(undefined, {
+      purge: async () => {
+        throw new Error('redis down');
+      },
+      recordRedisFailure: async () => {
+        throw new Error('postgres down');
+      },
+    });
+
+    await expect(outcome).resolves.toBe('revoked');
+    expect(lines).toContain(
+      'The Redis failure could not be persisted for monitoring.',
+    );
+    expect(lines.join('\n')).not.toContain('postgres down');
   });
 
   it('reports an unset REDIS_URL instead of purging', async () => {

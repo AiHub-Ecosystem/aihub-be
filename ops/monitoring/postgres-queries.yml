@@ -1,4 +1,14 @@
 # shortcut: relies on postgres_exporter v0.20.1's deprecated query extension; replace before upgrading past support.
+aihub_redis_unavailable:
+  query: SELECT seam, total FROM public.operator_redis_failures
+  metrics:
+    - seam:
+        usage: LABEL
+        description: Fixed Operator cache failure seam
+    - total:
+        usage: COUNTER
+        description: Redis commands an AIHUB protection or cache seam could not complete, by seam.
+
 aihub_postgres_snapshot:
   query: SELECT metric, database_name, value FROM aihub_monitoring.snapshot()
   metrics:

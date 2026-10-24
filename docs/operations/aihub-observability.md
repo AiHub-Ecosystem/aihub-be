@@ -51,13 +51,15 @@ Memory/CPU are hard container ceilings approved for this rollout. TSDB retention
 
 Store monitoring credentials in Vault and provision host-side files under `~/aihub-monitoring/secrets` of the operator account, outside the checkout, with owner-only directory access. Compose files contain file paths only.
 
-PostgreSQL uses a dedicated `aihub_monitoring` login that can execute one fixed `SECURITY DEFINER` function owned by `aihub_admin`. That function returns aggregate connection and lock counts plus `aihub`/`aihub_sandbox` sizes and transaction durations. It exports no SQL text or per-role activity and grants neither `pg_monitor` nor `pg_read_all_stats`. The postgres_exporter `v0.20.1` query extension is deprecated upstream; keep the image pinned and replace this compatibility path before upgrading past its support.
+PostgreSQL uses a dedicated `aihub_monitoring` login that can execute one fixed `SECURITY DEFINER` function owned by `aihub_admin` and read the fixed aggregate `operator_redis_failures` rows. The function returns aggregate connection and lock counts plus `aihub`/`aihub_sandbox` sizes and transaction durations; the table contains only a bounded seam and total. It exports no SQL text or per-role activity and grants neither `pg_monitor` nor `pg_read_all_stats`. The postgres_exporter `v0.20.1` query extension is deprecated upstream; keep the image pinned and replace this compatibility path before upgrading past its support.
 
 Redis uses a dedicated ACL user with only `PING`, aggregate `INFO`, `CLIENT SETNAME`, `LATENCY LATEST`, and `MEMORY STATS`. Key-reading and `CONFIG` commands are denied. The exporter reads its password from a mounted secret file. Do not change Redis `maxmemory` or its existing persistence policy for this collector. Its alert threshold assumes the observed 256 MiB `maxmemory` and must be reviewed if that value changes.
 
 ## Deploy and validate
 
 Keep the Compose file, Prometheus config/rules, blackbox config, PostgreSQL aggregate query/function, and statement installer/report under `~/aihub-monitoring` of the operator account on each host. Keep `.env` and secret files outside that directory's tracked source if it is a checkout; set directory/file permissions before starting containers.
+
+After migration `0051_operator_redis_failures` is applied to the shared `aihub` database, apply [`operator-redis-failures.sql`](../../ops/monitoring/operator-redis-failures.sql) there as the database owner. Copy the updated `postgres-queries.yml` to the Production monitoring directory and recreate only `postgres-exporter` to load the query. This counter is shared by the one-shot Operator CLIs against the control-plane database; do not install the grant in `aihub_sandbox`.
 
 On Production, set `AIHUB_METRICS_BIND_IP=127.0.0.1`, `AIHUB_POSTGRES_EXPORTER_URI=127.0.0.1:5433/aihub?sslmode=disable`, the secret-file path, and `AIHUB_HOST_JOB_METRICS_DIR` to the operator's `~/.aihub-host-job-metrics` (absolute path). On the monitoring host, point `AIHUB_HOST_JOB_METRICS_DIR` at an empty directory. Enable `production` and `container-metrics` profiles. On the monitoring host, set `AIHUB_METRICS_BIND_IP=172.27.0.1`, the observed Redis address `redis://redis:6379`, the restricted SSH identity, and its pinned host key; enable the `monitoring` profile. The `.env` file on each host must satisfy Compose interpolation for the complete file, including fields for inactive profiles.
 
@@ -78,6 +80,7 @@ Inspect `http://127.0.0.1:9094/api/v1/targets` through SSH. Every `aihub-*` targ
 node_uname_info{job=~"aihub-(production|monitoring)-node"}
 container_memory_usage_bytes{job="aihub-production-containers",name=~"aihub.*"}
 aihub_postgres_snapshot_value{job="aihub-postgres",metric="connections_total"}
+aihub_redis_unavailable_total{job="aihub-postgres",seam="api_key_cache_invalidation_revoke"}
 redis_memory_used_bytes{job="aihub-redis"}
 redis_commands_duration_seconds_total{job="aihub-redis"}
 probe_ssl_earliest_cert_expiry{job="aihub-certificate-expiry"}
@@ -86,6 +89,11 @@ aihub_host_job_last_success_timestamp_seconds{job="aihub-production-node"}
 aihub_email_outbox_oldest_queued_age_seconds{job=~"aihub-(production|sandbox)-app"}
 aihub_email_delivery_cancelled_timestamp_seconds{job=~"aihub-(production|sandbox)-app",reason="credential_expired"}
 ```
+
+`aihub_redis_unavailable_total` also appears on the Production and Sandbox app
+targets for request-path failures. Combine CLI and app samples with
+`sum by (seam) (rate(aihub_redis_unavailable_total[5m]))`; the sources are
+disjoint because only Operator CLI failures are persisted by PostgreSQL.
 
 Also confirm the Postgres scrape exposes only the custom aggregate families and the Redis exporter has no key/config access. cAdvisor's read-only Docker and containerd sockets still give it root-equivalent runtime API access; its metric relabel filter keeps only container names beginning `aihub`.
 

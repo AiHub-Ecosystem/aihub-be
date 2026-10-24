@@ -198,9 +198,9 @@ routes, request validation, unmatched routes, downstream failures, or Redis
 unavailability. A rejected response may also increment `aihub_requests_total`
 once in that separate metric family as specified by #240.
 
-`aihub_redis_unavailable_total` increments once when a request-path protection
-or cache seam reports a failed Redis operation, and does not increment for a
-successful operation. Its fixed `seam` values are `graded_admission`,
+`aihub_redis_unavailable_total` increments once when a request-path or
+Operator CLI protection/cache seam reports a failed Redis operation, and does
+not increment for a successful operation. Its fixed `seam` values are `graded_admission`,
 `concurrency`, `rate_limit`, `quota`, `retry_budget`, `api_key_cache`,
 `api_key_cache_invalidation_revoke`, `api_key_cache_invalidation_rotate`,
 `api_key_cache_invalidation_suspension`, `auth_failure_counter`,
@@ -210,6 +210,13 @@ revocation, rotation, or suspension; other API-key cache command failures use
 `api_key_cache`. Recording a Redis failure does not change the customer-facing
 response. Neither metric carries organization, user, request, API-key, signed
 assertion, or essay-content labels.
+
+One-shot Operator commands cannot expose their process-local counter to a later
+Prometheus scrape. Their failed API-key cache invalidations are instead
+incremented in fixed, zero-seeded PostgreSQL rows and exported by the existing
+PostgreSQL exporter as the same metric family on `job="aihub-postgres"`.
+Request-path samples remain process-local on the app targets; queries combining
+both sources aggregate by `seam` across jobs.
 
 The `operation` label comes from the bounded operation catalog. A response
 without a catalog operation uses the fixed value `unmatched`, the same sentinel
