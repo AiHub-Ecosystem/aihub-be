@@ -266,7 +266,10 @@ function sealedPayload(row: SealedRequest | undefined): {
   };
 }
 
-function registerRequest(email: string): {
+function registerRequest(
+  email: string,
+  overrides: { username?: string; password?: string } = {},
+): {
   method: 'POST';
   url: string;
   headers: Record<string, string>;
@@ -278,8 +281,8 @@ function registerRequest(email: string): {
     headers: { 'content-type': 'application/json' },
     payload: {
       email,
-      username: `user-${email.split('@')[0]}`,
-      password: 'correct horse battery',
+      username: overrides.username ?? `user-${email.split('@')[0]}`,
+      password: overrides.password ?? 'correct horse battery',
     },
   };
 }
@@ -469,6 +472,144 @@ describe('local auth email outbox over HTTP', () => {
     const afterExpiry = await app.inject(post(RESEND, 'person@example.com'));
     expect(afterExpiry.statusCode).toBe(202);
     expect(await queuedRequests()).toHaveLength(10);
+  });
+
+  /**
+   * A pending account whose nine-message recipient allowance is full, with the
+   * latest delivered verification link still usable (#932).
+   */
+  async function fillRecipientWindow(
+    email: string,
+  ): Promise<{ readonly accountId: string; readonly token: string }> {
+    const first = await app.inject(registerRequest(email));
+    expect(first.statusCode).toBe(201);
+    for (let index = 0; index < 8; index += 1) {
+      const resend = await app.inject(post(RESEND, email));
+      expect(resend.statusCode).toBe(202);
+    }
+    const requests = await queuedRequests();
+    expect(requests).toHaveLength(9);
+    const account = await pool.query<{ readonly id: string }>(
+      `SELECT user_account_id AS id FROM auth_identities
+       WHERE provider = 'password' AND canonical_email = $1`,
+      [email],
+    );
+    const accountId = account.rows[0]?.id;
+    if (accountId === undefined) throw new Error('the account was not found');
+    return { accountId, token: sealedPayload(requests[8]).token };
+  }
+
+  it('keeps a pending registration and its delivered link when the ceiling refuses the replacement', async () => {
+    const { accountId, token } =
+      await fillRecipientWindow('person@example.com');
+
+    const accountBefore = await pool.query(
+      'SELECT username, updated_at FROM user_accounts WHERE id = $1',
+      [accountId],
+    );
+    const tokensBefore = await pool.query(
+      'SELECT id, token_hash, consumed_at, consumed_reason FROM email_verification_tokens WHERE user_account_id = $1 ORDER BY created_at',
+      [accountId],
+    );
+    const windowBefore = await pool.query(
+      'SELECT address_hmac, request_count, window_started_at, expires_at FROM auth_email_recipient_rate_limits',
+    );
+    expect(
+      tokensBefore.rows.filter((row) => row.consumed_at === null),
+    ).toHaveLength(1);
+
+    // The ceiling is full; a registration for the pending email with
+    // different credentials is suppressed and must change nothing.
+    const suppressed = await app.inject(
+      registerRequest('person@example.com', {
+        username: 'someone-else',
+        password: 'a different password entirely',
+      }),
+    );
+    expect(suppressed.statusCode).toBe(201);
+    expect(suppressed.json().data).toMatchObject({
+      status: 'pending_verification',
+      email_delivery_status: 'suppressed',
+    });
+
+    const accountAfter = await pool.query(
+      'SELECT username, updated_at FROM user_accounts WHERE id = $1',
+      [accountId],
+    );
+    expect(accountAfter.rows[0]).toEqual(accountBefore.rows[0]);
+    const tokensAfter = await pool.query(
+      'SELECT id, token_hash, consumed_at, consumed_reason FROM email_verification_tokens WHERE user_account_id = $1 ORDER BY created_at',
+      [accountId],
+    );
+    expect(tokensAfter.rows).toEqual(tokensBefore.rows);
+    expect(await queuedRequests()).toHaveLength(9);
+    const windowAfter = await pool.query(
+      'SELECT address_hmac, request_count, window_started_at, expires_at FROM auth_email_recipient_rate_limits',
+    );
+    expect(windowAfter.rows).toEqual(windowBefore.rows);
+
+    // The delivered link still verifies the account: nothing was taken from
+    // the mailbox's owner.
+    const verify = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      headers: { 'content-type': 'application/json' },
+      payload: { token },
+    });
+    expect(verify.statusCode).toBe(204);
+    const active = await pool.query<{ readonly status: string }>(
+      'SELECT status FROM user_accounts WHERE id = $1',
+      [accountId],
+    );
+    expect(active.rows[0]?.status).toBe('active');
+  });
+
+  it('replaces the pending registration once the recipient window expires', async () => {
+    const { accountId } = await fillRecipientWindow('person@example.com');
+    await pool.query(
+      `UPDATE auth_email_recipient_rate_limits
+       SET window_started_at = now() - interval '24 hours' - interval '1 second',
+           expires_at = now() - interval '1 second'`,
+    );
+
+    const replacement = await app.inject(
+      registerRequest('person@example.com', {
+        username: 'new-owner',
+        password: 'a fresh password',
+      }),
+    );
+    expect(replacement.statusCode).toBe(201);
+    expect(replacement.json().data).toMatchObject({
+      status: 'pending_verification',
+      email_delivery_status: 'queued',
+    });
+
+    const account = await pool.query<{ readonly username: string }>(
+      'SELECT username FROM user_accounts WHERE id = $1',
+      [accountId],
+    );
+    expect(account.rows[0]?.username).toBe('new-owner');
+    const tokens = await pool.query<{
+      readonly consumed_at: Date | null;
+    }>(
+      'SELECT consumed_at FROM email_verification_tokens WHERE user_account_id = $1 ORDER BY created_at',
+      [accountId],
+    );
+    expect(tokens.rows).toHaveLength(10);
+    expect(
+      tokens.rows.slice(0, 9).every((row) => row.consumed_at !== null),
+    ).toBe(true);
+    expect(tokens.rows[9]?.consumed_at).toBeNull();
+
+    const requests = await queuedRequests();
+    expect(requests).toHaveLength(10);
+    const verify = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      headers: { 'content-type': 'application/json' },
+      payload: { token: sealedPayload(requests[9]).token },
+    });
+    expect(verify.statusCode).toBe(204);
   });
 
   it('cannot commit more than nine requests for one recipient under concurrent recovery calls', async () => {

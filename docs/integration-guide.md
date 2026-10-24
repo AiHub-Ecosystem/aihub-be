@@ -62,7 +62,13 @@ its email is verified, and sends a verification link to that address.
   username and password, makes every earlier verification link unusable, and
   sends a new one. The answer is the same `201` a new email gets. Only an email
   whose account is already active, or a username another account holds,
-  answers `409 AUTH_IDENTITY_UNAVAILABLE`.
+  answers `409 AUTH_IDENTITY_UNAVAILABLE`. One limit: an address can receive at
+  most nine authentication emails a day. When that ceiling is full, a
+  registration answers `email_delivery_status: "suppressed"` and guarantees
+  nothing was sent — for an email that already has a pending registration this
+  also means nothing was replaced: the earlier username, password and
+  verification link all stay exactly as they were, and the last delivered link
+  keeps working.
 - **A registration that is never verified expires after seven days.** Its email
   and username become free to register again.
 - **An email address has one form.** The local part must be ASCII (letters,

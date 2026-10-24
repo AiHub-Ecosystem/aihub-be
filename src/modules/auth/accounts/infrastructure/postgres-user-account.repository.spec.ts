@@ -1,3 +1,4 @@
+import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { LOCK_PASSWORD_IDENTITY_SQL } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
@@ -28,6 +29,31 @@ const USER_ID = 'usr_01J00000000000000000000000';
 function repositoryOver(script: ScriptedPrisma): PostgresUserAccountRepository {
   return new PostgresUserAccountRepository(script.client());
 }
+
+/** A writer whose recipient reservation answers `reserve` and records inserts. */
+function scriptedEmailWriter(
+  reserve: boolean,
+): EmailDeliveryRequestWriterPort & {
+  readonly inserted: unknown[];
+} {
+  const inserted: unknown[] = [];
+  return {
+    inserted,
+    reserveAuthenticationEmailRecipient: async () => reserve,
+    insert: async (_transaction, request) => {
+      inserted.push(request);
+    },
+    queuedPayloadCiphertexts: async () => [],
+    cancelQueued: async () => undefined,
+  };
+}
+
+const emailDelivery = {
+  id: 'edr_01J00000000000000000000000',
+  kind: 'verification_email',
+  payloadCiphertext: 'sealed',
+  createdAt: input.now,
+} as const;
 
 describe('PostgresUserAccountRepository', () => {
   it('persists account, local identity, and token in one transaction', async () => {
@@ -88,6 +114,84 @@ describe('PostgresUserAccountRepository', () => {
     expect(JSON.stringify(script.statements[4]?.args)).toContain(
       input.tokenHash,
     );
+  });
+
+  it('leaves a pending registration untouched when the recipient reservation is refused', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [
+        {
+          id: USER_ID,
+          canonical_email: input.email,
+          status: 'pending_verification',
+        },
+      ],
+    ];
+    const emailRequests = scriptedEmailWriter(false);
+
+    const result = await new PostgresUserAccountRepository(
+      script.client(),
+      emailRequests,
+    ).register({ ...input, emailDelivery });
+
+    // The delivered verification link stays the account's only usable one:
+    // no replacement, no token, no outbox row, and the pending-expiry
+    // timestamp is not renewed (#932).
+    expect(result).toBe('suppressed');
+    expect(script.statements.map(({ name }) => name)).toEqual([
+      LOCK_PASSWORD_IDENTITY_SQL,
+    ]);
+    expect(emailRequests.inserted).toEqual([]);
+  });
+
+  it('replaces and queues when the reservation allows the replacement', async () => {
+    const script = new ScriptedPrisma();
+    script.inside = [
+      [
+        {
+          id: USER_ID,
+          canonical_email: input.email,
+          status: 'pending_verification',
+        },
+      ],
+    ];
+    const emailRequests = scriptedEmailWriter(true);
+
+    const result = await new PostgresUserAccountRepository(
+      script.client(),
+      emailRequests,
+    ).register({ ...input, emailDelivery });
+
+    expect(result).toBe('queued');
+    expect(script.statements.map(({ name }) => name)).toEqual([
+      LOCK_PASSWORD_IDENTITY_SQL,
+      'userAccount.update',
+      'authIdentity.updateMany',
+      'emailVerificationToken.updateMany',
+      'emailVerificationToken.create',
+    ]);
+    expect(emailRequests.inserted).toEqual([emailDelivery]);
+  });
+
+  it('still creates a new suppressed account when the reservation is refused', async () => {
+    const script = new ScriptedPrisma();
+    const emailRequests = scriptedEmailWriter(false);
+
+    const result = await new PostgresUserAccountRepository(
+      script.client(),
+      emailRequests,
+    ).register({ ...input, emailDelivery });
+
+    // ADR-0096's baseline: an email with no account yet still gets its
+    // pending account and token, just no outbox row.
+    expect(result).toBe('suppressed');
+    expect(script.statements.map(({ name }) => name)).toEqual([
+      LOCK_PASSWORD_IDENTITY_SQL,
+      'userAccount.create',
+      'authIdentity.create',
+      'emailVerificationToken.create',
+    ]);
+    expect(emailRequests.inserted).toEqual([]);
   });
 
   it.each(['active', 'disabled'])(

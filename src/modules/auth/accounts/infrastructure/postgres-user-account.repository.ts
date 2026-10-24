@@ -51,7 +51,31 @@ export class PostgresUserAccountRepository
             input.email,
           ])
         )[0];
-        if (existing === undefined) {
+        const pendingId =
+          existing !== undefined &&
+          existing.status === 'pending_verification' &&
+          typeof existing.id === 'string'
+            ? existing.id
+            : undefined;
+        if (existing !== undefined && pendingId === undefined) {
+          throw new AuthIdentityConflictError();
+        }
+        // The mailbox's email allowance is reserved before anything a refused
+        // reservation must leave intact: a registration for a pending email
+        // keeps that account's credential, username, open verification token
+        // and pending-expiry timestamp exactly as they were, because the
+        // delivered link is the only way left to verify it (#932). Resend
+        // refuses the same reservation before its own token mutation.
+        const recipientAllowed =
+          input.emailDelivery === undefined ||
+          (await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+            new EmailDeliveryTransactionAdapter(transaction),
+            { email: input.email, now: input.now },
+          ));
+        if (!recipientAllowed && pendingId !== undefined) {
+          return 'suppressed';
+        }
+        if (pendingId === undefined) {
           userId = `usr_${ulid()}`;
           await transaction.userAccount.create({
             data: {
@@ -75,14 +99,9 @@ export class PostgresUserAccountRepository
           });
         } else {
           // The mailbox's owner registering again takes the pending slot back
-          // (ADR-0054): the registrant before them no longer holds the credential.
-          if (
-            existing.status !== 'pending_verification' ||
-            typeof existing.id !== 'string'
-          ) {
-            throw new AuthIdentityConflictError();
-          }
-          userId = existing.id;
+          // (ADR-0054): the registrant before them no longer holds the
+          // credential.
+          userId = pendingId;
           await transaction.userAccount.update({
             where: { id: userId },
             data: { username: input.username, updatedAt: input.now },
@@ -96,12 +115,6 @@ export class PostgresUserAccountRepository
             data: { consumedAt: input.now, consumedReason: 'superseded' },
           });
         }
-        const recipientAllowed =
-          input.emailDelivery === undefined ||
-          (await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
-            new EmailDeliveryTransactionAdapter(transaction),
-            { email: input.email, now: input.now },
-          ));
         await transaction.emailVerificationToken.create({
           data: {
             id: input.tokenId,
