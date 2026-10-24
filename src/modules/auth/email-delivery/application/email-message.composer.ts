@@ -339,7 +339,7 @@ export function composeApiKeyNearExpiryNotification(
       buttonLabel: 'Quản lý API key',
       url,
       expiryLabel: 'Key đầu tiên hết hạn',
-      expiresAt: `${formatVietnameseDateTime(earliest)} (giờ Việt Nam)`,
+      expiresAt: formatVietnameseDateTime(earliest),
       notice: remedy,
     }),
   };

@@ -50,6 +50,13 @@ describe('Auth email message composition', () => {
         'href="https://customer.example.com/console/orgs/org_123/api-keys"',
       );
       expect(message.html).toContain('Batch &lt;grader&gt;');
+      // The template renders the timezone suffix itself, so the value the
+      // composer passes must stay bare or the expiry row shows it twice
+      // (#1140).
+      expect(message.html).toContain(
+        'Key đầu tiên hết hạn <strong style="color:#1d2838">lúc 07:00 20 tháng 9, 2026</strong> (giờ Việt Nam).',
+      );
+      expect(message.html).not.toContain('(giờ Việt Nam) (giờ Việt Nam)');
     });
 
     it('stays text-only without a Customer Web URL', () => {
