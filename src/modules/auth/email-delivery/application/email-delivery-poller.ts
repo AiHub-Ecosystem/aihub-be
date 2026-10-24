@@ -322,11 +322,11 @@ export class EmailDeliveryPoller {
     try {
       reservation = await this.sendRateLimiter.reserve();
     } catch {
-      await this.releaseProbe(sendPermit);
+      await this.releaseProbe(sendPermit.probeToken);
       return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
     }
     if (!reservation.reserved) {
-      await this.releaseProbe(sendPermit);
+      await this.releaseProbe(sendPermit.probeToken);
       const retryAfterMs = reservation.retryAfterMs;
       return this.defer(
         request,
@@ -344,11 +344,11 @@ export class EmailDeliveryPoller {
           emailDailySendBudgetCategory(request.kind),
         );
       } catch {
-        await this.releaseProbe(sendPermit);
+        await this.releaseProbe(sendPermit.probeToken);
         return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
       }
       if (!budgetReservation.reserved) {
-        await this.releaseProbe(sendPermit);
+        await this.releaseProbe(sendPermit.probeToken);
         const expiresAt = delivery.handler.credential(
           delivery.payload,
         )?.expiresAt;
@@ -377,7 +377,7 @@ export class EmailDeliveryPoller {
         owner: this.options.owner,
       });
     } catch (error) {
-      await this.releaseProbe(sendPermit);
+      await this.releaseProbe(sendPermit.probeToken);
       throw error;
     }
 
@@ -388,7 +388,7 @@ export class EmailDeliveryPoller {
       credential !== undefined &&
       isCredentialExpired(credential.expiresAt, handoffAt)
     ) {
-      await this.releaseProbe(sendPermit);
+      await this.releaseProbe(sendPermit.probeToken);
       return this.maintenance.cancel(request, 'credential_expired', handoffAt);
     }
 
@@ -409,7 +409,7 @@ export class EmailDeliveryPoller {
         );
         return 'provider_outage';
       }
-      await this.releaseProbe(sendPermit);
+      await this.releaseProbe(sendPermit.probeToken);
       return this.maintenance.recordFailure(request, errorCodeOf(error), now);
     }
 
@@ -447,7 +447,7 @@ export class EmailDeliveryPoller {
       return 'provider_outage';
     }
 
-    await this.closeProviderCircuit();
+    await this.closeProviderCircuit(sendPermit.probeToken);
 
     if (response.status === 401 || response.status === 403) {
       this.providerPausedUntil = responseReceivedAt.getTime() + DEFER_RETRY_MS;
@@ -516,12 +516,13 @@ export class EmailDeliveryPoller {
     return 'provider_outage';
   }
 
-  private async releaseProbe(permit: EmailProviderSendPermit): Promise<void> {
-    if (!permit.allowed || permit.probeToken === undefined) return;
+  private async releaseProbe(probeToken: string | undefined): Promise<void> {
+    if (probeToken === undefined) return;
     try {
-      await this.providerOutageCircuit.releaseProbe(permit.probeToken);
+      await this.providerOutageCircuit.releaseProbe(probeToken);
     } catch {
-      // Redis expires the probe lock with its bounded recovery TTL.
+      // Redis expires the probe lock with its bounded recovery TTL, and the
+      // acquire script takes over a probe held past its stale margin (#1113).
     }
   }
 
@@ -546,6 +547,9 @@ export class EmailDeliveryPoller {
       );
       return safeDelayMs;
     } catch {
+      // Nothing reached shared state, so the probe this attempt held would
+      // strand every poller until the outage key expires (#1113).
+      await this.releaseProbe(probeToken);
       const fallbackDelayMs = Math.max(
         retryAfterMs,
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
@@ -558,10 +562,13 @@ export class EmailDeliveryPoller {
     }
   }
 
-  private async closeProviderCircuit(): Promise<void> {
+  private async closeProviderCircuit(probeToken?: string): Promise<void> {
     try {
       await this.providerOutageCircuit.recordProviderReachable();
     } catch {
+      // The state this DEL failed to clear still holds the probe, and a held
+      // probe strands every poller until it is released or taken over (#1113).
+      await this.releaseProbe(probeToken);
       this.providerPausedUntil = Math.max(
         this.providerPausedUntil,
         this.now().getTime() + EMAIL_SEND_RATE_LIMIT_RETRY_MS,

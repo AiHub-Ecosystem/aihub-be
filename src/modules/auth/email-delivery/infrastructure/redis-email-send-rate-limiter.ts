@@ -40,16 +40,26 @@ const OUTAGE_STATE_TTL_MARGIN_MS = 60_000;
 // shortcut: six-minute probe recovery TTL, raise it if a bounded dispatch can exceed that.
 const OUTAGE_PROBE_STATE_TTL_MS =
   EMAIL_PROVIDER_OUTAGE_MAX_COOLDOWN_MS + OUTAGE_STATE_TTL_MARGIN_MS;
+// A probe owner answers within one attempt (its 5-second provider timeout) plus
+// the reservation round-trips around it. A probe still held past this margin
+// belongs to an owner that could not record its outcome (#1113), so the next
+// acquire takes it over instead of waiting out the state key's TTL.
+export const OUTAGE_PROBE_STALE_MS = 30_000;
 
 export const EMAIL_PROVIDER_OUTAGE_ACQUIRE_SCRIPT = `
 local redis_time = redis.call('TIME')
 local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
-local state = redis.call('HMGET', KEYS[1], 'started_at_ms', 'open_until_ms', 'probe_token')
+local state = redis.call('HMGET', KEYS[1], 'started_at_ms', 'open_until_ms', 'probe_token', 'probe_granted_at_ms')
 if not state[1] then return { 1, 0, '' } end
 local open_until_ms = tonumber(state[2] or '0')
 if now_ms < open_until_ms then return { 0, open_until_ms - now_ms, '' } end
-if state[3] then return { 0, tonumber(ARGV[3]), '' } end
-redis.call('HSET', KEYS[1], 'probe_token', ARGV[1])
+if state[3] then
+  local granted_at_ms = tonumber(state[4] or '0')
+  if granted_at_ms <= 0 or now_ms - granted_at_ms < tonumber(ARGV[4]) then
+    return { 0, tonumber(ARGV[3]), '' }
+  end
+end
+redis.call('HSET', KEYS[1], 'probe_token', ARGV[1], 'probe_granted_at_ms', now_ms)
 redis.call('PEXPIRE', KEYS[1], math.max(open_until_ms - now_ms, 0) + tonumber(ARGV[2]))
 return { 1, 0, ARGV[1] }
 `;
@@ -58,7 +68,7 @@ export const EMAIL_PROVIDER_OUTAGE_RELEASE_PROBE_SCRIPT = `
 local redis_time = redis.call('TIME')
 local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
 if redis.call('HGET', KEYS[1], 'probe_token') ~= ARGV[1] then return 0 end
-redis.call('HDEL', KEYS[1], 'probe_token')
+redis.call('HDEL', KEYS[1], 'probe_token', 'probe_granted_at_ms')
 local open_until_ms = tonumber(redis.call('HGET', KEYS[1], 'open_until_ms') or '0')
 redis.call('PEXPIRE', KEYS[1], math.max(open_until_ms - now_ms, 0) + tonumber(ARGV[2]))
 return 1
@@ -80,7 +90,7 @@ local delay_ms = math.max(jitter_ms, retry_after_ms)
 local open_until_ms = math.max(tonumber(state[3] or '0'), now_ms + delay_ms)
 redis.call('HSET', KEYS[1], 'started_at_ms', started_at_ms, 'failure_count', failure_count, 'open_until_ms', open_until_ms)
 local owns_probe = state[4] and state[4] == ARGV[4]
-if owns_probe then redis.call('HDEL', KEYS[1], 'probe_token') end
+if owns_probe then redis.call('HDEL', KEYS[1], 'probe_token', 'probe_granted_at_ms') end
 local effective_delay_ms = math.max(0, open_until_ms - now_ms)
 local ttl_ms = effective_delay_ms + tonumber(ARGV[3])
 if state[4] and not owns_probe then ttl_ms = math.max(ttl_ms, tonumber(ARGV[5])) end
@@ -196,6 +206,7 @@ export class RedisEmailSendRateLimiter
         probeToken,
         String(OUTAGE_PROBE_STATE_TTL_MS),
         String(RETRY_WHEN_UNAVAILABLE_MS),
+        String(OUTAGE_PROBE_STALE_MS),
       );
       const [allowed, retryAfterMs, acquiredToken] = Array.isArray(result)
         ? result
@@ -261,7 +272,19 @@ export class RedisEmailSendRateLimiter
         return delayMs;
       }
     } catch {
-      // The caller keeps a short process-local pause if shared state is down.
+      // No recording was confirmed; fall through to the local pause below.
+    }
+    // A probe this far down may still be live, and a live one strands every
+    // other instance until the state key expires, so hand it back while Redis
+    // will still take it. A probe the failure script already consumed makes
+    // the release a no-op, and a release that itself fails is healed by the
+    // acquire script's stale takeover (#1113).
+    if (probeToken !== undefined) {
+      try {
+        await this.releaseProbe(probeToken);
+      } catch {
+        // The stale takeover bounds a probe this could not release.
+      }
     }
     return this.localPause(retryAfterMs);
   }

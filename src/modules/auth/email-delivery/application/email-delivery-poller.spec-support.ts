@@ -252,6 +252,8 @@ export class FakeEmailProviderOutageCircuit
   reachable = 0;
   outageDurationMs = 0;
   cooldownMs = 5_000;
+  recordFailureError: Error | undefined;
+  recordReachableError: Error | undefined;
 
   async acquireSendPermit(): Promise<EmailProviderSendPermit> {
     return this.permit;
@@ -265,12 +267,16 @@ export class FakeEmailProviderOutageCircuit
     retryAfterMs: number,
     probeToken?: string,
   ): Promise<number> {
+    if (this.recordFailureError !== undefined) throw this.recordFailureError;
     this.failures.push(retryAfterMs);
     this.failedProbeTokens.push(probeToken);
     return Math.max(this.cooldownMs, retryAfterMs);
   }
 
   async recordProviderReachable(): Promise<void> {
+    if (this.recordReachableError !== undefined) {
+      throw this.recordReachableError;
+    }
     this.reachable += 1;
   }
 

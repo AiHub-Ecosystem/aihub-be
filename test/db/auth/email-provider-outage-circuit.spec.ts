@@ -1,10 +1,39 @@
 import { once } from 'node:events';
 
 import {
+  EMAIL_PROVIDER_OUTAGE_FAILURE_SCRIPT,
   EMAIL_PROVIDER_OUTAGE_STATE_KEY,
+  type EmailSendRateRedisClient,
+  OUTAGE_PROBE_STALE_MS,
   RedisEmailSendRateLimiter,
 } from '@/modules/auth/email-delivery/infrastructure/redis-email-send-rate-limiter';
 import { createSandboxTestRedis } from '../shared/database';
+
+/** Answers every script from Redis except the failure script, which throws. */
+class FailureScriptRejectingRedis implements EmailSendRateRedisClient {
+  constructor(
+    private readonly redis: ReturnType<typeof createSandboxTestRedis>,
+  ) {}
+
+  async eval(
+    script: string,
+    numberOfKeys: number,
+    ...args: string[]
+  ): Promise<unknown> {
+    if (script === EMAIL_PROVIDER_OUTAGE_FAILURE_SCRIPT) {
+      throw new Error('connection lost');
+    }
+    return this.redis.eval(script, numberOfKeys, ...args);
+  }
+
+  on(event: string, listener: (...args: unknown[]) => void): unknown {
+    return this.redis.on(event, listener);
+  }
+
+  disconnect(): void {
+    this.redis.disconnect();
+  }
+}
 
 describe('shared email provider outage circuit in Redis', () => {
   let redisA: ReturnType<typeof createSandboxTestRedis>;
@@ -74,5 +103,57 @@ describe('shared email provider outage circuit in Redis', () => {
     await expect(circuitB.acquireSendPermit()).resolves.toEqual({
       allowed: true,
     });
+  });
+
+  it('releases a probe whose failure recording died on a Redis error, so the next acquire proceeds', async () => {
+    await circuitA.recordProviderFailure(1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const permit = await circuitA.acquireSendPermit();
+    if (!permit.allowed || permit.probeToken === undefined) {
+      throw new Error('the shared circuit did not grant a half-open probe');
+    }
+
+    const strandedOwner = new RedisEmailSendRateLimiter(
+      '',
+      1,
+      1_000,
+      new FailureScriptRejectingRedis(redisB),
+      () => 0,
+    );
+    await expect(
+      strandedOwner.recordProviderFailure(0, permit.probeToken),
+    ).resolves.toBe(5_000);
+
+    await expect(circuitB.acquireSendPermit()).resolves.toMatchObject({
+      allowed: true,
+    });
+  });
+
+  it('takes over a probe held past the stale margin by an owner that never answered', async () => {
+    await circuitA.recordProviderFailure(1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const permit = await circuitA.acquireSendPermit();
+    if (!permit.allowed || permit.probeToken === undefined) {
+      throw new Error('the shared circuit did not grant a half-open probe');
+    }
+
+    // A fresh probe still belongs to its owner: everyone else waits.
+    await expect(circuitB.acquireSendPermit()).resolves.toEqual({
+      allowed: false,
+      retryAfterMs: 5_000,
+    });
+
+    // The owner cannot record its outcome (#1113); once its grant ages past
+    // the stated margin, the next acquire heals the stranded probe.
+    await redisA.hset(
+      EMAIL_PROVIDER_OUTAGE_STATE_KEY,
+      'probe_granted_at_ms',
+      String(Date.now() - OUTAGE_PROBE_STALE_MS - 1_000),
+    );
+    const takeover = await circuitB.acquireSendPermit();
+    if (!takeover.allowed) {
+      throw new Error('the stale probe was not taken over');
+    }
+    expect(takeover.probeToken).not.toBe(permit.probeToken);
   });
 });

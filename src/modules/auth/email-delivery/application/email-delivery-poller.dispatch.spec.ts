@@ -272,6 +272,39 @@ describe('EmailDeliveryPoller', () => {
     expect(summary.deferred).toBe(2);
   });
 
+  it('releases the probe when recording the provider failure itself fails', async () => {
+    const { poller, store, sender, outageCircuit } = harness();
+    outageCircuit.permit = { allowed: true, probeToken: 'probe-token' };
+    outageCircuit.recordFailureError = new Error('connection lost');
+    store.claimResult = [claimed(), claimed({ id: 'edr_second' })];
+    sender.response = { status: 503, retryAfter: undefined };
+
+    const summary = await poller.runOnce();
+
+    // Nothing reached shared state, so the probe must go back or every other
+    // instance waits out the outage key's TTL (#1113).
+    expect(outageCircuit.releases).toEqual(['probe-token']);
+    expect(outageCircuit.failures).toEqual([]);
+    expect(store.unspent).toHaveLength(1);
+    expect(store.deferred).toContain('edr_second');
+    expect(summary.deferred).toBe(2);
+  });
+
+  it('releases the probe when closing the circuit after a successful send fails', async () => {
+    const { poller, store, outageCircuit } = harness();
+    outageCircuit.permit = { allowed: true, probeToken: 'probe-token' };
+    outageCircuit.recordReachableError = new Error('connection lost');
+    store.claimResult = [claimed()];
+
+    const summary = await poller.runOnce();
+
+    // The circuit state the DEL could not clear still holds the probe; it goes
+    // back or every other instance waits out the stale margin (#1113).
+    expect(outageCircuit.releases).toEqual(['probe-token']);
+    expect(store.accepted).toEqual([ROW_ID]);
+    expect(summary.providerAccepted).toBe(1);
+  });
+
   it('keeps mail queued through more than three provider failures, then delivers it', async () => {
     let now = new Date(NOW);
     const { poller, store, sender } = harness({ now: () => new Date(now) });
