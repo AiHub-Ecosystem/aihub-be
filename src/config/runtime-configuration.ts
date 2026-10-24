@@ -116,6 +116,9 @@ const fields = {
     kind: 'number',
     defaultValue: 100,
     minValue: 1,
+    // organizations.monthly_request_quota is a Postgres Int (Int4); a value
+    // past this bound would boot fine and fail every self-serve creation.
+    maxValue: 2_147_483_647,
   },
   DATABASE_URL: {
     kind: 'string',

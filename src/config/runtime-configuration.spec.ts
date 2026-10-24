@@ -53,6 +53,49 @@ describe('runtime configuration', () => {
     );
   });
 
+  it('refuses a self-serve monthly request quota its Int4 column cannot store', () => {
+    const base = {
+      NODE_ENV: 'test',
+      AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+      AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+      AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+      AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+      AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+    } as const;
+
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...base,
+        AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: '3000000000',
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    expect((caught as RuntimeConfigurationError).variableNames).toContain(
+      'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA',
+    );
+
+    let overByOne: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...base,
+        AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: '2147483648',
+      });
+    } catch (error) {
+      overByOne = error;
+    }
+    expect(overByOne).toBeInstanceOf(RuntimeConfigurationError);
+
+    expect(
+      loadRuntimeConfiguration({
+        ...base,
+        AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: '2147483647',
+      }).AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA,
+    ).toBe(2147483647);
+  });
+
   it('requires an explicit trusted-proxy IP literal in every runtime mode', () => {
     const base = {
       NODE_ENV: 'test',

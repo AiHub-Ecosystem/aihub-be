@@ -164,7 +164,9 @@ requests, that a new Organization starts on when a customer creates one through
 blank uses the built-in value of 100. It must be a positive integer — zero and
 fractions stop the process at boot rather than starting an Organization that
 could not answer a single request, and "no limit" is a quota of NULL set on the
-Organization itself. The value applies only to Organizations created after the
+Organization itself. It is also capped at 2147483647, the largest value the
+`organizations.monthly_request_quota` column can store; a larger value refuses
+boot with the variable named. The value applies only to Organizations created after the
 restart; an existing Organization keeps the quota already stored on it, and
 raising one is an operator SQL or CLI act, not this variable. The full set of
 terms is an Organization's own row, so this setting never retrofits existing
