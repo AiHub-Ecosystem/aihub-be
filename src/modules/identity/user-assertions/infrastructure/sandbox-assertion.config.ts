@@ -1,3 +1,5 @@
+import { createPrivateKey, createPublicKey } from 'node:crypto';
+
 import type {
   RuntimeConfiguration,
   RuntimeConnectionConfiguration,
@@ -19,6 +21,44 @@ export interface SandboxSigningMaterial {
 }
 
 const ALGORITHM: IdentityConfigAlgorithm = 'RS256';
+
+// #638 establishes the floor for the User Access JWT signing key; this is the
+// same floor for the sibling sandbox-assertion key until that issue names one.
+const MIN_SANDBOX_ASSERTION_MODULUS_BITS = 2048;
+
+// A memo keeps the per-request policy and mint paths from re-parsing the same
+// key; a key that fails is re-checked and re-refused on every call.
+let validatedPrivateKeyPem: string | undefined;
+
+function assertUsableRsaSigningKey(privateKeyPem: string): void {
+  if (validatedPrivateKeyPem === privateKeyPem) {
+    return;
+  }
+  let modulusBits: number;
+  try {
+    const privateKey = createPrivateKey(privateKeyPem);
+    if (privateKey.asymmetricKeyType !== 'rsa') {
+      throw new Error('the key is not RSA');
+    }
+    const jwk = createPublicKey(privateKey).export({ format: 'jwk' });
+    if (typeof jwk.n !== 'string') {
+      throw new Error('the key carries no modulus');
+    }
+    modulusBits = Buffer.from(jwk.n, 'base64url').length * 8;
+  } catch (error) {
+    throw new Error(
+      `AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY is not a usable RS256 signing key: ${
+        error instanceof Error ? error.message : 'unknown reason'
+      }`,
+    );
+  }
+  if (modulusBits < MIN_SANDBOX_ASSERTION_MODULUS_BITS) {
+    throw new Error(
+      `AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY carries a ${modulusBits}-bit RSA key; sandbox assertions need at least ${MIN_SANDBOX_ASSERTION_MODULUS_BITS} bits.`,
+    );
+  }
+  validatedPrivateKeyPem = privateKeyPem;
+}
 
 function trimmed(value: string | undefined): string {
   return value === undefined ? '' : value.trim();
@@ -53,6 +93,8 @@ export function readSandboxSigningMaterial(
   if (privateKeyPem.length === 0 || keyId.length === 0) {
     return undefined;
   }
+
+  assertUsableRsaSigningKey(privateKeyPem);
 
   return { privateKeyPem, keyId, algorithm: ALGORITHM };
 }

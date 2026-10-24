@@ -568,10 +568,15 @@ type IdentityTransactionClient = ReturnType<
       // sandbox must still assemble.
       provide: SANDBOX_ASSERTION_SIGNER,
       inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (connection: RuntimeConnectionConfigurationPort) =>
-        new JoseSandboxAssertionSigner(() =>
+      useFactory: (connection: RuntimeConnectionConfigurationPort) => {
+        // A present sandbox key is validated here, at boot, so a short or
+        // malformed key refuses assembly instead of failing at first mint;
+        // absence remains a supported state.
+        readSandboxSigningMaterial(connection);
+        return new JoseSandboxAssertionSigner(() =>
           readSandboxSigningMaterial(connection),
-        ),
+        );
+      },
     },
     {
       provide: SANDBOX_ASSERTION_MINTER,

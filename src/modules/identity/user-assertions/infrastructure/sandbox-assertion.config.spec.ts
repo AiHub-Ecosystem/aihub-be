@@ -1,10 +1,23 @@
+import { generateKeyPairSync } from 'node:crypto';
+
 import { loadRuntimeConfiguration } from '@/config/runtime-configuration';
 import {
   readSandboxOrganizationIds,
   readSandboxSigningMaterial,
 } from './sandbox-assertion.config';
 
-const PEM = '-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n';
+const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  .privateKey.export({ type: 'pkcs8', format: 'pem' })
+  .toString();
+const PEM = privateKey;
+
+const SHORT_KEY_PEM = generateKeyPairSync('rsa', { modulusLength: 1024 })
+  .privateKey.export({ type: 'pkcs8', format: 'pem' })
+  .toString();
+
+const EC_KEY_PEM = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  .privateKey.export({ type: 'pkcs8', format: 'pem' })
+  .toString();
 
 function configuration(
   overrides: Readonly<Record<string, string | undefined>>,
@@ -50,14 +63,41 @@ describe('readSandboxSigningMaterial', () => {
   it('restores line breaks escaped by the environment', () => {
     const material = readSandboxSigningMaterial(
       configuration({
-        AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY:
-          '-----BEGIN PRIVATE KEY-----\\nMIIB\\n-----END PRIVATE KEY-----',
+        AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: PEM.trim().replace(/\n/g, '\\n'),
       }).connection,
     );
 
-    expect(material?.privateKeyPem).toBe(
-      '-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----',
-    );
+    expect(material?.privateKeyPem).toBe(PEM.trim());
+  });
+
+  it('refuses an RSA key below the 2048-bit modulus floor, naming the variable', () => {
+    expect(() =>
+      readSandboxSigningMaterial(
+        configuration({
+          AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: SHORT_KEY_PEM,
+        }).connection,
+      ),
+    ).toThrow('AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY');
+  });
+
+  it('refuses a key that is not RSA, naming the variable', () => {
+    expect(() =>
+      readSandboxSigningMaterial(
+        configuration({
+          AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: EC_KEY_PEM,
+        }).connection,
+      ),
+    ).toThrow('AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY');
+  });
+
+  it('refuses a value that is not a parseable private key, naming the variable', () => {
+    expect(() =>
+      readSandboxSigningMaterial(
+        configuration({
+          AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: 'not a private key at all',
+        }).connection,
+      ),
+    ).toThrow('AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY');
   });
 
   it.each([
