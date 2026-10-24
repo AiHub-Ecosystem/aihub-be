@@ -1133,7 +1133,13 @@ main().catch((error) => {
   console.error(
     error instanceof Error && error.code === 'AUDIT_COMPLETION_FAILURE'
       ? 'Revocation outcome is unconfirmed: the request is audited, but completion could not be confirmed. After database recovery, rerun the same URL and actor; deletion is idempotent.'
-      : 'Command failed',
+      : // The message is operator-facing: runners throw configuration and
+        // store errors whose text names variables, never credential values.
+        `Command failed: ${
+          error instanceof Error && error.message.length > 0
+            ? error.message
+            : 'unknown error'
+        }`,
   );
   process.exitCode = error instanceof CliUsageError ? 2 : 1;
 });

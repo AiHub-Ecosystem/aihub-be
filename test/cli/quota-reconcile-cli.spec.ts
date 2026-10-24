@@ -41,6 +41,6 @@ describe('quota reconciliation CLI', () => {
     });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('Command failed');
+    expect(result.stderr).toContain('Command failed: REDIS_URL is required');
   });
 });
