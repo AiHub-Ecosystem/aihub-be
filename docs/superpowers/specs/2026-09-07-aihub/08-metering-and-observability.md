@@ -246,44 +246,69 @@ predict it. Per-Organization usage is still exact — it lives in the durable
 `usage_records` aggregate and in the `request_completed` structured log line,
 which is where an unbounded dimension belongs.
 
-## L.3 Request Tracing: OTLP Endpoint, No Bundled Collector
+## L.3 Request Tracing: OTLP over HTTPS, No Bundled Collector
 
 AIHUB creates a Fastify request span and child spans for ioredis commands,
 Postgres queries, and Undici downstream calls. The request span uses the route
 template rather than the raw URL and records AIHUB's generated `request_id`.
 W3C trace context is propagated downstream; baggage is not propagated.
 
-Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` to an OTLP/HTTP traces receiver to
-enable tracing. Leave it empty to disable instrumentation. Traces are batched
-and exported asynchronously, so exporter availability does not gate a customer
-response. The application Compose stack does not bundle a collector or trace
-store.
+Leave `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` empty to disable instrumentation.
+After #237's trace path is deployed, Production and Sandbox set it to
+`https://otel.<approved-domain>/v1/traces`. A TLS reverse proxy on the
+monitoring host forwards this route to Tempo's loopback OTLP/HTTP receiver. It
+accepts only the fixed Production egress IP, which also carries Sandbox
+traffic; it does not accept OTLP from arbitrary Internet clients. Grafana UI
+uses the separate `https://grafana.<approved-domain>` name and requires Grafana
+login. Keep both DNS records, proxy virtual
+hosts, certificate renewal, and expiry probes in the monitoring configuration
+repository. Until the DNS names and routes are deployed and verified, leave the
+endpoint empty. Do not use the old `otel-collector` example; no such service
+exists.
+
+Traces are batched and exported asynchronously, so exporter availability does
+not gate a customer response. The application Compose stack does not bundle a
+collector or trace store. #968 measures tracing overhead and behavior when the
+receiver is unavailable. #237 adds bounded counters for failed exports and
+dropped spans, emits one safe log event per receiver outage, and supplies a
+service-specific Tempo receive signal for the alert. The alert fires when AIHUB
+continues serving requests but Tempo receives no `service.name=aihub-be` spans
+for five minutes; no traffic is a healthy no-alert case. An exporter success
+counter alone is not proof that Tempo received the spans.
 
 Span data is restricted: Redis records the command name without keys or values;
 Postgres records the SQL operation name without query text or parameters;
 request bodies, credentials, and raw URLs are not attached to request spans.
 
-## L.4 Core Alerting Thresholds
+## L.4 Core Alerting and Ownership
 
 ```
 Circuit breaker open > 2 minutes
-5xx error rate > 5% over 5 minutes
-p95 latency > 2x historical baseline
 Redis connection loss
-missing_usage > 1% over 1 hour
+Incomplete usage rate > 1% over one hourly report window
 Postgres disk space utilization > 80%
 ```
 
-The 5xx rate uses `aihub_requests_total` alone; its numerator is the 5xx
-responses and its denominator is all HTTP responses in the same window:
+The incomplete usage rate comes from the durable `usage:report` calculation in
+[`usage-completeness.md`](../../../operations/usage-completeness.md): only
+successful billable attempts for reporting-eligible operations are in the
+denominator, and a zero denominator is healthy. Do not derive this rate from
+`aihub_metering_incomplete_total` and HTTP response counts. #849 owns the
+scheduled report's attention signal.
 
-```promql
-sum(rate(aihub_requests_total{status=~"5.."}[5m]))
-/
-sum(rate(aihub_requests_total[5m])) > 0.05
-```
+The previously listed raw global 5xx and historical-p95 thresholds are
+superseded. #292 owns gateway-owned and AI Service-owned SLO definitions and
+burn-rate alert thresholds; #237 wires those definitions into the running
+monitoring path.
+The circuit-breaker, Redis, and Postgres conditions remain in this issue's
+alert slice.
 
-Grafana alerts push notifications directly to developer chat channels. No separate Alertmanager container — eliminates another misconfiguration vector.
+AIHUB alert rules are evaluated by the AIHUB Prometheus overlay and delivered to
+the existing Alertmanager, which routes notifications by severity. Grafana
+provides the dashboards; it is not the notification router. #412 owns the alert
+catalog and route drills, and #1016 owns detection of loaded-rule drift. The
+#237 Sandbox acceptance test deliberately causes one L.4 condition and confirms
+that its notification reaches the configured route.
 
 ### L.4.1 Synthetic Canary — AI Writing Contract
 

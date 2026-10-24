@@ -1459,12 +1459,16 @@ reached the application; its access record therefore has an empty `request_id`.
 
 ### Optional request tracing
 
-Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to an OTLP/HTTP
-traces endpoint reachable from the application container, for example
-`http://otel-collector:4318/v1/traces`. AIHUB sends traces to that receiver;
-the production Compose stack does not run a collector or trace store. Leave the
-value blank to keep instrumentation disabled. `app` and `app-sandbox` use the
-same endpoint setting.
+After #237 deploys the restricted trace path, set
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to
+`https://otel.<approved-domain>/v1/traces`. The monitoring host's TLS reverse
+proxy forwards that route to Tempo's loopback OTLP/HTTP receiver and accepts
+only the fixed Production egress IP, shared by Production and Sandbox. It does
+not accept OTLP from arbitrary Internet clients. Until the DNS name, TLS route,
+and source-IP allowlist are deployed and verified, leave the value blank;
+`otel-collector` is not a running service. `app` and `app-sandbox` use the same
+endpoint setting. The Grafana UI uses a separate HTTPS hostname and still
+requires Grafana login.
 
 Each trace contains a Fastify request span and child spans for ioredis, Postgres,
 and Undici downstream calls. The root span records the route template, generated
@@ -2013,10 +2017,11 @@ the latest pending release wins.
 
 The automatic rollback window ends after cutover, smoke, drain, and the short
 final health check. It does not roll back a later error-rate or latency
-regression. Until the metrics and SLO alert work in #237, #240, #292, and #412
-is complete, an operator must detect the regression and use the manual helper
-rollback above. #483 records the decision about the observation window and
-rollback policy.
+regression. Until the live monitoring work in #237, the SLO definitions in
+#292, and the alert catalog and delivery work in #412 are complete, an operator
+must detect the regression and use the manual helper rollback above. #240's
+response counter is implemented. #483 records the decision about the observation
+window and rollback policy.
 
 The host helper supports `status`, `rollback production`, `rollback sandbox`,
 and `rehearse sandbox`. `status` reports `caller_ip_gate=<tier>` if an external

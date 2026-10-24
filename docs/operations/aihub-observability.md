@@ -2,6 +2,23 @@
 
 This runbook covers the host, container, shared PostgreSQL, Redis, and TLS signals requested by [#474](https://github.com/AiHub-Ecosystem/aihub-be/issues/474). It leaves the separate IELTS-writing monitoring worktree untouched. The AIHUB-owned overlay runs a separate Prometheus and sends alerts to the existing Alertmanager.
 
+## Monitoring stack recovery policy
+
+The accepted target in [ADR-0126](../adr/0126-self-hosted-monitoring-recovers-without-history.md) is not fully implemented until #237's source repository, drift check, clean-host runbook, and rehearsal are complete. Non-secret configuration belongs in a dedicated version-controlled repository outside application working trees; receiver credentials remain in Vault or the monitoring host's secret environment file.
+
+The monitoring data volumes are local. A lost monitoring host means complete loss of retained Prometheus and Tempo history; there is no off-host history restore in this recovery plan. The observed retention settings on 2026-10-24 were 30 days for the shared Prometheus, 14 days/512 MB for the AIHUB Prometheus, and 48 hours for Tempo. Verify these settings against the tracked configuration after it is established; they are live retention limits, not backup guarantees.
+
+The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means the expected targets are healthy, rules are loaded and evaluating, the Grafana and OTLP HTTPS routes are ready, Grafana authentication works, Tempo is ready, and a controlled Sandbox alert reaches its configured notification route. The rehearsal restores configuration and credentials, not historical telemetry. #826 separately owns the monitoring-host reboot drill.
+
+## Grafana and OTLP HTTPS routes
+
+The current Grafana access path remains an SSH local forward until #237 is deployed. The accepted target uses two DNS names provided by the operator's domain team:
+
+- `grafana.<approved-domain>` terminates TLS at the monitoring host's existing Nginx and proxies to Grafana on `127.0.0.1:3100`. Keep Grafana login required, with anonymous access and sign-up disabled.
+- `otel.<approved-domain>/v1/traces` terminates TLS and proxies only the OTLP/HTTP traces route to Tempo's private receiver. Allow only the fixed Production egress IP, which also carries Sandbox traffic; deny other sources. Do not publish Tempo's receiver port directly.
+
+Keep these virtual hosts, their TLS renewal, source-IP allowlists, and both certificate probes in the dedicated monitoring configuration repository. Do not set the application's OTLP endpoint until DNS, certificate validation, the allowlist, and a real Sandbox trace have been verified. The exact hostnames are still pending the domain team's record creation.
+
 ## Existing collectors audited
 
 | Service             | Existing behavior                                                                                                                                                                                             | AIHUB Prometheus coverage                                                                                                                  |
@@ -29,7 +46,7 @@ flowchart LR
   Prom -->|blackbox TLS probes every hour| Public
 ```
 
-The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19104`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. Existing Prometheus, Grafana, Alertmanager, and their files are not recreated or modified. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
+The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19104`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. #237 owns the shared monitoring stack's configuration source and clean-host recovery; until that work lands, the shared Prometheus, Grafana, Alertmanager, and Tempo configuration remains host-managed. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
 
 On Production, node_exporter listens on `127.0.0.1:9100`, cAdvisor on `127.0.0.1:19101`, postgres_exporter on `127.0.0.1:9187`, and Nginx exposes app metrics on loopback ports `19103` (Production) and `19104` (Sandbox). Those Nginx listeners proxy only the exact `/metrics` path to the active app slot; all other paths return 404. Public API and Sandbox listeners continue to return 404 for `/metrics`. The restricted key's `authorized_keys` `permitopen` list must allow only the five approved loopback destinations `9100`, `19101`, `9187`, `19103`, and `19104`. The monitoring-host tunnel binds the forwards to `172.27.0.1:19100-19104`. The SSH host key is pinned in a separate `known_hosts` file.
 

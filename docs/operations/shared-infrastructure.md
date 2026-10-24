@@ -27,6 +27,22 @@ Then open `http://127.0.0.1:3100` locally. The monitoring host configuration
 and rotated credential remain in the host deployment directory; the credential
 is not recorded here.
 
+## Target access after #237
+
+The accepted target replaces the SSH-only Grafana path after the domain records
+and TLS virtual hosts are deployed and verified:
+
+- `https://grafana.<approved-domain>` proxies to `127.0.0.1:3100` and still
+  requires Grafana authentication.
+- `https://otel.<approved-domain>/v1/traces` proxies only OTLP/HTTP traces to
+  Tempo's private receiver and accepts only the fixed Production egress IP.
+
+Do not expose Grafana or Tempo container ports directly. Until this target is
+live, continue using the SSH local forward above. Keep the virtual hosts,
+allowlists, certificate renewal, and expiry probes in the monitoring
+configuration repository; the exact DNS names are still pending the domain
+team.
+
 Upstream version policies:
 
 - [Grafana support policy](https://grafana.com/docs/grafana/latest/upgrade-guide/when-to-upgrade/)

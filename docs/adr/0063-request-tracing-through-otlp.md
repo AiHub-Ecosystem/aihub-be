@@ -24,7 +24,9 @@ Propagate W3C trace context downstream, without baggage.
 Export spans with OTLP/HTTP only when `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is
 configured. Batch export away from the response path. Do not add a collector or
 trace store to the application Compose stack; operators provide a reachable
-receiver. Trace every request while enabled.
+receiver. In Production and Sandbox, the receiver URL and ingress boundary are
+defined by [ADR-0126](0126-self-hosted-monitoring-recovers-without-history.md).
+Trace every request while enabled.
 
 Limit recorded detail: serialize Redis commands without keys or arguments,
 replace SQL text with its operation name, and use route templates instead of
