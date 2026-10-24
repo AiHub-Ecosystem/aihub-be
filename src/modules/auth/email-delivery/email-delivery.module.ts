@@ -53,7 +53,10 @@ import {
   EMAIL_SENDER,
   type EmailSenderPort,
 } from './application/email-sender.port';
-import { pruneExpiredAuthEmailRecipientLimits } from './infrastructure/auth-email-recipient-limit';
+import {
+  assertRetainedKeyVersionsCoverLiveWindows,
+  pruneExpiredAuthEmailRecipientLimits,
+} from './infrastructure/auth-email-recipient-limit';
 import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
@@ -214,6 +217,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         configuration: ConfigType<typeof appConfig>,
         dailyBudget: EmailDailySendBudgetPort,
         providerOutageCircuit: EmailProviderOutageCircuitPort,
+        secrets: RuntimeSecretProvider,
       ): EmailOutboxPollerScheduler => {
         const store = new PostgresEmailDispatchStore(runtime.prisma);
         return new EmailOutboxPollerScheduler(
@@ -226,6 +230,12 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
           () => store.cancellationTimestamps(),
           () => dailyBudget.usage(),
           () => providerOutageCircuit.readOutageDurationMs(),
+          () =>
+            assertRetainedKeyVersionsCoverLiveWindows(
+              runtime.prisma,
+              secrets.getSnapshot().emailOutbox,
+              new Date(),
+            ),
         );
       },
       inject: [
@@ -234,6 +244,7 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         appConfig.KEY,
         EMAIL_DAILY_SEND_BUDGET,
         EMAIL_PROVIDER_OUTAGE_CIRCUIT,
+        RUNTIME_SECRET_PROVIDER,
       ],
     },
   ],

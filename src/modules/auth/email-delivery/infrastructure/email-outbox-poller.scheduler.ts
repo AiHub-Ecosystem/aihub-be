@@ -67,9 +67,16 @@ export class EmailOutboxPollerScheduler
       readonly limit: number;
     }>,
     private readonly providerOutageDuration?: () => Promise<number>,
+    private readonly verifyRecipientKeyVersions?: () => Promise<void>,
   ) {}
 
-  onModuleInit(): void {
+  /**
+   * The keyring retention check runs before any timer starts, so a keyring
+   * that dropped a version with live recipient windows refuses the boot
+   * instead of silently resetting every ceiling under it (#1130). Nest awaits
+   * this hook; its rejection fails startup.
+   */
+  async onModuleInit(): Promise<void> {
     if (!this.enabled) return;
     if (this.backlog !== undefined) {
       setEmailOutboxBacklogSource(this.backlog);
@@ -83,6 +90,7 @@ export class EmailOutboxPollerScheduler
     if (this.providerOutageDuration !== undefined) {
       setEmailProviderOutageDurationSource(this.providerOutageDuration);
     }
+    await this.verifyRecipientKeyVersions?.();
     this.timer = setInterval(() => {
       void this.pass();
     }, this.intervalMs);

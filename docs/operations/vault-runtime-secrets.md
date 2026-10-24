@@ -69,6 +69,19 @@ Rotation is startup-only:
    counters at startup and hourly; wait for cleanup as well as expiry before
    removing a version.
 
+   This retention rule is enforced, not remembered: an instance that boots with
+   a keyring missing a version whose counters are still inside their 24-hour
+   window refuses to start (#1130), with a log line naming each dropped key
+   version and the time its windows expire. The gate reads the counter table
+   at startup, so a restart while the database is unreachable also fails (with
+   the query's own error); the instance restarts and passes once the read
+   succeeds — fail closed either way. If a restart fails with
+   `email outbox keyring no longer retains key versions with live
+authentication-email recipient windows`, restore the dropped version to the
+   keyring and restart, or wait for the named expiry and let the hourly
+   cleanup delete the counters before pruning again. A pruned-version restart
+   never silently resets the per-recipient ceiling.
+
 Rollback restores the previous approved KV versions, restarts Vault Agent and
 the application, and repeats the same checks. It never reintroduces a
 production `.env` fallback. Hot reload, per-request Vault reads, and automatic

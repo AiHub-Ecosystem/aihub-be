@@ -71,20 +71,20 @@ describe('EmailOutboxPollerScheduler', () => {
     }
   });
 
-  function start(
+  async function start(
     poller: ControllablePoller,
     nodeEnv: string,
-  ): EmailOutboxPollerScheduler {
+  ): Promise<EmailOutboxPollerScheduler> {
     const subject = scheduler(poller, INTERVAL_MS, nodeEnv !== 'test');
     subjects.push(subject);
-    subject.onModuleInit();
+    await subject.onModuleInit();
     return subject;
   }
 
   it('does not start a poller under test', async () => {
     const poller = new ControllablePoller();
 
-    start(poller, 'test');
+    void start(poller, 'test');
     await delay(INTERVAL_MS * 4);
 
     expect(poller.calls).toBe(0);
@@ -93,7 +93,7 @@ describe('EmailOutboxPollerScheduler', () => {
   it('polls on its interval outside test', async () => {
     const poller = new ControllablePoller();
 
-    start(poller, 'production');
+    void start(poller, 'production');
     await delay(INTERVAL_MS * 3);
 
     expect(poller.calls).toBeGreaterThanOrEqual(1);
@@ -111,9 +111,35 @@ describe('EmailOutboxPollerScheduler', () => {
     );
     subjects.push(subject);
 
-    subject.onModuleInit();
+    await subject.onModuleInit();
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to start when a retired key version still has live recipient windows', async () => {
+    const poller = new ControllablePoller();
+    const subject = new EmailOutboxPollerScheduler(
+      poller as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      async () => {
+        throw new Error(
+          'email outbox keyring no longer retains key versions with live authentication-email recipient windows: v1 (windows live until 2026-10-25T00:00:00.000Z). Keep every retired version in the keyring until its windows expire, or wait for the expiry before pruning (ADR-0096, #1130).',
+        );
+      },
+    );
+    subjects.push(subject);
+
+    await expect(subject.onModuleInit()).rejects.toThrow(
+      /v1 \(windows live until 2026-10-25T00:00:00.000Z\)/,
+    );
+    expect(poller.calls).toBe(0);
+    subject.onApplicationShutdown();
   });
 
   it('serves durable cancellation timestamps through metrics and removes the source on shutdown', async () => {
@@ -134,7 +160,7 @@ describe('EmailOutboxPollerScheduler', () => {
     );
     subjects.push(subject);
 
-    subject.onModuleInit();
+    await subject.onModuleInit();
     expect(await getMetrics()).toContain(
       'aihub_email_delivery_cancelled_timestamp_seconds{kind="verification_email",reason="credential_expired"} 1797000000',
     );
@@ -158,7 +184,7 @@ describe('EmailOutboxPollerScheduler', () => {
     );
     subjects.push(subject);
 
-    subject.onModuleInit();
+    await subject.onModuleInit();
 
     expect(await getMetrics()).toContain(
       'aihub_email_daily_send_budget{measurement="used"} 8',
@@ -185,7 +211,7 @@ describe('EmailOutboxPollerScheduler', () => {
     );
     subjects.push(subject);
 
-    subject.onModuleInit();
+    await subject.onModuleInit();
 
     expect(await getMetrics()).toContain(
       'aihub_email_provider_outage_duration_seconds 45',
@@ -203,7 +229,7 @@ describe('EmailOutboxPollerScheduler', () => {
   it('skips a tick while the previous pass is still running', async () => {
     const poller = new ControllablePoller(true);
 
-    start(poller, 'production');
+    void start(poller, 'production');
     await delay(INTERVAL_MS * 4);
     expect(poller.calls).toBe(1);
 
@@ -214,7 +240,7 @@ describe('EmailOutboxPollerScheduler', () => {
 
   it('stops polling after shutdown', async () => {
     const poller = new ControllablePoller();
-    const subject = start(poller, 'production');
+    const subject = await start(poller, 'production');
     await delay(INTERVAL_MS * 3);
     poller.finish();
     const beforeShutdown = poller.calls;

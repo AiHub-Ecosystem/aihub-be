@@ -87,6 +87,46 @@ export async function pruneExpiredAuthEmailRecipientLimits(
 }
 
 /**
+ * Boot gate for the ADR-0096 retention invariant: every counter window still
+ * inside its 24 hours must fingerprint under a key version the keyring still
+ * retains. Pruning a version whose windows are live makes them invisible to
+ * the reservation — every address under the pruned version gets a fresh
+ * window and the ceiling resets, the one consumer where early key removal
+ * fails open (#1130). Refusing to boot with the versions named turns that
+ * into a refusal the operator sees.
+ */
+export async function assertRetainedKeyVersionsCoverLiveWindows(
+  client: AuthSqlClient,
+  secrets: EmailOutboxRuntimeSecrets | undefined,
+  now: Date,
+): Promise<void> {
+  const rows = await authQueryRows<{
+    readonly key_version: string;
+    readonly expires_at: Date | string;
+  }>(
+    client,
+    `SELECT key_version, max(expires_at) AS expires_at
+     FROM auth_email_recipient_rate_limits
+     WHERE expires_at > $1
+     GROUP BY key_version`,
+    [now],
+  );
+  const retained = new Set(Object.keys(secrets?.keys ?? {}));
+  const retired = rows.filter((row) => !retained.has(row.key_version));
+  if (retired.length > 0) {
+    const detail = retired
+      .map(
+        (row) =>
+          `${row.key_version} (windows live until ${counterDate(row.expires_at).toISOString()})`,
+      )
+      .join(', ');
+    throw new Error(
+      `email outbox keyring no longer retains key versions with live authentication-email recipient windows: ${detail}. Keep every retired version in the keyring until its windows expire, or wait for the expiry before pruning (ADR-0096, #1130).`,
+    );
+  }
+}
+
+/**
  * Takes one of the recipient's slots inside the caller's transaction, and says
  * whether the email may be queued. Concurrent requests for one address
  * serialize on an advisory lock per fingerprint.

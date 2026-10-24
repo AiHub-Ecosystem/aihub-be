@@ -487,6 +487,15 @@ address. The HMAC key is derived from the Vault-provided Email Outbox keyring.
 Expired rows are removed at startup and hourly, so physical deletion can lag
 the 24-hour expiry by up to one hour. The table is included in Postgres dumps.
 
+Keyring retention is enforced at boot (#1130): an instance whose keyring drops
+a version with counters still inside their window refuses to start, logging
+`email outbox keyring no longer retains key versions with live
+authentication-email recipient windows` with each dropped version and the time
+its windows expire. Restoring the version (or waiting out the expiry) lets the
+instance start; a premature prune can never silently reset a recipient's
+ceiling. Rotation steps live in
+[vault-runtime-secrets.md](vault-runtime-secrets.md).
+
 To check active versions or overdue cleanup without reading fingerprints:
 
 ```sql
