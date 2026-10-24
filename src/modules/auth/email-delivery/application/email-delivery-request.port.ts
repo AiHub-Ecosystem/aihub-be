@@ -32,6 +32,29 @@ export interface ApiKeyNearExpiryNotificationPayload {
   readonly apiKeyIds: readonly string[];
 }
 
+/**
+ * Recognizes a near-expiry notice payload after decryption, so the module
+ * that decides which queued notices a withdrawal supersedes (#1098) fails
+ * loudly on a shape change instead of silently skipping the cancellation.
+ */
+export function isApiKeyNearExpiryNotificationPayload(
+  value: unknown,
+): value is ApiKeyNearExpiryNotificationPayload {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.organizationId === 'string' &&
+    candidate.organizationId.length > 0 &&
+    typeof candidate.userAccountId === 'string' &&
+    candidate.userAccountId.length > 0 &&
+    Array.isArray(candidate.apiKeyIds) &&
+    candidate.apiKeyIds.length > 0 &&
+    candidate.apiKeyIds.every((id) => typeof id === 'string' && id.length > 0)
+  );
+}
+
 /** What the notice is composed from once its facts are read at dispatch. */
 export interface ApiKeyNearExpiryNotificationInput {
   readonly email: string;
@@ -131,6 +154,30 @@ export interface EmailDeliveryRequestWriterPort {
   insert(
     transaction: EmailDeliveryTransaction,
     input: InsertEmailDeliveryRequestInput,
+  ): Promise<void>;
+  /**
+   * The still-queued, unclaimed requests of one kind, for a caller that must
+   * decide from their payloads which of them its own withdrawal supersedes
+   * (#1098). Their ciphertexts are returned unopened; the caller owns the
+   * payload's meaning.
+   */
+  queuedPayloadCiphertexts(
+    transaction: EmailDeliveryTransaction,
+    input: { readonly kind: EmailDeliveryKind },
+  ): Promise<
+    readonly { readonly id: string; readonly payloadCiphertext: string }[]
+  >;
+  /**
+   * Cancels requests no dispatch has claimed, recording why. A claim in flight
+   * is left to finish: its own dispatch decides the row's outcome.
+   */
+  cancelQueued(
+    transaction: EmailDeliveryTransaction,
+    input: {
+      readonly ids: readonly string[];
+      readonly reason: EmailDeliveryCancelReason;
+      readonly cancelledAt: Date;
+    },
   ): Promise<void>;
 }
 

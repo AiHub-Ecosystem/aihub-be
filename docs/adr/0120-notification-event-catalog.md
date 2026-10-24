@@ -1,6 +1,6 @@
 # ADR-0120: Notification Event catalog
 
-- Status: Accepted; an event is withdrawn when its Organization is not active at dispatch, added by [#996](https://github.com/AiHub-Ecosystem/aihub-be/issues/996)
+- Status: Accepted; an event is withdrawn when its Organization is not active at dispatch, added by [#996](https://github.com/AiHub-Ecosystem/aihub-be/issues/996); a withdrawal also cancels the still-queued notices of the withdrawn keys, added by [#1098](https://github.com/AiHub-Ecosystem/aihub-be/issues/1098)
 - Date: 2026-10-22
 - Related issue: [#608](https://github.com/AiHub-Ecosystem/aihub-be/issues/608), [#976](https://github.com/AiHub-Ecosystem/aihub-be/issues/976), [#977](https://github.com/AiHub-Ecosystem/aihub-be/issues/977), [#980](https://github.com/AiHub-Ecosystem/aihub-be/issues/980), [#986](https://github.com/AiHub-Ecosystem/aihub-be/issues/986)
 - Amends: [ADR-0074](0074-transactional-email-outbox.md) (actionability and stale cancellation for requests that carry no credential), [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md) (dispatch priority only), [ADR-0119](0119-shared-durable-email-daily-budget.md) (daily budget category only)
@@ -76,10 +76,22 @@ notice waiting days would keep the 15-minute queue-age alert firing.
 
 An event's ID is therefore stable only while its notice can be delivered: a
 withdrawn event's later replacement has a new ID. No channel stores event IDs
-yet. If the Organization is restored before every recipient's email of the
-withdrawn event has been dispatched, those emails still go out and the new
-sweep queues another, so a recipient can get the notice twice; that needs a
-restoration within seconds of the suspension.
+yet. When a withdrawal takes an event, it also cancels, in the same
+transaction, the still-queued notices no dispatch has claimed that cover one
+of the withdrawn keys (#1098): a restoration would re-record the event and
+queue fresh notices alongside those, and the old and new requests carry
+different ids — different provider idempotency keys — so nothing could
+deduplicate them. After the cancellation, a restoration inside the window
+tells each recipient exactly once through the fresh notices. Three windows
+remain and are accepted: a notice already sent before the suspension has
+erased its payload, and the fresh notice of the re-recorded event again
+carries a different id, so nothing deduplicates the second send — within or
+past the provider's 24-hour idempotency retention alike (ADR-0122); a notice
+claimed by a dispatch in flight when its sibling's withdrawal runs is left
+to that dispatch, so a concurrent claim across the restoration can still
+double-send; and a queued payload no running process can open is skipped by
+the cancellation, because unreadable is not evidence it covers the withdrawn
+keys. Each needs a restoration within seconds of the suspension.
 
 ### Priority
 

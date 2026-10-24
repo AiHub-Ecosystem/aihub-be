@@ -26,6 +26,8 @@ const payloadCipher: EmailPayloadCipherPort = {
 const emailRequests: EmailDeliveryRequestWriterPort = {
   reserveAuthenticationEmailRecipient: async () => true,
   insert: async () => undefined,
+  queuedPayloadCiphertexts: async () => [],
+  cancelQueued: async () => undefined,
 };
 
 function repository(prisma: ScriptedPrisma) {

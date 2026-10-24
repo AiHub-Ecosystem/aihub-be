@@ -8,6 +8,7 @@ import type {
   EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { isApiKeyNearExpiryNotificationPayload } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   ApiKeyNearExpiryNoticeRecordPort,
   ApiKeyNearExpirySweepSummary,
@@ -158,6 +159,23 @@ function requiredDate(row: unknown, field: string): Date {
   return value;
 }
 
+type IdentityTransactionClient = Parameters<
+  Parameters<typeof identityTransaction>[1]
+>[0];
+
+/** The email-delivery kind of this catalog's notice; `KIND` is the event's. */
+const NOTICE_EMAIL_KIND = 'api_key_near_expiry_notification' as const;
+
+/** Bridges an Identity transaction onto the writer port's transaction seam. */
+function emailDeliveryTransactionOver(
+  transaction: IdentityTransactionClient,
+): EmailDeliveryTransaction {
+  return {
+    [emailDeliveryTransactionBrand]: undefined,
+    client: transaction,
+  } as EmailDeliveryTransaction;
+}
+
 /**
  * The near-expiry notice's two database moments (ADR-0120): the sweep that
  * records events and queues the email, and the dispatch that reads again what
@@ -215,19 +233,15 @@ export class PostgresApiKeyNearExpiryNotices
           userAccountId: requiredString(row, 'user_account_id'),
         }));
         const notices = planApiKeyNearExpiryNotices(recorded, recipients);
-        const emailTransaction = {
-          [emailDeliveryTransactionBrand]: undefined,
-          client: transaction,
-        } as EmailDeliveryTransaction;
+        const emailTransaction = emailDeliveryTransactionOver(transaction);
         for (const payload of notices) {
           const id = input.newEmailDeliveryId(input.now);
-          const kind = 'api_key_near_expiry_notification';
           await this.emailRequests.insert(emailTransaction, {
             id,
-            kind,
+            kind: NOTICE_EMAIL_KIND,
             payloadCiphertext: this.payloadCipher.encrypt(
               JSON.stringify(payload),
-              { id, kind },
+              { id, kind: NOTICE_EMAIL_KIND },
             ),
             createdAt: input.now,
           });
@@ -316,8 +330,11 @@ export class PostgresApiKeyNearExpiryNotices
    * A recipient who no longer qualifies leaves the event alone: the
    * Organization was told, and recording it again would tell the other
    * recipients twice. An Organization that is no longer active was not told,
-   * so its events go in the same statement that observed the status. The
-   * answer's `remaining` is what stands afterwards: zero also covers the
+   * so its events go in the same statement that observed the status, and the
+   * still-queued notices that cover those keys are cancelled with them in one
+   * transaction (#1098): a restoration would otherwise re-record the event
+   * and queue fresh notices alongside the old, telling each recipient twice.
+   * The answer's `remaining` is what stands afterwards: zero also covers the
    * sibling notice that already withdrew the shared events (#1098), where
    * cancelling is equally safe because the next sweep records them again.
    */
@@ -325,18 +342,75 @@ export class PostgresApiKeyNearExpiryNotices
     payload: ApiKeyNearExpiryNotificationPayload,
     now: Date,
   ): Promise<{ readonly inactive: boolean; readonly remaining: number }> {
-    const row = (
-      await identityRows(this.client, WITHDRAW_EVENTS_SQL, [
-        KIND,
-        payload.organizationId,
-        [...payload.apiKeyIds],
-        now,
-      ])
-    )[0];
-    return {
-      inactive: isRecord(row) && row.inactive === true,
-      remaining:
-        isRecord(row) && typeof row.remaining === 'number' ? row.remaining : 0,
-    };
+    return identityTransaction(this.client, async (transaction) => {
+      const row = (
+        await identityRows(transaction, WITHDRAW_EVENTS_SQL, [
+          KIND,
+          payload.organizationId,
+          [...payload.apiKeyIds],
+          now,
+        ])
+      )[0];
+      const outcome = {
+        inactive: isRecord(row) && row.inactive === true,
+        remaining:
+          isRecord(row) && typeof row.remaining === 'number'
+            ? row.remaining
+            : 0,
+      };
+      if (outcome.inactive) {
+        await this.cancelQueuedSiblingsOfWithdrawnKeys(
+          transaction,
+          payload,
+          now,
+        );
+      }
+      return outcome;
+    });
+  }
+
+  /**
+   * The queued, unclaimed notices of the withdrawn keys. A notice claimed by a
+   * dispatch in flight, or already sent, is left alone: its own dispatch owns
+   * its outcome, and a sent notice's key set no longer exists to match
+   * (accepted requests erase their payload). A payload this process cannot
+   * open is no evidence that it covers the withdrawn keys, so it is skipped.
+   */
+  private async cancelQueuedSiblingsOfWithdrawnKeys(
+    transaction: IdentityTransactionClient,
+    payload: ApiKeyNearExpiryNotificationPayload,
+    now: Date,
+  ): Promise<void> {
+    const emailTransaction = emailDeliveryTransactionOver(transaction);
+    const queued = await this.emailRequests.queuedPayloadCiphertexts(
+      emailTransaction,
+      { kind: NOTICE_EMAIL_KIND },
+    );
+    const superseded: string[] = [];
+    for (const request of queued) {
+      let candidate: unknown;
+      try {
+        candidate = JSON.parse(
+          this.payloadCipher.decrypt(request.payloadCiphertext, {
+            id: request.id,
+            kind: NOTICE_EMAIL_KIND,
+          }),
+        );
+      } catch {
+        continue;
+      }
+      if (
+        isApiKeyNearExpiryNotificationPayload(candidate) &&
+        candidate.organizationId === payload.organizationId &&
+        candidate.apiKeyIds.some((id) => payload.apiKeyIds.includes(id))
+      ) {
+        superseded.push(request.id);
+      }
+    }
+    await this.emailRequests.cancelQueued(emailTransaction, {
+      ids: superseded,
+      reason: 'not_actionable',
+      cancelledAt: now,
+    });
   }
 }

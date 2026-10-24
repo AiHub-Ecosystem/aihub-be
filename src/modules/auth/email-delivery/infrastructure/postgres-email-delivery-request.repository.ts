@@ -259,6 +259,53 @@ export class PostgresEmailDeliveryRequestRepository
     });
   }
 
+  async queuedPayloadCiphertexts(
+    transaction: EmailDeliveryTransaction,
+    input: { kind: EmailDeliveryKind },
+  ): Promise<
+    readonly { readonly id: string; readonly payloadCiphertext: string }[]
+  > {
+    const client = (transaction as EmailDeliveryTransactionAdapter).client;
+    const rows = await client.emailDeliveryRequest.findMany({
+      select: { id: true, payloadCiphertext: true },
+      where: {
+        kind: input.kind,
+        status: 'queued',
+        leaseOwner: null,
+      },
+    });
+    return rows.flatMap((row) =>
+      row.payloadCiphertext === null
+        ? []
+        : [{ id: row.id, payloadCiphertext: row.payloadCiphertext }],
+    );
+  }
+
+  async cancelQueued(
+    transaction: EmailDeliveryTransaction,
+    input: {
+      ids: readonly string[];
+      reason: EmailDeliveryCancelReason;
+      cancelledAt: Date;
+    },
+  ): Promise<void> {
+    if (input.ids.length === 0) return;
+    const client = (transaction as EmailDeliveryTransactionAdapter).client;
+    await client.emailDeliveryRequest.updateMany({
+      where: {
+        id: { in: [...input.ids] },
+        status: 'queued',
+        leaseOwner: null,
+      },
+      data: {
+        status: 'cancelled',
+        cancelReason: input.reason,
+        payloadCiphertext: null,
+        completedAt: input.cancelledAt,
+      },
+    });
+  }
+
   async recordFailedAttempt(
     client: AuthSqlClient,
     input: {

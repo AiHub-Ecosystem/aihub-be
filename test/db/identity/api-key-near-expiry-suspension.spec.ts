@@ -24,6 +24,7 @@ import {
 
 const NOW = new Date('2026-10-22T00:00:00.000Z');
 const LATER = new Date('2026-10-23T00:00:00.000Z');
+const RESTORED = new Date('2026-10-22T02:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
 const ORG = 'org_suspended_between';
 const nextUlid = monotonicFactory();
@@ -101,8 +102,10 @@ function pausedAfterRead(): {
 
 /**
  * Holds the resolver at each statement matching `match` until the test resumes
- * it. That is the gap a suspension or a restoration can commit in (#996,
- * #1128). `pause(n)` resolves once the nth matching statement has parked.
+ * it, whether the statement runs on the client or inside one of its
+ * transactions. That is the gap a suspension or a restoration can commit in
+ * (#996, #1128). `pause(n)` resolves once the nth matching statement has
+ * parked.
  */
 function pausedWhile(match: (text: string) => boolean): {
   readonly client: IdentityFixtureClient;
@@ -110,25 +113,44 @@ function pausedWhile(match: (text: string) => boolean): {
   readonly resume: (occurrence: number) => void;
 } {
   const gates: { go: () => void }[] = [];
-  const paused = new Proxy(client, {
-    get(target, property) {
-      const value = Reflect.get(target, property, target);
-      if (
-        (property === '$queryRawUnsafe' || property === '$executeRawUnsafe') &&
-        typeof value === 'function'
-      ) {
-        return async (text: string, ...values: unknown[]) => {
-          if (match(text)) {
-            await new Promise<void>((resolveGo) => {
-              gates.push({ go: resolveGo });
-            });
-          }
-          return value.call(target, text, ...values);
-        };
-      }
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
+  const interceptStatements = (holder: object): object =>
+    new Proxy(holder, {
+      get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (
+          (property === '$queryRawUnsafe' ||
+            property === '$executeRawUnsafe') &&
+          typeof value === 'function'
+        ) {
+          return async (text: string, ...values: unknown[]) => {
+            if (match(text)) {
+              await new Promise<void>((resolveGo) => {
+                gates.push({ go: resolveGo });
+              });
+            }
+            return value.call(target, text, ...values);
+          };
+        }
+        if (property === '$transaction' && typeof value === 'function') {
+          return (
+            callback: (transaction: object) => Promise<unknown>,
+            options?: unknown,
+          ) =>
+            (
+              target as unknown as {
+                $transaction: (
+                  callback: (transaction: object) => Promise<unknown>,
+                  options?: unknown,
+                ) => Promise<unknown>;
+              }
+            ).$transaction(
+              (transaction) => callback(interceptStatements(transaction)),
+              options,
+            );
+        }
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
   const pause = async (occurrence: number): Promise<void> => {
     for (let attempt = 0; gates.length < occurrence; attempt += 1) {
       if (attempt > 500) {
@@ -140,7 +162,11 @@ function pausedWhile(match: (text: string) => boolean): {
   const resume = (occurrence: number): void => {
     gates[occurrence - 1]?.go();
   };
-  return { client: paused, pause, resume };
+  return {
+    client: interceptStatements(client) as IdentityFixtureClient,
+    pause,
+    resume,
+  };
 }
 
 /** What the poller does to a request whose resolver answered `undefined`. */
@@ -490,5 +516,133 @@ describe('near-expiry notices across an Organization suspension (#996)', () => {
     );
     expect(rows[0]?.events).toBe(1);
     await expect(actionableNotices(LATER)).resolves.toBe(1);
+  });
+});
+
+/** A second Organization with one owner and one expiring key of its own. */
+async function seedOtherOrganization(
+  organizationId: string,
+  ownerId: string,
+  keyId: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO organizations (id, name, status) VALUES ($1, 'Other Org', 'active')`,
+    [organizationId],
+  );
+  await pool.query(
+    `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
+     VALUES ($1, $2, 'active', now(), now())`,
+    [ownerId, ownerId.toLowerCase().replace('usr_', 'u-')],
+  );
+  await pool.query(
+    `INSERT INTO auth_identities (
+       id, user_account_id, provider, canonical_email, password_hash,
+       created_at, updated_at
+     ) VALUES ($1, $2, 'password', $3, $4, now(), now())`,
+    [
+      `auth_${ownerId.slice(4)}`,
+      ownerId,
+      `${ownerId.toLowerCase()}@example.com`,
+      ARGON2ID_DUMMY_HASH,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO organization_members (
+       organization_id, user_account_id, role, status, created_at, updated_at
+     ) VALUES ($1, $2, 'owner', 'active', now(), now())`,
+    [organizationId, ownerId],
+  );
+  await pool.query(
+    `INSERT INTO api_keys (
+       id, organization_id, key_hash, key_prefix, name, status, expires_at,
+       revoked_at, internal
+     ) VALUES ($1, $2, sha256(convert_to($1, 'UTF8')), 'aihub_prod_x',
+               'Other key', 'active', $3, NULL, false)`,
+    [keyId, organizationId, new Date(NOW.getTime() + 5 * DAY)],
+  );
+}
+
+describe('near-expiry notices across a withdrawal and re-record (#1098)', () => {
+  it('cancels the still-queued sibling notices so a restoration tells each recipient once', async () => {
+    await sweep(noticesOver(client), NOW);
+    expect(await queuedNotices()).toHaveLength(2);
+
+    // The dispatch that observes the suspension withdraws the event and, in
+    // the same transaction, the sibling notice still waiting in the outbox.
+    await setOrganizationStatus('suspended');
+    await expect(dispatch(NOW)).resolves.toBe(0);
+    expect(await queuedNotices()).toHaveLength(0);
+    const { rows: events } = await pool.query(
+      `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
+      [KEY],
+    );
+    expect(events[0]?.events).toBe(0);
+
+    // The restoration and the new sweep queue exactly one fresh notice per
+    // recipient; the cancelled earlier requests never come back, so neither
+    // recipient is told twice.
+    await setOrganizationStatus('active');
+    await sweep(noticesOver(client), RESTORED);
+    expect(await queuedNotices()).toHaveLength(2);
+    await expect(actionableNotices(RESTORED)).resolves.toBe(2);
+
+    await sweep(noticesOver(client), LATER);
+    expect(await queuedNotices()).toHaveLength(2);
+  });
+
+  it('leaves another Organization\u2019s queued notices alone when one is withdrawn', async () => {
+    const otherOrg = 'org_unrelated';
+    const otherOwner = `usr_${nextUlid()}`;
+    const otherKey = 'key_other_org';
+    await seedOtherOrganization(otherOrg, otherOwner, otherKey);
+    await sweep(noticesOver(client), NOW);
+    expect(await queuedNotices()).toHaveLength(3);
+
+    await setOrganizationStatus('suspended');
+    await expect(dispatch(NOW)).resolves.toBe(1);
+
+    // Only the suspended Organization's notices were cancelled.
+    const remaining = await queuedNotices();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.payload.organizationId).toBe(otherOrg);
+    const { rows: otherEvents } = await pool.query(
+      `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
+      [otherKey],
+    );
+    expect(otherEvents[0]?.events).toBe(1);
+    await expect(actionableNotices(NOW)).resolves.toBe(1);
+  });
+
+  it('cancels a deferred sibling that no dispatch has claimed', async () => {
+    await sweep(noticesOver(client), NOW);
+    const queued = await queuedNotices();
+    const deferred = queued[0];
+    const dispatching = queued[1];
+    if (deferred === undefined || dispatching === undefined) {
+      throw new Error('the sweep queued no notices to dispatch');
+    }
+
+    // The poller defers a request under an outage: ownerless, its lease held
+    // to the retry time, still queued. No dispatch has it.
+    await pool.query(
+      `UPDATE email_delivery_requests
+       SET lease_owner = NULL, lease_expires_at = $2
+       WHERE id = $1`,
+      [deferred.id, new Date(RESTORED.getTime() + 60_000)],
+    );
+
+    await setOrganizationStatus('suspended');
+    await expect(
+      noticesOver(client).resolve(dispatching.payload, NOW),
+    ).resolves.toBeUndefined();
+    await cancelNotice(dispatching.id, NOW);
+
+    // The deferred sibling went with the withdrawal, not just the dispatched
+    // one: after the restoration, the fresh sweep is the only notice left.
+    expect(await queuedNotices()).toHaveLength(0);
+    await setOrganizationStatus('active');
+    await sweep(noticesOver(client), RESTORED);
+    expect(await queuedNotices()).toHaveLength(2);
+    await expect(actionableNotices(RESTORED)).resolves.toBe(2);
   });
 });
