@@ -45,6 +45,7 @@ export class EmailOutboxPollerScheduler
   private timer: NodeJS.Timeout | undefined;
   private cleanupTimer: NodeJS.Timeout | undefined;
   private running = false;
+  private pruning = false;
 
   /**
    * `backlog` feeds the queue-age gauges. It is registered beside the timer
@@ -159,13 +160,25 @@ export class EmailOutboxPollerScheduler
     }
   }
 
+  /**
+   * The hourly cleanup of expired recipient counters, guarded like a pass:
+   * none starts once shutdown has begun, and one already running joins the
+   * background-work drain, so the pool is never closed under its DELETE
+   * (#1134).
+   */
   private async pruneExpiredRecipientCounters(): Promise<void> {
+    if (this.pruning || isShuttingDown()) return;
+    this.pruning = true;
+    backgroundWorkStarted();
     try {
       await this.pruneExpiredRecipientLimits?.();
     } catch {
       this.logger.error(
         'authentication email recipient counter cleanup failed',
       );
+    } finally {
+      this.pruning = false;
+      backgroundWorkSettled();
     }
   }
 }
