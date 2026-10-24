@@ -211,10 +211,20 @@ revocation, rotation, or suspension; other API-key cache command failures use
 response. Neither metric carries organization, user, request, API-key, signed
 assertion, or essay-content labels.
 
-The operation label comes from the bounded operation catalog. `gateway_overhead`
-**requires no dedicated metric** — it is derived directly from total and
-downstream durations; `admission_ms` exposes the time before dispatch
-separately.
+The `operation` label comes from the bounded operation catalog. A response
+without a catalog operation uses the fixed value `unmatched`, the same sentinel
+as the Request Completion Event's `route` field. This includes unmatched paths
+and responses before a route can be resolved; the label never contains a
+request path or URL. `/health` probes and `/metrics` scrapes are operational
+responses and count once in `aihub_requests_total`, but are omitted from the
+Request Completion Event log. A scrape's own increment is visible on the next
+scrape because its response is counted after the current metrics body is sent.
+A rejection may increment `aihub_rejected_total` once as a separate metric
+family; it still increments `aihub_requests_total` only once.
+
+`gateway_overhead` **requires no dedicated metric** — it is derived directly
+from total and downstream durations; `admission_ms` exposes the time before
+dispatch separately.
 
 The process gauges report RSS and used V8 heap in bytes. Event-loop lag is the
 99th percentile delay in seconds since the previous scrape. PostgreSQL pool
@@ -255,6 +265,15 @@ p95 latency > 2x historical baseline
 Redis connection loss
 missing_usage > 1% over 1 hour
 Postgres disk space utilization > 80%
+```
+
+The 5xx rate uses `aihub_requests_total` alone; its numerator is the 5xx
+responses and its denominator is all HTTP responses in the same window:
+
+```promql
+sum(rate(aihub_requests_total{status=~"5.."}[5m]))
+/
+sum(rate(aihub_requests_total[5m])) > 0.05
 ```
 
 Grafana alerts push notifications directly to developer chat channels. No separate Alertmanager container — eliminates another misconfiguration vector.

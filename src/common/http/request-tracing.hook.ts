@@ -15,6 +15,7 @@ interface RequestTraceState {
 }
 
 const traces = new WeakMap<object, RequestTraceState>();
+export const UNMATCHED_ROUTE = 'unmatched';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -29,7 +30,7 @@ declare module 'fastify' {
 }
 
 export function routeTemplate(request: FastifyRequest): string {
-  return request.routeOptions.url ?? 'unmatched';
+  return request.routeOptions.url ?? UNMATCHED_ROUTE;
 }
 
 function finishRequest(request: FastifyRequest, statusCode?: number): void {

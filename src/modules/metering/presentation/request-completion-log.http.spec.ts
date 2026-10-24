@@ -18,7 +18,7 @@ import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
-import { METRICS_ROUTE_PATH } from '@/common/observability/metrics';
+import { METRICS_ROUTE_PATH, getMetrics } from '@/common/observability/metrics';
 import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
@@ -234,15 +234,20 @@ const idempotency = {
 
 /** Total observations of a counter family, summed across its label sets. */
 async function metricValue(
-  application: NestFastifyApplication,
+  _application: NestFastifyApplication,
   name: string,
+  labels?: Record<string, string>,
 ): Promise<number> {
-  const body = (
-    await application.inject({ method: 'GET', url: METRICS_ROUTE_PATH })
-  ).body;
+  const body = await getMetrics();
+  const selector =
+    labels === undefined
+      ? `${name}{`
+      : `${name}{${Object.entries(labels)
+          .map(([key, value]) => `${key}="${value}"`)
+          .join(',')}} `;
   const lines = String(body)
     .split('\n')
-    .filter((line) => line.startsWith(`${name}{`));
+    .filter((line) => line.startsWith(selector));
 
   return lines.reduce((total, line) => {
     const value = Number(line.slice(line.lastIndexOf(' ') + 1));
@@ -804,6 +809,49 @@ describe('request completion log over the HTTP boundary', () => {
     );
   });
 
+  it('counts paths without catalog operations under one fixed operation label', async () => {
+    const paths = [
+      '/scanner/probe-alpha?target=alpha',
+      '/arbitrary/path-984?target=beta',
+    ];
+    const labels = {
+      operation: 'unmatched',
+      status: '404',
+      outcome: 'client_error',
+    };
+    const totalBefore = await metricValue(app, 'aihub_requests_total');
+    const unmatchedBefore = await metricValue(
+      app,
+      'aihub_requests_total',
+      labels,
+    );
+
+    for (const path of paths) {
+      const response = await app.inject({ method: 'GET', url: path });
+      expect(response.statusCode).toBe(404);
+    }
+
+    expect(await metricValue(app, 'aihub_requests_total')).toBe(
+      totalBefore + paths.length,
+    );
+    const unmatchedAfter = await metricValue(
+      app,
+      'aihub_requests_total',
+      labels,
+    );
+    expect(unmatchedAfter).toBe(unmatchedBefore + paths.length);
+
+    const payload = String(
+      (await app.inject({ method: 'GET', url: METRICS_ROUTE_PATH })).body,
+    );
+    expect(payload).toContain(
+      `aihub_requests_total{operation="unmatched",status="404",outcome="client_error"} ${unmatchedAfter}`,
+    );
+    for (const path of paths) {
+      expect(payload).not.toContain(path);
+    }
+  });
+
   it('counts a graded request in the scrape endpoint', async () => {
     await app.inject({
       method: 'POST',
@@ -823,17 +871,45 @@ describe('request completion log over the HTTP boundary', () => {
     expect(payload).toContain('aihub_request_duration_seconds_count');
   });
 
-  it('counts no scrape as a customer request', async () => {
+  it('counts metrics scrapes without logging completion events', async () => {
     const before = await metricValue(app, 'aihub_requests_total');
+    const unmatchedBefore = await metricValue(app, 'aihub_requests_total', {
+      operation: 'unmatched',
+      status: '200',
+      outcome: 'success',
+    });
 
-    await app.inject({ method: 'GET', url: '/metrics' });
+    const response = await app.inject({
+      method: 'GET',
+      url: METRICS_ROUTE_PATH,
+    });
 
-    expect(await metricValue(app, 'aihub_requests_total')).toBe(before);
+    expect(response.statusCode).toBe(200);
+    expect(await metricValue(app, 'aihub_requests_total')).toBe(before + 1);
+    expect(
+      await metricValue(app, 'aihub_requests_total', {
+        operation: 'unmatched',
+        status: '200',
+        outcome: 'success',
+      }),
+    ).toBe(unmatchedBefore + 1);
+    expect(log.completions()).toHaveLength(0);
   });
 
   it('records a delayed API-key refusal without creating Metering evidence', async () => {
     const delayMs = 75;
     const slowLogWriteMs = 20;
+    const apiKeyRefusalLabels = {
+      operation: 'writing.task1.grade',
+      status: '401',
+      outcome: 'client_error',
+    };
+    const requestsBefore = await metricValue(app, 'aihub_requests_total');
+    const apiKeyRefusalsBefore = await metricValue(
+      app,
+      'aihub_requests_total',
+      apiKeyRefusalLabels,
+    );
     const totalBefore = await metricValue(
       app,
       'aihub_request_duration_seconds_sum',
@@ -886,6 +962,12 @@ describe('request completion log over the HTTP boundary', () => {
     expect(Object.keys(event)).not.toContain('org_id');
     expect(Object.keys(event)).not.toContain('operation');
     expect(Object.keys(event)).not.toContain('environment');
+    expect(await metricValue(app, 'aihub_requests_total')).toBe(
+      requestsBefore + 1,
+    );
+    expect(
+      await metricValue(app, 'aihub_requests_total', apiKeyRefusalLabels),
+    ).toBe(apiKeyRefusalsBefore + 1);
     expect(
       (await metricValue(app, 'aihub_request_duration_seconds_sum')) -
         totalBefore,
@@ -947,10 +1029,24 @@ describe('request completion log over the HTTP boundary', () => {
     expect(log.completions()).toHaveLength(0);
   });
 
-  it('writes no event for a health probe', async () => {
+  it('counts a health response without logging it', async () => {
+    const before = await metricValue(app, 'aihub_requests_total');
+    const unmatchedBefore = await metricValue(app, 'aihub_requests_total', {
+      operation: 'unmatched',
+      status: '200',
+      outcome: 'success',
+    });
     const response = await app.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
+    expect(await metricValue(app, 'aihub_requests_total')).toBe(before + 1);
+    expect(
+      await metricValue(app, 'aihub_requests_total', {
+        operation: 'unmatched',
+        status: '200',
+        outcome: 'success',
+      }),
+    ).toBe(unmatchedBefore + 1);
     expect(log.completions()).toHaveLength(0);
   });
 

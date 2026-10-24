@@ -60,8 +60,8 @@ export async function bootstrap(): Promise<void> {
 
   registerSpeakingMultipartParser(fastify);
 
-  // Registered after the hooks so the scrape itself is observed by the same
-  // completion path, and skipped by it: a scrape is not a customer request.
+  // Registered after the hooks so the scrape itself is counted on response;
+  // its increment appears in the following scrape, after this body is sent.
   registerMetricsRoute(fastify);
 
   // No global prefix: the operation catalog carries the full public path

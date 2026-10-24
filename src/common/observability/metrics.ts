@@ -114,14 +114,14 @@ new Gauge({
 
 const requestsTotal = new Counter({
   name: 'aihub_requests_total',
-  help: 'Completed customer requests, labelled by operation and how they ended.',
+  help: 'Completed HTTP responses, labelled by operation and how they ended.',
   labelNames: ['operation', 'status', 'outcome'],
   registers: [registry],
 });
 
 const requestDuration = new Histogram({
   name: 'aihub_request_duration_seconds',
-  help: 'Wall time of a completed customer request, in seconds.',
+  help: 'Wall time of a completed HTTP response, in seconds.',
   labelNames: ['operation'],
   // A grading request runs 800-3000ms while a rejected one returns in
   // single-digit milliseconds, so the buckets are denser at the fast end
@@ -576,9 +576,9 @@ export function setDispatchAttemptUnresolvedSource(
 }
 
 /**
- * Only called from the Request Completion hook, where the operation is the
- * catalog's own identifier. A label value is therefore bounded by the
- * catalog rather than by whatever a caller put in the URL.
+ * Only called from the Request Completion hook, where the operation is either
+ * a catalog identifier or its fixed unmatched sentinel. Label values are
+ * bounded by code rather than whatever a caller put in the URL.
  */
 export interface CompletedRequestMetrics {
   readonly operation: string;

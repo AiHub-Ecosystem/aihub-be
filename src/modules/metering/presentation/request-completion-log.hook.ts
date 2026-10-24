@@ -9,7 +9,10 @@ import {
   requestAdmissionMs,
   requestDurationMs,
 } from '@/common/http/request-timing.hook';
-import { routeTemplate } from '@/common/http/request-tracing.hook';
+import {
+  UNMATCHED_ROUTE,
+  routeTemplate,
+} from '@/common/http/request-tracing.hook';
 import {
   METRICS_ROUTE_PATH,
   recordCompletedRequest,
@@ -118,7 +121,8 @@ function completionEvent(
  *
  * Authenticated requests use Metering evidence. A pre-auth refusal can still
  * use a bounded label when its matched method and route exactly name a catalog
- * operation. Never derive labels from the caller's raw URL.
+ * operation. All other requests use the fixed unmatched route sentinel. Never
+ * derive labels from the caller's raw URL.
  */
 function recordRequestMetrics(
   request: FastifyRequest,
@@ -126,12 +130,10 @@ function recordRequestMetrics(
   totalMs: number,
 ): void {
   const evidence = getMeteringEvidence(request);
-  const operation =
+  const catalogOperation =
     evidence?.operation ??
     OPERATION_BY_ROUTE.get(`${request.method} ${routeTemplate(request)}`);
-  if (operation === undefined) {
-    return;
-  }
+  const operation = catalogOperation ?? UNMATCHED_ROUTE;
 
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);
   const tokens = evidence === undefined ? undefined : tokensOf(evidence);
@@ -154,7 +156,9 @@ function recordRequestMetrics(
       ? {}
       : { meteringStatus: evidence.meteringStatus }),
   });
-  recordGradedAdmission(operation, admissionMs, dimensions);
+  if (catalogOperation !== undefined) {
+    recordGradedAdmission(catalogOperation, admissionMs, dimensions);
+  }
 }
 
 /**
@@ -192,20 +196,14 @@ export function registerRequestCompletionLog(instance: FastifyInstance): void {
   const log = instance.log;
 
   instance.addHook('onResponse', (request, reply, done) => {
+    const event = completionEvent(request, reply);
     const isProbe = isHealthProbe(request.url);
 
-    if (request.url === METRICS_ROUTE_PATH) {
-      // A scrape is not a customer request. It carries no metering evidence,
-      // so it would be skipped below anyway, but it also must not be logged.
-      return done();
-    }
-
-    if (!isProbe) {
-      const event = completionEvent(request, reply);
+    if (request.url !== METRICS_ROUTE_PATH && !isProbe) {
       log.info(event);
-      recordRequestMetrics(request, reply, event.total_ms);
     }
 
+    recordRequestMetrics(request, reply, event.total_ms);
     done();
   });
 }
