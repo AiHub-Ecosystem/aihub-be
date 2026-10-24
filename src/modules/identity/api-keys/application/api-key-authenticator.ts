@@ -113,6 +113,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       // counter" contract in the auth design.
       const currentFailures = await this.getFailureCount(credentials.clientIp);
       if (currentFailures >= AUTH_FAILURE_LIMIT) {
+        recordRejected('auth');
         throw rateLimited();
       }
 

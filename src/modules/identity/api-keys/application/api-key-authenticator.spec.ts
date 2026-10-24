@@ -397,6 +397,7 @@ describe('ApiKeyAuthenticator', () => {
   });
 
   it('rejects a fresh guess without touching Postgres once the IP is over the brute-force threshold', async () => {
+    const before = await rejectedAuthCount();
     const { authenticator, repository, failures } = createAuthenticator(null);
     failures.failures = AUTH_FAILURE_LIMIT;
 
@@ -411,6 +412,7 @@ describe('ApiKeyAuthenticator', () => {
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe('RATE_LIMITED');
     expect(repository.calls).toBe(0);
+    expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
   it('does not spend a failure-counter round trip on a valid, already-cached key', async () => {
