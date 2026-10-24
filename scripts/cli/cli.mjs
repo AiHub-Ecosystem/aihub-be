@@ -1129,17 +1129,26 @@ async function main() {
   usageError();
 }
 
+// Runners throw configuration and store errors whose text names variables,
+// never credential values — but a driver error outside that discipline is not
+// under our control, so a URL carrying inline credentials is scrubbed before
+// the line reaches operator stderr.
+function describeFailure(error) {
+  const message =
+    error instanceof Error && error.message.length > 0
+      ? error.message
+      : 'unknown error';
+  return message.replace(
+    /[a-z][a-z0-9+.-]*:\/\/[^\s/]+:[^\s/]+@/gi,
+    (url) => `${url.slice(0, url.indexOf('://') + 3)}***@`,
+  );
+}
+
 main().catch((error) => {
   console.error(
     error instanceof Error && error.code === 'AUDIT_COMPLETION_FAILURE'
       ? 'Revocation outcome is unconfirmed: the request is audited, but completion could not be confirmed. After database recovery, rerun the same URL and actor; deletion is idempotent.'
-      : // The message is operator-facing: runners throw configuration and
-        // store errors whose text names variables, never credential values.
-        `Command failed: ${
-          error instanceof Error && error.message.length > 0
-            ? error.message
-            : 'unknown error'
-        }`,
+      : `Command failed: ${describeFailure(error)}`,
   );
   process.exitCode = error instanceof CliUsageError ? 2 : 1;
 });
