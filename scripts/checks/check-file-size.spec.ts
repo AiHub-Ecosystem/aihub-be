@@ -10,7 +10,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 const script = join(process.cwd(), 'scripts', 'checks', 'check-file-size.mjs');
-const GRANDFATHERED = 'src/openapi/build-openapi-document.ts';
+const GRANDFATHERED =
+  'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts';
+const SPLIT_OPENAPI_ENTRY = 'src/openapi/build-openapi-document.ts';
 const EXEMPT = 'src/catalog/public-routes.ts';
 
 function runCheck(cwd: string) {
@@ -46,6 +48,13 @@ const realGrandfathered = (): string =>
 describe('file-size ceiling check', () => {
   it('fails when a new hand-written file exceeds the ceiling', () => {
     const result = runOnFixture({ 'src/big.ts': codeLines(501) });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toMatch(/exceeds the 500-line ceiling/);
+  });
+
+  it('enforces the ceiling on the split OpenAPI entry point', () => {
+    const result = runOnFixture({ [SPLIT_OPENAPI_ENTRY]: codeLines(501) });
 
     expect(result.status).not.toBe(0);
     expect(result.output).toMatch(/exceeds the 500-line ceiling/);
