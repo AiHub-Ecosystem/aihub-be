@@ -70,10 +70,6 @@ const grandfathered = new Map([
     'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
     957,
   ],
-  [
-    'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts',
-    818,
-  ],
 ]);
 
 function violation(rel, lines) {

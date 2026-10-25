@@ -13,6 +13,8 @@ const script = join(process.cwd(), 'scripts', 'checks', 'check-file-size.mjs');
 const GRANDFATHERED =
   'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts';
 const SPLIT_OPENAPI_ENTRY = 'src/openapi/build-openapi-document.ts';
+const SPLIT_JWKS_ENTRY =
+  'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts';
 const EXEMPT = 'src/catalog/public-routes.ts';
 
 function runCheck(cwd: string) {
@@ -53,12 +55,15 @@ describe('file-size ceiling check', () => {
     expect(result.output).toMatch(/exceeds the 500-line ceiling/);
   });
 
-  it('enforces the ceiling on the split OpenAPI entry point', () => {
-    const result = runOnFixture({ [SPLIT_OPENAPI_ENTRY]: codeLines(501) });
+  it.each([SPLIT_OPENAPI_ENTRY, SPLIT_JWKS_ENTRY])(
+    'enforces the ceiling on split entry point %s',
+    (entry) => {
+      const result = runOnFixture({ [entry]: codeLines(501) });
 
-    expect(result.status).not.toBe(0);
-    expect(result.output).toMatch(/exceeds the 500-line ceiling/);
-  });
+      expect(result.status).not.toBe(0);
+      expect(result.output).toMatch(/exceeds the 500-line ceiling/);
+    },
+  );
 
   it('passes a grandfathered file at its recorded size', () => {
     expect(runOnFixture({ [GRANDFATHERED]: realGrandfathered() }).status).toBe(

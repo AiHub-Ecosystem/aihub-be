@@ -1,15 +1,8 @@
-// ponytail: file above the 500-code-line ceiling (ADR-0110); split tracked in #964.
-import { Resolver } from 'node:dns/promises';
-import { isIP } from 'node:net';
-
-import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
-
 import { AppError } from '@/common/errors/app-error';
 import {
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
 } from '@/common/observability/metrics';
-import { parsePublicJsonWebKeySet } from '@/modules/identity/domain/organization-identity-config';
 import type {
   OrganizationIdentityConfig,
   PublicJsonWebKeySet,
@@ -26,16 +19,29 @@ import type {
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import { identityProviderUnavailable } from '@/modules/identity/user-assertions/application/user-identity-errors';
 
+import {
+  type DnsResolverFactory,
+  defaultJwksResolverFactory,
+} from './jwks-host-safety';
+import {
+  type JwksFetcher,
+  defaultJwksFetcher,
+  fetchRemoteJwks,
+} from './jwks-remote-fetch';
+
+export { JWKS_MAX_RESPONSE_BYTES } from './jwks-remote-fetch';
+
 export const JWKS_FRESH_TTL_MS = 15 * 60 * 1_000;
+
 export const JWKS_STALE_TTL_MS = 24 * 60 * 60 * 1_000;
+
 export const JWKS_REFRESH_COOLDOWN_MS = 5 * 60 * 1_000;
+
 export const JWKS_COLD_FAILURE_TTL_MS = 30 * 1_000;
-export const JWKS_DNS_TIMEOUT_MS = 1_000;
-export const JWKS_FETCH_TIMEOUT_MS = 3_000;
-export const JWKS_MAX_RESPONSE_BYTES = 64 * 1024;
+
 export const JWKS_MAX_CONCURRENT_ORGANIZATIONS = 8;
+
 const MAX_LOCAL_JWKS_COOLDOWNS = 256;
-const JWKS_DISPATCHER = Symbol('JWKS_DISPATCHER');
 
 function remainingCooldown(
   cooldowns: Map<string, number>,
@@ -69,418 +75,6 @@ class JwksCapacityError extends AppError {
   }
 }
 
-interface DnsAddress {
-  readonly address: string;
-  readonly family: number;
-}
-
-interface DnsResolver {
-  resolve4(hostname: string): Promise<string[]>;
-  resolve6(hostname: string): Promise<string[]>;
-  cancel(): void;
-}
-
-type DnsResolverFactory = () => DnsResolver;
-type DnsResult<T> = PromiseSettledResult<T>;
-
-const defaultResolverFactory: DnsResolverFactory = () =>
-  new Resolver({ timeout: JWKS_DNS_TIMEOUT_MS, tries: 1 });
-
-interface FetchInit {
-  readonly [JWKS_DISPATCHER]?: Dispatcher;
-  readonly redirect?: 'error' | 'manual';
-  readonly credentials?: 'omit';
-  readonly headers?: Record<string, string>;
-  readonly signal?: AbortSignal;
-}
-
-interface FetchResponse {
-  readonly ok: boolean;
-  readonly status: number;
-  readonly headers: { get(name: string): string | null };
-  readonly body: ReadableStream<Uint8Array> | null;
-}
-
-type Fetcher = (url: string, init?: FetchInit) => Promise<FetchResponse>;
-
-const defaultFetcher: Fetcher = (url, init) => {
-  const dispatcher = init?.[JWKS_DISPATCHER];
-
-  return undiciFetch(url, {
-    ...(dispatcher === undefined ? {} : { dispatcher }),
-    ...(init?.redirect === undefined ? {} : { redirect: init.redirect }),
-    ...(init?.credentials === undefined
-      ? {}
-      : { credentials: init.credentials }),
-    ...(init?.headers === undefined ? {} : { headers: init.headers }),
-    ...(init?.signal === undefined ? {} : { signal: init.signal }),
-  });
-};
-
-function unsafeUrl(): AppError {
-  return new AppError({
-    code: 'IDENTITY_JWKS_URL_UNSAFE',
-    message: 'JWKS URL is not safe',
-    retryable: false,
-  });
-}
-
-function sourceUnavailable(retryable: boolean, cause?: unknown): AppError {
-  return new AppError({
-    code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
-    message: 'JWKS source is unavailable',
-    retryable,
-    ...(cause === undefined ? {} : { cause }),
-  });
-}
-
-function invalidJwks(): AppError {
-  return new AppError({
-    code: 'IDENTITY_JWKS_INVALID',
-    message: 'Public JWKS is invalid',
-    retryable: false,
-  });
-}
-
-function ipv4Number(address: string): number | undefined {
-  const octets = address.split('.').map(Number);
-  if (
-    octets.length !== 4 ||
-    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
-  ) {
-    return undefined;
-  }
-
-  return (
-    (((octets[0] ?? 0) * 256 + (octets[1] ?? 0)) * 256 + (octets[2] ?? 0)) *
-      256 +
-    (octets[3] ?? 0)
-  );
-}
-
-function isUnsafeIpv4(address: string): boolean {
-  const value = ipv4Number(address);
-  if (value === undefined) {
-    return true;
-  }
-
-  const inRange = (start: string, end: string): boolean => {
-    const first = ipv4Number(start);
-    const last = ipv4Number(end);
-    return (
-      first !== undefined &&
-      last !== undefined &&
-      value >= first &&
-      value <= last
-    );
-  };
-
-  return [
-    ['0.0.0.0', '0.255.255.255'],
-    ['10.0.0.0', '10.255.255.255'],
-    ['100.64.0.0', '100.127.255.255'],
-    ['127.0.0.0', '127.255.255.255'],
-    ['169.254.0.0', '169.254.255.255'],
-    ['172.16.0.0', '172.31.255.255'],
-    ['192.0.0.0', '192.0.0.255'],
-    ['192.0.2.0', '192.0.2.255'],
-    ['192.88.99.0', '192.88.99.255'],
-    ['192.168.0.0', '192.168.255.255'],
-    ['198.18.0.0', '198.19.255.255'],
-    ['198.51.100.0', '198.51.100.255'],
-    ['203.0.113.0', '203.0.113.255'],
-    ['224.0.0.0', '239.255.255.255'],
-    ['240.0.0.0', '255.255.255.255'],
-  ].some(([start, end]) => inRange(start ?? '', end ?? ''));
-}
-
-function ipv6Hextets(address: string): readonly number[] | undefined {
-  const normalized = address.toLowerCase().split('%')[0] ?? '';
-  const halves = normalized.split('::');
-  if (halves.length > 2) {
-    return undefined;
-  }
-
-  const parsePart = (part: string): number[] | undefined => {
-    if (part.length === 0) {
-      return [];
-    }
-
-    const parsed: number[] = [];
-    for (const token of part.split(':')) {
-      if (token.includes('.')) {
-        const value = ipv4Number(token);
-        if (value === undefined) {
-          return undefined;
-        }
-        parsed.push((value >>> 16) & 0xffff, value & 0xffff);
-        continue;
-      }
-
-      if (!/^[0-9a-f]{1,4}$/.test(token)) {
-        return undefined;
-      }
-      parsed.push(Number.parseInt(token, 16));
-    }
-    return parsed;
-  };
-
-  const left = parsePart(halves[0] ?? '');
-  const right = halves.length === 2 ? parsePart(halves[1] ?? '') : [];
-  if (left === undefined || right === undefined) {
-    return undefined;
-  }
-
-  const missing = halves.length === 2 ? 8 - left.length - right.length : 0;
-  if (missing < 0 || (halves.length === 1 && left.length !== 8)) {
-    return undefined;
-  }
-
-  return [...left, ...Array.from({ length: missing }, () => 0), ...right];
-}
-
-function isUnsafeIpv6(address: string): boolean {
-  const parts = ipv6Hextets(address);
-  if (parts === undefined || parts.length !== 8) {
-    return true;
-  }
-
-  const first = parts[0] ?? 0;
-  const isIetfProtocolAssignment =
-    first === 0x2001 && (parts[1] ?? 0) <= 0x01ff;
-  const isDocumentation =
-    (first === 0x2001 && parts[1] === 0x0db8) ||
-    (first === 0x3fff && (parts[1] ?? 0) <= 0x0fff);
-  const isSixToFour = first === 0x2002;
-  const isNotGlobalUnicast = first < 0x2000 || first > 0x3fff;
-
-  return (
-    isNotGlobalUnicast ||
-    isIetfProtocolAssignment ||
-    isDocumentation ||
-    isSixToFour
-  );
-}
-
-function isUnsafeAddress(address: string): boolean {
-  const family = isIP(address);
-  return family === 4
-    ? isUnsafeIpv4(address)
-    : family === 6
-      ? isUnsafeIpv6(address)
-      : true;
-}
-
-function isNoDnsRecord(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error.code === 'ENODATA' || error.code === 'ENOTFOUND')
-  );
-}
-
-async function resolveHost(
-  hostname: string,
-  resolverFactory: DnsResolverFactory,
-  deadlineAt: number,
-): Promise<readonly DnsAddress[]> {
-  const normalizedHost = hostname.replace(/^\[|\]$/g, '');
-  const family = isIP(normalizedHost);
-  if (family === 4 || family === 6) {
-    return [{ address: normalizedHost, family }];
-  }
-
-  const resolver = resolverFactory();
-  let cancelled = false;
-  const cancelResolver = () => {
-    if (!cancelled) {
-      cancelled = true;
-      resolver.cancel();
-    }
-  };
-  try {
-    const dnsDeadlineAt = Math.min(
-      deadlineAt,
-      Date.now() + JWKS_DNS_TIMEOUT_MS,
-    );
-    let ipv4: DnsResult<string[]> | undefined;
-    let ipv6: DnsResult<string[]> | undefined;
-    const resolve = <T>(operation: () => Promise<T>) => {
-      try {
-        return operation().then<DnsResult<T>, DnsResult<T>>(
-          (value) => ({ status: 'fulfilled', value }),
-          (reason: unknown) => ({ status: 'rejected', reason }),
-        );
-      } catch (reason) {
-        return Promise.resolve<DnsResult<T>>({ status: 'rejected', reason });
-      }
-    };
-    const ipv4Lookup = resolve(() => resolver.resolve4(normalizedHost)).then(
-      (result) => (ipv4 = result),
-    );
-    const ipv6Lookup = resolve(() => resolver.resolve6(normalizedHost)).then(
-      (result) => (ipv6 = result),
-    );
-    try {
-      await withDeadline(Promise.all([ipv4Lookup, ipv6Lookup]), dnsDeadlineAt);
-    } catch {
-      cancelResolver();
-    }
-
-    const addresses: DnsAddress[] = [];
-    let lookupError: unknown;
-    for (const [result, addressFamily] of [
-      [ipv4, 4],
-      [ipv6, 6],
-    ] as const) {
-      if (result?.status === 'fulfilled') {
-        addresses.push(
-          ...result.value.map((address) => ({
-            address,
-            family: addressFamily,
-          })),
-        );
-      } else if (
-        result?.status === 'rejected' &&
-        !isNoDnsRecord(result.reason)
-      ) {
-        lookupError ??= result.reason;
-      }
-    }
-    if (addresses.length === 0 && lookupError !== undefined) {
-      throw lookupError;
-    }
-    return addresses;
-  } catch (error) {
-    cancelResolver();
-    throw error;
-  }
-}
-
-async function assertSafeHost(
-  hostname: string,
-  resolverFactory: DnsResolverFactory,
-  deadlineAt: number,
-): Promise<readonly DnsAddress[]> {
-  let addresses: readonly DnsAddress[];
-  try {
-    addresses = await withDeadline(
-      resolveHost(hostname, resolverFactory, deadlineAt),
-      deadlineAt,
-    );
-  } catch (cause) {
-    throw sourceUnavailable(true, cause);
-  }
-  if (addresses.length === 0) {
-    throw sourceUnavailable(true);
-  }
-  if (addresses.some((address) => isUnsafeAddress(address.address))) {
-    throw unsafeUrl();
-  }
-  return addresses;
-}
-
-async function withDeadline<T>(
-  operation: Promise<T>,
-  deadlineAt: number,
-): Promise<T> {
-  const remainingMs = deadlineAt - Date.now();
-  if (remainingMs <= 0) {
-    throw new Error('JWKS lookup timed out');
-  }
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error('JWKS lookup timed out')),
-      remainingMs,
-    );
-  });
-
-  try {
-    return await Promise.race([operation, timeout]);
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
-}
-
-function pinnedLookup(addresses: readonly DnsAddress[]) {
-  return (
-    _hostname: string,
-    options: import('node:dns').LookupOptions,
-    callback: (
-      error: NodeJS.ErrnoException | null,
-      address: string | DnsAddress[],
-      family?: number,
-    ) => void,
-  ): void => {
-    if (options.all === true) {
-      callback(null, [...addresses]);
-      return;
-    }
-
-    const address = addresses[0];
-    if (address === undefined) {
-      callback(
-        Object.assign(new Error('No public JWKS address'), {
-          code: 'ENOTFOUND',
-        }),
-        '',
-        0,
-      );
-      return;
-    }
-    callback(null, address.address, address.family);
-  };
-}
-
-async function readLimitedBody(response: FetchResponse): Promise<string> {
-  const contentLength = response.headers.get('content-length');
-  if (contentLength !== null) {
-    const length = Number(contentLength);
-    if (
-      !Number.isSafeInteger(length) ||
-      length < 0 ||
-      length > JWKS_MAX_RESPONSE_BYTES
-    ) {
-      throw invalidJwks();
-    }
-  }
-
-  if (response.body === null) {
-    throw invalidJwks();
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  try {
-    while (true) {
-      const next = await reader.read().catch((cause: unknown) => {
-        throw sourceUnavailable(true, cause);
-      });
-      if (next.done) {
-        break;
-      }
-
-      total += next.value.byteLength;
-      if (total > JWKS_MAX_RESPONSE_BYTES) {
-        await reader.cancel();
-        throw invalidJwks();
-      }
-      chunks.push(next.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  return Buffer.concat(chunks).toString('utf8');
-}
-
 export class JwksKeyProvider implements JwksKeyProviderPort {
   private readonly localRefreshCooldown = new Map<string, number>();
   private readonly refreshFailureCooldown = new Map<string, number>();
@@ -500,8 +94,8 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
 
   constructor(
     private readonly cache: JwksCachePort,
-    private readonly fetcher: Fetcher = defaultFetcher,
-    private readonly resolverFactory: DnsResolverFactory = defaultResolverFactory,
+    private readonly fetcher: JwksFetcher = defaultJwksFetcher,
+    private readonly resolverFactory: DnsResolverFactory = defaultJwksResolverFactory,
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -807,7 +401,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       readonly promise: Promise<PublicJsonWebKeySet>;
     };
     const promise = Promise.resolve()
-      .then(() => this.fetchRemote(url))
+      .then(() => fetchRemoteJwks(url, this.fetcher, this.resolverFactory))
       .catch((error: unknown) => {
         recordJwksRefreshFailure();
         throw error;
@@ -820,82 +414,5 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     flight = { key, promise };
     this.flights.set(organizationId, flight);
     return promise;
-  }
-
-  private async fetchRemote(urlValue: string): Promise<PublicJsonWebKeySet> {
-    let url: URL;
-    try {
-      url = new URL(urlValue);
-    } catch (error) {
-      throw new Error('JWKS URL is invalid', { cause: error });
-    }
-
-    if (
-      url.protocol !== 'https:' ||
-      url.username.length > 0 ||
-      url.password.length > 0
-    ) {
-      throw unsafeUrl();
-    }
-
-    const deadlineAt = Date.now() + JWKS_FETCH_TIMEOUT_MS;
-    const addresses = await assertSafeHost(
-      url.hostname,
-      this.resolverFactory,
-      deadlineAt,
-    );
-    const remainingMs = Math.max(1, deadlineAt - Date.now());
-    const dispatcher = new Agent({
-      connect: {
-        lookup: pinnedLookup(addresses),
-        timeout: remainingMs,
-      },
-      connections: 1,
-    });
-
-    try {
-      let response: FetchResponse;
-      try {
-        response = await this.fetcher(url.toString(), {
-          [JWKS_DISPATCHER]: dispatcher,
-          redirect: 'manual',
-          credentials: 'omit',
-          headers: { accept: 'application/json' },
-          signal: AbortSignal.timeout(remainingMs),
-        });
-      } catch (cause) {
-        throw sourceUnavailable(true, cause);
-      }
-
-      if (response.status >= 300 && response.status < 400) {
-        throw unsafeUrl();
-      }
-      if (!response.ok) {
-        const retryable =
-          response.status === 408 ||
-          response.status === 425 ||
-          response.status === 429 ||
-          response.status >= 500;
-        throw sourceUnavailable(retryable);
-      }
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(await readLimitedBody(response));
-      } catch (error) {
-        if (error instanceof AppError) {
-          throw error;
-        }
-        throw invalidJwks();
-      }
-      const jwks = parsePublicJsonWebKeySet(parsed);
-      if (jwks === undefined) {
-        throw invalidJwks();
-      }
-
-      return jwks;
-    } finally {
-      await dispatcher.close().catch(() => undefined);
-    }
   }
 }
