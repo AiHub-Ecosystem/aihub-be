@@ -196,12 +196,37 @@ The `aihub-edge-health` job (#291) asks the monitoring host's blackbox exporter 
 
 `AIHUBEdgeProbeFailed` fires after two minutes without a 2xx. `/health` is liveness only, so a process that answers but cannot reach Postgres or Redis still passes; the [authenticated Sandbox probe](#authenticated-sandbox-probe) covers that case. Read `probe_http_status_code` and `probe_duration_seconds` for the instance, then check the host with `ops/status.sh` ([deploy-vps.md](deploy-vps.md#checking-deployed-state)). The probe runs on the monitoring host, so that host being down silences it; the watchdog for that is #412's.
 
+### SLO alerts
+
+The [SLO declaration](slo.md) defines the 30-day objectives, exact queries,
+and burn-rate windows. Fast-burn rules are critical at 14.4x across 5-minute
+and 1-hour windows; sustained-burn rules are warning at 6x across 30-minute
+and 6-hour windows. Gateway alerts carry `journey`; AI Service alerts carry
+`provider` (`ai-writing` or `ai-speaking`).
+
+For a gateway alert, inspect `aihub:critical_journey:gateway_error_ratio:*`
+or `aihub:critical_journey:gateway_slow_ratio:*` for the affected journey.
+For a provider alert, inspect its `aihub:ai_service:*` rates and the matching
+`aihub_requests_total`/`aihub_downstream_duration_seconds` operation series.
+Gateway error ratios exclude client and downstream errors. Treat provider
+failures as provider-owned unless separate gateway evidence identifies an
+AIHUB fault. If a rolling 30-day objective is below target, follow the
+error-budget release policy in `slo.md`.
+
 ### Scheduled jobs
 
-Every scheduled run of `scripts/ops/host-jobs/host-scheduled-job.sh` and `scripts/ops/backups/backup-postgres.sh` writes its result to `~/.aihub-host-job-metrics/<task>-success.prom` or `<task>-failure.prom` on Production (#291). Production's node exporter reads that directory with its textfile collector, so Prometheus on the monitoring host sees:
+Every scheduled run of `scripts/ops/host-jobs/host-scheduled-job.sh` and `scripts/ops/backups/backup-postgres.sh` writes its result to `~/.aihub-host-job-metrics/<task>-success.prom` or `<task>-failure.prom` on Production (#291). A completed report or quota reconciliation can also write `<task>-attention.prom` when its summary needs operator action. Production's node exporter reads that directory with its textfile collector, so Prometheus on the monitoring host sees:
 
 - `aihub_host_job_last_success_timestamp_seconds{task}` and `aihub_host_job_max_age_seconds{task}`, written on success;
 - `aihub_host_job_last_failure_timestamp_seconds{task}`, written on failure.
+- `aihub_host_job_last_attention_timestamp_seconds{task}`, written when
+  `usage:report` finds missing usage above 1% or quota reconciliation repairs
+  any nonzero Redis-to-Postgres count difference.
+
+`AIHUBScheduledJobAttention` fires for the newest attention outcome and clears
+when a newer healthy success or failure is recorded. The failure rule similarly
+clears when attention is newer; infrastructure failures remain
+`AIHUBScheduledJobFailed`.
 
 | Task                                                                                                               | Window before `AIHUBScheduledJobMissed` |
 | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |

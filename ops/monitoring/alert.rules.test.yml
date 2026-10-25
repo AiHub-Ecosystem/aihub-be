@@ -51,7 +51,8 @@ tests:
             exp_annotations:
               summary: "An AIHUB scheduled job failed"
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
-              description: "The last prune run failed; the alert clears on its next success."
+
+              description: "The latest prune run failed; a newer healthy or attention outcome clears this alert."
       - eval_time: 6m
         alertname: AIHUBScheduledJobFailed
         exp_alerts:
@@ -63,7 +64,7 @@ tests:
             exp_annotations:
               summary: "An AIHUB scheduled job failed"
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
-              description: "The last prune run failed; the alert clears on its next success."
+              description: "The latest prune run failed; a newer healthy or attention outcome clears this alert."
           - exp_labels:
               severity: warning
               owner: aihub-operations
@@ -72,7 +73,7 @@ tests:
             exp_annotations:
               summary: "An AIHUB scheduled job failed"
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
-              description: "The last quota run failed; the alert clears on its next success."
+              description: "The latest quota run failed; a newer healthy or attention outcome clears this alert."
       - eval_time: 140m
         alertname: AIHUBScheduledJobMissed
         exp_alerts: []
@@ -88,6 +89,32 @@ tests:
               summary: "An AIHUB scheduled job has not succeeded within its window"
               description: "report last succeeded 2h 21m 0s ago."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+
+  - interval: 1m
+    input_series:
+      - series: 'aihub_host_job_last_success_timestamp_seconds{job="aihub-production-node",task="report"}'
+        values: "0x5 360x10"
+      - series: 'aihub_host_job_last_attention_timestamp_seconds{job="aihub-production-node",task="report"}'
+        values: "_ _ _ 180x12"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AIHUBScheduledJobAttention
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AIHUBScheduledJobAttention
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              task: report
+            exp_annotations:
+              summary: "An AIHUB scheduled job completed with findings"
+              description: "The latest report run completed but found data requiring operator attention."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+      - eval_time: 6m
+        alertname: AIHUBScheduledJobAttention
+        exp_alerts: []
 
   # #396 container watchdog: an OOM kill at t=120 s, an exit at t=0, and an
   # unhealthy vault-agent from t=0. An empty exit_code label is dropped.
@@ -662,4 +689,167 @@ tests:
     alert_rule_test:
       - eval_time: 12m
         alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'aihub_critical_journey_requests_total{job="aihub-production-app",journey="graded_request",outcome="internal_error"}'
+        values: "0+1x10"
+      - series: 'aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app",journey="graded_request"}'
+        values: "0+1x10"
+      - series: 'aihub_gateway_overhead_duration_seconds_bucket{job="aihub-production-app",journey="graded_request",le="1"}'
+        values: "0x11"
+      - series: 'aihub_requests_total{job="aihub-production-app",operation="writing.task1.grade",status="503",outcome="downstream_error"}'
+        values: "0+1x10"
+      - series: 'aihub_downstream_duration_seconds_count{job="aihub-production-app",operation="writing.task1.grade"}'
+        values: "0+1x10"
+      - series: 'aihub_downstream_duration_seconds_bucket{job="aihub-production-app",operation="writing.task1.grade",le="30"}'
+        values: "0x11"
+      - series: 'aihub_requests_total{job="aihub-production-app",operation="speaking.grading",status="503",outcome="downstream_error"}'
+        values: "0+1x10"
+      - series: 'aihub_downstream_duration_seconds_count{job="aihub-production-app",operation="speaking.grading"}'
+        values: "0+1x10"
+      - series: 'aihub_downstream_duration_seconds_bucket{job="aihub-production-app",operation="speaking.grading",le="30"}'
+        values: "0x11"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: AIHUBGatewayAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              journey: graded_request
+            exp_annotations:
+              summary: "AIHUB gateway availability SLO is burning fast"
+              description: "The graded_request journey is consuming its 30-day gateway availability budget at more than 14.4x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBGatewayAvailabilitySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              journey: graded_request
+            exp_annotations:
+              summary: "AIHUB gateway availability SLO is burning steadily"
+              description: "The graded_request journey is consuming its 30-day gateway availability budget at more than 6x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBGatewayLatencyFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              journey: graded_request
+            exp_annotations:
+              summary: "AIHUB gateway overhead latency SLO is burning fast"
+              description: "The graded_request journey is exceeding 1 second of gateway overhead and consuming its latency budget at more than 14.4x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBGatewayLatencySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              journey: graded_request
+            exp_annotations:
+              summary: "AIHUB gateway overhead latency SLO is burning steadily"
+              description: "The graded_request journey is exceeding 1 second of gateway overhead and consuming its latency budget at more than 6x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAIWritingAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              provider: ai-writing
+            exp_annotations:
+              summary: "AI Writing downstream success SLO is burning fast"
+              description: "AI Writing downstream errors are consuming the 30-day provider success budget at more than 14.4x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAIWritingAvailabilitySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              provider: ai-writing
+            exp_annotations:
+              summary: "AI Writing downstream success SLO is burning steadily"
+              description: "AI Writing downstream errors are consuming the 30-day provider success budget at more than 6x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAIWritingLatencyFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              provider: ai-writing
+            exp_annotations:
+              summary: "AI Writing downstream latency SLO is burning fast"
+              description: "More than 30 seconds of AI Writing downstream wait is consuming the 30-day latency budget at more than 14.4x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAIWritingLatencySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              provider: ai-writing
+            exp_annotations:
+              summary: "AI Writing downstream latency SLO is burning steadily"
+              description: "More than 30 seconds of AI Writing downstream wait is consuming the 30-day latency budget at more than 6x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAISpeakingAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              provider: ai-speaking
+            exp_annotations:
+              summary: "AI Speaking downstream success SLO is burning fast"
+              description: "AI Speaking downstream errors are consuming the 30-day provider success budget at more than 14.4x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAISpeakingAvailabilitySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              provider: ai-speaking
+            exp_annotations:
+              summary: "AI Speaking downstream success SLO is burning steadily"
+              description: "AI Speaking downstream errors are consuming the 30-day provider success budget at more than 6x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAISpeakingLatencyFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: aihub-operations
+              provider: ai-speaking
+            exp_annotations:
+              summary: "AI Speaking downstream latency SLO is burning fast"
+              description: "More than 30 seconds of AI Speaking downstream wait is consuming the 30-day latency budget at more than 14.4x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - eval_time: 6m
+        alertname: AIHUBAISpeakingLatencySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              provider: ai-speaking
+            exp_annotations:
+              summary: "AI Speaking downstream latency SLO is burning steadily"
+              description: "More than 30 seconds of AI Speaking downstream wait is consuming the 30-day latency budget at more than 6x."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+
+  - interval: 1m
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: AIHUBGatewayAvailabilityFastBurn
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: AIHUBAIWritingAvailabilityFastBurn
         exp_alerts: []

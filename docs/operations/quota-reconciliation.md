@@ -26,9 +26,9 @@ scheduled job types. A second `quota` invocation logs
 it. See [`deploy-vps.md`](deploy-vps.md) for the cross-job policy.
 
 The wrapper appends a summary or bounded failure stderr to
-`~/aihub-ops-job.log`; alert on a non-zero exit and on a missed successful
-run. A missed run does not produce a failure line, so use the absence of a
-recent successful run as the dead-man's-switch signal.
+`~/aihub-ops-job.log`; Prometheus alerts on an attention summary, a non-zero
+exit, and a missed healthy run. An attention result means the Redis value did
+not match the durable count before the command repaired it.
 
 ## What it reconciles
 
@@ -87,7 +87,11 @@ the following shape:
 }
 ```
 
-The final summary reports `reconciled`, `over_quota`, and `failed` counts:
+The final summary reports how many organizations and request units differed
+before the overwrite. Any positive `drift_requests` value is the stated
+attention threshold; a missing Redis key is counted as zero before comparison.
+The exact comparison happens before each overwrite, so a small difference can
+also include requests still in flight during the run.
 
 ```json
 {
@@ -95,14 +99,19 @@ The final summary reports `reconciled`, `over_quota`, and `failed` counts:
   "month": "2026-09",
   "reconciled": 1,
   "over_quota": 0,
+  "drifted_organizations": 1,
+  "drift_requests": 42,
+  "status": "attention",
   "failed": 0
 }
 ```
 
 An organization whose durable count is strictly greater than its quota is
-reported with `over_quota: true` and `excess` set to the difference. Being
-over quota does not make the command fail; it is an operator signal, not an
-automatic policy mutation.
+reported with `over_quota: true` and `excess` set to the difference. The
+summary's `status` is `attention` when `drift_requests > 0` or
+`over_quota > 0`, otherwise `healthy`. Any nonzero repaired difference or any
+strict over-quota organization needs operator attention; over-quota policy is
+never changed automatically.
 
 | Exit code | Meaning                                                                   |
 | --------- | ------------------------------------------------------------------------- |

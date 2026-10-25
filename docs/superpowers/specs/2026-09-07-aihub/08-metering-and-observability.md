@@ -164,7 +164,9 @@ Essay content represents PII belonging to our customer's end-users — logging i
 
 ```
 aihub_requests_total{operation,status,outcome}
+aihub_critical_journey_requests_total{journey,outcome}
 aihub_request_duration_seconds{operation}          histogram
+aihub_gateway_overhead_duration_seconds{journey}    histogram
 aihub_admission_duration_seconds{operation,identity_mode,retry_budget} histogram
 aihub_graded_completion_duration_seconds{operation,identity_mode,retry_budget} histogram
 aihub_downstream_duration_seconds{operation}       histogram
@@ -298,8 +300,9 @@ scheduled report's attention signal.
 
 The previously listed raw global 5xx and historical-p95 thresholds are
 superseded. #292 owns gateway-owned and AI Service-owned SLO definitions and
-burn-rate alert thresholds; #237 wires those definitions into the running
-monitoring path.
+burn-rate alert thresholds; the declaration, measured baseline, and exact
+SLI queries are in [`slo.md`](../../../operations/slo.md). #237 wires those
+definitions into the running monitoring path.
 The circuit-breaker, Redis, and Postgres conditions remain in this issue's
 alert slice.
 

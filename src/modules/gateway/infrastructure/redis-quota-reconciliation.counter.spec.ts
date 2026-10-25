@@ -14,6 +14,10 @@ class FakeRedis implements RedisQuotaReconciliationClient {
   }> = [];
   result: string | null = 'OK';
 
+  async get(key: string): Promise<string | null> {
+    return this.values.get(key) ?? null;
+  }
+
   async set(
     key: string,
     value: string,
@@ -33,6 +37,32 @@ class FakeRedis implements RedisQuotaReconciliationClient {
 }
 
 describe('RedisQuotaReconciliationCounter', () => {
+  it('reads the current canonical count and treats a missing key as zero', async () => {
+    const redis = new FakeRedis();
+    const counter = new RedisQuotaReconciliationCounter(redis);
+    const request = { organizationId: 'org_alpha', month: '2026-09' };
+
+    await expect(counter.read(request)).resolves.toBe(0);
+    redis.values.set(
+      quotaKeyForMonth(request.organizationId, request.month),
+      '4',
+    );
+    await expect(counter.read(request)).resolves.toBe(4);
+  });
+
+  it.each(['-1', '1.5', '01', '9007199254740992'])(
+    'rejects invalid count %s',
+    async (value) => {
+      const redis = new FakeRedis();
+      const counter = new RedisQuotaReconciliationCounter(redis);
+      redis.values.set(quotaKeyForMonth('org_alpha', '2026-09'), value);
+
+      await expect(
+        counter.read({ organizationId: 'org_alpha', month: '2026-09' }),
+      ).rejects.toThrow('Redis quota counter value is invalid');
+    },
+  );
+
   it('overwrites zero with the canonical organization-month key and 40-day TTL', async () => {
     const redis = new FakeRedis();
     const counter = new RedisQuotaReconciliationCounter(redis);

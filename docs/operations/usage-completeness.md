@@ -113,9 +113,13 @@ The error codes are stable: `USAGE_REPORT_INVALID_WINDOW`,
 connection strings, credentials, request bodies, assertions, or downstream
 responses.
 
-The host-job monitor must alert on:
+The host-job wrapper reads the final summary and writes
+`aihub_host_job_last_attention_timestamp_seconds{task="report"}` when its
+status is `alert`. The `AIHUBScheduledJobAttention` rule then alerts without
+misclassifying the completed report as a process failure. A later healthy run
+clears it. The host-job monitor also alerts on:
 
-1. a summary with `status: "alert"`;
+1. a summary with `status: "alert"` (recorded by the wrapper as attention);
 2. a non-zero exit; and
 3. a missed hourly run for either deployment database.
 

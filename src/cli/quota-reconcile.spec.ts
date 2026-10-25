@@ -35,6 +35,8 @@ describe('formatQuotaReconciliationEvent', () => {
         month: '2026-09',
         reconciled: 1,
         overQuota: 0,
+        driftedOrganizations: 1,
+        driftRequests: 4,
         failed: 1,
       }),
     ).toBe(
@@ -44,6 +46,8 @@ describe('formatQuotaReconciliationEvent', () => {
         month: '2026-09',
         reconciled: 1,
         over_quota: 0,
+        drifted_organizations: 1,
+        drift_requests: 4,
         failed: 1,
       }),
     );
@@ -51,7 +55,13 @@ describe('formatQuotaReconciliationEvent', () => {
       formatQuotaReconciliationEvent({
         type: 'summary',
         month: '2026-09',
-        summary: { reconciled: 2, overQuota: 1, failed: 0 },
+        summary: {
+          reconciled: 2,
+          overQuota: 1,
+          driftedOrganizations: 1,
+          driftRequests: 7,
+          failed: 0,
+        },
       }),
     ).toBe(
       JSON.stringify({
@@ -59,8 +69,30 @@ describe('formatQuotaReconciliationEvent', () => {
         month: '2026-09',
         reconciled: 2,
         over_quota: 1,
+        drifted_organizations: 1,
+        drift_requests: 7,
+        status: 'attention',
         failed: 0,
       }),
     );
+  });
+
+  it('raises attention for drift and over-quota findings but not healthy runs', () => {
+    const summary = (overQuota: number, driftRequests: number) =>
+      formatQuotaReconciliationEvent({
+        type: 'summary',
+        month: '2026-09',
+        summary: {
+          reconciled: 1,
+          overQuota,
+          driftedOrganizations: driftRequests > 0 ? 1 : 0,
+          driftRequests,
+          failed: 0,
+        },
+      });
+
+    expect(summary(0, 0)).toContain('"status":"healthy"');
+    expect(summary(0, 2)).toContain('"status":"attention"');
+    expect(summary(1, 0)).toContain('"status":"attention"');
   });
 });

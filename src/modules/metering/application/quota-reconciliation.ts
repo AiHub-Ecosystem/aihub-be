@@ -22,6 +22,8 @@ export interface QuotaReconciledResult {
 export interface QuotaReconciliationSummary {
   readonly reconciled: number;
   readonly overQuota: number;
+  readonly driftedOrganizations: number;
+  readonly driftRequests: number;
   readonly failed: number;
 }
 
@@ -33,6 +35,8 @@ export type QuotaReconciliationEvent =
       readonly month: string;
       readonly reconciled: number;
       readonly overQuota: number;
+      readonly driftedOrganizations: number;
+      readonly driftRequests: number;
       readonly failed: 1;
     }
   | {
@@ -202,8 +206,31 @@ export class QuotaReconciliationService {
     const snapshots = orderedSnapshots(sourceSnapshots);
     let reconciled = 0;
     let overQuota = 0;
+    let driftedCount = 0;
+    let driftRequests = 0;
 
     for (const snapshot of snapshots) {
+      let currentCount: number;
+      try {
+        currentCount = await this.counterPort.read({
+          organizationId: snapshot.organizationId,
+          month: target.month,
+        });
+      } catch {
+        emit({
+          type: 'failed',
+          organizationId: snapshot.organizationId,
+          month: target.month,
+          reconciled,
+          overQuota,
+          driftedOrganizations: driftedCount,
+          driftRequests,
+          failed: 1,
+        });
+        throw new QuotaReconciliationWriteError(snapshot.organizationId);
+      }
+
+      const drift = Math.abs(currentCount - snapshot.billableCount);
       try {
         await this.counterPort.overwrite({
           organizationId: snapshot.organizationId,
@@ -217,6 +244,8 @@ export class QuotaReconciliationService {
           month: target.month,
           reconciled,
           overQuota,
+          driftedOrganizations: driftedCount,
+          driftRequests,
           failed: 1,
         });
         throw new QuotaReconciliationWriteError(snapshot.organizationId);
@@ -225,6 +254,10 @@ export class QuotaReconciliationService {
       if (snapshot.overQuota) {
         overQuota += 1;
       }
+      if (drift > 0) {
+        driftedCount += 1;
+        driftRequests += drift;
+      }
       reconciled += 1;
       emit({
         type: 'reconciled',
@@ -232,7 +265,13 @@ export class QuotaReconciliationService {
       });
     }
 
-    const summary = { reconciled, overQuota, failed: 0 } as const;
+    const summary = {
+      reconciled,
+      overQuota,
+      driftedOrganizations: driftedCount,
+      driftRequests,
+      failed: 0,
+    } as const;
     emit({ type: 'summary', month: target.month, summary });
     return summary;
   }

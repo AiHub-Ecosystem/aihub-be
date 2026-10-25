@@ -22,6 +22,12 @@ export interface QuotaCounterOverwriteRequest {
   readonly count: number;
 }
 
+export interface QuotaCounterReadRequest {
+  readonly organizationId: string;
+  readonly month: string;
+}
+
 export interface QuotaCounterOverwritePort {
+  read(request: QuotaCounterReadRequest): Promise<number>;
   overwrite(request: QuotaCounterOverwriteRequest): Promise<void>;
 }

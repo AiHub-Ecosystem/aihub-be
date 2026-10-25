@@ -43,6 +43,8 @@ export function formatQuotaReconciliationEvent(
       month: event.month,
       reconciled: event.reconciled,
       over_quota: event.overQuota,
+      drifted_organizations: event.driftedOrganizations,
+      drift_requests: event.driftRequests,
       failed: event.failed,
     });
   }
@@ -52,6 +54,12 @@ export function formatQuotaReconciliationEvent(
     month: event.month,
     reconciled: event.summary.reconciled,
     over_quota: event.summary.overQuota,
+    drifted_organizations: event.summary.driftedOrganizations,
+    drift_requests: event.summary.driftRequests,
+    status:
+      event.summary.driftRequests > 0 || event.summary.overQuota > 0
+        ? 'attention'
+        : 'healthy',
     failed: event.summary.failed,
   });
 }
@@ -81,6 +89,7 @@ async function connectRedis(
     throw error;
   }
   return {
+    get: (key) => redis.get(key),
     set: (key, value, mode, seconds) => redis.set(key, value, mode, seconds),
     quit: async () => {
       await redis.quit().catch(() => undefined);

@@ -278,14 +278,25 @@ groups:
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#edge-probe
 
       - alert: AIHUBScheduledJobFailed
-        expr: aihub_host_job_last_failure_timestamp_seconds > aihub_host_job_last_success_timestamp_seconds or (aihub_host_job_last_failure_timestamp_seconds unless aihub_host_job_last_success_timestamp_seconds)
+        expr: (aihub_host_job_last_failure_timestamp_seconds > aihub_host_job_last_success_timestamp_seconds or (aihub_host_job_last_failure_timestamp_seconds unless aihub_host_job_last_success_timestamp_seconds)) unless aihub_host_job_last_attention_timestamp_seconds > aihub_host_job_last_failure_timestamp_seconds
         for: 0m
         labels:
           severity: warning
           owner: aihub-operations
         annotations:
           summary: "An AIHUB scheduled job failed"
-          description: "The last {{ $labels.task }} run failed; the alert clears on its next success."
+          description: "The latest {{ $labels.task }} run failed; a newer healthy or attention outcome clears this alert."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+
+      - alert: AIHUBScheduledJobAttention
+        expr: (aihub_host_job_last_attention_timestamp_seconds > aihub_host_job_last_success_timestamp_seconds or (aihub_host_job_last_attention_timestamp_seconds unless aihub_host_job_last_success_timestamp_seconds)) unless aihub_host_job_last_failure_timestamp_seconds > aihub_host_job_last_attention_timestamp_seconds
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "An AIHUB scheduled job completed with findings"
+          description: "The latest {{ $labels.task }} run completed but found data requiring operator attention."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
 
       # ponytail: a task that has never succeeded has no series and never fires
@@ -414,3 +425,218 @@ groups:
           summary: "A burst of failed SSH logins on the production host"
           description: "{{ $value | humanize }} failed SSH login attempts in 10 minutes. sshd penalizes each source on its own; check whether one key holder is locked out or a scan is running."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/container-watchdog.md#ssh-logins
+
+  - name: aihub-slo-burn-rates
+    rules:
+      - record: aihub:critical_journey:gateway_error_ratio:rate5m
+        expr: |
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome="internal_error"}[5m]))
+          /
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome=~"success|internal_error"}[5m]))
+      - record: aihub:critical_journey:gateway_error_ratio:rate1h
+        expr: |
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome="internal_error"}[1h]))
+          /
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome=~"success|internal_error"}[1h]))
+      - record: aihub:critical_journey:gateway_error_ratio:rate30m
+        expr: |
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome="internal_error"}[30m]))
+          /
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome=~"success|internal_error"}[30m]))
+      - record: aihub:critical_journey:gateway_error_ratio:rate6h
+        expr: |
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome="internal_error"}[6h]))
+          /
+          sum by (journey) (rate(aihub_critical_journey_requests_total{job="aihub-production-app",outcome=~"success|internal_error"}[6h]))
+      - record: aihub:critical_journey:gateway_slow_ratio:rate5m
+        expr: |
+          (
+            sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[5m]))
+            - sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_bucket{job="aihub-production-app",le="1"}[5m]))
+          )
+          / sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[5m]))
+      - record: aihub:critical_journey:gateway_slow_ratio:rate1h
+        expr: |
+          (
+            sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[1h]))
+            - sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_bucket{job="aihub-production-app",le="1"}[1h]))
+          )
+          / sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[1h]))
+      - record: aihub:critical_journey:gateway_slow_ratio:rate30m
+        expr: |
+          (
+            sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[30m]))
+            - sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_bucket{job="aihub-production-app",le="1"}[30m]))
+          )
+          / sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[30m]))
+      - record: aihub:critical_journey:gateway_slow_ratio:rate6h
+        expr: |
+          (
+            sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[6h]))
+            - sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_bucket{job="aihub-production-app",le="1"}[6h]))
+          )
+          / sum by (journey) (rate(aihub_gateway_overhead_duration_seconds_count{job="aihub-production-app"}[6h]))
+
+      - record: aihub:ai_service:downstream_errors:rate5m
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome="downstream_error"}[5m]))
+      - record: aihub:ai_service:downstream_errors:rate1h
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome="downstream_error"}[1h]))
+      - record: aihub:ai_service:downstream_errors:rate30m
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome="downstream_error"}[30m]))
+      - record: aihub:ai_service:downstream_errors:rate6h
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome="downstream_error"}[6h]))
+      - record: aihub:ai_service:requests:rate5m
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome=~"success|downstream_error"}[5m]))
+      - record: aihub:ai_service:requests:rate1h
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome=~"success|downstream_error"}[1h]))
+      - record: aihub:ai_service:requests:rate30m
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome=~"success|downstream_error"}[30m]))
+      - record: aihub:ai_service:requests:rate6h
+        expr: sum by (operation) (rate(aihub_requests_total{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",outcome=~"success|downstream_error"}[6h]))
+      - record: aihub:ai_service:slow_requests:rate5m
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[5m])) - sum by (operation) (rate(aihub_downstream_duration_seconds_bucket{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",le="30"}[5m]))
+      - record: aihub:ai_service:slow_requests:rate1h
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[1h])) - sum by (operation) (rate(aihub_downstream_duration_seconds_bucket{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",le="30"}[1h]))
+      - record: aihub:ai_service:slow_requests:rate30m
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[30m])) - sum by (operation) (rate(aihub_downstream_duration_seconds_bucket{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",le="30"}[30m]))
+      - record: aihub:ai_service:slow_requests:rate6h
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[6h])) - sum by (operation) (rate(aihub_downstream_duration_seconds_bucket{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json",le="30"}[6h]))
+      - record: aihub:ai_service:latency_requests:rate5m
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[5m]))
+      - record: aihub:ai_service:latency_requests:rate1h
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[1h]))
+      - record: aihub:ai_service:latency_requests:rate30m
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[30m]))
+      - record: aihub:ai_service:latency_requests:rate6h
+        expr: sum by (operation) (rate(aihub_downstream_duration_seconds_count{job="aihub-production-app",operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade|speaking\\.grading|speaking\\.grading-json"}[6h]))
+
+      - alert: AIHUBGatewayAvailabilityFastBurn
+        expr: (aihub:critical_journey:gateway_error_ratio:rate5m / 0.005 > 14.4) and (aihub:critical_journey:gateway_error_ratio:rate1h / 0.005 > 14.4)
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB gateway availability SLO is burning fast"
+          description: "The {{ $labels.journey }} journey is consuming its 30-day gateway availability budget at more than 14.4x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBGatewayAvailabilitySlowBurn
+        expr: (aihub:critical_journey:gateway_error_ratio:rate30m / 0.005 > 6) and (aihub:critical_journey:gateway_error_ratio:rate6h / 0.005 > 6)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB gateway availability SLO is burning steadily"
+          description: "The {{ $labels.journey }} journey is consuming its 30-day gateway availability budget at more than 6x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBGatewayLatencyFastBurn
+        expr: (aihub:critical_journey:gateway_slow_ratio:rate5m / 0.05 > 14.4) and (aihub:critical_journey:gateway_slow_ratio:rate1h / 0.05 > 14.4)
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB gateway overhead latency SLO is burning fast"
+          description: "The {{ $labels.journey }} journey is exceeding 1 second of gateway overhead and consuming its latency budget at more than 14.4x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBGatewayLatencySlowBurn
+        expr: (aihub:critical_journey:gateway_slow_ratio:rate30m / 0.05 > 6) and (aihub:critical_journey:gateway_slow_ratio:rate6h / 0.05 > 6)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB gateway overhead latency SLO is burning steadily"
+          description: "The {{ $labels.journey }} journey is exceeding 1 second of gateway overhead and consuming its latency budget at more than 6x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+
+      - alert: AIHUBAIWritingAvailabilityFastBurn
+        expr: ((sum(aihub:ai_service:downstream_errors:rate5m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:requests:rate5m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.01 > 14.4) and ((sum(aihub:ai_service:downstream_errors:rate1h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:requests:rate1h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.01 > 14.4)
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+          provider: ai-writing
+        annotations:
+          summary: "AI Writing downstream success SLO is burning fast"
+          description: "AI Writing downstream errors are consuming the 30-day provider success budget at more than 14.4x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBAIWritingAvailabilitySlowBurn
+        expr: ((sum(aihub:ai_service:downstream_errors:rate30m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:requests:rate30m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.01 > 6) and ((sum(aihub:ai_service:downstream_errors:rate6h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:requests:rate6h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.01 > 6)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          provider: ai-writing
+        annotations:
+          summary: "AI Writing downstream success SLO is burning steadily"
+          description: "AI Writing downstream errors are consuming the 30-day provider success budget at more than 6x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBAIWritingLatencyFastBurn
+        expr: ((sum(aihub:ai_service:slow_requests:rate5m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:latency_requests:rate5m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.05 > 14.4) and ((sum(aihub:ai_service:slow_requests:rate1h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:latency_requests:rate1h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.05 > 14.4)
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+          provider: ai-writing
+        annotations:
+          summary: "AI Writing downstream latency SLO is burning fast"
+          description: "More than 30 seconds of AI Writing downstream wait is consuming the 30-day latency budget at more than 14.4x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBAIWritingLatencySlowBurn
+        expr: ((sum(aihub:ai_service:slow_requests:rate30m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:latency_requests:rate30m{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.05 > 6) and ((sum(aihub:ai_service:slow_requests:rate6h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"}) / sum(aihub:ai_service:latency_requests:rate6h{operation=~"writing\\.task1\\.grade|writing\\.task2\\.grade"})) / 0.05 > 6)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          provider: ai-writing
+        annotations:
+          summary: "AI Writing downstream latency SLO is burning steadily"
+          description: "More than 30 seconds of AI Writing downstream wait is consuming the 30-day latency budget at more than 6x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+
+      - alert: AIHUBAISpeakingAvailabilityFastBurn
+        expr: ((sum(aihub:ai_service:downstream_errors:rate5m{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:requests:rate5m{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.01 > 14.4) and ((sum(aihub:ai_service:downstream_errors:rate1h{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:requests:rate1h{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.01 > 14.4)
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+          provider: ai-speaking
+        annotations:
+          summary: "AI Speaking downstream success SLO is burning fast"
+          description: "AI Speaking downstream errors are consuming the 30-day provider success budget at more than 14.4x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBAISpeakingAvailabilitySlowBurn
+        expr: ((sum(aihub:ai_service:downstream_errors:rate30m{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:requests:rate30m{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.01 > 6) and ((sum(aihub:ai_service:downstream_errors:rate6h{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:requests:rate6h{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.01 > 6)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          provider: ai-speaking
+        annotations:
+          summary: "AI Speaking downstream success SLO is burning steadily"
+          description: "AI Speaking downstream errors are consuming the 30-day provider success budget at more than 6x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBAISpeakingLatencyFastBurn
+        expr: ((sum(aihub:ai_service:slow_requests:rate5m{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:latency_requests:rate5m{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.05 > 14.4) and ((sum(aihub:ai_service:slow_requests:rate1h{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:latency_requests:rate1h{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.05 > 14.4)
+        for: 0m
+        labels:
+          severity: critical
+          owner: aihub-operations
+          provider: ai-speaking
+        annotations:
+          summary: "AI Speaking downstream latency SLO is burning fast"
+          description: "More than 30 seconds of AI Speaking downstream wait is consuming the 30-day latency budget at more than 14.4x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts
+      - alert: AIHUBAISpeakingLatencySlowBurn
+        expr: ((sum(aihub:ai_service:slow_requests:rate30m{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:latency_requests:rate30m{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.05 > 6) and ((sum(aihub:ai_service:slow_requests:rate6h{operation=~"speaking\\.grading|speaking\\.grading-json"}) / sum(aihub:ai_service:latency_requests:rate6h{operation=~"speaking\\.grading|speaking\\.grading-json"})) / 0.05 > 6)
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          provider: ai-speaking
+        annotations:
+          summary: "AI Speaking downstream latency SLO is burning steadily"
+          description: "More than 30 seconds of AI Speaking downstream wait is consuming the 30-day latency budget at more than 6x."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#slo-alerts

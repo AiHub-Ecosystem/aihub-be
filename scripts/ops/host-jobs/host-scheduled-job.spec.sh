@@ -176,6 +176,14 @@ if [[ "${FAKE_DOCKER_FAIL_SERVICE:-}" == "$service" ]] ||
   for ((i = 1; i <= 60; i += 1)); do printf 'diagnostic-%02d\n' "$i" >&2; done
   exit 7
 fi
+if [[ -n "${FAKE_DOCKER_ATTENTION_COMMAND:-}" &&
+  " ${command_args[*]} " == *" ${FAKE_DOCKER_ATTENTION_COMMAND} "* ]]; then
+  case "$FAKE_DOCKER_ATTENTION_COMMAND" in
+    usage:report) printf '{"event":"usage_report_summary","status":"alert"}\n' ;;
+    quota:reconcile) printf '{"event":"quota_reconcile_summary","status":"attention"}\n' ;;
+  esac
+  exit 0
+fi
 printf 'intermediate output\nsummary service=%s\n' "$service"
 STUB
 chmod 755 "$bin_dir/docker"
@@ -231,6 +239,33 @@ APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" r
 assert_contains "$FAKE_DOCKER_CALLS" \
   'usage:report --from 2026-09-20T12:00:00.000Z --to 2026-09-20T13:00:00.000Z'
 [[ ! -e "$home_dir/.aihub-host-job-metrics/report-success.prom" ]]
+
+# A healthy scheduled report records a healthy run; a report with findings
+# records attention instead, while keeping the wrapper process successful.
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" report \
+  >"$test_root/report-healthy.out" 2>&1
+[[ -e "$home_dir/.aihub-host-job-metrics/report-success.prom" ]]
+[[ ! -e "$home_dir/.aihub-host-job-metrics/report-attention.prom" ]]
+
+rm -f "$home_dir/.aihub-host-job-metrics"/report-*.prom
+: >"$FAKE_DOCKER_CALLS"
+FAKE_DOCKER_ATTENTION_COMMAND=usage:report \
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" report \
+  >"$test_root/report-attention.out" 2>&1
+assert_contains "$home_dir/.aihub-host-job-metrics/report-attention.prom" \
+  'aihub_host_job_last_attention_timestamp_seconds{task="report"} '
+[[ ! -e "$home_dir/.aihub-host-job-metrics/report-success.prom" ]]
+assert_contains "$AIHUB_HOST_JOB_LOG" 'report production service=app-slot-b outcome=attention'
+
+rm -f "$home_dir/.aihub-host-job-metrics"/quota-*.prom
+: >"$FAKE_DOCKER_CALLS"
+FAKE_DOCKER_ATTENTION_COMMAND=quota:reconcile \
+  APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
+  >"$test_root/quota-attention.out" 2>&1
+assert_contains "$home_dir/.aihub-host-job-metrics/quota-attention.prom" \
+  'aihub_host_job_last_attention_timestamp_seconds{task="quota"} '
+[[ ! -e "$home_dir/.aihub-host-job-metrics/quota-success.prom" ]]
 
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \

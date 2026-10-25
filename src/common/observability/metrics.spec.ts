@@ -92,6 +92,50 @@ describe('request lifecycle metrics', () => {
     );
   });
 
+  it('records a bounded journey and gateway overhead without downstream wait', async () => {
+    recordCompletedRequest({
+      operation: GRADE,
+      statusCode: 200,
+      outcome: 'success',
+      totalMs: 840,
+      downstreamMs: 810,
+      criticalJourney: 'graded_request',
+    });
+
+    expect(
+      await sample('aihub_critical_journey_requests_total', {
+        journey: 'graded_request',
+        outcome: 'success',
+      }),
+    ).toBeDefined();
+    expect(
+      Number(
+        await sample('aihub_gateway_overhead_duration_seconds_sum', {
+          journey: 'graded_request',
+        }),
+      ),
+    ).toBeCloseTo(0.03);
+  });
+
+  it('clamps overhead at zero when millisecond rounding exceeds total time', async () => {
+    recordCompletedRequest({
+      operation: 'unmatched',
+      statusCode: 200,
+      outcome: 'success',
+      totalMs: 10,
+      downstreamMs: 11,
+      criticalJourney: 'authentication',
+    });
+
+    expect(
+      Number(
+        await sample('aihub_gateway_overhead_duration_seconds_sum', {
+          journey: 'authentication',
+        }),
+      ),
+    ).toBe(0);
+  });
+
   it('records a failed request the same way as a successful one', async () => {
     recordCompletedRequest({
       operation: GRADE,

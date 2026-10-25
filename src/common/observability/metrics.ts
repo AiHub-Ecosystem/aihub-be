@@ -3,6 +3,10 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
+import {
+  registerCriticalJourneyMetrics,
+  secondsOf,
+} from './critical-journey-metrics';
 import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
 import { registerEmailOutboxBackpressureMetric } from './email-outbox-backpressure-metric';
 import {
@@ -23,6 +27,7 @@ export type {
 export const METRICS_ROUTE_PATH = '/metrics';
 
 export const registry = new Registry();
+const recordCriticalJourneyMetrics = registerCriticalJourneyMetrics(registry);
 
 let objectStorageQueueSource: (() => number) | undefined;
 
@@ -584,6 +589,8 @@ export interface CompletedRequestMetrics {
   readonly operation: string;
   readonly statusCode: number;
   readonly outcome: string;
+  /** A bounded journey name supplied by the request-completion hook. */
+  readonly criticalJourney?: string;
   /** Total wall time in milliseconds; converted to seconds here. */
   readonly totalMs?: number;
   /** Downstream wait in milliseconds, already timed by the dispatcher. */
@@ -592,16 +599,10 @@ export interface CompletedRequestMetrics {
   readonly meteringStatus?: string;
 }
 
-/** A duration only reaches a histogram if it is a real, non-negative number. */
-function secondsOf(milliseconds: number): number | undefined {
-  return Number.isFinite(milliseconds) && milliseconds >= 0
-    ? milliseconds / 1000
-    : undefined;
-}
-
 export function recordCompletedRequest(request: CompletedRequestMetrics): void {
   const { operation, statusCode, outcome } = request;
   requestsTotal.inc({ operation, status: String(statusCode), outcome });
+  recordCriticalJourneyMetrics(request);
 
   const totalSeconds = secondsOf(request.totalMs ?? Number.NaN);
   if (totalSeconds !== undefined) {

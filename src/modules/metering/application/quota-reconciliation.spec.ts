@@ -7,6 +7,7 @@ import {
 import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
+  QuotaCounterReadRequest,
   QuotaOrganizationSnapshot,
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
@@ -31,6 +32,10 @@ class FakeCounter implements QuotaCounterOverwritePort {
   readonly values = new Map<string, number>();
   readonly writes: QuotaCounterOverwriteRequest[] = [];
   failOrganizationId: string | undefined;
+
+  async read(request: QuotaCounterReadRequest): Promise<number> {
+    return this.values.get(`${request.organizationId}:${request.month}`) ?? 0;
+  }
 
   async overwrite(request: QuotaCounterOverwriteRequest): Promise<void> {
     if (request.organizationId === this.failOrganizationId) {
@@ -104,6 +109,8 @@ describe('QuotaReconciliationService', () => {
     await expect(service.reconcile()).resolves.toEqual({
       reconciled: 0,
       overQuota: 0,
+      driftedOrganizations: 0,
+      driftRequests: 0,
       failed: 0,
     });
     expect(source.targets).toEqual([
@@ -202,7 +209,13 @@ describe('QuotaReconciliationService', () => {
       {
         type: 'summary',
         month: '2026-09',
-        summary: { reconciled: 2, overQuota: 1, failed: 0 },
+        summary: {
+          reconciled: 2,
+          overQuota: 1,
+          driftedOrganizations: 1,
+          driftRequests: 3,
+          failed: 0,
+        },
       },
     ]);
   });
@@ -218,12 +231,37 @@ describe('QuotaReconciliationService', () => {
     const counter = new FakeCounter();
     const service = new QuotaReconciliationService(source, counter, now);
 
-    await service.reconcile('2026-09');
-    await service.reconcile('2026-09');
+    await expect(service.reconcile('2026-09')).resolves.toMatchObject({
+      driftedOrganizations: 1,
+      driftRequests: 4,
+    });
+    await expect(service.reconcile('2026-09')).resolves.toMatchObject({
+      driftedOrganizations: 0,
+      driftRequests: 0,
+    });
 
     expect(counter.values.get('org_alpha:2026-09')).toBe(4);
     expect(counter.writes).toHaveLength(2);
     expect(counter.writes[0]).toEqual(counter.writes[1]);
+  });
+
+  it('reports and repairs an overcount as request-unit drift', async () => {
+    const source = new FakeSnapshotPort([
+      {
+        organizationId: 'org_alpha',
+        monthlyRequestQuota: 10,
+        billableRequestCount: 4,
+      },
+    ]);
+    const counter = new FakeCounter();
+    counter.values.set('org_alpha:2026-09', 6);
+    const service = new QuotaReconciliationService(source, counter, now);
+
+    await expect(service.reconcile('2026-09')).resolves.toMatchObject({
+      driftedOrganizations: 1,
+      driftRequests: 2,
+    });
+    expect(counter.values.get('org_alpha:2026-09')).toBe(4);
   });
 
   it('leaves earlier writes in place and emits a safe partial-failure event', async () => {
@@ -269,6 +307,8 @@ describe('QuotaReconciliationService', () => {
         month: '2026-09',
         reconciled: 1,
         overQuota: 0,
+        driftedOrganizations: 1,
+        driftRequests: 1,
         failed: 1,
       },
     ]);

@@ -85,8 +85,8 @@ log_line() {
   }
 }
 
-# Writes the last success or failure time for the node-exporter textfile
-# collector, which alert.rules.yml reads for a failed or missed run.
+# Writes the last success, attention, or failure time for the node-exporter
+# textfile collector, which alert.rules.yml reads for unhealthy job outcomes.
 # backup-postgres.sh writes the same format. A write that fails is logged; the
 # missing success then alerts as a missed run.
 record_job_result() {
@@ -95,7 +95,7 @@ record_job_result() {
   file="$METRICS_DIR/$JOB-$outcome.prom"
   tmp="$file.tmp"
   if mkdir -p -- "$METRICS_DIR" && chmod 755 "$METRICS_DIR" && {
-    printf 'aihub_host_job_last_%s_timestamp_seconds{task="%s"} %s\n' "$outcome" "$JOB" "$(date +%s)"
+      printf 'aihub_host_job_last_%s_timestamp_seconds{task="%s"} %s\n' "$outcome" "$JOB" "$(date +%s)"
     if [[ "$outcome" == success ]]; then
       printf 'aihub_host_job_max_age_seconds{task="%s"} %s\n' "$JOB" "$max_age_seconds"
     fi
@@ -256,7 +256,13 @@ for tier in production sandbox; do
       </dev/null >"$stdout_file" 2>"$stderr_file"; then
       summary="$(tail -n 1 "$stdout_file" | tr -d '\r')"
       [[ -n "$summary" ]] || summary='no output'
-      log_line "$(date -u +%FT%TZ) $JOB $tier service=$service exit=0 $summary"
+      if { [[ "$command" == usage:report && "$summary" == *'"event":"usage_report_summary"'*'"status":"alert"'* ]] ||
+        [[ "$command" == quota:reconcile && "$summary" == *'"event":"quota_reconcile_summary"'*'"status":"attention"'* ]]; }; then
+        [[ "$status" != 0 ]] || status=2
+        log_line "$(date -u +%FT%TZ) $JOB $tier service=$service outcome=attention $summary"
+      else
+        log_line "$(date -u +%FT%TZ) $JOB $tier service=$service exit=0 $summary"
+      fi
     else
       code=$?
       status=1
@@ -272,6 +278,9 @@ done
 
 if [[ "$status" == 0 ]]; then
   record_job_result success
+elif [[ "$status" == 2 ]]; then
+  record_job_result attention
+  status=0
 else
   record_job_result failure
 fi
