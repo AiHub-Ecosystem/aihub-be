@@ -80,6 +80,20 @@ groups:
           description: "Candidate threshold pending Redis owner and #412 approval."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
 
+  - name: aihub-downstream
+    rules:
+      - alert: AIHUBDownstreamCircuitBreakerOpen
+        expr: max by (job, environment, operation) (aihub_breaker_state{job=~"aihub-(production|sandbox)-app"} == 1)
+        for: 2m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "An AIHUB downstream circuit breaker has stayed open for two minutes"
+          description: "{{ $labels.operation }} is still open in the {{ $labels.environment }} tier."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-circuit-breakers
+
   - name: aihub-email-outbox
     rules:
       - alert: EmailProviderOutage

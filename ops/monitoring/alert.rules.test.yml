@@ -1,4 +1,4 @@
-# promtool test rules: the #291 edge and scheduled-job alerts.
+# promtool tests for AIHUB monitoring alert rules.
 rule_files:
   - alert.rules.yml
 
@@ -484,4 +484,54 @@ tests:
     alert_rule_test:
       - eval_time: 15m
         alertname: AIHUBEmailSendRateRedisUnavailable
+        exp_alerts: []
+
+  # #237: sustained opens alert per tier and operation; closed and half-open states do not.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_breaker_state{job="aihub-production-app",environment="production",instance="a",operation="writing.task1.grade"}'
+        values: "0 1 1 1 0 0 0"
+      - series: 'aihub_breaker_state{job="aihub-production-app",environment="production",instance="b",operation="writing.task1.grade"}'
+        values: "0x7"
+      - series: 'aihub_breaker_state{job="aihub-sandbox-app",environment="sandbox",instance="s",operation="writing.task2.grade"}'
+        values: "0 0 0 1 1 1 0"
+      - series: 'aihub_breaker_state{job="aihub-production-app",environment="production",instance="c",operation="speaking.grading"}'
+        values: "0 2 2 2 2 2 0"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AIHUBDownstreamCircuitBreakerOpen
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AIHUBDownstreamCircuitBreakerOpen
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              environment: production
+              operation: writing.task1.grade
+            exp_annotations:
+              summary: "An AIHUB downstream circuit breaker has stayed open for two minutes"
+              description: "writing.task1.grade is still open in the production tier."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-circuit-breakers
+      - eval_time: 4m
+        alertname: AIHUBDownstreamCircuitBreakerOpen
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AIHUBDownstreamCircuitBreakerOpen
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-sandbox-app
+              environment: sandbox
+              operation: writing.task2.grade
+            exp_annotations:
+              summary: "An AIHUB downstream circuit breaker has stayed open for two minutes"
+              description: "writing.task2.grade is still open in the sandbox tier."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-circuit-breakers
+      - eval_time: 6m
+        alertname: AIHUBDownstreamCircuitBreakerOpen
         exp_alerts: []
