@@ -24,6 +24,20 @@ describe('Argon2PasswordHasher', () => {
     await expect(hasher.verify(password, hash)).resolves.toBe(true);
   });
 
+  it('detects a hash made with weaker Argon2id parameters', async () => {
+    const password = 'correct horse battery staple';
+    const legacyHash = await argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 8 * 1024,
+      timeCost: 1,
+      parallelism: 1,
+    });
+    const currentHash = await hasher.hash(password);
+
+    expect(hasher.needsRehash(legacyHash)).toBe(true);
+    expect(hasher.needsRehash(currentHash)).toBe(false);
+  });
+
   it('keeps the dummy hash at the same work factor as real hashes', () => {
     expect(argon2.needsRehash(ARGON2ID_DUMMY_HASH, ARGON2ID_PARAMETERS)).toBe(
       false,

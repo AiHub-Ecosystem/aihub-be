@@ -191,6 +191,20 @@ export class PostgresUserAccountRepository
     };
   }
 
+  async updatePasswordHash(
+    input: Parameters<UserAccountRepositoryPort['updatePasswordHash']>[0],
+  ): Promise<boolean> {
+    const result = await this.client.authIdentity.updateMany({
+      where: {
+        userAccountId: input.userId,
+        provider: 'password',
+        passwordHash: input.expectedPasswordHash,
+      },
+      data: { passwordHash: input.passwordHash, updatedAt: input.now },
+    });
+    return result.count === 1;
+  }
+
   async findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined> {

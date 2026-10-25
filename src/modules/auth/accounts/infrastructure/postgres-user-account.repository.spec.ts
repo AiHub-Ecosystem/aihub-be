@@ -247,6 +247,42 @@ describe('PostgresUserAccountRepository', () => {
     });
   });
 
+  it('replaces a verified password hash conditionally', async () => {
+    const now = new Date('2026-10-25T00:00:00.000Z');
+    const script = new ScriptedPrisma();
+
+    await expect(
+      repositoryOver(script).updatePasswordHash({
+        userId: USER_ID,
+        expectedPasswordHash: 'legacy-hash',
+        passwordHash: 'current-hash',
+        now,
+      }),
+    ).resolves.toBe(true);
+    expect(script.statements[0]?.name).toBe('authIdentity.updateMany');
+    expect(script.statements[0]?.args).toEqual([
+      {
+        where: {
+          userAccountId: USER_ID,
+          provider: 'password',
+          passwordHash: 'legacy-hash',
+        },
+        data: { passwordHash: 'current-hash', updatedAt: now },
+      },
+    ]);
+
+    const changed = new ScriptedPrisma();
+    changed.outside = [{ count: 0 }];
+    await expect(
+      repositoryOver(changed).updatePasswordHash({
+        userId: USER_ID,
+        expectedPasswordHash: 'legacy-hash',
+        passwordHash: 'current-hash',
+        now,
+      }),
+    ).resolves.toBe(false);
+  });
+
   it('reads durable account status for bearer authorization', async () => {
     const script = new ScriptedPrisma();
     script.outside = [{ status: 'disabled' }];

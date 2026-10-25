@@ -43,6 +43,7 @@ import type { PasswordHasherPort } from './password-hasher.port';
 const USER_ID = 'usr_01J00000000000000000000000';
 const EMAIL = 'person@example.com';
 const NOW = new Date('2026-09-20T00:00:00.000Z');
+const LEGACY_PASSWORD_HASH = '$argon2id$v=19$m=8192,p=1,t=1$c2FsdHNhbHQ$aGFzaA';
 const RECOVERY_MESSAGE =
   'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
 
@@ -64,6 +65,10 @@ class FakeHasher implements PasswordHasherPort {
   async verify(password: string, _encodedHash?: string): Promise<boolean> {
     this.verified.push(password);
     return this.result;
+  }
+
+  needsRehash(encodedHash: string): boolean {
+    return encodedHash.startsWith('$argon2id$');
   }
 }
 
@@ -268,6 +273,7 @@ function service(
   return {
     local,
     state,
+    userAccounts,
     tokenIssuer,
     passwordResetTokenIssuer,
     passwordResetTokens,
@@ -283,12 +289,15 @@ function service(
 }
 
 /** An active account holder who already verified their email. */
-function seedActiveAccount(state: InMemoryAuthState): void {
+function seedActiveAccount(
+  state: InMemoryAuthState,
+  passwordHash = 'argon2:correct horse battery',
+): void {
   seedAccount(state, {
     userId: USER_ID,
     email: EMAIL,
     username: 'person_01',
-    passwordHash: 'argon2:correct horse battery',
+    passwordHash,
   });
 }
 
@@ -1070,9 +1079,84 @@ describe('LocalAuthService', () => {
     );
   });
 
+  it('upgrades a legacy password hash after successful login before creating the session', async () => {
+    const { local, state } = service();
+    seedActiveAccount(state, LEGACY_PASSWORD_HASH);
+
+    await expect(
+      local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
+    ).resolves.toMatchObject({ kind: 'session' });
+
+    expect(state.accounts.get(USER_ID)?.passwordHash).toBe(
+      'argon2:correct horse battery',
+    );
+    expect(state.refreshTokens.size).toBe(1);
+  });
+
+  it('does not rewrite a legacy hash for an incorrect password', async () => {
+    const { local, state, hasher } = service();
+    seedActiveAccount(state, LEGACY_PASSWORD_HASH);
+    hasher.result = false;
+
+    await expect(
+      local.login({ email: EMAIL, password: 'wrong password' }, '203.0.113.7'),
+    ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+
+    expect(state.accounts.get(USER_ID)?.passwordHash).toBe(
+      LEGACY_PASSWORD_HASH,
+    );
+    expect(state.refreshTokens.size).toBe(0);
+    expect(hasher.hashed).toEqual([]);
+  });
+
+  it('does not overwrite a password reset that wins before the hash upgrade', async () => {
+    const { local, state, hasher } = service();
+    seedActiveAccount(state, LEGACY_PASSWORD_HASH);
+    const account = state.accounts.get(USER_ID);
+    if (account === undefined) throw new Error('the account was not seeded');
+    jest.spyOn(hasher, 'needsRehash').mockImplementation(() => {
+      account.passwordHash = 'argon2:reset password';
+      return true;
+    });
+
+    await expect(
+      local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
+    ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+
+    expect(account.passwordHash).toBe('argon2:reset password');
+    expect(state.refreshTokens.size).toBe(0);
+  });
+
+  it('creates no session when saving a replacement password hash fails', async () => {
+    const { local, state, userAccounts } = service();
+    seedActiveAccount(state, LEGACY_PASSWORD_HASH);
+    const update = jest
+      .spyOn(userAccounts, 'updatePasswordHash')
+      .mockRejectedValue(new Error('storage unavailable'));
+
+    await expect(
+      local.login(
+        { email: EMAIL, password: 'correct horse battery' },
+        '203.0.113.7',
+      ),
+    ).rejects.toThrow('storage unavailable');
+
+    expect(state.accounts.get(USER_ID)?.passwordHash).toBe(
+      LEGACY_PASSWORD_HASH,
+    );
+    expect(state.refreshTokens.size).toBe(0);
+    update.mockRestore();
+  });
+
   it('requires an MFA proof before writing a session and counts invalid proof generically', async () => {
     const required = service();
-    seedActiveAccount(required.state);
+    seedActiveAccount(required.state, LEGACY_PASSWORD_HASH);
     required.state.mfaFactors.set(USER_ID, {
       factorId: 'mfa_01J00000000000000000000000',
       status: 'enabled',
@@ -1088,6 +1172,9 @@ describe('LocalAuthService', () => {
       ),
     ).resolves.toEqual({ kind: 'mfa-required' });
     expect(required.state.refreshTokens.size).toBe(0);
+    expect(required.state.accounts.get(USER_ID)?.passwordHash).toBe(
+      LEGACY_PASSWORD_HASH,
+    );
 
     required.mfa.result = { kind: 'invalid' };
     await expect(
@@ -1099,6 +1186,9 @@ describe('LocalAuthService', () => {
       code: 'AUTH_CREDENTIALS_INVALID',
       httpStatus: 401,
     });
+    expect(required.state.accounts.get(USER_ID)?.passwordHash).toBe(
+      LEGACY_PASSWORD_HASH,
+    );
     expect(required.limiter.calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ scope: 'login_ip' }),

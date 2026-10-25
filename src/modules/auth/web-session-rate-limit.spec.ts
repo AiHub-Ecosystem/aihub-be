@@ -74,6 +74,7 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       .overrideProvider(PASSWORD_HASHER)
       .useValue({
         hash: async () => '$argon2id$fake',
+        needsRehash: () => false,
         verify: async (password: string) => password === PASSWORD,
       })
       .overrideProvider(AUTH_CLOCK)

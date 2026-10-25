@@ -9,6 +9,10 @@ import {
 } from 'jose';
 
 import { AppError } from '@/common/errors/app-error';
+import {
+  USER_ACCESS_TOKEN_MINIMUM_RSA_MODULUS_BITS,
+  userAccessTokenRsaModulusIsAcceptable,
+} from '@/modules/auth/web-sessions/application/user-access-token-key-policy';
 import type {
   IssuedUserAccessToken,
   UserAccessTokenIssuerPort,
@@ -28,6 +32,11 @@ export interface UserAccessTokenConfig {
 export const USER_ACCESS_TOKEN_CRYPTO = Symbol('USER_ACCESS_TOKEN_CRYPTO');
 
 const CLAIMS = ['aud', 'exp', 'iat', 'iss', 'jti', 'sub'] as const;
+const INVALID_KEY_CONFIGURATION_MESSAGE =
+  'User Access JWT configuration is invalid';
+const INVALID_SIGNING_KEY_MESSAGE =
+  `AIHUB_USER_ACCESS_JWT_PRIVATE_KEY must be an RSA key with at least ` +
+  `${USER_ACCESS_TOKEN_MINIMUM_RSA_MODULUS_BITS} bits`;
 
 function invalidToken(): AppError {
   return new AppError({
@@ -59,15 +68,27 @@ export class JoseUserAccessTokenService
       throw new Error('User Access JWT configuration is invalid');
     }
 
+    let privateKey: ReturnType<typeof createPrivateKey>;
     try {
-      const privateKey = createPrivateKey(config.privateKeyPem);
-      if (privateKey.asymmetricKeyType !== 'rsa') {
-        throw new Error('not an RSA key');
-      }
-      this.privateKey = privateKey;
+      privateKey = createPrivateKey(config.privateKeyPem);
+    } catch {
+      throw new Error(INVALID_KEY_CONFIGURATION_MESSAGE);
+    }
+    if (privateKey.asymmetricKeyType !== 'rsa') {
+      throw new Error(INVALID_KEY_CONFIGURATION_MESSAGE);
+    }
+    if (
+      !userAccessTokenRsaModulusIsAcceptable(
+        privateKey.asymmetricKeyDetails?.modulusLength,
+      )
+    ) {
+      throw new Error(INVALID_SIGNING_KEY_MESSAGE);
+    }
+    this.privateKey = privateKey;
+    try {
       this.publicKey = createPublicKey(privateKey);
     } catch {
-      throw new Error('User Access JWT configuration is invalid');
+      throw new Error(INVALID_KEY_CONFIGURATION_MESSAGE);
     }
   }
 

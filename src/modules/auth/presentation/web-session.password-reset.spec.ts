@@ -69,6 +69,9 @@ class HasherFake implements PasswordHasherPort {
   async hash(password: string): Promise<string> {
     return `$argon2id$fake:${password}`;
   }
+  needsRehash(): boolean {
+    return false;
+  }
   async verify(): Promise<boolean> {
     return this.result;
   }

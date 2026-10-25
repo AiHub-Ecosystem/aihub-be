@@ -49,6 +49,10 @@ export class Argon2PasswordHasher implements PasswordHasherPort {
     }
   }
 
+  needsRehash(encodedHash: string): boolean {
+    return argon2.needsRehash(encodedHash, ARGON2ID_OPTIONS);
+  }
+
   private acquire(): Promise<() => void> {
     if (this.active < this.maxConcurrency) {
       this.active += 1;

@@ -6,6 +6,7 @@ import {
   type AuthenticatedCredentials,
   authenticateCredentials,
   rejectCredentials,
+  upgradePasswordHashIfNeeded,
 } from '@/modules/auth/local-credentials/application/local-credentials';
 import { type PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import type {
@@ -133,8 +134,25 @@ export class WebSessionService implements WebSessionServicePort {
     }
 
     const now = this.clock.now();
+    let currentCredentials: AuthenticatedCredentials;
+    try {
+      currentCredentials = await upgradePasswordHashIfNeeded(
+        {
+          userAccounts: this.userAccounts,
+          passwordHasher: this.passwordHasher,
+          rateLimiter: this.rateLimiter,
+        },
+        credentials,
+        input.password,
+        now,
+        endUserIp,
+      );
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw webSessionUnavailable(error);
+    }
     return this.commitSession(
-      credentials,
+      currentCredentials,
       this.tokenIssuer.issue(now),
       now,
       endUserIp,

@@ -63,6 +63,31 @@ export interface AuthenticatedCredentials {
   readonly passwordHash: string;
 }
 
+/** Call after password and required MFA proof succeed. */
+export async function upgradePasswordHashIfNeeded(
+  ports: CredentialCheckPorts,
+  credentials: AuthenticatedCredentials,
+  password: string,
+  now: Date,
+  ip: string,
+): Promise<AuthenticatedCredentials> {
+  if (!ports.passwordHasher.needsRehash(credentials.passwordHash)) {
+    return credentials;
+  }
+
+  const passwordHash = await ports.passwordHasher.hash(password);
+  const updated = await ports.userAccounts.updatePasswordHash({
+    userId: credentials.userId,
+    expectedPasswordHash: credentials.passwordHash,
+    passwordHash,
+    now,
+  });
+  if (!updated) {
+    return rejectCredentials(ports.rateLimiter, ip, credentials.email);
+  }
+  return { ...credentials, passwordHash };
+}
+
 export async function rejectCredentials(
   rateLimiter: AuthRateLimiterPort,
   ip: string,

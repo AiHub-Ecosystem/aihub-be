@@ -90,6 +90,10 @@ export class HasherFake implements PasswordHasherPort {
     return `$argon2id$fake:${password}`;
   }
 
+  needsRehash(): boolean {
+    return false;
+  }
+
   async verify(password: string, passwordHash: string): Promise<boolean> {
     return this.verifyByHash
       ? passwordHash === (await this.hash(password))

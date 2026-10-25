@@ -1,3 +1,5 @@
+import { generateKeyPairSync } from 'node:crypto';
+
 import {
   type CryptoKey,
   type KeyObject,
@@ -169,6 +171,42 @@ describe('JoseUserAccessTokenService', () => {
           { ...config(keys.privateKeyPem), keyId: '' },
           () => 1_800_000_000,
         ),
+    ).toThrow('User Access JWT configuration is invalid');
+  });
+
+  it('refuses an RSA signing key below 2048 bits without echoing its value', () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+    const privateKeyPem = privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString();
+    let error: unknown;
+
+    try {
+      new JoseUserAccessTokenService(config(privateKeyPem));
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain('AIHUB_USER_ACCESS_JWT_PRIVATE_KEY');
+    expect(message).toContain('2048');
+    expect(message).not.toContain(privateKeyPem);
+  });
+
+  it('keeps malformed and non-RSA key errors distinct from a short RSA key', () => {
+    const { privateKey } = generateKeyPairSync('ec', {
+      namedCurve: 'prime256v1',
+    });
+    const ecPrivateKeyPem = privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString();
+
+    expect(() => new JoseUserAccessTokenService(config('not a key'))).toThrow(
+      'User Access JWT configuration is invalid',
+    );
+    expect(
+      () => new JoseUserAccessTokenService(config(ecPrivateKeyPem)),
     ).toThrow('User Access JWT configuration is invalid');
   });
 });

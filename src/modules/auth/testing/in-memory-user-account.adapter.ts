@@ -88,6 +88,20 @@ export class InMemoryUserAccountAdapter implements UserAccountRepositoryPort {
     };
   }
 
+  async updatePasswordHash(
+    input: Parameters<UserAccountRepositoryPort['updatePasswordHash']>[0],
+  ): Promise<boolean> {
+    const account = this.state.accounts.get(input.userId);
+    if (
+      account === undefined ||
+      account.passwordHash !== input.expectedPasswordHash
+    ) {
+      return false;
+    }
+    account.passwordHash = input.passwordHash;
+    return true;
+  }
+
   async findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined> {

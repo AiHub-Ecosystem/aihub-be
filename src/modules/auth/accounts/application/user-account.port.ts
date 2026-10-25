@@ -37,6 +37,13 @@ export interface UserAccountRepositoryPort {
   register(input: RegisterLocalAccountInput): Promise<'queued' | 'suppressed'>;
   findLoginIdentityByEmail(email: string): Promise<LoginIdentity | undefined>;
   findLoginIdentityByUserId(userId: string): Promise<LoginIdentity | undefined>;
+  /** Replaces the hash only if it still matches the credential login verified. */
+  updatePasswordHash(input: {
+    readonly userId: string;
+    readonly expectedPasswordHash: string;
+    readonly passwordHash: string;
+    readonly now: Date;
+  }): Promise<boolean>;
   findUserAccountStatus(
     userId: string,
   ): Promise<LocalAccountStatus | undefined>;

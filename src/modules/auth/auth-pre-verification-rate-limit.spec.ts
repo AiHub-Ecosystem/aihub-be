@@ -106,6 +106,7 @@ describe('auth pre-verification rate limits over HTTP with Redis unavailable', (
       .overrideProvider(PASSWORD_HASHER)
       .useValue({
         hash: async () => '$argon2id$fake',
+        needsRehash: () => false,
         verify: verifyPassword,
       })
       .overrideProvider(AUTH_CLOCK)

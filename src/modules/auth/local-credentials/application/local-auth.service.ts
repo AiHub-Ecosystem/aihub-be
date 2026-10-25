@@ -61,6 +61,7 @@ import {
   type CredentialCheckPorts,
   authenticateCredentials,
   rejectCredentials,
+  upgradePasswordHashIfNeeded,
 } from './local-credentials';
 import { type PasswordHasherPort } from './password-hasher.port';
 
@@ -111,6 +112,8 @@ export const AUTH_CLOCK = Symbol('AUTH_CLOCK');
  * never silently the wall clock because a binding went missing.
  */
 export class LocalAuthService {
+  private readonly credentials: CredentialCheckPorts;
+
   constructor(
     private readonly userAccounts: UserAccountRepositoryPort,
     private readonly verificationTokens: VerificationTokenRepositoryPort,
@@ -130,7 +133,9 @@ export class LocalAuthService {
     private readonly emailBackpressure: AdmitEmailRequestPort,
     /** Tokens issued from now on need the registration password (ADR-0123). */
     private readonly requireVerificationPassword: boolean,
-  ) {}
+  ) {
+    this.credentials = { userAccounts, passwordHasher, rateLimiter };
+  }
 
   async currentUser(userId: string): Promise<{ readonly username: string }> {
     const username = await this.userAccounts.findActiveUsername(userId);
@@ -391,22 +396,17 @@ export class LocalAuthService {
       return rejectCredentials(this.rateLimiter, ip, credentials.email);
     }
     const proof = mfa.kind === 'proved' ? mfa.proof : undefined;
+    const now = this.clock.now();
+    const currentCredentials = await upgradePasswordHashIfNeeded(
+      this.credentials,
+      credentials,
+      input.password,
+      now,
+      ip,
+    );
     return {
       kind: 'session',
-      session: await this.startLoginSession(
-        credentials,
-        this.clock.now(),
-        ip,
-        proof,
-      ),
-    };
-  }
-
-  private get credentials(): CredentialCheckPorts {
-    return {
-      userAccounts: this.userAccounts,
-      passwordHasher: this.passwordHasher,
-      rateLimiter: this.rateLimiter,
+      session: await this.startLoginSession(currentCredentials, now, ip, proof),
     };
   }
 

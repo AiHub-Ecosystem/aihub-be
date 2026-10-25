@@ -140,6 +140,10 @@ class PasswordHasherFake implements PasswordHasherPort {
     return STORED_PASSWORD_HASH;
   }
 
+  needsRehash(): boolean {
+    return false;
+  }
+
   async verify(): Promise<boolean> {
     return true;
   }

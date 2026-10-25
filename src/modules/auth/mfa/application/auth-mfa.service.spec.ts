@@ -59,6 +59,10 @@ class FakeHasher implements PasswordHasherPort {
     return `hash:${password}`;
   }
 
+  needsRehash(): boolean {
+    return false;
+  }
+
   async verify(password: string, passwordHash: string): Promise<boolean> {
     return passwordHash === `hash:${password}`;
   }
