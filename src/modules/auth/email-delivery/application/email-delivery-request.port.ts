@@ -279,6 +279,8 @@ export const EMAIL_DELIVERY_ERROR_CODES = [
   'provider_permanent_rejection',
   'outcome_unknown',
   'payload_unreadable',
+  // Deploy readers before the poller starts writing this value (#266).
+  'key_unavailable',
 ] as const;
 
 export type EmailDeliveryErrorCode =

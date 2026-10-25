@@ -201,6 +201,24 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
     expect(failures[0]?.lastErrorCode).toBe('provider_permanent_rejection');
   });
 
+  it('reads key_unavailable before the writer rollout', async () => {
+    const failures =
+      await new PostgresEmailDeliveryRequestRepository().claimUnreportedFailures(
+        clientReturning({
+          ...queuedRow({
+            status: 'failed',
+            payloadCiphertext: null,
+            lastErrorCode: 'key_unavailable',
+            completedAt: NOW,
+          }),
+          claim: CLAIM,
+        }),
+        { limit: 1, now: NOW, leaseMs: 30_000 },
+      );
+
+    expect(failures[0]?.lastErrorCode).toBe('key_unavailable');
+  });
+
   it('returns each failure claim with the lease it wrote, which identifies the claim (#989)', async () => {
     const failures =
       await new PostgresEmailDeliveryRequestRepository().claimUnreportedFailures(
