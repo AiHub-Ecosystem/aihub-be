@@ -1,6 +1,10 @@
+import { calculateMonthAnchoredCutoff } from '@/modules/metering/public/usage-retention';
 import type { WritingChartRevocationAuditRepositoryPort } from './writing-chart-revocation.port';
 
 export const WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE = 1_000;
+
+/** The revocation audit keeps events for 24 months (ADR-0111). */
+const WRITING_CHART_REVOCATION_AUDIT_MONTHS = 24;
 
 function validDate(value: Date): boolean {
   return !Number.isNaN(value.getTime());
@@ -10,15 +14,10 @@ export function calculateWritingChartRevocationAuditCutoff(now: Date): Date {
   if (!validDate(now)) {
     throw new Error('Writing chart revocation audit clock is invalid');
   }
-  const originalDay = now.getUTCDate();
-  const cutoff = new Date(now.getTime());
-  cutoff.setUTCDate(1);
-  cutoff.setUTCMonth(cutoff.getUTCMonth() - 24);
-  const lastDayOfTargetMonth = new Date(
-    Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  cutoff.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
-  return cutoff;
+  return calculateMonthAnchoredCutoff(
+    now,
+    WRITING_CHART_REVOCATION_AUDIT_MONTHS,
+  );
 }
 
 export class WritingChartRevocationAuditRetentionService {
