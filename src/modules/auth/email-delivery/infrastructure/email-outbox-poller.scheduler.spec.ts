@@ -53,12 +53,11 @@ function scheduler(
   intervalMs = INTERVAL_MS,
   enabled = true,
 ): EmailOutboxPollerScheduler {
-  return new EmailOutboxPollerScheduler(
-    poller as unknown as EmailDeliveryPoller,
+  return new EmailOutboxPollerScheduler({
+    poller: poller as unknown as EmailDeliveryPoller,
     intervalMs,
-    undefined,
     enabled,
-  );
+  });
 }
 
 function delay(ms: number): Promise<void> {
@@ -105,13 +104,11 @@ describe('EmailOutboxPollerScheduler', () => {
   it('runs recipient counter cleanup at startup', async () => {
     const poller = new ControllablePoller();
     const cleanup = jest.fn().mockResolvedValue(0);
-    const subject = new EmailOutboxPollerScheduler(
-      poller as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      cleanup,
-    );
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      pruneExpiredRecipientLimits: cleanup,
+    });
     subjects.push(subject);
 
     await subject.onModuleInit();
@@ -132,18 +129,11 @@ describe('EmailOutboxPollerScheduler', () => {
         keys: { 'current-v2': 'unused' },
       }),
     );
-    const subject = new EmailOutboxPollerScheduler(
-      poller as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      readMissingKeyVersions,
-    );
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      readMissingQueuedKeyVersions: readMissingKeyVersions,
+    });
     subjects.push(subject);
 
     try {
@@ -164,21 +154,15 @@ describe('EmailOutboxPollerScheduler', () => {
 
   it('refuses to start when a retired key version still has live recipient windows', async () => {
     const poller = new ControllablePoller();
-    const subject = new EmailOutboxPollerScheduler(
-      poller as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      async () => {
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      verifyRecipientKeyVersions: async () => {
         throw new RetiredKeyVersionLiveError(
           'v1 (windows live until 2026-10-25T00:00:00.000Z)',
         );
       },
-    );
+    });
     subjects.push(subject);
 
     await expect(subject.onModuleInit()).rejects.toThrow(
@@ -191,23 +175,17 @@ describe('EmailOutboxPollerScheduler', () => {
   it('boots with the gate deferred while the counter table cannot be read, and holds every pass until it resolves', async () => {
     const poller = new ControllablePoller();
     let tableReadable = false;
-    const subject = new EmailOutboxPollerScheduler(
-      poller as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      async () => {
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      verifyRecipientKeyVersions: async () => {
         if (!tableReadable) {
           // The image-boot contract boots without a database: an unreadable
           // counter table defers the verdict instead of failing startup.
           throw new Error("Can't reach database server at database.invalid");
         }
       },
-    );
+    });
     subjects.push(subject);
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
@@ -233,20 +211,17 @@ describe('EmailOutboxPollerScheduler', () => {
 
   it('serves durable cancellation timestamps through metrics and removes the source on shutdown', async () => {
     const poller = new ControllablePoller();
-    const subject = new EmailOutboxPollerScheduler(
-      poller as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      undefined,
-      async () => [
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      cancellations: async () => [
         {
           kind: 'verification_email',
           reason: 'credential_expired',
           timestampSeconds: 1_797_000_000,
         },
       ],
-    );
+    });
     subjects.push(subject);
 
     await subject.onModuleInit();
@@ -262,15 +237,11 @@ describe('EmailOutboxPollerScheduler', () => {
   });
 
   it('reports the shared daily budget through metrics and removes the source on shutdown', async () => {
-    const subject = new EmailOutboxPollerScheduler(
-      new ControllablePoller() as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      undefined,
-      undefined,
-      async () => ({ used: 8, limit: 10 }),
-    );
+    const subject = new EmailOutboxPollerScheduler({
+      poller: new ControllablePoller() as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      dailyBudget: async () => ({ used: 8, limit: 10 }),
+    });
     subjects.push(subject);
 
     await subject.onModuleInit();
@@ -288,16 +259,11 @@ describe('EmailOutboxPollerScheduler', () => {
   });
 
   it('reports the shared provider outage duration through metrics and removes the source on shutdown', async () => {
-    const subject = new EmailOutboxPollerScheduler(
-      new ControllablePoller() as unknown as EmailDeliveryPoller,
-      INTERVAL_MS,
-      undefined,
-      true,
-      undefined,
-      undefined,
-      undefined,
-      async () => 45_000,
-    );
+    const subject = new EmailOutboxPollerScheduler({
+      poller: new ControllablePoller() as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      providerOutageDuration: async () => 45_000,
+    });
     subjects.push(subject);
 
     await subject.onModuleInit();

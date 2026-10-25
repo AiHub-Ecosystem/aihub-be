@@ -259,8 +259,11 @@ export class EmailDeliveryPoller {
       return this.defer(request, now);
     }
     if (delivery === 'unreadable' || delivery === 'key_unavailable') {
-      // A missing key must be restored before this pass; after it is claimed,
-      // fail durably so the erased payload cannot sit in the queue unnoticed.
+      // Neither outcome improves by waiting: an unreadable payload would be
+      // claimed forever, and the pass cannot restore a key the keyring lost.
+      // Both are failures to report, not cancellations: after the claim, fail
+      // durably so the erased payload cannot sit in the queue unnoticed, and
+      // the distinct codes carry each case to an operator.
       await this.store.markFailed({
         id: request.id,
         failedAt: now,

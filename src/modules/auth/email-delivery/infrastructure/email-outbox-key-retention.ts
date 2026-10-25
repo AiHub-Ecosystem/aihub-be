@@ -6,7 +6,7 @@ import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/ru
 
 export async function missingQueuedEmailPayloadKeyVersions(
   client: AuthSqlClient,
-  secrets: EmailOutboxRuntimeSecrets | undefined,
+  secrets: EmailOutboxRuntimeSecrets,
 ): Promise<readonly string[]> {
   const rows = await authQueryRows<{ readonly key_version: string }>(
     client,
@@ -19,7 +19,7 @@ export async function missingQueuedEmailPayloadKeyVersions(
      ORDER BY key_version`,
     [],
   );
-  const retained = new Set(Object.keys(secrets?.keys ?? {}));
+  const retained = new Set(Object.keys(secrets.keys));
   return rows
     .map(({ key_version }) => key_version)
     .filter((version) => !retained.has(version));

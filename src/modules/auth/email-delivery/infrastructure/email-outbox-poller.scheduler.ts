@@ -28,6 +28,24 @@ import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 export const EMAIL_OUTBOX_POLL_INTERVAL_MS = 5_000;
 export const AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
+export interface EmailOutboxPollerSchedulerOptions {
+  readonly poller: EmailDeliveryPoller;
+  readonly intervalMs?: number;
+  readonly enabled?: boolean;
+  readonly backlog?: () => Promise<readonly EmailOutboxBacklogSample[]>;
+  readonly pruneExpiredRecipientLimits?: () => Promise<number>;
+  readonly cancellations?: () => Promise<
+    readonly EmailOutboxCancellationSample[]
+  >;
+  readonly dailyBudget?: () => Promise<{
+    readonly used: number;
+    readonly limit: number;
+  }>;
+  readonly providerOutageDuration?: () => Promise<number>;
+  readonly verifyRecipientKeyVersions?: () => Promise<void>;
+  readonly readMissingQueuedKeyVersions?: () => Promise<readonly string[]>;
+}
+
 /**
  * Runs the poller in this instance, against this instance's own database
  * (ADR-0074). There is no separate worker container: every process that serves
@@ -43,6 +61,28 @@ export class EmailOutboxPollerScheduler
   implements OnModuleInit, OnApplicationShutdown
 {
   private readonly logger = new Logger(EmailOutboxPollerScheduler.name);
+  private readonly poller: EmailDeliveryPoller;
+  private readonly intervalMs: number;
+  private readonly enabled: boolean;
+  private readonly backlog?:
+    | (() => Promise<readonly EmailOutboxBacklogSample[]>)
+    | undefined;
+  private readonly pruneExpiredRecipientLimits?:
+    | (() => Promise<number>)
+    | undefined;
+  private readonly cancellations?:
+    | (() => Promise<readonly EmailOutboxCancellationSample[]>)
+    | undefined;
+  private readonly dailyBudget?:
+    | (() => Promise<{ readonly used: number; readonly limit: number }>)
+    | undefined;
+  private readonly providerOutageDuration?: (() => Promise<number>) | undefined;
+  private readonly verifyRecipientKeyVersions?:
+    | (() => Promise<void>)
+    | undefined;
+  private readonly readMissingQueuedKeyVersions?:
+    | (() => Promise<readonly string[]>)
+    | undefined;
   private timer: NodeJS.Timeout | undefined;
   private cleanupTimer: NodeJS.Timeout | undefined;
   private running = false;
@@ -55,27 +95,18 @@ export class EmailOutboxPollerScheduler
    * rather than read by the poller, so the gauges keep reporting from the table
    * even when passes stop running — which is the outage they exist to show.
    */
-  constructor(
-    private readonly poller: EmailDeliveryPoller,
-    private readonly intervalMs = EMAIL_OUTBOX_POLL_INTERVAL_MS,
-    private readonly backlog?: () => Promise<
-      readonly EmailOutboxBacklogSample[]
-    >,
-    private readonly enabled = true,
-    private readonly pruneExpiredRecipientLimits?: () => Promise<number>,
-    private readonly cancellations?: () => Promise<
-      readonly EmailOutboxCancellationSample[]
-    >,
-    private readonly dailyBudget?: () => Promise<{
-      readonly used: number;
-      readonly limit: number;
-    }>,
-    private readonly providerOutageDuration?: () => Promise<number>,
-    private readonly verifyRecipientKeyVersions?: () => Promise<void>,
-    private readonly readMissingQueuedKeyVersions?: () => Promise<
-      readonly string[]
-    >,
-  ) {}
+  constructor(options: EmailOutboxPollerSchedulerOptions) {
+    this.poller = options.poller;
+    this.intervalMs = options.intervalMs ?? EMAIL_OUTBOX_POLL_INTERVAL_MS;
+    this.enabled = options.enabled ?? true;
+    this.backlog = options.backlog;
+    this.pruneExpiredRecipientLimits = options.pruneExpiredRecipientLimits;
+    this.cancellations = options.cancellations;
+    this.dailyBudget = options.dailyBudget;
+    this.providerOutageDuration = options.providerOutageDuration;
+    this.verifyRecipientKeyVersions = options.verifyRecipientKeyVersions;
+    this.readMissingQueuedKeyVersions = options.readMissingQueuedKeyVersions;
+  }
 
   /**
    * The keyring retention check runs before any timer starts: a keyring that
@@ -158,8 +189,10 @@ export class EmailOutboxPollerScheduler
           `email outbox queued requests reference unavailable key versions: ${versions.join(',')}`,
         );
       }
-    } catch {
-      this.logger.error('email outbox queued key version check failed');
+    } catch (error) {
+      this.logger.error(
+        `email outbox queued key version check failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
     }
   }
 

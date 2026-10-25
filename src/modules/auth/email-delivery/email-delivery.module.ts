@@ -221,28 +221,29 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
         secrets: RuntimeSecretProvider,
       ): EmailOutboxPollerScheduler => {
         const store = new PostgresEmailDispatchStore(runtime.prisma);
-        return new EmailOutboxPollerScheduler(
+        return new EmailOutboxPollerScheduler({
           poller,
-          EMAIL_OUTBOX_POLL_INTERVAL_MS,
-          () => store.backlog({ now: new Date() }),
-          configuration.NODE_ENV !== 'test',
-          () =>
+          intervalMs: EMAIL_OUTBOX_POLL_INTERVAL_MS,
+          backlog: () => store.backlog({ now: new Date() }),
+          enabled: configuration.NODE_ENV !== 'test',
+          pruneExpiredRecipientLimits: () =>
             pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
-          () => store.cancellationTimestamps(),
-          () => dailyBudget.usage(),
-          () => providerOutageCircuit.readOutageDurationMs(),
-          () =>
+          cancellations: () => store.cancellationTimestamps(),
+          dailyBudget: () => dailyBudget.usage(),
+          providerOutageDuration: () =>
+            providerOutageCircuit.readOutageDurationMs(),
+          verifyRecipientKeyVersions: () =>
             assertRetainedKeyVersionsCoverLiveWindows(
               runtime.prisma,
               secrets.getSnapshot().emailOutbox,
               new Date(),
             ),
-          () =>
+          readMissingQueuedKeyVersions: () =>
             missingQueuedEmailPayloadKeyVersions(
               runtime.prisma,
               secrets.getSnapshot().emailOutbox,
             ),
-        );
+        });
       },
       inject: [
         EmailDeliveryPoller,

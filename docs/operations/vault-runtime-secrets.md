@@ -65,6 +65,7 @@ Rotation is startup-only:
    WHERE status = 'queued'
      AND payload_ciphertext IS NOT NULL
      AND split_part(payload_ciphertext, '.', 1) IN ('v1', 'v2')
+     AND split_part(payload_ciphertext, '.', 2) <> ''
    GROUP BY 1
    ORDER BY 1;
 

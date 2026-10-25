@@ -122,13 +122,11 @@ async function withApp(
         {
           provide: EmailOutboxPollerScheduler,
           useFactory: () =>
-            new EmailOutboxPollerScheduler(
-              poller as unknown as EmailDeliveryPoller,
-              INTERVAL_MS,
-              undefined,
-              true,
-              () => prune.prune(),
-            ),
+            new EmailOutboxPollerScheduler({
+              poller: poller as unknown as EmailDeliveryPoller,
+              intervalMs: INTERVAL_MS,
+              pruneExpiredRecipientLimits: () => prune.prune(),
+            }),
         },
         { provide: FakeRedis, useFactory: () => new FakeRedis(events) },
       ],
