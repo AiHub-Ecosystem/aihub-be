@@ -1069,31 +1069,35 @@ describe('email outbox dispatch poller', () => {
       });
     });
 
-    it('leaves a request sealed with a key version this instance lacks queued, unerased, and claimable after its retry time', async () => {
+    it('fails a request sealed with a key version this instance lacks, terminal with its own code and an erased payload', async () => {
       const seeded = await seedRequest({ sealedWith: foreignCipher });
       const sender = new RecordingSender();
       const retryAt = new Date(NOW.getTime() + DEFER_RETRY_MS);
 
       const summary = await poller(OWNER_A, sender).runOnce();
 
-      // Cancelling would erase a payload the instance that holds the key can
-      // still deliver, so the row keeps its ciphertext and its attempts. It is
-      // not handed straight back: a batch of such rows reclaimed every pass
-      // would keep every newer request from being claimed.
+      // A key the keyring lost is an operator error, not user behaviour, so
+      // the row ends terminal under its own code with the payload erased —
+      // loud, rather than queued forever. A mixed-fleet rotation can destroy
+      // rows another instance still holds the key for; that trade-off and its
+      // remedy are decided in #1233.
       expect(sender.sends).toEqual([]);
-      expect(summary).toMatchObject({ claimed: 1, deferred: 1, cancelled: 0 });
-      expect(await rowOf(seeded.id)).toMatchObject({
-        status: 'queued',
-        attempts: 0,
-        cancel_reason: null,
-        lease_owner: null,
-        lease_expires_at: retryAt,
+      expect(summary).toMatchObject({
+        claimed: 1,
+        failed: 1,
+        deferred: 0,
+        cancelled: 0,
       });
-      expect((await rowOf(seeded.id)).payload_ciphertext).not.toBeNull();
+      const row = await rowOf(seeded.id);
+      expect(row).toMatchObject({
+        status: 'failed',
+        last_error_code: 'key_unavailable',
+        cancel_reason: null,
+        payload_ciphertext: null,
+      });
+      expect(row.failure_reported_at).not.toBeNull();
       expect(await claim(OWNER_B)).toEqual([]);
-      expect(
-        (await claim(OWNER_B, { now: retryAt })).map((row) => row.id),
-      ).toEqual([seeded.id]);
+      expect(await claim(OWNER_B, { now: retryAt })).toEqual([]);
     });
 
     it('fails a request whose ciphertext was moved from another row, with its own code, and still sends the row it belongs to', async () => {
@@ -1148,7 +1152,7 @@ describe('email outbox dispatch poller', () => {
       expect(row.failure_reported_at).not.toBeNull();
     });
 
-    it('does not let deferred rows starve newer requests', async () => {
+    it('does not let unopenable rows starve newer requests', async () => {
       const foreign = [];
       for (let index = 0; index < 3; index += 1) {
         foreign.push(await seedRequest({ sealedWith: foreignCipher }));
@@ -1170,14 +1174,18 @@ describe('email outbox dispatch poller', () => {
       await smallBatch.runOnce();
       await smallBatch.runOnce();
 
-      // The first pass fills its batch with the three unopenable rows and defers
-      // them; the second must reach the request behind them.
+      // The first pass fills its batch with the three unopenable rows and
+      // fails them out of the queue; the second must reach the request behind
+      // them.
       expect(sender.sends).toHaveLength(1);
       expect(await rowOf(deliverable.id)).toMatchObject({
         status: 'provider_accepted',
       });
       for (const row of foreign) {
-        expect(await rowOf(row.id)).toMatchObject({ status: 'queued' });
+        expect(await rowOf(row.id)).toMatchObject({
+          status: 'failed',
+          last_error_code: 'key_unavailable',
+        });
       }
     });
 
