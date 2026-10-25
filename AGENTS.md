@@ -88,6 +88,6 @@ After each batch of edits run `pnpm check:changed`: it reads the changed files f
 
 `pnpm verify:summary` runs the same loop and prints only the result, the first failing step, and the path of a log file of its own; use it when the output is read into context.
 
-Before starting a full loop, and whenever a run dies with a worker or heap error, read `docs/agents/verification.md` for the memory budget.
+Before starting a full loop, and whenever a run dies with a worker or heap error, read `docs/agents/verification.md` for the memory budget. Low free RAM alone is not a reason to defer verification or ask for confirmation: run the loop with Jest's automatic worker cap (one worker below 4 GiB free, two otherwise, unless explicitly overridden).
 
 A worker or heap death is not a test result. Read the error line, then re-run the named suite alone: a suite that passes alone did not fail, and the rest of that run is not evidence about the change. Do not reach green by skipping a suite, lowering a `coverageThreshold`, or editing an assertion — record what was observed and why the run is inconclusive.
