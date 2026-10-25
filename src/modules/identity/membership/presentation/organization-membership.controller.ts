@@ -38,6 +38,7 @@ import {
 } from '@/modules/identity/membership/application/organization-membership.port';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)
@@ -54,7 +55,7 @@ export class OrganizationMembershipController {
   @HttpCode(PUBLIC_ROUTES['organizations.members.list'].successStatus)
   async listOrganizationMembers(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
   ): Promise<OrganizationMembershipListResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -114,7 +115,7 @@ export class OrganizationMembershipController {
   @HttpCode(PUBLIC_ROUTES['organizations.members.change_role'].successStatus)
   async changeRole(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('username') username: string,
     @Body() body: unknown,
   ): Promise<OrganizationMembershipMutationResponse> {
@@ -143,7 +144,7 @@ export class OrganizationMembershipController {
   @HttpCode(PUBLIC_ROUTES['organizations.members.disable'].successStatus)
   async disable(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('username') username: string,
     @Body() body: unknown,
   ): Promise<OrganizationMembershipMutationResponse> {
@@ -171,7 +172,7 @@ export class OrganizationMembershipController {
   @HttpCode(PUBLIC_ROUTES['organizations.members.transfer'].successStatus)
   async transfer(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('username') username: string,
     @Body() body: unknown,
   ): Promise<OrganizationMembershipMutationResponse> {

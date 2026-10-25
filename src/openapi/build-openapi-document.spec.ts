@@ -45,6 +45,7 @@ interface OpenApiDocument {
   readonly components: {
     readonly securitySchemes: Record<string, unknown>;
     readonly parameters: Record<string, unknown>;
+    readonly schemas: Record<string, unknown>;
     readonly responses: Record<string, unknown>;
   };
   readonly paths: Record<string, OpenApiPathItem>;
@@ -149,6 +150,32 @@ describe('buildOpenApiDocument', () => {
       },
     ]);
     expect(build().servers).not.toHaveLength(0);
+  });
+
+  it('publishes Organization ID syntax on every Organization path route', () => {
+    const document = build();
+
+    expect(document.components.schemas.OrganizationId).toMatchObject({
+      type: 'string',
+      pattern: '^org_[A-Za-z0-9][A-Za-z0-9_-]*$',
+      description: expect.stringContaining('Organization ID'),
+    });
+
+    for (const route of Object.values(PUBLIC_ROUTES)) {
+      if (route.organizationResolution !== 'path') continue;
+
+      const method = route.method.toLowerCase() as keyof OpenApiPathItem;
+      const operation = document.paths[toOpenApiPath(route.path)]?.[method];
+      expect(operation?.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'organization_id',
+            in: 'path',
+            schema: { $ref: '#/components/schemas/OrganizationId' },
+          }),
+        ]),
+      );
+    }
   });
 
   it('has exactly one path entry per catalogued operation, so adding an operation without regenerating fails', () => {

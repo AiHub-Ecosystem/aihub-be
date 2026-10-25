@@ -103,7 +103,7 @@ export function organizationItemPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization to rename.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       requestBody: {
@@ -146,7 +146,7 @@ export function organizationInvitationPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization whose open invitations are listed.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       responses: {
@@ -175,7 +175,7 @@ export function organizationInvitationPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization the invited person is invited to.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       requestBody: {
@@ -222,7 +222,7 @@ export function organizationInvitationItemPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization that owns the invitation.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
         {
           name: 'invitation_id',
@@ -264,7 +264,7 @@ export function organizationApiKeyItemPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization that owns the API key.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
         {
           name: 'api_key_id',
@@ -307,7 +307,7 @@ export function organizationApiKeyRotatePathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization that owns the API key.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
         {
           name: 'api_key_id',
@@ -355,7 +355,7 @@ export function organizationApiKeyPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization whose API keys are listed.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       responses: {
@@ -383,7 +383,7 @@ export function organizationApiKeyPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization that will own the API key.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       requestBody: {

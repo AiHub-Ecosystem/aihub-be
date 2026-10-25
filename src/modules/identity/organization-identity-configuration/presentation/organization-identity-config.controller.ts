@@ -33,6 +33,7 @@ import {
 } from '@/modules/identity/organization-identity-configuration/application/set-organization-identity-config.port';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 
 type ConfiguredResponse = Extract<
   ReadOrganizationIdentityConfigResponse['data'],
@@ -71,7 +72,7 @@ export class OrganizationIdentityConfigController {
   @HttpCode(PUBLIC_ROUTES['organizations.identityConfig.read'].successStatus)
   async read(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
   ): Promise<ReadOrganizationIdentityConfigResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -101,7 +102,7 @@ export class OrganizationIdentityConfigController {
   @HttpCode(PUBLIC_ROUTES['organizations.identityConfig.set'].successStatus)
   async set(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Body() body: unknown,
   ): Promise<ReadOrganizationIdentityConfigResponse> {
     const { context, requestId, userId } = bearerRequestContext(

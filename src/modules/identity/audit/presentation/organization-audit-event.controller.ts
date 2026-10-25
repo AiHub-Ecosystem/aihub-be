@@ -22,6 +22,7 @@ import {
 } from '@/modules/identity/audit/application/read-organization-audit-events.port';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 import { encodeAuditCursor } from './audit-cursor';
 import { parseOrganizationAuditQuery } from './audit-event-query';
 
@@ -37,7 +38,7 @@ export class OrganizationAuditEventController {
   @HttpCode(PUBLIC_ROUTES['organizations.auditEvents.list'].successStatus)
   async list(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
   ): Promise<ListOrganizationAuditEventsResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,

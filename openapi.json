@@ -67,6 +67,13 @@
         "description": "Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent."
       }
     },
+    "schemas": {
+      "OrganizationId": {
+        "pattern": "^org_[A-Za-z0-9][A-Za-z0-9_-]*$",
+        "description": "Case-sensitive Organization ID prefixed with org_; its suffix starts with an ASCII letter or digit and may contain ASCII letters, digits, underscores, and hyphens.",
+        "type": "string"
+      }
+    },
     "responses": {
       "Error400": {
         "description": "INVALID_REQUEST | IDENTITY_JWKS_URL_UNSAFE | IDENTITY_JWKS_INVALID | AUTH_VERIFICATION_TOKEN_INVALID | AUTH_VERIFICATION_PASSWORD_INVALID | AUTH_PASSWORD_RESET_TOKEN_INVALID | ORGANIZATION_INVITE_TOKEN_INVALID",
@@ -5092,8 +5099,7 @@
             "required": true,
             "description": "The organization to rename.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -5397,8 +5403,7 @@
             "required": true,
             "description": "The organization whose memberships are listed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -5522,8 +5527,7 @@
             "required": true,
             "description": "The organization whose memberships are listed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -5577,8 +5581,7 @@
             "required": true,
             "description": "The organization whose open invitations are listed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -5716,8 +5719,7 @@
             "required": true,
             "description": "The organization the invited person is invited to.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -5889,8 +5891,7 @@
             "required": true,
             "description": "The organization whose open invitations are listed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -5932,8 +5933,7 @@
             "required": true,
             "description": "The organization that owns the invitation.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -6091,8 +6091,7 @@
             "required": true,
             "description": "The organization whose membership is being changed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -6245,8 +6244,7 @@
             "required": true,
             "description": "The organization whose membership is being changed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -6375,8 +6373,7 @@
             "required": true,
             "description": "The organization whose membership is being changed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -6506,8 +6503,7 @@
             "required": true,
             "description": "The organization whose API keys are listed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -6665,8 +6661,7 @@
             "required": true,
             "description": "The organization that will own the API key.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -6878,8 +6873,7 @@
             "required": true,
             "description": "The organization whose API keys are listed.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -6923,8 +6917,7 @@
             "required": true,
             "description": "The organization that owns the API key.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -7088,8 +7081,7 @@
             "required": true,
             "description": "The organization that owns the API key.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -7266,8 +7258,7 @@
             "required": true,
             "description": "The organization whose identity configuration is set.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -7708,8 +7699,7 @@
             "required": true,
             "description": "The organization whose identity configuration is read.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -7961,8 +7951,7 @@
             "required": true,
             "description": "The organization whose identity configuration is read.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -8006,8 +7995,7 @@
             "required": true,
             "description": "The organization whose audit trail is read.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {
@@ -8334,8 +8322,7 @@
             "required": true,
             "description": "The organization whose audit trail is read.",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/components/schemas/OrganizationId"
             }
           },
           {

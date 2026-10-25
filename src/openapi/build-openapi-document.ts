@@ -3,6 +3,7 @@ import { OPERATION_IDS } from '@/catalog/operation-id';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/common/http/client-secret-header';
 import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
+import { OrganizationIdSchema } from '@/contracts/organization/organization-id';
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
 import { buildErrorResponses } from './openapi-error-responses';
 import { localAuthPathItems } from './openapi-local-auth-path-items';
@@ -193,6 +194,7 @@ export function buildOpenApiDocument(version: string): unknown {
         CorrelationId: CORRELATION_ID_PARAMETER,
         UserIdentity: USER_IDENTITY_PARAMETER,
       },
+      schemas: { OrganizationId: OrganizationIdSchema },
       responses: errorResponses,
     },
     paths,

@@ -36,7 +36,7 @@ export function organizationAuditEventPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization whose audit trail is read.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
         {
           name: 'action',
@@ -132,7 +132,7 @@ export function organizationIdentityConfigPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization whose identity configuration is set.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       requestBody: {
@@ -166,7 +166,7 @@ export function organizationIdentityConfigPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization whose identity configuration is read.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       responses: {
@@ -228,7 +228,7 @@ export function organizationMembershipListPathItem(): Record<string, unknown> {
           in: 'path',
           required: true,
           description: 'The organization whose memberships are listed.',
-          schema: { type: 'string', minLength: 1 },
+          schema: { $ref: '#/components/schemas/OrganizationId' },
         },
         {
           name: 'status',
@@ -265,7 +265,7 @@ function organizationMemberParameters(): readonly Record<string, unknown>[] {
       in: 'path',
       required: true,
       description: 'The organization whose membership is being changed.',
-      schema: { type: 'string', minLength: 1 },
+      schema: { $ref: '#/components/schemas/OrganizationId' },
     },
     {
       name: 'username',

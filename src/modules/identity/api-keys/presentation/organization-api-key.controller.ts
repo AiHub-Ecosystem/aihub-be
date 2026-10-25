@@ -41,6 +41,7 @@ import {
 } from '@/modules/identity/api-keys/application/rotate-organization-api-key.port';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)
@@ -62,7 +63,7 @@ export class OrganizationApiKeyController {
   @HttpCode(PUBLIC_ROUTES['organizations.apiKeys.revoke'].successStatus)
   async revoke(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('apiKeyId') apiKeyId: string,
   ): Promise<RevokeOrganizationApiKeyResponse> {
     const { context, requestId, userId } = bearerRequestContext(
@@ -100,7 +101,7 @@ export class OrganizationApiKeyController {
   @Header('Cache-Control', 'no-store')
   async rotate(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('apiKeyId') apiKeyId: string,
   ): Promise<OrganizationApiKeySecretResponse> {
     const { context, requestId, userId } = bearerRequestContext(
@@ -139,7 +140,7 @@ export class OrganizationApiKeyController {
   // meaningful.
   async list(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
   ): Promise<ListOrganizationApiKeysResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -173,7 +174,7 @@ export class OrganizationApiKeyController {
   @Header('Cache-Control', 'no-store')
   async create(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Body() body: unknown,
   ): Promise<OrganizationApiKeySecretResponse> {
     const { context, requestId, userId } = bearerRequestContext(

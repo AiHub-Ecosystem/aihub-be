@@ -52,6 +52,7 @@ import {
 } from '@/modules/identity/invitations/application/revoke-organization-invitation.port';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -156,7 +157,7 @@ export class OrganizationInvitationController {
   @HttpCode(PUBLIC_ROUTES['organizations.invitations.create'].successStatus)
   async invite(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<CreateOrganizationInvitationResponse> {
@@ -240,7 +241,7 @@ export class OrganizationInvitationController {
   @HttpCode(PUBLIC_ROUTES['organizations.invitations.list'].successStatus)
   async list(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
   ): Promise<ListOpenOrganizationInvitationsResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -273,7 +274,7 @@ export class OrganizationInvitationController {
   @HttpCode(PUBLIC_ROUTES['organizations.invitations.revoke'].successStatus)
   async revoke(
     @Req() request: FastifyRequest,
-    @Param('organizationId') organizationId: string,
+    @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('invitationId') invitationId: string,
   ): Promise<void> {
     const { context, userId } = bearerRequestContext(request, organizationId);

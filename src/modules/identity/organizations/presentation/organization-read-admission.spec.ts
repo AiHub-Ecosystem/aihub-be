@@ -309,10 +309,13 @@ describe('Organization read admission through the public route', () => {
     identityConfigs.findByOrganizationId.mockResolvedValue(null);
   });
 
-  function read(surface: OrganizationReadSurface) {
+  function read(
+    surface: OrganizationReadSurface,
+    organizationId = ORGANIZATION_ID,
+  ) {
     return app.inject({
       method: 'GET',
-      url: ROUTES[surface],
+      url: ROUTES[surface].replace(ORGANIZATION_ID, organizationId),
       headers: { authorization: 'Bearer valid.token.value' },
     });
   }
@@ -351,6 +354,54 @@ describe('Organization read admission through the public route', () => {
         : { status: response.statusCode, body: response.json() },
     ).toEqual(expected);
   });
+
+  it.each(['missing-prefix', 'org_', 'org_bad.dot'])(
+    'rejects malformed Organization ID %s before admission or reads',
+    async (organizationId) => {
+      const response = await read('open_invitations', organizationId);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(membership.resolveMembership.mock.calls).toHaveLength(0);
+      expect(invitations.listOpenInvitations.mock.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    ['slug', 'org_acme'],
+    ['numeric', 'org_1'],
+    ['ULID', 'org_01J00000000000000000000001'],
+    ['hyphenated', 'org_private-marker'],
+  ])('accepts the existing %s Organization ID format', async (_kind, id) => {
+    const response = await read('open_invitations', id);
+
+    expect(response.statusCode).toBe(200);
+    expect(membership.resolveMembership.mock.calls).toContainEqual([
+      expect.objectContaining({ organizationId: id }),
+    ]);
+  });
+
+  it.each([
+    ['unknown', 'org_unknown'],
+    ['foreign', 'org_other'],
+  ])(
+    'keeps a well-formed %s Organization ID on the safe denial path',
+    async (_kind, id) => {
+      caller = arrangeCaller('a caller outside the Organization');
+
+      const response = await read('open_invitations', id);
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toMatchObject({
+        code: 'FORBIDDEN',
+        message: PUBLISHED_REFUSALS.open_invitations,
+      });
+      expect(membership.resolveMembership.mock.calls).toContainEqual([
+        expect.objectContaining({ organizationId: id }),
+      ]);
+      expect(invitations.listOpenInvitations.mock.calls).toHaveLength(0);
+    },
+  );
 
   it('projects an open invitation as actionable, keeping the pending status public', async () => {
     const createdAt = new Date('2026-09-21T11:00:00.000Z');
