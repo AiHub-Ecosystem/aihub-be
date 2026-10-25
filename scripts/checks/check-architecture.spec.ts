@@ -953,3 +953,75 @@ describe('the generated Prisma client stays inside infrastructure', () => {
     }
   });
 });
+
+describe('source-text architecture rules fail arch-check', () => {
+  const srcRoot = join(__dirname, '..', '..', 'src');
+
+  function runWithFixtures(
+    fixtures: Array<{ layer: string; name: string; source: string }>,
+  ): { status: number | null; output: string } {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'identity', '.tmp-source-text-'),
+    );
+
+    try {
+      for (const { layer, name, source } of fixtures) {
+        const layerRoot = join(fixtureRoot, layer);
+        mkdirSync(layerRoot, { recursive: true });
+        writeFileSync(join(layerRoot, name), source);
+      }
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      return {
+        status: result.status,
+        output: `${result.stdout}\n${result.stderr}`,
+      };
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }
+
+  it("fails when an application file declares module 'fastify'", () => {
+    const result = runWithFixtures([
+      {
+        layer: 'application',
+        name: 'probe.ts',
+        source: "declare module 'fastify' {}\n",
+      },
+    ]);
+
+    expect(result.output).toContain("declares module 'fastify'");
+    expect(result.status).not.toBe(0);
+  });
+
+  it('fails when infrastructure casts an application-declared type', () => {
+    const result = runWithFixtures([
+      {
+        layer: 'application',
+        name: 'probe.port.ts',
+        source: 'export type ProbeApplicationType = {};\n',
+      },
+      {
+        layer: 'infrastructure',
+        name: 'probe.adapter.ts',
+        source: 'const probe = {} as unknown as ProbeApplicationType;\n',
+      },
+    ]);
+
+    expect(result.output).toContain('casts an application-declared type');
+    expect(result.status).not.toBe(0);
+  });
+});

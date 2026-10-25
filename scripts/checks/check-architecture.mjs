@@ -437,4 +437,4 @@ if (result.error) {
   process.exit(1);
 }
 
-process.exit(result.status ?? 1);
+process.exit(Math.max(process.exitCode ?? 0, result.status ?? 1));
