@@ -66,7 +66,6 @@ const exempt = new Map([
 // Grandfathered (ADR-0110): recorded code-line count; the split is tracked in
 // the issue named in each file's `ponytail:` header.
 const grandfathered = new Map([
-  ['src/openapi/build-openapi-document.ts', 2126],
   [
     'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
     957,
