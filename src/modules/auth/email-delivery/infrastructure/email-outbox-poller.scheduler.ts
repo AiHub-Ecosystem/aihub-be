@@ -72,6 +72,9 @@ export class EmailOutboxPollerScheduler
     }>,
     private readonly providerOutageDuration?: () => Promise<number>,
     private readonly verifyRecipientKeyVersions?: () => Promise<void>,
+    private readonly readMissingQueuedKeyVersions?: () => Promise<
+      readonly string[]
+    >,
   ) {}
 
   /**
@@ -97,6 +100,7 @@ export class EmailOutboxPollerScheduler
     if (this.providerOutageDuration !== undefined) {
       setEmailProviderOutageDurationSource(this.providerOutageDuration);
     }
+    await this.reportMissingQueuedKeyVersions();
     await this.runRecipientKeyGate(true);
     this.timer = setInterval(() => {
       void this.pass();
@@ -142,6 +146,20 @@ export class EmailOutboxPollerScheduler
         );
       }
       return false;
+    }
+  }
+
+  private async reportMissingQueuedKeyVersions(): Promise<void> {
+    if (this.readMissingQueuedKeyVersions === undefined) return;
+    try {
+      const versions = await this.readMissingQueuedKeyVersions();
+      if (versions.length > 0) {
+        this.logger.error(
+          `email outbox queued requests reference unavailable key versions: ${versions.join(',')}`,
+        );
+      }
+    } catch {
+      this.logger.error('email outbox queued key version check failed');
     }
   }
 

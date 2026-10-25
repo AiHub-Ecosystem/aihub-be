@@ -87,6 +87,7 @@ export class FakeStore implements EmailDispatchStorePort {
   async markFailed(input: {
     id: string;
     errorCode: EmailDeliveryErrorCode;
+    failedAt: Date;
   }): Promise<void> {
     this.failed.push({ id: input.id, errorCode: input.errorCode });
     const row = this.claimResult.find((claimed) => claimed.id === input.id);
@@ -94,7 +95,9 @@ export class FakeStore implements EmailDispatchStorePort {
       this.unreported.push({
         ...row,
         status: 'failed',
+        payloadCiphertext: null,
         lastErrorCode: input.errorCode,
+        completedAt: input.failedAt,
       });
     }
   }

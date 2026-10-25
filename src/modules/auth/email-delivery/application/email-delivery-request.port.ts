@@ -230,7 +230,8 @@ export interface EmailPayloadContext {
 /**
  * One failure kind for every AES-256-GCM envelope in the module, so a caller
  * decides what a failure means from its kind rather than from the concrete
- * thrown type. `unknown-key` defers, `malformed` and `unreadable` do not.
+ * thrown type. `unknown-key` becomes `key_unavailable`; malformed and
+ * unreadable envelopes become `payload_unreadable`.
  */
 export type EnvelopeCipherFailureKind =
   | 'malformed'
@@ -248,10 +249,8 @@ export class EnvelopeCipherError extends Error {
 }
 
 /**
- * The envelope names a key version this instance holds no key for, which is what
- * an instance that started before a rotation sees when it claims a row another
- * instance sealed afterwards. It is not a broken payload: the row stays queued
- * and unerased, because the instance that does hold the key can still open it.
+ * The envelope names a key version this instance no longer holds. The poller
+ * treats this as an operator-visible terminal failure, distinct from corruption.
  */
 export class EmailPayloadUnknownKeyVersionError extends EnvelopeCipherError {
   constructor() {

@@ -750,9 +750,10 @@ describe('EmailDeliveryPoller', () => {
     });
   });
 
-  it('leaves a request another instance can still open queued and unerased', async () => {
+  it('fails and erases a request sealed with a key version this instance lacks', async () => {
     const store = new FakeStore();
     const sender = new RecordingSender();
+    const failures: unknown[] = [];
     const poller = new EmailDeliveryPoller(
       store,
       new FakeCredentials(),
@@ -762,49 +763,32 @@ describe('EmailDeliveryPoller', () => {
       new FakeEmailProviderOutageCircuit(),
       (): Date => NOW,
       { hash: () => TOKEN_HASH },
-      { owner: 'instance-a' },
+      {
+        owner: 'instance-a',
+        onTerminalFailure: (failure) => failures.push(failure),
+      },
     );
-    store.claimResult = [claimed()];
+    store.claimResult = [
+      claimed({ payloadCiphertext: 'v2.retired.iv.tag.ciphertext' }),
+    ];
 
     const summary = await poller.runOnce();
 
-    // Cancelling here would erase a payload the instance that owns the key can
-    // still deliver; the row goes back with its ciphertext and its attempts.
     expect(store.cancelled).toEqual([]);
-    expect(store.deferred).toEqual([ROW_ID]);
+    expect(store.failed).toEqual([
+      { id: ROW_ID, errorCode: 'key_unavailable' },
+    ]);
+    expect(store.unreported[0]).toMatchObject({
+      status: 'failed',
+      payloadCiphertext: null,
+      lastErrorCode: 'key_unavailable',
+    });
     expect(store.attempts).toEqual([]);
     expect(sender.sends).toEqual([]);
-    expect(summary).toEqual({
-      claimed: 1,
-      providerAccepted: 0,
-      cancelled: 0,
-      failed: 0,
-      deferred: 1,
-    });
-  });
-
-  it('keeps a deferred request out of every batch until its retry time', async () => {
-    const store = new FakeStore();
-    const poller = new EmailDeliveryPoller(
-      store,
-      new FakeCredentials(),
-      unknownKeyVersionCipher(),
-      new RecordingSender(),
-      new FakeEmailSendRateLimiter(),
-      new FakeEmailProviderOutageCircuit(),
-      (): Date => NOW,
-      { hash: () => TOKEN_HASH },
-      { owner: 'instance-a' },
-    );
-    store.claimResult = [claimed()];
-
-    await poller.runOnce();
-
-    // Released for immediate reclaim, a batch of unopenable rows would come
-    // back every pass and keep every newer request from being claimed.
-    expect(store.deferredUntil).toEqual([
-      new Date(NOW.getTime() + DEFER_RETRY_MS),
+    expect(failures).toEqual([
+      { id: ROW_ID, kind: 'verification_email', errorCode: 'key_unavailable' },
     ]);
+    expect(summary).toMatchObject({ failed: 1, cancelled: 0, deferred: 0 });
   });
 
   it.each([

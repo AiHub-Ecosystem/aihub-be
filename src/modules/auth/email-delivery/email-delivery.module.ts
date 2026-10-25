@@ -57,6 +57,7 @@ import {
   assertRetainedKeyVersionsCoverLiveWindows,
   pruneExpiredAuthEmailRecipientLimits,
 } from './infrastructure/auth-email-recipient-limit';
+import { missingQueuedEmailPayloadKeyVersions } from './infrastructure/email-outbox-key-retention';
 import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
@@ -235,6 +236,11 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
               runtime.prisma,
               secrets.getSnapshot().emailOutbox,
               new Date(),
+            ),
+          () =>
+            missingQueuedEmailPayloadKeyVersions(
+              runtime.prisma,
+              secrets.getSnapshot().emailOutbox,
             ),
         );
       },

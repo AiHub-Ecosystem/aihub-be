@@ -59,15 +59,29 @@ Rotation is startup-only:
    while an active recipient counter uses its version:
 
    ```sql
+   SELECT split_part(payload_ciphertext, '.', 2) AS key_version,
+          count(*) AS queued_requests
+   FROM email_delivery_requests
+   WHERE status = 'queued'
+     AND payload_ciphertext IS NOT NULL
+     AND split_part(payload_ciphertext, '.', 1) IN ('v1', 'v2')
+   GROUP BY 1
+   ORDER BY 1;
+
    SELECT key_version, count(*)
    FROM auth_email_recipient_rate_limits
    WHERE expires_at > now()
    GROUP BY key_version;
    ```
 
-   The query exposes versions and counts only. The application deletes expired
-   counters at startup and hourly; wait for cleanup as well as expiry before
-   removing a version.
+   Run both queries against the Production and Sandbox outbox databases. Remove
+   an old key only when the first query has no row for that version and the
+   second query has no active counter for it. The queries expose versions and
+   counts only. The application deletes expired counters at startup and hourly;
+   wait for cleanup as well as expiry before removing a version. At startup, the
+   scheduler logs queued versions missing from its keyring before its first pass;
+   restore the version and restart before that pass so the queued messages can
+   still be dispatched.
 
    This retention rule is enforced, not remembered: an instance that boots with
    a keyring missing a version whose counters are still inside their 24-hour

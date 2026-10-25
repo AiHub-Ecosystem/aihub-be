@@ -1,7 +1,9 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
+import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { Logger } from '@nestjs/common';
 import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
+import { missingQueuedEmailPayloadKeyVersions } from './email-outbox-key-retention';
 
 import {
   EmailOutboxPollerScheduler,
@@ -115,6 +117,49 @@ describe('EmailOutboxPollerScheduler', () => {
     await subject.onModuleInit();
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports queued key versions missing from this instance before polling', async () => {
+    const poller = new ControllablePoller();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const script = new ScriptedPrisma();
+    script.outside = [
+      [{ key_version: 'current-v2' }, { key_version: 'retired-v1' }],
+    ];
+    const readMissingKeyVersions = jest.fn(() =>
+      missingQueuedEmailPayloadKeyVersions(script.client(), {
+        currentKeyId: 'current-v2',
+        keys: { 'current-v2': 'unused' },
+      }),
+    );
+    const subject = new EmailOutboxPollerScheduler(
+      poller as unknown as EmailDeliveryPoller,
+      INTERVAL_MS,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      readMissingKeyVersions,
+    );
+    subjects.push(subject);
+
+    try {
+      await subject.onModuleInit();
+
+      expect(readMissingKeyVersions).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith(
+        'email outbox queued requests reference unavailable key versions: retired-v1',
+      );
+      expect(poller.calls).toBe(0);
+
+      await delay(INTERVAL_MS * 3);
+      expect(poller.calls).toBeGreaterThan(0);
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('refuses to start when a retired key version still has live recipient windows', async () => {
@@ -348,6 +393,7 @@ describe('reportTerminalEmailDeliveryFailure', () => {
   it.each([
     ['verification_email', 'provider_rejected'],
     ['password_reset_email', 'timeout'],
+    ['organization_invite_email', 'key_unavailable'],
   ] as const)(
     'emits only the request, kind=%s, and error=%s',
     async (kind, errorCode) => {

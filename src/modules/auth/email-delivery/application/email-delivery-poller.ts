@@ -248,21 +248,26 @@ export class EmailDeliveryPoller {
     | 'configuration_failure'
   > {
     const now = this.now();
-    let delivery: ValidatedEmailDelivery | 'unreadable' | undefined;
+    let delivery:
+      | ValidatedEmailDelivery
+      | 'key_unavailable'
+      | 'unreadable'
+      | undefined;
     try {
       delivery = readEmailPayload(this.cipher, request);
     } catch {
       return this.defer(request, now);
     }
-    if (delivery === 'unreadable') {
-      // A payload this instance cannot open or make sense of will never be
-      // sendable, so waiting would claim the row forever. It is a failure to
-      // report, not a cancellation: nothing about the credential changed, and a
-      // re-provisioned key or a moved ciphertext should reach an operator.
+    if (delivery === 'unreadable' || delivery === 'key_unavailable') {
+      // A missing key must be restored before this pass; after it is claimed,
+      // fail durably so the erased payload cannot sit in the queue unnoticed.
       await this.store.markFailed({
         id: request.id,
         failedAt: now,
-        errorCode: 'payload_unreadable',
+        errorCode:
+          delivery === 'key_unavailable'
+            ? 'key_unavailable'
+            : 'payload_unreadable',
         owner: this.options.owner,
       });
       return 'failed';

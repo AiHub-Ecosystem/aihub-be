@@ -182,14 +182,16 @@ First steps:
 1. Read the failed rows with the query in
    [What an operator can read](#what-an-operator-can-read). Quote the `id`, never
    an address.
-2. Read `last_error_code`. It is one of five codes. `timeout` means the attempt
+2. Read `last_error_code`. It is one of six codes. `timeout` means the attempt
    ran past the five-second provider timeout; `provider_rejected` means the
    provider declined the API request; `provider_permanent_rejection` means a
    `400` or `422` response ended the request after one attempt;
    `outcome_unknown` means a process died after reserving the last attempt, so no
    answer was recorded (see above); `payload_unreadable` means the stored payload
-   never reached the provider because it could not be opened (see below). Nothing
-   else about the provider's answer survives to this point, by design.
+   never reached the provider because it was corrupt or invalid;
+   `key_unavailable` means its envelope named a key version the instance no
+   longer holds. Nothing else about the provider's answer survives to this
+   point, by design.
 3. If `EmailProviderOutage` is also firing, the provider is the cause; follow
    [Provider-wide outage backoff](#provider-wide-outage-backoff-adr-0122-410).
 4. If one `kind` fails and the others do not, check that flow's recipient domain
@@ -204,10 +206,30 @@ as a provider failure. Its payload is erased and nothing is sent. The causes are
 a ciphertext copied from another row or kind, an altered ciphertext, a key id in
 Vault that now holds other material than when the row was sealed (a key id is
 never reused, see `ops/vault/README.md`), and plaintext that no handler accepts.
-A key version this instance holds no key for is not one of them: that row stays
-queued for an instance that has the key. The log line for this failure reads
+The log line for this failure reads
 "exhausted its attempts" like any terminal failure, though no attempt was made:
 the code in the line is what tells them apart.
+
+### A queued payload references a missing key (`key_unavailable`, #266)
+
+At startup, the scheduler reads key versions named by queued ciphertexts and
+logs any version absent from its keyring before the first poll. If dispatch then
+claims such a request, it fails it with `key_unavailable`, erases the payload,
+and emits the same terminal-failure metric, log event, and alert as a provider
+failure. The log contains the request id, kind, and bounded error code only. If
+the startup report appears, restore the missing version and restart before the
+first poll to keep those requests deliverable.
+
+Before removing an old key, verify that no queued payload still names it. The
+Vault runbook has the read-only query and full rotation order.
+
+#### Release order for `key_unavailable`
+
+`last_error_code` is validated against each image's accepted vocabulary. Ship a
+reader release that accepts `key_unavailable` without writing it, and deploy it
+to every instance before the release that starts recording this code. The
+database constraint already permits bounded lowercase codes; no migration is
+needed.
 
 ## Provider response classification
 
@@ -247,16 +269,16 @@ problem, each can emit one signal until one of its sends succeeds.
 A payload is sealed in an envelope that names its version. Version `v1` carries
 no associated data. Version `v2` authenticates the request it belongs to, so a
 ciphertext copied onto another row or kind does not open. A `v1` reader cannot
-open `v2`, and a poller that cannot open a payload cancels the request without
-a signal, so the order of releases decides whether a deploy can lose mail:
+open `v2`, so the writer release waits until every instance can read both
+versions:
 
 1. **Reader release.** Every instance opens `v1` and `v2` and accepts the error
-   code `payload_unreadable`, and still writes `v1`. The poller still cancels a
-   payload it cannot open.
+   code `payload_unreadable`, and still writes `v1`. The poller fails an
+   unreadable payload with `payload_unreadable` and emits the terminal-failure
+   signal.
 2. **Writer release**, only after the reader release is running on every
-   instance of Production and Sandbox, and the previous slot has stopped. Instances
-   write `v2`, and the poller fails an unreadable payload with
-   `payload_unreadable` instead of cancelling it.
+   instance of Production and Sandbox, and the previous slot has stopped.
+   Instances write `v2`; unreadable payload behavior stays the same.
 3. **Drain.** Rows sealed as `v1` leave the queue within 24 hours for the
    credential kinds (the longest credential lifetime) and within 14 days for
    `api_key_near_expiry_notification` (its notice window), plus one sweep
@@ -264,8 +286,9 @@ a signal, so the order of releases decides whether a deploy can lose mail:
 
 Never deploy the writer release while an older reader can still claim a row, and
 never roll back past the reader release while `v2` rows are queued: an image
-that cannot open `v2` cancels them without a signal. The
-operator CLI seals notices too (`src/cli/operator-notification-client.ts`), and
+that cannot open `v2` fails them as `payload_unreadable` and emits the terminal
+signal. The operator CLI seals notices too
+(`src/cli/operator-notification-client.ts`), and
 it runs from the same image: move it through the same two releases in the same
 order, and do not run its sweep from an older image after the writer release.
 
@@ -322,9 +345,8 @@ without opening it.
 ## Queue backlog: when dispatch stops
 
 The terminal-failure counter only moves when a request gives up. If no instance
-dispatches at all — the poller is not running, every claim errors, or every
-request is waiting on a key version this instance does not hold — nothing gives
-up, and that counter stays flat. Two gauges cover that case:
+dispatches at all — the poller is not running or every claim errors — nothing
+gives up, and that counter stays flat. Two gauges cover that case:
 
 | Signal                                                     | Meaning                                              |
 | ---------------------------------------------------------- | ---------------------------------------------------- |
@@ -339,9 +361,9 @@ that too. For these two gauges, `kind` is the only label.
 A #438 alert fires when oldest queued age exceeds 15 minutes for any `kind`.
 The Prometheus rule is in `ops/monitoring/alert.rules.yml`. A healthy request
 is sent on its first pass (every 5 seconds) or retried
-at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A request
-held back because its payload is sealed with a key version this instance lacks
-waits 5 minutes between claims, so a key removed too early shows up here too.
+at +1 and +5 minutes, so 15 minutes is past the whole retry schedule. A missing
+key version is reported at startup and recorded as `key_unavailable` when the
+request is claimed; it appears in the terminal-failure signal instead.
 
 Read `aihub_redis_unavailable_total{seam="email_send_rate"}` first: it counts
 every time the send-rate limiter could not get a send permit, a rate
@@ -352,12 +374,10 @@ not counted. A counter that rises with `deferred` means the limiter's Redis, not
 the provider, is what stops dispatch.
 
 `deferred=N` in the per-pass log line counts requests handed back without an
-attempt. A steadily non-zero value has two usual causes, and a queued row with
-`attempts = 0` and a `lease_expires_at` a few seconds ahead of now points at
-the second:
+attempt. A steadily non-zero value usually means the send-rate Redis is slow or
+unavailable, and a queued row with `attempts = 0` and a `lease_expires_at` a few
+seconds ahead of now points at that:
 
-- A key version was removed while queued requests still needed it; restore the
-  key before those requests age out.
 - The send-rate Redis answers more slowly than its command timeout, or not at
   all, so no send permit or reservation is granted. Every pass hands the request
   back after 5 seconds and nothing is sent. Measure a round trip to that Redis
@@ -461,15 +481,13 @@ released. `attempts` is the count used, `last_error_code` the bounded cause, and
 `completed_at` when the request was given up on. For a `cancelled` row read
 `cancel_reason` instead; `last_error_code` is not set.
 
-Three rows are states an operator will meet that no pass resolves on its own, and
-none of them is a lost email:
+Three states an operator will meet need attention outside the poller:
 
 - `failure_reported_at IS NULL` on a `failed` row means an instance still owes
   its alert. The next pass reconciles it.
-- A `queued` row naming a key version this deployment does not hold was claimed
-  by an instance that could not read it. The instance that does hold the key
-  claims it unchanged, with its attempts untouched. The cause is a keyring that
-  dropped an id still in use by queued rows.
+- A `failed` row with `last_error_code = 'key_unavailable'` means dispatch found
+  a queued payload sealed under a removed key version. Its payload is erased;
+  the startup report should have named the version before the first poll.
 - A `queued` row with `attempts` at the cap lost the outcome of its last attempt,
   so no pass can retry it or finish it. It is given up on deliberately rather
   than called a fourth time, and the payload stays until the row is resolved by
@@ -511,8 +529,9 @@ FROM auth_email_recipient_rate_limits
 WHERE expires_at <= now();
 ```
 
-Keep old Email Outbox key versions until queued ciphertext no longer needs them
-and their recipient counters have expired and been removed.
+Keep old Email Outbox key versions until the queue query in
+[vault-runtime-secrets.md](vault-runtime-secrets.md) shows no queued ciphertext
+uses them and their recipient counters have expired and been removed.
 
 ## Daily email budget
 

@@ -5,10 +5,7 @@ import {
   sealed,
   unknownKeyVersionCipher,
 } from './email-delivery-poller.spec-support';
-import {
-  EmailPayloadUnknownKeyVersionError,
-  EnvelopeCipherError,
-} from './email-delivery-request.port';
+import { EnvelopeCipherError } from './email-delivery-request.port';
 import type { EmailPayloadCipherPort } from './email-delivery-request.port';
 
 function cipherThrowing(error: Error): EmailPayloadCipherPort {
@@ -83,9 +80,9 @@ describe('readEmailPayload', () => {
     ).toBe('unreadable');
   });
 
-  it('rethrows an unknown key version, so the row stays queued for an instance that holds the key', () => {
-    expect(() =>
-      readEmailPayload(unknownKeyVersionCipher(), claimed()),
-    ).toThrow(EmailPayloadUnknownKeyVersionError);
+  it('distinguishes a key version the instance does not hold from unreadable ciphertext', () => {
+    expect(readEmailPayload(unknownKeyVersionCipher(), claimed())).toBe(
+      'key_unavailable',
+    );
   });
 });
