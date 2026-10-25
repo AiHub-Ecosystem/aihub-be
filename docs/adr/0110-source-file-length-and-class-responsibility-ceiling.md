@@ -30,3 +30,7 @@ The file-length rule is enforced by `scripts/checks/check-file-size.mjs`, not by
 - it fails when the file is back under 500 lines, until the entry is removed.
 
 Each grandfathered file's `ponytail:` header links its own split issue (#960 to #965). The three by-design exemptions keep their reasons in the check and are not ratcheted.
+
+## Update (2026-10-25): no grandfathered source files remain
+
+Issue [#962](https://github.com/AiHub-Ecosystem/aihub-be/issues/962) split the last grandfathered repository. The file-size check now enforces the 500-code-line ceiling directly for every hand-written source file, with only the three by-design exemptions above.

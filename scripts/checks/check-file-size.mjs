@@ -3,10 +3,7 @@
  * Source file length ceiling (ADR-0110): hand-written source files are capped
  * at 500 code lines (blank lines and comments excluded). Composition roots,
  * single-schema configuration, and catalogues are exempt with stated reasons.
- * The existing oversized files are grandfathered behind a ratchet (#869): each
- * may shrink but never grow past its recorded count, the count must be lowered
- * when the file shrinks, and the entry must go once the file is back under the
- * ceiling. Each carries a `ponytail:` header linking its split issue.
+ * The historical grandfather list was removed when its tracked splits landed.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -53,7 +50,7 @@ function codeLines(file) {
 
 const CEILING = 500;
 
-// Exempt by design (ADR-0110); no ceiling and no ratchet.
+// Exempt by design (ADR-0110); no ceiling.
 const exempt = new Map([
   ['src/modules/identity/identity.module.ts', 'composition root'],
   [
@@ -63,30 +60,11 @@ const exempt = new Map([
   ['src/catalog/public-routes.ts', 'route catalogue'],
 ]);
 
-// Grandfathered (ADR-0110): recorded code-line count; the split is tracked in
-// the issue named in each file's `ponytail:` header.
-const grandfathered = new Map([
-  [
-    'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
-    957,
-  ],
-]);
-
 function violation(rel, lines) {
   if (exempt.has(rel)) return undefined;
-  const recorded = grandfathered.get(rel);
-  if (recorded === undefined) {
-    return lines > CEILING
-      ? `${lines} code lines exceeds the ${CEILING}-line ceiling (ADR-0110).`
-      : undefined;
-  }
-  if (lines <= CEILING)
-    return `${lines} code lines is back under the ${CEILING}-line ceiling; remove it from the grandfathered list.`;
-  if (lines > recorded)
-    return `${lines} code lines grew past its grandfathered ${recorded} (ADR-0110); split it instead of growing it.`;
-  if (lines < recorded)
-    return `${lines} code lines is below its grandfathered ${recorded}; lower the recorded count to ${lines}.`;
-  return undefined;
+  return lines > CEILING
+    ? `${lines} code lines exceeds the ${CEILING}-line ceiling (ADR-0110).`
+    : undefined;
 }
 
 let failed = false;

@@ -60,8 +60,12 @@ const allowlist = new Map([
     'reads active status for identity flows',
   ],
   [
-    'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts::user_accounts',
-    'reads account status for membership',
+    'src/modules/identity/membership/infrastructure/postgres-organization-membership-read.repository.ts::user_accounts',
+    'reads account usernames for membership roster and member list',
+  ],
+  [
+    'src/modules/identity/membership/infrastructure/postgres-organization-membership-mutation-support.ts::user_accounts',
+    'matches the exact target username while locking membership rows',
   ],
   [
     'src/modules/identity/audit/infrastructure/postgres-organization-audit-read.repository.ts::user_accounts',
