@@ -4,6 +4,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { AlwaysOnSampler } from '@opentelemetry/sdk-trace-base';
 
@@ -13,6 +14,8 @@ import {
   postgresOperationName,
   redisOperationName,
 } from './span-sanitizers';
+import { withTraceExportSignals } from './trace-exporter';
+import { TraceProcessorMetricsExporter } from './trace-processor-metrics-exporter';
 
 const configuration = getRuntimeConfiguration();
 const exporterEndpoint = configuration.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
@@ -28,7 +31,15 @@ if (exporterEndpoint !== undefined && exporterEndpoint.length > 0) {
     serviceName: configuration.OTEL_SERVICE_NAME,
     sampler: new AlwaysOnSampler(),
     textMapPropagator: new W3CTraceContextPropagator(),
-    traceExporter: new OTLPTraceExporter({ url: exporterEndpoint }),
+    traceExporter: withTraceExportSignals(
+      new OTLPTraceExporter({ url: exporterEndpoint }),
+    ),
+    metricReaders: [
+      new PeriodicExportingMetricReader({
+        exporter: new TraceProcessorMetricsExporter(),
+        exportIntervalMillis: 5_000,
+      }),
+    ],
     instrumentations: [
       new IORedisInstrumentation({
         dbStatementSerializer: redisOperationName,

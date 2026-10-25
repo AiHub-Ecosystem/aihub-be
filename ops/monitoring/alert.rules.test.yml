@@ -433,8 +433,7 @@ tests:
         exp_alerts: []
 
   # #1015: a sustained rise of the email send-rate seam fires after ten minutes
-  # of increase; a single blip, a flat counter, another seam, and a series that
-  # first appears already at 1 do not.
+  # of increase; a single blip and a flat counter do not.
   - interval: 1m
     input_series:
       - series: 'aihub_redis_unavailable_total{job="aihub-production-app",instance="a",seam="email_send_rate"}'
@@ -470,17 +469,6 @@ tests:
     input_series:
       - series: 'aihub_redis_unavailable_total{job="aihub-production-app",instance="a",seam="email_send_rate"}'
         values: "0x25"
-    alert_rule_test:
-      - eval_time: 15m
-        alertname: AIHUBEmailSendRateRedisUnavailable
-        exp_alerts: []
-
-  # Why the application exposes the seam at 0 on start: with no earlier sample,
-  # increase() reads the first answer as no increase.
-  - interval: 1m
-    input_series:
-      - series: 'aihub_redis_unavailable_total{job="aihub-production-app",instance="a",seam="email_send_rate"}'
-        values: "_x5 1x20"
     alert_rule_test:
       - eval_time: 15m
         alertname: AIHUBEmailSendRateRedisUnavailable
@@ -534,4 +522,144 @@ tests:
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-circuit-breakers
       - eval_time: 6m
         alertname: AIHUBDownstreamCircuitBreakerOpen
+        exp_alerts: []
+
+  # #237: Redis failures fire on any request-path protection seam, except the
+  # separately owned email send-rate alert; initialized counters catch first failures.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_redis_unavailable_total{job="aihub-production-app",instance="prod",seam="auth_rate_limit"}'
+        values: "0 1 1x8"
+      - series: 'aihub_redis_unavailable_total{job="aihub-sandbox-app",instance="sandbox",seam="concurrency"}'
+        values: "0 0 1 1x7"
+      - series: 'aihub_redis_unavailable_total{job="aihub-production-app",instance="prod",seam="email_send_rate"}'
+        values: "0 1 1x8"
+      - series: 'aihub_redis_unavailable_total{job="aihub-production-app",instance="prod",seam="quota"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: AIHUBRedisProtectionUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AIHUBRedisProtectionUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              seam: auth_rate_limit
+            exp_annotations:
+              summary: "An AIHUB Redis protection or cache operation failed"
+              description: "aihub-production-app could not complete a Redis operation for auth_rate_limit in the last five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-sandbox-app
+              seam: concurrency
+            exp_annotations:
+              summary: "An AIHUB Redis protection or cache operation failed"
+              description: "aihub-sandbox-app could not complete a Redis operation for concurrency in the last five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
+      - eval_time: 7m
+        alertname: AIHUBRedisProtectionUnavailable
+        exp_alerts: []
+
+  # #237: the shared PostgreSQL alert fires at 80% of max_connections and clears below it.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_postgres_snapshot_value{job="aihub-postgres",instance="postgres-exporter",metric="connections_total",database_name=""}'
+        values: "79 80 80 80 80 80 80 79"
+      - series: 'aihub_postgres_snapshot_value{job="aihub-postgres",instance="postgres-exporter",metric="max_connections",database_name=""}'
+        values: "100 100 100 100 100 100 100 100"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AIHUBPostgresConnectionsAboveBudget
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: AIHUBPostgresConnectionsAboveBudget
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-postgres
+              instance: postgres-exporter
+            exp_annotations:
+              summary: "Shared PostgreSQL connections reached 80% of max_connections"
+              description: "Connection usage is at least 80% of max_connections, the threshold recorded in ADR-0103."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#postgresql
+      - eval_time: 7m
+        alertname: AIHUBPostgresConnectionsAboveBudget
+        exp_alerts: []
+
+  # #237: alert only after sustained AIHUB traffic without service-specific
+  # Tempo span metrics; requests that stop or spans from another service stay quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod"}'
+        values: "0+1x15"
+      - series: 'traces_spanmetrics_calls_total{service="other-service",span_name="GET /health"}'
+        values: "0+1x15"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+            exp_annotations:
+              summary: "Tempo has not received AIHUB spans while requests continue"
+              description: "aihub-production-app has served requests while Tempo's service-specific span metric reports no received spans for five minutes. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+
+  - interval: 1m
+    input_series:
+      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod"}'
+        values: "0x15"
+      - series: 'aihub_requests_total{job="aihub-sandbox-app",instance="sandbox"}'
+        values: "0+1x15"
+      - series: 'traces_spanmetrics_calls_total{service="aihub-be",span_name="POST /v1/grade"}'
+        values: "0+1x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts: []
+
+  - interval: 15s
+    input_series:
+      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod"}'
+        values: "0+1x48"
+      - series: 'traces_spanmetrics_calls_total{service="aihub-be",span_name="POST /v1/grade"}'
+        values: "0 1 1+0x46"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+            exp_annotations:
+              summary: "Tempo has not received AIHUB spans while requests continue"
+              description: "aihub-production-app has served requests while Tempo's service-specific span metric reports no received spans for five minutes. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+
+  - interval: 1m
+    input_series:
+      - series: 'traces_spanmetrics_calls_total{service="other-service",span_name="GET /health"}'
+        values: "0+1x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AIHUBTraceReceiverNotReceiving
         exp_alerts: []

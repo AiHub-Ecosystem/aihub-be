@@ -19,6 +19,14 @@ The current Grafana access path remains an SSH local forward until #237 is deplo
 
 Keep these virtual hosts, their TLS renewal, source-IP allowlists, and both certificate probes in the dedicated monitoring configuration repository. Do not set the application's OTLP endpoint until DNS, certificate validation, the allowlist, and a real Sandbox trace have been verified. The exact hostnames are still pending the domain team's record creation.
 
+## Trace delivery
+
+When tracing is enabled, `/metrics` exposes the label-free counters `aihub_otel_export_failures_total` and `aihub_otel_dropped_spans_total`. The first counts failed OTLP batches; the second counts spans in failed batches and spans dropped when the bounded OpenTelemetry export queue fills. The production image enables the SDK's queue-full self-observation and bridges it into the application registry every five seconds. A failed receiver produces one safe warning log until an export succeeds; the log contains no endpoint, response body, or span data.
+
+The receive-side signal must come from Tempo's metrics-generator span metrics, remote-written to the AIHUB Prometheus with `traces_spanmetrics_calls_total{service="aihub-be"}`. `AIHUBTraceReceiverNotReceiving` fires only while the Production or Sandbox request counter is increasing and that service-specific counter is absent or flat. No application traffic is a no-alert condition. The dedicated monitoring configuration repository still needs the Tempo metrics-generator and remote-write settings before this alert can run against live samples.
+
+When it fires, check the app's OTLP failure/drop counters and safe outage log first, then DNS/TLS and the source-IP allowlist for `otel.<approved-domain>`, Tempo receiver readiness, and the metrics-generator remote-write path. Confirm recovery with a new searchable `service.name=aihub-be` trace; exporter success alone is not proof of delivery.
+
 ## Existing collectors audited
 
 | Service             | Existing behavior                                                                                                                                                                                             | AIHUB Prometheus coverage                                                                                                                  |
@@ -144,6 +152,8 @@ Use the cAdvisor `name` label to identify the affected `aihub...` container, the
 
 Compare `connections_total` with `max_connections`; investigate the shared cluster using its approved operator workflow. The exporter function exposes counts and durations only, not SQL text or per-role activity.
 
+The L.4 PostgreSQL disk alert is still blocked: the current exporter reports each AIHUB database's size, but not the shared cluster's storage capacity or free space. The host disk rule covers the AIHUB VPS filesystems, not the managed PostgreSQL volume. Do not infer an 80% storage threshold from database size alone; add a capacity signal after the database owner provides an authoritative denominator.
+
 #### Statement statistics and privacy gate
 
 The read-only production check on 2026-10-16 found PostgreSQL 16.15 with an empty `shared_preload_libraries`, `compute_query_id=auto`, and `pg_stat_statements` 1.10 available but not installed in any connectable database. PostgreSQL last started at `2026-10-12 08:11:15 UTC`. The `aihub_monitoring` login exists, is a non-superuser, and is not a member of `pg_monitor` or `pg_read_all_stats`. The database container belongs to the separate Compose project `/home/VietHXQ/aihub`; #362 has not recorded its owner contact or a change-notification agreement. Do not change or restart it without a maintenance window coordinated with every affected application owner.
@@ -159,6 +169,8 @@ Use [`postgres-statements-report.sql`](../../ops/monitoring/postgres-statements-
 ### Redis
 
 Check `redis_memory_used_bytes`, command latency, and the observed 256 MiB limit. Use the Redis operator's ACL-safe checks; do not enable key collection or `CONFIG` access to investigate an alert.
+
+`AIHUBRedisProtectionUnavailable` fires on an increase in any Production or Sandbox request-path protection/cache seam. It excludes `email_send_rate`, which has a separate 10-minute alert. Use the `seam` label to identify the failing decision, then check `redis_up` and the application's safe logs. The counters expose every bounded seam at zero from process start so Prometheus can see its first failure after a restart.
 
 ### Downstream circuit breakers
 

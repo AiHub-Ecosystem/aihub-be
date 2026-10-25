@@ -1,13 +1,33 @@
 describe('aihub_redis_unavailable_total', () => {
-  it('exposes the email send-rate seam at zero before it is ever unavailable, so its first answer is an increase', async () => {
+  it('exposes every bounded seam at zero before it is ever unavailable', async () => {
     // A fresh module, so nothing another spec recorded in the shared registry counts.
     await jest.isolateModulesAsync(async () => {
       const metrics = await import('./metrics');
       await import('./redis-unavailable-metric');
 
-      expect(await metrics.getMetrics()).toContain(
-        'aihub_redis_unavailable_total{seam="email_send_rate"} 0',
-      );
+      const samples = (await metrics.getMetrics())
+        .split('\n')
+        .filter((line) => line.startsWith('aihub_redis_unavailable_total{'));
+      expect(samples).toHaveLength(13);
+      for (const seam of [
+        'graded_admission',
+        'concurrency',
+        'rate_limit',
+        'quota',
+        'retry_budget',
+        'api_key_cache',
+        'api_key_cache_invalidation_revoke',
+        'api_key_cache_invalidation_rotate',
+        'api_key_cache_invalidation_suspension',
+        'auth_failure_counter',
+        'auth_rate_limit',
+        'jwks_cache',
+        'email_send_rate',
+      ]) {
+        expect(samples).toContain(
+          `aihub_redis_unavailable_total{seam="${seam}"} 0`,
+        );
+      }
     });
   });
 
@@ -43,12 +63,12 @@ describe('aihub_redis_unavailable_total', () => {
       const samples = (await metrics.getMetrics())
         .split('\n')
         .filter((line) => line.startsWith('aihub_redis_unavailable_total{'));
-      expect(samples).toEqual([
-        'aihub_redis_unavailable_total{seam="email_send_rate"} 0',
-        ...seams.map(
-          (seam) => `aihub_redis_unavailable_total{seam="${seam}"} 1`,
-        ),
-      ]);
+      for (const seam of seams) {
+        expect(samples).toContain(
+          `aihub_redis_unavailable_total{seam="${seam}"} 1`,
+        );
+      }
+      expect(samples).toHaveLength(13);
     });
   });
 });

@@ -80,6 +80,18 @@ groups:
           description: "Candidate threshold pending Redis owner and #412 approval."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
 
+      - alert: AIHUBRedisProtectionUnavailable
+        expr: sum by (job, seam) (increase(aihub_redis_unavailable_total{job=~"aihub-(production|sandbox)-app",seam!="email_send_rate"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "An AIHUB Redis protection or cache operation failed"
+          description: "{{ $labels.job }} could not complete a Redis operation for {{ $labels.seam }} in the last five minutes."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
+
   - name: aihub-downstream
     rules:
       - alert: AIHUBDownstreamCircuitBreakerOpen
@@ -93,6 +105,28 @@ groups:
           summary: "An AIHUB downstream circuit breaker has stayed open for two minutes"
           description: "{{ $labels.operation }} is still open in the {{ $labels.environment }} tier."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-circuit-breakers
+
+  - name: aihub-tracing
+    rules:
+      - alert: AIHUBTraceReceiverNotReceiving
+        expr: |
+          (
+            sum by (job) (increase(aihub_requests_total{job=~"aihub-(production|sandbox)-app"}[5m])) > 0
+          )
+          and on()
+          (
+            sum(increase(traces_spanmetrics_calls_total{service="aihub-be"}[1m])) == 0
+            or absent_over_time(traces_spanmetrics_calls_total{service="aihub-be"}[1m])
+          )
+        for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "Tempo has not received AIHUB spans while requests continue"
+          description: "{{ $labels.job }} has served requests while Tempo's service-specific span metric reports no received spans for five minutes. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
 
   - name: aihub-email-outbox
     rules:

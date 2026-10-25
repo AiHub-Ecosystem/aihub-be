@@ -32,6 +32,7 @@ LABEL org.opencontainers.image.source="https://github.com/AiHub-Ecosystem/aihub-
       org.opencontainers.image.revision="${VCS_REF}"
 
 ENV NODE_ENV=production \
+    OTEL_NODE_EXPERIMENTAL_SDK_METRICS=true \
     PORT=3000 \
     UV_THREADPOOL_SIZE=4
 
