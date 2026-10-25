@@ -17,7 +17,10 @@ import type {
   RevokeOrganizationInvitationInput,
   RevokeOrganizationInvitationResult,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
-import { forbidden } from '@/modules/identity/membership/application/organization-membership.authorization';
+import {
+  forbidden,
+  organizationSuspensionClosesSurface,
+} from '@/modules/identity/membership/application/organization-membership.authorization';
 
 import {
   auditStamp,
@@ -368,7 +371,7 @@ export class PostgresOrganizationInvitationRepository
         ) {
           throw identityStoreError('Identity data is invalid');
         }
-        if (organizationStatus === 'suspended') {
+        if (organizationSuspensionClosesSurface(organizationStatus)) {
           return { kind: 'organization_suspended' };
         }
 
@@ -517,7 +520,7 @@ export class PostgresOrganizationInvitationRepository
         if (organizationStatus === undefined) {
           throw identityStoreError('Identity data is invalid');
         }
-        if (organizationStatus === 'suspended') {
+        if (organizationSuspensionClosesSurface(organizationStatus)) {
           return { kind: 'organization_suspended' };
         }
 

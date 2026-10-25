@@ -69,7 +69,7 @@ const grandfathered = new Map([
   ['src/openapi/build-openapi-document.ts', 2126],
   [
     'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts',
-    958,
+    957,
   ],
   [
     'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts',

@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
+import { organizationSuspensionClosesSurface } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type {
   OrganizationRenameRecordPort,
   RenameOrganizationRecordInput,
@@ -95,7 +96,10 @@ export class PostgresOrganizationRenameRepository
 
           // Neither refusal is recorded: a disabled caller no longer belongs,
           // and suspension closes the surface for every role alike.
-          if (membershipStatus !== 'active' || status === 'suspended') {
+          if (
+            membershipStatus !== 'active' ||
+            organizationSuspensionClosesSurface(status)
+          ) {
             return { kind: 'forbidden' as const };
           }
           if (role !== 'owner') {

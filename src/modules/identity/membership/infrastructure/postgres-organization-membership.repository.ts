@@ -12,7 +12,10 @@ import type {
   OrganizationMembershipListPort,
   OrganizationMembershipListResult,
 } from '@/modules/identity/membership/application/organization-membership-list.port';
-import { forbidden } from '@/modules/identity/membership/application/organization-membership.authorization';
+import {
+  forbidden,
+  organizationSuspensionClosesSurface,
+} from '@/modules/identity/membership/application/organization-membership.authorization';
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   ORGANIZATION_MEMBERSHIP_TARGET_REFUSAL,
@@ -432,9 +435,7 @@ async function lockMutationContext(
     [input.organizationId],
   );
   const organization = organizationRows[0];
-  if (!isRecord(organization)) {
-    throw forbidden(routeDenial);
-  }
+  if (!isRecord(organization)) throw forbidden(routeDenial);
 
   const organizationId = stringValue(organization, 'id');
   const organizationStatus = organizationStatusValue(organization, 'status');
@@ -444,7 +445,7 @@ async function lockMutationContext(
   ) {
     throw identityStoreError('Identity data is invalid');
   }
-  if (organizationStatus === 'suspended') {
+  if (organizationSuspensionClosesSurface(organizationStatus)) {
     throw forbidden(routeDenial);
   }
 
@@ -485,9 +486,7 @@ function mutationDecision(
   caller: MutationMembershipRow,
   target: MutationMembershipRow | undefined,
 ): MembershipMutationDecision {
-  if (target === undefined) {
-    return undefined;
-  }
+  if (target === undefined) return undefined;
   return authorizeOrganizationMembershipMutation({
     action,
     callerUserId: caller.userId,

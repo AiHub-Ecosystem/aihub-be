@@ -3,6 +3,7 @@ import type { RequestContext } from '@/common/request-context/request-context';
 
 import {
   forbidden,
+  organizationSuspensionClosesSurface,
   requireActiveMembership,
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
@@ -47,7 +48,7 @@ export class RevokeOrganizationInvitation {
       INVITATION_REVOCATION_FORBIDDEN,
     );
 
-    if (caller.organizationStatus === 'suspended') {
+    if (organizationSuspensionClosesSurface(caller.organizationStatus)) {
       throw forbidden(INVITATION_REVOCATION_FORBIDDEN);
     }
 

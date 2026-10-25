@@ -1,6 +1,7 @@
 import type { OrganizationMembershipMutationPort } from './organization-membership-mutation.port';
 import {
   forbidden,
+  organizationSuspensionClosesSurface,
   requireActiveMembership,
 } from './organization-membership.authorization';
 import {
@@ -62,7 +63,7 @@ export class ManageOrganizationMembership
       denial,
     );
 
-    if (caller.organizationStatus === 'suspended') {
+    if (organizationSuspensionClosesSurface(caller.organizationStatus)) {
       throw forbidden(denial);
     }
   }
