@@ -261,9 +261,13 @@ export class HttpOperationTransport implements OperationTransportPort {
     private readonly retryBudget?: DownstreamRetryBudgetPort,
     private readonly random: () => number = Math.random,
   ) {
-    this.adapters = new Map(
+    const registry = new Map(
       adapters.map((adapter) => [adapter.operation, adapter]),
     );
+    if (registry.size !== adapters.length) {
+      throw new Error('Duplicate downstream adapter registration');
+    }
+    this.adapters = registry;
   }
 
   isUndelivered(error: unknown): boolean {

@@ -258,6 +258,22 @@ describe('HttpOperationDispatcher', () => {
     expect(loggerError).not.toHaveBeenCalled();
   });
 
+  it('rejects duplicate adapter operations during construction', () => {
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+
+    expect(() =>
+      createHttpOperationDispatcher(
+        httpClient,
+        new FakeTokenIssuer(),
+        [fakeGradeAdapter('/first'), fakeGradeAdapter('/second')],
+        noOpDispatchAttemptRecord,
+      ),
+    ).toThrow('Duplicate downstream adapter registration');
+  });
+
   it('maps a downstream 5xx to a retryable unified error', async () => {
     const attempts = fakeDispatchAttempts();
     mockAgent
