@@ -48,6 +48,7 @@ describe('background-completed grading billing', () => {
     requestId: string,
     deadlineMs: number,
     backgroundLifecycle?: ReturnType<typeof billBackgroundCompletion>,
+    timeoutMs = 50,
   ) {
     return {
       organizationId: 'org_acme',
@@ -56,7 +57,7 @@ describe('background-completed grading billing', () => {
       actorId: 'student_1',
       requestBody: { essay: 'same body' },
       requestId,
-      timeoutMs: 50,
+      timeoutMs,
       signal: new AbortController().signal,
       deadlineAt: new Date(Date.now() + deadlineMs),
       ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
@@ -65,8 +66,12 @@ describe('background-completed grading billing', () => {
 
   it('charges the late result once however many times it is replayed', async () => {
     let finishGrading: ((value: { score: number }) => void) | undefined;
+    let settleBackgroundCompletion: (() => void) | undefined;
     const grading = new Promise<{ score: number }>((resolve) => {
       finishGrading = resolve;
+    });
+    const backgroundSettled = new Promise<void>((resolve) => {
+      settleBackgroundCompletion = resolve;
     });
 
     const first = evidence();
@@ -80,7 +85,9 @@ describe('background-completed grading billing', () => {
             receivedAt: new Date(),
             evidence: first,
             finalizer: metering,
+            onCompletionSettled: () => settleBackgroundCompletion?.(),
           }),
+          1_000,
         ),
         () => grading,
         (value) => value as { score: number },
@@ -95,7 +102,7 @@ describe('background-completed grading billing', () => {
     });
 
     finishGrading?.({ score: 7 });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await backgroundSettled;
 
     for (const requestId of ['req_retry_1', 'req_retry_2']) {
       const replay = await idempotency.execute(
