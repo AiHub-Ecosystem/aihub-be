@@ -6,7 +6,7 @@ import type {
 } from '@/catalog/operation-catalog';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
-import type { PublicRouteId } from '@/catalog/public-routes';
+import type { PublicRouteDef, PublicRouteId } from '@/catalog/public-routes';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { ERROR_CODES, type ErrorCode } from '@/common/errors/error-code';
 import {
@@ -136,7 +136,7 @@ export function routeIdentityScopeOf(
 export function routeReplayHeaderOf(
   routeId: PublicRouteId,
   description: string,
-): Record<string, unknown> {
+): { readonly headers?: Readonly<Record<string, unknown>> } {
   if (PUBLIC_ROUTES[routeId].idempotency === 'none') {
     return {};
   }
@@ -327,7 +327,10 @@ export function operationToPathItem(
   return {
     [operation.method.toLowerCase()]: {
       operationId,
-      summary: operationId,
+      summary: operation.openApi.summary,
+      ...(operation.openApi.description === undefined
+        ? {}
+        : { description: operation.openApi.description }),
       'x-required-scope': operation.requiredScope,
       'x-identity-scope': operation.identityScope,
       'x-idempotency': operation.idempotency,
@@ -340,6 +343,97 @@ export function operationToPathItem(
         },
       },
       responses,
+      ...operation.openApi.extensions,
+    },
+  };
+}
+
+export function publicRouteToPathItem(
+  routeId: PublicRouteId,
+): Record<string, unknown> {
+  const route: PublicRouteDef = PUBLIC_ROUTES[routeId];
+  const metadata = route.openApi;
+  if (metadata === undefined) {
+    throw new Error(`${routeId} has no OpenAPI operation metadata`);
+  }
+
+  const parameters = [
+    ...(metadata.includeCorrelationId === false
+      ? []
+      : [{ $ref: '#/components/parameters/CorrelationId' }]),
+    ...(route.idempotency === 'none'
+      ? []
+      : [idempotencyKeyParameter(route.idempotency)]),
+    ...(route.publishedIdentityScope === 'user'
+      ? [{ $ref: '#/components/parameters/UserIdentity' }]
+      : []),
+    ...(metadata.parameters ?? []),
+  ];
+  const successResponse = (
+    description: string,
+    responseHeaders?: Readonly<Record<string, unknown>>,
+    includeReplayHeader = false,
+  ): Record<string, unknown> => {
+    const headers = {
+      ...responseHeaders,
+      ...(includeReplayHeader && metadata.replayHeaderDescription !== undefined
+        ? routeReplayHeaderOf(routeId, metadata.replayHeaderDescription).headers
+        : {}),
+    };
+    return {
+      description,
+      ...(Object.keys(headers).length === 0 ? {} : { headers }),
+      ...(route.responseSchema === null
+        ? {}
+        : {
+            content: {
+              'application/json': {
+                schema: routeSchemaOf(routeId, 'response'),
+              },
+            },
+          }),
+    };
+  };
+  const responses: Record<string, unknown> = {
+    [routeSuccessKeyOf(routeId)]: successResponse(
+      metadata.successDescription,
+      metadata.successHeaders,
+      true,
+    ),
+  };
+  for (const alternate of metadata.alternateSuccessResponses ?? []) {
+    responses[String(alternate.status)] = successResponse(
+      alternate.description,
+      alternate.headers,
+    );
+  }
+  Object.assign(responses, routeErrorResponsesOf(routeId));
+
+  return {
+    [route.method.toLowerCase()]: {
+      operationId: routeId,
+      summary: metadata.summary,
+      ...(metadata.description === undefined
+        ? {}
+        : { description: metadata.description }),
+      ...routeIdentityScopeOf(routeId),
+      ...routeIdempotencyExtensionsOf(routeId),
+      ...routeSecurityOf(routeId),
+      parameters,
+      ...(route.requestSchema === null
+        ? {}
+        : {
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: routeSchemaOf(routeId, 'request'),
+                },
+              },
+            },
+          }),
+      responses,
+      ...metadata.extensions,
     },
   };
 }

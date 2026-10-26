@@ -1,6 +1,10 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS } from '@/catalog/operation-id';
-import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
+import {
+  PUBLIC_ROUTES,
+  type PublicRouteDef,
+  type PublicRouteId,
+} from '@/catalog/public-routes';
 import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/common/http/client-secret-header';
 import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import { OrganizationIdSchema } from '@/contracts/organization/organization-id';
@@ -8,38 +12,15 @@ import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie'
 import { buildErrorResponses } from './openapi-error-responses';
 import { localAuthPathItems } from './openapi-local-auth-path-items';
 import {
-  organizationAuditEventPathItem,
-  organizationIdentityConfigPathItem,
-  organizationMembershipListPathItem,
-  organizationMembershipMutationPathItem,
-  organizationMembershipTransferPathItem,
-  organizationRosterPathItem,
-} from './openapi-organization-access-path-items';
-import {
-  organizationApiKeyItemPathItem,
-  organizationApiKeyPathItem,
-  organizationApiKeyRotatePathItem,
-  organizationInvitationAcceptPathItem,
-  organizationInvitationItemPathItem,
-  organizationInvitationPathItem,
-  organizationItemPathItem,
-  organizationPathItem,
-} from './openapi-organization-path-items';
-import {
-  avatarCompletePathItem,
-  avatarItemPathItem,
-  avatarUploadPathItem,
   sandboxAssertionPathItem,
   sandboxDemoKeyValidationPathItem,
-  speakingAudioUploadPathItems,
-  speakingQuestionsPathItem,
-  writingChartUploadPathItems,
-} from './openapi-product-path-items';
+} from './openapi-sandbox-path-items';
 import {
   CORRELATION_ID_PARAMETER,
   USER_IDENTITY_PARAMETER,
   errorsByStatus,
   operationToPathItem,
+  publicRouteToPathItem,
   routePathOf,
 } from './openapi-shared';
 import { webSessionPathItems } from './openapi-web-session-path-items';
@@ -50,6 +31,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function addPublicRoute(
+  paths: Record<string, unknown>,
+  routeId: PublicRouteId,
+): void {
+  const path = routePathOf(routeId);
+  paths[path] = {
+    ...(isRecord(paths[path]) ? paths[path] : {}),
+    ...publicRouteToPathItem(routeId),
+  };
+}
+
+// Manual because a generated HEAD operation needs bodyless copies of each GET response.
 function addHeadOperations(paths: Record<string, unknown>): void {
   for (const pathItem of Object.values(paths)) {
     if (!isRecord(pathItem) || !isRecord(pathItem.get) || pathItem.head) {
@@ -103,38 +96,35 @@ export function buildOpenApiDocument(version: string): unknown {
     sandboxAssertionPathItem(groupedErrors);
   paths[routePathOf('sandbox.demo-key.validate')] =
     sandboxDemoKeyValidationPathItem(groupedErrors);
-  paths[routePathOf('speaking.questions')] = speakingQuestionsPathItem();
-  Object.assign(paths, speakingAudioUploadPathItems());
-  Object.assign(paths, writingChartUploadPathItems());
-  paths[routePathOf('me.avatar.uploads.create')] = avatarUploadPathItem();
-  paths[routePathOf('me.avatar.uploads.complete')] = avatarCompletePathItem();
-  paths[routePathOf('me.avatar.remove')] = avatarItemPathItem();
-  paths[routePathOf('organizations.create')] = organizationPathItem();
-  paths[routePathOf('organizations.rename')] = organizationItemPathItem();
-  paths[routePathOf('organizations.me.members.list')] =
-    organizationRosterPathItem();
-  paths[routePathOf('organizations.members.list')] =
-    organizationMembershipListPathItem();
-  paths[routePathOf('organizations.invitations.list')] =
-    organizationInvitationPathItem();
-  paths[routePathOf('organizations.invitations.revoke')] =
-    organizationInvitationItemPathItem();
-  paths[routePathOf('organizations.invitations.accept')] =
-    organizationInvitationAcceptPathItem();
-  paths[routePathOf('organizations.members.change_role')] =
-    organizationMembershipMutationPathItem();
-  paths[routePathOf('organizations.members.transfer')] =
-    organizationMembershipTransferPathItem();
-  paths[routePathOf('organizations.apiKeys.list')] =
-    organizationApiKeyPathItem();
-  paths[routePathOf('organizations.apiKeys.revoke')] =
-    organizationApiKeyItemPathItem();
-  paths[routePathOf('organizations.apiKeys.rotate')] =
-    organizationApiKeyRotatePathItem();
-  paths[routePathOf('organizations.identityConfig.read')] =
-    organizationIdentityConfigPathItem();
-  paths[routePathOf('organizations.auditEvents.list')] =
-    organizationAuditEventPathItem();
+  addPublicRoute(paths, 'speaking.questions');
+  addPublicRoute(paths, 'speaking.audioUploads.create');
+  addPublicRoute(paths, 'speaking.audioUploads.refresh');
+  addPublicRoute(paths, 'speaking.audioUploads.complete');
+  addPublicRoute(paths, 'writing.chartUploads.create');
+  addPublicRoute(paths, 'writing.chartUploads.refresh');
+  addPublicRoute(paths, 'writing.chartUploads.complete');
+  addPublicRoute(paths, 'me.avatar.uploads.create');
+  addPublicRoute(paths, 'me.avatar.uploads.complete');
+  addPublicRoute(paths, 'me.avatar.read');
+  addPublicRoute(paths, 'me.avatar.remove');
+  addPublicRoute(paths, 'organizations.create');
+  addPublicRoute(paths, 'organizations.rename');
+  addPublicRoute(paths, 'organizations.me.members.list');
+  addPublicRoute(paths, 'organizations.members.list');
+  addPublicRoute(paths, 'organizations.invitations.list');
+  addPublicRoute(paths, 'organizations.invitations.create');
+  addPublicRoute(paths, 'organizations.invitations.revoke');
+  addPublicRoute(paths, 'organizations.invitations.accept');
+  addPublicRoute(paths, 'organizations.members.change_role');
+  addPublicRoute(paths, 'organizations.members.disable');
+  addPublicRoute(paths, 'organizations.members.transfer');
+  addPublicRoute(paths, 'organizations.apiKeys.list');
+  addPublicRoute(paths, 'organizations.apiKeys.create');
+  addPublicRoute(paths, 'organizations.apiKeys.revoke');
+  addPublicRoute(paths, 'organizations.apiKeys.rotate');
+  addPublicRoute(paths, 'organizations.identityConfig.set');
+  addPublicRoute(paths, 'organizations.identityConfig.read');
+  addPublicRoute(paths, 'organizations.auditEvents.list');
   Object.assign(paths, localAuthPathItems());
   Object.assign(paths, webSessionPathItems());
   addHeadOperations(paths);

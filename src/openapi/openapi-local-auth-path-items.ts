@@ -63,6 +63,7 @@ export function publishedLocalAuthRequestSchema(schema: TSchema): TSchema {
   );
 }
 
+// Manual: the shared builder cannot model refresh-cookie 401s, MFA responses, and Set-Cookie headers.
 export function localAuthPathItems(): Record<string, Record<string, unknown>> {
   // Keep auth responses intentionally narrow: these routes do not carry API
   // key, assertion, downstream, or idempotency behavior. The success status,
