@@ -10,10 +10,16 @@ the server validates against. This guide is the surrounding context.
 
 ## Compatibility promise
 
-Within an API version, adding a public route or a response field is additive
-when existing fields keep their meaning and type. Clients must ignore response
-fields they do not recognize and must not reject a response only because it
-contains an extra field.
+The URI major version applies to the whole Public API Contract. All current
+customer API routes use `/v1`. Within a major, adding a public route or response
+field is additive when existing fields keep their meaning and type. Adding an
+optional request field is compatible when existing callers can omit it. AIHUB
+documents a new optional request field for client use only after the deployed
+release and its normal rollback target both accept it. Request bodies continue
+to reject unknown fields.
+
+Clients must ignore response fields they do not recognize and must not reject a
+response only because it contains an extra field.
 
 Response enum values are closed unless their OpenAPI schema has
 `x-extensible-enum`. AIHUB may add values to `error.code` and Organization Audit
@@ -27,6 +33,10 @@ Removing or renaming a route or existing field, making a request field
 required, narrowing accepted request values, changing an existing field's type
 or meaning, removing a response enum value, or adding a value to a closed
 response enum is breaking and may require customer changes.
+
+AIHUB introduces a new URI major only for a breaking contract change. A
+compatible release stays on the current major; it does not create a duplicate
+major with the same contract.
 
 \nAIHUB sets a baseline Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, and Referrer-Policy: no-referrer on every response.\n
 Every grading request needs an `X-User-Identity` value, but a JWKS is optional.
@@ -1228,4 +1238,11 @@ and when it is resolved. AIHUB has no public status page.
 
 ## Deprecation headers
 
-A route slated to retire publishes `Deprecation`, `Sunset`, and a `Link: rel="successor-version"` header. A client that sees them should migrate to the successor before the sunset date; after that date the route may stop responding.
+A route or major slated to retire publishes `Deprecation`, `Sunset`, and a
+`Link: rel="successor-version"` header. AIHUB keeps a superseded major available
+for at least 12 months after its successor is released and publishes the sunset
+date with that release. Before sunset, AIHUB reviews customer traffic and
+contacts affected Organizations. If customers are still migrating, the sunset
+may be extended by an explicit owner decision and a newly published date.
+Requests to a retired major return `410 Gone` with the standard error envelope
+and successor information.
