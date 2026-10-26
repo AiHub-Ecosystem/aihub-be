@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { touchesIssue } from './issue-triage-hook.mjs';
+import { commandFromInput, touchesIssue } from './issue-triage-hook.mjs';
 
 await test('fires on commands that file or edit an issue', () => {
   assert.equal(
@@ -16,6 +16,15 @@ await test('fires on commands that file or edit an issue', () => {
   );
   assert.equal(touchesIssue('gh issue view 1'), false);
   assert.equal(touchesIssue('gh issue comment 1 --body-file b.md'), false);
+});
+
+await test('reads only string commands from the hook input', () => {
+  assert.equal(
+    commandFromInput({ tool_input: { command: 'gh issue create' } }),
+    'gh issue create',
+  );
+  assert.equal(commandFromInput({ tool_input: { command: 42 } }), '');
+  assert.equal(commandFromInput(null), '');
 });
 
 await test('exits silently for any other command without calling GitHub', () => {

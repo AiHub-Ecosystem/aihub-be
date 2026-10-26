@@ -155,11 +155,18 @@ describe('buildOpenApiDocument', () => {
   it('publishes Organization ID syntax on every Organization path route', () => {
     const document = build();
 
-    expect(document.components.schemas.OrganizationId).toMatchObject({
+    const organizationIdSchema = document.components.schemas.OrganizationId;
+    expect(organizationIdSchema).toMatchObject({
       type: 'string',
       pattern: '^org_[A-Za-z0-9][A-Za-z0-9_-]*$',
-      description: expect.stringContaining('Organization ID'),
     });
+    if (
+      !isRecord(organizationIdSchema) ||
+      typeof organizationIdSchema.description !== 'string'
+    ) {
+      throw new Error('OrganizationId schema has no description');
+    }
+    expect(organizationIdSchema.description).toContain('Organization ID');
 
     for (const route of Object.values(PUBLIC_ROUTES)) {
       if (route.organizationResolution !== 'path') continue;
@@ -642,13 +649,16 @@ describe('buildOpenApiDocument', () => {
     // would send something no parameter here accepts.
     expect(named('action')?.explode).toBe(true);
     expect(named('action')?.style).toBe('form');
-    expect(named('action')?.schema).toEqual({
-      type: 'array',
-      items: {
-        type: 'string',
-        enum: expect.arrayContaining(['api_key.revoked']),
-      },
-    });
+    const actionSchema = named('action')?.schema;
+    expect(actionSchema).toMatchObject({ type: 'array' });
+    if (
+      !isRecord(actionSchema) ||
+      !isRecord(actionSchema.items) ||
+      !Array.isArray(actionSchema.items.enum)
+    ) {
+      throw new Error('audit action schema has no enum');
+    }
+    expect(actionSchema.items.enum).toContain('api_key.revoked');
     expect(named('outcome')?.schema).toEqual({
       type: 'string',
       enum: ['applied', 'denied'],
@@ -1099,14 +1109,14 @@ describe('buildOpenApiDocument', () => {
     );
 
     expect(names).toContain('Idempotency-Key');
-    expect(
-      operation?.parameters.find(
-        (parameter) => parameter.name === 'Idempotency-Key',
-      ),
-    ).toMatchObject({
-      required: false,
-      description: expect.stringContaining('Ignored'),
-    });
+    const idempotencyKey = operation?.parameters.find(
+      (parameter) => parameter.name === 'Idempotency-Key',
+    );
+    expect(idempotencyKey).toMatchObject({ required: false });
+    if (typeof idempotencyKey?.description !== 'string') {
+      throw new Error('Speaking Idempotency-Key has no description');
+    }
+    expect(idempotencyKey.description).toContain('Ignored');
   });
 
   it('marks Idempotency-Key required for grading operations', () => {
@@ -1244,12 +1254,6 @@ describe('buildOpenApiDocument', () => {
                   retryable: { type: 'boolean' },
                   retry_after_ms: { type: 'integer', minimum: 0 },
                 },
-                required: expect.arrayContaining([
-                  'code',
-                  'message',
-                  'request_id',
-                  'retryable',
-                ]),
               },
             },
           },
@@ -1270,6 +1274,11 @@ describe('buildOpenApiDocument', () => {
         };
       };
     };
+    expect(
+      schema.content['application/json'].schema.properties.error.required,
+    ).toEqual(
+      expect.arrayContaining(['code', 'message', 'request_id', 'retryable']),
+    );
     expect(
       schema.content['application/json'].schema.properties.error.required,
     ).not.toContain('retry_after_ms');

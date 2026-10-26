@@ -6,6 +6,7 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 import sharp from 'sharp';
 import { MockAgent } from 'undici';
 
@@ -13,6 +14,10 @@ import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import {
+  WritingChartAssetResponseSchema,
+  WritingChartUploadGrantResponseSchema,
+} from '@/contracts/writing/chart-upload';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
@@ -50,6 +55,21 @@ const FIXTURES = join(__dirname, '../fixtures/ai-writing');
 const task1 = JSON.parse(
   readFileSync(join(FIXTURES, 'grade-task1.request.json'), 'utf8'),
 ) as { question: string; url: string; topic: string; essay: string };
+
+function uploadGrant(response: { json(): unknown }) {
+  return Value.Parse(WritingChartUploadGrantResponseSchema, response.json());
+}
+
+function chartAsset(response: { json(): unknown }) {
+  return Value.Parse(WritingChartAssetResponseSchema, response.json());
+}
+
+function rawResponseFixture(): unknown {
+  const parsed: unknown = JSON.parse(
+    readFileSync(join(FIXTURES, 'grade-task1.response.json'), 'utf8'),
+  );
+  return parsed;
+}
 
 const VALID_CHART_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC',
@@ -427,7 +447,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       headers: headers(),
       payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
-    const assetId = String(created.json().data.asset_id);
+    const assetId = uploadGrant(created).data.asset_id;
     const timeout = jest
       .spyOn(AbortSignal, 'timeout')
       .mockReturnValue(
@@ -468,7 +488,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     });
     expect(create.statusCode).toBe(201);
     expect(create.headers['cache-control']).toBe('no-store');
-    const grant = create.json().data;
+    const grant = uploadGrant(create).data;
     expect(grant).toMatchObject({
       method: 'POST',
       fields: { 'Content-Type': 'image/png' },
@@ -498,9 +518,10 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       headers: headers(),
     });
     expect(complete.statusCode).toBe(200);
-    const imageUrl = complete.json().data.image_url as string;
+    const completedAsset = chartAsset(complete).data;
+    const imageUrl = completedAsset.image_url;
     expect(imageUrl).toBe(`https://charts.example.net/${intent.publishedKey}`);
-    expect(complete.json().data.expires_at).toBe('2026-10-15T00:00:00.000Z');
+    expect(completedAsset.expires_at).toBe('2026-10-15T00:00:00.000Z');
     expect(storage.published).toEqual([intent.publishedKey]);
     expect(storage.publishedObjects.get(intent.publishedKey)).not.toEqual(
       chartBytes().bytes,
@@ -520,11 +541,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
         }),
         headers: { authorization: 'Bearer writing-token' },
       })
-      .reply(200, () =>
-        JSON.parse(
-          readFileSync(join(FIXTURES, 'grade-task1.response.json'), 'utf8'),
-        ),
-      );
+      .reply(200, rawResponseFixture);
     const grade = await app.inject({
       method: 'POST',
       url: '/v1/ielts/writing/task1/grade',
@@ -539,7 +556,9 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
         image_url: imageUrl,
       },
     });
-    expect(grade.json()).toMatchObject({ data: { overall_band: 7 } });
+    expect(grade.json<unknown>()).toMatchObject({
+      data: { overall_band: 7 },
+    });
   });
 
   it('rejects bytes that do not match the declared content before publishing', async () => {
@@ -549,7 +568,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       headers: headers(),
       payload: { content_type: 'image/png', byte_size: chartBytes().byteSize },
     });
-    const assetId = create.json().data.asset_id as string;
+    const assetId = uploadGrant(create).data.asset_id;
     const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
     const invalidImage = new Uint8Array(chartBytes().byteSize).fill(0x20);
     invalidImage.set(new TextEncoder().encode('<html>not an image</html>'));
@@ -577,7 +596,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       headers: headers(),
       payload: { content_type: 'image/webp', byte_size: source.byteLength },
     });
-    const assetId = create.json().data.asset_id as string;
+    const assetId = uploadGrant(create).data.asset_id;
     const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
     storage.upload(
       intent.stagingKey,
@@ -625,7 +644,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
         byte_size: chartBytes().byteSize,
       },
     });
-    const assetId = create.json().data.asset_id as string;
+    const assetId = uploadGrant(create).data.asset_id;
     const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
     storage.upload(intent.stagingKey);
 
@@ -638,7 +657,9 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     const responses = await Promise.all([complete(), complete()]);
 
     expect(responses.map(({ statusCode }) => statusCode)).toEqual([200, 200]);
-    expect(responses[0]?.json().data).toEqual(responses[1]?.json().data);
+    expect(responses[0] && chartAsset(responses[0]).data).toEqual(
+      responses[1] && chartAsset(responses[1]).data,
+    );
     expect(storage.published).toEqual([intent.publishedKey]);
   });
 
@@ -655,7 +676,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
             byte_size: chartBytes().byteSize,
           },
         });
-        const assetId = create.json().data.asset_id as string;
+        const assetId = uploadGrant(create).data.asset_id;
         const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
         storage.upload(intent.stagingKey);
         return assetId;

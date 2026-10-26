@@ -18,11 +18,25 @@ type DeployTargetGuard = {
   }) => void;
 };
 
-const {
-  classifyDeployTarget,
-  parseActiveRevisions,
-  validateDeployTarget,
-}: DeployTargetGuard = require('./deploy-target-guard.cjs');
+function isDeployTargetGuard(value: unknown): value is DeployTargetGuard {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'classifyDeployTarget' in value &&
+    typeof value.classifyDeployTarget === 'function' &&
+    'parseActiveRevisions' in value &&
+    typeof value.parseActiveRevisions === 'function' &&
+    'validateDeployTarget' in value &&
+    typeof value.validateDeployTarget === 'function'
+  );
+}
+
+const deployTargetGuard: unknown = require('./deploy-target-guard.cjs');
+if (!isDeployTargetGuard(deployTargetGuard)) {
+  throw new Error('deploy-target-guard.cjs exports are invalid');
+}
+const { classifyDeployTarget, parseActiveRevisions, validateDeployTarget } =
+  deployTargetGuard;
 
 let repository: string;
 let oldSha: string;

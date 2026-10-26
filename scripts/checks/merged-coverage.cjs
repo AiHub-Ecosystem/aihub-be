@@ -21,7 +21,19 @@ const {
 const path = require('node:path');
 const process = require('node:process');
 
-const coverageLibrary = require('istanbul-lib-coverage');
+/** @typedef {import('./merged-coverage.cjs').CoverageMetricSummary} CoverageMetricSummary */
+/** @typedef {import('./merged-coverage.cjs').CoverageTotals} CoverageTotals */
+/** @typedef {import('./merged-coverage.cjs').CoverageReport} CoverageReport */
+/** @typedef {{branches: CoverageMetricSummary, lines: CoverageMetricSummary}} FileCoverageSummary */
+/** @typedef {{files: () => string[], fileCoverageFor: (filePath: string) => {toJSON: () => unknown, toSummary: () => FileCoverageSummary}, merge: (map: CoverageMap) => void, getCoverageSummary: () => {toJSON: () => CoverageTotals}}} CoverageMap */
+/** @typedef {{createCoverageMap: (value: unknown) => CoverageMap}} CoverageLibrary */
+/** @typedef {{name: string, report: string, missing: true} | {name: string, report: string, missing: false, map: CoverageMap}} CoverageLane */
+/** @typedef {{file: string, branchTotal: number, branchCovered: number, branchPercent: number | null, linePercent: number | null, highConsequence: boolean}} BranchGap */
+/** @typedef {'lines' | 'branches' | 'statements' | 'functions'} CoverageMetric */
+
+const coverageLibrary = /** @type {CoverageLibrary} */ (
+  require('istanbul-lib-coverage')
+);
 
 /**
  * The agreed margin, in percentage points, and why it is that number.
@@ -57,6 +69,7 @@ const BASELINE_PATH = 'test/coverage-baseline.json';
  * stand would compare two different definitions of the denominator, so both are
  * narrowed to production code before anything is added up (#320).
  */
+/** @param {string} relativePath */
 function isProductionCode(relativePath) {
   return (
     !relativePath.endsWith('.spec.ts') &&
@@ -65,7 +78,9 @@ function isProductionCode(relativePath) {
   );
 }
 
+/** @param {CoverageMap} map @param {string} root @returns {CoverageMap} */
 function productionOnly(map, root) {
+  /** @type {Record<string, unknown>} */
   const entries = {};
   for (const filePath of map.files()) {
     const relativePath = path.relative(root, filePath).replaceAll('\\', '/');
@@ -76,6 +91,7 @@ function productionOnly(map, root) {
   return coverageLibrary.createCoverageMap(entries);
 }
 
+/** @param {Pick<CoverageTotals, 'branches'>} summary */
 function branchPercent(summary) {
   return summary.branches.total === 0
     ? null
@@ -90,15 +106,30 @@ function branchPercent(summary) {
  * A missing baseline fails outright: certifying coverage against nothing is the
  * one outcome that must never read as a pass.
  */
+/**
+ * @param {CoverageReport | null | undefined} baseline
+ * @param {CoverageReport | undefined} current
+ * @param {number} [marginPoints]
+ * @returns {import('./merged-coverage.cjs').CoverageComparison}
+ */
 function compareCoverage(
   baseline,
   current,
   marginPoints = DEFAULT_MARGIN_POINTS,
 ) {
   const hasBaseline = baseline !== undefined && baseline !== null;
+  /** @type {import('./merged-coverage.cjs').CoverageFinding[]} */
   const findings = [];
-  for (const metric of ['lines', 'branches', 'statements', 'functions']) {
-    const before = hasBaseline ? baseline[metric] : undefined;
+  for (const metric of /** @type {const} */ ([
+    'lines',
+    'branches',
+    'statements',
+    'functions',
+  ])) {
+    const before =
+      baseline === undefined || baseline === null
+        ? undefined
+        : baseline[metric];
     const after = current === undefined ? undefined : current[metric];
     if (before === undefined || after === undefined) {
       findings.push({
@@ -125,12 +156,17 @@ function compareCoverage(
   };
 }
 
+/** @param {string} root @param {{name: string, report: string}} lane @returns {CoverageLane} */
 function loadLane(root, lane) {
   const reportPath = path.join(root, lane.report);
   if (!existsSync(reportPath)) {
     return { ...lane, missing: true };
   }
+  /** @type {unknown} */
   const parsed = JSON.parse(readFileSync(reportPath, 'utf8'));
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${lane.name} coverage report must be a JSON object`);
+  }
   if (Object.keys(parsed).length === 0) {
     return { ...lane, missing: true };
   }
@@ -141,10 +177,20 @@ function loadLane(root, lane) {
   };
 }
 
+/** @param {number | null} value */
+/** @param {number | null | undefined} value */
 function formatPercent(value) {
-  return value === null ? ' n/a' : `${value.toFixed(1)}%`;
+  return value == null ? ' n/a' : `${value.toFixed(1)}%`;
 }
 
+/** @param {unknown} value @returns {value is string[]} */
+function isStringArray(value) {
+  return (
+    Array.isArray(value) && value.every((lane) => typeof lane === 'string')
+  );
+}
+
+/** @param {string} root @param {CoverageMap} map @param {number} limit @returns {BranchGap[]} */
 function branchGaps(root, map, limit) {
   return map
     .files()
@@ -176,13 +222,52 @@ function branchGaps(root, map, limit) {
     .slice(0, limit);
 }
 
-function readBaseline(root) {
-  const baselinePath = path.join(root, BASELINE_PATH);
-  return existsSync(baselinePath)
-    ? JSON.parse(readFileSync(baselinePath, 'utf8'))
-    : undefined;
+/** @param {unknown} value @returns {CoverageReport} */
+function parseCoverageReport(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('coverage baseline must be a JSON object');
+  }
+  const report = /** @type {Record<string, unknown>} */ (value);
+  /** @param {CoverageMetric} metric */
+  const readMetric = (metric) => {
+    const amount = report[metric];
+    if (
+      amount !== undefined &&
+      (typeof amount !== 'number' || !Number.isFinite(amount))
+    ) {
+      throw new Error(`coverage baseline ${metric} must be a finite number`);
+    }
+    return amount;
+  };
+  const marginPoints = report.marginPoints;
+  if (
+    marginPoints !== undefined &&
+    (typeof marginPoints !== 'number' || !Number.isFinite(marginPoints))
+  ) {
+    throw new Error('coverage baseline marginPoints must be a finite number');
+  }
+  const recordedLanes = report.recordedLanes;
+  if (recordedLanes !== undefined && !isStringArray(recordedLanes)) {
+    throw new Error('coverage baseline recordedLanes must be a string array');
+  }
+  return {
+    lines: readMetric('lines'),
+    branches: readMetric('branches'),
+    statements: readMetric('statements'),
+    functions: readMetric('functions'),
+    ...(marginPoints === undefined ? {} : { marginPoints }),
+    ...(recordedLanes === undefined ? {} : { recordedLanes }),
+  };
 }
 
+/** @param {string} root @returns {CoverageReport | undefined} */
+function readBaseline(root) {
+  const baselinePath = path.join(root, BASELINE_PATH);
+  if (!existsSync(baselinePath)) return undefined;
+  return parseCoverageReport(JSON.parse(readFileSync(baselinePath, 'utf8')));
+}
+
+/** @param {CoverageTotals} totals @returns {CoverageReport} */
 function mergedPercentages(totals) {
   return {
     lines: (100 * totals.lines.covered) / totals.lines.total,
@@ -192,6 +277,7 @@ function mergedPercentages(totals) {
   };
 }
 
+/** @param {readonly string[]} [argv] @param {string} [root] */
 function main(argv = process.argv.slice(2), root = process.cwd()) {
   const shouldCheck = argv.includes('--check');
   const shouldWriteBaseline = argv.includes('--write-baseline');
@@ -214,7 +300,9 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
     return 1;
   }
 
-  const merged = productionOnly(present[0].map, root);
+  const firstLane = present[0];
+  if (firstLane === undefined) return 1;
+  const merged = productionOnly(firstLane.map, root);
   for (const lane of present.slice(1)) {
     merged.merge(productionOnly(lane.map, root));
   }
@@ -235,7 +323,12 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
   }
 
   console.log('\n  metric        merged');
-  for (const metric of ['statements', 'branches', 'functions', 'lines']) {
+  for (const metric of /** @type {const} */ ([
+    'statements',
+    'branches',
+    'functions',
+    'lines',
+  ])) {
     const entry = totals[metric];
     console.log(
       `  ${metric.padEnd(12)} ${formatPercent((100 * entry.covered) / entry.total)} (${entry.covered}/${entry.total})`,
@@ -326,4 +419,5 @@ module.exports = {
   compareCoverage,
   isProductionCode,
   main,
+  parseCoverageReport,
 };

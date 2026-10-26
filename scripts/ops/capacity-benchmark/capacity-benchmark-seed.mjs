@@ -7,8 +7,26 @@ import argon2 from 'argon2';
 import { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import apiKeyModule from '../../../dist/modules/identity/api-keys/application/organization-api-key-generator.js';
+/** @typedef {{id: string, raw: string, hash: string, prefix: string}} GeneratedApiKey */
+/** @typedef {{generateApiKey: (id: string) => GeneratedApiKey}} ApiKeyGeneratorModule */
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
 
+/** @param {unknown} value @returns {value is ApiKeyGeneratorModule} */
+function isApiKeyGeneratorModule(value) {
+  return isRecord(value) && typeof value.generateApiKey === 'function';
+}
+
+const apiKeyModule = /** @type {unknown} */ (
+  await import(
+    '../../../dist/modules/identity/api-keys/application/organization-api-key-generator.js'
+  )
+);
+if (!isApiKeyGeneratorModule(apiKeyModule)) {
+  throw new Error('API key generator is unavailable');
+}
 const { generateApiKey } = apiKeyModule;
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -28,6 +46,7 @@ if (databaseUrl === undefined || organizationCount < 2 || userCount < 1) {
   throw new Error('invalid benchmark seed configuration');
 }
 
+/** @param {string | undefined} value @param {number} fallback */
 function positiveInteger(value, fallback) {
   if (value === undefined) return fallback;
   if (!/^\d+$/.test(value))
@@ -39,10 +58,12 @@ function positiveInteger(value, fallback) {
   return parsed;
 }
 
+/** @returns {string} */
 function token() {
   return randomBytes(32).toString('base64url');
 }
 
+/** @param {string} value @returns {string} */
 function hash(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
@@ -55,7 +76,9 @@ const passwordHash = await argon2.hash(password, {
   timeCost: 3,
   parallelism: 1,
 });
+/** @type {Array<{id: string, apiKey: string}>} */
 const organizations = [];
+/** @type {Array<{email: string, userId: string, password: string, refreshToken: string, webSessionToken: string}>} */
 const users = [];
 const pool = new Pool({ connectionString: databaseUrl, max: 4 });
 

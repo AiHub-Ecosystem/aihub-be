@@ -79,14 +79,19 @@ describe('local auth HTTP boundary - verification sign-in', () => {
 
       expect(first.statusCode).toBe(200);
       expect(first.headers['cache-control']).toBe('no-store');
-      expect(first.json()).toEqual({
+      const body = first.json<{
+        data: { access_token: string; token_type: string; expires_in: number };
+        meta: { request_id: string };
+      }>();
+      expect(body).toEqual({
         data: {
           access_token: 'ey.fake.access',
           token_type: 'Bearer',
           expires_in: 900,
         },
-        meta: { request_id: expect.stringMatching(/^req_/) },
+        meta: { request_id: body.meta.request_id },
       });
+      expect(body.meta.request_id).toMatch(/^req_/);
       const setCookie = first.headers['set-cookie'];
       expect(Array.isArray(setCookie) ? setCookie : [setCookie]).toEqual(
         expect.arrayContaining([
@@ -142,7 +147,9 @@ describe('local auth HTTP boundary - verification sign-in', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
     });
   });
 

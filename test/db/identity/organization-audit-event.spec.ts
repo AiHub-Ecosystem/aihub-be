@@ -234,7 +234,9 @@ describe('organization audit trail read against PostgreSQL', () => {
     return new PostgresOrganizationAuditReadRepository(
       prismaFromQueryFake({
         query: async (text: string, values: readonly unknown[]) => {
-          const result = await pool.query(text, [...values]);
+          const result = await pool.query<Record<string, unknown>>(text, [
+            ...values,
+          ]);
           return result.rows;
         },
       }),

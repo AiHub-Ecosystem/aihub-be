@@ -158,7 +158,7 @@ describe('S3WritingChartUploadStorage contract', () => {
   });
 
   it('publishes only prepared bytes to the environment-isolated public bucket', async () => {
-    const send = jest.fn().mockResolvedValue({});
+    const send = jest.fn(async (_command: unknown) => ({}));
     const adapter = createStorage(send);
     const bytes = Buffer.from('re-encoded-chart');
 

@@ -37,6 +37,14 @@ const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
 
 type OrganizationStatus = 'active' | 'suspended';
 
+function secretBody(response: { json(): unknown }) {
+  return Value.Parse(OrganizationApiKeySecretResponseSchema, response.json());
+}
+
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
+
 describe('Organization API key creation HTTP flow', () => {
   let app: NestFastifyApplication;
   let apiKeys: jest.Mocked<OrganizationApiKeyPort>;
@@ -159,12 +167,16 @@ describe('Organization API key creation HTTP flow', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({
+    const body = secretBody(response);
+    expect(body.data.api_key).toMatch(/^aihub_prod_[A-Za-z0-9]{43}$/);
+    expect(body.data.id).toMatch(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(body.data.key_prefix).toMatch(/^aihub_prod_[A-Za-z0-9]{6}$/);
+    expect(body).toEqual({
       data: {
-        api_key: expect.stringMatching(/^aihub_prod_[A-Za-z0-9]{43}$/),
-        id: expect.stringMatching(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/),
+        api_key: body.data.api_key,
+        id: body.data.id,
         name: 'Prod backend',
-        key_prefix: expect.stringMatching(/^aihub_prod_[A-Za-z0-9]{6}$/),
+        key_prefix: body.data.key_prefix,
         scopes: ['writing.grade'],
         allowed_environments: ['production'],
         status: 'active',
@@ -189,10 +201,7 @@ describe('Organization API key creation HTTP flow', () => {
       // the published schema rejects is a broken contract, not a passing test.
       // Its credential pattern lists the prefixes literally, so this is also
       // what catches a new prefix that never reached the contract.
-      expect(
-        Value.Check(OrganizationApiKeySecretResponseSchema, response.json()),
-      ).toBe(true);
-      expect(response.json().data.api_key).toMatch(
+      expect(secretBody(response).data.api_key).toMatch(
         new RegExp(
           `^aihub_(${environment === 'sandbox' ? 'sandbox' : 'prod'}_)[A-Za-z0-9]{43}$`,
         ),
@@ -203,7 +212,7 @@ describe('Organization API key creation HTTP flow', () => {
   it('derives the display prefix from the raw credential it returns', async () => {
     const response = await create();
 
-    const { api_key: rawKey, key_prefix: prefix } = response.json().data;
+    const { api_key: rawKey, key_prefix: prefix } = secretBody(response).data;
     expect(prefix).toBe(rawKey.slice(0, 17));
   });
 
@@ -217,7 +226,7 @@ describe('Organization API key creation HTTP flow', () => {
     const response = await create();
 
     const persisted = createCall();
-    const rawKey: string = response.json().data.api_key;
+    const rawKey = secretBody(response).data.api_key;
     expect(persisted.keyHash).toMatch(/^[0-9a-f]{64}$/);
     expect(persisted.keyHash).not.toContain(rawKey);
     expect(JSON.stringify(persisted)).not.toContain(rawKey);
@@ -278,7 +287,10 @@ describe('Organization API key creation HTTP flow', () => {
 
     const response = await create();
 
-    expect({ status: response.statusCode, body: response.json() }).toEqual({
+    expect({
+      status: response.statusCode,
+      body: response.json<unknown>(),
+    }).toEqual({
       status: 403,
       body: {
         error: {
@@ -299,7 +311,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
     expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
@@ -328,7 +340,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expectErrorCode(response, 'FORBIDDEN');
   });
 
   it('denies creation once the organization reaches its active key limit', async () => {
@@ -337,7 +349,7 @@ describe('Organization API key creation HTTP flow', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expectErrorCode(response, 'FORBIDDEN');
   });
 
   it('rejects a Staging-only customer key request', async () => {
@@ -348,7 +360,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
   });
 
   it.each([
@@ -366,8 +378,9 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().data.allowed_environments).toEqual(['sandbox']);
-    expect(response.json().data.scopes).toEqual(scopes);
+    const body = secretBody(response);
+    expect(body.data.allowed_environments).toEqual(['sandbox']);
+    expect(body.data.scopes).toEqual(scopes);
     expect(createCall().allowedEnvironments).toEqual(['sandbox']);
     expect(createCall().scopes).toEqual(scopes);
   });
@@ -396,7 +409,7 @@ describe('Organization API key creation HTTP flow', () => {
     const response = await create(payload);
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
     expect(apiKeys.createApiKey.mock.calls).toHaveLength(0);
   });
 
@@ -427,7 +440,7 @@ describe('Organization API key creation HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().data.expires_at).toBe(expiresAt.toISOString());
+    expect(secretBody(response).data.expires_at).toBe(expiresAt.toISOString());
     expect(createCall().expiresAt).toEqual(expiresAt);
   });
 
@@ -480,7 +493,9 @@ describe('Organization API key creation HTTP flow', () => {
     const first = await create();
     const second = await create();
 
-    expect(first.json().data.api_key).not.toBe(second.json().data.api_key);
-    expect(first.json().data.id).not.toBe(second.json().data.id);
+    expect(secretBody(first).data.api_key).not.toBe(
+      secretBody(second).data.api_key,
+    );
+    expect(secretBody(first).data.id).not.toBe(secretBody(second).data.id);
   });
 });

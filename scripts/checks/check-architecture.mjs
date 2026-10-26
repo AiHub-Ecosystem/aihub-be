@@ -2,15 +2,18 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import process from 'node:process';
-import ts from 'typescript';
+import tsModule from 'typescript';
 
 const root = process.cwd();
+const ts = /** @type {typeof import('typescript')} */ (tsModule);
 
+/** @param {string} message */
 function fail(message) {
   console.error(`Architecture check failed: ${message}`);
   process.exitCode = 1;
 }
 
+/** @param {string} directory @returns {string[]} */
 function collectTypeScriptFiles(directory) {
   const files = [];
 
@@ -202,6 +205,7 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
 
 const QUERY_VALIDATION_MARKER = 'arch-check:';
 
+/** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */
 function hasQueryValidationMarker(sourceFile, node, lines) {
   const line = sourceFile.getLineAndCharacterOfPosition(
     node.getStart(sourceFile),
@@ -211,6 +215,7 @@ function hasQueryValidationMarker(sourceFile, node, lines) {
   );
 }
 
+/** @param {import('typescript').Node} node @returns {node is import('typescript').CallExpression} */
 function isParseRequestQueryCall(node) {
   return (
     ts.isCallExpression(node) &&
@@ -219,6 +224,7 @@ function isParseRequestQueryCall(node) {
   );
 }
 
+/** @param {import('typescript').Node} node */
 function isDirectlyPassedToQueryHelper(node) {
   let argument = node;
   while (ts.isParenthesizedExpression(argument.parent)) {
@@ -229,6 +235,7 @@ function isDirectlyPassedToQueryHelper(node) {
   return isParseRequestQueryCall(call) && call.arguments[1] === argument;
 }
 
+/** @param {import('typescript').ParameterDeclaration} parameter */
 function queryDecorator(parameter) {
   const decorators = ts.canHaveDecorators(parameter)
     ? (ts.getDecorators(parameter) ?? [])
@@ -254,13 +261,27 @@ function queryDecorator(parameter) {
   return undefined;
 }
 
+/** @param {import('typescript').Node} node @returns {node is import('typescript').FunctionLikeDeclaration} */
+function isFunctionLikeNode(node) {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isConstructorDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node)
+  );
+}
+
+/** @param {import('typescript').ParameterDeclaration} parameter */
 function queryParameterIsValidated(parameter) {
   if (!ts.isIdentifier(parameter.name)) {
     return false;
   }
 
   let owner = parameter.parent;
-  while (owner !== undefined && !ts.isFunctionLike(owner)) {
+  while (owner !== undefined && !isFunctionLikeNode(owner)) {
     owner = owner.parent;
   }
   if (owner?.body === undefined) {
@@ -268,8 +289,9 @@ function queryParameterIsValidated(parameter) {
   }
 
   let isValidated = false;
+  /** @param {import('typescript').Node} node */
   function visit(node) {
-    if (node !== owner.body && ts.isFunctionLike(node)) {
+    if (node !== owner.body && isFunctionLikeNode(node)) {
       return;
     }
     if (
@@ -302,6 +324,7 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   );
   const lines = source.split(/\r?\n/);
 
+  /** @param {import('typescript').Node} node */
   function visit(node) {
     if (
       ts.isPropertyAccessExpression(node) &&

@@ -1,3 +1,5 @@
+/// <reference path="./capacity-benchmark-k6.d.ts" />
+
 import exec from 'k6/execution';
 import http from 'k6/http';
 import { Counter, Gauge, Trend } from 'k6/metrics';
@@ -8,6 +10,14 @@ import {
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
 
+/** @typedef {'writing_task1' | 'writing_task2' | 'speaking_multipart' | 'speaking_json'} GradingRouteName */
+/** @typedef {GradingRouteName | 'login' | 'refresh' | 'web_session_exchange'} RouteName */
+/** @typedef {{userId: string, email: string, password: string, refreshToken: string, webSessionToken: string}} BenchmarkUser */
+/** @typedef {{apiKey: string}} BenchmarkOrganization */
+/** @typedef {{users: BenchmarkUser[], organizations: BenchmarkOrganization[]}} BenchmarkCredentials */
+/** @typedef {{status: number, error_code: number, error: unknown, timings: {duration: number}, headers: Record<string, string | string[] | undefined>, body: string}} HttpResponse */
+
+/** @type {RouteName[]} */
 const allRoutes = [
   'writing_task1',
   'writing_task2',
@@ -17,14 +27,18 @@ const allRoutes = [
   'refresh',
   'web_session_exchange',
 ];
+/** @type {GradingRouteName[]} */
 const gradingRoutes = [
   'writing_task1',
   'writing_task2',
   'speaking_multipart',
   'speaking_json',
 ];
+/** @type {Record<RouteName, import('k6/metrics').Counter>} */
 const routeResponseCounts = {};
+/** @type {Record<RouteName, import('k6/metrics').Counter>} */
 const routeErrorCounts = {};
+/** @type {Record<RouteName, import('k6/metrics').Counter>} */
 const routeTransportErrorCounts = {};
 for (const name of allRoutes) {
   routeResponseCounts[name] = new Counter(`benchmark_api_responses_${name}`);
@@ -33,7 +47,9 @@ for (const name of allRoutes) {
     `benchmark_api_transport_errors_${name}`,
   );
 }
+/** @template {string} T @param {T[]} names @param {string} prefix @param {boolean} isTime @returns {Record<T, import('k6/metrics').Trend>} */
 function trends(names, prefix, isTime) {
+  /** @type {Record<string, import('k6/metrics').Trend>} */
   const result = {};
   for (const name of names) {
     result[name] = new Trend(`${prefix}${name}`, isTime);
@@ -52,10 +68,16 @@ const postgresWaiting = new Gauge('benchmark_postgres_waiting');
 const downstreamQueued = new Gauge('benchmark_downstream_queued');
 
 const task1 = task1PayloadFromFixture(
-  JSON.parse(open('/fixtures/ai-writing/grade-task1.request.json')),
+  parseTask1Fixture(
+    JSON.parse(open('/fixtures/ai-writing/grade-task1.request.json')),
+  ),
 );
-const task2 = JSON.parse(open('/fixtures/ai-writing/grade-task2.request.json'));
-const credentials = JSON.parse(open('/data/credentials.json'));
+const task2 = parseJsonObject(
+  open('/fixtures/ai-writing/grade-task2.request.json'),
+);
+const credentials = parseBenchmarkCredentials(
+  JSON.parse(open('/data/credentials.json')),
+);
 const host = 'api.benchmark.test';
 const baseUrl = 'http://aihub:3000';
 const stubUrl = 'http://benchmark-support:8080';
@@ -77,7 +99,10 @@ const speakingMultipart = {
   test_type: 'Practice',
 };
 
-const workload = __ENV.WORKLOAD || 'mixed_grading';
+const workload =
+  /** @type {RouteName | 'mixed_grading' | 'auth_and_grading'} */ (
+    __ENV.WORKLOAD || 'mixed_grading'
+  );
 const rate = Number(__ENV.RATE || 4);
 const duration = __ENV.DURATION || '15s';
 const maxVUs = Number(__ENV.MAX_VUS || 256);
@@ -111,12 +136,14 @@ export const options = {
   thresholds: {},
 };
 
+/** @type {GradingRouteName[]} */
 const grading = [
   'writing_task1',
   'writing_task2',
   'speaking_multipart',
   'speaking_json',
 ];
+/** @returns {BenchmarkCredentials} */
 export function setup() {
   if (
     !hasOneUserPerVu(
@@ -133,8 +160,10 @@ export function setup() {
   return credentials;
 }
 
+/** @type {string | undefined} */
 let refreshToken;
 
+/** @param {BenchmarkCredentials} data */
 export function load(data) {
   if (exec.scenario.iterationInTest === 0) {
     console.log('BENCHMARK_LOAD_STARTED');
@@ -191,6 +220,7 @@ export function teardown() {
   }
 }
 
+/** @param {{state: unknown, metrics: Record<string, unknown>}} data */
 export function handleSummary(data) {
   const summary = { state: data.state, metrics: data.metrics };
   return {
@@ -198,6 +228,7 @@ export function handleSummary(data) {
   };
 }
 
+/** @param {GradingRouteName} name @param {BenchmarkOrganization} organization @param {BenchmarkUser} user @returns {HttpResponse} */
 function requestGrade(name, organization, user) {
   const route = {
     writing_task1: {
@@ -235,17 +266,30 @@ function requestGrade(name, organization, user) {
   recordResponse(name, response);
   if (response.status >= 200 && response.status < 300) {
     const payload = parseJson(response.body);
-    const timing = payload && payload.meta && payload.meta.timing;
-    if (timing && Number.isFinite(timing.total_ms)) {
-      gatewayTotal[name].add(timing.total_ms);
-    }
-    if (timing && Number.isFinite(timing.downstream_ms)) {
-      downstream[name].add(timing.downstream_ms);
+    if (
+      isRecord(payload) &&
+      isRecord(payload.meta) &&
+      isRecord(payload.meta.timing)
+    ) {
+      const timing = payload.meta.timing;
+      if (
+        typeof timing.total_ms === 'number' &&
+        Number.isFinite(timing.total_ms)
+      ) {
+        gatewayTotal[name].add(timing.total_ms);
+      }
+      if (
+        typeof timing.downstream_ms === 'number' &&
+        Number.isFinite(timing.downstream_ms)
+      ) {
+        downstream[name].add(timing.downstream_ms);
+      }
     }
   }
   return response;
 }
 
+/** @param {BenchmarkUser} user @returns {HttpResponse} */
 function requestLogin(user) {
   const response = http.post(
     `${baseUrl}/v1/auth/login`,
@@ -257,6 +301,7 @@ function requestLogin(user) {
   return response;
 }
 
+/** @param {BenchmarkUser} user @returns {HttpResponse} */
 function requestRefresh(user) {
   const response = http.post(`${baseUrl}/v1/auth/refresh`, '{}', {
     headers: {
@@ -270,6 +315,7 @@ function requestRefresh(user) {
   return response;
 }
 
+/** @param {BenchmarkUser} user @returns {HttpResponse} */
 function requestWebSession(user) {
   const response = http.post(
     `${baseUrl}/v1/auth/web-sessions/exchange`,
@@ -286,6 +332,7 @@ function requestWebSession(user) {
   return response;
 }
 
+/** @param {RouteName} name @param {HttpResponse} response */
 function recordResponse(name, response) {
   routeResponseCounts[name].add(1);
   if (
@@ -304,6 +351,7 @@ function recordResponse(name, response) {
   }
 }
 
+/** @param {HttpResponse} response */
 function captureRefreshToken(response) {
   const cookie =
     response.headers['Set-Cookie'] || response.headers['set-cookie'];
@@ -317,10 +365,82 @@ function captureRefreshToken(response) {
   }
 }
 
+/** @param {string} body @returns {unknown} */
 function parseJson(body) {
   try {
-    return JSON.parse(body);
+    return /** @type {unknown} */ (JSON.parse(body));
   } catch {
     return undefined;
   }
+}
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {{question: string, topic: string, essay: string, url: string}} */
+function parseTask1Fixture(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.question !== 'string' ||
+    typeof value.topic !== 'string' ||
+    typeof value.essay !== 'string' ||
+    typeof value.url !== 'string'
+  ) {
+    throw new Error('capacity benchmark task1 fixture is invalid');
+  }
+  return {
+    question: value.question,
+    topic: value.topic,
+    essay: value.essay,
+    url: value.url,
+  };
+}
+
+/** @param {string} source @returns {Record<string, unknown>} */
+function parseJsonObject(source) {
+  const value = /** @type {unknown} */ (JSON.parse(source));
+  if (!isRecord(value))
+    throw new Error('capacity benchmark fixture is invalid');
+  return value;
+}
+
+/** @param {unknown} value @returns {BenchmarkCredentials} */
+function parseBenchmarkCredentials(value) {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.users) ||
+    value.users.length === 0 ||
+    !Array.isArray(value.organizations) ||
+    value.organizations.length === 0
+  ) {
+    throw new Error('benchmark credential seed is incomplete');
+  }
+  const users = value.users.map((user) => {
+    if (
+      !isRecord(user) ||
+      typeof user.userId !== 'string' ||
+      typeof user.email !== 'string' ||
+      typeof user.password !== 'string' ||
+      typeof user.refreshToken !== 'string' ||
+      typeof user.webSessionToken !== 'string'
+    ) {
+      throw new Error('benchmark credential seed is incomplete');
+    }
+    return {
+      userId: user.userId,
+      email: user.email,
+      password: user.password,
+      refreshToken: user.refreshToken,
+      webSessionToken: user.webSessionToken,
+    };
+  });
+  const organizations = value.organizations.map((organization) => {
+    if (!isRecord(organization) || typeof organization.apiKey !== 'string') {
+      throw new Error('benchmark organization seed is incomplete');
+    }
+    return { apiKey: organization.apiKey };
+  });
+  return { users, organizations };
 }

@@ -72,9 +72,7 @@ describe('Unix socket listener', () => {
     await app.close();
 
     // A new connection (no keep-alive reuse) finds no listener.
-    await expect(call(socketPath)).rejects.toMatchObject({
-      code: expect.any(String),
-    });
+    await expect(call(socketPath)).rejects.toHaveProperty('code');
   });
 });
 

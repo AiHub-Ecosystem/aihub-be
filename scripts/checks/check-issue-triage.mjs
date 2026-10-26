@@ -40,9 +40,53 @@ export const CANONICAL_ROLES = [
 const PRIORITY_RE = /^P[0-3]$/;
 const READY_ROLES = new Set(['ready-for-agent', 'ready-for-human']);
 
+/** @typedef {{name: string}} GitHubIssueLabel */
+/** @typedef {{number: number, title: string, pull_request?: unknown, milestone?: unknown, labels?: readonly GitHubIssueLabel[] | null}} GitHubIssue */
+/** @typedef {{number: number, title: string, reasons: string[]}} IssueViolation */
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/** @param {unknown} value @returns {value is GitHubIssueLabel} */
+function isIssueLabel(value) {
+  return isRecord(value) && typeof value.name === 'string';
+}
+
+/** @param {unknown} value @returns {value is GitHubIssue} */
+function isGitHubIssue(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.number !== 'number' ||
+    typeof value.title !== 'string'
+  ) {
+    return false;
+  }
+  const labels = value.labels;
+  if (labels === undefined || labels === null) return true;
+  if (!Array.isArray(labels)) return false;
+  return /** @type {unknown[]} */ (labels).every(isIssueLabel);
+}
+
+/** @param {string} raw @returns {GitHubIssue[]} */
+export function parseOpenIssues(raw) {
+  const parsed = /** @type {unknown} */ (JSON.parse(raw));
+  if (!Array.isArray(parsed)) {
+    throw new Error('GitHub issue response must be an array');
+  }
+  const issues = /** @type {unknown[]} */ (parsed);
+  if (!issues.every(isGitHubIssue)) {
+    throw new Error('GitHub issue response contains an invalid issue');
+  }
+  return issues;
+}
+
 /**
  * Pure: given open issues (GitHub /issues shape), return one entry per issue
  * that violates the metadata rules. No I/O, so it is unit-testable offline.
+ * @param {readonly GitHubIssue[]} issues
+ * @returns {IssueViolation[]}
  */
 export function findViolations(issues) {
   const violations = [];
@@ -66,6 +110,7 @@ export function findViolations(issues) {
   return violations;
 }
 
+/** @returns {string} */
 function repository() {
   if (process.env.GITHUB_REPOSITORY) return process.env.GITHUB_REPOSITORY;
   return execFileSync(
@@ -77,13 +122,14 @@ function repository() {
   ).trim();
 }
 
+/** @param {string} repo @returns {GitHubIssue[]} */
 function openIssues(repo) {
   const raw = execFileSync(
     'gh',
     ['api', `repos/${repo}/issues?state=open&per_page=100`, '--paginate'],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
-  return JSON.parse(raw);
+  return parseOpenIssues(raw);
 }
 
 async function main() {

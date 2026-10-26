@@ -3,9 +3,14 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
+import {
+  CreateOrganizationInvitationResponseSchema,
+  ListOpenOrganizationInvitationsResponseSchema,
+} from '@/contracts/organization/invitation';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_SENDER,
@@ -59,6 +64,28 @@ type CallerOverride = {
   readonly status?: OrganizationMembershipStatus;
   readonly organization?: OrganizationStatus;
 };
+
+function createdInvitationBody(response: { json(): unknown }) {
+  return Value.Parse(
+    CreateOrganizationInvitationResponseSchema,
+    response.json(),
+  );
+}
+
+function invitationListBody(response: { json(): unknown }) {
+  return Value.Parse(
+    ListOpenOrganizationInvitationsResponseSchema,
+    response.json(),
+  );
+}
+
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
+
+function expectError(response: { json(): unknown }, error: object): void {
+  expect(response.json()).toMatchObject({ error });
+}
 
 class RateLimiterFake implements AuthRateLimiterPort {
   allowed = true;
@@ -263,16 +290,19 @@ describe('Organization invitation HTTP flow', () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({
+    const body = createdInvitationBody(response);
+    expect(body.data.invitation_id).toMatch(/^oiv_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(body.data.expires_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
+    expect(body).toEqual({
       data: {
-        invitation_id: expect.stringMatching(/^oiv_[0-9A-HJKMNP-TV-Z]{26}$/),
+        invitation_id: body.data.invitation_id,
         organization_id: ORGANIZATION_ID,
         email: 'invitee@example.com',
         role: 'member',
         status: 'pending',
-        expires_at: expect.stringMatching(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-        ),
+        expires_at: body.data.expires_at,
         email_delivery_status: 'queued',
       },
       meta: { request_id: REQUEST_ID },
@@ -286,7 +316,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(429);
-    expect(response.json()).toMatchObject({
+    expect(response.json<unknown>()).toMatchObject({
       error: {
         code: 'RATE_LIMITED',
         retry_after_ms: 12_345,
@@ -342,7 +372,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.headers['idempotent-replay']).toBe('true');
-    expect(response.json()).toEqual({
+    expect(createdInvitationBody(response)).toEqual({
       data: {
         invitation_id: INVITATION_ID,
         organization_id: ORGANIZATION_ID,
@@ -385,7 +415,7 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.headers['idempotent-replay']).toBe('true');
-    expect(response.json()).toEqual({
+    expect(createdInvitationBody(response)).toEqual({
       data: {
         invitation_id: INVITATION_ID,
         organization_id: ORGANIZATION_ID,
@@ -463,7 +493,7 @@ describe('Organization invitation HTTP flow', () => {
   it('reports the request as queued on a fresh invitation', async () => {
     const response = await invite();
 
-    expect(response.json()).toMatchObject({
+    expect(createdInvitationBody(response)).toMatchObject({
       data: { email_delivery_status: 'queued' },
     });
   });
@@ -525,7 +555,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(invitationListBody(response)).toEqual({
       data: {
         invitations: [
           {
@@ -543,14 +573,12 @@ describe('Organization invitation HTTP flow', () => {
     });
     expect(response.payload).not.toContain(USER_ID);
     expect(response.payload).not.toContain('token');
-    expect(invitations.listOpenInvitations.mock.calls).toContainEqual([
-      {
-        context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
-        userId: USER_ID,
-        organizationId: ORGANIZATION_ID,
-        now: expect.any(Date),
-      },
-    ]);
+    const listInput = invitations.listOpenInvitations.mock.calls[0]?.[0];
+    if (listInput === undefined) throw new Error('expected an invitation read');
+    expect(listInput.context.organizationId).toBe(ORGANIZATION_ID);
+    expect(listInput.userId).toBe(USER_ID);
+    expect(listInput.organizationId).toBe(ORGANIZATION_ID);
+    expect(listInput.now).toBeInstanceOf(Date);
   });
 
   it('lists the same invitation metadata for an admin', async () => {
@@ -569,7 +597,9 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.invitations[0]).toMatchObject({
+    const invitation = invitationListBody(response).data.invitations[0];
+    if (invitation === undefined) throw new Error('expected an invitation');
+    expect(invitation).toMatchObject({
       role: 'member',
       status: 'pending',
     });
@@ -579,7 +609,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(invitationListBody(response)).toEqual({
       data: { invitations: [] },
       meta: { request_id: REQUEST_ID },
     });
@@ -590,16 +620,15 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(204);
     expect(response.payload).toBe('');
-    expect(invitations.revokeInvitation.mock.calls).toContainEqual([
-      {
-        context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
-        actorUserId: USER_ID,
-        actorRole: 'owner',
-        organizationId: ORGANIZATION_ID,
-        invitationId: INVITATION_ID,
-        now: expect.any(Date),
-      },
-    ]);
+    const revokeInput = invitations.revokeInvitation.mock.calls[0]?.[0];
+    if (revokeInput === undefined)
+      throw new Error('expected an invitation revocation');
+    expect(revokeInput.context.organizationId).toBe(ORGANIZATION_ID);
+    expect(revokeInput.actorUserId).toBe(USER_ID);
+    expect(revokeInput.actorRole).toBe('owner');
+    expect(revokeInput.organizationId).toBe(ORGANIZATION_ID);
+    expect(revokeInput.invitationId).toBe(INVITATION_ID);
+    expect(revokeInput.now).toBeInstanceOf(Date);
   });
 
   it('keeps revocation available to an admin', async () => {
@@ -626,7 +655,7 @@ describe('Organization invitation HTTP flow', () => {
       const response = await revoke();
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
+      expectError(response, {
         code: 'FORBIDDEN',
         message: 'Organization invitation revocation is forbidden',
       });
@@ -647,7 +676,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await revoke();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expectErrorCode(response, 'FORBIDDEN');
     expect(invitations.revokeInvitation.mock.calls).toHaveLength(1);
   });
 
@@ -666,7 +695,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await revoke();
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
+    expectErrorCode(response, 'NOT_FOUND');
   });
 
   it.each<[string, CallerOverride]>([
@@ -684,7 +713,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error).toMatchObject({
+    expectError(response, {
       code: 'FORBIDDEN',
       message: 'Organization invitation access is forbidden',
     });
@@ -708,7 +737,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().error.code).toBe('INTERNAL_ERROR');
+    expectErrorCode(response, 'INTERNAL_ERROR');
     expect(response.payload).not.toContain('database unavailable');
   });
 
@@ -720,7 +749,7 @@ describe('Organization invitation HTTP flow', () => {
       const response = await invite({ email: 'invitee@example.com', role });
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
+      expectError(response, {
         code: 'FORBIDDEN',
         message: 'Organization admins can only invite members',
       });
@@ -743,7 +772,10 @@ describe('Organization invitation HTTP flow', () => {
 
     const response = await invite();
 
-    expect({ status: response.statusCode, body: response.json() }).toEqual({
+    expect({
+      status: response.statusCode,
+      body: response.json<unknown>(),
+    }).toEqual({
       status: 403,
       body: {
         error: {
@@ -784,7 +816,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe('ORGANIZATION_MEMBER_EXISTS');
+    expectErrorCode(response, 'ORGANIZATION_MEMBER_EXISTS');
     expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
@@ -817,7 +849,7 @@ describe('Organization invitation HTTP flow', () => {
       const response = await invite(payload);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expectErrorCode(response, 'INVALID_REQUEST');
       expect(invitations.createInvitation.mock.calls).toHaveLength(0);
       expect(emailSender.send.mock.calls).toHaveLength(0);
     },
@@ -840,7 +872,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().error.code).toBe('INTERNAL_ERROR');
+    expectErrorCode(response, 'INTERNAL_ERROR');
     expect(response.payload).not.toContain('outbox store unavailable');
     expect(emailSender.send.mock.calls).toHaveLength(0);
   });
@@ -901,7 +933,7 @@ describe('Organization invitation HTTP flow', () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expectErrorCode(response, 'FORBIDDEN');
     expect(invitations.createInvitation.mock.calls).toHaveLength(0);
   });
 

@@ -76,8 +76,10 @@ describe('RedisConcurrencyLimiter', () => {
       throw new Error('expected a concurrency lease');
     }
     expect(redis.evaluations).toHaveLength(1);
-    expect(redis.evaluations[0]).toEqual({
-      script: expect.stringMatching(/ZREMRANGEBYSCORE[\s\S]*EXPIRE/),
+    const evaluation = redis.evaluations[0];
+    expect(evaluation?.script).toMatch(/ZREMRANGEBYSCORE[\s\S]*EXPIRE/);
+    expect(evaluation).toEqual({
+      script: evaluation?.script,
       numberOfKeys: 1,
       args: [
         'aihub:v1:inflight:org_acme',
@@ -146,8 +148,10 @@ describe('RedisConcurrencyLimiter', () => {
     });
 
     expect(decision.allowed).toBe(true);
-    expect(redis.evaluations[0]).toEqual({
-      script: expect.stringContaining("ZCARD', KEYS[2]"),
+    const evaluation = redis.evaluations[0];
+    expect(evaluation?.script).toContain("ZCARD', KEYS[2]");
+    expect(evaluation).toEqual({
+      script: evaluation?.script,
       numberOfKeys: 2,
       args: [
         'aihub:v1:inflight:org_customer',

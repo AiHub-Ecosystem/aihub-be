@@ -7,6 +7,8 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 import { MockAgent, FormData as UndiciFormData } from 'undici';
 
 import { AppModule } from '@/app.module';
@@ -16,6 +18,7 @@ import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import {
@@ -41,6 +44,32 @@ import {
 import { registerSpeakingGradingHeaders } from './speaking-grading-headers.hook';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
+const speakingResponseSchema = Type.Object({
+  meta: Type.Object({ operation: Type.String() }),
+  data: SpeakingGradeResponseSchema,
+});
+
+function responseBody(response: { readonly payload: string }): unknown {
+  const body: unknown = JSON.parse(response.payload);
+  return body;
+}
+
+function expectError(
+  response: { readonly payload: string },
+  code: string,
+  fields: {
+    readonly retryable?: boolean;
+    readonly retry_after_ms?: number;
+  } = {},
+): void {
+  expect(responseBody(response)).toMatchObject({
+    error: { code, ...fields },
+  });
+}
+
+function speakingResponse(response: { readonly payload: string }) {
+  return Value.Parse(speakingResponseSchema, responseBody(response));
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -276,23 +305,23 @@ describe('Speaking grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    const body = response.json();
+    const body = speakingResponse(response);
     expect(body.meta.operation).toBe('speaking.grading');
     expect(body.data.scorability.is_scorable).toBe(false);
-    expect(body.data.estimated_band.overall).toEqual(expect.any(Number));
+    expect(Number.isFinite(body.data.estimated_band.overall)).toBe(true);
     expect(body.data.transcript.word_count).toBeGreaterThanOrEqual(0);
-    expect(body.data.fluency_metrics.speech_rate_wpm).toBeNull();
-    expect(body.data.pronunciation_detail.words[0].syllables).toEqual(
-      expect.any(Array),
+    expect(body.data.fluency_metrics).toMatchObject({ speech_rate_wpm: null });
+    expect(
+      Array.isArray(body.data.pronunciation_detail.words[0]?.syllables),
+    ).toBe(true);
+    expect(
+      Array.isArray(body.data.pronunciation_detail.words[0]?.phonemes),
+    ).toBe(true);
+    expect(Array.isArray(body.data.language_analysis.grammar_errors)).toBe(
+      true,
     );
-    expect(body.data.pronunciation_detail.words[0].phonemes).toEqual(
-      expect.any(Array),
-    );
-    expect(body.data.language_analysis.grammar_errors).toEqual(
-      expect.any(Array),
-    );
-    expect(body.data.language_analysis.vocabulary_upgrades).toEqual(
-      expect.any(Array),
+    expect(Array.isArray(body.data.language_analysis.vocabulary_upgrades)).toBe(
+      true,
     );
     expect(body.data).not.toHaveProperty('performance_timing');
     expect(body.data).not.toHaveProperty('session_id');
@@ -351,9 +380,10 @@ describe('Speaking grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.json().meta.operation).toBe('speaking.grading-json');
-    expect(response.json().data).not.toHaveProperty('performance_timing');
-    expect(response.json().data).not.toHaveProperty('user_id');
+    const body = speakingResponse(response);
+    expect(body.meta.operation).toBe('speaking.grading-json');
+    expect(body.data).not.toHaveProperty('performance_timing');
+    expect(body.data).not.toHaveProperty('user_id');
     expect(outboundJson).toEqual({
       user_id: 'local-development',
       part: 1,
@@ -387,18 +417,14 @@ describe('Speaking grading HTTP flow', () => {
         payload: multipart.payload,
       });
       expect(upload.statusCode).toBe(200);
-      expect(execute).toHaveBeenCalledWith(
-        expect.objectContaining({
-          operation: 'speaking.grading',
-          input: expect.objectContaining({
-            part: 1,
-            questionId: 'p1_hometown',
-          }),
-          signal: parse.mock.calls[0]?.[1],
-          receivedAt: expect.any(Date),
-          userId: 'local-development',
-        }),
-      );
+      const multipartCall = execute.mock.calls[0]?.[0];
+      expect(multipartCall).toMatchObject({
+        operation: 'speaking.grading',
+        input: { part: 1, questionId: 'p1_hometown' },
+        signal: parse.mock.calls[0]?.[1],
+        userId: 'local-development',
+      });
+      expect(multipartCall?.receivedAt).toBeInstanceOf(Date);
 
       execute.mockClear();
       const json = await app.inject({
@@ -412,18 +438,17 @@ describe('Speaking grading HTTP flow', () => {
         },
       });
       expect(json.statusCode).toBe(200);
-      expect(execute).toHaveBeenCalledWith(
-        expect.objectContaining({
-          operation: 'speaking.grading-json',
-          input: expect.objectContaining({
-            audioUrl: 'https://s3.wispace.app/audio/sample.mp3',
-            testType: 'Practice',
-          }),
-          receivedAt: expect.any(Date),
-          signal: expect.any(AbortSignal),
-          userId: 'local-development',
-        }),
-      );
+      const jsonCall = execute.mock.calls[0]?.[0];
+      expect(jsonCall).toMatchObject({
+        operation: 'speaking.grading-json',
+        input: {
+          audioUrl: 'https://s3.wispace.app/audio/sample.mp3',
+          testType: 'Practice',
+        },
+        userId: 'local-development',
+      });
+      expect(jsonCall?.receivedAt).toBeInstanceOf(Date);
+      expect(jsonCall?.signal).toBeInstanceOf(AbortSignal);
     } finally {
       parse.mockRestore();
       execute.mockRestore();
@@ -451,7 +476,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(504);
-      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+      expectError(response, 'AI_SERVICE_TIMEOUT');
       expect(outboundJson).toBeUndefined();
     } finally {
       timeout.mockRestore();
@@ -471,7 +496,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
+    expectError(response, 'NOT_FOUND');
   });
 
   it('applies JSON defaults and does not accept a client user_id', async () => {
@@ -509,7 +534,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(override.statusCode).toBe(400);
-    expect(override.json().error.code).toBe('INVALID_REQUEST');
+    expectError(override, 'INVALID_REQUEST');
   });
 
   it.each([
@@ -541,7 +566,7 @@ describe('Speaking grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectError(response, 'INVALID_REQUEST');
     expect(outboundJson).toBeUndefined();
   });
 
@@ -563,7 +588,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json().error.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
+    expectError(response, 'AI_SERVICE_CONTRACT_VIOLATION');
 
     providerResponse = {
       statusCode: 200,
@@ -597,8 +622,7 @@ describe('Speaking grading HTTP flow', () => {
 
         expect(response.statusCode).toBe(publicStatus);
         expect(response.headers['cache-control']).toBe('no-store');
-        expect(response.json().error.code).toBe(errorCode);
-        expect(response.json().error.retryable).toBe(retryable);
+        expectError(response, errorCode, { retryable });
         expect(response.payload).not.toContain(
           'private JSON provider failure detail',
         );
@@ -631,7 +655,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(504);
-      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+      expectError(response, 'AI_SERVICE_TIMEOUT');
     } finally {
       timeout.mockRestore();
     }
@@ -653,7 +677,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(504);
-      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+      expectError(response, 'AI_SERVICE_TIMEOUT');
     } finally {
       abortJsonRequest = false;
     }
@@ -684,7 +708,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.fluency_metrics).toBeNull();
+    expect(speakingResponse(response).data.fluency_metrics).toBeNull();
 
     providerResponse = {
       statusCode: 200,
@@ -711,7 +735,7 @@ describe('Speaking grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectError(response, 'INVALID_REQUEST');
   });
 
   it('rejects a request that tries to override the verified downstream user', async () => {
@@ -732,7 +756,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectError(response, 'INVALID_REQUEST');
   });
 
   it('rejects missing required grading metadata before downstream dispatch', async () => {
@@ -749,7 +773,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectError(response, 'INVALID_REQUEST');
   });
 
   it('rejects unsupported audio formats at the public boundary', async () => {
@@ -767,7 +791,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectError(response, 'INVALID_REQUEST');
   });
 
   it('rejects a declared body beyond the 26 MB operation limit', async () => {
@@ -789,7 +813,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(413);
-    expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE');
+    expectError(response, 'PAYLOAD_TOO_LARGE');
   });
 
   it('rejects an uploaded audio file beyond the 25 MB audio limit', async () => {
@@ -806,7 +830,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(413);
-    expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE');
+    expectError(response, 'PAYLOAD_TOO_LARGE');
   });
 
   it('accepts a full-size 25 MB audio file within the 26 MB wire ceiling', async () => {
@@ -865,8 +889,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(429);
-      expect(response.json().error).toMatchObject({
-        code: 'CONCURRENCY_LIMIT',
+      expectError(response, 'CONCURRENCY_LIMIT', {
         retryable: true,
         retry_after_ms: 1000,
       });
@@ -911,7 +934,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(504);
-      expect(response.json().error.code).toBe('AI_SERVICE_TIMEOUT');
+      expectError(response, 'AI_SERVICE_TIMEOUT');
     } finally {
       parser.parse = originalParse;
       timeout.mockRestore();
@@ -965,8 +988,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json().error.code).toBe('AI_SERVICE_ERROR');
-    expect(response.json().error.retryable).toBe(false);
+    expectError(response, 'AI_SERVICE_ERROR', { retryable: false });
     expect(response.payload).not.toContain(
       'private provider credential detail',
     );
@@ -997,8 +1019,9 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(502);
-      expect(response.json().error.code).toBe('AI_SERVICE_ERROR');
-      expect(response.json().error.retryable).toBe(statusCode >= 500);
+      expectError(response, 'AI_SERVICE_ERROR', {
+        retryable: statusCode >= 500,
+      });
       expect(response.payload).not.toContain('private provider failure detail');
 
       providerResponse = {
@@ -1026,7 +1049,7 @@ describe('Speaking grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json().error.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
+    expectError(response, 'AI_SERVICE_CONTRACT_VIOLATION');
 
     providerResponse = {
       statusCode: 200,
@@ -1053,10 +1076,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(422);
-      expect(response.json().error).toMatchObject({
-        code: 'AUDIO_UNREADABLE',
-        retryable: false,
-      });
+      expectError(response, 'AUDIO_UNREADABLE', { retryable: false });
       expect(response.payload).not.toContain('error_convert_audio');
       expect(response.payload).not.toContain('Grading pipeline');
     } finally {
@@ -1088,10 +1108,7 @@ describe('Speaking grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(502);
-      expect(response.json().error).toMatchObject({
-        code: 'AI_SERVICE_ERROR',
-        retryable: true,
-      });
+      expectError(response, 'AI_SERVICE_ERROR', { retryable: true });
     } finally {
       providerResponse = {
         statusCode: 200,

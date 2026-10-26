@@ -56,7 +56,7 @@ describe('usage report CLI boundary', () => {
       emit: (line) => lines.push(line),
     });
 
-    expect(lines.map((line) => JSON.parse(line))).toEqual([
+    expect(lines.map((line) => JSON.parse(line) as unknown)).toEqual([
       {
         event: 'usage_report_operation',
         window_from: from,

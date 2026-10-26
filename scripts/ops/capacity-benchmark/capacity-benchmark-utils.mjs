@@ -1,9 +1,26 @@
 export const K6_GRACEFUL_STOP_SECONDS = 65;
 
+/** @typedef {'writing_task1' | 'writing_task2' | 'speaking_multipart' | 'speaking_json'} GradingRouteName */
+/** @typedef {'login' | 'refresh' | 'web_session_exchange'} AuthRouteName */
+/** @typedef {GradingRouteName | AuthRouteName} BenchmarkRouteName */
+/** @typedef {BenchmarkRouteName | 'mixed_grading' | 'auth_and_grading'} BenchmarkWorkload */
+/** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
+/** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
+/** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
+/** @typedef {{count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}} SampleAdequacy */
+/** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
+/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, sampleAdequacy?: {routes?: Record<string, SampleAdequacy>, paths?: Record<string, Record<string, SampleAdequacy>>}}} BenchmarkRun */
+/** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {logicalCpuCount: number, totalMemoryBytes: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
+/** @typedef {{min: number | null, median: number | null, max: number | null}} NumericSpread */
+/** @typedef {{samples: Array<{repetition: number, count: number, status: string, admissionP50Ms: number | null, admissionP99Ms: number | null, completionP50Ms: number | null, completionP99Ms: number | null}>, admissionP50Ms: NumericSpread | null, admissionP99Ms: NumericSpread | null, completionP50Ms: NumericSpread | null, completionP99Ms: NumericSpread | null, sampleVerdict: 'sufficient' | 'inconclusive'}} RepetitionPathSummary */
+/** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: NumericSpread | null, p50Ms: NumericSpread | null, p95Ms: NumericSpread | null, p99Ms: NumericSpread | null, sampleVerdict: string}} RepetitionRouteSummary */
+
+/** @param {number} durationSeconds */
 export function k6ProcessTimeoutMs(durationSeconds) {
   return (durationSeconds + K6_GRACEFUL_STOP_SECONDS + 30) * 1000;
 }
 
+/** @param {BenchmarkRun[]} runs @param {BenchmarkRouteName[]} routeNames @param {number | Record<string, number>} deadlineMs @param {number} [minimumSamples] */
 export function highestPassingRate(
   runs,
   routeNames,
@@ -32,6 +49,7 @@ export function highestPassingRate(
     .reduce((highest, run) => Math.max(highest, run.offeredRateRps), 0);
 }
 
+/** @type {GradingRouteName[]} */
 const gradingRoutes = [
   'writing_task1',
   'writing_task2',
@@ -39,6 +57,7 @@ const gradingRoutes = [
   'speaking_json',
 ];
 
+/** @type {Record<GradingRouteName, string[]>} */
 const gradedPathPairs = {
   writing_task1: [
     'declared_id:keyed_writing',
@@ -56,6 +75,7 @@ const gradedPathPairs = {
   speaking_json: ['declared_id:none', 'signed_assertion:none'],
 };
 
+/** @param {Pick<BenchmarkRun, 'routes'>} run @param {BenchmarkRouteName[]} routeNames @param {number} minimumSamples */
 export function hasMinimumRouteSamples(run, routeNames, minimumSamples) {
   return (
     Number.isSafeInteger(minimumSamples) &&
@@ -68,12 +88,16 @@ export function hasMinimumRouteSamples(run, routeNames, minimumSamples) {
   );
 }
 
+/** @param {Record<string, {admissionMs: number[], completionMs: number[]}>} paths @returns {Record<string, PathTimings>} */
 export function summarizeGradedPathTimings(paths) {
+  /** @param {number[]} values */
   const summarize = (values) => {
     if (values.length === 0) {
       return { count: 0, p50: null, p95: null, p99: null };
     }
+    /** @type {number[]} */
     const ordered = [...values].sort((left, right) => left - right);
+    /** @param {number} fraction */
     const at = (fraction) => ordered[Math.ceil(fraction * ordered.length) - 1];
     return {
       count: ordered.length,
@@ -83,31 +107,36 @@ export function summarizeGradedPathTimings(paths) {
     };
   };
   return Object.fromEntries(
-    Object.entries(paths).map(([path, timing]) => [
-      path,
-      {
-        admissionMs: summarize(timing.admissionMs),
-        completionMs: summarize(timing.completionMs),
-      },
-    ]),
+    Object.entries(paths).map(
+      ([path, timing]) =>
+        /** @type {const} */ ([
+          path,
+          {
+            admissionMs: summarize(timing.admissionMs),
+            completionMs: summarize(timing.completionMs),
+          },
+        ]),
+    ),
   );
 }
 
+/** @param {GradingRouteName} route @param {Record<string, PathTimings>} timings @param {number} minimumSamples @returns {Record<string, SampleAdequacy>} */
 export function gradedPathSampleAdequacy(route, timings, minimumSamples) {
   return Object.fromEntries(
     gradedPathPairs[route].map((path) => {
       const count = timings[path]?.completionMs?.count ?? 0;
-      return [
+      return /** @type {const} */ ([
         path,
         {
           count,
           status: count >= minimumSamples ? 'sufficient' : 'inconclusive',
         },
-      ];
+      ]);
     }),
   );
 }
 
+/** @param {BenchmarkWorkload} workload @param {number} offeredRateRps @param {number} minimumSamples @param {number} minimumHoldSeconds */
 export function minimumGradingHoldSeconds(
   workload,
   offeredRateRps,
@@ -149,9 +178,11 @@ export function minimumGradingHoldSeconds(
 
 // Repetitions run on separate VMs of the same runner shape, whose usable
 // memory differs by a few MiB; compare the shape, not the exact byte count.
+/** @param {BenchmarkReport} report */
 const memoryGiB = (report) =>
   Math.round((report.benchmark.host.totalMemoryBytes ?? 0) / 1024 ** 3);
 
+/** @param {BenchmarkReport[]} reports @param {number} expectedRepetitions */
 export function summarizeRepetitions(reports, expectedRepetitions) {
   if (
     !Array.isArray(reports) ||
@@ -168,6 +199,9 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
     (report) => report.benchmark.repetition,
   );
   const firstReport = sortedReports[0];
+  if (firstReport === undefined) {
+    throw new Error('benchmark repetitions are incomplete');
+  }
   if (
     new Set(repetitions).size !== expectedRepetitions ||
     repetitions.some((repetition, index) => repetition !== index + 1) ||
@@ -195,6 +229,7 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
     throw new Error('benchmark repetitions must be complete and comparable');
   }
 
+  /** @type {Map<string, Array<{repetition: number, run: BenchmarkRun}>>} */
   const stages = new Map();
   for (const report of sortedReports) {
     for (const run of report.runs) {
@@ -236,7 +271,7 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
                 adequacy.every((status) => status === 'sufficient')
               ? 'sufficient'
               : 'inconclusive';
-          return [
+          return /** @type {const} */ ([
             name,
             {
               samples: routeSamples.map(({ repetition, route }) => ({
@@ -258,61 +293,62 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
               ),
               sampleVerdict,
             },
-          ];
+          ]);
         }),
       );
       const paths = Object.fromEntries(
-        routeNames
-          .filter((name) => gradedPathPairs[name] !== undefined)
-          .map((name) => [
-            name,
-            Object.fromEntries(
-              gradedPathPairs[name].map((path) => {
-                const pathSamples = samples.map(({ repetition, run }) => {
-                  const adequacy = run.sampleAdequacy?.paths?.[name]?.[path];
-                  const timing = run.routes[name]?.timingsByPath?.[path];
-                  return {
-                    repetition,
-                    count: adequacy?.count ?? 0,
-                    status: adequacy?.status ?? 'inconclusive',
-                    admissionP50Ms: timing?.admissionMs?.p50 ?? null,
-                    admissionP99Ms: timing?.admissionMs?.p99 ?? null,
-                    completionP50Ms: timing?.completionMs?.p50 ?? null,
-                    completionP99Ms: timing?.completionMs?.p99 ?? null,
-                  };
-                });
-                return [
-                  path,
-                  {
-                    samples: pathSamples,
-                    admissionP50Ms: numericSpread(
-                      pathSamples.map((sample) => sample.admissionP50Ms),
-                    ),
-                    admissionP99Ms: numericSpread(
-                      pathSamples.map((sample) => sample.admissionP99Ms),
-                    ),
-                    completionP50Ms: numericSpread(
-                      pathSamples.map((sample) => sample.completionP50Ms),
-                    ),
-                    completionP99Ms: numericSpread(
-                      pathSamples.map((sample) => sample.completionP99Ms),
-                    ),
-                    sampleVerdict:
-                      pathSamples.length === expectedRepetitions &&
-                      pathSamples.every(
-                        (sample) =>
-                          sample.status === 'sufficient' &&
-                          sample.count >=
-                            firstReport.benchmark.configuration
-                              .minimumGradingSamples,
-                      )
-                        ? 'sufficient'
-                        : 'inconclusive',
-                  },
-                ];
-              }),
-            ),
-          ]),
+        routeNames.filter(isGradingRouteName).map(
+          (name) =>
+            /** @type {const} */ ([
+              name,
+              Object.fromEntries(
+                gradedPathPairs[name].map((path) => {
+                  const pathSamples = samples.map(({ repetition, run }) => {
+                    const adequacy = run.sampleAdequacy?.paths?.[name]?.[path];
+                    const timing = run.routes[name]?.timingsByPath?.[path];
+                    return {
+                      repetition,
+                      count: adequacy?.count ?? 0,
+                      status: adequacy?.status ?? 'inconclusive',
+                      admissionP50Ms: timing?.admissionMs?.p50 ?? null,
+                      admissionP99Ms: timing?.admissionMs?.p99 ?? null,
+                      completionP50Ms: timing?.completionMs?.p50 ?? null,
+                      completionP99Ms: timing?.completionMs?.p99 ?? null,
+                    };
+                  });
+                  return /** @type {const} */ ([
+                    path,
+                    {
+                      samples: pathSamples,
+                      admissionP50Ms: numericSpread(
+                        pathSamples.map((sample) => sample.admissionP50Ms),
+                      ),
+                      admissionP99Ms: numericSpread(
+                        pathSamples.map((sample) => sample.admissionP99Ms),
+                      ),
+                      completionP50Ms: numericSpread(
+                        pathSamples.map((sample) => sample.completionP50Ms),
+                      ),
+                      completionP99Ms: numericSpread(
+                        pathSamples.map((sample) => sample.completionP99Ms),
+                      ),
+                      sampleVerdict:
+                        pathSamples.length === expectedRepetitions &&
+                        pathSamples.every(
+                          (sample) =>
+                            sample.status === 'sufficient' &&
+                            sample.count >=
+                              firstReport.benchmark.configuration
+                                .minimumGradingSamples,
+                        )
+                          ? 'sufficient'
+                          : 'inconclusive',
+                    },
+                  ]);
+                }),
+              ),
+            ]),
+        ),
       );
       const complete = samples.length === expectedRepetitions;
       const sampleAdequate =
@@ -326,10 +362,14 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
             ({ sampleVerdict }) => sampleVerdict === 'sufficient',
           ),
         );
+      const firstSample = samples[0];
+      if (firstSample === undefined) {
+        throw new Error('benchmark stage has no samples');
+      }
       return {
         label,
-        workload: samples[0].run.workload,
-        offeredRateRps: samples[0].run.offeredRateRps,
+        workload: firstSample.run.workload,
+        offeredRateRps: firstSample.run.offeredRateRps,
         repetitionCount: samples.length,
         verdict: complete && sampleAdequate ? 'sufficient' : 'inconclusive',
         routes,
@@ -339,6 +379,7 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
   };
 }
 
+/** @param {Array<number | null>} values @returns {NumericSpread | null} */
 function numericSpread(values) {
   const sorted = values
     .filter((value) => typeof value === 'number' && Number.isFinite(value))
@@ -355,6 +396,12 @@ function numericSpread(values) {
   };
 }
 
+/** @param {string} name @returns {name is GradingRouteName} */
+function isGradingRouteName(name) {
+  return Object.hasOwn(gradedPathPairs, name);
+}
+
+/** @param {{question: string, topic: string, essay: string, url: string}} fixture */
 export function task1PayloadFromFixture(fixture) {
   return {
     question: fixture.question,
@@ -364,6 +411,7 @@ export function task1PayloadFromFixture(fixture) {
   };
 }
 
+/** @type {BenchmarkRouteName[]} */
 export const authAndGradingWorkload = [
   'writing_task1',
   'writing_task2',
@@ -383,6 +431,7 @@ export const authAndGradingWorkload = [
   'login',
 ];
 
+/** @param {Pick<BenchmarkRun, 'holdDuration' | 'offeredRateRps' | 'completedRequests'>} run */
 export function hasCompleteLoadDelivery(run) {
   const duration = /^(\d+)s$/.exec(run.holdDuration);
   const durationSeconds = Number(duration?.[1]);
@@ -398,6 +447,7 @@ export function hasCompleteLoadDelivery(run) {
   );
 }
 
+/** @param {number} maxVUs @param {number} userCount */
 export function hasOneUserPerVu(maxVUs, userCount) {
   return (
     Number.isSafeInteger(maxVUs) &&
@@ -407,6 +457,7 @@ export function hasOneUserPerVu(maxVUs, userCount) {
   );
 }
 
+/** @param {Array<{durationMs: number}>} jobs @param {number} maxDurationMs */
 export function contentionJobsFitLoadWindow(jobs, maxDurationMs) {
   return (
     jobs.length > 0 &&
@@ -421,6 +472,7 @@ export function contentionJobsFitLoadWindow(jobs, maxDurationMs) {
   );
 }
 
+/** @param {string} previousTail @param {string} chunk @param {string} marker */
 export function appendStreamingMarkerChunk(previousTail, chunk, marker) {
   const combined = previousTail + chunk;
   return {
@@ -429,6 +481,7 @@ export function appendStreamingMarkerChunk(previousTail, chunk, marker) {
   };
 }
 
+/** @param {number[]} stageRates @param {number} passingRate */
 export function overloadRate(stageRates, passingRate) {
   if (passingRate <= 0) {
     const highestStage = stageRates.at(-1);
@@ -443,12 +496,14 @@ export function overloadRate(stageRates, passingRate) {
   return Math.ceil(Math.max(highestStage, passingRate) * 1.5);
 }
 
+/** @param {Record<string, {values?: Record<string, unknown>} | undefined>} metrics @param {string} name @param {string} [statistic] */
 export function metricValue(metrics, name, statistic = 'max') {
   const values = metrics[name]?.values;
   const value = values?.[statistic];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/** @param {string} text @param {string} prefix @returns {unknown} */
 export function jsonAfterPrefix(text, prefix) {
   const line = text.split(/\r?\n/).find((item) => item.includes(prefix));
   if (line === undefined) return undefined;
@@ -456,13 +511,16 @@ export function jsonAfterPrefix(text, prefix) {
   const end = payload.lastIndexOf('}');
   if (end < 0) return undefined;
   const serialized = payload.slice(0, end + 1);
-  return JSON.parse(
-    serialized.startsWith('{\\"')
-      ? serialized.replace(/\\"/g, '"')
-      : serialized,
+  return /** @type {unknown} */ (
+    JSON.parse(
+      serialized.startsWith('{\\"')
+        ? serialized.replace(/\\"/g, '"')
+        : serialized,
+    )
   );
 }
 
+/** @param {Record<string, {values?: Record<string, unknown>} | undefined>} metrics @param {string} prefix */
 export function taggedMetricValues(metrics, prefix) {
   return Object.entries(metrics)
     .filter(([name]) => name.startsWith(`${prefix}{`) && name.endsWith('}'))
@@ -476,32 +534,48 @@ export function taggedMetricValues(metrics, prefix) {
     }));
 }
 
+/** @param {string} line @returns {{cpuPercent: number, memoryBytes: number | null}} */
 export function parseDockerStats(line) {
   // Streaming `docker stats` redraws the terminal with ANSI escapes around each
   // JSON row even when stdout is a pipe.
-  const stats = JSON.parse(
-    line.slice(line.indexOf('{'), line.lastIndexOf('}') + 1),
+  const parsed = /** @type {unknown} */ (
+    JSON.parse(line.slice(line.indexOf('{'), line.lastIndexOf('}') + 1))
   );
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('invalid Docker stats output');
+  }
+  const stats = /** @type {Record<string, unknown>} */ (parsed);
+  const memory = stats.MemUsage;
+  if (memory != null && typeof memory !== 'string') {
+    throw new Error('invalid Docker stats output');
+  }
   return {
-    cpuPercent: parseFloat(stats.CPUPerc),
-    memoryBytes: parseBytes(stats.MemUsage?.split('/')[0]?.trim() ?? ''),
+    cpuPercent: parseFloat(String(stats.CPUPerc)),
+    memoryBytes: parseBytes(memory?.split('/')[0]?.trim() ?? ''),
   };
 }
 
+/** @param {string} reference @param {string} output */
 export function parseDockerImageIdentity(reference, output) {
   const separator = output.indexOf(' ');
   if (separator < 1) throw new Error('invalid Docker image inspect output');
-  const repositoryDigests = JSON.parse(output.slice(separator + 1));
-  if (!Array.isArray(repositoryDigests)) {
+  const parsedDigests = /** @type {unknown} */ (
+    JSON.parse(output.slice(separator + 1))
+  );
+  if (
+    !Array.isArray(parsedDigests) ||
+    !parsedDigests.every((digest) => typeof digest === 'string')
+  ) {
     throw new Error('invalid Docker image repository digests');
   }
   return {
     reference,
     imageId: output.slice(0, separator),
-    repositoryDigests,
+    repositoryDigests: parsedDigests,
   };
 }
 
+/** @param {string} value @returns {number | null} */
 function parseBytes(value) {
   const match = value.match(/^([\d.]+)\s*(B|KiB|MiB|GiB|KB|MB|GB)$/i);
   if (match === null) return null;

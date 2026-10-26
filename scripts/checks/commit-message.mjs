@@ -27,6 +27,7 @@ const HEADER_PATTERN = new RegExp(
 // intent for this check to judge, so they pass untouched.
 const EXEMPT_PATTERNS = [/^Merge /, /^Revert "/, /^fixup! /, /^squash! /];
 
+/** @param {string} message @returns {string | undefined} */
 function headerOf(message) {
   return message
     .split(/\r?\n/)
@@ -34,6 +35,7 @@ function headerOf(message) {
     .find((line) => line.length > 0 && !line.startsWith('#'));
 }
 
+/** @param {string} message @returns {string[]} */
 function problemsIn(message) {
   const header = headerOf(message);
   if (header === undefined) return ['the commit message is empty'];
@@ -61,6 +63,7 @@ if (file === undefined) {
   process.exit(2);
 }
 
+/** @type {string} */
 let message;
 try {
   message = readFileSync(file, 'utf8');

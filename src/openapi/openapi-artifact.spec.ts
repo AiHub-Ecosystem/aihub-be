@@ -20,7 +20,7 @@ function packageVersion(): string {
 describe('committed openapi.json', () => {
   it('matches what the generator produces right now — catches "changed a schema, forgot to regenerate"', () => {
     const committed = committedDocument();
-    const fresh = JSON.parse(
+    const fresh: unknown = JSON.parse(
       JSON.stringify(buildOpenApiDocument(packageVersion())),
     );
 
@@ -44,9 +44,9 @@ describe('committed openapi.json', () => {
 
     expect(path.get).toMatchObject({
       operationId: 'organizations.identityConfig.read',
-      description: expect.stringContaining('active owner'),
       security: [{ BearerAuth: [] }],
     });
+    expect(path.get?.description).toContain('active owner');
 
     const successResponse = JSON.stringify(path.get?.responses?.['200']);
     expect(successResponse).toContain('"const":true');

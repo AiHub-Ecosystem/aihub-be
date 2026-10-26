@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
@@ -11,6 +13,14 @@ import {
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { parseChanges } from '../../scripts/ci/api-compatibility/check.mjs';
+
+/** @typedef {{type?: string, properties?: Record<string, Schema>, required?: string[], enum?: string[], 'x-extensible-enum'?: string[], anyOf?: Schema[], items?: Schema, const?: string}} Schema */
+/** @typedef {{schema: Schema}} MediaType */
+/** @typedef {{content: Record<string, MediaType>}} ApiResponse */
+/** @typedef {{responses: Record<string, ApiResponse>}} Operation */
+/** @typedef {{get: Operation}} PathItem */
+/** @typedef {{paths: Record<string, PathItem>, components: {responses: Record<string, ApiResponse>}}} OpenApiDocument */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../..');
@@ -20,18 +30,57 @@ const BASELINE_PATH = join(
   ROOT,
   'scripts/ci/api-compatibility/fixtures/baseline.json',
 );
-const BASELINE = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
-const OPENAPI = JSON.parse(readFileSync(join(ROOT, 'openapi.json'), 'utf8'));
+const BASELINE = /** @type {OpenApiDocument} */ (
+  JSON.parse(readFileSync(BASELINE_PATH, 'utf8'))
+);
+const OPENAPI = /** @type {OpenApiDocument} */ (
+  JSON.parse(readFileSync(join(ROOT, 'openapi.json'), 'utf8'))
+);
 const WORKFLOW = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
 const API_BREAK_DECLARATION =
   'API-Breaking-Change: intentional\nAPI-Breaking-Change-Reason: remove field for v2 migration';
 
+void test('validates the oasdiff change shape before reporting it', () => {
+  assert.deepEqual(
+    parseChanges('[{"level":2,"text":"response field removed"}]'),
+    [{ level: 2, text: 'response field removed' }],
+  );
+  assert.throws(
+    () => parseChanges('[{"level":2}]'),
+    /unexpected breaking-change result/,
+  );
+  assert.throws(
+    () => parseChanges('[{"level":1,"text":"non-breaking change"}]'),
+    /unexpected breaking-change result/,
+  );
+});
+
+/** @param {unknown} error */
+function errorCode(error) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) {
+    return error.code;
+  }
+  return undefined;
+}
+
+/** @param {(document: OpenApiDocument) => void} mutator */
 function fixture(mutator) {
   const document = structuredClone(BASELINE);
   mutator(document);
   return document;
 }
 
+/**
+ * @param {import('node:test').TestContext} t
+ * @param {OpenApiDocument | string} candidate
+ * @param {string} [body]
+ * @param {OpenApiDocument} [baseline]
+ */
 function runChecker(t, candidate, body = '', baseline = BASELINE) {
   mkdirSync(TEMP_ROOT, { recursive: true });
   const dir = mkdtempSync(join(TEMP_ROOT, 'api-compatibility-'));
@@ -40,7 +89,9 @@ function runChecker(t, candidate, body = '', baseline = BASELINE) {
     try {
       rmdirSync(TEMP_ROOT);
     } catch (error) {
-      if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
+      if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(errorCode(error) ?? '')) {
+        throw error;
+      }
     }
   });
   const basePath = join(dir, 'base.json');

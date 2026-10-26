@@ -109,7 +109,9 @@ for (const { path, gates } of pathCases) {
 }
 
 await test('a domain source file still runs type-check and related specs', () => {
-  const { gates } = planChangedFiles(['src/modules/example/domain/policy.ts']);
+  const plan = planChangedFiles(['src/modules/example/domain/policy.ts']);
+  if (!('gates' in plan)) throw new Error('expected a changed-file plan');
+  const { gates } = plan;
   assert.ok(gates.includes('type-check'));
   assert.ok(gates.includes('test:related'));
   assert.ok(gates.includes('check:domain-globals'));
@@ -140,7 +142,7 @@ await test('changed files union committed, staged, unstaged, and untracked paths
     ['ls-files --others --exclude-standard', 'new.ts'],
   ]);
   assert.deepEqual(
-    resolveChangedFiles((args) => outputs.get(args.join(' '))),
+    resolveChangedFiles((args) => outputs.get(args.join(' ')) ?? ''),
     ['committed.ts', 'unstaged.ts', 'staged.ts', 'new.ts'],
   );
 });
@@ -194,10 +196,12 @@ await test('the entry-point comparison holds on both path shapes', () => {
 });
 
 await test('all gates in pnpm verify have commands and a tested path mapping', () => {
-  const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+  const packageJson = /** @type {{scripts: Record<string, string>}} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
   const invoked = [
     ...packageJson.scripts.verify.matchAll(/\bpnpm\s+([\w:-]+)/g),
-  ].map((match) => match[1]);
+  ].map((match) => match[1] ?? '');
   // `check:batch` is one step that runs several gates. The guarantee is about
   // the gates, so expand the step into its declared members rather than letting
   // a single step name stand in for the coverage of eleven.
@@ -222,7 +226,9 @@ await test('all gates in pnpm verify have commands and a tested path mapping', (
 });
 
 await test('check:changed stays out of verify and CI', () => {
-  const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+  const packageJson = /** @type {{scripts: Record<string, string>}} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
   assert.ok(!packageJson.scripts.verify.includes('check:changed'));
   assert.ok(!workflow.includes('check:changed'));

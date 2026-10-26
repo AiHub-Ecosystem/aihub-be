@@ -8,6 +8,7 @@
  */
 class CliUsageError extends Error {}
 
+/** @returns {never} */
 function usageError() {
   throw new CliUsageError('Invalid CLI arguments');
 }
@@ -20,6 +21,7 @@ function usageError() {
  * unlimited, matching the column's nullable default — so a quota is something
  * you opt into, and forgetting the flag never silently caps a real tenant.
  */
+/** @param {ReadonlyMap<string, string>} options @param {string} name @returns {number | null} */
 function quotaOption(options, name) {
   const raw = options.get(name);
   if (raw === undefined) {
@@ -42,6 +44,7 @@ function quotaOption(options, name) {
  * `--name value` pairs, so there are no bare flags to accidentally invert,
  * and an unrecognised word is rejected rather than read as false.
  */
+/** @param {ReadonlyMap<string, string>} options @param {string} name @param {boolean} [fallback] @returns {boolean} */
 function booleanOption(options, name, fallback = false) {
   const raw = options.get(name);
   if (raw === undefined) {
@@ -68,6 +71,7 @@ const ALLOWED_ENVIRONMENTS = new Set([
  * every newly issued key has exactly one environment, so there is no shared
  * multi-environment prefix to issue it under.
  */
+/** @param {ReadonlyMap<string, string>} options @param {string} name @param {string} [fallback] @returns {string} */
 function environmentOption(options, name, fallback = 'production') {
   const value = (options.get(name) ?? fallback).trim();
   if (!ALLOWED_ENVIRONMENTS.has(value)) {

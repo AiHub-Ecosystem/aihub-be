@@ -108,7 +108,9 @@ describe('registerBodySizeGuard', () => {
     });
 
     expect(response.statusCode).toBe(413);
-    expect(response.json().code).toBe('FST_ERR_CTP_BODY_TOO_LARGE');
+    expect(response.json()).toMatchObject({
+      code: 'FST_ERR_CTP_BODY_TOO_LARGE',
+    });
     expect(handlerCalls).toBe(0);
   });
 

@@ -39,8 +39,12 @@ function withQuery(
         return (text: string, values: readonly unknown[]) =>
           authQueryRows(target, text, values);
       }
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        const result: unknown = Reflect.apply(value, target, args);
+        return result;
+      };
     },
   }) as Prisma.TransactionClient & PostgresAuthQueryClient;
 }
@@ -70,8 +74,12 @@ function fixtureClient(
       if (property in helpers) {
         return helpers[property as keyof typeof helpers];
       }
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        const result: unknown = Reflect.apply(value, target, args);
+        return result;
+      };
     },
   }) as PostgresAuthClient;
 }

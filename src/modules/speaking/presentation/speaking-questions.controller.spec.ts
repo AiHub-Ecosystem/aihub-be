@@ -27,14 +27,11 @@ describe('SpeakingQuestionsController', () => {
 
     expect(response.data.part).toBe(3);
     expect(response.data.questions).toHaveLength(4);
-    expect(response.data.questions[0]).toEqual(
-      expect.objectContaining({
-        question_id: expect.stringMatching(/^p3_/),
-        part: 3,
-        prompt_text: expect.stringMatching(/\?$/),
-        audio_url: expect.stringMatching(/^https:\/\/s3\.wispace\.app\//),
-      }),
-    );
+    const question = response.data.questions[0];
+    expect(question?.question_id).toMatch(/^p3_/);
+    expect(question?.part).toBe(3);
+    expect(question?.prompt_text).toMatch(/\?$/);
+    expect(question?.audio_url).toMatch(/^https:\/\/s3\.wispace\.app\//);
     expect(getReadUrl.mock.calls).toHaveLength(4);
   });
 

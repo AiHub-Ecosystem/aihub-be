@@ -8,8 +8,12 @@ const schemaPath = join(root, 'prisma', 'schema.prisma');
 const srcModules = join(root, 'src', 'modules');
 
 const schema = readFileSync(schemaPath, 'utf8');
+/** @typedef {{model: string, owner: string | null, table: string | null}} OwnedTable */
+/** @type {OwnedTable[]} */
 const tables = [];
+/** @type {string | null} */
 let lastOwner = null;
+/** @type {OwnedTable | null} */
 let current = null;
 for (const line of schema.split(/\r?\n/)) {
   const om = /^\s*\/\/\/\s*@owner\s+(\w+)/.exec(line);
@@ -39,7 +43,9 @@ for (const line of schema.split(/\r?\n/)) {
   }
 }
 
+/** @param {string} dir @returns {string[]} */
 function collectFiles(dir) {
+  /** @type {string[]} */
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
@@ -50,6 +56,7 @@ function collectFiles(dir) {
   return out;
 }
 
+/** @type {Map<string, string>} */
 const allowlist = new Map([
   [
     'src/modules/identity/organizations/infrastructure/postgres-organization-creation.repository.ts::user_accounts',
@@ -105,6 +112,7 @@ const allowlist = new Map([
   ],
 ]);
 
+/** @param {string} s @returns {string} */
 function esc(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

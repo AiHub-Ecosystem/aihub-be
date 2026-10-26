@@ -1,3 +1,9 @@
+import { Value } from '@sinclair/typebox/value';
+
+import {
+  LoginResponseSchema,
+  MfaRequiredResponseSchema,
+} from '@/contracts/auth/local-auth';
 import {
   type InMemoryAccount,
   seedAccount,
@@ -43,8 +49,11 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
     if (setCookie === undefined) {
       throw new Error('the response set no refresh cookie');
     }
-    const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-    return (cookie ?? '').split(';', 1)[0] ?? '';
+    const cookie: unknown = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    if (typeof cookie !== 'string') {
+      throw new Error('the response refresh cookie was not a string');
+    }
+    return cookie.split(';', 1)[0] ?? '';
   }
 
   it('logs in through the real HTTP stack with a narrow no-store response', async () => {
@@ -61,14 +70,13 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.json()).toEqual({
-      data: {
-        access_token: 'ey.fake.access',
-        token_type: 'Bearer',
-        expires_in: 900,
-      },
-      meta: { request_id: expect.stringMatching(/^req_/) },
+    const body = Value.Parse(LoginResponseSchema, response.json<unknown>());
+    expect(body.data).toEqual({
+      access_token: 'ey.fake.access',
+      token_type: 'Bearer',
+      expires_in: 900,
     });
+    expect(body.meta.request_id).toMatch(/^req_/);
     const setCookie = response.headers['set-cookie'];
     expect(Array.isArray(setCookie) ? setCookie : [setCookie]).toEqual(
       expect.arrayContaining([
@@ -93,7 +101,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
     expect(response.statusCode).toBe(202);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.headers['set-cookie']).toBeUndefined();
-    expect(response.json().data).toEqual({ status: 'MFA_REQUIRED' });
+    expect(
+      Value.Parse(MfaRequiredResponseSchema, response.json<unknown>()).data,
+    ).toEqual({ status: 'MFA_REQUIRED' });
     expect(c.state.refreshTokens.size).toBe(0);
   });
 
@@ -107,9 +117,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       payload: { email: 'nobody@example.com', password: 'wrong password' },
     });
     expect(unknown.statusCode).toBe(401);
-    expect(unknown.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_CREDENTIALS_INVALID' }),
-    );
+    expect(unknown.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_CREDENTIALS_INVALID' },
+    });
     expect(unknown.payload).not.toContain('nobody@example.com');
 
     seedActiveAccount();
@@ -136,7 +146,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
   });
 
   it('rotates the refresh cookie and revokes a reused family', async () => {
@@ -161,14 +173,13 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
 
     expect(refresh.statusCode).toBe(200);
     expect(refresh.headers['cache-control']).toBe('no-store');
-    expect(refresh.json()).toEqual({
-      data: {
-        access_token: 'ey.fake.access',
-        token_type: 'Bearer',
-        expires_in: 900,
-      },
-      meta: { request_id: expect.stringMatching(/^req_/) },
+    const body = Value.Parse(LoginResponseSchema, refresh.json<unknown>());
+    expect(body.data).toEqual({
+      access_token: 'ey.fake.access',
+      token_type: 'Bearer',
+      expires_in: 900,
     });
+    expect(body.meta.request_id).toMatch(/^req_/);
     const rotatedCookie = cookieOf(refresh);
     expect(rotatedCookie).not.toBe(loginCookie);
 
@@ -178,9 +189,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       headers: { cookie: loginCookie },
     });
     expect(replay.statusCode).toBe(401);
-    expect(replay.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_REFRESH_TOKEN_INVALID' }),
-    );
+    expect(replay.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_REFRESH_TOKEN_INVALID' },
+    });
     expect(String(replay.headers['set-cookie'])).toContain('Max-Age=0');
 
     const successorAfterReuse = await c.app.inject({
@@ -332,7 +343,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       url: '/v1/auth/refresh?query_value=alternate',
     });
     expect(alternate.statusCode).toBe(401);
-    expect(alternate.json().error.code).toBe('AUTH_REFRESH_TOKEN_INVALID');
+    expect(alternate.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_REFRESH_TOKEN_INVALID' },
+    });
 
     const body = await c.app.inject({
       method: 'POST',
@@ -341,7 +354,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       payload: { token: 'alternate' },
     });
     expect(body.statusCode).toBe(400);
-    expect(body.json().error.code).toBe('INVALID_REQUEST');
+    expect(body.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
 
     seedActiveAccount();
     const login = await c.app.inject({
@@ -358,7 +373,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       headers: { cookie: `${validCookie}; unrelated=value` },
     });
     expect(extraCookie.statusCode).toBe(401);
-    expect(extraCookie.json().error.code).toBe('AUTH_REFRESH_TOKEN_INVALID');
+    expect(extraCookie.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_REFRESH_TOKEN_INVALID' },
+    });
 
     const authorization = await c.app.inject({
       method: 'POST',

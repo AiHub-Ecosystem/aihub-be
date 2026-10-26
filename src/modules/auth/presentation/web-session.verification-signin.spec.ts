@@ -4,11 +4,13 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 import type { LightMyRequestResponse } from 'fastify';
 
 import { AppModule } from '@/app.module';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { AUTH_CLOCK } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
@@ -268,9 +270,9 @@ describe('web session HTTP boundary', () => {
         const response = await post(url, { browser_binding: BINDING });
 
         expect(response.statusCode).toBe(400);
-        expect(response.json().error.code).toBe(
-          'AUTH_VERIFICATION_PASSWORD_INVALID',
-        );
+        expect(response.json<unknown>()).toMatchObject({
+          error: { code: 'AUTH_VERIFICATION_PASSWORD_INVALID' },
+        });
         expect(state.accounts.get(USER_ID)?.status).toBe(
           'pending_verification',
         );
@@ -283,9 +285,9 @@ describe('web session HTTP boundary', () => {
         const response = await post(url, { password: 'not it' });
 
         expect(response.statusCode).toBe(400);
-        expect(response.json().error.code).toBe(
-          'AUTH_VERIFICATION_PASSWORD_INVALID',
-        );
+        expect(response.json<unknown>()).toMatchObject({
+          error: { code: 'AUTH_VERIFICATION_PASSWORD_INVALID' },
+        });
         expect(
           state.verificationTokens.get(`hash:${VERIFICATION_TOKEN_VALUE}`)
             ?.passwordFailures,
@@ -339,12 +341,10 @@ describe('web session HTTP boundary', () => {
         method: 'POST',
         url: VERIFICATION_URL,
         headers,
-        payload:
-          options.body ??
-          ({ token: VERIFICATION_TOKEN_VALUE, browser_binding: BINDING } as {
-            token: string;
-            browser_binding: string;
-          }),
+        payload: options.body ?? {
+          token: VERIFICATION_TOKEN_VALUE,
+          browser_binding: BINDING,
+        },
       });
     }
 
@@ -352,10 +352,10 @@ describe('web session HTTP boundary', () => {
       const response = await signIn();
 
       expect(response.statusCode).toBe(201);
-      const body = response.json() as {
-        data: { web_session_token: string; expires_at: string };
-        meta: { request_id: string };
-      };
+      const body = Value.Parse(
+        CreateWebSessionResponseSchema,
+        response.json<unknown>(),
+      );
       expect(body.data.web_session_token).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(body.data.expires_at).toBe('2026-11-07T00:00:00.000Z');
       expect(body.meta.request_id).toMatch(/^req_/);
@@ -438,9 +438,9 @@ describe('web session HTTP boundary', () => {
       const response = await signIn({ body: { token: 'not-a-real-token' } });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'AUTH_VERIFICATION_TOKEN_INVALID' }),
-      );
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'AUTH_VERIFICATION_TOKEN_INVALID' },
+      });
       expect(response.headers['cache-control']).toBe('no-store');
       expect(state.webSessions.size).toBe(0);
     });
@@ -451,9 +451,9 @@ describe('web session HTTP boundary', () => {
       const response = await signIn();
 
       expect(response.statusCode).toBe(429);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'RATE_LIMITED' }),
-      );
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'RATE_LIMITED' },
+      });
       expect(limiter.calls.map((call) => call.scope)).toEqual([
         'web_session_verification_token',
       ]);
@@ -469,9 +469,9 @@ describe('web session HTTP boundary', () => {
         const response = await signIn({ secret });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json().error).toEqual(
-          expect.objectContaining({ code: 'UNAUTHORIZED' }),
-        );
+        expect(response.json<unknown>()).toMatchObject({
+          error: { code: 'UNAUTHORIZED' },
+        });
         expect(limiter.calls).toEqual([]);
         expect(state.webSessions.size).toBe(0);
         expect(state.accounts.get(USER_ID)?.status).toBe(
@@ -486,9 +486,9 @@ describe('web session HTTP boundary', () => {
       const response = await signIn();
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'AUTH_WEB_SESSION_UNAVAILABLE' }),
-      );
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.payload).not.toContain('web_session_token');
       expect(state.webSessions.size).toBe(0);
     });
@@ -499,9 +499,9 @@ describe('web session HTTP boundary', () => {
       const response = await signIn();
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'AUTH_WEB_SESSION_UNAVAILABLE' }),
-      );
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.headers['set-cookie']).toBeUndefined();
       expect(response.payload).not.toContain('web_session_token');
       expect(state.webSessions.size).toBe(0);
@@ -520,7 +520,9 @@ describe('web session HTTP boundary', () => {
       });
 
       expect(extra.statusCode).toBe(400);
-      expect(extra.json().error.code).toBe('INVALID_REQUEST');
+      expect(extra.json<unknown>()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect(malformed.statusCode).toBe(400);
       expect(state.webSessions.size).toBe(0);
     });

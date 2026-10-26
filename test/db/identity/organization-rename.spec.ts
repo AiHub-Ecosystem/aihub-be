@@ -89,7 +89,7 @@ function input(
 }
 
 async function organization(): Promise<Record<string, unknown>> {
-  const result = await pool.query(
+  const result = await pool.query<Record<string, unknown>>(
     `SELECT name, status, entitlements, rate_limit_rpm, max_concurrent,
             monthly_request_quota, hard_stop_on_quota, updated_at
      FROM organizations WHERE id = $1`,
@@ -103,7 +103,7 @@ async function organization(): Promise<Record<string, unknown>> {
 }
 
 async function events(): Promise<Record<string, unknown>[]> {
-  const result = await pool.query(
+  const result = await pool.query<Record<string, unknown>>(
     `SELECT id, actor_user_account_id, action, outcome, target_type, target_id,
             target_label, detail
      FROM organization_audit_events

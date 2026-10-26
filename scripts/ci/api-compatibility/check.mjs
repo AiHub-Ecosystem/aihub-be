@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -16,17 +16,38 @@ const TEMP_ROOT = join(REPO_ROOT, 'temp');
 const DECLARATION = /^API-Breaking-Change:\s*intentional\s*$/im;
 const REASON = /^API-Breaking-Change-Reason:\s*([^\r\n]+)\s*$/im;
 
-function normalizeLegacyTuples(value, path = '$') {
+/** @typedef {{level: number, text: string}} ApiChange */
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/** @param {unknown} value @returns {value is ApiChange} */
+function isApiChange(value) {
+  return (
+    isRecord(value) &&
+    typeof value.level === 'number' &&
+    typeof value.text === 'string'
+  );
+}
+
+/** @param {unknown} value @param {string} [path] */
+export function normalizeLegacyTuples(value, path = '$') {
   if (Array.isArray(value)) {
-    value.forEach((item, index) =>
+    /** @type {unknown[]} */
+    const items = value;
+    items.forEach((item, index) =>
       normalizeLegacyTuples(item, `${path}/${index}`),
     );
     return;
   }
-  if (value === null || typeof value !== 'object') return;
+  if (!isRecord(value)) return;
 
-  if (value.type === 'array' && Array.isArray(value.items)) {
-    const items = value.items;
+  const tupleItems = value.items;
+  if (value.type === 'array' && Array.isArray(tupleItems)) {
+    /** @type {unknown[]} */
+    const items = tupleItems;
     const tupleLength = items.length;
     if (
       tupleLength === 0 ||
@@ -50,43 +71,60 @@ function normalizeLegacyTuples(value, path = '$') {
   }
 }
 
+/** @param {string} path @returns {unknown} */
 function readOpenApi(path) {
-  const document = JSON.parse(readFileSync(resolve(path), 'utf8'));
+  const document = /** @type {unknown} */ (
+    JSON.parse(readFileSync(resolve(path), 'utf8'))
+  );
   normalizeLegacyTuples(document);
   return document;
 }
 
+/** @param {string} body */
 function breakingReason(body) {
   if (!DECLARATION.test(body)) return undefined;
   return REASON.exec(body)?.[1]?.trim() || undefined;
 }
 
-function parseChanges(stdout) {
-  const changes = JSON.parse(stdout);
+/** @param {string} stdout @returns {ApiChange[]} */
+export function parseChanges(stdout) {
+  const parsed = /** @type {unknown} */ (JSON.parse(stdout));
+  if (!Array.isArray(parsed)) {
+    throw new Error('oasdiff returned an unexpected breaking-change result');
+  }
+  const entries = /** @type {unknown[]} */ (parsed);
+  const changes = entries.filter(isApiChange);
   if (
-    !Array.isArray(changes) ||
     changes.length === 0 ||
-    !changes.some(
-      (change) =>
-        change !== null &&
-        typeof change === 'object' &&
-        typeof change.level === 'number' &&
-        change.level >= 2,
-    )
+    changes.length !== entries.length ||
+    !changes.some((change) => change.level >= 2)
   ) {
     throw new Error('oasdiff returned an unexpected breaking-change result');
   }
   return changes;
 }
 
+/** @param {unknown} error */
+function ignoreExpectedTempRootError(error) {
+  const code = isRecord(error) ? error.code : undefined;
+  if (
+    typeof code === 'string' &&
+    ['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(code)
+  ) {
+    return;
+  }
+  throw error;
+}
+
 function cleanTempRoot() {
   try {
     rmdirSync(TEMP_ROOT);
   } catch (error) {
-    if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
+    ignoreExpectedTempRootError(error);
   }
 }
 
+/** @returns {void} */
 function main() {
   const [basePath, revisionPath, ...extraArgs] = process.argv.slice(2);
   if (!basePath || !revisionPath || extraArgs.length > 0) {
@@ -151,11 +189,20 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  process.stderr.write(
-    `${error instanceof Error ? error.message : String(error)}\n`,
-  );
-  process.exitCode = 1;
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  try {
+    main();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : '';
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
 }

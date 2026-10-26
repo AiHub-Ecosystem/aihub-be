@@ -6,13 +6,24 @@ const runtimeConnectionModule = new URL(
   import.meta.url,
 );
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/** @param {unknown} value @returns {value is (options: {env: NodeJS.ProcessEnv}) => void} */
+function isRuntimeConnectionLoader(value) {
+  return typeof value === 'function';
+}
+
 async function main() {
   // Set only by the scheduled host wrapper; the API entrypoint has no deadline.
   const args = process.argv.slice(2);
+  /** @type {number | undefined} */
   let timeoutSeconds;
   if (args[0] === '--timeout-seconds') {
     const rawTimeout = args[1];
-    if (!/^[1-9]\d*$/.test(rawTimeout)) {
+    if (rawTimeout === undefined || !/^[1-9]\d*$/.test(rawTimeout)) {
       throw new Error('--timeout-seconds must be a positive integer');
     }
     const seconds = Number(rawTimeout);
@@ -34,11 +45,26 @@ async function main() {
     throw new Error('runtime connection loader is unavailable');
   }
 
-  const runtimeConnection = await import(runtimeConnectionModule);
-  const loadRuntimeConnectionEnvironment =
-    runtimeConnection.loadRuntimeConnectionEnvironment ??
-    runtimeConnection.default?.loadRuntimeConnectionEnvironment;
-  if (typeof loadRuntimeConnectionEnvironment !== 'function') {
+  const runtimeConnection = /** @type {unknown} */ (
+    await import(runtimeConnectionModule)
+  );
+  const defaultExport = isRecord(runtimeConnection)
+    ? runtimeConnection.default
+    : undefined;
+  const directLoader = isRecord(runtimeConnection)
+    ? runtimeConnection.loadRuntimeConnectionEnvironment
+    : undefined;
+  const defaultLoader = isRecord(defaultExport)
+    ? defaultExport.loadRuntimeConnectionEnvironment
+    : undefined;
+  const loadRuntimeConnectionEnvironment = isRuntimeConnectionLoader(
+    directLoader,
+  )
+    ? directLoader
+    : isRuntimeConnectionLoader(defaultLoader)
+      ? defaultLoader
+      : undefined;
+  if (loadRuntimeConnectionEnvironment === undefined) {
     throw new Error('runtime connection loader is unavailable');
   }
   loadRuntimeConnectionEnvironment({ env: process.env });
@@ -64,7 +90,7 @@ main().catch((error) => {
   // the failing field or file. "runtime configuration failed" on its own sent
   // every failed sandbox deploy back to the Vault runbook.
   console.error(
-    `runtime configuration failed: ${error instanceof Error ? error.message : String(error)}`,
+    `runtime configuration failed: ${error instanceof Error ? error.message : typeof error === 'string' ? error : ''}`,
   );
   process.exitCode = 1;
 });

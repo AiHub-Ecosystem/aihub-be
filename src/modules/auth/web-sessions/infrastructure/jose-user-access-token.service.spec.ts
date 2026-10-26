@@ -87,10 +87,11 @@ describe('JoseUserAccessTokenService', () => {
       exp: 1_800_000_900,
     });
 
-    await expect(service.verify(issued.token)).resolves.toEqual({
+    const verified = await service.verify(issued.token);
+    expect(verified).toMatchObject({
       userId: 'usr_01J00000000000000000000000',
-      jti: expect.any(String),
     });
+    expect(verified.jti).toEqual(expect.any(String));
   });
 
   it('maps malformed, expired, and claim-tampered tokens to one safe error', async () => {

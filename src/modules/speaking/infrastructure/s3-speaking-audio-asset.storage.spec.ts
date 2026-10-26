@@ -6,7 +6,7 @@ const KEY =
 
 function storage(
   send: jest.Mock<Promise<unknown>, [unknown]> = jest
-    .fn()
+    .fn<Promise<unknown>, [unknown]>()
     .mockResolvedValue({}),
   options: ConstructorParameters<typeof S3SpeakingAudioAssetStorage>[1] = {},
 ) {
@@ -54,7 +54,7 @@ describe('S3SpeakingAudioAssetStorage', () => {
   });
 
   it('selects the isolated Sandbox bucket and returns HEAD metadata', async () => {
-    const send = jest.fn().mockResolvedValue({
+    const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({
       ContentType: 'audio/webm',
       ContentLength: 2_048,
     });
@@ -63,7 +63,8 @@ describe('S3SpeakingAudioAssetStorage', () => {
     await expect(
       adapter.describeObject({ environment: 'sandbox', objectKey: KEY }),
     ).resolves.toEqual({ contentType: 'audio/webm', byteSize: 2_048 });
-    expect(send.mock.calls[0]?.[0]).toMatchObject({
+    const command: unknown = send.mock.calls[0]?.[0];
+    expect(command).toMatchObject({
       input: { Bucket: 'aihub-sandbox-speaking-recordings', Key: KEY },
     });
   });
@@ -74,7 +75,7 @@ describe('S3SpeakingAudioAssetStorage', () => {
       $metadata: { httpStatusCode: 404 },
     });
     const send = jest
-      .fn()
+      .fn<Promise<unknown>, [unknown]>()
       .mockRejectedValueOnce(missing)
       .mockRejectedValueOnce(missing);
     const adapter = storage(send);
@@ -131,7 +132,7 @@ describe('S3SpeakingAudioAssetStorage', () => {
   });
 
   it('rejects path traversal without calling the SDK client', async () => {
-    const send = jest.fn();
+    const send = jest.fn<Promise<unknown>, [unknown]>();
     const adapter = storage(send);
 
     await expect(

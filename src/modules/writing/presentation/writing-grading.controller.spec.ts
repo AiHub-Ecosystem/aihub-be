@@ -6,12 +6,15 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { type Static, type TSchema, Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 import { MockAgent } from 'undici';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { GradeResponseSchema } from '@/contracts/writing/grading';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import {
@@ -27,24 +30,61 @@ import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-atte
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-writing');
 
-function fixture(name: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')) as Record<
-    string,
-    unknown
-  >;
+const Task1FixtureSchema = Type.Object(
+  {
+    question: Type.String(),
+    url: Type.String(),
+    topic: Type.String(),
+    essay: Type.String(),
+  },
+  { additionalProperties: false },
+);
+const Task2FixtureSchema = Type.Object(
+  {
+    question: Type.String(),
+    topic: Type.String(),
+    essay: Type.String(),
+  },
+  { additionalProperties: false },
+);
+const GradingResponseSchema = Type.Object({
+  data: GradeResponseSchema,
+  meta: Type.Object({
+    request_id: Type.String(),
+    service: Type.String(),
+    operation: Type.String(),
+    timing: Type.Object({
+      downstream_ms: Type.Number(),
+      gateway_overhead_ms: Type.Number(),
+      total_ms: Type.Number(),
+    }),
+  }),
+});
+
+function fixture<T extends TSchema>(name: string, schema: T): Static<T> {
+  return Value.Parse(
+    schema,
+    JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')),
+  );
 }
 
-const task1Request = fixture('grade-task1.request.json') as {
-  question: string;
-  url: string;
-  topic: string;
-  essay: string;
-};
-const task2Request = fixture('grade-task2.request.json') as {
-  question: string;
-  topic: string;
-  essay: string;
-};
+function rawFixture(name: string): unknown {
+  const parsed: unknown = JSON.parse(
+    readFileSync(join(FIXTURES, name), 'utf8'),
+  );
+  return parsed;
+}
+
+function gradingResponse(response: { json(): unknown }) {
+  return Value.Parse(GradingResponseSchema, response.json());
+}
+
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
+
+const task1Request = fixture('grade-task1.request.json', Task1FixtureSchema);
+const task2Request = fixture('grade-task2.request.json', Task2FixtureSchema);
 
 // Auth and rate limiting use shared guards; this file focuses on what is
 // actually new for grading: field renaming per task, the shared response
@@ -89,7 +129,7 @@ describe('Writing grading HTTP flow', () => {
       })
       .reply(200, () => {
         task1DownstreamCalls += 1;
-        return fixture('grade-task1.response.json');
+        return rawFixture('grade-task1.response.json');
       })
       .persist();
     pool
@@ -105,7 +145,7 @@ describe('Writing grading HTTP flow', () => {
       })
       .reply(200, () => {
         task2DownstreamCalls += 1;
-        return fixture('grade-task2.response.json');
+        return rawFixture('grade-task2.response.json');
       })
       .persist();
 
@@ -240,7 +280,7 @@ describe('Writing grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
+    const body = gradingResponse(response);
     expect(body.data.overall_band).toBe(7);
     expect(body.data.criteria.map((c: { id: string }) => c.id)).toEqual([
       'task_achievement',
@@ -270,7 +310,7 @@ describe('Writing grading HTTP flow', () => {
       })
       .reply(200, () => {
         task1DownstreamCalls += 1;
-        return fixture('grade-task1.response.json');
+        return rawFixture('grade-task1.response.json');
       });
 
     const before = task1DownstreamCalls;
@@ -330,7 +370,7 @@ describe('Writing grading HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expectErrorCode(response, 'INVALID_REQUEST');
       expect(task1DownstreamCalls).toBe(beforeDownstreamCalls);
       expect(dispatchAttemptCalls).toBe(beforeDispatchAttempts);
     },
@@ -361,10 +401,10 @@ describe('Writing grading HTTP flow', () => {
     expect(first.statusCode).toBe(200);
     expect(replay.statusCode).toBe(200);
     expect(replay.headers['idempotent-replay']).toBe('true');
-    expect(replay.json().data).toEqual(first.json().data);
-    expect(replay.json().meta.timing.downstream_ms).toBe(0);
-    expect(replay.json().meta.request_id).not.toBe(
-      first.json().meta.request_id,
+    expect(gradingResponse(replay).data).toEqual(gradingResponse(first).data);
+    expect(gradingResponse(replay).meta.timing.downstream_ms).toBe(0);
+    expect(gradingResponse(replay).meta.request_id).not.toBe(
+      gradingResponse(first).meta.request_id,
     );
   });
 
@@ -400,7 +440,7 @@ describe('Writing grading HTTP flow', () => {
     expect(first.statusCode).toBe(200);
     expect(replay.statusCode).toBe(200);
     expect(replay.headers['idempotent-replay']).toBe('true');
-    expect(replay.json().data).toEqual(first.json().data);
+    expect(gradingResponse(replay).data).toEqual(gradingResponse(first).data);
     expect(quotaCount).toBe(1);
     expect(dispatchAttemptCalls).toBe(beforeDispatchAttempts + 1);
     expect(task1DownstreamCalls).toBe(beforeDownstreamCalls + 1);
@@ -419,7 +459,7 @@ describe('Writing grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
   });
 
   it('rejects a changed Task 1 request under a completed key', async () => {
@@ -445,7 +485,7 @@ describe('Writing grading HTTP flow', () => {
 
     expect(first.statusCode).toBe(200);
     expect(mismatch.statusCode).toBe(409);
-    expect(mismatch.json().error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expectErrorCode(mismatch, 'IDEMPOTENCY_CONFLICT');
   });
 
   it('grades Task 2 against the real fixture, using task_response first', async () => {
@@ -461,8 +501,8 @@ describe('Writing grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.data.criteria[0].id).toBe('task_response');
+    const body = gradingResponse(response);
+    expect(body.data.criteria[0]?.id).toBe('task_response');
     expect(body.meta.operation).toBe('writing.task2.grade');
   });
 
@@ -492,8 +532,8 @@ describe('Writing grading HTTP flow', () => {
     expect(replay.statusCode).toBe(200);
     expect(task2DownstreamCalls - before).toBe(1);
     expect(replay.headers['idempotent-replay']).toBe('true');
-    expect(replay.json().data).toEqual(first.json().data);
-    expect(replay.json().meta.timing.downstream_ms).toBe(0);
+    expect(gradingResponse(replay).data).toEqual(gradingResponse(first).data);
+    expect(gradingResponse(replay).meta.timing.downstream_ms).toBe(0);
   });
 
   it('refuses an over-budget same-key retry before replay or another dispatch', async () => {
@@ -510,9 +550,11 @@ describe('Writing grading HTTP flow', () => {
 
     expect(first.statusCode).toBe(200);
     expect(retry.statusCode).toBe(429);
-    expect(retry.json().error).toMatchObject({
-      code: 'RATE_LIMITED',
-      retry_after_ms: 60_250,
+    expect(retry.json<unknown>()).toMatchObject({
+      error: {
+        code: 'RATE_LIMITED',
+        retry_after_ms: 60_250,
+      },
     });
     expect(retry.headers['retry-after']).toBe('61');
     expect(task2DownstreamCalls - before).toBe(1);
@@ -535,10 +577,12 @@ describe('Writing grading HTTP flow', () => {
 
     for (const response of [first, repeat]) {
       expect(response.statusCode).toBe(503);
-      expect(response.json().error).toMatchObject({
-        code: 'REDIS_UNAVAILABLE',
-        retryable: true,
-        retry_after_ms: 1_000,
+      expect(response.json<unknown>()).toMatchObject({
+        error: {
+          code: 'REDIS_UNAVAILABLE',
+          retryable: true,
+          retry_after_ms: 1_000,
+        },
       });
     }
     expect(retryBudgetUnavailableCalls).toBe(beforeBudgetCalls + 2);
@@ -568,10 +612,12 @@ describe('Writing grading HTTP flow', () => {
     const recovered = await app.inject(request);
 
     expect(unavailable.statusCode).toBe(503);
-    expect(unavailable.json().error).toMatchObject({
-      code: 'REDIS_UNAVAILABLE',
-      retryable: true,
-      retry_after_ms: 1_000,
+    expect(unavailable.json<unknown>()).toMatchObject({
+      error: {
+        code: 'REDIS_UNAVAILABLE',
+        retryable: true,
+        retry_after_ms: 1_000,
+      },
     });
     expect(recovered.statusCode).toBe(200);
     expect(quotaCount).toBe(beforeQuota);
@@ -591,7 +637,7 @@ describe('Writing grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
     expect(task2DownstreamCalls).toBe(before);
   });
 
@@ -609,7 +655,7 @@ describe('Writing grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
   });
 
   it('rejects a changed Task 2 request under a completed key', async () => {
@@ -634,7 +680,7 @@ describe('Writing grading HTTP flow', () => {
 
     expect(first.statusCode).toBe(200);
     expect(mismatch.statusCode).toBe(409);
-    expect(mismatch.json().error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expectErrorCode(mismatch, 'IDEMPOTENCY_CONFLICT');
   });
 
   it('rejects a Task 1 request missing the required image url', async () => {
@@ -649,6 +695,6 @@ describe('Writing grading HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expectErrorCode(response, 'INVALID_REQUEST');
   });
 });

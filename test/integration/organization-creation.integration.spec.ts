@@ -3,12 +3,14 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import {
   appConfig,
   loadRuntimeConfiguration,
 } from '@/config/runtime-configuration';
+import { CreateOrganizationResponseSchema } from '@/contracts/organization/organization';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
@@ -37,6 +39,10 @@ const OTHER_ID = 'usr_01J00000000000000000000002';
 const DISABLED_TOKEN = 'disabled.token.value';
 const DISABLED_ID = 'usr_01J00000000000000000000003';
 const REQUEST_ID = 'req_01J00000000000000000000000';
+
+function organizationBody(response: { json(): unknown }) {
+  return Value.Parse(CreateOrganizationResponseSchema, response.json());
+}
 
 /** Stands in for the durable act the database lane covers; it keeps only the limit. */
 class OrganizationCreationLimitFake implements OrganizationCreationRecordPort {
@@ -191,11 +197,12 @@ describe('Self-serve Organization creation over HTTP', () => {
       url: '/v1/organizations',
       headers: {
         authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
         ...(options.key === undefined
           ? {}
           : { 'idempotency-key': options.key }),
       },
-      payload: payload as Record<string, unknown>,
+      payload: JSON.stringify(payload),
     });
   }
 
@@ -203,7 +210,7 @@ describe('Self-serve Organization creation over HTTP', () => {
     const response = await create({ name: '  Acme Learning  ' });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({
+    expect(organizationBody(response)).toEqual({
       data: {
         organization: {
           organization_id: 'org_1',
@@ -246,7 +253,9 @@ describe('Self-serve Organization creation over HTTP', () => {
       const response = await create(body);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect(creation.created).toHaveLength(0);
     },
   );
@@ -259,9 +268,9 @@ describe('Self-serve Organization creation over HTTP', () => {
     const response = await create({ name: 'Four' });
 
     expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe(
-      'ORGANIZATION_CREATION_LIMIT_REACHED',
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'ORGANIZATION_CREATION_LIMIT_REACHED' },
+    });
     expect(creation.created).toHaveLength(3);
   });
 
@@ -274,7 +283,7 @@ describe('Self-serve Organization creation over HTTP', () => {
 
     expect(replay.statusCode).toBe(201);
     expect(replay.headers['idempotent-replay']).toBe('true');
-    expect(replay.json().data).toEqual(first.json().data);
+    expect(organizationBody(replay).data).toEqual(organizationBody(first).data);
     expect(creation.created).toHaveLength(3);
   });
 
@@ -287,8 +296,8 @@ describe('Self-serve Organization creation over HTTP', () => {
 
     expect(other.statusCode).toBe(201);
     expect(other.headers['idempotent-replay']).toBeUndefined();
-    expect(other.json().data.organization.organization_id).not.toBe(
-      owner.json().data.organization.organization_id,
+    expect(organizationBody(other).data.organization.organization_id).not.toBe(
+      organizationBody(owner).data.organization.organization_id,
     );
   });
 
@@ -296,7 +305,9 @@ describe('Self-serve Organization creation over HTTP', () => {
     const response = await create({ name: 'Acme' }, { token: DISABLED_TOKEN });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('AUTH_USER_ACCESS_TOKEN_INVALID');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
+    });
     expect(creation.created).toHaveLength(0);
   });
 

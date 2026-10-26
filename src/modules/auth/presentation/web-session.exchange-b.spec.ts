@@ -335,7 +335,9 @@ describe('web session HTTP boundary', () => {
       const response = await exchange(token);
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_INVALID');
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_INVALID' },
+      });
       // Disabling stops the session, it does not delete it: re-enabling the
       // account restores it, which is why nothing is revoked here.
       expect(state.webSessions.size).toBe(1);
@@ -374,9 +376,9 @@ describe('web session HTTP boundary', () => {
       const response = await exchange(token);
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'AUTH_WEB_SESSION_INVALID' }),
-      );
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_INVALID' },
+      });
       expect(response.headers['cache-control']).toBe('no-store');
       // Nothing that distinguishes one unusable session from another.
       expect(response.payload).not.toContain(token);
@@ -433,7 +435,9 @@ describe('web session HTTP boundary', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json().error.code).toBe('AUTH_WEB_SESSION_INVALID');
+        expect(response.json()).toMatchObject({
+          error: { code: 'AUTH_WEB_SESSION_INVALID' },
+        });
       },
     );
 
@@ -453,7 +457,9 @@ describe('web session HTTP boundary', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error.code).toBe('UNAUTHORIZED');
+      expect(response.json()).toMatchObject({
+        error: { code: 'UNAUTHORIZED' },
+      });
       expect(limiter.calls).toEqual([]);
       // The session survives a refused caller: only the exchange was refused.
       expect(state.webSessions.size).toBe(1);
@@ -481,7 +487,9 @@ describe('web session HTTP boundary', () => {
       const response = await exchange('t'.repeat(43));
 
       expect(response.statusCode).toBe(429);
-      expect(response.json().error.code).toBe('RATE_LIMITED');
+      expect(response.json()).toMatchObject({
+        error: { code: 'RATE_LIMITED' },
+      });
       expect(response.payload).not.toContain('access_token');
     });
 
@@ -492,7 +500,9 @@ describe('web session HTTP boundary', () => {
       const response = await exchange(token);
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.headers['cache-control']).toBe('no-store');
       expect(response.payload).not.toContain('access_token');
     });
@@ -504,7 +514,9 @@ describe('web session HTTP boundary', () => {
       const response = await exchange(token);
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.payload).not.toContain('access_token');
     });
 

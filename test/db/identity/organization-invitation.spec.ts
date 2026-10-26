@@ -225,7 +225,12 @@ async function insertInvitationRow(row: {
 }
 
 async function openInvitations(organizationId = ORGANIZATION_ID) {
-  const result = await pool.query(
+  const result = await pool.query<{
+    id: string;
+    email: string;
+    role: OrganizationMembershipRole;
+    token_hash: string;
+  }>(
     `SELECT id, email, role, token_hash
      FROM organization_invitations
      WHERE organization_id = $1 AND consumed_at IS NULL
@@ -236,7 +241,10 @@ async function openInvitations(organizationId = ORGANIZATION_ID) {
 }
 
 async function membershipRow(organizationId: string, userAccountId: string) {
-  const result = await pool.query(
+  const result = await pool.query<{
+    role: OrganizationMembershipRole;
+    status: MembershipStatus;
+  }>(
     `SELECT role, status FROM organization_members
      WHERE organization_id = $1 AND user_account_id = $2`,
     [organizationId, userAccountId],
@@ -256,7 +264,7 @@ async function seedInviterOwner(): Promise<string> {
 }
 
 async function invitationByHash(tokenHash: string) {
-  const result = await pool.query(
+  const result = await pool.query<{ consumed_at: Date | null }>(
     'SELECT consumed_at FROM organization_invitations WHERE token_hash = $1',
     [tokenHash],
   );
@@ -449,7 +457,13 @@ describe('organization invitation revocation against PostgreSQL', () => {
       detail: Record<string, unknown> | null;
     }>
   > {
-    const result = await pool.query(
+    const result = await pool.query<{
+      action: string;
+      outcome: string;
+      target_id: string;
+      target_label: string;
+      detail: Record<string, unknown> | null;
+    }>(
       `SELECT action, outcome, target_id, target_label, detail
        FROM organization_audit_events
        WHERE target_type = 'invitation' AND target_id = ANY($1)

@@ -3,8 +3,10 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
+import { AcceptOrganizationInvitationResponseSchema } from '@/contracts/organization/invitation';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_SENDER,
@@ -125,7 +127,11 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    const body = Value.Parse(
+      AcceptOrganizationInvitationResponseSchema,
+      response.json<unknown>(),
+    );
+    expect(body).toEqual({
       data: { organization_id: 'org_acme', role: 'member', status: 'active' },
       meta: { request_id: REQUEST_ID },
     });
@@ -141,7 +147,12 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.role).toBe('admin');
+    expect(
+      Value.Parse(
+        AcceptOrganizationInvitationResponseSchema,
+        response.json<unknown>(),
+      ).data.role,
+    ).toBe('admin');
   });
 
   it('redeems against the authenticated account and never a request-named organization', async () => {
@@ -167,9 +178,9 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept();
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe(
-      'ORGANIZATION_INVITE_TOKEN_INVALID',
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'ORGANIZATION_INVITE_TOKEN_INVALID' },
+    });
   });
 
   it('gives every token rejection the identical public response', async () => {
@@ -179,8 +190,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const second = await accept({ token: 'a-different-token-entirely' });
 
     expect(second.statusCode).toBe(first.statusCode);
-    expect(second.json().error.code).toBe(first.json().error.code);
-    expect(second.json().error.message).toBe(first.json().error.message);
+    expect(second.json<unknown>()).toEqual(first.json<unknown>());
   });
 
   it('rejects acceptance into a suspended organization distinctly', async () => {
@@ -191,7 +201,9 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'FORBIDDEN' },
+    });
   });
 
   it.each([
@@ -217,7 +229,9 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept(payload);
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(invitations.acceptInvitation.mock.calls).toHaveLength(0);
   });
 
@@ -282,7 +296,12 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const response = await accept();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.role).toBe('owner');
+    expect(
+      Value.Parse(
+        AcceptOrganizationInvitationResponseSchema,
+        response.json<unknown>(),
+      ).data.role,
+    ).toBe('owner');
   });
 
   it('accepts an oversized token as a token rejection, not a schema rejection', async () => {
@@ -293,9 +312,9 @@ describe('Organization invitation acceptance HTTP flow', () => {
     // Any non-empty string is a candidate token, so a wrong one must reach the
     // single generic result rather than earning a second observable outcome.
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe(
-      'ORGANIZATION_INVITE_TOKEN_INVALID',
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'ORGANIZATION_INVITE_TOKEN_INVALID' },
+    });
   });
 
   it.each([

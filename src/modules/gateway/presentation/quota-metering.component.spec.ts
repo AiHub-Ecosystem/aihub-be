@@ -119,7 +119,7 @@ describe('quota and metering component behaviour', () => {
 
     const repository = new FakeUsageRepository();
     const metering = new MeteringService(repository, undefined, counter);
-    const send = jest.fn();
+    const send = jest.fn<void, [unknown]>();
     await new HttpExceptionFilter(metering).catch(
       failure,
       httpContextFor(request, {
@@ -128,11 +128,10 @@ describe('quota and metering component behaviour', () => {
       }),
     );
 
-    expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.objectContaining({ code: 'REDIS_UNAVAILABLE' }),
-      }),
-    );
+    const responseBody: unknown = send.mock.calls[0]?.[0];
+    expect(responseBody).toMatchObject({
+      error: { code: 'REDIS_UNAVAILABLE' },
+    });
     expect(repository.records[0]).toEqual(
       expect.objectContaining({
         outcome: 'internal_error',

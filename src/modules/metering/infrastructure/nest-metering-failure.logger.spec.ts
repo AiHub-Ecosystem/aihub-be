@@ -34,7 +34,10 @@ describe('NestMeteringFailureLogger', () => {
     try {
       new NestMeteringFailureLogger().writeFailed(record);
 
-      const message = error.mock.calls[0]?.[0];
+      const message: unknown = error.mock.calls[0]?.[0];
+      if (typeof message !== 'string') {
+        throw new Error('Expected a string log message');
+      }
       expect(message).toContain(record.requestId);
       expect(message).toContain('inputTokens');
       expect(message).not.toContain(forbiddenEssay);

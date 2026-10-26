@@ -1,3 +1,6 @@
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+
 import {
   type InMemoryAccount,
   seedAccount,
@@ -8,6 +11,10 @@ import {
   USER_ID,
   createLocalAuthTestContext,
 } from '@/modules/auth/testing/local-auth.controller.spec-support';
+
+const RequestIdEnvelopeSchema = Type.Object({
+  error: Type.Object({ request_id: Type.String({ pattern: '^req_' }) }),
+});
 
 describe('local auth HTTP boundary - passwords and reset', () => {
   let c: LocalAuthTestContext;
@@ -56,8 +63,11 @@ describe('local auth HTTP boundary - passwords and reset', () => {
     if (setCookie === undefined) {
       throw new Error('the response set no refresh cookie');
     }
-    const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-    return (cookie ?? '').split(';', 1)[0] ?? '';
+    const cookie: unknown = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    if (typeof cookie !== 'string') {
+      throw new Error('the response refresh cookie was not a string');
+    }
+    return cookie.split(';', 1)[0] ?? '';
   }
 
   const passwordBoundaryRequests = [
@@ -131,14 +141,15 @@ describe('local auth HTTP boundary - passwords and reset', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json()).toEqual({
+      const body = response.json<unknown>();
+      expect(body).toMatchObject({
         error: {
           code: 'INVALID_REQUEST',
           message: 'Request failed validation',
-          request_id: expect.stringMatching(/^req_/),
           retryable: false,
         },
       });
+      expect(Value.Check(RequestIdEnvelopeSchema, body)).toBe(true);
     },
   );
 
@@ -166,12 +177,13 @@ describe('local auth HTTP boundary - passwords and reset', () => {
       },
     });
 
-    expect([
-      conflict.statusCode,
-      conflict.json().error.code,
-      invalid.statusCode,
-      invalid.json().error.code,
-    ]).toEqual([409, 'AUTH_IDENTITY_UNAVAILABLE', 400, 'INVALID_REQUEST']);
+    expect([conflict.statusCode, invalid.statusCode]).toEqual([409, 400]);
+    expect(conflict.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_IDENTITY_UNAVAILABLE' },
+    });
+    expect(invalid.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(c.state.accounts.size).toBe(1);
   });
 
@@ -183,7 +195,9 @@ describe('local auth HTTP boundary - passwords and reset', () => {
       payload: { email: EMAIL },
     });
     expect(malformed.statusCode).toBe(400);
-    expect(malformed.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(malformed.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(c.state.accounts.size).toBe(0);
     expect(c.state.emailDeliveryRequests).toHaveLength(0);
   });
@@ -203,7 +217,9 @@ describe('local auth HTTP boundary - passwords and reset', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect(c.state.accounts.size).toBe(0);
     },
   );
@@ -217,9 +233,11 @@ describe('local auth HTTP boundary - passwords and reset', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatchObject({
-      code: 'AUTH_VERIFICATION_TOKEN_INVALID',
-      message: 'Verification token is invalid',
+    expect(response.json<unknown>()).toMatchObject({
+      error: {
+        code: 'AUTH_VERIFICATION_TOKEN_INVALID',
+        message: 'Verification token is invalid',
+      },
     });
   });
 
@@ -327,9 +345,9 @@ describe('local auth HTTP boundary - passwords and reset', () => {
       payload: { token, password: 'another password here' },
     });
     expect(replay.statusCode).toBe(400);
-    expect(replay.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' }),
-    );
+    expect(replay.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' },
+    });
   });
 
   // keep helper referenced

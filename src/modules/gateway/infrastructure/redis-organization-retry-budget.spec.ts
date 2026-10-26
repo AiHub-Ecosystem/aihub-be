@@ -111,9 +111,9 @@ describe('RedisOrganizationRetryBudget', () => {
       secondInstance.consume(request('first-1')),
     ]);
     expect(decisions.filter((decision) => decision.allowed)).toHaveLength(1);
-    expect(decisions.filter((decision) => !decision.allowed)).toMatchObject([
-      { allowed: false, retryAfterMs: expect.any(Number) },
-    ]);
+    const rejected = decisions.filter((decision) => !decision.allowed);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.retryAfterMs).toBeGreaterThan(0);
   });
 
   it('bounds the remembered keys and treats a dropped key as a first attempt', async () => {

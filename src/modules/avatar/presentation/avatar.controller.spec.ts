@@ -41,6 +41,10 @@ const UPLOAD_URL =
 const MiB = 1024 * 1024;
 const PUBLIC_ORIGIN = 'https://s3.wispace.app/aihub-user-assets/';
 
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
+
 function storageUnavailable(): AppError {
   return new AppError({
     code: 'AVATAR_STORAGE_UNAVAILABLE',
@@ -169,7 +173,10 @@ describe('Avatar upload HTTP flow', () => {
     overrides: Partial<StoredAvatarObject> = {},
   ): Promise<{ assetId: string; objectKey: string }> {
     const response = await requestUpload();
-    const assetId = String(response.json().data.asset_id);
+    const assetId = Value.Parse(
+      AvatarUploadResponseSchema,
+      response.json<unknown>(),
+    ).data.asset_id;
     const objectKey = `users/${USER_ID}/avatar/${assetId}/original`;
     storage.objects.set(objectKey, {
       contentType: 'image/png',
@@ -186,11 +193,14 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(201);
       expect(response.headers['cache-control']).toBe('no-store');
-      const body = response.json();
-      expect(Value.Check(AvatarUploadResponseSchema, body)).toBe(true);
+      const body = Value.Parse(
+        AvatarUploadResponseSchema,
+        response.json<unknown>(),
+      );
+      expect(body.data.asset_id).toMatch(/^ava_[0-9A-HJKMNP-TV-Z]{26}$/);
       expect(body).toEqual({
         data: {
-          asset_id: expect.stringMatching(/^ava_[0-9A-HJKMNP-TV-Z]{26}$/),
+          asset_id: body.data.asset_id,
           upload_url: UPLOAD_URL,
           method: 'PUT',
           headers: {
@@ -225,7 +235,9 @@ describe('Avatar upload HTTP flow', () => {
       const response = await requestUpload(body);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect(storage.signed).toEqual([]);
     });
 
@@ -236,7 +248,9 @@ describe('Avatar upload HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(413);
-      expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE');
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'PAYLOAD_TOO_LARGE' },
+      });
       expect(storage.signed).toEqual([]);
     });
 
@@ -264,9 +278,11 @@ describe('Avatar upload HTTP flow', () => {
       const response = await requestUpload();
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error).toMatchObject({
-        code: 'AVATAR_STORAGE_UNAVAILABLE',
-        retryable: true,
+      expect(response.json<unknown>()).toMatchObject({
+        error: {
+          code: 'AVATAR_STORAGE_UNAVAILABLE',
+          retryable: true,
+        },
       });
     });
   });
@@ -278,14 +294,13 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(201);
-      const body = response.json();
-      expect(Value.Check(AvatarResponseSchema, body)).toBe(true);
+      const body = Value.Parse(AvatarResponseSchema, response.json<unknown>());
       expect(body).toEqual({
         data: {
           asset_id: assetId,
           content_type: 'image/png',
           byte_size: 1234,
-          accepted_at: expect.any(String),
+          accepted_at: body.data.accepted_at,
           url: `${PUBLIC_ORIGIN}${objectKey}`,
         },
         meta: { request_id: REQUEST_ID },
@@ -302,7 +317,10 @@ describe('Avatar upload HTTP flow', () => {
     it('exposes nothing about storage beyond the public URL', async () => {
       const { assetId } = await uploadedAsset();
 
-      const { url, ...rest } = (await complete(assetId)).json().data;
+      const { url, ...rest } = Value.Parse(
+        AvatarResponseSchema,
+        (await complete(assetId)).json<unknown>(),
+      ).data;
 
       expect(JSON.stringify(rest)).not.toContain('users/');
       expect(JSON.stringify(rest)).not.toContain('aihub-user-assets');
@@ -321,12 +339,17 @@ describe('Avatar upload HTTP flow', () => {
 
     it('answers not found while the upload has not landed, and records nothing', async () => {
       const response = await requestUpload();
-      const assetId = String(response.json().data.asset_id);
+      const assetId = Value.Parse(
+        AvatarUploadResponseSchema,
+        response.json<unknown>(),
+      ).data.asset_id;
 
       const completed = await complete(assetId);
 
       expect(completed.statusCode).toBe(404);
-      expect(completed.json().error.code).toBe('NOT_FOUND');
+      expect(completed.json<unknown>()).toMatchObject({
+        error: { code: 'NOT_FOUND' },
+      });
       expect(repository.avatars.size).toBe(0);
     });
 
@@ -345,7 +368,7 @@ describe('Avatar upload HTTP flow', () => {
         const response = await complete(assetId);
 
         expect(response.statusCode).toBe(400);
-        expect(response.json().error.code).toBe('INVALID_REQUEST');
+        expectErrorCode(response, 'INVALID_REQUEST');
       },
     );
 
@@ -358,7 +381,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(413);
-      expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE');
+      expectErrorCode(response, 'PAYLOAD_TOO_LARGE');
       expect(storage.deleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
@@ -374,7 +397,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expectErrorCode(response, 'INVALID_REQUEST');
       expect(storage.deleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
@@ -389,7 +412,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expectErrorCode(response, 'INVALID_REQUEST');
     });
 
     it('answers a retryable storage-unavailable error when storage fails', async () => {
@@ -399,7 +422,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+      expectErrorCode(response, 'AVATAR_STORAGE_UNAVAILABLE');
       expect(repository.avatars.size).toBe(0);
     });
   });
@@ -421,9 +444,11 @@ describe('Avatar upload HTTP flow', () => {
       try {
         const response = await complete(assetId);
         expect(response.statusCode).toBe(503);
-        expect(response.json().error).toMatchObject({
-          code: 'AVATAR_STORAGE_UNAVAILABLE',
-          retryable: true,
+        expect(response.json<unknown>()).toMatchObject({
+          error: {
+            code: 'AVATAR_STORAGE_UNAVAILABLE',
+            retryable: true,
+          },
         });
         expect(repository.avatars.size).toBe(0);
       } finally {
@@ -453,7 +478,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(404);
-      expect(response.json().error.code).toBe('NOT_FOUND');
+      expectErrorCode(response, 'NOT_FOUND');
       expect(storage.deleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
@@ -509,7 +534,10 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().data.asset_id).toBe(assetId);
+      expect(
+        Value.Parse(AvatarResponseSchema, response.json<unknown>()).data
+          .asset_id,
+      ).toBe(assetId);
     });
   });
 
@@ -534,7 +562,9 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(next.assetId);
 
       expect(response.statusCode).toBe(201);
-      expect(response.json().data).toMatchObject({
+      expect(
+        Value.Parse(AvatarResponseSchema, response.json<unknown>()).data,
+      ).toMatchObject({
         asset_id: next.assetId,
         content_type: 'image/webp',
         byte_size: 99,
@@ -568,7 +598,7 @@ describe('Avatar upload HTTP flow', () => {
       const failed = await complete(next.assetId);
 
       expect(failed.statusCode).toBe(503);
-      expect(failed.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+      expectErrorCode(failed, 'AVATAR_STORAGE_UNAVAILABLE');
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
       expect(storage.objects.has(previous.objectKey)).toBe(true);
       expect(storage.objects.has(next.objectKey)).toBe(true);
@@ -610,7 +640,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(next.assetId);
 
       expect(response.statusCode).toBe(409);
-      expect(response.json().error.code).toBe('AVATAR_CHANGED');
+      expectErrorCode(response, 'AVATAR_CHANGED');
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(winner.assetId);
       expect(storage.objects.has(next.objectKey)).toBe(false);
       expect(storage.objects.has(winner.objectKey)).toBe(true);
@@ -655,7 +685,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(mine.assetId);
 
       expect(response.statusCode).toBe(409);
-      expect(response.json().error.code).toBe('AVATAR_CHANGED');
+      expectErrorCode(response, 'AVATAR_CHANGED');
       expect(storage.objects.has(mine.objectKey)).toBe(false);
       expect(storage.objects.has(winner.objectKey)).toBe(true);
     });
@@ -734,7 +764,7 @@ describe('Avatar upload HTTP flow', () => {
       const failed = await remove();
 
       expect(failed.statusCode).toBe(503);
-      expect(failed.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+      expectErrorCode(failed, 'AVATAR_STORAGE_UNAVAILABLE');
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
       expect(storage.objects.has(objectKey)).toBe(true);
 
@@ -761,7 +791,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await remove();
 
       expect(response.statusCode).toBe(409);
-      expect(response.json().error.code).toBe('AVATAR_CHANGED');
+      expectErrorCode(response, 'AVATAR_CHANGED');
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(winner.assetId);
       expect(storage.objects.has(winner.objectKey)).toBe(true);
     });
@@ -806,8 +836,10 @@ describe('Avatar upload HTTP flow', () => {
       const response = await read();
 
       expect(response.statusCode).toBe(200);
-      const body = response.json();
-      expect(Value.Check(ReadAvatarResponseSchema, body)).toBe(true);
+      const body = Value.Parse(
+        ReadAvatarResponseSchema,
+        response.json<unknown>(),
+      );
       expect(body).toEqual({
         data: { avatar: null },
         meta: { request_id: REQUEST_ID },
@@ -821,22 +853,32 @@ describe('Avatar upload HTTP flow', () => {
       const response = await read();
 
       expect(response.statusCode).toBe(200);
-      const body = response.json();
-      expect(Value.Check(ReadAvatarResponseSchema, body)).toBe(true);
+      const body = Value.Parse(
+        ReadAvatarResponseSchema,
+        response.json<unknown>(),
+      );
+      const avatar = body.data.avatar;
+      if (avatar === null) throw new Error('expected an Avatar');
       expect(body.data.avatar).toEqual({
         asset_id: assetId,
         content_type: 'image/png',
         byte_size: 1234,
-        accepted_at: expect.any(String),
+        accepted_at: avatar.accepted_at,
         url: `${PUBLIC_ORIGIN}${objectKey}`,
       });
     });
 
     it('returns the same URL the completion returned', async () => {
       const { assetId } = await uploadedAsset();
-      const completed = (await complete(assetId)).json().data;
+      const completed = Value.Parse(
+        AvatarResponseSchema,
+        (await complete(assetId)).json<unknown>(),
+      ).data;
 
-      const read_ = (await read()).json().data.avatar;
+      const read_ = Value.Parse(
+        ReadAvatarResponseSchema,
+        (await read()).json<unknown>(),
+      ).data.avatar;
 
       expect(read_).toEqual(completed);
     });
@@ -849,7 +891,9 @@ describe('Avatar upload HTTP flow', () => {
       const response = await read();
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AVATAR_STORAGE_UNAVAILABLE');
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'AVATAR_STORAGE_UNAVAILABLE' },
+      });
     });
 
     it('only ever reads the caller own Avatar', async () => {
@@ -859,7 +903,10 @@ describe('Avatar upload HTTP flow', () => {
       const response = await read('other.token.value');
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().data.avatar).toBeNull();
+      expect(
+        Value.Parse(ReadAvatarResponseSchema, response.json<unknown>()).data
+          .avatar,
+      ).toBeNull();
     });
   });
 

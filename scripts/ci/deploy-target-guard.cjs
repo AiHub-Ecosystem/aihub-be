@@ -1,6 +1,7 @@
 const { execFileSync, spawnSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 
+/** @param {string} status @returns {string[]} */
 function parseActiveRevisions(status) {
   const revisions = [];
   const seen = new Set();
@@ -35,8 +36,10 @@ function parseActiveRevisions(status) {
   return revisions;
 }
 
+/** @param {unknown} sha @returns {sha is string} */
 const isSha = (sha) => typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha);
 
+/** @param {{targetSha: string, mainSha: string, activeShas: string[], cwd: string}} options */
 function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
   const outcome = classifyDeployTarget({ targetSha, mainSha, cwd });
   if (outcome === 'superseded') {
@@ -85,6 +88,7 @@ function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
   }
 }
 
+/** @param {{targetSha: string, mainSha: string, cwd: string}} options @returns {'deploy' | 'superseded'} */
 function classifyDeployTarget({ targetSha, mainSha, cwd }) {
   if (!isSha(targetSha) || !isSha(mainSha)) {
     throw new Error(
@@ -158,9 +162,13 @@ if (require.main === module) {
       );
     }
   } catch (error) {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : String(error)}\n`,
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : '';
+    process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   }
 }

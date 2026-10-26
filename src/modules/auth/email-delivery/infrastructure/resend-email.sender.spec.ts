@@ -32,8 +32,8 @@ describe('ResendEmailSender', () => {
         'content-type': 'application/json',
         'Idempotency-Key': 'edr_one',
       },
-      signal: expect.any(AbortSignal),
     });
+    expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
     const requestBody = calls[0]?.init?.body;
     if (typeof requestBody !== 'string') {
       throw new Error('Expected a serialized Resend request body');

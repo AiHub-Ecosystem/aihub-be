@@ -55,6 +55,8 @@
     // and cli.mjs reach the .cjs through TypeScript, so without this knip
     // reports a live file as unused.
     "scripts/cli/cli-options.d.cts",
+    // Hand-written types for the dynamic CLI runner's source and built exports.
+    "scripts/cli/load-cli-runner.d.cts",
     // Hand-written types for scripts/checks/prisma-drift/prisma-drift.cjs — same reason.
     "scripts/checks/prisma-drift/prisma-drift.d.cts",
     // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
@@ -63,6 +65,10 @@
     "scripts/checks/verify-summary.d.cts",
     // Hand-written types for scripts/checks/merged-coverage.cjs — same reason.
     "scripts/checks/merged-coverage.d.cts",
+    // Hand-written types for check-changed.mjs and check-batch.cjs — test imports
+    // reach the runtime modules through TypeScript declaration boundaries.
+    "scripts/checks/check-changed.d.mts",
+    "scripts/checks/check-batch.d.cts",
     // Hand-written types for scripts/checks/jest-worker-cap.cjs — same reason:
     // Jest reaches it through jest.config.cjs, outside the TypeScript graph.
     "scripts/checks/jest-worker-cap.d.cts",

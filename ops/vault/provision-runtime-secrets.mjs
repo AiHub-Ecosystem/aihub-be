@@ -7,6 +7,7 @@ const environment = process.env.AIHUB_VAULT_ENVIRONMENT;
 const credentialsDirectory = process.env.AIHUB_VAULT_CREDENTIALS_DIR;
 const allowedEnvironments = new Set(['development', 'staging', 'production']);
 
+/** @param {string} message @returns {never} */
 function fail(message) {
   console.error(`Vault provisioning failed: ${message}`);
   process.exit(1);
@@ -46,6 +47,7 @@ if (agentCidr === undefined || !/^[\d./]+$/.test(agentCidr)) {
   );
 }
 
+/** @param {string[]} args @param {string} label @returns {string} */
 function runVault(args, label) {
   const result = spawnSync('vault', args, {
     encoding: 'utf8',
@@ -58,8 +60,10 @@ function runVault(args, label) {
   return result.stdout;
 }
 
+/** @param {string} fileName @param {string[]} keys @returns {string} */
 function readBundle(fileName, keys) {
   const path = join(credentialsDirectory, fileName);
+  /** @type {unknown} */
   let value;
   try {
     value = JSON.parse(readFileSync(path, 'utf8'));
@@ -68,9 +72,7 @@ function readBundle(fileName, keys) {
   }
 
   if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value) ||
+    !isRecord(value) ||
     Object.keys(value).some((key) => !keys.includes(key)) ||
     keys.some(
       (key) => typeof value[key] !== 'string' || value[key].trim().length === 0,
@@ -82,18 +84,20 @@ function readBundle(fileName, keys) {
   return path;
 }
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 const mounts = runVault(['auth', 'list', '-format=json'], 'auth list');
+/** @type {unknown} */
 let authMounts;
 try {
   authMounts = JSON.parse(mounts);
 } catch {
   fail('Vault auth list did not return JSON');
 }
-if (
-  typeof authMounts !== 'object' ||
-  authMounts === null ||
-  authMounts['approle/'] === undefined
-) {
+if (!isRecord(authMounts) || authMounts['approle/'] === undefined) {
   fail('auth/approle is not enabled; enable it in an operator session first');
 }
 
@@ -129,6 +133,7 @@ runVault(
   'AppRole provision',
 );
 
+/** @type {Array<[string, string[], string]>} */
 const bundles = [
   ['ai-speaking.json', ['client_id', 'secret_key'], 'ai-speaking'],
   ['ai-writing.json', ['token'], 'ai-writing'],
@@ -158,10 +163,9 @@ const bundles = [
 
 for (const [fileName, keys, bundleName] of bundles) {
   const path = readBundle(fileName, keys);
-  const bundle = /** @type {string} */ (bundleName);
   runVault(
-    ['kv', 'put', `secret/aihub/${environment}/${bundle}`, `@${path}`],
-    `KV bundle write (${bundle})`,
+    ['kv', 'put', `secret/aihub/${environment}/${bundleName}`, `@${path}`],
+    `KV bundle write (${bundleName})`,
   );
 }
 

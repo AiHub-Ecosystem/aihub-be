@@ -395,9 +395,9 @@ describe('Organization membership HTTP/application integration', () => {
 
         const response = await mutate(route, username);
 
-        expect({ status: response.statusCode, body: response.json() }).toEqual(
-          refusal(routeDenial[route]),
-        );
+        const expected = refusal(routeDenial[route]);
+        expect(response.statusCode).toBe(expected.status);
+        expect(response.json()).toEqual(expected.body);
       });
     },
   );
@@ -416,9 +416,9 @@ describe('Organization membership HTTP/application integration', () => {
 
       const response = await mutate(route);
 
-      expect({ status: response.statusCode, body: response.json() }).toEqual(
-        refusal('Organization admins can only manage members'),
-      );
+      const expected = refusal('Organization admins can only manage members');
+      expect(response.statusCode).toBe(expected.status);
+      expect(response.json()).toEqual(expected.body);
     },
   );
 
@@ -439,9 +439,11 @@ describe('Organization membership HTTP/application integration', () => {
 
       const response = await mutate('transfer', username);
 
-      expect({ status: response.statusCode, body: response.json() }).toEqual(
-        refusal('Ownership can only be transferred to a non-owner member'),
+      const expected = refusal(
+        'Ownership can only be transferred to a non-owner member',
       );
+      expect(response.statusCode).toBe(expected.status);
+      expect(response.json()).toEqual(expected.body);
     },
   );
 
@@ -471,9 +473,8 @@ describe('Organization membership HTTP/application integration', () => {
     const response = await mutate('disable', 'alice');
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({
-      username: 'alice',
-      status: 'disabled',
+    expect(response.json()).toMatchObject({
+      data: { username: 'alice', status: 'disabled' },
     });
   });
 });

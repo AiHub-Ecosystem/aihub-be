@@ -57,8 +57,10 @@ describe('loadLocalEnvironment', () => {
 
       expect(loadSpy).not.toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy.mock.calls[0]?.[0]).toContain('Refusing to load');
-      expect(errorSpy.mock.calls[0]?.[0]).toContain(mode);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Refusing to load'),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(mode));
     }
   });
 

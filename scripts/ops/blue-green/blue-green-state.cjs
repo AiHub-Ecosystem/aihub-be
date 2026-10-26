@@ -7,6 +7,10 @@ const SLOT_PORTS = Object.freeze({
 
 const TEMPLATE_PORTS = Object.freeze({ production: 3021, sandbox: 3022 });
 
+/** @typedef {'production' | 'sandbox'} Tier */
+/** @typedef {'a' | 'b'} Slot */
+
+/** @param {string} config @returns {number[]} */
 function portsInConfig(config) {
   return Array.from(
     config.matchAll(/proxy_pass\s+http:\/\/127\.0\.0\.1:(\d+)\s*;/g),
@@ -14,14 +18,16 @@ function portsInConfig(config) {
   );
 }
 
+/** @param {Tier} tier @param {number} port @returns {Slot} */
 function slotForPort(tier, port) {
   const slots = SLOT_PORTS[tier];
   if (!slots) throw new Error(`unknown deployment tier: ${tier}`);
-  const entry = Object.entries(slots).find(([, value]) => value === port);
-  if (!entry) throw new Error(`unsupported ${tier} upstream port: ${port}`);
-  return entry[0];
+  if (slots.a === port) return 'a';
+  if (slots.b === port) return 'b';
+  throw new Error(`unsupported ${tier} upstream port: ${port}`);
 }
 
+/** @param {string} config @param {Tier} tier @returns {Slot} */
 function activeSlot(config, tier) {
   const ports = portsInConfig(config);
   const uniquePorts = [...new Set(ports)];
@@ -31,6 +37,7 @@ function activeSlot(config, tier) {
   return slotForPort(tier, uniquePorts[0]);
 }
 
+/** @param {string} template @param {Tier} tier @param {Slot} slot @returns {string} */
 function renderNginxConfig(template, tier, slot) {
   const defaultPort = TEMPLATE_PORTS[tier];
   const targetPort = SLOT_PORTS[tier]?.[slot];
@@ -48,6 +55,7 @@ function renderNginxConfig(template, tier, slot) {
   );
 }
 
+/** @param {{apiTemplate: string, sandboxTemplate: string, currentApi: string, currentSandbox: string, tier: Tier, nextSlot: Slot, sandboxEnabled: boolean}} options */
 function renderNginxPair({
   apiTemplate,
   sandboxTemplate,

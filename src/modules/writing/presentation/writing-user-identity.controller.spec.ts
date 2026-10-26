@@ -3,6 +3,8 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 
 import { AppModule } from '@/app.module';
@@ -34,6 +36,10 @@ import type { OrganizationIdentityConfig } from '@/modules/identity/organization
 import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import { JWKS_KEY_PROVIDER } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+
+const RequestIdEnvelopeSchema = Type.Object({
+  error: Type.Object({ request_id: Type.String({ pattern: '^req_' }) }),
+});
 
 const authenticatedApiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',
@@ -234,9 +240,11 @@ describe('Writing user identity HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error).toMatchObject({
-        code: 'USER_IDENTITY_REQUIRED',
-        message: 'User identity is required in X-User-Identity',
+      expect(response.json<unknown>()).toMatchObject({
+        error: {
+          code: 'USER_IDENTITY_REQUIRED',
+          message: 'User identity is required in X-User-Identity',
+        },
       });
       expect(capturedContext).toBeUndefined();
     }
@@ -254,7 +262,9 @@ describe('Writing user identity HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('USER_IDENTITY_REQUIRED');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'USER_IDENTITY_REQUIRED' },
+    });
     expect(response.payload).not.toContain(signed);
     expect(capturedContext).toBeUndefined();
   });
@@ -296,10 +306,12 @@ describe('Writing user identity HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error).toMatchObject({
-        code: 'INVALID_USER_IDENTITY',
-        message:
-          'User identity must be 1-256 visible ASCII characters with no spaces',
+      expect(response.json<unknown>()).toMatchObject({
+        error: {
+          code: 'INVALID_USER_IDENTITY',
+          message:
+            'User identity must be 1-256 visible ASCII characters with no spaces',
+        },
       });
       expect(capturedContext).toBeUndefined();
     },
@@ -320,10 +332,12 @@ describe('Writing user identity HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error).toMatchObject({
-      code: 'INVALID_USER_IDENTITY',
-      message:
-        'User identity must be 1-256 visible ASCII characters with no spaces',
+    expect(response.json<unknown>()).toMatchObject({
+      error: {
+        code: 'INVALID_USER_IDENTITY',
+        message:
+          'User identity must be 1-256 visible ASCII characters with no spaces',
+      },
     });
     expect(response.payload).not.toContain(signed);
     expect(response.payload).not.toContain('test-api-key');
@@ -359,10 +373,12 @@ describe('Writing user identity HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error).toMatchObject({
-      code: 'INVALID_USER_IDENTITY',
-      message:
-        'User identity must be a valid Signed User Assertion for this Organization',
+    expect(response.json<unknown>()).toMatchObject({
+      error: {
+        code: 'INVALID_USER_IDENTITY',
+        message:
+          'User identity must be a valid Signed User Assertion for this Organization',
+      },
     });
     expect(capturedContext).toBeUndefined();
   });
@@ -376,10 +392,12 @@ describe('Writing user identity HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error).toMatchObject({
-      code: 'INVALID_USER_IDENTITY',
-      message:
-        'User identity must be a valid Signed User Assertion for this Organization',
+    expect(response.json<unknown>()).toMatchObject({
+      error: {
+        code: 'INVALID_USER_IDENTITY',
+        message:
+          'User identity must be a valid Signed User Assertion for this Organization',
+      },
     });
     expect(capturedContext).toBeUndefined();
   });
@@ -400,14 +418,15 @@ describe('Writing user identity HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({
+    const body = response.json<unknown>();
+    expect(body).toMatchObject({
       error: {
         code: 'IDENTITY_PROVIDER_UNAVAILABLE',
         message: 'Identity provider is unavailable',
-        request_id: expect.stringMatching(/^req_/),
         retryable: true,
       },
     });
+    expect(Value.Check(RequestIdEnvelopeSchema, body)).toBe(true);
     expect(response.payload).not.toContain('provider down');
     expect(capturedContext).toBeUndefined();
   });
@@ -423,7 +442,9 @@ describe('Writing user identity HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('IDENTITY_PROVIDER_UNAVAILABLE');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'IDENTITY_PROVIDER_UNAVAILABLE' },
+    });
     expect(response.payload).not.toContain('connection refused');
     expect(capturedContext).toBeUndefined();
   });

@@ -5,6 +5,8 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 import type { Pool } from 'pg';
 
 import { AppModule } from '@/app.module';
@@ -47,6 +49,14 @@ const TARGET_REFUSAL = {
 
 /** One text for every not-found, so a target's absence never explains itself. */
 const NOT_FOUND = 'Resource not found';
+
+const ErrorDetailsSchema = Type.Object({
+  error: Type.Object({ code: Type.String(), message: Type.String() }),
+});
+
+function responseError(response: { json(): unknown }) {
+  return Value.Parse(ErrorDetailsSchema, response.json()).error;
+}
 
 type MutationRoute = keyof typeof ROUTE_DENIAL;
 
@@ -577,8 +587,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: response.json().error?.code,
-          message: response.json().error?.message,
+          code: responseError(response).code,
+          message: responseError(response).message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: testCase.status,
@@ -599,8 +609,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: response.json().error?.code,
-          message: response.json().error?.message,
+          code: responseError(response).code,
+          message: responseError(response).message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -620,8 +630,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: response.json().error?.code,
-          message: response.json().error?.message,
+          code: responseError(response).code,
+          message: responseError(response).message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -641,8 +651,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: response.json().error?.code,
-          message: response.json().error?.message,
+          code: responseError(response).code,
+          message: responseError(response).message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -677,8 +687,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: response.json().error?.code,
-          message: response.json().error?.message,
+          code: responseError(response).code,
+          message: responseError(response).message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -791,12 +801,12 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
     expect({
       disable: {
         status: disableResponse.statusCode,
-        code: disableResponse.json().error?.code,
+        code: responseError(disableResponse).code,
         denial: disableAudit.map((event) => event.detail?.['denial']),
       },
       demote: {
         status: demoteResponse.statusCode,
-        code: demoteResponse.json().error?.code,
+        code: responseError(demoteResponse).code,
         denial: (await auditEvents()).map((event) => event.detail?.['denial']),
       },
       owners: await activeOwners(),

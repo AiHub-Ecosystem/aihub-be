@@ -7,6 +7,15 @@ import {
 
 const OCTOBER = parseBillingMonth('2026-10');
 
+function captureError(action: () => unknown): unknown {
+  try {
+    action();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('Expected the action to throw');
+}
+
 describe('parseBillingMonth', () => {
   it('bounds a UTC month on both sides', () => {
     expect(OCTOBER).toEqual({
@@ -20,9 +29,9 @@ describe('parseBillingMonth', () => {
   });
 
   it.each(['2026-13', '2026-1', '10-2026', ''])('refuses %p', (raw) => {
-    expect(() => parseBillingMonth(raw)).toThrow(
-      expect.objectContaining({ code: 'BILLING_INVALID_MONTH' }),
-    );
+    expect(captureError(() => parseBillingMonth(raw))).toMatchObject({
+      code: 'BILLING_INVALID_MONTH',
+    });
   });
 
   it('trims its input', () => {

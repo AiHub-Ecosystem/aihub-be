@@ -31,13 +31,9 @@ describe('speaking question catalog', () => {
 
     expect(questions).toHaveLength(4);
     expect(storage.getReadUrl).toHaveBeenCalledTimes(4);
-    expect(questions[0]).toEqual(
-      expect.objectContaining({
-        id: expect.stringMatching(/^p2_/),
-        part: 2,
-        audioUrl: expect.stringMatching(/^https:\/\/s3\.wispace\.app\//),
-      }),
-    );
+    expect(questions[0]?.id).toMatch(/^p2_/);
+    expect(questions[0]?.part).toBe(2);
+    expect(questions[0]?.audioUrl).toMatch(/^https:\/\/s3\.wispace\.app\//);
     expect(questions[0]).not.toHaveProperty('audioObjectKey');
   });
 });

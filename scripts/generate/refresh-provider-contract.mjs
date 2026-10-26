@@ -25,11 +25,18 @@ const PROVIDERS = {
   // schema for every grading endpoint, so there is nothing to compare against.
 };
 
+/** @typedef {keyof typeof PROVIDERS} ProviderName */
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {unknown} */
 function sorted(value) {
   if (Array.isArray(value)) {
-    return value.map(sorted);
+    return /** @type {unknown[]} */ (value).map(sorted);
   }
-  if (value !== null && typeof value === 'object') {
+  if (isRecord(value)) {
     return Object.fromEntries(
       Object.keys(value)
         .sort()
@@ -39,6 +46,12 @@ function sorted(value) {
   return value;
 }
 
+/** @param {string} name @returns {name is ProviderName} */
+function isProviderName(name) {
+  return Object.hasOwn(PROVIDERS, name);
+}
+
+/** @param {ProviderName} name @returns {Promise<void>} */
 async function refresh(name) {
   const provider = PROVIDERS[name];
   const response = await fetch(provider.url, {
@@ -47,7 +60,7 @@ async function refresh(name) {
   if (!response.ok) {
     throw new Error(`${name}: ${provider.url} answered ${response.status}`);
   }
-  const document = await response.json();
+  const document = /** @type {unknown} */ (await response.json());
   await writeFile(
     new URL(provider.file, import.meta.url),
     `${JSON.stringify(sorted(document), null, 2)}\n`,
@@ -59,20 +72,25 @@ async function refresh(name) {
 
 const requested = process.argv.slice(2);
 const names = requested.length > 0 ? requested : Object.keys(PROVIDERS);
-for (const name of names) {
-  if (!Object.hasOwn(PROVIDERS, name)) {
-    console.error(
-      `unknown service "${name}"; expected one of ${Object.keys(PROVIDERS).join(', ')}`,
-    );
-    process.exit(2);
-  }
+const unknownName = names.find((name) => !isProviderName(name));
+if (unknownName !== undefined) {
+  console.error(
+    `unknown service "${unknownName}"; expected one of ${Object.keys(PROVIDERS).join(', ')}`,
+  );
+  process.exit(2);
 }
 
 try {
-  for (const name of names) {
+  for (const name of names.filter(isProviderName)) {
     await refresh(name);
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '',
+  );
   process.exit(1);
 }

@@ -331,6 +331,7 @@ describe('Organization read admission through the public route', () => {
 
     const response = await read(surface);
     const expectedRead = EXPECTED[surface][kind] === 'read';
+    const responseBody: unknown = response.json();
 
     // One literal per surface for every refusal, so no two refusals on the
     // same surface can differ by status, code, or message.
@@ -347,11 +348,10 @@ describe('Organization read admission through the public route', () => {
             },
           },
         };
-
     expect(
       expectedRead
         ? response.statusCode
-        : { status: response.statusCode, body: response.json() },
+        : { status: response.statusCode, body: responseBody },
     ).toEqual(expected);
   });
 
@@ -361,7 +361,9 @@ describe('Organization read admission through the public route', () => {
       const response = await read('open_invitations', organizationId);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect(membership.resolveMembership.mock.calls).toHaveLength(0);
       expect(invitations.listOpenInvitations.mock.calls).toHaveLength(0);
     },
@@ -392,9 +394,11 @@ describe('Organization read admission through the public route', () => {
       const response = await read('open_invitations', id);
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
-        code: 'FORBIDDEN',
-        message: PUBLISHED_REFUSALS.open_invitations,
+      expect(response.json()).toMatchObject({
+        error: {
+          code: 'FORBIDDEN',
+          message: PUBLISHED_REFUSALS.open_invitations,
+        },
       });
       expect(membership.resolveMembership.mock.calls).toContainEqual([
         expect.objectContaining({ organizationId: id }),
@@ -419,24 +423,22 @@ describe('Organization read admission through the public route', () => {
 
     const response = await read('open_invitations');
 
-    expect({ status: response.statusCode, body: response.json() }).toEqual({
-      status: 200,
-      body: {
-        data: {
-          invitations: [
-            {
-              invitation_id: 'oiv_01J00000000000000000000000',
-              email: 'invitee@example.com',
-              role: 'member',
-              invited_by_username: 'ada',
-              created_at: createdAt.toISOString(),
-              expires_at: expiresAt.toISOString(),
-              status: 'pending',
-            },
-          ],
-        },
-        meta: { request_id: REQUEST_ID },
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: {
+        invitations: [
+          {
+            invitation_id: 'oiv_01J00000000000000000000000',
+            email: 'invitee@example.com',
+            role: 'member',
+            invited_by_username: 'ada',
+            created_at: createdAt.toISOString(),
+            expires_at: expiresAt.toISOString(),
+            status: 'pending',
+          },
+        ],
       },
+      meta: { request_id: REQUEST_ID },
     });
   });
 

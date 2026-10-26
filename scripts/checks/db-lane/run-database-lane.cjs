@@ -1,7 +1,12 @@
 const childProcess = require('node:child_process');
 const path = require('node:path');
 
-const { Client } = require('pg');
+const pg = /** @type {typeof import('pg')} */ (require('pg'));
+const { Client } = pg;
+
+/** @typedef {'db' | 'tenant-isolation'} DatabaseLane */
+/** @typedef {{connect: () => Promise<void>, query: (query: string, values: readonly number[]) => Promise<{rows: readonly {acquired: unknown}[]}>, end: () => Promise<void>}} DatabaseLaneClient */
+/** @typedef {{env?: NodeJS.ProcessEnv, client?: DatabaseLaneClient, passthrough?: string[], runCommand?: (command: string, args: string[]) => Promise<number>}} DatabaseLaneOptions */
 
 const ROOT = path.resolve(__dirname, '../../..');
 const DEFAULT_ADMIN_URL = 'postgres://aihub:change-me@localhost:5432/aihub';
@@ -14,16 +19,38 @@ const LANE_CONFIGS = {
   ),
 };
 
+/** @param {string} connectionString @returns {DatabaseLaneClient} */
+function createPostgresLaneClient(connectionString) {
+  const client = new Client({
+    connectionString,
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 5_000,
+    statement_timeout: 5_000,
+  });
+
+  return {
+    connect: () => client.connect(),
+    query: async (query, values) => {
+      const result = await client.query(query, [...values]);
+      return { rows: result.rows };
+    },
+    end: () => client.end(),
+  };
+}
+
+/** @param {string} adminUrl */
 function databaseLaneLockConnectionString(adminUrl) {
   const url = new URL(adminUrl);
   url.pathname = '/postgres';
   return url.toString();
 }
 
+/** @param {NodeJS.ProcessEnv} env */
 function databaseLaneAdminUrl(env) {
   return env.DB_LANE_ADMIN_URL?.trim() || DEFAULT_ADMIN_URL;
 }
 
+/** @template T @param {DatabaseLaneClient} client @param {() => Promise<T>} run @returns {Promise<T>} */
 async function withDatabaseLaneLock(client, run) {
   // shortcut: lock scope is one PostgreSQL server; add Redis-scoped coordination if separate servers can share Redis.
   let acquired = false;
@@ -34,6 +61,7 @@ async function withDatabaseLaneLock(client, run) {
       DATABASE_LANE_LOCK_KEY,
     );
     if (result.rows[0]?.acquired !== true) {
+      /** @type {Error & {code: string}} */
       const error = new Error('Database validation lane is already held');
       error.code = 'DB_LANE_HELD';
       throw error;
@@ -53,6 +81,7 @@ async function withDatabaseLaneLock(client, run) {
   }
 }
 
+/** @param {string} command @param {string[]} args @returns {Promise<number>} */
 function runCommand(command, args) {
   return new Promise((resolveResult, reject) => {
     const child = childProcess.spawn(command, args, {
@@ -60,6 +89,7 @@ function runCommand(command, args) {
       env: process.env,
       stdio: 'inherit',
     });
+    /** @type {Array<[NodeJS.Signals, () => void]>} */
     const handlers = [];
     const removeSignalHandlers = () => {
       for (const [signal, handler] of handlers) {
@@ -67,7 +97,9 @@ function runCommand(command, args) {
       }
     };
 
-    for (const signal of ['SIGINT', 'SIGTERM']) {
+    /** @type {NodeJS.Signals[]} */
+    const signals = ['SIGINT', 'SIGTERM'];
+    for (const signal of signals) {
       const handler = () => child.kill(signal);
       handlers.push([signal, handler]);
       process.on(signal, handler);
@@ -84,10 +116,12 @@ function runCommand(command, args) {
   });
 }
 
+/** @param {string | undefined} lane @param {DatabaseLaneOptions} [options] @returns {Promise<number>} */
 async function runDatabaseLane(lane, options = {}) {
-  const config = Object.hasOwn(LANE_CONFIGS, lane)
-    ? LANE_CONFIGS[lane]
-    : undefined;
+  /** @type {DatabaseLane | undefined} */
+  const validLane =
+    lane === 'db' || lane === 'tenant-isolation' ? lane : undefined;
+  const config = validLane === undefined ? undefined : LANE_CONFIGS[validLane];
   if (config === undefined) {
     throw new Error(`Unknown database lane: ${lane}`);
   }
@@ -97,14 +131,7 @@ async function runDatabaseLane(lane, options = {}) {
   const env = options.env ?? process.env;
   const adminUrl = databaseLaneAdminUrl(env);
   const lockUrl = databaseLaneLockConnectionString(adminUrl);
-  const client =
-    options.client ??
-    new Client({
-      connectionString: lockUrl,
-      connectionTimeoutMillis: 10_000,
-      query_timeout: 5_000,
-      statement_timeout: 5_000,
-    });
+  const client = options.client ?? createPostgresLaneClient(lockUrl);
   const run = options.runCommand ?? runCommand;
 
   return withDatabaseLaneLock(client, async () => {
@@ -127,6 +154,7 @@ async function runDatabaseLane(lane, options = {}) {
   });
 }
 
+/** @param {string} text */
 function redactDatabaseUrls(text) {
   return String(text).replace(
     /(?:postgres(?:ql)?|prisma\+postgres):\/\/[^\s"'`<>]+/gi,
@@ -134,21 +162,31 @@ function redactDatabaseUrls(text) {
   );
 }
 
+/** @param {unknown} error */
 function safeErrorMessage(error) {
+  /** @param {string} name @returns {unknown} */
+  const read = (name) =>
+    typeof error === 'object' && error !== null
+      ? /** @type {unknown} */ (Reflect.get(error, name))
+      : undefined;
+  /** @type {string[]} */
   const collected = [];
-  if (error && typeof error.code === 'string' && error.code.length > 0) {
-    collected.push(`[${error.code}]`);
+  const code = read('code');
+  if (typeof code === 'string' && code.length > 0) {
+    collected.push(`[${code}]`);
   }
-  if (Array.isArray(error && error.errors)) {
-    for (const nested of error.errors) {
+  const errors = read('errors');
+  if (Array.isArray(errors)) {
+    for (const nested of /** @type {unknown[]} */ (errors)) {
       const nestedMessage = safeErrorMessage(nested);
       if (nestedMessage.length > 0) {
         collected.push(nestedMessage);
       }
     }
   }
-  if (error && error.cause !== undefined && error.cause !== error) {
-    const causeMessage = safeErrorMessage(error.cause);
+  const cause = read('cause');
+  if (cause !== undefined && cause !== error) {
+    const causeMessage = safeErrorMessage(cause);
     if (causeMessage.length > 0) {
       collected.push(causeMessage);
     }
@@ -156,9 +194,14 @@ function safeErrorMessage(error) {
   const message =
     error instanceof Error
       ? error.message
-      : error === undefined || error === null
-        ? ''
-        : String(error);
+      : typeof error === 'string'
+        ? error
+        : typeof error === 'number' ||
+            typeof error === 'boolean' ||
+            typeof error === 'bigint' ||
+            typeof error === 'symbol'
+          ? String(error)
+          : '';
   if (typeof message === 'string' && message.trim().length > 0) {
     collected.push(message.trim());
   }
@@ -175,14 +218,20 @@ if (require.main === module) {
       return exitCode;
     },
     (error) => {
-      if (error?.code === 'DB_LANE_HELD') {
+      /** @type {unknown} */
+      const caughtError = error;
+      const code =
+        typeof caughtError === 'object' && caughtError !== null
+          ? /** @type {unknown} */ (Reflect.get(caughtError, 'code'))
+          : undefined;
+      if (code === 'DB_LANE_HELD' && caughtError instanceof Error) {
         const adminUrl = databaseLaneAdminUrl(process.env);
         console.error(
-          `${error.message} on PostgreSQL server ${new URL(adminUrl).host}. Wait for it to finish before retrying.`,
+          `${caughtError.message} on PostgreSQL server ${new URL(adminUrl).host}. Wait for it to finish before retrying.`,
         );
       } else {
         console.error(
-          `Database validation lane failed: ${safeErrorMessage(error)}`,
+          `Database validation lane failed: ${safeErrorMessage(caughtError)}`,
         );
       }
       process.exitCode = 1;

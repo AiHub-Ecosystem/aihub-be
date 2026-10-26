@@ -1062,7 +1062,14 @@ describe('organization API key audit trail against PostgreSQL', () => {
       detail: Record<string, unknown> | null;
     }>
   > {
-    const result = await pool.query(
+    const result = await pool.query<{
+      action: string;
+      outcome: string;
+      target_id: string;
+      target_label: string | null;
+      actor_user_account_id: string;
+      detail: Record<string, unknown> | null;
+    }>(
       `SELECT action, outcome, target_id, target_label,
               actor_user_account_id, detail
        FROM organization_audit_events

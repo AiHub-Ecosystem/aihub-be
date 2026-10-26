@@ -307,8 +307,9 @@ describe('organization invitation email outbox over HTTP', () => {
     expect(
       createHash('sha256').update(sealed.token, 'utf8').digest('hex'),
     ).toBe(stored.rows[0]?.token_hash);
-    expect(response.json().data.invitation_id).toEqual(
-      expect.stringMatching(/^oiv_[0-9A-HJKMNP-TV-Z]{26}$/),
+    const responseBody = response.json<{ data: { invitation_id: string } }>();
+    expect(responseBody.data.invitation_id).toMatch(
+      /^oiv_[0-9A-HJKMNP-TV-Z]{26}$/,
     );
   });
 
@@ -318,7 +319,9 @@ describe('organization invitation email outbox over HTTP', () => {
     const response = await invite();
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().error).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(response.json<{ error: { code: string } }>().error.code).toBe(
+      'INTERNAL_ERROR',
+    );
     expect(response.payload).not.toContain('email delivery request store');
     expect(await countRows('organization_invitations')).toBe(0);
     expect(await countRows('organization_audit_events')).toBe(0);
@@ -335,7 +338,9 @@ describe('organization invitation email outbox over HTTP', () => {
     expect(second.statusCode).toBe(201);
     expect(second.headers['idempotent-replay']).toBe('true');
     // The original result, correlation id aside: that one is per request.
-    expect(second.json().data).toEqual(first.json().data);
+    expect(second.json<{ data: unknown }>().data).toEqual(
+      first.json<{ data: unknown }>().data,
+    );
     expect(await countRows('organization_invitations')).toBe(1);
     expect(await queuedRequests()).toHaveLength(1);
     // A replayed key spends no further allowance (ADR-0074).

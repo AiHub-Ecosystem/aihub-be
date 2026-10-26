@@ -190,7 +190,9 @@ describe('auth pre-verification rate limits over HTTP with Redis unavailable', (
 
     expect(blocked.statusCode).toBe(429);
     expect(blocked.headers['retry-after']).toBe('900');
-    expect(blocked.json().error.retry_after_ms).toBe(15 * 60_000);
+    expect(blocked.json()).toMatchObject({
+      error: { retry_after_ms: 15 * 60_000 },
+    });
     expect(verifyPassword).toHaveBeenCalledTimes(verificationsBeforeLockout);
   });
 
@@ -225,7 +227,9 @@ describe('auth pre-verification rate limits over HTTP with Redis unavailable', (
 
     expect(blocked.statusCode).toBe(429);
     expect(blocked.headers['retry-after']).toBe('360');
-    expect(blocked.json().error.retry_after_ms).toBe(6 * 60_000);
+    expect(blocked.json()).toMatchObject({
+      error: { retry_after_ms: 6 * 60_000 },
+    });
   });
 
   it('does not spend login budget for successful password proof that still needs MFA', async () => {
@@ -334,7 +338,9 @@ describe('auth pre-verification rate limits over HTTP with Redis unavailable', (
     );
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+    expect(response.json()).toMatchObject({
+      error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+    });
     expect(decryptMfaSecret).not.toHaveBeenCalled();
   });
 });

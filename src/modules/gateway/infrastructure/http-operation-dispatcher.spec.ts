@@ -190,23 +190,41 @@ function readLogLine(loggerError: jest.SpiedFunction<Logger['error']>): string {
   expect(loggerError).toHaveBeenCalledTimes(1);
   const call = loggerError.mock.calls[0];
   expect(call).toHaveLength(1);
-  const line = call?.[0];
-  expect(typeof line).toBe('string');
-  return String(line);
+  const line: unknown = call?.[0];
+  if (typeof line !== 'string') {
+    throw new Error('the dispatcher failure log is not a string');
+  }
+  return line;
+}
+
+function isLogPayload(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function logPayload(logLine: string): Record<string, unknown> {
+  const payload: unknown = JSON.parse(logLine);
+  if (!isLogPayload(payload)) {
+    throw new Error('the dispatcher failure log is not an object');
+  }
+  return payload;
+}
+
+function expectFailureLogLine(
+  logLine: string,
+  expected: Record<string, unknown>,
+): void {
+  const { downstream_ms, ...fields } = logPayload(logLine);
+  expect(fields).toEqual(expected);
+  expect(typeof downstream_ms).toBe('number');
 }
 
 function downstreamMs(logLine: string): number {
-  const payload: unknown = JSON.parse(logLine);
-  if (
-    typeof payload !== 'object' ||
-    payload === null ||
-    !('downstream_ms' in payload) ||
-    typeof payload.downstream_ms !== 'number'
-  ) {
+  const downstreamMs = logPayload(logLine).downstream_ms;
+  if (typeof downstreamMs !== 'number') {
     throw new Error('downstream_ms is missing from the failure log');
   }
 
-  return payload.downstream_ms;
+  return downstreamMs;
 }
 
 async function metricCount(name: string): Promise<number> {
@@ -299,7 +317,7 @@ describe('HttpOperationDispatcher', () => {
     ).rejects.toMatchObject({ code: 'AI_SERVICE_ERROR', retryable: true });
 
     const logLine = readLogLine(loggerError);
-    expect(JSON.parse(logLine)).toEqual({
+    expectFailureLogLine(logLine, {
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       operation: 'writing.task1.grade',
@@ -308,7 +326,6 @@ describe('HttpOperationDispatcher', () => {
       downstream_status: 503,
       downstream_error_code: null,
       downstream_message: null,
-      downstream_ms: expect.any(Number),
       error_code: 'AI_SERVICE_ERROR',
       message: 'downstream status 503',
     });
@@ -1260,7 +1277,7 @@ describe('HttpOperationDispatcher', () => {
     ).rejects.toMatchObject({ code: 'AI_SERVICE_THROTTLED', httpStatus: 503 });
 
     const logLine = readLogLine(loggerError);
-    expect(JSON.parse(logLine)).toEqual({
+    expectFailureLogLine(logLine, {
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       operation: 'writing.task1.grade',
@@ -1269,7 +1286,6 @@ describe('HttpOperationDispatcher', () => {
       downstream_status: 429,
       downstream_error_code: null,
       downstream_message: null,
-      downstream_ms: expect.any(Number),
       error_code: 'AI_SERVICE_THROTTLED',
       message: 'downstream status 429',
     });
@@ -1300,7 +1316,7 @@ describe('HttpOperationDispatcher', () => {
     ).rejects.toBe(originalError);
 
     const logLine = readLogLine(loggerError);
-    expect(JSON.parse(logLine)).toEqual({
+    expectFailureLogLine(logLine, {
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       operation: 'writing.task1.grade',
@@ -1309,7 +1325,6 @@ describe('HttpOperationDispatcher', () => {
       downstream_status: null,
       downstream_error_code: null,
       downstream_message: null,
-      downstream_ms: expect.any(Number),
       error_code: 'AI_SERVICE_TIMEOUT',
       message: 'downstream timed out',
     });
@@ -1345,7 +1360,7 @@ describe('HttpOperationDispatcher', () => {
     });
 
     const logLine = readLogLine(loggerError);
-    expect(JSON.parse(logLine)).toEqual({
+    expectFailureLogLine(logLine, {
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       operation: 'writing.task1.grade',
@@ -1354,7 +1369,6 @@ describe('HttpOperationDispatcher', () => {
       downstream_status: null,
       downstream_error_code: null,
       downstream_message: null,
-      downstream_ms: expect.any(Number),
       error_code: 'AI_SERVICE_UNAVAILABLE',
       message: 'downstream unreachable',
     });
@@ -1435,7 +1449,7 @@ describe('HttpOperationDispatcher', () => {
     ).rejects.toBe(originalError);
 
     const logLine = readLogLine(loggerError);
-    expect(JSON.parse(logLine)).toEqual({
+    expectFailureLogLine(logLine, {
       event: 'downstream_failed',
       request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       operation: 'writing.task1.grade',
@@ -1444,7 +1458,6 @@ describe('HttpOperationDispatcher', () => {
       downstream_status: 200,
       downstream_error_code: null,
       downstream_message: null,
-      downstream_ms: expect.any(Number),
       error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
       message: 'downstream response failed contract validation',
     });
@@ -1495,7 +1508,7 @@ describe('HttpOperationDispatcher', () => {
         }),
       );
 
-      expect(JSON.parse(logLine)).toMatchObject({
+      expect(logPayload(logLine)).toMatchObject({
         error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
         reason:
           '/pronunciation_detail/words/3/syllables/1/predicted_stress (Integer)',
@@ -1513,7 +1526,7 @@ describe('HttpOperationDispatcher', () => {
         }),
       );
 
-      expect(JSON.parse(logLine).reason).toHaveLength(400);
+      expect(logPayload(logLine).reason).toHaveLength(400);
     });
 
     it('omits the reason when the error carries none', async () => {
@@ -1525,7 +1538,7 @@ describe('HttpOperationDispatcher', () => {
         }),
       );
 
-      expect(JSON.parse(logLine)).not.toHaveProperty('reason');
+      expect(logPayload(logLine)).not.toHaveProperty('reason');
     });
   });
 });

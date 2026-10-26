@@ -20,11 +20,19 @@
  * summary would blame this batch instead of the gate inside it.
  */
 
-const { spawn } = require('node:child_process');
+const childProcess = /** @type {typeof import('node:child_process')} */ (
+  require('node:child_process')
+);
+const { spawn } = childProcess;
 const os = require('node:os');
 
 const BYTES_PER_CHILD = 256 * 1024 * 1024;
 const MAX_CONCURRENCY = 3;
+
+/** @typedef {{code: number, output: string}} GateResult */
+/** @typedef {{index: number, gate: string, code: number, output: string}} CompletedGate */
+/** @typedef {{gates?: string[], freeBytes?: number, run?: (gate: string) => Promise<Partial<GateResult> | null | undefined>, log?: (line: string) => void, error?: (line: string) => void}} RunBatchOptions */
+/** @typedef {{exitCode: number, concurrency: number, peakInFlight: number, failed: string[]}} BatchResult */
 
 /**
  * Gates with no output, artifact, or ordering dependency on each other.
@@ -46,6 +54,7 @@ const BATCHED_GATES = [
   'test:issue-triage',
 ];
 
+/** @param {{freeBytes?: number}} [options] @returns {number} */
 function concurrencyFor({ freeBytes } = {}) {
   if (!Number.isFinite(freeBytes) || freeBytes <= 0) return 1;
   return Math.min(
@@ -57,6 +66,7 @@ function concurrencyFor({ freeBytes } = {}) {
 /** A gate name is a declared script name, never free text. */
 const GATE_NAME = /^[A-Za-z0-9:_-]+$/;
 
+/** @param {string} gate @returns {Promise<GateResult>} */
 function runGate(gate) {
   if (!GATE_NAME.test(gate)) {
     return Promise.resolve({
@@ -74,8 +84,12 @@ function runGate(gate) {
       shell: true,
     });
     let output = '';
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
+    child.stdout.on('data', (/** @type {Buffer | string} */ chunk) => {
+      output += typeof chunk === 'string' ? chunk : chunk.toString();
+    });
+    child.stderr.on('data', (/** @type {Buffer | string} */ chunk) => {
+      output += typeof chunk === 'string' ? chunk : chunk.toString();
+    });
     child.on('error', (error) =>
       resolve({ code: 1, output: `${gate}: ${error.message}\n` }),
     );
@@ -83,6 +97,7 @@ function runGate(gate) {
   });
 }
 
+/** @param {RunBatchOptions} [options] @returns {Promise<BatchResult>} */
 async function runBatch({
   gates = BATCHED_GATES,
   freeBytes = os.freemem(),
@@ -91,6 +106,7 @@ async function runBatch({
   error = (...args) => console.error(...args),
 } = {}) {
   const concurrency = concurrencyFor({ freeBytes });
+  /** @type {CompletedGate[]} */
   const completed = [];
   let next = 0;
   let inFlight = 0;
@@ -117,7 +133,18 @@ async function runBatch({
           index,
           gate: gates[index],
           code: 1,
-          output: `${gates[index]}: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+          output: `${gates[index]}: ${
+            cause instanceof Error
+              ? cause.message
+              : typeof cause === 'string'
+                ? cause
+                : typeof cause === 'number' ||
+                    typeof cause === 'boolean' ||
+                    typeof cause === 'bigint' ||
+                    typeof cause === 'symbol'
+                  ? String(cause)
+                  : ''
+          }\n`,
         });
       } finally {
         inFlight -= 1;

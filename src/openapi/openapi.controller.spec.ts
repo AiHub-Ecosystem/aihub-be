@@ -52,7 +52,7 @@ describe('OpenApiController', () => {
     // Round-tripped through JSON on the expected side too: TypeBox schemas
     // carry internal Symbol-keyed metadata that a real HTTP response body
     // (this one included) can never actually transmit.
-    const expected = JSON.parse(
+    const expected: unknown = JSON.parse(
       JSON.stringify(buildOpenApiDocument(packageVersion())),
     );
     expect(response.json()).toEqual(expected);

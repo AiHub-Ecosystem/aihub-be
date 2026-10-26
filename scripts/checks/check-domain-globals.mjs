@@ -4,6 +4,7 @@ import process from 'node:process';
 
 import { defineFileVisitorCheck } from './support/check-runner.mjs';
 
+/** @type {Array<{name: string, re: RegExp}>} */
 const patterns = [
   { name: 'Date.now()', re: /\bDate\.now\s*\(\s*\)/ },
   { name: 'new Date() without argument', re: /\bnew\s+Date\s*\(\s*\)/ },
@@ -18,6 +19,7 @@ const run = defineFileVisitorCheck({
   successMessage: 'Domain bare-globals check passed.',
   visitFile: ({ relativePath, source }) => {
     if (!relativePath.includes('/domain/')) return [];
+    /** @type {Array<{detail: string}>} */
     const violations = [];
     for (const { name, re } of patterns) {
       if (re.test(source)) {

@@ -18,13 +18,15 @@ import { defineFileVisitorCheck } from './support/check-runner.mjs';
 const TENANT_IDENT = /(organi[sz]ation|tenant)/i;
 
 // Allowlist: file path (relative, posix) -> reason
-const allowlist = new Set([]);
+/** @type {Set<string>} */
+const allowlist = new Set();
 
 const run = defineFileVisitorCheck({
   directory: () => join(process.cwd(), 'src', 'modules'),
   successMessage: 'No module-level tenant state found.',
   visitFile: ({ relativePath, source }) => {
     if (allowlist.has(relativePath)) return [];
+    /** @type {Array<{line: number, detail: string}>} */
     const violations = [];
     for (const [index, line] of source.split(/\r?\n/).entries()) {
       // top-level let/var declaration (not indented inside a function/class)

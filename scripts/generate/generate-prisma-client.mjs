@@ -36,6 +36,12 @@ const STAMP = join(GENERATED, '.stamp');
 const reportTimings = process.argv.includes('--timings');
 const runtime = process.argv.includes('--runtime');
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {string} command @param {string[]} args @param {string} phase */
 function run(command, args, phase) {
   const startedAt = performance.now();
   const result = spawnSync(command, args, {
@@ -54,15 +60,24 @@ function run(command, args, phase) {
   }
 }
 
+/** @returns {string} */
 function computeStamp() {
   const schema = readFileSync('prisma/schema.prisma');
-  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-  const prismaVersion =
-    pkg.dependencies?.prisma ?? pkg.devDependencies?.prisma ?? '';
-  const clientVersion =
-    pkg.dependencies?.['@prisma/client'] ??
-    pkg.devDependencies?.['@prisma/client'] ??
-    '';
+  const parsed = /** @type {unknown} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
+  const pkg = isRecord(parsed) ? parsed : {};
+  const dependencies = isRecord(pkg.dependencies) ? pkg.dependencies : {};
+  const devDependencies = isRecord(pkg.devDependencies)
+    ? pkg.devDependencies
+    : {};
+  /** @param {string} name @returns {string} */
+  const dependencyVersion = (name) => {
+    const version = dependencies[name] ?? devDependencies[name];
+    return typeof version === 'string' ? version : '';
+  };
+  const prismaVersion = dependencyVersion('prisma');
+  const clientVersion = dependencyVersion('@prisma/client');
   return createHash('sha256')
     .update(schema)
     .update(prismaVersion)

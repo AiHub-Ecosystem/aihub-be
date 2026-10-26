@@ -3,12 +3,23 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
+/** @typedef {{host_ip?: string, target?: number, published?: string, protocol?: string}} MonitoringPort */
+/** @typedef {{target: string, read_only?: boolean}} MonitoringVolume */
+/** @typedef {{command?: string[], ports?: MonitoringPort[], volumes?: MonitoringVolume[], networks?: {monitoring?: {ipv4_address?: string}, redis?: object}, build?: {args?: Record<string, string>}, user?: string, privileged?: boolean, cap_add?: string[], profiles?: string[], mem_limit?: string | number, cpus?: number, read_only?: boolean, [key: string]: unknown}} MonitoringService */
+/** @typedef {{services: Record<string, MonitoringService>}} MonitoringCompose */
+
+const monitoringConfig = /** @type {{
+  buildMonitoringCheckCommands: (repositoryRoot: string) => Array<{label: string, command: string, args: string[]}>,
+  runMonitoringChecks: (execute?: (command: string, args: string[], options?: object) => {status: number | null, error: Error | null, stdout?: string, stderr?: string}, repositoryRoot?: string) => void,
+  validateExporterCompose: (compose: unknown) => string[],
+}} */ (require('./check-monitoring-config.cjs'));
 const {
   buildMonitoringCheckCommands,
   runMonitoringChecks,
   validateExporterCompose,
-} = require('./check-monitoring-config.cjs');
+} = monitoringConfig;
 
+/** @returns {MonitoringCompose} */
 function validExporterCompose() {
   const services = {
     'prometheus-aihub': {
@@ -190,6 +201,17 @@ void test('validates the exporter Compose file and Prometheus config and rules',
   });
 });
 
+void test('rejects malformed service fields before reading them', () => {
+  const compose = /** @type {unknown} */ ({
+    services: { 'node-exporter': { command: 42 } },
+  });
+
+  assert.throws(
+    () => validateExporterCompose(compose),
+    /node-exporter has an invalid monitoring service definition/,
+  );
+});
+
 void test('scrapes both application metrics endpoints through private forwards', () => {
   const prometheus = readFileSync(
     path.resolve(__dirname, '../../../ops/monitoring/prometheus.yml'),
@@ -227,6 +249,7 @@ void test('scrapes both application metrics endpoints through private forwards',
 });
 
 void test('stops at the first invalid monitoring config', () => {
+  /** @type {Array<[string, string[]]>} */
   const executed = [];
   assert.throws(
     () =>
@@ -415,6 +438,7 @@ void test('rejects a public listener, published port, or weakened container boun
 });
 
 void test('runs all config checks when each succeeds', () => {
+  /** @type {Array<[string, string[]]>} */
   const executed = [];
   runMonitoringChecks((command, args) => {
     executed.push([command, args]);

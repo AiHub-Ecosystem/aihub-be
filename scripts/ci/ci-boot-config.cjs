@@ -26,10 +26,9 @@ const path = require('node:path');
 const SECRETS_MOUNT = '/run/secrets/aihub';
 const FAKE = 'ci-boot-fake';
 
-function privateKeyPem(type, options) {
-  return generateKeyPairSync(type, options)
-    .privateKey.export({ type: 'pkcs8', format: 'pem' })
-    .toString();
+/** @param {import('node:crypto').KeyObject} key */
+function privateKeyPem(key) {
+  return key.export({ type: 'pkcs8', format: 'pem' }).toString();
 }
 
 function runtimeSecrets() {
@@ -38,7 +37,9 @@ function runtimeSecrets() {
     'ai-writing': { token: FAKE },
     resend: { api_key: FAKE },
     'user-access-jwt': {
-      private_key_pem: privateKeyPem('rsa', { modulusLength: 2048 }),
+      private_key_pem: privateKeyPem(
+        generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey,
+      ),
       key_id: FAKE,
     },
     'web-session': { client_secret: FAKE },
@@ -68,7 +69,9 @@ function connectionSecrets() {
       email_send_rate_url: 'redis://cache.invalid/2',
     },
     'sandbox-assertion': {
-      private_key_pem: privateKeyPem('ec', { namedCurve: 'P-256' }),
+      private_key_pem: privateKeyPem(
+        generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey,
+      ),
       key_id: FAKE,
     },
   };
@@ -116,6 +119,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_CHART_PUBLIC_BASE_URL: '',
 };
 
+/** @param {string} directory */
 function writeBootConfig(directory) {
   mkdirSync(directory, { recursive: true });
   writeFileSync(

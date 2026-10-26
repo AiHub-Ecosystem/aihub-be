@@ -6,6 +6,7 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
 import { AUTH_CLOCK } from './local-credentials/application/local-auth.service';
@@ -44,6 +45,12 @@ const PASSWORD = 'correct horse battery';
 const END_USER_IP = '198.51.100.10';
 const OTHER_END_USER_IP = '198.51.100.20';
 const NOW = Date.parse('2026-10-08T00:00:00.000Z');
+const RateLimitedResponseSchema = Type.Object({
+  error: Type.Object({
+    code: Type.Literal('RATE_LIMITED'),
+    retry_after_ms: Type.Integer({ minimum: 0 }),
+  }),
+});
 const redisUnavailable: AuthRedisClient = {
   eval: async () => {
     throw new Error('Redis unavailable');
@@ -161,8 +168,11 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       password: 'a wrong password',
     });
     expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('RATE_LIMITED');
-    expect(blocked.json().error.retry_after_ms).toBe(15 * 60_000);
+    const blockedError = Value.Parse(
+      RateLimitedResponseSchema,
+      blocked.json<unknown>(),
+    ).error;
+    expect(blockedError.retry_after_ms).toBe(15 * 60_000);
     // Same refusal as login's, so the header an integrator honours says the same
     // thing here as it does there.
     expect(blocked.headers['retry-after']).toBe('900');
@@ -225,7 +235,9 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       );
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(state.webSessions.size).toBe(0);
     },
   );
@@ -239,7 +251,9 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
     );
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('UNAUTHORIZED');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'UNAUTHORIZED' },
+    });
     expect(state.webSessions.size).toBe(0);
   });
 
@@ -270,14 +284,15 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       web_session_token: 'unknown-session',
     });
     expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('RATE_LIMITED');
+    const blockedError = Value.Parse(
+      RateLimitedResponseSchema,
+      blocked.json<unknown>(),
+    ).error;
     // The exchange refusal carries both dimensions' wait now, so the header
     // answers the same body field it always did.
-    expect(blocked.json().error.retry_after_ms).toBeGreaterThanOrEqual(
-      5 * 60_000,
-    );
+    expect(blockedError.retry_after_ms).toBeGreaterThanOrEqual(5 * 60_000);
     expect(blocked.headers['retry-after']).toBe(
-      String(Math.ceil(blocked.json().error.retry_after_ms / 1_000)),
+      String(Math.ceil(blockedError.retry_after_ms / 1_000)),
     );
     expect(blocked.payload).not.toContain('access_token');
     expect(
@@ -406,7 +421,9 @@ describe('Web Session HTTP rate limits with Redis unavailable', () => {
       token: 'unknown-verification-token',
     });
     expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('RATE_LIMITED');
+    expect(blocked.json<unknown>()).toMatchObject({
+      error: { code: 'RATE_LIMITED' },
+    });
     expect(blocked.payload).not.toContain('web_session_token');
     expect(
       (

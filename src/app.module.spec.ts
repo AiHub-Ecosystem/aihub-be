@@ -4,6 +4,8 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from './app.module';
 import { OPERATION_CATALOG } from './catalog/operation-catalog';
@@ -41,6 +43,16 @@ const OPENAPI_METHODS = new Set([
   'put',
   'trace',
 ]);
+
+const RequestIdEnvelopeSchema = Type.Object({
+  error: Type.Object({
+    request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }),
+  }),
+});
+
+function requestIdOf(response: { json(): unknown }): string {
+  return Value.Parse(RequestIdEnvelopeSchema, response.json()).error.request_id;
+}
 
 function routeShape(path: string): string {
   return path
@@ -192,23 +204,22 @@ describe('AppModule wiring', () => {
     const response = await app.inject({ method: 'GET', url: '/boom' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({
+    expect(response.json()).toMatchObject({
       error: {
         code: 'AI_SERVICE_UNAVAILABLE',
         message: 'AI service is temporarily unavailable',
-        request_id: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
         retryable: true,
       },
     });
+    expect(requestIdOf(response)).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);
   });
 
   it('reports an unknown route as 404 NOT_FOUND rather than 500', async () => {
     const response = await app.inject({ method: 'GET', url: '/nope' });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error).toMatchObject({
-      code: 'NOT_FOUND',
-      retryable: false,
+    expect(response.json()).toMatchObject({
+      error: { code: 'NOT_FOUND', retryable: false },
     });
     // Nest's own message would echo the route back to the caller.
     expect(response.payload).not.toContain('/nope');
@@ -226,15 +237,15 @@ describe('AppModule wiring', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
+    expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
 
   it('stamps every response with a contract-shaped request id', async () => {
     const first = await app.inject({ method: 'GET', url: '/boom' });
     const second = await app.inject({ method: 'GET', url: '/boom' });
 
-    const firstId = first.json().error.request_id;
-    const secondId = second.json().error.request_id;
+    const firstId = requestIdOf(first);
+    const secondId = requestIdOf(second);
 
     expect(firstId).not.toBe(secondId);
     expect(firstId < secondId).toBe(true);

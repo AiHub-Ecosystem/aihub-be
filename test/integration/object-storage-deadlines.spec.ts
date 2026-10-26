@@ -10,6 +10,22 @@ import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seawee
 import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';
 import { S3WritingChartUploadStorage } from '@/modules/writing/infrastructure/s3-writing-chart-upload.storage';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isTransportConfigUpdater(
+  value: unknown,
+): value is (this: unknown, key: string, value: unknown) => void {
+  return typeof value === 'function';
+}
+
+function isTransportConfigReader(
+  value: unknown,
+): value is (this: unknown) => unknown {
+  return typeof value === 'function';
+}
+
 describe('SeaweedFS S3 transport', () => {
   let server: Server;
   let client: S3Client;
@@ -45,12 +61,14 @@ describe('SeaweedFS S3 transport', () => {
 
   function configureTransport(key: string, value: unknown): void {
     const handler = client.config.requestHandler;
-    if (
-      !('updateHttpClientConfig' in handler) ||
-      typeof handler.updateHttpClientConfig !== 'function'
-    )
+    if (!('updateHttpClientConfig' in handler)) {
       throw new Error('expected Node HTTP handler');
-    handler.updateHttpClientConfig(key, value);
+    }
+    const update: unknown = Reflect.get(handler, 'updateHttpClientConfig');
+    if (!isTransportConfigUpdater(update)) {
+      throw new Error('expected Node HTTP handler');
+    }
+    update.call(handler, key, value);
   }
 
   beforeEach(async () => {
@@ -95,22 +113,29 @@ describe('SeaweedFS S3 transport', () => {
       'httpsAgent',
       new HttpsAgent({ lookup: () => undefined }),
     );
-    await expect(
-      new S3AvatarStorage(client, {
-        bucket: 'aihub-user-assets',
-      }).describeObject(
+    const failure: unknown = await new S3AvatarStorage(client, {
+      bucket: 'aihub-user-assets',
+    })
+      .describeObject(
         'users/usr_test/avatar/ava_test/original',
         AbortSignal.timeout(1_500),
-      ),
-    ).rejects.toMatchObject({
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(failure).toMatchObject({
       httpStatus: 503,
       diagnostic: 'object_storage:connection_timeout',
       cause: {
         name: 'TimeoutError',
-        message: expect.stringContaining('did not establish a connection'),
         $metadata: { attempts: 1 },
       },
     });
+    if (!isRecord(failure) || !isRecord(failure.cause)) {
+      throw new Error('expected a timeout cause');
+    }
+    expect(failure.cause.message).toContain('did not establish a connection');
   });
 
   it('fails a refused connection immediately with a retryable 503', async () => {
@@ -140,18 +165,22 @@ describe('SeaweedFS S3 transport', () => {
       server.on('request', (_request, response) => response.end());
       await client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' }));
       const handler = client.config.requestHandler;
-      if (
-        !('httpHandlerConfigs' in handler) ||
-        typeof handler.httpHandlerConfigs !== 'function'
-      )
+      if (!('httpHandlerConfigs' in handler)) {
         throw new Error('expected Node HTTP handler');
-      expect(handler.httpHandlerConfigs()).toMatchObject({
+      }
+      const readConfig: unknown = Reflect.get(handler, 'httpHandlerConfigs');
+      if (!isTransportConfigReader(readConfig)) {
+        throw new Error('expected Node HTTP handler');
+      }
+      const config: unknown = readConfig.call(handler);
+      if (!isRecord(config)) throw new Error('expected HTTP handler settings');
+      expect(config).toMatchObject({
         connectionTimeout: workload === 'request' ? 1_000 : 3_000,
         requestTimeout: workload === 'request' ? 5_000 : 30_000,
         throwOnRequestTimeout: true,
-        httpAgent: expect.objectContaining({ maxSockets: 16 }),
-        httpsAgent: expect.objectContaining({ maxSockets: 16 }),
       });
+      expect(config.httpAgent).toHaveProperty('maxSockets', 16);
+      expect(config.httpsAgent).toHaveProperty('maxSockets', 16);
       expect(await client.config.maxAttempts()).toBe(1);
     },
   );

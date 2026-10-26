@@ -56,14 +56,14 @@ describe('notifications:sweep', () => {
     expect(lines).toEqual([
       JSON.stringify({ eventsRecorded: 2, emailsQueued: 3, keysSkipped: 1 }),
     ]);
-    expect(store.calls).toEqual([
-      {
-        now: NOW,
-        windowEnd: new Date('2026-11-05T03:00:00.000Z'),
-        eventId: expect.stringMatching(/^nev_[0-9A-HJKMNP-TV-Z]{26}$/),
-        emailId: expect.stringMatching(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/),
-      },
-    ]);
+    expect(store.calls).toHaveLength(1);
+    const [call] = store.calls;
+    expect(call).toMatchObject({
+      now: NOW,
+      windowEnd: new Date('2026-11-05T03:00:00.000Z'),
+    });
+    expect(call?.eventId).toMatch(/^nev_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(call?.emailId).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(store.closed).toBe(1);
   });
 

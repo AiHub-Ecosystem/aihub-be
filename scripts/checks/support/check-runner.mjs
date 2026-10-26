@@ -14,7 +14,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import process from 'node:process';
 
+/** @param {string} dir @returns {string[]} */
 function collectFiles(dir) {
+  /** @type {string[]} */
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
@@ -25,6 +27,7 @@ function collectFiles(dir) {
   return out;
 }
 
+/** @param {string} relativePath @param {number | undefined} line @param {string} detail @returns {string} */
 function formatViolation(relativePath, line, detail) {
   return line === undefined
     ? `${relativePath}: ${detail}`
@@ -37,6 +40,10 @@ function formatViolation(relativePath, line, detail) {
  * tree by changing the working directory. `visitFile` receives every scanned
  * file and returns its violations as `{ line, detail }` pairs; the runner
  * formats each against the file path, prints it, and handles the exit code.
+ */
+/**
+ * @param {{directory: () => string, successMessage: string, visitFile: (input: {relativePath: string, source: string}) => Array<{line?: number, detail: string}>}} options
+ * @returns {() => void}
  */
 export function defineFileVisitorCheck({
   directory,

@@ -32,6 +32,12 @@ import {
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
 
+/** @typedef {{min: number | null, median: number | null, max: number | null}} Spread */
+/** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: Spread, p50Ms: Spread, p95Ms: Spread, p99Ms: Spread, sampleVerdict: string}} RouteSummary */
+/** @typedef {{completionP99Ms: Spread, samples: Array<{status: string, count: number}>}} PathSummary */
+/** @typedef {{verdict: string, routes: Record<string, RouteSummary>, paths: Record<string, Record<string, PathSummary>>}} StageSummary */
+/** @typedef {{stages: StageSummary[]}} RepetitionSummary */
+
 await test('reads Argon2 queue counters from Prometheus exposition', () => {
   assert.deepEqual(
     parseArgon2QueueMetrics(
@@ -218,6 +224,11 @@ await test('holds grading stages long enough to reach the route sample minimum',
 });
 
 await test('summarizes p99 spread and marks missing or under-sampled repetitions inconclusive', () => {
+  /**
+   * @param {number} repetition
+   * @param {number} p99Ms
+   * @param {'sufficient' | 'inconclusive'} status
+   */
   const report = (repetition, p99Ms, status) => ({
     benchmark: {
       repetition,
@@ -274,9 +285,11 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
       },
     ],
   });
-  const summary = summarizeRepetitions(
-    [report(2, 20, 'sufficient'), report(1, 10, 'sufficient')],
-    2,
+  const summary = /** @type {RepetitionSummary} */ (
+    summarizeRepetitions(
+      [report(2, 20, 'sufficient'), report(1, 10, 'sufficient')],
+      2,
+    )
   );
 
   assert.equal(summary.stages[0].routes.writing_task1.p99Ms.min, 10);
@@ -308,6 +321,7 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
   );
   assert.throws(() => summarizeRepetitions([report(1, 10, 'sufficient')], 2));
 
+  /** @param {number} repetition @param {number} totalMemoryBytes */
   const onSeparateVm = (repetition, totalMemoryBytes) => {
     const result = report(repetition, 10, 'sufficient');
     result.benchmark.host.totalMemoryBytes = totalMemoryBytes;
@@ -329,9 +343,8 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
   delete missingSignedPath.runs[0].sampleAdequacy.paths.writing_task1[
     'signed_assertion:keyed_writing'
   ];
-  const missingPathSummary = summarizeRepetitions(
-    [missingSignedPath, report(2, 20, 'sufficient')],
-    2,
+  const missingPathSummary = /** @type {RepetitionSummary} */ (
+    summarizeRepetitions([missingSignedPath, report(2, 20, 'sufficient')], 2)
   );
   assert.equal(missingPathSummary.stages[0].verdict, 'inconclusive');
   assert.equal(
@@ -389,15 +402,18 @@ await test('detects a load-start marker split across stdout chunks', () => {
 });
 
 await test('maps the Task 1 provider fixture to the public API request shape', () => {
-  const fixture = JSON.parse(
-    readFileSync(
-      new URL(
-        '../../../test/fixtures/ai-writing/grade-task1.request.json',
-        import.meta.url,
-      ),
-      'utf8',
-    ),
-  );
+  const fixture =
+    /** @type {{question: string, topic: string, essay: string, url: string}} */ (
+      JSON.parse(
+        readFileSync(
+          new URL(
+            '../../../test/fixtures/ai-writing/grade-task1.request.json',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      )
+    );
 
   assert.deepEqual(task1PayloadFromFixture(fixture), {
     question: fixture.question,
@@ -409,10 +425,11 @@ await test('maps the Task 1 provider fixture to the public API request shape', (
 
 await test('interleaves auth and grading routes across four-request blocks', () => {
   const authRoutes = new Set(['login', 'refresh', 'web_session_exchange']);
-  const counts = authAndGradingWorkload.reduce(
-    (result, route) => ({ ...result, [route]: (result[route] ?? 0) + 1 }),
-    {},
-  );
+  /** @type {Record<string, number>} */
+  const counts = {};
+  for (const route of authAndGradingWorkload) {
+    counts[route] = (counts[route] ?? 0) + 1;
+  }
 
   assert.deepEqual(counts, {
     writing_task1: 3,
@@ -461,6 +478,7 @@ await test('reads tagged k6 metrics and Docker resource samples', () => {
     parseDockerStats('[2J[H{"CPUPerc":"12.5%","MemUsage":"1GiB / 768MiB"}[K'),
     { cpuPercent: 12.5, memoryBytes: 1073741824 },
   );
+  assert.throws(() => parseDockerStats('{"CPUPerc":"12.5%","MemUsage":42}'));
   assert.deepEqual(
     parseDockerImageIdentity(
       'postgres:16-alpine',
@@ -471,6 +489,9 @@ await test('reads tagged k6 metrics and Docker resource samples', () => {
       imageId: 'sha256:abc',
       repositoryDigests: ['postgres@sha256:def'],
     },
+  );
+  assert.throws(() =>
+    parseDockerImageIdentity('postgres:16-alpine', 'sha256:abc [42]'),
   );
 });
 

@@ -155,10 +155,10 @@ describe('tenant isolation for Redis counters', () => {
 
     expect(firstA.allowed).toBe(true);
     expect(firstB.allowed).toBe(true);
-    expect(secondA).toEqual({
-      allowed: false,
-      retryAfterMs: expect.any(Number),
-    });
+    if (secondA.allowed) {
+      throw new Error('expected the second request to be refused');
+    }
+    expect(secondA.retryAfterMs).toBeGreaterThan(0);
     if (firstA.allowed) {
       await firstA.lease.release();
     }

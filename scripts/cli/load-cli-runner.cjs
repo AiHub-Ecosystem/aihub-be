@@ -1,20 +1,53 @@
 const { existsSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
 
+/** @typedef {import('./load-cli-runner.cjs').CliRunner} CliRunner */
+/**
+ * @template {CliRunner} T
+ * @typedef {import('./load-cli-runner.cjs').CliRunnerDescriptor<T>} CliRunnerDescriptor
+ */
+
+/** @type {WeakMap<object, Promise<CliRunner>>} */
 const runnerPromises = new WeakMap();
 
-function runnerExport(module, exportName, unavailableMessage) {
-  if (typeof module[exportName] === 'function') {
-    return module[exportName];
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * @template {CliRunner} T
+ * @param {unknown} moduleValue
+ * @param {string} exportName
+ * @param {string} unavailableMessage
+ * @returns {T}
+ */
+function runnerExport(moduleValue, exportName, unavailableMessage) {
+  if (!isRecord(moduleValue)) {
+    throw new Error(unavailableMessage);
   }
-  if (typeof module.default?.[exportName] === 'function') {
-    return module.default[exportName];
+
+  const namedExport = moduleValue[exportName];
+  const defaultExport = moduleValue.default;
+  const defaultValue = isRecord(defaultExport)
+    ? defaultExport[exportName]
+    : undefined;
+  const candidate = namedExport ?? defaultValue;
+  if (typeof candidate === 'function') {
+    // The descriptor's generic type is bound to its source export at the call site.
+    return /** @type {T} */ (candidate);
   }
   throw new Error(unavailableMessage);
 }
 
+/**
+ * @template {CliRunner} T
+ * @param {CliRunnerDescriptor<T>} descriptor
+ * @returns {Promise<T>}
+ */
 async function loadRunnerModule(descriptor) {
   if (existsSync(descriptor.builtPath)) {
+    /** @type {unknown} */
     let loadedModule;
     try {
       loadedModule = require(descriptor.builtPath);
@@ -31,9 +64,13 @@ async function loadRunnerModule(descriptor) {
     );
   }
 
-  const { register, require: tsxRequire } = require('tsx/cjs/api');
+  const tsxApi = /** @type {typeof import('tsx/cjs/api')} */ (
+    require('tsx/cjs/api')
+  );
+  const { register, require: tsxRequire } = tsxApi;
   const unregister = register();
   try {
+    /** @type {unknown} */
     const module = tsxRequire(descriptor.sourcePath, __filename);
     return runnerExport(
       module,
@@ -45,10 +82,15 @@ async function loadRunnerModule(descriptor) {
   }
 }
 
+/**
+ * @template {CliRunner} T
+ * @param {CliRunnerDescriptor<T>} descriptor
+ * @returns {Promise<T>}
+ */
 function loadCliRunner(descriptor) {
   const cached = runnerPromises.get(descriptor);
   if (cached !== undefined) {
-    return cached;
+    return /** @type {Promise<T>} */ (cached);
   }
   const promise = loadRunnerModule(descriptor);
   runnerPromises.set(descriptor, promise);

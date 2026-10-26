@@ -261,9 +261,8 @@ describe('Organization Membership List over HTTP and PostgreSQL', () => {
       outsiderResponse,
       suspendedResponse,
     ]) {
-      expect({ status: response.statusCode, body: response.json() }).toEqual(
-        denial,
-      );
+      const body: unknown = response.json();
+      expect({ status: response.statusCode, body }).toEqual(denial);
     }
   });
 
@@ -324,7 +323,10 @@ describe('Organization Membership List over HTTP and PostgreSQL', () => {
 
       const snapshotResponse = await request;
       expect(snapshotResponse.statusCode).toBe(200);
-      expect(snapshotResponse.json().data.members).toContainEqual({
+      const members = snapshotResponse.json<{
+        data: { members: unknown[] };
+      }>().data.members;
+      expect(members).toContainEqual({
         username: 'owner',
         role: 'owner',
         status: 'active',

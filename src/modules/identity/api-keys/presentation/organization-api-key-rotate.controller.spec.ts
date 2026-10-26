@@ -177,41 +177,43 @@ describe('Organization API key rotation HTTP flow', () => {
     return call[0];
   }
 
+  function secretBody(response: { json(): unknown }) {
+    return Value.Parse(OrganizationApiKeySecretResponseSchema, response.json());
+  }
+
   it('returns the raw replacement once with the inherited key metadata', async () => {
     const response = await rotate();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      data: {
-        api_key: expect.stringMatching(/^aihub_sk_[A-Za-z0-9]{43}$/),
-        id: expect.stringMatching(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/),
-        name: 'Prod backend',
-        key_prefix: expect.stringMatching(/^aihub_sk_[A-Za-z0-9]{6}$/),
-        scopes: ['writing.grade'],
-        allowed_environments: ['production'],
-        status: 'active',
-        expires_at: INHERITED_EXPIRY.toISOString(),
-        last_used_at: null,
-        created_at: CREATED_AT.toISOString(),
-      },
-      meta: { request_id: REQUEST_ID },
+    const body = secretBody(response);
+    expect(body.data).toMatchObject({
+      name: 'Prod backend',
+      scopes: ['writing.grade'],
+      allowed_environments: ['production'],
+      status: 'active',
+      expires_at: INHERITED_EXPIRY.toISOString(),
+      last_used_at: null,
+      created_at: CREATED_AT.toISOString(),
     });
+    expect(body.data.api_key).toMatch(/^aihub_sk_[A-Za-z0-9]{43}$/);
+    expect(body.data.id).toMatch(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(body.data.key_prefix).toMatch(/^aihub_sk_[A-Za-z0-9]{6}$/);
+    expect(body.meta.request_id).toBe(REQUEST_ID);
   });
 
   it('returns a body the published response contract accepts', async () => {
     const response = await rotate();
 
-    expect(
-      Value.Check(OrganizationApiKeySecretResponseSchema, response.json()),
-    ).toBe(true);
+    expect(secretBody(response).data.api_key).toMatch(/^aihub_sk_/);
   });
 
   it('gives the replacement its own identifier, not the retired one', async () => {
     const response = await rotate();
 
-    expect(response.json().data.id).not.toBe(RETIRED_KEY_ID);
+    const body = secretBody(response);
+    expect(body.data.id).not.toBe(RETIRED_KEY_ID);
     expect(rotateCall().apiKeyId).toBe(RETIRED_KEY_ID);
-    expect(rotateCall().replacementId).toBe(response.json().data.id);
+    expect(rotateCall().replacementId).toBe(body.data.id);
   });
 
   it('marks the credential response uncacheable', async () => {
@@ -238,7 +240,9 @@ describe('Organization API key rotation HTTP flow', () => {
     // would withhold the only copy of a credential the caller now has to use,
     // while the old one is already revoked.
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.api_key).toMatch(/^aihub_sk_[A-Za-z0-9]{43}$/);
+    expect(secretBody(response).data.api_key).toMatch(
+      /^aihub_sk_[A-Za-z0-9]{43}$/,
+    );
   });
 
   it('never discloses the retired key hash', async () => {
@@ -251,7 +255,7 @@ describe('Organization API key rotation HTTP flow', () => {
     const response = await rotate();
 
     const persisted = rotateCall();
-    const rawKey: string = response.json().data.api_key;
+    const rawKey = secretBody(response).data.api_key;
     expect(persisted.keyHash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(persisted)).not.toContain(rawKey);
     expect(persisted.keyPrefix).toBe(rawKey.slice(0, 15));
@@ -311,7 +315,10 @@ describe('Organization API key rotation HTTP flow', () => {
 
     const response = await rotate();
 
-    expect({ status: response.statusCode, body: response.json() }).toEqual({
+    expect({
+      status: response.statusCode,
+      body: response.json<unknown>(),
+    }).toEqual({
       status: 403,
       body: {
         error: {
@@ -340,7 +347,9 @@ describe('Organization API key rotation HTTP flow', () => {
     const response = await rotate();
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
     expect(cache.delete.mock.calls).toHaveLength(0);
   });
 
@@ -350,7 +359,9 @@ describe('Organization API key rotation HTTP flow', () => {
     const response = await rotate();
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('FORBIDDEN');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'FORBIDDEN' },
+    });
     expect(cache.delete.mock.calls).toHaveLength(0);
   });
 
@@ -358,7 +369,9 @@ describe('Organization API key rotation HTTP flow', () => {
     const first = await rotate();
     const second = await rotate();
 
-    expect(first.json().data.api_key).not.toBe(second.json().data.api_key);
-    expect(first.json().data.id).not.toBe(second.json().data.id);
+    expect(secretBody(first).data.api_key).not.toBe(
+      secretBody(second).data.api_key,
+    );
+    expect(secretBody(first).data.id).not.toBe(secretBody(second).data.id);
   });
 });

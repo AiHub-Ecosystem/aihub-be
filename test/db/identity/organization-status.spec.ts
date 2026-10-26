@@ -137,7 +137,7 @@ async function snapshot(): Promise<unknown> {
 }
 
 async function events(): Promise<Record<string, unknown>[]> {
-  const result = await pool.query(
+  const result = await pool.query<Record<string, unknown>>(
     `SELECT actor_user_account_id, action, outcome, target_type, target_id,
             target_label, detail, request_id
      FROM organization_audit_events
@@ -199,12 +199,14 @@ describe('Organization suspension against PostgreSQL', () => {
   });
 
   it('answers a repeat as unchanged, still returning the keys, and records nothing', async () => {
-    await expect(
-      repository.setOrganizationStatus(input({ status: 'active' })),
-    ).resolves.toEqual({
-      kind: 'unchanged',
-      keyHashes: expect.arrayContaining(keyHashes),
-    });
+    const result = await repository.setOrganizationStatus(
+      input({ status: 'active' }),
+    );
+    expect(result).toMatchObject({ kind: 'unchanged' });
+    if (result.kind !== 'unchanged') {
+      throw new Error('expected an unchanged organization status');
+    }
+    expect(result.keyHashes).toEqual(expect.arrayContaining(keyHashes));
     await repository.setOrganizationStatus(input());
     await expect(
       repository.setOrganizationStatus(input()),

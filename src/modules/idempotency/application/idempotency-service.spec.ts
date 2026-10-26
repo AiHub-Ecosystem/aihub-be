@@ -133,8 +133,10 @@ describe('IdempotencyService', () => {
       operation: 'writing.task1.grade',
       actorScope: '',
       idempotencyKey: 'grade-1',
-      fingerprintHex: expect.any(String),
     });
+    expect(repository.completedMatchInputs[0]?.fingerprintHex).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
     expect(repository.reserved).toEqual([]);
   });
 

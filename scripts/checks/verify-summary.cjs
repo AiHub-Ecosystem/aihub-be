@@ -10,7 +10,10 @@
  * the other scripts a test needs to reach.
  */
 
-const { spawn } = require('node:child_process');
+const childProcess = /** @type {typeof import('node:child_process')} */ (
+  require('node:child_process')
+);
+const { spawn } = childProcess;
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
@@ -26,6 +29,7 @@ const MAX_TAIL_LINES = 6;
 const OUT_OF_MEMORY =
   /heap out of memory|Allocation failed|exit code (?:134|3221226505)\b/i;
 
+/** @param {readonly string[]} lines @param {RegExp} pattern @returns {string | undefined} */
 function lastMatch(lines, pattern) {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     if (pattern.test(lines[index])) {
@@ -36,6 +40,7 @@ function lastMatch(lines, pattern) {
 }
 
 /** The lines the failing step printed: from its `$ command` line to ELIFECYCLE. */
+/** @param {readonly string[]} lines @returns {{command: string, output: string[]} | undefined} */
 function failingStep(lines) {
   const end = lines.findIndex((line) => line.includes('ELIFECYCLE'));
   const stop = end === -1 ? lines.length : end;
@@ -58,6 +63,7 @@ function failingStep(lines) {
   };
 }
 
+/** @param {readonly string[]} lines @returns {string[]} */
 function jestFailures(lines) {
   const files = [];
   const tests = [];
@@ -127,6 +133,7 @@ function summarize(rawLog, exitCode, logPath) {
   return out.join('\n');
 }
 
+/** @param {Date} now */
 function logFileName(now) {
   const stamp = now
     .toISOString()
@@ -147,9 +154,10 @@ function run() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
+  /** @type {Buffer[]} */
   const chunks = [];
-  child.stdout.on('data', (chunk) => chunks.push(chunk));
-  child.stderr.on('data', (chunk) => chunks.push(chunk));
+  child.stdout.on('data', (/** @type {Buffer} */ chunk) => chunks.push(chunk));
+  child.stderr.on('data', (/** @type {Buffer} */ chunk) => chunks.push(chunk));
   child.on('error', (error) => {
     console.error(`verify:summary could not start pnpm: ${error.message}`);
     process.exit(1);

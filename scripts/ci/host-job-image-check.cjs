@@ -2,12 +2,15 @@ const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 
+/** @param {string} source @param {string} name @returns {string} */
 function requiredConstant(source, name) {
   const match = new RegExp(`^readonly ${name}='([^']+)'$`, 'm').exec(source);
-  if (!match) throw new Error(`host job wrapper is missing ${name}`);
+  if (!match || match[1] === undefined)
+    throw new Error(`host job wrapper is missing ${name}`);
   return match[1];
 }
 
+/** @param {string} repositoryRoot @returns {string[]} */
 function collectHostJobImagePaths(repositoryRoot) {
   const wrapperPath = path.join(
     repositoryRoot,
@@ -70,6 +73,7 @@ function collectHostJobImagePaths(repositoryRoot) {
   return [...new Set(imagePaths.map((imagePath) => `/app/${imagePath}`))];
 }
 
+/** @param {string | undefined} image @param {string} [repositoryRoot] */
 function checkImagePaths(image, repositoryRoot = process.cwd()) {
   if (!image) throw new Error('usage: host-job-image-check.cjs <image>');
   const imagePaths = collectHostJobImagePaths(repositoryRoot);
@@ -94,7 +98,7 @@ if (require.main === module) {
     checkImagePaths(process.argv[2]);
   } catch (error) {
     process.stderr.write(
-      `${error instanceof Error ? error.message : String(error)}\n`,
+      `${error instanceof Error ? error.message : typeof error === 'string' ? error : ''}\n`,
     );
     process.exitCode = 1;
   }

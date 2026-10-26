@@ -82,7 +82,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       const store = new RedisIdentityStore(proxiedRedisUrl);
       const warnings: string[] = [];
       const failures = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
-        warn: (message) => warnings.push(message),
+        warn: (message: string) => warnings.push(message),
         log: () => undefined,
       });
       const authenticator = new ApiKeyAuthenticator(

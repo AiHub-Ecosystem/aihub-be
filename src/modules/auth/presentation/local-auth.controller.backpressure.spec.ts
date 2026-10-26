@@ -5,8 +5,25 @@ import {
   USER_ID,
   createLocalAuthTestContext,
 } from '@/modules/auth/testing/local-auth.controller.spec-support';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 
 const HOUR = 60 * 60 * 1000;
+const BackpressureErrorSchema = Type.Object(
+  {
+    error: Type.Object(
+      {
+        code: Type.Literal('EMAIL_DELIVERY_BACKLOGGED'),
+        message: Type.String(),
+        request_id: Type.String({ pattern: '^req_' }),
+        retryable: Type.Literal(true),
+        retry_after_ms: Type.Literal(15 * 60 * 1000),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
 
 describe('local auth HTTP boundary - email outbox backpressure', () => {
   let c: LocalAuthTestContext;
@@ -41,15 +58,15 @@ describe('local auth HTTP boundary - email outbox backpressure', () => {
     const response = await post('/v1/auth/register', register);
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({
-      error: {
-        code: 'EMAIL_DELIVERY_BACKLOGGED',
-        message: 'Email delivery is delayed; try again later',
-        request_id: expect.stringMatching(/^req_/),
-        retryable: true,
-        retry_after_ms: 15 * 60 * 1000,
-      },
+    const responseBody: unknown = response.json();
+    const parsed = Value.Parse(BackpressureErrorSchema, responseBody);
+    expect(parsed.error).toMatchObject({
+      code: 'EMAIL_DELIVERY_BACKLOGGED',
+      message: 'Email delivery is delayed; try again later',
+      retryable: true,
+      retry_after_ms: 15 * 60 * 1000,
     });
+    expect(parsed.error.request_id).toMatch(/^req_/);
     expect(response.headers['retry-after']).toBe('900');
   });
 
@@ -95,7 +112,12 @@ describe('local auth HTTP boundary - email outbox backpressure', () => {
 
     expect(known.statusCode).toBe(503);
     expect(unknown.statusCode).toBe(503);
-    expect(unknown.json().error.code).toBe(known.json().error.code);
+    expect(unknown.json()).toMatchObject({
+      error: { code: 'EMAIL_DELIVERY_BACKLOGGED' },
+    });
+    expect(known.json()).toMatchObject({
+      error: { code: 'EMAIL_DELIVERY_BACKLOGGED' },
+    });
     expect(c.limiter.calls).toEqual([]);
   });
 

@@ -7,6 +7,20 @@ import Fastify from 'fastify';
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
 import { loadRuntimeConfiguration } from './config/runtime-configuration';
 
+function isCallerIpResponse(
+  value: unknown,
+): value is { ip: string | null; ips: (string | null)[] } {
+  if (typeof value !== 'object' || value === null || !('ip' in value)) {
+    return false;
+  }
+  if (!('ips' in value)) return false;
+  return (
+    (typeof value.ip === 'string' || value.ip === null) &&
+    Array.isArray(value.ips) &&
+    value.ips.every((ip: unknown) => typeof ip === 'string' || ip === null)
+  );
+}
+
 describe('Fastify proxy trust configuration', () => {
   it('uses the configured immediate peer and ignores forwarding from other peers', async () => {
     const configuration = loadRuntimeConfiguration({
@@ -61,7 +75,14 @@ describe('Fastify proxy trust over a Unix socket', () => {
           response.on('data', (chunk: Buffer) => {
             body += chunk.toString();
           });
-          response.on('end', () => resolve(JSON.parse(body)));
+          response.on('end', () => {
+            const parsed: unknown = JSON.parse(body);
+            if (!isCallerIpResponse(parsed)) {
+              reject(new Error('invalid caller IP response'));
+              return;
+            }
+            resolve(parsed);
+          });
         }).on('error', reject);
       },
     );

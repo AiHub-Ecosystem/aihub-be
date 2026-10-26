@@ -5,6 +5,7 @@ const {
   branchPercent,
   compareCoverage,
   isProductionCode,
+  parseCoverageReport,
 } = mergedCoverage;
 
 describe('branchPercent', () => {
@@ -117,5 +118,19 @@ describe('compareCoverage', () => {
 
     expect(result.ok).toBe(false);
     expect(result.findings.every((f) => f.status === 'unknown')).toBe(true);
+  });
+});
+
+describe('parseCoverageReport', () => {
+  it('keeps recorded metrics and rejects invalid baseline values', () => {
+    expect(parseCoverageReport({ branches: 70 })).toEqual({
+      lines: undefined,
+      branches: 70,
+      statements: undefined,
+      functions: undefined,
+    });
+    expect(() => parseCoverageReport({ branches: '70' })).toThrow(
+      'coverage baseline branches must be a finite number',
+    );
   });
 });

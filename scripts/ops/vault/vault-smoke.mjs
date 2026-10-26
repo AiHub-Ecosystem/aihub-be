@@ -4,9 +4,15 @@ import process from 'node:process';
 const environment = process.env.AIHUB_VAULT_ENVIRONMENT;
 const allowedEnvironments = new Set(['development', 'staging', 'production']);
 
+/** @param {string} message @returns {never} */
 function fail(message) {
   console.error(`Vault smoke test failed: ${message}`);
   process.exit(1);
+}
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 if (process.env.AIHUB_VAULT_SMOKE_ALLOW !== 'true') {
@@ -21,6 +27,7 @@ if (environment === undefined || !allowedEnvironments.has(environment)) {
   fail('AIHUB_VAULT_ENVIRONMENT must be development, staging, or production');
 }
 
+/** @param {string[]} args @returns {import('node:child_process').SpawnSyncReturns<string>} */
 function runVault(args) {
   return spawnSync('vault', args, {
     encoding: 'utf8',
@@ -34,6 +41,7 @@ if (lookup.status !== 0) {
   fail('the Vault CLI could not authenticate the current session');
 }
 
+/** @type {unknown} */
 let lookupDocument;
 try {
   lookupDocument = JSON.parse(lookup.stdout);
@@ -41,8 +49,17 @@ try {
   fail('the Vault token lookup did not return JSON');
 }
 
-const lookupData = lookupDocument.data ?? lookupDocument;
-const policies = Array.isArray(lookupData.policies) ? lookupData.policies : [];
+if (!isRecord(lookupDocument)) {
+  fail('the Vault token lookup returned an invalid document');
+}
+const lookupDataValue = lookupDocument.data ?? lookupDocument;
+if (!isRecord(lookupDataValue)) {
+  fail('the Vault token lookup returned invalid token data');
+}
+const lookupData = lookupDataValue;
+const policies = Array.isArray(lookupData.policies)
+  ? /** @type {unknown[]} */ (lookupData.policies)
+  : [];
 if (policies.includes('root') || lookupData.ttl === 0) {
   fail('refusing to run with a root or non-expiring token');
 }

@@ -31,8 +31,12 @@ export function pauseBeforeCommit(client: PostgresAuthClient): {
     client: new Proxy(client, {
       get(target, property) {
         if (property !== '$transaction') {
-          const value = Reflect.get(target, property, target);
-          return typeof value === 'function' ? value.bind(target) : value;
+          const value: unknown = Reflect.get(target, property, target);
+          if (typeof value !== 'function') return value;
+          return (...args: unknown[]) => {
+            const result: unknown = Reflect.apply(value, target, args);
+            return result;
+          };
         }
         return (callback: (transaction: unknown) => Promise<unknown>) =>
           target.$transaction(async (transaction) => {
@@ -117,8 +121,12 @@ export function pauseAtStatement(
     client: new Proxy(client, {
       get(target, property) {
         if (property !== '$transaction') {
-          const value = Reflect.get(target, property, target);
-          return typeof value === 'function' ? value.bind(target) : value;
+          const value: unknown = Reflect.get(target, property, target);
+          if (typeof value !== 'function') return value;
+          return (...args: unknown[]) => {
+            const result: unknown = Reflect.apply(value, target, args);
+            return result;
+          };
         }
         return (callback: (transaction: PrismaClient) => Promise<unknown>) =>
           target.$transaction(async (transaction) => {

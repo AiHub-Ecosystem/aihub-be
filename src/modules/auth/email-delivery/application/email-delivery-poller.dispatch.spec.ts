@@ -255,14 +255,14 @@ describe('EmailDeliveryPoller', () => {
 
     const summary = await poller.runOnce();
 
-    expect(store.unspent).toEqual([
+    expect(store.unspent).toMatchObject([
       {
         id: 'edr_first',
         previousAttempts: 2,
         previousAttemptAt: null,
-        retryAt: expect.any(Date),
       },
     ]);
+    expect(store.unspent[0]?.retryAt).toBeInstanceOf(Date);
     expect(outageCircuit.failures).toEqual([0]);
     expect(outageCircuit.failedProbeTokens).toEqual(['probe-token']);
     expect(sender.sends).toHaveLength(1);

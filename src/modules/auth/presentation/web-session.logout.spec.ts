@@ -481,7 +481,9 @@ describe('web session HTTP boundary', () => {
         const response = await logout(token, { secret });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json().error.code).toBe('UNAUTHORIZED');
+        expect(response.json()).toMatchObject({
+          error: { code: 'UNAUTHORIZED' },
+        });
         expect(limiter.calls).toEqual([]);
         // A refused caller logs nobody out.
         expect((await exchange(token)).statusCode).toBe(200);
@@ -498,7 +500,9 @@ describe('web session HTTP boundary', () => {
       // temporary fault the BFF must be able to tell from "already gone", or it
       // would clear a cookie whose session is still live.
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.payload).not.toContain('web_session_token');
     });
 
@@ -509,7 +513,9 @@ describe('web session HTTP boundary', () => {
       const response = await logout(token);
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
     });
 
     it('marks every response no-store, whatever it answers', async () => {
@@ -541,7 +547,9 @@ describe('web session HTTP boundary', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect((await exchange(token)).statusCode).toBe(200);
     });
 

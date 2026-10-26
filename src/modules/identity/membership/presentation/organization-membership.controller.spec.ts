@@ -3,10 +3,15 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
+import {
+  OrganizationMembershipMutationResponseSchema,
+  OrganizationRosterResponseSchema,
+} from '@/contracts/organization/membership';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
@@ -32,6 +37,17 @@ const ORGANIZATION_MEMBERS_PATH = PUBLIC_ROUTES[
   'organizations.members.list'
 ].path.replace(':organizationId', ORGANIZATION_ID);
 const MUTATION_URL = `/v1/organizations/${ORGANIZATION_ID}/members/bob`;
+
+function rosterBody(response: { json(): unknown }) {
+  return Value.Parse(OrganizationRosterResponseSchema, response.json());
+}
+
+function mutationBody(response: { json(): unknown }) {
+  return Value.Parse(
+    OrganizationMembershipMutationResponseSchema,
+    response.json(),
+  );
+}
 
 const roster: readonly OrganizationRosterOrganization[] = [
   {
@@ -169,7 +185,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await rosterRequest();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(rosterBody(response)).toEqual({
       data: {
         organizations: [
           {
@@ -199,12 +215,9 @@ describe('Organization membership HTTP flow', () => {
     });
     expect(response.payload).not.toContain(USER_ID);
     expect(response.payload).not.toContain('@');
-    expect(membership.listRoster.mock.calls).toContainEqual([
-      expect.objectContaining({
-        userId: USER_ID,
-        context: expect.objectContaining({ userId: USER_ID }),
-      }),
-    ]);
+    const rosterCall = membership.listRoster.mock.calls[0]?.[0];
+    expect(rosterCall?.userId).toBe(USER_ID);
+    expect(rosterCall?.context.userId).toBe(USER_ID);
   });
 
   it('allows an admin to read the same redacted roster shape', async () => {
@@ -226,7 +239,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await rosterRequest();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    expect(response.json<unknown>()).toMatchObject({
       data: {
         organizations: [
           {
@@ -250,7 +263,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await rosterRequest();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(rosterBody(response)).toEqual({
       data: { organizations: [] },
       meta: { request_id: 'req_01J00000000000000000000000' },
     });
@@ -264,10 +277,12 @@ describe('Organization membership HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatchObject({
-      code: 'INVALID_REQUEST',
-      message: 'Request failed validation',
-      retryable: false,
+    expect(response.json<unknown>()).toMatchObject({
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Request failed validation',
+        retryable: false,
+      },
     });
   });
 
@@ -324,7 +339,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await rosterRequest();
 
     expect(response.statusCode).toBe(500);
-    expect(response.json()).toMatchObject({
+    expect(response.json<unknown>()).toMatchObject({
       error: { code: 'INTERNAL_ERROR' },
     });
     expect(response.payload).not.toContain('Acme');
@@ -336,7 +351,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await rosterRequest();
 
     expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
+    expect(response.json<unknown>()).toMatchObject({
       error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
     });
     expect(membership.listRoster.mock.calls).toHaveLength(0);
@@ -348,7 +363,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await mutationRequest('DELETE');
 
     expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
+    expect(response.json<unknown>()).toMatchObject({
       error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
     });
     expect(mutation.disable.mock.calls).toHaveLength(0);
@@ -360,7 +375,7 @@ describe('Organization membership HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(mutationBody(response)).toEqual({
       data: {
         organization_id: ORGANIZATION_ID,
         username: 'bob',
@@ -369,22 +384,19 @@ describe('Organization membership HTTP flow', () => {
       },
       meta: { request_id: 'req_01J00000000000000000000000' },
     });
-    expect(mutation.changeRole.mock.calls).toContainEqual([
-      expect.objectContaining({
-        userId: USER_ID,
-        organizationId: ORGANIZATION_ID,
-        username: 'bob',
-        role: 'admin',
-        context: expect.objectContaining({ organizationId: ORGANIZATION_ID }),
-      }),
-    ]);
+    const changeCall = mutation.changeRole.mock.calls[0]?.[0];
+    expect(changeCall?.userId).toBe(USER_ID);
+    expect(changeCall?.organizationId).toBe(ORGANIZATION_ID);
+    expect(changeCall?.username).toBe('bob');
+    expect(changeCall?.role).toBe('admin');
+    expect(changeCall?.context.organizationId).toBe(ORGANIZATION_ID);
   });
 
   it('disables a member through DELETE and returns the durable state', async () => {
     const response = await mutationRequest('DELETE');
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toEqual({
+    expect(mutationBody(response).data).toEqual({
       organization_id: ORGANIZATION_ID,
       username: 'bob',
       role: 'member',
@@ -403,7 +415,7 @@ describe('Organization membership HTTP flow', () => {
     const response = await mutationRequest('POST', `${MUTATION_URL}/transfer`);
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toEqual({
+    expect(mutationBody(response).data).toEqual({
       organization_id: ORGANIZATION_ID,
       username: 'bob',
       role: 'owner',
@@ -426,7 +438,9 @@ describe('Organization membership HTTP flow', () => {
     const response = await mutationRequest('PATCH', MUTATION_URL, payload);
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(mutation.changeRole.mock.calls).toHaveLength(0);
   });
 
@@ -436,7 +450,9 @@ describe('Organization membership HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(mutation.transfer.mock.calls).toHaveLength(0);
   });
 

@@ -4,6 +4,18 @@ import type {
 } from '@/modules/metering/application/usage-retention';
 import { formatUsageRetentionEvent, runUsagePruneCommand } from './usage-prune';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJsonLine(line: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(line);
+  if (!isRecord(value)) {
+    throw new Error('usage prune output is not a JSON object');
+  }
+  return value;
+}
+
 class FakeUsageRetentionPort implements UsageRetentionPort {
   constructor(
     private readonly batch: UsageRetentionBatch = { deleted: 0 },
@@ -102,7 +114,7 @@ describe('runUsagePruneCommand', () => {
       }),
     ).resolves.toMatchObject({ batches: 0, deleted: 0 });
 
-    expect(lines.map((line) => JSON.parse(line))).toEqual([
+    expect(lines.map(parseJsonLine)).toEqual([
       {
         event: 'usage_prune_started',
         started_at: start.toISOString(),
@@ -144,7 +156,7 @@ describe('runUsagePruneCommand', () => {
       }),
     ).rejects.toMatchObject({ code: 'DATABASE_FAILURE' });
 
-    expect(lines.map((line) => JSON.parse(line))).toEqual([
+    expect(lines.map(parseJsonLine)).toEqual([
       {
         event: 'usage_prune_started',
         started_at: start.toISOString(),
@@ -224,7 +236,7 @@ describe('runUsagePruneCommand', () => {
     );
     expect(
       lines
-        .map((line) => JSON.parse(line))
+        .map(parseJsonLine)
         .find(
           (event) =>
             event.event === 'writing_chart_revocation_audit_prune_completed',

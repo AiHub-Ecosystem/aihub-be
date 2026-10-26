@@ -23,10 +23,34 @@ interface Allowed {
   readonly reason: string;
 }
 
-function readJson<T>(relative: string): T {
-  return JSON.parse(
+function isRecord(value: unknown): value is Json {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAllowedList(value: unknown): value is Allowed[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.kind === 'string' &&
+        typeof entry.path === 'string' &&
+        typeof entry.reason === 'string',
+    )
+  );
+}
+
+function readJson<T>(
+  relative: string,
+  isExpected: (value: unknown) => value is T,
+): T {
+  const value: unknown = JSON.parse(
     readFileSync(join(__dirname, 'fixtures', relative), 'utf8'),
   );
+  if (!isExpected(value)) {
+    throw new Error(`provider snapshot ${relative} has an unexpected shape`);
+  }
+  return value;
 }
 
 function dig(node: unknown, path: readonly string[]): unknown {
@@ -41,9 +65,13 @@ function dig(node: unknown, path: readonly string[]): unknown {
 }
 
 describe('AI Speaking: provider contract against the schema AIHUB checks', () => {
-  const doc = readJson<Json>('ai-speaking/provider-openapi.snapshot.json');
+  const doc = readJson<Json>(
+    'ai-speaking/provider-openapi.snapshot.json',
+    isRecord,
+  );
   const allowed = readJson<Allowed[]>(
     'ai-speaking/provider-drift.allowed.json',
+    isAllowedList,
   );
 
   const responseSchema = dig(doc, [
@@ -66,8 +94,11 @@ describe('AI Speaking: provider contract against the schema AIHUB checks', () =>
     node: envelopeProperties.data,
     doc,
   };
+  const oursNode: unknown = JSON.parse(
+    JSON.stringify(SpeakingGradeResponseSchema),
+  );
   const ours = {
-    node: JSON.parse(JSON.stringify(SpeakingGradeResponseSchema)),
+    node: oursNode,
     doc: {},
   };
 
@@ -85,9 +116,13 @@ describe('AI Speaking: provider contract against the schema AIHUB checks', () =>
       expect.arrayContaining(['input_tokens', 'output_tokens', 'total_tokens']),
     );
     for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
-      expect(usageProperties[field]).toMatchObject({
-        anyOf: expect.arrayContaining([{ type: 'integer' }, { type: 'null' }]),
-      });
+      const property = usageProperties[field];
+      if (!isRecord(property) || !Array.isArray(property.anyOf)) {
+        throw new Error(`${field} has no nullable type list`);
+      }
+      expect(property.anyOf).toEqual(
+        expect.arrayContaining([{ type: 'integer' }, { type: 'null' }]),
+      );
     }
 
     expect(providerMetrics.required).toContain('ai_processing_ms');

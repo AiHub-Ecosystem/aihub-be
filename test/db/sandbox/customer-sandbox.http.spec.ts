@@ -271,10 +271,9 @@ beforeAll(async () => {
       `Sandbox API-key creation returned ${apiKeyCreation.statusCode}`,
     );
   }
-  const createdKey = apiKeyCreation.json().data as {
-    id: string;
-    api_key: string;
-  };
+  const createdKey = apiKeyCreation.json<{
+    data: { id: string; api_key: string };
+  }>().data;
   apiKey = {
     id: createdKey.id,
     raw: createdKey.api_key,
@@ -526,7 +525,9 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
         });
 
       expect(speaking.statusCode).toBe(200);
-      expect(speaking.json().meta.operation).toBe('speaking.grading-json');
+      expect(
+        speaking.json<{ meta: { operation: string } }>().meta.operation,
+      ).toBe('speaking.grading-json');
       expect(downstreamCalls).toBe(1);
     } finally {
       appConfiguration.AIHUB_SANDBOX_ORG_IDS = savedConfiguration.organizations;
@@ -558,7 +559,9 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
         scopes: ['writing.grade'],
       },
     });
-    expect(apiKeyCreation.json().data.api_key).toBe(apiKey.raw);
+    expect(
+      apiKeyCreation.json<{ data: { api_key: string } }>().data.api_key,
+    ).toBe(apiKey.raw);
 
     const stored = await controlPlane.query<{
       key_hash: string;
@@ -585,7 +588,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
     ]);
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().data).toMatchObject({
+    expect(response.json<{ data: unknown }>().data).toMatchObject({
       scopes: ['writing.grade', 'speaking.grade'],
       allowed_environments: ['sandbox'],
     });
@@ -595,7 +598,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
     const response = await createSandboxKey(adminUserId, 'Admin Sandbox key');
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().data).toMatchObject({
+    expect(response.json<{ data: unknown }>().data).toMatchObject({
       scopes: ['writing.grade'],
       allowed_environments: ['sandbox'],
     });

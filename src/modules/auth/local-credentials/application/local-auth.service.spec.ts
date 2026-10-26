@@ -480,11 +480,12 @@ describe('LocalAuthService', () => {
     ]);
     // One durable handoff, carrying the opaque token and nothing else.
     expect(state.emailDeliveryRequests).toHaveLength(1);
-    expect(state.emailDeliveryRequests[0]).toMatchObject({
+    const request = state.emailDeliveryRequests[0];
+    expect(request).toMatchObject({
       kind: 'verification_email',
-      id: expect.stringMatching(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/),
       createdAt: NOW,
     });
+    expect(request?.id).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(sealed(cipher, state.emailDeliveryRequests[0])).toEqual({
       email: 'person@example.com',
       token: 'opaque-token-1',

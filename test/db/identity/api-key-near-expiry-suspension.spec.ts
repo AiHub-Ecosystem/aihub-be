@@ -7,6 +7,7 @@ import type {
   ApiKeyNearExpiryNotificationPayload,
   EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { isApiKeyNearExpiryNotificationPayload } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
@@ -31,6 +32,36 @@ const nextUlid = monotonicFactory();
 const OWNER = `usr_${nextUlid()}`;
 const ADMIN = `usr_${nextUlid()}`;
 const KEY = 'key_expiring';
+
+type TransactionOptions = NonNullable<
+  Parameters<IdentityFixtureClient['$transaction']>[1]
+>;
+
+function boundValue(target: object, value: unknown): unknown {
+  if (typeof value !== 'function') return value;
+  return (...args: unknown[]): unknown => {
+    const result: unknown = Reflect.apply(value, target, args);
+    return result;
+  };
+}
+
+function callValue(target: object, value: unknown, args: unknown[]): unknown {
+  if (typeof value !== 'function') {
+    throw new Error('expected a callable Prisma method');
+  }
+  const result: unknown = Reflect.apply(value, target, args);
+  return result;
+}
+
+function decodeNoticePayload(
+  serialized: string,
+): ApiKeyNearExpiryNotificationPayload {
+  const candidate: unknown = JSON.parse(serialized);
+  if (!isApiKeyNearExpiryNotificationPayload(candidate)) {
+    throw new Error('queued notice payload is malformed');
+  }
+  return candidate;
+}
 
 let pool: Pool;
 let client: IdentityFixtureClient;
@@ -67,12 +98,15 @@ function pausedAfterRead(): {
   const wrapTransaction = (transaction: object) =>
     new Proxy(transaction, {
       get(target, property) {
-        const value = Reflect.get(target, property, target);
+        const value: unknown = Reflect.get(target, property, target);
         if (property !== '$queryRawUnsafe' || typeof value !== 'function') {
-          return typeof value === 'function' ? value.bind(target) : value;
+          return boundValue(target, value);
         }
         return async (text: string, ...values: unknown[]) => {
-          const rows = await value.call(target, text, ...values);
+          const rows: unknown = await callValue(target, value, [
+            text,
+            ...values,
+          ]);
           if (text.includes('FROM api_keys AS api_key')) {
             signalRead();
             await released;
@@ -84,16 +118,16 @@ function pausedAfterRead(): {
   const paused = new Proxy(client, {
     get(target, property) {
       if (property !== '$transaction') {
-        const value = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
+        const value: unknown = Reflect.get(target, property, target);
+        return boundValue(target, value);
       }
       return (
         callback: (transaction: object) => Promise<unknown>,
-        options?: unknown,
+        options?: TransactionOptions,
       ) =>
         target.$transaction(
           (transaction) => callback(wrapTransaction(transaction)),
-          options as never,
+          options,
         );
     },
   });
@@ -113,10 +147,10 @@ function pausedWhile(match: (text: string) => boolean): {
   readonly resume: (occurrence: number) => void;
 } {
   const gates: { go: () => void }[] = [];
-  const interceptStatements = (holder: object): object =>
+  const interceptStatements = <T extends object>(holder: T): T =>
     new Proxy(holder, {
       get(target, property) {
-        const value = Reflect.get(target, property, target);
+        const value: unknown = Reflect.get(target, property, target);
         if (
           (property === '$queryRawUnsafe' ||
             property === '$executeRawUnsafe') &&
@@ -128,27 +162,21 @@ function pausedWhile(match: (text: string) => boolean): {
                 gates.push({ go: resolveGo });
               });
             }
-            return value.call(target, text, ...values);
+            return callValue(target, value, [text, ...values]);
           };
         }
         if (property === '$transaction' && typeof value === 'function') {
           return (
             callback: (transaction: object) => Promise<unknown>,
-            options?: unknown,
+            options?: TransactionOptions,
           ) =>
-            (
-              target as unknown as {
-                $transaction: (
-                  callback: (transaction: object) => Promise<unknown>,
-                  options?: unknown,
-                ) => Promise<unknown>;
-              }
-            ).$transaction(
-              (transaction) => callback(interceptStatements(transaction)),
+            callValue(target, value, [
+              (transaction: object) =>
+                callback(interceptStatements(transaction)),
               options,
-            );
+            ]);
         }
-        return typeof value === 'function' ? value.bind(target) : value;
+        return boundValue(target, value);
       },
     });
   const pause = async (occurrence: number): Promise<void> => {
@@ -163,7 +191,7 @@ function pausedWhile(match: (text: string) => boolean): {
     gates[occurrence - 1]?.go();
   };
   return {
-    client: interceptStatements(client) as IdentityFixtureClient,
+    client: interceptStatements(client),
     pause,
     resume,
   };
@@ -209,7 +237,7 @@ async function queuedNotices(): Promise<
   );
   return result.rows.map((row) => ({
     id: row.id,
-    payload: JSON.parse(
+    payload: decodeNoticePayload(
       cipher.decrypt(row.payload, {
         id: row.id,
         kind: 'api_key_near_expiry_notification',
@@ -344,7 +372,7 @@ describe("near-expiry notices across a restore between the resolver's reads (#11
     // the recipient is not told twice.
     await sweep(noticesOver(client), LATER);
     expect(await queuedNotices()).toHaveLength(1);
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<{ events: number }>(
       `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
       [KEY],
     );
@@ -358,7 +386,7 @@ describe("near-expiry notices across a restore between the resolver's reads (#11
     // The withdrawal runs while the Organization is suspended, and the
     // restoration lands after the resolver already answered.
     await expect(dispatch(NOW)).resolves.toBe(0);
-    const { rows: withdrawn } = await pool.query(
+    const { rows: withdrawn } = await pool.query<{ events: number }>(
       `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
       [KEY],
     );
@@ -446,7 +474,7 @@ describe("near-expiry notices across a restore between the resolver's reads (#11
     // The guard withdrew on the second suspension, so the events are back with
     // the sweep instead of stranding the dedupe key: after the next
     // restoration the only notice is queued and sent once.
-    const { rows: events } = await pool.query(
+    const { rows: events } = await pool.query<{ events: number }>(
       `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
       [KEY],
     );
@@ -510,7 +538,7 @@ describe('near-expiry notices across an Organization suspension (#996)', () => {
     await expect(dispatch(NOW)).resolves.toBe(1);
     await sweep(noticesOver(client), LATER);
 
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<{ events: number }>(
       `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
       [KEY],
     );
@@ -572,7 +600,7 @@ describe('near-expiry notices across a withdrawal and re-record (#1098)', () => 
     await setOrganizationStatus('suspended');
     await expect(dispatch(NOW)).resolves.toBe(0);
     expect(await queuedNotices()).toHaveLength(0);
-    const { rows: events } = await pool.query(
+    const { rows: events } = await pool.query<{ events: number }>(
       `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
       [KEY],
     );
@@ -605,7 +633,7 @@ describe('near-expiry notices across a withdrawal and re-record (#1098)', () => 
     const remaining = await queuedNotices();
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.payload.organizationId).toBe(otherOrg);
-    const { rows: otherEvents } = await pool.query(
+    const { rows: otherEvents } = await pool.query<{ events: number }>(
       `SELECT count(*)::int AS events FROM notification_events WHERE api_key_id = $1`,
       [otherKey],
     );

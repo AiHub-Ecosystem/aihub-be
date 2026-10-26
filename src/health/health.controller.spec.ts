@@ -111,7 +111,9 @@ describe('HealthController', () => {
     const response = await app.inject({ method: 'GET', url: '/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().dependencies['runtime-postgres']).toBe('down');
+    expect(response.json()).toMatchObject({
+      dependencies: { 'runtime-postgres': 'down' },
+    });
     expect(performance.now() - startedAt).toBeLessThan(2_000);
   });
 

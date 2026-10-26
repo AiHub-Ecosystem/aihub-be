@@ -211,7 +211,7 @@ describe('runAvatarSweepCommand', () => {
     });
     expect(storage.deleted).toEqual([]);
     expect(storage.objects.size).toBe(2);
-    expect(JSON.parse(lines.join('\n')).dryRun).toBe(true);
+    expect(JSON.parse(lines.join('\n'))).toMatchObject({ dryRun: true });
   });
 
   it('follows every page of the listing', async () => {

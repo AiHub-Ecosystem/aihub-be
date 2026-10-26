@@ -158,21 +158,20 @@ describe('billing statement', () => {
       now: AFTER_OCTOBER,
     });
 
-    expect({
-      line: lineFor(statement),
-      adjustments: statement.adjustments.map((a) => [a.requests, a.actor]),
-      usageRows: (
-        await pool.query('SELECT count(*)::int AS n FROM usage_records')
-      ).rows[0].n,
-    }).toEqual({
-      line: expect.objectContaining({
-        billableRequests: 1,
-        adjustmentRequests: -1,
-        totalRequests: 0,
-      }),
-      adjustments: [[-1, 'operator_a']],
-      usageRows: 1,
+    const usageRows = (
+      await pool.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM usage_records',
+      )
+    ).rows[0]?.n;
+    expect(lineFor(statement)).toMatchObject({
+      billableRequests: 1,
+      adjustmentRequests: -1,
+      totalRequests: 0,
     });
+    expect(statement.adjustments.map((a) => [a.requests, a.actor])).toEqual([
+      [-1, 'operator_a'],
+    ]);
+    expect(usageRows).toBe(1);
     await expect(pool.query('DELETE FROM billing_adjustments')).rejects.toThrow(
       'billing_adjustments is append-only',
     );

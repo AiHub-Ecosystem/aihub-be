@@ -418,9 +418,9 @@ describe('web session HTTP boundary', () => {
       const response = await resetPassword(resetToken);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe(
-        'AUTH_PASSWORD_RESET_TOKEN_INVALID',
-      );
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' },
+      });
       expect((await exchange(token)).statusCode).toBe(200);
       expect(storedSession().revokedAt).toBeUndefined();
     });
@@ -431,9 +431,9 @@ describe('web session HTTP boundary', () => {
       const response = await resetPassword('never-issued-reset-token');
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe(
-        'AUTH_PASSWORD_RESET_TOKEN_INVALID',
-      );
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' },
+      });
       expect((await exchange(token)).statusCode).toBe(200);
       expect(storedSession().revokedAt).toBeUndefined();
     });

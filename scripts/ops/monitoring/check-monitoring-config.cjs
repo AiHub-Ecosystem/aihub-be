@@ -2,6 +2,12 @@ const { spawnSync } = require('node:child_process');
 const net = require('node:net');
 const path = require('node:path');
 
+/** @typedef {{host_ip?: string, target?: string | number, published?: string | number, protocol?: string}} MonitoringPort */
+/** @typedef {{target: string, read_only?: boolean}} MonitoringVolume */
+/** @typedef {{command?: string[], ports?: (string | MonitoringPort)[], volumes?: MonitoringVolume[], networks?: Record<string, {ipv4_address?: string}>, network_mode?: string, user?: string, build?: {args?: Record<string, string | number>}, environment?: Record<string, string | null>, read_only?: boolean, cap_drop?: string[], privileged?: boolean, cap_add?: string[], security_opt?: string[], profiles?: string[], mem_limit?: string | number, cpus?: string | number, pids_limit?: string | number, image?: string}} MonitoringService */
+/** @typedef {{services: Record<string, MonitoringService>}} MonitoringCompose */
+/** @typedef {(command: string, args: string[], options: {encoding?: 'utf8', stdio?: 'pipe' | 'inherit'}) => {error?: Error | null, status: number | null, stdout?: string | Buffer | null, stderr?: string | Buffer | null}} MonitoringCommandRunner */
+
 const PROMETHEUS_IMAGE = 'prom/prometheus:v3.13.4';
 const BLACKBOX_IMAGE = 'quay.io/prometheus/blackbox-exporter:v0.28.0';
 const EXPORTER_PORTS = {
@@ -20,6 +26,7 @@ const HOST_NETWORK_SERVICES = [
   'ssh-tunnel',
 ];
 
+/** @param {string | number | undefined} value */
 function memoryLimitBytes(value) {
   if (typeof value === 'number') return value;
   if (typeof value !== 'string') return 0;
@@ -37,6 +44,7 @@ function memoryLimitBytes(value) {
   return Number(match[1]) * (units[(match[2] ?? 'b').toLowerCase()] ?? 1);
 }
 
+/** @param {string} address */
 function isPrivateOrLoopbackIPv4(address) {
   if (net.isIP(address) !== 4) return false;
   const [first, second] = address.split('.').map(Number);
@@ -48,6 +56,7 @@ function isPrivateOrLoopbackIPv4(address) {
   );
 }
 
+/** @param {MonitoringService} service */
 function serviceListenAddress(service) {
   const command = service.command ?? [];
   const webAddress = command.find((value) =>
@@ -61,9 +70,147 @@ function serviceListenAddress(service) {
   return `${bindAddress.slice('--listen_ip='.length)}:${port.slice('--port='.length)}`;
 }
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {value is string[]} */
+function isStringArray(value) {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
+/** @param {unknown} value @returns {value is string | MonitoringPort} */
+function isMonitoringPort(value) {
+  return (
+    typeof value === 'string' ||
+    (isRecord(value) &&
+      (value.host_ip === undefined || typeof value.host_ip === 'string') &&
+      (value.target === undefined ||
+        typeof value.target === 'string' ||
+        typeof value.target === 'number') &&
+      (value.published === undefined ||
+        typeof value.published === 'string' ||
+        typeof value.published === 'number') &&
+      (value.protocol === undefined || typeof value.protocol === 'string'))
+  );
+}
+
+/** @param {unknown} value @returns {value is MonitoringVolume} */
+function isMonitoringVolume(value) {
+  return (
+    isRecord(value) &&
+    typeof value.target === 'string' &&
+    (value.read_only === undefined || typeof value.read_only === 'boolean')
+  );
+}
+
+/** @param {unknown} value @returns {value is MonitoringService} */
+function isMonitoringService(value) {
+  if (!isRecord(value)) return false;
+  const optionalStringFields = ['network_mode', 'user', 'image'];
+  if (
+    optionalStringFields.some(
+      (field) => value[field] !== undefined && typeof value[field] !== 'string',
+    )
+  ) {
+    return false;
+  }
+  const optionalBooleanFields = ['read_only', 'privileged'];
+  if (
+    optionalBooleanFields.some(
+      (field) =>
+        value[field] !== undefined && typeof value[field] !== 'boolean',
+    )
+  ) {
+    return false;
+  }
+  const optionalStringArrays = [
+    'command',
+    'cap_drop',
+    'cap_add',
+    'security_opt',
+    'profiles',
+  ];
+  if (
+    optionalStringArrays.some(
+      (field) => value[field] !== undefined && !isStringArray(value[field]),
+    )
+  ) {
+    return false;
+  }
+  if (
+    (value.ports !== undefined &&
+      (!Array.isArray(value.ports) || !value.ports.every(isMonitoringPort))) ||
+    (value.volumes !== undefined &&
+      (!Array.isArray(value.volumes) ||
+        !value.volumes.every(isMonitoringVolume)))
+  ) {
+    return false;
+  }
+  for (const field of ['mem_limit', 'cpus', 'pids_limit']) {
+    const limit = value[field];
+    if (
+      limit !== undefined &&
+      typeof limit !== 'string' &&
+      typeof limit !== 'number'
+    ) {
+      return false;
+    }
+  }
+  if (value.networks !== undefined) {
+    if (!isRecord(value.networks)) return false;
+    for (const network of Object.values(value.networks)) {
+      if (
+        !isRecord(network) ||
+        (network.ipv4_address !== undefined &&
+          typeof network.ipv4_address !== 'string')
+      ) {
+        return false;
+      }
+    }
+  }
+  if (value.environment !== undefined) {
+    if (!isRecord(value.environment)) return false;
+    if (
+      Object.values(value.environment).some(
+        (entry) => entry !== null && typeof entry !== 'string',
+      )
+    ) {
+      return false;
+    }
+  }
+  if (value.build !== undefined) {
+    if (!isRecord(value.build)) return false;
+    const args = value.build.args;
+    if (
+      args !== undefined &&
+      (!isRecord(args) ||
+        Object.values(args).some(
+          (entry) => typeof entry !== 'string' && typeof entry !== 'number',
+        ))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** @param {unknown} compose */
 function validateExporterCompose(compose) {
-  const services = compose?.services;
-  if (!services) throw new Error('monitoring Compose services are missing');
+  if (!isRecord(compose) || !isRecord(compose.services)) {
+    throw new Error('monitoring Compose services are missing');
+  }
+  /** @type {Record<string, MonitoringService>} */
+  const services = {};
+  for (const [name, value] of Object.entries(compose.services)) {
+    if (!isMonitoringService(value)) {
+      throw new Error(`${name} has an invalid monitoring service definition`);
+    }
+    services[name] = value;
+  }
   if (Object.keys(services).some((name) => !EXPORTER_SERVICES.includes(name))) {
     throw new Error('monitoring Compose contains an unchecked service');
   }
@@ -266,6 +413,7 @@ function validateExporterCompose(compose) {
   return EXPORTER_SERVICES;
 }
 
+/** @param {string} repositoryRoot */
 function buildMonitoringCheckCommands(repositoryRoot) {
   const monitoringDirectory = path.resolve(repositoryRoot, 'ops/monitoring');
   const composeFile = path.join(monitoringDirectory, 'exporters.compose.yml');
@@ -355,8 +503,12 @@ function buildMonitoringCheckCommands(repositoryRoot) {
   ];
 }
 
+/**
+ * @param {MonitoringCommandRunner} [execute]
+ * @param {string} [repositoryRoot]
+ */
 function runMonitoringChecks(
-  execute = spawnSync,
+  execute = /** @type {MonitoringCommandRunner} */ (spawnSync),
   repositoryRoot = path.resolve(__dirname, '../../..'),
 ) {
   for (const step of buildMonitoringCheckCommands(repositoryRoot)) {
@@ -367,13 +519,23 @@ function runMonitoringChecks(
       isCompose ? { encoding: 'utf8', stdio: 'pipe' } : { stdio: 'inherit' },
     );
     if (result.error || result.status !== 0) {
-      const detail =
-        result.error?.message ?? result.stderr?.trim().slice(0, 500);
+      const stderr =
+        typeof result.stderr === 'string'
+          ? result.stderr
+          : result.stderr?.toString('utf8');
+      const detail = result.error?.message ?? stderr?.trim().slice(0, 500);
       throw new Error(`${step.label} failed${detail ? `: ${detail}` : ''}`);
     }
     if (isCompose) {
       try {
-        validateExporterCompose(JSON.parse(result.stdout));
+        const output =
+          typeof result.stdout === 'string'
+            ? result.stdout
+            : result.stdout?.toString('utf8');
+        if (output === undefined) {
+          throw new Error('docker compose returned no output');
+        }
+        validateExporterCompose(JSON.parse(output));
       } catch (error) {
         throw new Error(
           `${step.label} failed: ${error instanceof Error ? error.message : 'invalid output'}`,

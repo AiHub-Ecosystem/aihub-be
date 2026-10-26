@@ -13,12 +13,38 @@ const runtimeConnectionModule = new URL(
   '../../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
   import.meta.url,
 );
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/** @param {unknown} value @returns {value is (options: {env: NodeJS.ProcessEnv}) => void} */
+function isRuntimeConnectionLoader(value) {
+  return typeof value === 'function';
+}
+
 if (existsSync(runtimeConnectionModule)) {
-  const runtimeConnection = await import(runtimeConnectionModule);
-  const loadRuntimeConnectionEnvironment =
-    runtimeConnection.loadRuntimeConnectionEnvironment ??
-    runtimeConnection.default?.loadRuntimeConnectionEnvironment;
-  if (typeof loadRuntimeConnectionEnvironment !== 'function') {
+  const runtimeConnection = /** @type {unknown} */ (
+    await import(runtimeConnectionModule)
+  );
+  const defaultExport = isRecord(runtimeConnection)
+    ? runtimeConnection.default
+    : undefined;
+  const directLoader = isRecord(runtimeConnection)
+    ? runtimeConnection.loadRuntimeConnectionEnvironment
+    : undefined;
+  const defaultLoader = isRecord(defaultExport)
+    ? defaultExport.loadRuntimeConnectionEnvironment
+    : undefined;
+  const loadRuntimeConnectionEnvironment = isRuntimeConnectionLoader(
+    directLoader,
+  )
+    ? directLoader
+    : isRuntimeConnectionLoader(defaultLoader)
+      ? defaultLoader
+      : undefined;
+  if (loadRuntimeConnectionEnvironment === undefined) {
     throw new Error('runtime connection loader is unavailable');
   }
   loadRuntimeConnectionEnvironment({ env: process.env });
@@ -32,6 +58,7 @@ if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
 
 const MIGRATIONS_DIR = 'prisma/migrations';
 
+/** @param {Pool} pool @returns {Promise<Array<{filename: string, path: string}>>} */
 async function pendingMigrations(pool) {
   const entries = await readdir(MIGRATIONS_DIR, { withFileTypes: true });
   const migrations = entries
@@ -42,7 +69,9 @@ async function pendingMigrations(pool) {
     }))
     .sort((left, right) => left.filename.localeCompare(right.filename));
 
-  const applied = await pool.query('SELECT filename FROM schema_migrations');
+  const applied = /** @type {import('pg').QueryResult<{filename: string}>} */ (
+    await pool.query('SELECT filename FROM schema_migrations')
+  );
   const appliedNames = new Set(applied.rows.map((row) => row.filename));
 
   return migrations.filter(({ filename }) => !appliedNames.has(filename));

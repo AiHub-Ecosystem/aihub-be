@@ -4,11 +4,14 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 import type { LightMyRequestResponse } from 'fastify';
 
 import { AppModule } from '@/app.module';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { MfaRequiredResponseSchema } from '@/contracts/auth/local-auth';
+import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { AUTH_CLOCK } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
@@ -44,6 +47,10 @@ import {
 } from '@/modules/auth/verification/application/verification-token.port';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import { WEB_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/web-session-repository.port';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const URL = '/v1/auth/web-sessions';
@@ -149,7 +156,11 @@ class CapturedLog {
       throw new Error('no request completion event was logged');
     }
 
-    return JSON.parse(line) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(line);
+    if (!isRecord(parsed)) {
+      throw new Error('request completion event was not a JSON object');
+    }
+    return parsed;
   }
 }
 
@@ -320,7 +331,9 @@ describe('web session HTTP boundary', () => {
     try {
       const response = await create();
       expect(response.statusCode).toBe(401);
-      expect(response.json().error.code).toBe('AUTH_CREDENTIALS_INVALID');
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'AUTH_CREDENTIALS_INVALID' },
+      });
       expect(response.payload).not.toContain('web_session_token');
       expect(response.headers['cache-control']).toBe('no-store');
       expect(state.webSessions.size).toBe(0);
@@ -339,10 +352,10 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(201);
-    const body = response.json() as {
-      data: { web_session_token: string; expires_at: string };
-      meta: { request_id: string };
-    };
+    const body = Value.Parse(
+      CreateWebSessionResponseSchema,
+      response.json<unknown>(),
+    );
     expect(body.data.web_session_token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(body.data.expires_at).toBe('2026-11-07T00:00:00.000Z');
     expect(body.meta.request_id).toMatch(/^req_/);
@@ -358,7 +371,9 @@ describe('web session HTTP boundary', () => {
     expect(response.statusCode).toBe(202);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.headers['set-cookie']).toBeUndefined();
-    expect(response.json().data).toEqual({ status: 'MFA_REQUIRED' });
+    expect(
+      Value.Parse(MfaRequiredResponseSchema, response.json<unknown>()).data,
+    ).toEqual({ status: 'MFA_REQUIRED' });
     expect(response.payload).not.toContain('web_session_token');
     expect(state.webSessions.size).toBe(0);
   });
@@ -367,8 +382,10 @@ describe('web session HTTP boundary', () => {
     seedActiveAccount();
 
     const response = await create();
-    const token = (response.json() as { data: { web_session_token: string } })
-      .data.web_session_token;
+    const token = Value.Parse(
+      CreateWebSessionResponseSchema,
+      response.json<unknown>(),
+    ).data.web_session_token;
 
     expect(response.headers['set-cookie']).toBeUndefined();
     const [stored] = [...state.webSessions.values()];
@@ -407,9 +424,9 @@ describe('web session HTTP boundary', () => {
       const response = await create({ secret });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'UNAUTHORIZED' }),
-      );
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'UNAUTHORIZED' },
+      });
       expect(log.completion()['client_ip_source']).toBe('direct_peer');
       expect(limiter.calls).toEqual([]);
       expect(state.webSessions.size).toBe(0);
@@ -422,12 +439,9 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(201);
-    expect(log.completion()).toEqual(
-      expect.objectContaining({
-        client_ip: expect.any(String),
-        client_ip_source: 'customer_web_bff',
-      }),
-    );
+    const completion = log.completion();
+    expect(typeof completion.client_ip).toBe('string');
+    expect(completion.client_ip_source).toBe('customer_web_bff');
   });
 
   it('answers 503 with no credential when the deployment provisioned no secret', async () => {
@@ -437,9 +451,9 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_WEB_SESSION_UNAVAILABLE' }),
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+    });
     expect(response.payload).not.toContain('web_session_token');
     expect(state.webSessions.size).toBe(0);
   });
@@ -448,9 +462,9 @@ describe('web session HTTP boundary', () => {
     const rejected = await create();
 
     expect(rejected.statusCode).toBe(401);
-    expect(rejected.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_CREDENTIALS_INVALID' }),
-    );
+    expect(rejected.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_CREDENTIALS_INVALID' },
+    });
     expect(limiter.calls.map((call) => call.scope)).toEqual([
       'login_ip',
       'login_email',
@@ -492,9 +506,9 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_CREDENTIALS_INVALID' }),
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_CREDENTIALS_INVALID' },
+    });
     expect(response.payload).not.toContain(EMAIL);
     expect(response.payload).not.toContain('pending_verification');
     expect(response.payload).not.toContain('disabled');
@@ -511,9 +525,9 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(429);
-    expect(response.json().error).toEqual(
-      expect.objectContaining({ code: 'RATE_LIMITED' }),
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'RATE_LIMITED' },
+    });
     expect(state.webSessions.size).toBe(0);
   });
 
@@ -524,9 +538,9 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().error).toEqual(
-      expect.objectContaining({ code: 'AUTH_WEB_SESSION_UNAVAILABLE' }),
-    );
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+    });
     expect(response.headers['set-cookie']).toBeUndefined();
     expect(response.payload).not.toContain('web_session_token');
     expect(state.webSessions.size).toBe(0);
@@ -552,7 +566,8 @@ describe('web session HTTP boundary', () => {
     const response = await create();
 
     expect(
-      (response.json() as { data: { expires_at: string } }).data.expires_at,
+      Value.Parse(CreateWebSessionResponseSchema, response.json<unknown>()).data
+        .expires_at,
     ).toBe('2026-11-07T12:00:00.000Z');
     expect([...state.webSessions.values()][0]?.expiresAt.getTime()).toBe(
       clock.value.getTime() + THIRTY_DAYS_MS,
@@ -568,7 +583,9 @@ describe('web session HTTP boundary', () => {
     const short = await create({ body: { email: EMAIL, password: 'short' } });
 
     expect(extra.statusCode).toBe(400);
-    expect(extra.json().error.code).toBe('INVALID_REQUEST');
+    expect(extra.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(short.statusCode).toBe(400);
     expect(state.webSessions.size).toBe(0);
   });

@@ -117,15 +117,14 @@ describe('RotateOrganizationApiKey', () => {
   it('keeps a single-environment key in the same environment when rotated', async () => {
     const { useCase } = createUseCase(['sandbox']);
 
-    await expect(
-      useCase.rotate({
-        context: CONTEXT,
-        userId: 'usr_owner',
-        organizationId: 'org_acme',
-        apiKeyId: 'ak_retired',
-      }),
-    ).resolves.toMatchObject({
-      apiKey: expect.stringMatching(/^aihub_sandbox_[A-Za-z0-9]{43}$/),
+    const rotated = await useCase.rotate({
+      context: CONTEXT,
+      userId: 'usr_owner',
+      organizationId: 'org_acme',
+      apiKeyId: 'ak_retired',
+    });
+    expect(rotated.apiKey).toMatch(/^aihub_sandbox_[A-Za-z0-9]{43}$/);
+    expect(rotated).toMatchObject({
       allowedEnvironments: ['sandbox'],
     });
   });

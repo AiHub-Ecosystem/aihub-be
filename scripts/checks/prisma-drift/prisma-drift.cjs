@@ -11,9 +11,13 @@
  * `prisma migrate diff --script` prints a lone comment when the two sides
  * already agree. Anything else is a statement that would change the database.
  */
-const { spawnSync } = require('node:child_process');
+const childProcess = /** @type {typeof import('node:child_process')} */ (
+  require('node:child_process')
+);
+const { spawnSync } = childProcess;
 const { performance } = require('node:perf_hooks');
-const { Client } = require('pg');
+const pg = /** @type {typeof import('pg')} */ (require('pg'));
+const { Client } = pg;
 
 const EMPTY_DIFF = '-- This is an empty migration.';
 const PRISMA_CLI = require.resolve('prisma/build/index.js');
@@ -33,6 +37,7 @@ const SCRATCH_DATABASE_NAME = 'aihub_prisma_drift';
  * A pure function of the CLI's diff output, so a spec can pin both directions
  * without a PostgreSQL instance.
  */
+/** @param {string} output @returns {string[]} */
 function driftStatements(output) {
   if (output.includes(EMPTY_DIFF)) {
     return [];
@@ -44,6 +49,7 @@ function driftStatements(output) {
     .filter((line) => line.length > 0 && !line.startsWith('--'));
 }
 
+/** @param {string} adminUrl @param {string} name */
 function scratchDatabaseUrl(adminUrl, name) {
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
@@ -54,11 +60,13 @@ function scratchDatabaseUrl(adminUrl, name) {
  * Host and database only. The admin URL carries a password, so it never
  * reaches an error message or a log line.
  */
+/** @param {string} adminUrl */
 function adminTarget(adminUrl) {
   const admin = new URL(adminUrl);
   return `${admin.host}${admin.pathname}`;
 }
 
+/** @param {string} message */
 function redactDatabaseUrls(message) {
   return message.replace(
     /(?:postgres(?:ql)?|prisma\+postgres):\/\/[^\s"'`<>]+/gi,
@@ -66,6 +74,7 @@ function redactDatabaseUrls(message) {
   );
 }
 
+/** @template T @param {string} phase @param {() => Promise<T>} work @returns {Promise<T>} */
 async function timePhase(phase, work) {
   const startedAt = performance.now();
   try {
@@ -80,6 +89,10 @@ async function timePhase(phase, work) {
   }
 }
 
+/**
+ * @param {{command: string, args: string[], timeoutMs: number, phase: string, cwd?: string, env?: NodeJS.ProcessEnv}} options
+ * @returns {string}
+ */
 function runDiffProcess({ command, args, timeoutMs, phase, cwd, env }) {
   const startedAt = performance.now();
   try {
@@ -111,6 +124,7 @@ function runDiffProcess({ command, args, timeoutMs, phase, cwd, env }) {
   }
 }
 
+/** @template T @param {string} adminUrl @param {(admin: import('pg').Client) => Promise<T>} work @returns {Promise<T>} */
 async function withAdmin(adminUrl, work) {
   const admin = new Client({
     connectionString: adminUrl,
@@ -138,6 +152,10 @@ async function withAdmin(adminUrl, work) {
  * the same thing. Both scratch databases are created and dropped here, so a
  * developer's working database is never touched.
  */
+/**
+ * @param {{adminUrl: string, migrationsDir: string, schemaPath: string, scratchName?: string}} options
+ * @returns {Promise<string[]>}
+ */
 async function driftAgainstMigrations({
   adminUrl,
   migrationsDir,
@@ -146,8 +164,10 @@ async function driftAgainstMigrations({
 }) {
   const shadowName = `${scratchName}_shadow`;
   let cleanupRequired = false;
+  /** @type {unknown} */
   let failure;
-  let drifted;
+  /** @type {string[]} */
+  let drifted = [];
 
   try {
     await timePhase('drift scratch database creation', () =>

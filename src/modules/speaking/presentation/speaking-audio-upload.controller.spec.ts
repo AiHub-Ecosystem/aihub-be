@@ -8,8 +8,10 @@ import { Value } from '@sinclair/typebox/value';
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { SpeakingAudioUploadUrlResponseSchema } from '@/contracts/speaking/audio-upload';
-import { SpeakingAudioAssetResponseSchema } from '@/contracts/speaking/audio-upload';
+import {
+  SpeakingAudioAssetResponseSchema,
+  SpeakingAudioUploadUrlResponseSchema,
+} from '@/contracts/speaking/audio-upload';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import type { ApiKeyAuthenticatorPort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
@@ -27,6 +29,18 @@ import type {
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+
+function uploadUrlBody(response: { json(): unknown }) {
+  return Value.Parse(SpeakingAudioUploadUrlResponseSchema, response.json());
+}
+
+function audioAssetBody(response: { json(): unknown }) {
+  return Value.Parse(SpeakingAudioAssetResponseSchema, response.json());
+}
+
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
 
 class FakeAudioUploadRepository implements SpeakingAudioUploadRepositoryPort {
   readonly intents = new Map<string, SpeakingAudioUploadIntent>();
@@ -337,7 +351,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expectErrorCode(response, 'INVALID_REQUEST');
     },
   );
 
@@ -382,21 +396,18 @@ describe('Speaking Audio upload HTTP flow', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.headers['cache-control']).toBe('no-store');
-    const body = response.json();
-    expect([
-      ...Value.Errors(SpeakingAudioUploadUrlResponseSchema, body),
-    ]).toEqual([]);
+    const body = uploadUrlBody(response);
+    expect(body.data.upload_url).toMatch(/^https:\/\/s3\.wispace\.app\//);
+    expect(body.data.asset_id).toMatch(/^aud_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(body.data).toMatchObject({
-      upload_url: expect.stringMatching(/^https:\/\/s3\.wispace\.app\//),
+      upload_url: body.data.upload_url,
       method: 'PUT',
       headers: {
         'Content-Type': 'audio/wav',
         'Content-Length': '1024',
       },
     });
-    expect(body.data.asset_id).toMatch(/^aud_[0-9A-HJKMNP-TV-Z]{26}$/);
-
-    const assetId = body.data.asset_id as string;
+    const assetId = body.data.asset_id;
     const intent = repository.intents.get(assetId);
     expect(intent).toBeDefined();
     if (intent === undefined)
@@ -438,7 +449,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/webm', byte_size: 2_048 },
     });
-    const assetId = created.json().data.asset_id as string;
+    const assetId = uploadUrlBody(created).data.asset_id;
     const before = repository.intents.get(assetId);
     if (before === undefined)
       throw new Error('upload intent was not persisted');
@@ -450,7 +461,7 @@ describe('Speaking Audio upload HTTP flow', () => {
     });
 
     expect(refreshed.statusCode).toBe(200);
-    expect(refreshed.json().data).toMatchObject({
+    expect(uploadUrlBody(refreshed).data).toMatchObject({
       asset_id: assetId,
       method: 'PUT',
       headers: {
@@ -487,7 +498,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/wav', byte_size: 512 },
     });
-    const assetId = created.json().data.asset_id as string;
+    const assetId = uploadUrlBody(created).data.asset_id;
     currentTime = new Date(currentTime.getTime() + 60 * 60 * 1000);
 
     const refresh = await app.inject({
@@ -521,7 +532,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/wav', byte_size: 1_024 },
     });
-    const assetId = String(created.json().data.asset_id);
+    const assetId = uploadUrlBody(created).data.asset_id;
     const timeout = jest
       .spyOn(AbortSignal, 'timeout')
       .mockReturnValue(
@@ -565,7 +576,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/wav', byte_size: 1_024 },
     });
-    const assetId = created.json().data.asset_id as string;
+    const assetId = uploadUrlBody(created).data.asset_id;
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
@@ -582,9 +593,7 @@ describe('Speaking Audio upload HTTP flow', () => {
 
     expect(first.statusCode).toBe(201);
     expect(first.headers['cache-control']).toBe('no-store');
-    expect([
-      ...Value.Errors(SpeakingAudioAssetResponseSchema, first.json()),
-    ]).toEqual([]);
+    const firstBody = audioAssetBody(first);
     const accepted = repository.assets.get(assetId);
     if (accepted === undefined) throw new Error('Audio asset was not recorded');
     expect(accepted).toMatchObject({
@@ -608,7 +617,7 @@ describe('Speaking Audio upload HTTP flow', () => {
     });
 
     expect(repeat.statusCode).toBe(200);
-    expect(repeat.json().data).toEqual(first.json().data);
+    expect(audioAssetBody(repeat).data).toEqual(firstBody.data);
     expect(storage.described).toEqual([intent.objectKey]);
     expect(repository.assets.size).toBe(1);
   });
@@ -625,7 +634,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/ogg', byte_size: 1_200 },
     });
-    const assetId = created.json().data.asset_id as string;
+    const assetId = uploadUrlBody(created).data.asset_id;
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
@@ -688,7 +697,7 @@ describe('Speaking Audio upload HTTP flow', () => {
         headers,
         payload: { content_type: 'audio/wav', byte_size: 1_024 },
       });
-      const assetId = created.json().data.asset_id as string;
+      const assetId = uploadUrlBody(created).data.asset_id;
       const intent = repository.intents.get(assetId);
       if (intent === undefined)
         throw new Error('upload intent was not persisted');
@@ -719,7 +728,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/wav', byte_size: 1_024 },
     });
-    const assetId = created.json().data.asset_id as string;
+    const assetId = uploadUrlBody(created).data.asset_id;
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
@@ -758,7 +767,7 @@ describe('Speaking Audio upload HTTP flow', () => {
       headers,
       payload: { content_type: 'audio/wav', byte_size: 1_024 },
     });
-    const assetId = created.json().data.asset_id as string;
+    const assetId = uploadUrlBody(created).data.asset_id;
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');

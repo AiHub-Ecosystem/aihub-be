@@ -11,6 +11,7 @@ const modulesDirectory = path.join(__dirname, 'src', 'modules');
  * one signal that says "this file extends the shared request contract", and a
  * file that does not say it stays private by default.
  */
+/** @param {string} file @returns {boolean} */
 function isSharedPrimitive(file) {
   return /declare module ['"]fastify['"]/.test(readFileSync(file, 'utf8'));
 }
@@ -110,6 +111,7 @@ function cliRule() {
  * looking like a coupling bug, without adding either symbol to `exports:`
  * where it does not belong.
  */
+/** @returns {string[]} */
 function nestDecoratorPaths() {
   return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
     .filter(
@@ -136,6 +138,7 @@ function nestDecoratorPaths() {
  * through files in `public/`. Unlike a maintained allowlist, the directory is
  * the module's explicit API surface and callers must import that facade.
  */
+/** @returns {string[]} */
 function publicModuleApiPaths() {
   return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
     .filter(
@@ -161,7 +164,9 @@ function publicModuleApiPaths() {
  * from source keeps the exemption derived from the declaration rather than a
  * list, so exporting a guard is all it takes to make it reachable.
  */
+/** @returns {string[]} */
 function nestExportPaths() {
+  /** @type {Map<string, Set<string>>} */
   const exported = new Map();
 
   for (const entry of readdirSync(modulesDirectory, {
@@ -216,7 +221,7 @@ function nestExportPaths() {
                 .trim()
                 .match(/^(?:type\s+)?([A-Za-z_$][\w$]*)/)?.[1],
           )
-          .filter(Boolean),
+          .filter((symbol) => typeof symbol === 'string'),
       ),
     );
   }
@@ -266,6 +271,7 @@ function nestExportPaths() {
  * that does not declare it stays private and a new file needs no edit to this
  * config to become shared.
  */
+/** @returns {string[]} */
 function sharedPrimitivePaths() {
   return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
     .filter(

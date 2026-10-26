@@ -1395,12 +1395,11 @@ describe('email outbox dispatch poller', () => {
 
       await poller(OWNER_A, sender).runOnce();
 
-      expect(delivered).toEqual([
-        expect.objectContaining({
-          subject: 'Lời mời tham gia một tổ chức trên AIHUB',
-          text: expect.stringContaining('chủ sở hữu'),
-        }),
-      ]);
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]).toMatchObject({
+        subject: 'Lời mời tham gia một tổ chức trên AIHUB',
+      });
+      expect(delivered[0]?.text).toContain('chủ sở hữu');
       expect((await rowOf(seeded.id)).status).toBe('provider_accepted');
     });
 

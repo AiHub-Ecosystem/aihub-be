@@ -16,17 +16,23 @@ const DEFAULT_BUCKET = 'aihub-speaking-samples';
 const DEFAULT_REGION = 'us-east-1';
 const OBJECT_PREFIX = 'speaking-samples';
 
+/** @typedef {{part: number, filePath: string, fileName: string, bytes: number, key: string, contentType: string}} SourceObject */
+/** @typedef {{endpoint: string, bucket: string, region: string, accessKeyId: string, secretAccessKey: string}} StorageConfig */
+
+/** @param {string} name @returns {string | undefined} */
 function option(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
+/** @param {string} name @returns {string} */
 function required(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
 }
 
+/** @param {string} value @returns {string} */
 function slug(value) {
   return value
     .toLowerCase()
@@ -34,10 +40,12 @@ function slug(value) {
     .replace(/^-+|-+$/g, '');
 }
 
+/** @param {string} extension @returns {string} */
 function contentType(extension) {
   return extension === 'mp3' ? 'audio/mpeg' : 'audio/webm';
 }
 
+/** @returns {StorageConfig} */
 function storageConfig() {
   const endpoint =
     option('--endpoint') ??
@@ -76,6 +84,7 @@ function storageConfig() {
   };
 }
 
+/** @param {string} source @returns {Promise<SourceObject[]>} */
 async function sourceObjects(source) {
   const directories = (await readdir(source, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -84,6 +93,7 @@ async function sourceObjects(source) {
   if (directories.length === 0)
     throw new Error(`No question folders found in ${source}`);
 
+  /** @type {SourceObject[]} */
   const objects = [];
   for (const directory of directories) {
     const directoryPath = path.join(source, directory.name);
@@ -95,6 +105,7 @@ async function sourceObjects(source) {
     }
 
     const file = entries[0];
+    if (!file) throw new Error(`Expected one audio file in ${directoryPath}`);
     const match = /^Part([123]) - (.+)\.(mp3|webm)$/i.exec(file.name);
     if (!match || match[2] !== directory.name) {
       throw new Error(
@@ -117,14 +128,23 @@ async function sourceObjects(source) {
   return objects;
 }
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/** @param {unknown} error @returns {boolean} */
 function bucketMissing(error) {
+  const metadata = isRecord(error) ? error.$metadata : undefined;
+  const statusCode = isRecord(metadata) ? metadata.httpStatusCode : undefined;
   return (
-    error?.name === 'NotFound' ||
-    error?.name === 'NoSuchBucket' ||
-    error?.$metadata?.httpStatusCode === 404
+    (isRecord(error) && error.name === 'NotFound') ||
+    (isRecord(error) && error.name === 'NoSuchBucket') ||
+    statusCode === 404
   );
 }
 
+/** @param {S3Client} client @param {string} bucket @returns {Promise<boolean>} */
 async function ensureBucket(client, bucket) {
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }));
@@ -182,10 +202,13 @@ async function main() {
         source,
         bucketCreated: created,
         uploaded: objects.length,
-        parts: objects.reduce((counts, object) => {
-          counts[object.part] = (counts[object.part] ?? 0) + 1;
-          return counts;
-        }, {}),
+        parts: objects.reduce(
+          (/** @type {Record<number, number>} */ counts, object) => {
+            counts[object.part] = (counts[object.part] ?? 0) + 1;
+            return counts;
+          },
+          /** @type {Record<number, number>} */ ({}),
+        ),
       },
       null,
       2,

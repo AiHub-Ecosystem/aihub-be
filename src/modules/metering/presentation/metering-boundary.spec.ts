@@ -85,7 +85,7 @@ describe('metering request boundary', () => {
     async (timeout, sqlstate, message) => {
       const finalizer = new FakeFinalizer();
       const request = authenticatedRequest();
-      const send = jest.fn();
+      const send = jest.fn<void, [unknown]>();
       const status = jest.fn(() => ({ send }));
       const header = jest.fn();
       const filter = new HttpExceptionFilter(finalizer);
@@ -108,13 +108,14 @@ describe('metering request boundary', () => {
 
         expect(status).toHaveBeenCalledWith(503);
         expect(header).toHaveBeenCalledWith('Retry-After', '1');
-        expect(send).toHaveBeenCalledWith({
-          error: expect.objectContaining({
+        const responseBody: unknown = send.mock.calls[0]?.[0];
+        expect(responseBody).toMatchObject({
+          error: {
             code: 'DATABASE_UNAVAILABLE',
             message: 'Database temporarily unavailable',
             retryable: true,
             retry_after_ms: 1_000,
-          }),
+          },
         });
         expect(logger).toHaveBeenCalledWith(
           JSON.stringify({
@@ -133,7 +134,7 @@ describe('metering request boundary', () => {
 
   it('maps an unreachable database to a retryable 503 with Retry-After, without the driver message', async () => {
     const finalizer = new FakeFinalizer();
-    const send = jest.fn();
+    const send = jest.fn<void, [unknown]>();
     const status = jest.fn(() => ({ send }));
     const header = jest.fn();
     const filter = new HttpExceptionFilter(finalizer);
@@ -157,12 +158,13 @@ describe('metering request boundary', () => {
 
       expect(status).toHaveBeenCalledWith(503);
       expect(header).toHaveBeenCalledWith('Retry-After', '1');
-      expect(send).toHaveBeenCalledWith({
-        error: expect.objectContaining({
+      const responseBody: unknown = send.mock.calls[0]?.[0];
+      expect(responseBody).toMatchObject({
+        error: {
           code: 'DATABASE_UNAVAILABLE',
           retryable: true,
           retry_after_ms: 1_000,
-        }),
+        },
       });
       expect(logger).toHaveBeenCalledWith(
         JSON.stringify({ event: 'postgres_unavailable' }),
@@ -207,7 +209,7 @@ describe('metering request boundary', () => {
   it('records a post-auth error once and leaves the public error unchanged', async () => {
     const finalizer = new FakeFinalizer();
     const request = authenticatedRequest();
-    const send = jest.fn();
+    const send = jest.fn<void, [unknown]>();
     const filter = new HttpExceptionFilter(finalizer);
     const context = httpContextFor(request, { status: () => ({ send }) });
     const error = new AppError({
@@ -228,9 +230,10 @@ describe('metering request boundary', () => {
       }),
     );
     expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[0]?.[0].error).toEqual(
-      expect.objectContaining({ code: 'AI_SERVICE_TIMEOUT' }),
-    );
+    const responseBody: unknown = send.mock.calls[0]?.[0];
+    expect(responseBody).toMatchObject({
+      error: { code: 'AI_SERVICE_TIMEOUT' },
+    });
   });
 
   it('passes quota tracking state to the finalizer', async () => {

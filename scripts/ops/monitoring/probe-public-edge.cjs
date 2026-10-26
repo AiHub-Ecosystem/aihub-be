@@ -4,6 +4,11 @@ const DEFAULT_INTERVAL_MS = 1_000;
 const REQUEST_TIMEOUT_MS = 3_000;
 const REQUEST_ID_PATTERN = /^req_[0-9A-HJKMNP-TV-Z]{26}$/;
 
+/** @typedef {{tier: string, hostname: string}} PublicHost */
+/** @typedef {{hostname: string, result: string}} ProbeFailure */
+/** @typedef {{hostname: string, ok: boolean, result: string}} ProbeResult */
+
+/** @param {unknown} hostname @param {string} label @returns {string} */
 function validateHostname(hostname, label) {
   if (typeof hostname !== 'string' || hostname.length === 0) {
     throw new Error(`${label} hostname is required`);
@@ -22,6 +27,7 @@ function validateHostname(hostname, label) {
   return hostname;
 }
 
+/** @param {string} hostname @param {typeof fetch} [fetchImpl] @returns {Promise<ProbeResult>} */
 async function probeHost(hostname, fetchImpl = fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -49,6 +55,7 @@ async function probeHost(hostname, fetchImpl = fetch) {
   }
 }
 
+/** @param {string} hostname @param {typeof fetch} [fetchImpl] @returns {Promise<string>} */
 async function requestCompletionId(hostname, fetchImpl = fetch) {
   validateHostname(hostname, 'public API');
   const controller = new AbortController();
@@ -66,7 +73,8 @@ async function requestCompletionId(hostname, fetchImpl = fetch) {
     if (
       response.status < 200 ||
       response.status >= 300 ||
-      !REQUEST_ID_PATTERN.test(requestId ?? '')
+      requestId === null ||
+      !REQUEST_ID_PATTERN.test(requestId)
     ) {
       throw new Error('public request did not return a valid request ID');
     }
@@ -76,6 +84,11 @@ async function requestCompletionId(hostname, fetchImpl = fetch) {
   }
 }
 
+/**
+ * @param {readonly PublicHost[]} hosts
+ * @param {{fetchImpl?: typeof fetch, intervalMs?: number, onFailure?: (failure: ProbeFailure) => void}} [options]
+ * @returns {{readonly failures: ProbeFailure[], readonly samples: number, stop: () => Promise<{failures: ProbeFailure[], samples: number}>}}
+ */
 function startPublicHealthMonitor(
   hosts,
   {
@@ -91,20 +104,25 @@ function startPublicHealthMonitor(
     throw new Error('probe interval must be a positive integer');
   }
 
+  /** @type {ProbeFailure[]} */
   const failures = [];
   let samples = 0;
   let running = true;
   let busy = false;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
+  /** @type {(() => void) | undefined} */
   let wake;
 
+  /** @type {Promise<void>} */
   const loop = (async () => {
     while (running) {
       const startedAt = performance.now();
       if (!busy) {
         busy = true;
+        const publicHosts = /** @type {readonly PublicHost[]} */ (hosts);
         const results = await Promise.all(
-          hosts.map(({ hostname }) => probeHost(hostname, fetchImpl)),
+          publicHosts.map(({ hostname }) => probeHost(hostname, fetchImpl)),
         );
         samples += results.length;
         for (const result of results) {
@@ -156,6 +174,7 @@ function startPublicHealthMonitor(
 }
 
 async function main() {
+  /** @type {PublicHost[]} */
   const hosts = [
     {
       tier: 'production',

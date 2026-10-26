@@ -12,18 +12,28 @@ const READINESS_CHECKS = [
   'control-plane-read-postgres',
   'redis',
 ];
-const DOWNSTREAMS = [
+const DOWNSTREAMS = /** @type {const} */ ([
   ['ai-writing', 'DOWNSTREAM_AI_WRITING_URL'],
   ['ai-speaking', 'DOWNSTREAM_AI_SPEAKING_URL'],
-];
+]);
 
+/** @typedef {{name: string, ok: boolean, result: string}} ProbeResult */
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} error */
 function safeErrorCode(error) {
-  return typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)
-    ? error.code
+  const code = isRecord(error) ? error.code : undefined;
+  return typeof code === 'string' && /^[A-Z0-9_]+$/.test(code)
+    ? code
     : 'CONNECTION_FAILED';
 }
 
 // Provider checks stop at TCP/TLS because grading requests may consume quota.
+/** @param {string} value @param {number} [timeoutMs] @returns {Promise<{ok: boolean, result: string}>} */
 function probeDependencyUrl(value, timeoutMs = PROBE_TIMEOUT_MS) {
   let url;
   try {
@@ -46,9 +56,11 @@ function probeDependencyUrl(value, timeoutMs = PROBE_TIMEOUT_MS) {
 
   return new Promise((resolve) => {
     let settled = false;
+    /** @type {net.Socket | tls.TLSSocket | undefined} */
     let socket;
     const timeout = setTimeout(() => finish(false, 'TIMEOUT'), timeoutMs);
 
+    /** @param {boolean} ok @param {string} result */
     function finish(ok, result) {
       if (settled) return;
       settled = true;
@@ -75,6 +87,7 @@ function probeDependencyUrl(value, timeoutMs = PROBE_TIMEOUT_MS) {
   });
 }
 
+/** @param {typeof fetch} [fetchImpl] @returns {Promise<ProbeResult>} */
 async function probeReadiness(fetchImpl = fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
@@ -84,6 +97,7 @@ async function probeReadiness(fetchImpl = fetch) {
       redirect: 'manual',
       signal: controller.signal,
     });
+    /** @type {unknown} */
     let body;
     try {
       body = await response.json();
@@ -91,34 +105,33 @@ async function probeReadiness(fetchImpl = fetch) {
       return { name: 'postgres-redis', ok: false, result: 'INVALID_RESPONSE' };
     }
 
-    const hasDependencies =
-      body &&
-      typeof body === 'object' &&
-      body.dependencies &&
-      typeof body.dependencies === 'object';
-    const entries = hasDependencies ? Object.entries(body.dependencies) : [];
+    const bodyRecord = isRecord(body) ? body : undefined;
+    const dependencies =
+      bodyRecord && isRecord(bodyRecord.dependencies)
+        ? bodyRecord.dependencies
+        : undefined;
+    const hasDependencies = dependencies !== undefined;
+    const entries = dependencies ? Object.entries(dependencies) : [];
     const knownDependencies = entries.every(([name]) =>
       READINESS_CHECKS.includes(name),
     );
     const requiredChecksUp =
       hasDependencies &&
-      REQUIRED_READINESS_CHECKS.every(
-        (name) => body.dependencies[name] === 'up',
-      );
+      REQUIRED_READINESS_CHECKS.every((name) => dependencies[name] === 'up');
     const nonRedisDependenciesUp = entries
       .filter(([name]) => name !== 'redis')
       .every(([, state]) => state === 'up');
-    const redisState = hasDependencies ? body.dependencies.redis : undefined;
+    const redisState = dependencies?.redis;
     const allUp = entries.every(([, state]) => state === 'up');
     const ready =
       response.status === 200 &&
-      body.status === 'ok' &&
+      bodyRecord?.status === 'ok' &&
       allUp &&
       redisState === 'up';
     // Gateway requests fail open on Redis outages; Postgres checks still gate.
     const redisDegraded =
       response.status === 503 &&
-      body.status === 'error' &&
+      bodyRecord?.status === 'error' &&
       redisState === 'down' &&
       nonRedisDependenciesUp;
     if (
@@ -150,16 +163,21 @@ async function probeReadiness(fetchImpl = fetch) {
       result: redisDegraded ? 'REDIS_DOWN_ADVISORY' : 'READY',
     };
   } catch (error) {
+    const name = isRecord(error) ? error.name : undefined;
     return {
       name: 'postgres-redis',
       ok: false,
-      result: error?.name === 'AbortError' ? 'TIMEOUT' : 'REQUEST_FAILED',
+      result: name === 'AbortError' ? 'TIMEOUT' : 'REQUEST_FAILED',
     };
   } finally {
     clearTimeout(timeout);
   }
 }
 
+/**
+ * @param {{env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, connect?: (value: string) => Promise<{ok: boolean, result: string}>}} [options]
+ * @returns {Promise<ProbeResult[]>}
+ */
 async function probeRuntimeDependencies({
   env = process.env,
   fetchImpl = fetch,

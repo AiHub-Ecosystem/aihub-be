@@ -93,9 +93,10 @@ describe('RevokeOrganizationInvitation', () => {
         () => NOW,
       );
 
-      await expect(useCase.revoke(command())).resolves.toBeUndefined();
+      const input = command();
+      await expect(useCase.revoke(input)).resolves.toBeUndefined();
       expect(invitations.revokeInvitation).toHaveBeenCalledWith({
-        context: expect.any(Object),
+        context: input.context,
         actorUserId: USER_ID,
         actorRole: role,
         organizationId: ORGANIZATION_ID,

@@ -44,7 +44,10 @@ function operationsServedBy(controller: { prototype: object }): string[] {
     if (typeof method !== 'function') {
       continue;
     }
-    const operation = Reflect.getMetadata(REQUIRED_OPERATION_METADATA, method);
+    const operation: unknown = Reflect.getMetadata(
+      REQUIRED_OPERATION_METADATA,
+      method,
+    );
     if (typeof operation === 'string') {
       operations.push(operation);
     }

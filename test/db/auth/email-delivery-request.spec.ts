@@ -101,7 +101,13 @@ describe('email delivery request repository', () => {
         await repository.insert(emailDeliveryTransaction(tx), insertInput(id));
       });
 
-      const rows = await pool.query(
+      const rows = await pool.query<{
+        status: string;
+        payload_ciphertext: string | null;
+        attempts: number;
+        last_attempt_at: Date | null;
+        completed_at: Date | null;
+      }>(
         'SELECT status, payload_ciphertext, attempts FROM email_delivery_requests WHERE id = $1',
         [id],
       );
@@ -140,17 +146,27 @@ describe('email delivery request repository', () => {
         payloadCiphertext: null,
       });
 
-      const rows = await pool.query(
+      const rows = await pool.query<{
+        status: string;
+        payload_ciphertext: string | null;
+        attempts: number;
+        last_attempt_at: Date | null;
+        completed_at: Date | null;
+      }>(
         'SELECT status, payload_ciphertext, attempts, last_attempt_at, completed_at FROM email_delivery_requests WHERE id = $1',
         [id],
       );
-      expect(rows.rows[0]).toMatchObject({
+      const row = rows.rows[0];
+      if (row === undefined) {
+        throw new Error('Expected the persisted email delivery request');
+      }
+      expect(row).toMatchObject({
         status: 'provider_accepted',
         payload_ciphertext: null,
         attempts: 1,
       });
-      expect(rows.rows[0].last_attempt_at).not.toBeNull();
-      expect(rows.rows[0].completed_at).not.toBeNull();
+      expect(row.last_attempt_at).not.toBeNull();
+      expect(row.completed_at).not.toBeNull();
     } finally {
       await client.close();
     }
@@ -208,7 +224,13 @@ describe('email delivery request repository', () => {
       owner,
     });
 
-    const rows = await pool.query(
+    const rows = await pool.query<{
+      id: string;
+      status: string;
+      payload_ciphertext: string | null;
+      cancel_reason: string | null;
+      completed_at: Date | null;
+    }>(
       'SELECT id, status, payload_ciphertext, cancel_reason, completed_at FROM email_delivery_requests ORDER BY id',
     );
     for (const row of rows.rows) {

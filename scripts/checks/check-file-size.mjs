@@ -12,7 +12,9 @@ import process from 'node:process';
 const root = process.cwd();
 const srcDir = join(root, 'src');
 
+/** @param {string} dir @returns {string[]} */
 function collectFiles(dir) {
+  /** @type {string[]} */
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
@@ -27,10 +29,12 @@ function collectFiles(dir) {
   }
   return out;
 }
+/** @returns {string} */
 function pathSep() {
   return process.platform === 'win32' ? '\\\\' : '/';
 }
 
+/** @param {string} file @returns {number} */
 function codeLines(file) {
   let n = 0;
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
@@ -51,6 +55,7 @@ function codeLines(file) {
 const CEILING = 500;
 
 // Exempt by design (ADR-0110); no ceiling.
+/** @type {Map<string, string>} */
 const exempt = new Map([
   ['src/modules/identity/identity.module.ts', 'composition root'],
   [
@@ -60,6 +65,7 @@ const exempt = new Map([
   ['src/catalog/public-routes.ts', 'route catalogue'],
 ]);
 
+/** @param {string} rel @param {number} lines @returns {string | undefined} */
 function violation(rel, lines) {
   if (exempt.has(rel)) return undefined;
   return lines > CEILING

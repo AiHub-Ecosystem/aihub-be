@@ -14,7 +14,7 @@ describe('HttpExceptionFilter', () => {
     const status = jest.fn(function (this: unknown) {
       return this;
     });
-    const send = jest.fn();
+    const send = jest.fn<void, [unknown]>();
     const response = {
       header(name: string, value: string) {
         headers.set(name, value);
@@ -46,14 +46,13 @@ describe('HttpExceptionFilter', () => {
 
     expect(headers.get('Retry-After')).toBe('1');
     expect(status).toHaveBeenCalledWith(503);
-    expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.objectContaining({
-          code: 'AUTH_ARGON2_CAPACITY',
-          retryable: true,
-          retry_after_ms: 1000,
-        }),
-      }),
-    );
+    const responseBody: unknown = send.mock.calls[0]?.[0];
+    expect(responseBody).toMatchObject({
+      error: {
+        code: 'AUTH_ARGON2_CAPACITY',
+        retryable: true,
+        retry_after_ms: 1000,
+      },
+    });
   });
 });

@@ -12,8 +12,20 @@ const FIXTURE = join(
 
 type Json = Record<string, unknown>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function providerResponse(): { status: string; data: Json } {
-  return JSON.parse(readFileSync(FIXTURE, 'utf8'));
+  const parsed: unknown = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+  if (
+    !isRecord(parsed) ||
+    typeof parsed.status !== 'string' ||
+    !isRecord(parsed.data)
+  ) {
+    throw new Error('Captured speaking response has an invalid shape');
+  }
+  return { status: parsed.status, data: parsed.data };
 }
 
 function violation(

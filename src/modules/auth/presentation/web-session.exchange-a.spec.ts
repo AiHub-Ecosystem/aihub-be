@@ -472,9 +472,9 @@ describe('web session HTTP boundary', () => {
       // BFF must be able to tell from a bad session, so it keeps its cookie
       // instead of receiving a JWT for an exchange that never committed.
       expect(response.statusCode).toBe(503);
-      expect(response.json().error).toEqual(
-        expect.objectContaining({ code: 'AUTH_WEB_SESSION_UNAVAILABLE' }),
-      );
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.payload).not.toContain('access_token');
       expect(storedSession().expiresAt.getTime()).toBe(createdExpiry);
     });
@@ -517,7 +517,9 @@ describe('web session HTTP boundary', () => {
       const expired = await exchange(token);
 
       expect(expired.statusCode).toBe(401);
-      expect(expired.json().error.code).toBe('AUTH_WEB_SESSION_INVALID');
+      expect(expired.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_INVALID' },
+      });
     });
   });
 });

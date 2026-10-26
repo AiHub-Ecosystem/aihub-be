@@ -8,11 +8,14 @@ const repositoryRoot = path.resolve(
   '../../..',
 );
 
+/** @typedef {import('node:child_process').StdioOptions} StdioOptions */
+/** @typedef {{timeout?: number, killProcessGroup?: boolean, killSignal?: NodeJS.Signals, stdio?: StdioOptions, env?: NodeJS.ProcessEnv, allowNonZeroExit?: boolean, onStdout?: (chunk: string) => void, onStderr?: (chunk: string) => void}} RunProcessOptions */
+
+/** @param {string} command @param {readonly string[]} args @param {RunProcessOptions} [options] @returns {Promise<{stdout: string, stderr: string, exitCode: number | null}>} */
 export function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const killProcessGroup =
       options.killProcessGroup === true && process.platform !== 'win32';
-    const captureOutput = options.stdio !== 'ignore';
     const child = spawn(command, args, {
       cwd: repositoryRoot,
       detached: killProcessGroup,
@@ -21,19 +24,24 @@ export function runProcess(command, args, options = {}) {
       timeout: killProcessGroup ? undefined : options.timeout,
       killSignal: options.killSignal,
     });
+    /** @type {NodeJS.Timeout | undefined} */
     let timeoutId;
     let stdout = '';
     let stderr = '';
-    if (captureOutput) {
+    if (child.stdout !== null) {
       child.stdout.setEncoding('utf8');
-      child.stderr.setEncoding('utf8');
       child.stdout.on('data', (chunk) => {
-        stdout = appendLimited(stdout, chunk);
-        options.onStdout?.(chunk);
+        const text = String(chunk);
+        stdout = appendLimited(stdout, text);
+        options.onStdout?.(text);
       });
+    }
+    if (child.stderr !== null) {
+      child.stderr.setEncoding('utf8');
       child.stderr.on('data', (chunk) => {
-        stderr = appendLimited(stderr, chunk);
-        options.onStderr?.(chunk);
+        const text = String(chunk);
+        stderr = appendLimited(stderr, text);
+        options.onStderr?.(text);
       });
     }
     child.once('spawn', () => {
@@ -46,7 +54,15 @@ export function runProcess(command, args, options = {}) {
           try {
             process.kill(-child.pid, signal);
           } catch (error) {
-            if (error.code !== 'ESRCH') child.kill(signal);
+            if (
+              typeof error === 'object' &&
+              error !== null &&
+              'code' in error &&
+              error.code === 'ESRCH'
+            ) {
+              return;
+            }
+            child.kill(signal);
           }
         }
         child.stdout?.destroy();
@@ -76,6 +92,7 @@ export function runProcess(command, args, options = {}) {
   });
 }
 
+/** @param {string} value @param {number} limit */
 export function lastLines(value, limit) {
   return value
     .split(/\r?\n/)
@@ -85,6 +102,7 @@ export function lastLines(value, limit) {
     .trim();
 }
 
+/** @param {string} current @param {string} chunk */
 function appendLimited(current, chunk) {
   const result = current + chunk;
   return result.length > 8_000_000 ? result.slice(-8_000_000) : result;

@@ -29,6 +29,7 @@ const environment = process.env.DEMO_ENVIRONMENT ?? 'development';
 // actor of the audit event, so it must exist before anything is created.
 const actor = process.env.DEMO_OPERATOR_USERNAME?.trim() ?? '';
 
+/** @param {string[]} args @returns {string} */
 function run(args) {
   try {
     // stdout captured, stderr inherited so the CLI's own errors stay visible.
@@ -46,6 +47,7 @@ function run(args) {
   }
 }
 
+/** @param {...string} args @returns {string} */
 function cli(...args) {
   return run(['scripts/cli/cli.mjs', ...args]);
 }

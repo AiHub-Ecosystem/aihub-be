@@ -176,7 +176,7 @@ describe('buildPostmanCollection', () => {
         pm: {
           response: {
             code,
-            json: () => JSON.parse(payload),
+            json: () => JSON.parse(payload) as unknown,
             text: () => payload,
           },
           test: (_name: string, test: () => void) => test(),

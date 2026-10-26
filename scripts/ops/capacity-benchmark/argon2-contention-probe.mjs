@@ -7,23 +7,35 @@ import { pathToFileURL } from 'node:url';
 
 const PROBE_PORT = 39117;
 const PROBE_INTERVAL_MS = 100;
+/** @typedef {'idle' | 'burst'} ProbePhase */
+/** @typedef {{dnsLookupMs: number[], jwtVerifyMs: number[], failures: number, processRssPeakBytes: number}} ProbeSamples */
+/** @typedef {{dnsLookupSampleCount: number, dnsLookupP95Ms: number | null, jwtVerifySampleCount: number, jwtVerifyP95Ms: number | null, probeFailures: number, processRssPeakBytes: number}} ProbeSummary */
+/** @typedef {{waits: number, refusals: number}} QueueMetrics */
+/** @typedef {{startedAt: string, completedAt: string, result: string}} ChartVerification */
+/** @typedef {typeof import('../../../dist/modules/writing/application/writing-chart-image-verifier.js')} ChartVerifierModule */
+/** @typedef {typeof import('../../../dist/modules/writing/application/writing-chart-image-processing.js')} ChartProcessingModule */
+/** @type {Record<ProbePhase, ProbeSamples>} */
 const phaseSamples = { idle: emptySamples(), burst: emptySamples() };
+/** @type {'off' | ProbePhase} */
 let phase = 'off';
 let probeInFlight = false;
+/** @type {Promise<ChartVerification> | undefined} */
 let chartVerification;
 let chartVerificationRequested = false;
+/** @type {(() => Promise<{kind: string} | undefined>) | undefined} */
 let verifyChart;
 let queueWaitBaseline = 0;
 const requireFromApp = createRequire('/app/package.json');
-const importFromApp = (specifier) =>
-  import(pathToFileURL(requireFromApp.resolve(specifier)));
 
+/** @param {number[]} samples @param {number} fraction @returns {number | null} */
 export function percentile(samples, fraction) {
   if (samples.length === 0) return null;
   const ordered = [...samples].sort((left, right) => left - right);
-  return Number(ordered[Math.ceil(fraction * ordered.length) - 1].toFixed(3));
+  const value = ordered[Math.ceil(fraction * ordered.length) - 1];
+  return value === undefined ? null : Number(value.toFixed(3));
 }
 
+/** @param {ProbeSamples} samples @returns {ProbeSummary} */
 export function summarizeProbeSamples(samples) {
   return {
     dnsLookupSampleCount: samples.dnsLookupMs.length,
@@ -35,6 +47,7 @@ export function summarizeProbeSamples(samples) {
   };
 }
 
+/** @param {string} metricsText */
 export function parseArgon2QueueMetrics(metricsText) {
   const counter = (name) => {
     const value = new RegExp(`^${name}\\s+([0-9]+(?:\\.[0-9]+)?)$`, 'm').exec(
@@ -48,6 +61,7 @@ export function parseArgon2QueueMetrics(metricsText) {
   };
 }
 
+/** @param {string} metricsText */
 export function parseDownstreamQueued(metricsText) {
   let queued = 0;
   for (const match of metricsText.matchAll(
@@ -58,6 +72,7 @@ export function parseDownstreamQueued(metricsText) {
   return queued;
 }
 
+/** @returns {ProbeSamples} */
 function emptySamples() {
   return {
     dnsLookupMs: [],
@@ -67,18 +82,21 @@ function emptySamples() {
   };
 }
 
+/** @param {() => Promise<unknown>} operation @returns {Promise<number>} */
 async function timed(operation) {
   const start = performance.now();
   await operation();
   return performance.now() - start;
 }
 
+/** @returns {Promise<string>} */
 async function appMetricsText() {
   const response = await fetch('http://127.0.0.1:3000/metrics');
   if (!response.ok) throw new Error('could not read app metrics');
   return response.text();
 }
 
+/** @returns {Promise<QueueMetrics>} */
 async function currentArgon2QueueMetrics() {
   return parseArgon2QueueMetrics(await appMetricsText());
 }
@@ -86,6 +104,7 @@ async function currentArgon2QueueMetrics() {
 // The idle window must measure an idle process. A preceding overload stage can
 // leave over a hundred requests queued per downstream pool, and draining them
 // keeps the CPU-limited process too busy to take idle samples.
+/** @returns {Promise<number>} */
 async function waitForDownstreamDrain() {
   const deadline = Date.now() + 120_000;
   for (;;) {
@@ -95,6 +114,7 @@ async function waitForDownstreamDrain() {
   }
 }
 
+/** @returns {Promise<number>} */
 async function waitForArgon2QueueWait() {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
@@ -112,7 +132,7 @@ async function startProbeServer() {
   }
 
   const { SignJWT, importPKCS8, importSPKI, jwtVerify } =
-    await importFromApp('jose');
+    await importJoseFromApp();
   const privateKeyPem = Buffer.from(encodedKey, 'base64').toString('utf8');
   const signingKey = await importPKCS8(privateKeyPem, 'RS256');
   const publicKeyPem = createPublicKey(privateKeyPem)
@@ -127,19 +147,14 @@ async function startProbeServer() {
     .setExpirationTime('12h')
     .sign(signingKey);
 
-  const [
-    { default: sharp },
-    { sanitizeWritingChartImage },
-    { serializeWritingChartImageProcessing },
-  ] = await Promise.all([
-    importFromApp('sharp'),
-    import(
-      '/app/dist/modules/writing/application/writing-chart-image-verifier.js'
-    ),
-    import(
-      '/app/dist/modules/writing/application/writing-chart-image-processing.js'
-    ),
-  ]);
+  const [{ default: sharp }, verifierModule, processingModule] =
+    await Promise.all([
+      importSharpFromApp(),
+      importChartVerifierFromApp(),
+      importChartProcessingFromApp(),
+    ]);
+  const verifier = /** @type {ChartVerifierModule} */ (verifierModule);
+  const processing = /** @type {ChartProcessingModule} */ (processingModule);
   const chartBytes = await sharp({
     create: {
       width: 32,
@@ -151,8 +166,8 @@ async function startProbeServer() {
     .png()
     .toBuffer();
   verifyChart = () =>
-    serializeWritingChartImageProcessing(() =>
-      sanitizeWritingChartImage({
+    processing.serializeWritingChartImageProcessing(() =>
+      verifier.sanitizeWritingChartImage({
         contentType: 'image/png',
         bytes: chartBytes,
       }),
@@ -201,6 +216,39 @@ async function startProbeServer() {
   server.unref();
 }
 
+/** @returns {Promise<typeof import('jose')>} */
+function importJoseFromApp() {
+  return /** @type {Promise<typeof import('jose')>} */ (
+    import(pathToFileURL(requireFromApp.resolve('jose')))
+  );
+}
+
+/** @returns {Promise<typeof import('sharp')>} */
+function importSharpFromApp() {
+  return /** @type {Promise<typeof import('sharp')>} */ (
+    import(pathToFileURL(requireFromApp.resolve('sharp')))
+  );
+}
+
+/** @returns {Promise<ChartVerifierModule>} */
+function importChartVerifierFromApp() {
+  return /** @type {Promise<ChartVerifierModule>} */ (
+    import(
+      '/app/dist/modules/writing/application/writing-chart-image-verifier.js'
+    )
+  );
+}
+
+/** @returns {Promise<ChartProcessingModule>} */
+function importChartProcessingFromApp() {
+  return /** @type {Promise<ChartProcessingModule>} */ (
+    import(
+      '/app/dist/modules/writing/application/writing-chart-image-processing.js'
+    )
+  );
+}
+
+/** @param {import('node:http').IncomingMessage} request @param {import('node:http').ServerResponse} response */
 async function handleControlRequest(request, response) {
   if (request.method !== 'POST') {
     response.writeHead(405).end();
@@ -250,6 +298,9 @@ async function handleControlRequest(request, response) {
     chartVerificationRequested = true;
     const queueWaitCount = await waitForArgon2QueueWait();
     const startedAt = new Date().toISOString();
+    if (verifyChart === undefined) {
+      throw new Error('chart verification is not available');
+    }
     chartVerification = verifyChart().then((result) => ({
       startedAt,
       completedAt: new Date().toISOString(),
@@ -273,6 +324,7 @@ async function handleControlRequest(request, response) {
   response.writeHead(404).end();
 }
 
+/** @param {import('node:http').ServerResponse} response @param {number} statusCode @param {unknown} body */
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));

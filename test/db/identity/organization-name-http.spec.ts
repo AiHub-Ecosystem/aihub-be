@@ -121,7 +121,9 @@ describe('Organization name validation over HTTP and PostgreSQL', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json<{ error: { code: string } }>().error.code).toBe(
+        'INVALID_REQUEST',
+      );
       const stored = await pool.query<{ count: number }>(
         'SELECT count(*)::int AS count FROM organizations',
       );
@@ -141,7 +143,9 @@ describe('Organization name validation over HTTP and PostgreSQL', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json<{ error: { code: string } }>().error.code).toBe(
+        'INVALID_REQUEST',
+      );
       const stored = await pool.query<{ name: string }>(
         'SELECT name FROM organizations WHERE id = $1',
         [organizationId],

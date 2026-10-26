@@ -64,6 +64,10 @@ const VALID_BODY = {
 const REQUEST_ID_PATTERN = /^req_[0-9A-HJKMNP-TV-Z]{26}$/;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
 
+function matchesPattern(value: unknown, pattern: RegExp): boolean {
+  return typeof value === 'string' && pattern.test(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -387,20 +391,23 @@ describe('request completion log over the HTTP boundary', () => {
     // Fastify's own per-request lines are off, so the completion event is the
     // only line the request writes.
     expect(log.all()).toHaveLength(1);
-    expect(log.only()).toEqual({
+    const {
+      time,
+      request_id,
+      trace_id,
+      total_ms,
+      admission_ms,
+      completion_ms,
+      ...event
+    } = log.only();
+    expect(event).toEqual({
       level: 'info',
-      time: expect.any(Number),
       event: 'request_completed',
-      request_id: expect.stringMatching(REQUEST_ID_PATTERN),
       client_ip: '127.0.0.1',
       client_ip_source: 'direct_peer',
-      trace_id: expect.stringMatching(TRACE_ID_PATTERN),
       method: 'POST',
       route: GRADE_URL,
       http_status: 200,
-      total_ms: expect.any(Number),
-      admission_ms: expect.any(Number),
-      completion_ms: expect.any(Number),
       outcome: 'success',
       org_id: 'local-development',
       operation: 'writing.task1.grade',
@@ -408,6 +415,12 @@ describe('request completion log over the HTTP boundary', () => {
       identity_mode: 'declared_id',
       retry_budget: 'keyed_writing',
     });
+    expect(typeof time).toBe('number');
+    expect(matchesPattern(request_id, REQUEST_ID_PATTERN)).toBe(true);
+    expect(matchesPattern(trace_id, TRACE_ID_PATTERN)).toBe(true);
+    expect(typeof total_ms).toBe('number');
+    expect(typeof admission_ms).toBe('number');
+    expect(typeof completion_ms).toBe('number');
   });
 
   it('records the authenticated API key id and address resolved through the proxy', async () => {
@@ -424,20 +437,23 @@ describe('request completion log over the HTTP boundary', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
-    expect(log.only()).toEqual({
+    const {
+      time,
+      request_id,
+      trace_id,
+      total_ms,
+      admission_ms,
+      completion_ms,
+      ...event
+    } = log.only();
+    expect(event).toEqual({
       level: 'info',
-      time: expect.any(Number),
       event: 'request_completed',
-      request_id: expect.stringMatching(REQUEST_ID_PATTERN),
       client_ip: '203.0.113.42',
       client_ip_source: 'nginx',
-      trace_id: expect.stringMatching(TRACE_ID_PATTERN),
       method: 'POST',
       route: GRADE_URL,
       http_status: 200,
-      total_ms: expect.any(Number),
-      admission_ms: expect.any(Number),
-      completion_ms: expect.any(Number),
       outcome: 'success',
       api_key_id: API_KEY_ID,
       org_id: 'local-development',
@@ -446,6 +462,12 @@ describe('request completion log over the HTTP boundary', () => {
       identity_mode: 'declared_id',
       retry_budget: 'keyed_writing',
     });
+    expect(typeof time).toBe('number');
+    expect(matchesPattern(request_id, REQUEST_ID_PATTERN)).toBe(true);
+    expect(matchesPattern(trace_id, TRACE_ID_PATTERN)).toBe(true);
+    expect(typeof total_ms).toBe('number');
+    expect(typeof admission_ms).toBe('number');
+    expect(typeof completion_ms).toBe('number');
     expect(JSON.stringify(log.all())).not.toContain(API_KEY_VALUE);
   });
 

@@ -6,6 +6,8 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 import { exportPKCS8, generateKeyPair } from 'jose';
 
 import { AppModule } from '@/app.module';
@@ -15,6 +17,7 @@ import {
   appConfig,
   getRuntimeConnectionConfiguration,
 } from '@/config/runtime-configuration';
+import { MintSandboxAssertionResponseSchema } from '@/contracts/sandbox/assertion';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -27,6 +30,20 @@ import {
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 
 const SANDBOX_ORG = 'org_sandbox';
+
+const SandboxAssertionEnvelopeSchema = Type.Object({
+  data: MintSandboxAssertionResponseSchema,
+  meta: Type.Object({ request_id: Type.String({ pattern: '^req_' }) }),
+});
+const SandboxAssertionMintedLogSchema = Type.Object({
+  event: Type.Literal('sandbox_assertion_minted'),
+  requestId: Type.String({ pattern: '^req_' }),
+  organizationId: Type.String(),
+  apiKeyId: Type.String(),
+  userId: Type.String(),
+  jti: Type.String(),
+  expiresAt: Type.Number(),
+});
 
 const identityConfig: OrganizationIdentityConfig = {
   organizationId: SANDBOX_ORG,
@@ -137,15 +154,12 @@ describe('Sandbox assertion HTTP flow', () => {
     const response = await mint({ user_id: 'student_456' });
 
     expect(response.statusCode).toBe(200);
-    const body: unknown = response.json();
-    expect(body).toMatchObject({
-      data: {
-        user_id: 'student_456',
-        expires_at: expect.any(Number),
-        assertion: expect.any(String),
-      },
-      meta: { request_id: expect.stringMatching(/^req_/) },
-    });
+    const responseBody: unknown = response.json();
+    const body = Value.Parse(SandboxAssertionEnvelopeSchema, responseBody);
+    expect(body.data.user_id).toBe('student_456');
+    expect(typeof body.data.expires_at).toBe('number');
+    expect(body.data.assertion.length).toBeGreaterThan(0);
+    expect(body.meta.request_id).toMatch(/^req_/);
   });
 
   it('rejects a request with no api key through the shared authenticator', async () => {
@@ -183,14 +197,16 @@ describe('Sandbox assertion HTTP flow', () => {
     );
 
     expect(line).toBeDefined();
-    expect(JSON.parse(line ?? '{}')).toMatchObject({
+    const logPayload: unknown = JSON.parse(line ?? '{}');
+    const log = Value.Parse(SandboxAssertionMintedLogSchema, logPayload);
+    expect(log).toMatchObject({
       event: 'sandbox_assertion_minted',
-      requestId: expect.stringMatching(/^req_/),
       organizationId: SANDBOX_ORG,
       apiKeyId: sandboxApiKeyId,
       userId: 'student_456',
-      jti: expect.any(String),
     });
+    expect(log.requestId).toMatch(/^req_/);
+    expect(log.jti.length).toBeGreaterThan(0);
     expect(line).not.toContain(body.data.assertion);
     expect(line).not.toContain('PRIVATE KEY');
   });

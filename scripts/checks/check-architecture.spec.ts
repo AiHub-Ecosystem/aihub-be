@@ -13,6 +13,52 @@ import architectureConfig from '../../.dependency-cruiser.cjs';
 
 type DependencyCruiserConfig = typeof architectureConfig;
 
+interface DependencyCruiserViolation {
+  readonly rule: { readonly name: string };
+  readonly from: string;
+  readonly to: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseDependencyCruiserViolations(
+  value: unknown,
+): DependencyCruiserViolation[] {
+  if (!isRecord(value)) {
+    throw new Error('dependency-cruiser output has no summary');
+  }
+  const summary = value.summary;
+  if (!isRecord(summary) || !Array.isArray(summary.violations)) {
+    throw new Error('dependency-cruiser output has no violations list');
+  }
+
+  return summary.violations.map((violation) => {
+    if (!isRecord(violation) || !isRecord(violation.rule)) {
+      throw new Error(
+        'dependency-cruiser output contains a malformed violation',
+      );
+    }
+    const { name } = violation.rule;
+    const { from, to } = violation;
+    if (
+      typeof name !== 'string' ||
+      typeof from !== 'string' ||
+      typeof to !== 'string'
+    ) {
+      throw new Error(
+        'dependency-cruiser output contains a malformed violation',
+      );
+    }
+    return {
+      rule: { name },
+      from,
+      to,
+    };
+  });
+}
+
 const rules =
   architectureConfig.forbidden as DependencyCruiserConfig['forbidden'];
 const crossModuleRule = rules.find(
@@ -250,21 +296,16 @@ describe('cross-module import rule over the real tree', () => {
       },
     );
 
-    const report = JSON.parse(result.stdout);
-    violations = report.summary.violations
-      .filter(
-        (violation: { rule: { name: string } }) =>
-          violation.rule.name === 'no-cross-module-internal-import',
-      )
+    const parsedReport: unknown = JSON.parse(result.stdout);
+    const reportViolations = parseDependencyCruiserViolations(parsedReport);
+    violations = reportViolations
+      .filter(({ rule }) => rule.name === 'no-cross-module-internal-import')
       .map((violation: { from: string; to: string }) => ({
         from: violation.from,
         to: violation.to,
       }));
-    cliViolations = report.summary.violations
-      .filter(
-        (violation: { rule: { name: string } }) =>
-          violation.rule.name === 'no-cli-module-internal-import',
-      )
+    cliViolations = reportViolations
+      .filter(({ rule }) => rule.name === 'no-cli-module-internal-import')
       .map((violation: { from: string; to: string }) => ({
         from: violation.from,
         to: violation.to,

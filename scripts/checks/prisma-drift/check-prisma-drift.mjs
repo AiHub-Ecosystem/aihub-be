@@ -17,7 +17,10 @@
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { driftAgainstMigrations } = require('./prisma-drift.cjs');
+const prismaDrift = /** @type {typeof import('./prisma-drift.cjs')} */ (
+  require('./prisma-drift.cjs')
+);
+const { driftAgainstMigrations } = prismaDrift;
 
 /**
  * The lane's own default, so CI exercises the same path a developer does.
@@ -26,6 +29,7 @@ const { driftAgainstMigrations } = require('./prisma-drift.cjs');
  */
 const DEFAULT_ADMIN_URL = 'postgres://aihub:change-me@localhost:5432/aihub';
 
+/** @returns {string} */
 function adminDatabaseUrl() {
   const configured = process.env.DB_LANE_ADMIN_URL?.trim();
   return configured !== undefined && configured.length > 0

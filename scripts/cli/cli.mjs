@@ -19,7 +19,9 @@ async function loadApiKeyGenerator() {
     );
   }
 
-  const module = await import(apiKeyModule);
+  const module = /** @type {ApiKeyGeneratorModule} */ (
+    await import(apiKeyModule)
+  );
   const generateApiKey =
     module.generateApiKey ?? module.default?.generateApiKey;
   if (typeof generateApiKey !== 'function') {
@@ -58,6 +60,20 @@ import {
 } from './cli-options.cjs';
 import { loadCliRunner } from './load-cli-runner.cjs';
 
+/** @typedef {ReadonlyMap<string, string>} CliOptions */
+/** @typedef {import('./load-cli-runner.cjs').CliRunner} CliRunner */
+/** @template {CliRunner} T @typedef {import('./load-cli-runner.cjs').CliRunnerDescriptor<T>} CliRunnerDescriptor */
+/** @typedef {import('../../src/modules/identity/domain/api-key.ts').GeneratedApiKey} GeneratedApiKey */
+/** @typedef {(id: string, environment?: string) => GeneratedApiKey} ApiKeyGenerator */
+/** @typedef {{generateApiKey?: ApiKeyGenerator; default?: {generateApiKey?: ApiKeyGenerator}}} ApiKeyGeneratorModule */
+/** @typedef {import('@prisma-client/client').PrismaClient} GeneratedPrismaClient */
+/** @typedef {{prisma: GeneratedPrismaClient; close: () => Promise<void>}} OperatorPrismaClient */
+/** @typedef {(role: 'runtime', databaseUrl: string) => OperatorPrismaClient} PrismaClientFactory */
+/** @typedef {new (prisma: GeneratedPrismaClient) => {cleanupExpired: () => Promise<number>}} IdempotencyRepositoryConstructor */
+/** @typedef {{createOperatorPrismaClient?: unknown; default?: Record<string, unknown>}} PrismaClientFactoryModule */
+/** @typedef {{PostgresIdempotencyRepository?: unknown; default?: Record<string, unknown>}} IdempotencyRepositoryModule */
+
+/** @param {string} name @param {string} exportName @param {string} unavailableMessage */
 function cliRunnerDescriptor(name, exportName, unavailableMessage) {
   return {
     builtPath: fileURLToPath(
@@ -71,97 +87,116 @@ function cliRunnerDescriptor(name, exportName, unavailableMessage) {
   };
 }
 
+/** @type {CliRunnerDescriptor<import('../../src/cli/organization-status.js').runOrganizationStatusCommand>} */
 const organizationStatusDescriptor = cliRunnerDescriptor(
   'organization-status',
   'runOrganizationStatusCommand',
   'organization status command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/organization-entitlement.js').runGrantOrganizationEntitlementCommand>} */
 const organizationEntitlementDescriptor = cliRunnerDescriptor(
   'organization-entitlement',
   'runGrantOrganizationEntitlementCommand',
   'organization entitlement command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/organization-first-owner.js').runAttachFirstOwnerCommand>} */
 const attachFirstOwnerDescriptor = cliRunnerDescriptor(
   'organization-first-owner',
   'runAttachFirstOwnerCommand',
   'first owner attachment command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/usage-prune.js').runUsagePruneCommand>} */
 const usagePruneDescriptor = cliRunnerDescriptor(
   'usage-prune',
   'runUsagePruneCommand',
   'usage prune command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/avatar-sweep.js').runAvatarSweepCommand>} */
 const avatarSweepDescriptor = cliRunnerDescriptor(
   'avatar-sweep',
   'runAvatarSweepCommand',
   'avatar sweep command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/notifications-sweep.js').runNotificationsSweepCommand>} */
 const notificationsSweepDescriptor = cliRunnerDescriptor(
   'notifications-sweep',
   'runNotificationsSweepCommand',
   'notifications sweep command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/registrations-sweep.js').runRegistrationsSweepCommand>} */
 const registrationsSweepDescriptor = cliRunnerDescriptor(
   'registrations-sweep',
   'runRegistrationsSweepCommand',
   'registrations sweep command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/speaking-audio-upload-sweep.js').runSpeakingAudioUploadSweepCommand>} */
 const speakingAudioUploadSweepDescriptor = cliRunnerDescriptor(
   'speaking-audio-upload-sweep',
   'runSpeakingAudioUploadSweepCommand',
   'Speaking Audio upload sweep command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/writing-chart-upload-sweep.js').runWritingChartUploadSweepCommand>} */
 const writingChartUploadSweepDescriptor = cliRunnerDescriptor(
   'writing-chart-upload-sweep',
   'runWritingChartUploadSweepCommand',
   'Writing chart upload sweep command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/writing-chart-revoke.js').runWritingChartRevokeCommand>} */
 const writingChartRevokeDescriptor = cliRunnerDescriptor(
   'writing-chart-revoke',
   'runWritingChartRevokeCommand',
   'Writing chart revocation command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/usage-report.js').runUsageReportCommand>} */
 const usageReportDescriptor = cliRunnerDescriptor(
   'usage-report',
   'runUsageReportCommand',
   'usage report command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/quota-reconcile.js').runQuotaReconciliationCommand>} */
 const quotaReconciliationDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
   'runQuotaReconciliationCommand',
   'quota reconciliation command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/redis-ttl-audit.js').runRedisTtlAuditCommand>} */
 const redisTtlAuditDescriptor = cliRunnerDescriptor(
   'redis-ttl-audit',
   'runRedisTtlAuditCommand',
   'Redis TTL audit command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/organization-api-key.js').runCreateOperatorApiKeyCommand>} */
 const createOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'organization-api-key',
   'runCreateOperatorApiKeyCommand',
   'operator API key command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/organization-api-key.js').runRevokeOperatorApiKeyCommand>} */
 const revokeOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'organization-api-key',
   'runRevokeOperatorApiKeyCommand',
   'operator API key command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/billing-statement.js').runBillingStatementCommand>} */
 const billingStatementDescriptor = cliRunnerDescriptor(
   'billing-statement',
   'runBillingStatementCommand',
   'billing statement command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/billing-statement.js').runBillingAdjustCommand>} */
 const billingAdjustDescriptor = cliRunnerDescriptor(
   'billing-statement',
   'runBillingAdjustCommand',
   'billing adjustment command is unavailable',
 );
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/quota-reconcile.js').parseTargetMonth>} */
 const quotaTargetMonthDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
   'parseTargetMonth',
   'quota reconciliation command is unavailable',
 );
 
+/** @template {CliRunner} T @param {CliRunnerDescriptor<T>} descriptor @param {Parameters<T>} args */
 async function runCliCommand(descriptor, ...args) {
   const runner = await loadCliRunner(descriptor);
   return runner(...args);
@@ -240,7 +275,10 @@ const runtimeConnectionModule = new URL(
   import.meta.url,
 );
 if (existsSync(runtimeConnectionModule)) {
-  const runtimeConnection = await import(runtimeConnectionModule);
+  const runtimeConnection =
+    /** @type {typeof import('../../src/modules/secrets/infrastructure/runtime-connection.environment.ts') & {default?: Record<string, unknown>}} */ (
+      await import(runtimeConnectionModule)
+    );
   const loadRuntimeConnectionEnvironment =
     runtimeConnection.loadRuntimeConnectionEnvironment ??
     runtimeConnection.default?.loadRuntimeConnectionEnvironment;
@@ -250,6 +288,7 @@ if (existsSync(runtimeConnectionModule)) {
   loadRuntimeConnectionEnvironment({ env: process.env });
 }
 
+/** @param {string[]} values */
 function parseOptions(values) {
   const options = new Map();
   for (let index = 0; index < values.length; index += 1) {
@@ -267,6 +306,7 @@ function parseOptions(values) {
   return options;
 }
 
+/** @param {CliOptions} options @param {string} name */
 function requiredOption(options, name) {
   const value = options.get(name);
   if (value === undefined || value.trim().length === 0) {
@@ -275,6 +315,7 @@ function requiredOption(options, name) {
   return value.trim();
 }
 
+/** @param {CliOptions} options @param {string} name @param {string} fallback */
 function listOption(options, name, fallback) {
   const value = options.get(name) ?? fallback;
   const values = value
@@ -287,6 +328,7 @@ function listOption(options, name, fallback) {
   return values;
 }
 
+/** @param {CliOptions} options @param {string} name @param {string} fallback */
 function positiveIntegerOption(options, name, fallback) {
   const raw = options.get(name) ?? fallback;
   const value = Number(raw);
@@ -296,10 +338,19 @@ function positiveIntegerOption(options, name, fallback) {
   return value;
 }
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** @param {unknown} value @returns {value is string[]} */
+function isStringArray(value) {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
+/** @param {CliOptions} options */
 function validateIdentityIssuer(options) {
   const issuer = requiredOption(options, 'issuer');
   if (issuer.length > 2048) {
@@ -308,6 +359,7 @@ function validateIdentityIssuer(options) {
   return issuer;
 }
 
+/** @param {CliOptions} options */
 function validateIdentityAlgorithms(options) {
   const raw = options.get('allowed-algorithms');
   if (raw === undefined) {
@@ -328,6 +380,7 @@ function validateIdentityAlgorithms(options) {
   return values;
 }
 
+/** @param {CliOptions} options */
 function validateIdentityTtl(options) {
   const raw = options.get('max-assertion-ttl-seconds');
   if (raw === undefined) {
@@ -345,6 +398,7 @@ function validateIdentityTtl(options) {
   return value;
 }
 
+/** @param {CliOptions} options */
 function validateJwksUrl(options) {
   if (!options.has('jwks-url')) {
     return null;
@@ -366,6 +420,7 @@ function validateJwksUrl(options) {
   return value;
 }
 
+/** @param {unknown} value */
 function validatePublicJwks(value) {
   if (
     !isRecord(value) ||
@@ -375,7 +430,8 @@ function validatePublicJwks(value) {
     usageError();
   }
 
-  for (const key of value.keys) {
+  for (const candidate of /** @type {unknown[]} */ (value.keys)) {
+    const key = candidate;
     if (!isRecord(key)) {
       usageError();
     }
@@ -420,6 +476,7 @@ function validatePublicJwks(value) {
   return value;
 }
 
+/** @param {CliOptions} options */
 async function readPublicKeysFile(options) {
   if (!options.has('public-keys-file')) {
     return null;
@@ -433,6 +490,7 @@ async function readPublicKeysFile(options) {
     usageError();
   }
 
+  /** @type {unknown} */
   let value;
   try {
     value = JSON.parse(source);
@@ -442,6 +500,7 @@ async function readPublicKeysFile(options) {
   return validatePublicJwks(value);
 }
 
+/** @param {CliOptions} options */
 async function parseIdentityOptions(options) {
   const organizationId = requiredOption(options, 'org');
   const status = options.get('status');
@@ -479,9 +538,10 @@ async function parseIdentityOptions(options) {
   };
 }
 
+/** @param {{ allowed_algorithms: unknown }} row */
 function existingIdentityAlgorithms(row) {
   if (
-    !Array.isArray(row.allowed_algorithms) ||
+    !isStringArray(row.allowed_algorithms) ||
     row.allowed_algorithms.length === 0 ||
     new Set(row.allowed_algorithms).size !== row.allowed_algorithms.length ||
     row.allowed_algorithms.some(
@@ -493,6 +553,7 @@ function existingIdentityAlgorithms(row) {
   return row.allowed_algorithms;
 }
 
+/** @param {{ max_assertion_ttl_seconds: unknown }} row */
 function existingIdentityTtl(row) {
   if (
     !Number.isInteger(row.max_assertion_ttl_seconds) ||
@@ -504,6 +565,7 @@ function existingIdentityTtl(row) {
   return row.max_assertion_ttl_seconds;
 }
 
+/** @param {{controlPlane?: boolean}} [options] @returns {Promise<import('pg').Pool>} */
 async function databasePool({ controlPlane = false } = {}) {
   const databaseUrl = controlPlane
     ? (process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL)
@@ -511,7 +573,7 @@ async function databasePool({ controlPlane = false } = {}) {
   if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
     throw new Error('DATABASE_URL is required');
   }
-  const { default: pg } = await import('pg');
+  const pg = /** @type {typeof import('pg')} */ (await import('pg'));
   return new pg.Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 1_000,
@@ -522,27 +584,30 @@ async function databasePool({ controlPlane = false } = {}) {
   });
 }
 
+/** @param {CliOptions} options */
 async function createOrganization(options) {
   const pool = await databasePool({ controlPlane: true });
   try {
-    const result = await pool.query(
-      `INSERT INTO organizations
+    const result = /** @type {import('pg').QueryResult<{id: string}>} */ (
+      await pool.query(
+        `INSERT INTO organizations
          (id, name, entitlements, rate_limit_rpm, max_concurrent,
           monthly_request_quota, hard_stop_on_quota)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [
-        `org_${ulid()}`,
-        requiredOption(options, 'name'),
-        listOption(options, 'entitlements', 'writing'),
-        positiveIntegerOption(options, 'rate-limit-rpm', '600'),
-        positiveIntegerOption(options, 'max-concurrent', '20'),
-        // Quota and hard stop live on the organization, not the key: they are
-        // one budget shared by every key it issues, which is what makes
-        // per-person keys safe to hand out.
-        quotaOption(options, 'monthly-quota'),
-        booleanOption(options, 'hard-stop'),
-      ],
+        [
+          `org_${ulid()}`,
+          requiredOption(options, 'name'),
+          listOption(options, 'entitlements', 'writing'),
+          positiveIntegerOption(options, 'rate-limit-rpm', '600'),
+          positiveIntegerOption(options, 'max-concurrent', '20'),
+          // Quota and hard stop live on the organization, not the key: they are
+          // one budget shared by every key it issues, which is what makes
+          // per-person keys safe to hand out.
+          quotaOption(options, 'monthly-quota'),
+          booleanOption(options, 'hard-stop'),
+        ],
+      )
     );
     console.log(result.rows[0].id);
   } finally {
@@ -560,6 +625,7 @@ function controlPlaneDatabaseUrl() {
   );
 }
 
+/** @param {CliOptions} options */
 async function createKey(options) {
   const generateApiKey = await loadApiKeyGenerator();
   const organizationId = requiredOption(options, 'org');
@@ -590,6 +656,7 @@ async function createKey(options) {
   }
 }
 
+/** @param {CliOptions} options */
 async function revokeKey(options) {
   const outcome = await runCliCommand(revokeOperatorApiKeyDescriptor, {
     databaseUrl: controlPlaneDatabaseUrl(),
@@ -602,6 +669,7 @@ async function revokeKey(options) {
   }
 }
 
+/** @param {CliOptions} options */
 async function setIdentity(options) {
   const input = await parseIdentityOptions(options);
   const pool = await databasePool({ controlPlane: true });
@@ -614,8 +682,10 @@ async function setIdentity(options) {
       usageError();
     }
 
-    const existingResult = await pool.query(
-      `SELECT
+    const existingResult =
+      /** @type {import('pg').QueryResult<{allowed_algorithms: unknown; max_assertion_ttl_seconds: unknown; status: unknown}>} */ (
+        await pool.query(
+          `SELECT
          issuer,
          jwks_url,
          public_keys_jwks,
@@ -624,8 +694,9 @@ async function setIdentity(options) {
          status
        FROM organization_identity_configs
        WHERE organization_id = $1`,
-      [input.organizationId],
-    );
+          [input.organizationId],
+        )
+      );
     const existing = existingResult.rows[0];
 
     if (input.disableOnly) {
@@ -702,21 +773,32 @@ async function cleanupIdempotency() {
   }
 
   const [factoryModule, repositoryModule] = await Promise.all([
-    import(prismaClientFactoryModule),
-    import(idempotencyRepositoryModule),
+    /** @type {Promise<PrismaClientFactoryModule>} */ (
+      import(prismaClientFactoryModule)
+    ),
+    /** @type {Promise<IdempotencyRepositoryModule>} */ (
+      import(idempotencyRepositoryModule)
+    ),
   ]);
-  const createOperatorPrismaClient =
+  const createOperatorPrismaClientValue =
     factoryModule.createOperatorPrismaClient ??
     factoryModule.default?.createOperatorPrismaClient;
-  const PostgresIdempotencyRepository =
+  const idempotencyRepositoryValue =
     repositoryModule.PostgresIdempotencyRepository ??
     repositoryModule.default?.PostgresIdempotencyRepository;
   if (
-    typeof createOperatorPrismaClient !== 'function' ||
-    typeof PostgresIdempotencyRepository !== 'function'
+    typeof createOperatorPrismaClientValue !== 'function' ||
+    typeof idempotencyRepositoryValue !== 'function'
   ) {
     throw new Error('Idempotency cleanup is unavailable.');
   }
+  const createOperatorPrismaClient = /** @type {PrismaClientFactory} */ (
+    createOperatorPrismaClientValue
+  );
+  const PostgresIdempotencyRepository =
+    /** @type {IdempotencyRepositoryConstructor} */ (
+      idempotencyRepositoryValue
+    );
   const client = createOperatorPrismaClient('runtime', databaseUrl);
   try {
     const repository = new PostgresIdempotencyRepository(client.prisma);
@@ -727,6 +809,7 @@ async function cleanupIdempotency() {
   }
 }
 
+/** @param {CliOptions} options */
 async function reconcileQuotaCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'month') {
@@ -745,6 +828,7 @@ async function reconcileQuotaCommand(options) {
   });
 }
 
+/** @param {CliOptions} options */
 async function auditRedisTtlCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -762,6 +846,7 @@ async function auditRedisTtlCommand(options) {
 // (ADR-0044). `--actor` names the operator's own AIHUB User Account, which the
 // audit event records; an unknown Organization or actor is a usage error, so
 // scripts can tell a bad command from an operational failure.
+/** @param {CliOptions} options @param {'active' | 'suspended'} status */
 async function organizationStatusCommand(options, status) {
   for (const name of options.keys()) {
     if (name !== 'org' && name !== 'actor') {
@@ -782,6 +867,7 @@ async function organizationStatusCommand(options, status) {
   }
 }
 
+/** @param {CliOptions} options */
 async function organizationGrantEntitlementCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'org' && name !== 'actor' && name !== 'entitlement')
@@ -801,6 +887,7 @@ async function organizationGrantEntitlementCommand(options) {
 // First Owner Attachment (ADR-0045): the bootstrap for an Organization
 // `org:create` provisioned, which starts with no members. Every refusal is a
 // usage error, named by the command before it exits.
+/** @param {CliOptions} options */
 async function attachFirstOwnerCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'org' && name !== 'owner' && name !== 'actor') {
@@ -824,6 +911,7 @@ async function attachFirstOwnerCommand(options) {
 // (ADR-0068). `--dry-run true` reports without deleting. The summary is one
 // JSON line, and any failed delete makes the exit status non-zero so cron
 // alerts on a partial run. Run it once per deployment, like `usage:prune`.
+/** @param {CliOptions} options */
 async function sweepAvatarsCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'dry-run') {
@@ -843,6 +931,7 @@ async function sweepAvatarsCommand(options) {
 // Records a Notification Event for each API key expiring within 14 days and
 // queues its email (ADR-0120). The summary is one JSON line of counts; a
 // failure leaves the exit status non-zero so cron alerts. Run it daily.
+/** @param {CliOptions} options */
 async function sweepRegistrationsCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -853,6 +942,7 @@ async function sweepRegistrationsCommand(options) {
   });
 }
 
+/** @param {CliOptions} options */
 async function sweepNotificationsCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -863,6 +953,7 @@ async function sweepNotificationsCommand(options) {
   });
 }
 
+/** @param {CliOptions} options */
 async function sweepSpeakingAudioUploadsCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'dry-run') {
@@ -881,6 +972,7 @@ async function sweepSpeakingAudioUploadsCommand(options) {
   }
 }
 
+/** @param {CliOptions} options */
 async function sweepWritingChartUploadsCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'dry-run') usageError();
@@ -894,6 +986,7 @@ async function sweepWritingChartUploadsCommand(options) {
   }
 }
 
+/** @param {CliOptions} options */
 async function revokeWritingChartCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'url' && name !== 'actor') usageError();
@@ -912,7 +1005,7 @@ async function revokeWritingChartCommand(options) {
   } catch (error) {
     if (
       error instanceof Error &&
-      ['INVALID_PUBLIC_URL', 'ACTOR_INVALID'].includes(error.code)
+      ['INVALID_PUBLIC_URL', 'ACTOR_INVALID'].includes(errorCode(error) ?? '')
     ) {
       usageError();
     }
@@ -923,6 +1016,7 @@ async function revokeWritingChartCommand(options) {
   }
 }
 
+/** @param {CliOptions} options */
 async function pruneUsageCommand(options) {
   if (options.size > 0) {
     usageError();
@@ -933,6 +1027,7 @@ async function pruneUsageCommand(options) {
   });
 }
 
+/** @param {CliOptions} options */
 async function reportUsageCommand(options) {
   for (const name of options.keys()) {
     if (name !== 'from' && name !== 'to') {
@@ -948,15 +1043,23 @@ async function reportUsageCommand(options) {
 }
 
 function invalidBillingInput(error) {
+  const code = errorCode(error);
   return (
-    error instanceof Error &&
-    typeof error.code === 'string' &&
-    (error.code === 'BILLING_INVALID_MONTH' ||
-      error.code === 'BILLING_INVALID_ADJUSTMENT' ||
-      error.code === 'BILLING_MONTH_NOT_ENDED')
+    code === 'BILLING_INVALID_MONTH' ||
+    code === 'BILLING_INVALID_ADJUSTMENT' ||
+    code === 'BILLING_MONTH_NOT_ENDED'
   );
 }
 
+/** @param {unknown} error */
+function errorCode(error) {
+  if (!(error instanceof Error)) return undefined;
+  /** @type {unknown} */
+  const code = Reflect.get(error, 'code');
+  return typeof code === 'string' ? code : undefined;
+}
+
+/** @template {CliRunner} T @param {CliRunnerDescriptor<T>} descriptor @param {Parameters<T>[0]} input */
 async function runBilling(descriptor, input) {
   try {
     return await runCliCommand(descriptor, input);
@@ -969,6 +1072,7 @@ async function runBilling(descriptor, input) {
 }
 
 // billing:statement --month YYYY-MM [--org <id>] [--close true --actor <username>]
+/** @param {CliOptions} options */
 async function billingStatementCommand(options) {
   for (const name of options.keys()) {
     if (!['month', 'org', 'close', 'actor'].includes(name)) {
@@ -992,6 +1096,7 @@ async function billingStatementCommand(options) {
 // billing:adjust --org <id> --month YYYY-MM --operation <id> --requests <+/-n>
 //   --reason <text> --actor <username>
 //   (--request-ids <id,id> | --period-from <iso> --period-to <iso>)
+/** @param {CliOptions} options */
 async function billingAdjustCommand(options) {
   const allowed = [
     'org',

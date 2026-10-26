@@ -41,6 +41,21 @@ const validateRemote = jest.fn(async (_url: string) => undefined);
 
 type OrganizationStatus = 'active' | 'suspended';
 
+function identityConfigBody(response: { json(): unknown }) {
+  return Value.Parse(
+    ReadOrganizationIdentityConfigResponseSchema,
+    response.json(),
+  );
+}
+
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
+
+function expectError(response: { json(): unknown }, error: object): void {
+  expect(response.json()).toMatchObject({ error });
+}
+
 function config(
   overrides: Partial<StoredOrganizationIdentityConfig> = {},
 ): StoredOrganizationIdentityConfig {
@@ -238,7 +253,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    expect(response.json<unknown>()).toMatchObject({
       data: {
         configured: true,
         issuer: 'https://acme.edu',
@@ -295,14 +310,17 @@ describe('Organization identity configuration HTTP flow', () => {
       const response = await set(payload);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe(
+      expectErrorCode(
+        response,
         _label === 'private key material' || _label === 'invalid inline JWKS'
           ? 'IDENTITY_JWKS_INVALID'
           : 'INVALID_REQUEST',
       );
       expect(configs.saveForOwner.mock.calls).toHaveLength(0);
       expect(purgeJwks).not.toHaveBeenCalled();
-      expect(JSON.stringify(response.json())).not.toContain('private-material');
+      expect(JSON.stringify(response.json<unknown>())).not.toContain(
+        'private-material',
+      );
     },
   );
 
@@ -329,7 +347,7 @@ describe('Organization identity configuration HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(503);
-      expect(response.json().error).toMatchObject({
+      expectError(response, {
         code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
         message: 'JWKS source is unavailable',
         retryable,
@@ -347,7 +365,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatchObject({
+    expectError(response, {
       code: 'IDENTITY_JWKS_INVALID',
       retryable: false,
     });
@@ -361,7 +379,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatchObject({
+    expectError(response, {
       code: 'IDENTITY_JWKS_URL_UNSAFE',
       retryable: false,
     });
@@ -383,7 +401,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatchObject({
+    expectError(response, {
       code: 'IDENTITY_JWKS_INVALID',
       retryable: false,
     });
@@ -405,7 +423,7 @@ describe('Organization identity configuration HTTP flow', () => {
     const response = await set({ issuer: 'https://acme.edu', jwks_url: url });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatchObject({
+    expectError(response, {
       code: 'IDENTITY_JWKS_URL_UNSAFE',
       message: 'JWKS URL is not safe',
       retryable: false,
@@ -435,7 +453,7 @@ describe('Organization identity configuration HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
+      expectError(response, {
         code: 'FORBIDDEN',
         message: 'Organization identity configuration access is forbidden',
       });
@@ -480,9 +498,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe(
-      'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
-    );
+    expectErrorCode(response, 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT');
     expect(purgeJwks).not.toHaveBeenCalled();
   });
 
@@ -499,11 +515,11 @@ describe('Organization identity configuration HTTP flow', () => {
     const retried = await set(payload);
 
     expect(failed.statusCode).toBe(503);
-    expect(failed.json().error).toMatchObject({
+    expectError(failed, {
       code: 'IDENTITY_CONFIG_CACHE_UNAVAILABLE',
       retryable: true,
     });
-    expect(JSON.stringify(failed.json())).not.toContain('Redis host');
+    expect(JSON.stringify(failed.json<unknown>())).not.toContain('Redis host');
     expect(retried.statusCode).toBe(200);
     expect(purgeJwks).toHaveBeenCalledTimes(2);
     expect(configs.saveForOwner.mock.calls).toHaveLength(2);
@@ -521,7 +537,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({
+    expect(identityConfigBody(response).data).toMatchObject({
       configured: true,
       status: 'disabled',
     });
@@ -531,7 +547,7 @@ describe('Organization identity configuration HTTP flow', () => {
     const response = await read();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(response.json<unknown>()).toEqual({
       data: {
         configured: true,
         issuer: 'https://acme.edu',
@@ -557,7 +573,7 @@ describe('Organization identity configuration HTTP flow', () => {
     expect(
       Value.Check(
         ReadOrganizationIdentityConfigResponseSchema,
-        response.json(),
+        response.json<unknown>(),
       ),
     ).toBe(true);
   });
@@ -568,7 +584,7 @@ describe('Organization identity configuration HTTP flow', () => {
     const response = await read();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({
+    expect(identityConfigBody(response).data).toMatchObject({
       configured: true,
       status: 'disabled',
     });
@@ -580,14 +596,14 @@ describe('Organization identity configuration HTTP flow', () => {
     const response = await read();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({
+    expect(identityConfigBody(response).data).toMatchObject({
       jwks_url: 'https://acme.edu/.well-known/jwks.json',
       public_keys_jwks: null,
     });
     expect(
       Value.Check(
         ReadOrganizationIdentityConfigResponseSchema,
-        response.json(),
+        response.json<unknown>(),
       ),
     ).toBe(true);
   });
@@ -598,14 +614,14 @@ describe('Organization identity configuration HTTP flow', () => {
     const response = await read();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(response.json<unknown>()).toEqual({
       data: { configured: false },
       meta: { request_id: REQUEST_ID },
     });
     expect(
       Value.Check(
         ReadOrganizationIdentityConfigResponseSchema,
-        response.json(),
+        response.json<unknown>(),
       ),
     ).toBe(true);
   });
@@ -626,7 +642,10 @@ describe('Organization identity configuration HTTP flow', () => {
 
       const response = await read();
 
-      expect({ status: response.statusCode, body: response.json() }).toEqual({
+      expect({
+        status: response.statusCode,
+        body: response.json<unknown>(),
+      }).toEqual({
         status: 403,
         body: {
           error: {
@@ -668,7 +687,12 @@ describe('Organization identity configuration HTTP flow', () => {
 
   it('returns public JWK fields without private key members', async () => {
     const response = await read();
-    const key = response.json().data.public_keys_jwks.keys[0];
+    const configBody = identityConfigBody(response).data;
+    if (!configBody.configured || configBody.public_keys_jwks === null) {
+      throw new Error('expected configured public keys');
+    }
+    const key = configBody.public_keys_jwks.keys[0];
+    if (key === undefined) throw new Error('expected a public key');
 
     expect(Object.keys(key)).not.toEqual(
       expect.arrayContaining(['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k']),
@@ -679,15 +703,18 @@ describe('Organization identity configuration HTTP flow', () => {
     'rejects private JWK member %s in the published response schema',
     async (member) => {
       const response = await read();
-      const body = response.json();
+      const body = identityConfigBody(response);
+      if (!body.data.configured || body.data.public_keys_jwks === null) {
+        throw new Error('expected configured public keys');
+      }
+      const firstKey = body.data.public_keys_jwks.keys[0];
+      if (firstKey === undefined) throw new Error('expected a public key');
       const unsafeBody = {
         ...body,
         data: {
           ...body.data,
           public_keys_jwks: {
-            keys: [
-              { ...body.data.public_keys_jwks.keys[0], [member]: 'private' },
-            ],
+            keys: [{ ...firstKey, [member]: 'private' }],
           },
         },
       };

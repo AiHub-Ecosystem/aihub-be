@@ -9,9 +9,176 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require('../../dist/generated/prisma/client.js');
+const prismaClientModule =
+  /** @type {typeof import('../../../dist/generated/prisma/client.js')} */ (
+    require('../../../dist/generated/prisma/client.js')
+  );
+const { PrismaClient } = prismaClientModule;
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+/** @typedef {{organization_id: string, api_key_id: string, organization_status: string, status: string, scopes: string[], entitlements: string[], allowed_environments: string[], expires_at: Date | null, rate_limit_rpm: number, max_concurrent: number, monthly_request_quota: number | null, hard_stop_on_quota: boolean}} RawApiKeyRow */
+/** @typedef {{id: string, organizationId: string, status: string, scopes: string[], allowedEnvironments: string[], expiresAt: Date | null, organization: {status: string, entitlements: string[], rateLimitRpm: number, maxConcurrent: number, monthlyRequestQuota: number | null, hardStopOnQuota: boolean}}} PrismaApiKeyRow */
+/** @typedef {RawApiKeyRow | PrismaApiKeyRow} ApiKeyLookupRow */
+/** @typedef {{organizationId: string, apiKeyId: string, organizationStatus: string, status: string, scopes: string[], entitlements: string[], allowedEnvironments: string[], expiresAt: Date | null, rateLimitRpm: number, maxConcurrent: number, monthlyRequestQuota: number | null, hardStopOnQuota: boolean}} ApiKeyOutputInput */
+/** @typedef {ApiKeyOutputInput} ApiKeyOutput */
+/** @typedef {{billable_request_count: string | number | bigint, billable_token_count: string | number | bigint, missing_usage_count: string | number | bigint}} UsageAggregateRow */
+/** @typedef {{request_id?: string, requestId?: string}} MeteringInsertRow */
+/** @typedef {{requestId: string | null, organizationId: string, apiKeyId: string, actorId: null, service: string, operation: string, environment: string, outcome: string, httpStatus: number, errorCode: null, billableRequests: number, inputTokens: number, outputTokens: number, totalTokens: number, models: null, meteringStatus: string, totalMs: number, downstreamMs: number, aiProcessingMs: number}} UsageRecord */
+/** @typedef {{reset: () => void, count: () => number}} PoolMetrics */
+/** @typedef {(queryText: string, values?: Array<string | number | boolean | null | Date | Buffer>, callback?: import('pg').QueryResultCallback) => Promise<import('pg').QueryResult> | import('pg').Query} PgClientQuery */
+/** @typedef {{metrics: PoolMetrics, name?: string, apiKeyLookup: () => Promise<ApiKeyLookupRow | null>, meteringInsert: (requestId: string) => Promise<MeteringInsertRow[]>, usageAggregate: (from: Date, to: Date) => Promise<UsageAggregateRow | undefined>, normalizeApiKey: (row: ApiKeyLookupRow | null) => ReturnType<typeof apiKeyOutput>, normalizeMeteringInsert: (rows: MeteringInsertRow[]) => Array<{requestId: string | undefined}>, normalizeUsageAggregate: (row: UsageAggregateRow | undefined) => ReturnType<typeof aggregateOutput>}} BenchmarkMode */
+/** @typedef {Record<'raw' | 'prisma' | 'prismaRaw', BenchmarkMode>} BenchmarkModes */
+/** @typedef {{name: string, label: string, from?: Date, to?: Date}} BenchmarkOperation */
+/** @typedef {{p50: number | null, p95: number | null, completedRate: number, roundTrips: number | null, failures: number}} PassResult */
+/** @typedef {{name: 'apiKeyLookup' | 'meteringInsert' | 'lookupThenInsert', label: string} | {name: 'usageAggregate', label: string, from: Date, to: Date}} BenchmarkOperation */
+/** @typedef {'raw' | 'prisma' | 'prismaRaw'} BenchmarkModeName */
+/** @typedef {Record<BenchmarkModeName, BenchmarkMode>} BenchmarkModeSet */
+/** @typedef {{apiKeyLookup: ApiKeyOutput | null, meteringInsert: Array<{requestId: string | undefined}>, lookupThenInsert: {apiKey: ApiKeyOutput | null, inserted: Array<{requestId: string | undefined}>}, usageAggregate: ReturnType<typeof aggregateOutput>}} BenchmarkOutputs */
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {value is string[]} */
+function isStringArray(value) {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
+/** @param {unknown} value @returns {RawApiKeyRow | null} */
+function parseRawApiKeyRow(value) {
+  if (value === null || value === undefined) return null;
+  if (
+    !isRecord(value) ||
+    typeof value.organization_id !== 'string' ||
+    typeof value.api_key_id !== 'string' ||
+    typeof value.organization_status !== 'string' ||
+    typeof value.status !== 'string' ||
+    !isStringArray(value.scopes) ||
+    !isStringArray(value.entitlements) ||
+    !isStringArray(value.allowed_environments) ||
+    (value.expires_at !== null && !(value.expires_at instanceof Date)) ||
+    typeof value.rate_limit_rpm !== 'number' ||
+    typeof value.max_concurrent !== 'number' ||
+    (value.monthly_request_quota !== null &&
+      typeof value.monthly_request_quota !== 'number') ||
+    typeof value.hard_stop_on_quota !== 'boolean'
+  ) {
+    throw new Error('API-key benchmark query returned an invalid row');
+  }
+  return {
+    organization_id: value.organization_id,
+    api_key_id: value.api_key_id,
+    organization_status: value.organization_status,
+    status: value.status,
+    scopes: value.scopes,
+    entitlements: value.entitlements,
+    allowed_environments: value.allowed_environments,
+    expires_at: value.expires_at,
+    rate_limit_rpm: value.rate_limit_rpm,
+    max_concurrent: value.max_concurrent,
+    monthly_request_quota: value.monthly_request_quota,
+    hard_stop_on_quota: value.hard_stop_on_quota,
+  };
+}
+
+/** @param {unknown} value @returns {MeteringInsertRow[]} */
+function parseMeteringInsertRows(value) {
+  if (!Array.isArray(value))
+    throw new Error('Metering benchmark query returned invalid rows');
+  return value.map((row) => {
+    if (
+      !isRecord(row) ||
+      (typeof row.request_id !== 'string' && typeof row.requestId !== 'string')
+    ) {
+      throw new Error('Metering benchmark query returned an invalid row');
+    }
+    return {
+      ...(typeof row.request_id === 'string'
+        ? { request_id: row.request_id }
+        : {}),
+      ...(typeof row.requestId === 'string'
+        ? { requestId: row.requestId }
+        : {}),
+    };
+  });
+}
+
+/** @param {unknown} value @returns {UsageAggregateRow | undefined} */
+function parseUsageAggregateRow(value) {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    !['string', 'number', 'bigint'].includes(
+      typeof value.billable_request_count,
+    ) ||
+    !['string', 'number', 'bigint'].includes(
+      typeof value.billable_token_count,
+    ) ||
+    !['string', 'number', 'bigint'].includes(typeof value.missing_usage_count)
+  ) {
+    throw new Error('usage aggregate benchmark query returned an invalid row');
+  }
+  return {
+    billable_request_count: sqlCount(value.billable_request_count),
+    billable_token_count: sqlCount(value.billable_token_count),
+    missing_usage_count: sqlCount(value.missing_usage_count),
+  };
+}
+
+/** @param {unknown} value @returns {value is string | number | bigint} */
+function isSqlCount(value) {
+  return (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint'
+  );
+}
+
+/** @param {unknown} value @returns {string | number | bigint} */
+function sqlCount(value) {
+  if (!isSqlCount(value)) throw new Error('invalid SQL aggregate count');
+  return value;
+}
+
+/** @param {unknown} value @returns {unknown} */
+function firstArrayItem(value) {
+  if (!Array.isArray(value))
+    throw new Error('benchmark query returned invalid rows');
+  return value[0];
+}
+
+/** @param {unknown} value @returns {{version: string, version_num: string}} */
+function parseVersion(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.version !== 'string' ||
+    typeof value.version_num !== 'string'
+  ) {
+    throw new Error('PostgreSQL version query returned an invalid row');
+  }
+  return { version: value.version, version_num: value.version_num };
+}
+
+/** @param {unknown} value @returns {{apiKeys: number, usageRecords: number}} */
+function parseSeedCounts(value) {
+  if (
+    !isRecord(value) ||
+    (typeof value.api_keys !== 'string' &&
+      typeof value.api_keys !== 'number') ||
+    (typeof value.usage_records !== 'string' &&
+      typeof value.usage_records !== 'number')
+  ) {
+    throw new Error('Benchmark seed count query returned an invalid row');
+  }
+  return {
+    apiKeys: Number(value.api_keys),
+    usageRecords: Number(value.usage_records),
+  };
+}
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const ORGANIZATION_COUNT = 100;
 const ORGANIZATION_ID = `bench_org_${String(ORGANIZATION_COUNT - 1).padStart(3, '0')}`;
 const API_KEY_COUNT = 100_000;
@@ -68,6 +235,7 @@ const USAGE_AGGREGATE_SQL = `
     AND ($4::text IS NULL OR operation = $4)
 `;
 
+/** @param {string} connectionString */
 function assertDisposableAdminUrl(connectionString) {
   const url = new URL(connectionString);
   if (
@@ -82,24 +250,34 @@ function assertDisposableAdminUrl(connectionString) {
   return url;
 }
 
+/** @param {string} identifier */
 function quoteIdentifier(identifier) {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
+/** @param {import('pg').Pool} pool @returns {PoolMetrics} */
 function instrumentPool(pool) {
   let statements = 0;
   const wrapped = new WeakSet();
-  pool.on('acquire', (client) => {
-    if (wrapped.has(client)) {
-      return;
-    }
-    wrapped.add(client);
-    const query = client.query.bind(client);
-    client.query = (...args) => {
-      statements += 1;
-      return query(...args);
-    };
-  });
+  pool.on(
+    'acquire',
+    /** @param {import('pg').PoolClient} client */ (client) => {
+      if (wrapped.has(client)) {
+        return;
+      }
+      wrapped.add(client);
+      /** @type {PgClientQuery} */
+      const query = client.query.bind(client);
+      /** @type {PgClientQuery} */
+      client.query = (queryText, values, callback) => {
+        statements += 1;
+        if (callback !== undefined) return query(queryText, values, callback);
+        return values === undefined
+          ? query(queryText)
+          : query(queryText, values);
+      };
+    },
+  );
   return {
     reset: () => {
       statements = 0;
@@ -108,6 +286,7 @@ function instrumentPool(pool) {
   };
 }
 
+/** @param {ApiKeyOutputInput | null | undefined} row */
 function apiKeyOutput(row) {
   if (row === null || row === undefined) {
     return null;
@@ -128,6 +307,7 @@ function apiKeyOutput(row) {
   };
 }
 
+/** @param {RawApiKeyRow | null | undefined} row */
 function rawApiKeyOutput(row) {
   if (row === null || row === undefined) {
     return null;
@@ -148,6 +328,15 @@ function rawApiKeyOutput(row) {
   });
 }
 
+/** @param {ApiKeyLookupRow | null} row */
+function normalizeApiKey(row) {
+  if (row === null) return null;
+  return 'organization_id' in row
+    ? rawApiKeyOutput(row)
+    : prismaApiKeyOutput(row);
+}
+
+/** @param {PrismaApiKeyRow | null | undefined} row */
 function prismaApiKeyOutput(row) {
   if (row === null || row === undefined) {
     return null;
@@ -168,12 +357,14 @@ function prismaApiKeyOutput(row) {
   });
 }
 
+/** @param {MeteringInsertRow[]} rows */
 function meteringInsertOutput(rows) {
   return rows.map((row) => ({
     requestId: row.request_id ?? row.requestId,
   }));
 }
 
+/** @param {string} requestId @returns {UsageRecord} */
 function usageRecord(requestId) {
   return {
     requestId,
@@ -198,6 +389,7 @@ function usageRecord(requestId) {
   };
 }
 
+/** @param {UsageRecord} record @returns {Array<string | number | null>} */
 function usageRecordValues(record) {
   return [
     record.requestId,
@@ -222,7 +414,9 @@ function usageRecordValues(record) {
   ];
 }
 
+/** @param {UsageAggregateRow | undefined} row */
 function aggregateOutput(row) {
+  if (row === undefined) throw new Error('usage aggregate returned no row');
   return {
     billableRequestCount: String(row.billable_request_count),
     billableTokenCount: String(row.billable_token_count),
@@ -230,10 +424,12 @@ function aggregateOutput(row) {
   };
 }
 
+/** @param {unknown} value */
 function canonical(value) {
   return JSON.stringify(value);
 }
 
+/** @param {string | URL} databaseUrl */
 async function applyMigrations(databaseUrl) {
   const migrationsDirectory = join(ROOT, 'prisma/migrations');
   const files = (await readdir(migrationsDirectory, { withFileTypes: true }))
@@ -255,6 +451,7 @@ async function applyMigrations(databaseUrl) {
   }
 }
 
+/** @param {string} databaseUrl */
 async function seedDatabase(databaseUrl) {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
@@ -306,20 +503,19 @@ async function seedDatabase(databaseUrl) {
       FROM generate_series(1, ${USAGE_RECORD_COUNT}) AS n
     `);
     await pool.query('ANALYZE api_keys; ANALYZE usage_records');
+    /** @type {import('pg').QueryResult<{api_keys: string, usage_records: string}>} */
     const counts = await pool.query(`
       SELECT
         (SELECT count(*) FROM api_keys) AS api_keys,
         (SELECT count(*) FROM usage_records) AS usage_records
     `);
-    return {
-      apiKeys: Number(counts.rows[0].api_keys),
-      usageRecords: Number(counts.rows[0].usage_records),
-    };
+    return parseSeedCounts(counts.rows[0]);
   } finally {
     await pool.end();
   }
 }
 
+/** @param {string} databaseUrl @returns {BenchmarkModeSet & {close: () => Promise<void>}} */
 function makeModes(databaseUrl) {
   const rawPool = new Pool({
     connectionString: databaseUrl,
@@ -334,21 +530,22 @@ function makeModes(databaseUrl) {
   const prismaMetrics = instrumentPool(prismaPool);
   const prismaClient = new PrismaClient({ adapter: new PrismaPg(prismaPool) });
 
+  /** @type {BenchmarkMode} */
   const raw = {
     metrics: rawMetrics,
-    normalizeApiKey: rawApiKeyOutput,
+    normalizeApiKey,
     normalizeMeteringInsert: meteringInsertOutput,
     normalizeUsageAggregate: aggregateOutput,
     async apiKeyLookup() {
       const result = await rawPool.query(API_KEY_LOOKUP_SQL, [LOOKUP_HASH]);
-      return result.rows[0] ?? null;
+      return parseRawApiKeyRow(result.rows[0] ?? null);
     },
     async meteringInsert(requestId) {
       const result = await rawPool.query(
         METERING_INSERT_SQL,
         usageRecordValues(usageRecord(requestId)),
       );
-      return result.rows;
+      return parseMeteringInsertRows(result.rows);
     },
     async usageAggregate(from, to) {
       const result = await rawPool.query(USAGE_AGGREGATE_SQL, [
@@ -357,13 +554,14 @@ function makeModes(databaseUrl) {
         to,
         null,
       ]);
-      return result.rows[0];
+      return parseUsageAggregateRow(result.rows[0]);
     },
   };
 
+  /** @type {BenchmarkMode} */
   const prisma = {
     metrics: prismaMetrics,
-    normalizeApiKey: prismaApiKeyOutput,
+    normalizeApiKey,
     normalizeMeteringInsert: meteringInsertOutput,
     normalizeUsageAggregate: aggregateOutput,
     async apiKeyLookup() {
@@ -413,16 +611,17 @@ function makeModes(databaseUrl) {
         to,
         null,
       );
-      return rows[0];
+      return parseUsageAggregateRow(firstArrayItem(rows));
     },
   };
 
   // The exact SQL of the raw mode, issued through Prisma's raw path on the same
   // adapter pool: what the production repositories do where the generated
   // client cannot express the statement or where one statement is the contract.
+  /** @type {BenchmarkMode} */
   const prismaRaw = {
     metrics: prismaMetrics,
-    normalizeApiKey: rawApiKeyOutput,
+    normalizeApiKey,
     normalizeMeteringInsert: meteringInsertOutput,
     normalizeUsageAggregate: aggregateOutput,
     async apiKeyLookup() {
@@ -430,13 +629,14 @@ function makeModes(databaseUrl) {
         API_KEY_LOOKUP_SQL,
         LOOKUP_HASH,
       );
-      return rows[0] ?? null;
+      return parseRawApiKeyRow(firstArrayItem(rows));
     },
     async meteringInsert(requestId) {
-      return prismaClient.$queryRawUnsafe(
+      const rows = await prismaClient.$queryRawUnsafe(
         METERING_INSERT_SQL,
         ...usageRecordValues(usageRecord(requestId)),
       );
+      return parseMeteringInsertRows(rows);
     },
     async usageAggregate(from, to) {
       const rows = await prismaClient.$queryRawUnsafe(
@@ -446,7 +646,7 @@ function makeModes(databaseUrl) {
         to,
         null,
       );
-      return rows[0];
+      return parseUsageAggregateRow(firstArrayItem(rows));
     },
   };
 
@@ -472,24 +672,29 @@ function makeModes(databaseUrl) {
   };
 }
 
+/** @type {BenchmarkModeName[]} */
 const MODE_NAMES = ['raw', 'prisma', 'prismaRaw'];
+/** @type {Record<BenchmarkModeName, string>} */
 const MODE_LABELS = {
   raw: 'Raw pg',
   prisma: 'Prisma client',
   prismaRaw: 'Prisma raw SQL',
 };
 
+/** @param {BenchmarkModeSet} modes @param {Date} from @param {Date} to @param {import('pg').Pool} cleanupPool */
 async function verifyOutputs(modes, from, to, cleanupPool) {
+  /** @type {Map<BenchmarkModeName, BenchmarkOutputs>} */
   const operationResults = new Map();
   const fixtureRequestId = 'bench_verify_523';
 
   for (const modeName of MODE_NAMES) {
     const mode = modes[modeName];
     const rawApiKey = await mode.apiKeyLookup();
+    /** @type {BenchmarkOutputs} */
     const outputs = {
       apiKeyLookup: mode.normalizeApiKey(rawApiKey),
-      meteringInsert: undefined,
-      lookupThenInsert: undefined,
+      meteringInsert: [],
+      lookupThenInsert: { apiKey: null, inserted: [] },
       usageAggregate: mode.normalizeUsageAggregate(
         await mode.usageAggregate(from, to),
       ),
@@ -535,21 +740,26 @@ async function verifyOutputs(modes, from, to, cleanupPool) {
   }
 }
 
+/** @param {number[]} samples @param {number} fraction @returns {number} */
 function percentile(samples, fraction) {
   const sorted = [...samples].sort((a, b) => a - b);
-  return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)];
+  return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)] ?? 0;
 }
 
+/** @param {number} milliseconds */
 function sleep(milliseconds) {
   return new Promise((resolvePromise) =>
     setTimeout(resolvePromise, milliseconds),
   );
 }
 
+/** @param {BenchmarkMode} mode @param {BenchmarkOperation} operation @param {number} passNumber @returns {Promise<PassResult>} */
 async function runPass(mode, operation, passNumber) {
   mode.metrics.reset();
+  /** @type {number[]} */
   const samples = [];
   let failures = 0;
+  /** @type {Promise<void>[]} */
   const tasks = [];
   const startedAt = performance.now();
 
@@ -600,6 +810,7 @@ async function runPass(mode, operation, passNumber) {
   };
 }
 
+/** @param {Array<number | null>} values @returns {string} */
 function range(values) {
   const finiteValues = values.filter(
     (value) => typeof value === 'number' && Number.isFinite(value),
@@ -614,13 +825,16 @@ function range(values) {
     : `${minimum.toFixed(2)}–${maximum.toFixed(2)}`;
 }
 
+/** @param {Map<string, PassResult[]>} results @param {BenchmarkOperation[]} operations */
 function renderResults(results, operations) {
+  /** @param {BenchmarkOperation} operation @param {'roundTrips' | 'completedRate' | 'failures'} field */
   const column = (operation, field) =>
     MODE_NAMES.map((modeName) =>
       range(
         results.get(`${modeName}:${operation.name}`).map((pass) => pass[field]),
       ),
     ).join(' / ');
+  /** @param {BenchmarkOperation} operation @param {BenchmarkModeName} modeName */
   const latency = (operation, modeName) => {
     const passes = results.get(`${modeName}:${operation.name}`);
     return `${range(passes.map((pass) => pass.p50))} / ${range(
@@ -660,7 +874,9 @@ async function main() {
   databaseUrl.pathname = `/${databaseName}`;
   const adminPool = new Pool({ connectionString: adminUrlValue, max: 1 });
   let databaseCreated = false;
+  /** @type {(BenchmarkModeSet & {close: () => Promise<void>}) | undefined} */
   let modes;
+  /** @type {import('pg').Pool | undefined} */
   let cleanupPool;
 
   try {
@@ -668,9 +884,10 @@ async function main() {
       `SELECT current_setting('server_version') AS version,
               current_setting('server_version_num') AS version_num`,
     );
-    if (!version.rows[0].version_num.startsWith('16')) {
+    const serverVersion = parseVersion(version.rows[0]);
+    if (!serverVersion.version_num.startsWith('16')) {
       throw new Error(
-        `Benchmark requires PostgreSQL 16; found ${version.rows[0].version}`,
+        `Benchmark requires PostgreSQL 16; found ${serverVersion.version}`,
       );
     }
     await adminPool.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
@@ -684,7 +901,7 @@ async function main() {
       throw new Error(`Seed count mismatch: ${JSON.stringify(counts)}`);
     }
     process.stdout.write(
-      `Seeded PostgreSQL ${version.rows[0].version}: ${counts.apiKeys} API keys, ${counts.usageRecords} usage rows, and ${ORGANIZATION_COUNT} organizations\n`,
+      `Seeded PostgreSQL ${serverVersion.version}: ${counts.apiKeys} API keys, ${counts.usageRecords} usage rows, and ${ORGANIZATION_COUNT} organizations\n`,
     );
 
     modes = makeModes(databaseUrl.toString());
@@ -699,12 +916,14 @@ async function main() {
       'Every implementation returned equal fixture outputs before timing.\n',
     );
 
+    /** @type {BenchmarkOperation[]} */
     const operations = [
       { name: 'apiKeyLookup', label: 'API-key lookup' },
       { name: 'meteringInsert', label: 'Durable Metering insert' },
       { name: 'lookupThenInsert', label: 'Lookup then insert' },
       { name: 'usageAggregate', label: 'Request/token aggregate', from, to },
     ];
+    /** @type {Map<string, PassResult[]>} */
     const results = new Map();
     // Forward, then reversed, so no mode always runs on a warmer database.
     const passOrders = [MODE_NAMES, [...MODE_NAMES].reverse()];

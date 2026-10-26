@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { findViolations } from './check-issue-triage.mjs';
+import { findViolations, parseOpenIssues } from './check-issue-triage.mjs';
 
+/**
+ * @param {{labels?: string[], milestone?: {id: number, title: string} | null, pull_request?: object}} [options]
+ */
 function issue({
   labels = [],
   milestone = { id: 1, title: 'M' },
@@ -22,6 +25,17 @@ await test('well-formed ready issue passes', () => {
   assert.deepEqual(
     findViolations([issue({ labels: ['ready-for-agent', 'P2'] })]),
     [],
+  );
+});
+
+await test('parses GitHub open issues and rejects malformed label data', () => {
+  assert.deepEqual(
+    parseOpenIssues('[{"number":1,"title":"t","labels":[{"name":"P1"}]}]'),
+    [{ number: 1, title: 't', labels: [{ name: 'P1' }] }],
+  );
+  assert.throws(
+    () => parseOpenIssues('[{"number":1,"title":"t","labels":[null]}]'),
+    /invalid issue/,
   );
 });
 

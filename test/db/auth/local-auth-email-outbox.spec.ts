@@ -3,12 +3,17 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { Value } from '@sinclair/typebox/value';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { generateRequestId } from '@/common/request-context/request-id';
+import {
+  ForgotPasswordResponseSchema,
+  RegisterResponseSchema,
+} from '@/contracts/auth/local-auth';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
 import {
@@ -54,6 +59,14 @@ import {
 const REGISTER = '/v1/auth/register';
 const RESEND = '/v1/auth/resend-verification';
 const FORGOT = '/v1/auth/forgot-password';
+
+function registrationBody(response: { json(): unknown }) {
+  return Value.Parse(RegisterResponseSchema, response.json());
+}
+
+function recoveryBody(response: { json(): unknown }) {
+  return Value.Parse(ForgotPasswordResponseSchema, response.json());
+}
 const RECOVERY_MESSAGE =
   'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
 
@@ -337,7 +350,7 @@ describe('local auth email outbox over HTTP', () => {
 
     expect(response.statusCode).toBe(202);
     expect(response.payload).toBe('');
-    const open = await pool.query(
+    const open = await pool.query<{ readonly count: string }>(
       'SELECT count(*)::text AS count FROM email_verification_tokens WHERE consumed_at IS NULL',
     );
     expect(Number(open.rows[0]?.count)).toBe(1);
@@ -390,7 +403,9 @@ describe('local auth email outbox over HTTP', () => {
       registerRequest('person@example.com'),
     );
     expect(registration.statusCode).toBe(201);
-    expect(registration.json().data.email_delivery_status).toBe('queued');
+    expect(registrationBody(registration).data.email_delivery_status).toBe(
+      'queued',
+    );
 
     for (let count = 0; count < 8; count += 1) {
       const response = await app.inject(post(RESEND, ' Person@Example.com '));
@@ -407,11 +422,9 @@ describe('local auth email outbox over HTTP', () => {
        FROM auth_email_recipient_rate_limits`,
     );
     expect(firstWindow.rows).toHaveLength(1);
-    expect(firstWindow.rows[0]).toMatchObject({
-      request_count: 9,
-      window_started_at: expect.any(Date),
-      expires_at: expect.any(Date),
-    });
+    expect(firstWindow.rows[0]?.request_count).toBe(9);
+    expect(firstWindow.rows[0]?.window_started_at).toBeInstanceOf(Date);
+    expect(firstWindow.rows[0]?.expires_at).toBeInstanceOf(Date);
     expect(firstWindow.rows[0]?.address_hmac).not.toContain(
       'person@example.com',
     );
@@ -433,7 +446,7 @@ describe('local auth email outbox over HTTP', () => {
 
     const capped = await app.inject(post(FORGOT, 'person@example.com'));
     expect(capped.statusCode).toBe(202);
-    expect(capped.json().data.message).toBe(RECOVERY_MESSAGE);
+    expect(recoveryBody(capped).data.message).toBe(RECOVERY_MESSAGE);
     expect(await queuedRequests()).toHaveLength(9);
     expect(await countRows('password_reset_tokens')).toBe(0);
     const unchangedWindow = await pool.query(
@@ -462,7 +475,7 @@ describe('local auth email outbox over HTTP', () => {
       registerRequest('person@example.com'),
     );
     expect(suppressedRegistration.statusCode).toBe(201);
-    expect(suppressedRegistration.json().data).toMatchObject({
+    expect(registrationBody(suppressedRegistration).data).toMatchObject({
       status: 'pending_verification',
       email_delivery_status: 'suppressed',
     });
@@ -511,7 +524,12 @@ describe('local auth email outbox over HTTP', () => {
       'SELECT username, updated_at FROM user_accounts WHERE id = $1',
       [accountId],
     );
-    const tokensBefore = await pool.query(
+    const tokensBefore = await pool.query<{
+      readonly id: string;
+      readonly token_hash: string;
+      readonly consumed_at: Date | null;
+      readonly consumed_reason: string | null;
+    }>(
       'SELECT id, token_hash, consumed_at, consumed_reason FROM email_verification_tokens WHERE user_account_id = $1 ORDER BY created_at',
       [accountId],
     );
@@ -531,7 +549,7 @@ describe('local auth email outbox over HTTP', () => {
       }),
     );
     expect(suppressed.statusCode).toBe(201);
-    expect(suppressed.json().data).toMatchObject({
+    expect(registrationBody(suppressed).data).toMatchObject({
       status: 'pending_verification',
       email_delivery_status: 'suppressed',
     });
@@ -583,7 +601,7 @@ describe('local auth email outbox over HTTP', () => {
       }),
     );
     expect(replacement.statusCode).toBe(201);
-    expect(replacement.json().data).toMatchObject({
+    expect(registrationBody(replacement).data).toMatchObject({
       status: 'pending_verification',
       email_delivery_status: 'queued',
     });
@@ -681,7 +699,7 @@ describe('local auth email outbox over HTTP', () => {
     const unknown = await app.inject(post(FORGOT, 'nobody@example.com'));
 
     expect(unknown.statusCode).toBe(known.statusCode);
-    expect(unknown.json().data).toEqual(known.json().data);
+    expect(recoveryBody(unknown).data).toEqual(recoveryBody(known).data);
   });
 
   it('rolls the account back when its outbox write fails', async () => {
@@ -690,7 +708,9 @@ describe('local auth email outbox over HTTP', () => {
     const response = await app.inject(registerRequest('rollback@example.com'));
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().error).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'INTERNAL_ERROR' },
+    });
     expect(response.payload).not.toContain('email delivery request store');
     expect(await countRows('user_accounts')).toBe(0);
     expect(await countRows('email_verification_tokens')).toBe(0);

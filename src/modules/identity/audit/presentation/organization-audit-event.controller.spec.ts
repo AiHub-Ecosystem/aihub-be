@@ -36,6 +36,23 @@ const AUDIT_URL = `/v1/organizations/${ORGANIZATION_ID}/audit-events`;
 
 type OrganizationStatus = 'active' | 'suspended';
 
+function auditBody(response: { json(): unknown }) {
+  return Value.Parse(
+    ListOrganizationAuditEventsResponseSchema,
+    response.json(),
+  );
+}
+
+function nextCursor(response: { json(): unknown }): string {
+  const cursor = auditBody(response).data.next_cursor;
+  if (cursor === null) throw new Error('expected another audit page');
+  return cursor;
+}
+
+function expectErrorCode(response: { json(): unknown }, code: string): void {
+  expect(response.json()).toMatchObject({ error: { code } });
+}
+
 function event(
   overrides: Partial<OrganizationAuditEventRecord> = {},
 ): OrganizationAuditEventRecord {
@@ -165,7 +182,7 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read();
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({
+      expect(response.json<unknown>()).toEqual({
         data: {
           events: [
             {
@@ -191,9 +208,7 @@ describe('Organization audit trail HTTP flow', () => {
 
       const response = await read();
 
-      expect(
-        Value.Check(ListOrganizationAuditEventsResponseSchema, response.json()),
-      ).toBe(true);
+      expect(auditBody(response).data.events).toHaveLength(1);
     });
 
     it('reads the trail for an admin', async () => {
@@ -256,9 +271,7 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read();
 
       expect(
-        response
-          .json()
-          .data.events.map((entry: { event_id: string }) => entry.event_id),
+        auditBody(response).data.events.map((entry) => entry.event_id),
       ).toEqual([newer.id, older.id]);
     });
 
@@ -274,8 +287,8 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read();
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().data.events).toHaveLength(1);
-      expect(response.json().data.events[0].target_label).toBeNull();
+      expect(auditBody(response).data.events).toHaveLength(1);
+      expect(auditBody(response).data.events[0]?.target_label).toBeNull();
     });
   });
 
@@ -334,7 +347,7 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read();
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().data.events).toHaveLength(1);
+      expect(auditBody(response).data.events).toHaveLength(1);
     });
   });
 
@@ -388,10 +401,12 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read(`${AUDIT_URL}?actoin=member.removed`);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error).toMatchObject({
-        code: 'INVALID_REQUEST',
-        message: 'Request failed validation',
-        retryable: false,
+      expect(response.json<unknown>()).toMatchObject({
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Request failed validation',
+          retryable: false,
+        },
       });
       expect(response.body).not.toContain('actoin');
       expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
@@ -401,7 +416,7 @@ describe('Organization audit trail HTTP flow', () => {
       const response = await read(`${AUDIT_URL}?unexpected=value`);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expectErrorCode(response, 'INVALID_REQUEST');
       expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
@@ -473,8 +488,8 @@ describe('Organization audit trail HTTP flow', () => {
 
       const response = await read(`${AUDIT_URL}?limit=10`);
 
-      expect(response.json().data.events).toHaveLength(2);
-      expect(response.json().data.next_cursor).toBeNull();
+      expect(auditBody(response).data.events).toHaveLength(2);
+      expect(auditBody(response).data.next_cursor).toBeNull();
     });
 
     it('offers a cursor when another page follows', async () => {
@@ -482,14 +497,13 @@ describe('Organization audit trail HTTP flow', () => {
 
       const response = await read(`${AUDIT_URL}?limit=2`);
 
-      expect(response.json().data.events).toHaveLength(2);
-      expect(typeof response.json().data.next_cursor).toBe('string');
+      expect(auditBody(response).data.events).toHaveLength(2);
+      expect(typeof auditBody(response).data.next_cursor).toBe('string');
     });
 
     it('resumes from the cursor it handed out', async () => {
       auditEvents.listAuditEvents.mockResolvedValue(page(3));
-      const cursor = (await read(`${AUDIT_URL}?limit=2`)).json().data
-        .next_cursor;
+      const cursor = nextCursor(await read(`${AUDIT_URL}?limit=2`));
 
       jest.clearAllMocks();
       auditEvents.listAuditEvents.mockResolvedValue([]);
@@ -504,8 +518,7 @@ describe('Organization audit trail HTTP flow', () => {
 
     it('returns the same page when a cursor is replayed', async () => {
       auditEvents.listAuditEvents.mockResolvedValue(page(3));
-      const cursor = (await read(`${AUDIT_URL}?limit=2`)).json().data
-        .next_cursor;
+      const cursor = nextCursor(await read(`${AUDIT_URL}?limit=2`));
 
       const url = `${AUDIT_URL}?limit=2&cursor=${encodeURIComponent(cursor)}`;
       auditEvents.listAuditEvents.mockResolvedValue(page(2));
@@ -522,9 +535,9 @@ describe('Organization audit trail HTTP flow', () => {
      */
     it('refuses a cursor whose filter changed under it', async () => {
       auditEvents.listAuditEvents.mockResolvedValue(page(3));
-      const cursor = (
-        await read(`${AUDIT_URL}?limit=2&action=api_key.revoked`)
-      ).json().data.next_cursor;
+      const cursor = nextCursor(
+        await read(`${AUDIT_URL}?limit=2&action=api_key.revoked`),
+      );
 
       const response = await read(
         `${AUDIT_URL}?limit=2&action=api_key.rotated&cursor=${encodeURIComponent(cursor)}`,
@@ -535,11 +548,11 @@ describe('Organization audit trail HTTP flow', () => {
 
     it('accepts a cursor when the same filters arrive in a different order', async () => {
       auditEvents.listAuditEvents.mockResolvedValue(page(3));
-      const cursor = (
+      const cursor = nextCursor(
         await read(
           `${AUDIT_URL}?limit=2&action=api_key.revoked&action=api_key.rotated&outcome=applied`,
-        )
-      ).json().data.next_cursor;
+        ),
+      );
 
       const response = await read(
         `${AUDIT_URL}?limit=2&outcome=applied&action=api_key.rotated&action=api_key.revoked&cursor=${encodeURIComponent(cursor)}`,

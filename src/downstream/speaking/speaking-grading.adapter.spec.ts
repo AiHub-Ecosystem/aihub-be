@@ -10,6 +10,15 @@ import {
 
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
 
+function captureError(action: () => unknown): unknown {
+  try {
+    action();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('Expected the action to throw');
+}
+
 function capture(name: string): unknown {
   return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
 }
@@ -38,9 +47,9 @@ describe('requiredSpeakingUserId', () => {
   ])(
     'rejects a %s End-User ID before a downstream request exists',
     (_name, userId) => {
-      expect(() => requiredSpeakingUserId(context(userId))).toThrow(
-        expect.objectContaining({ code: 'USER_IDENTITY_REQUIRED' }),
-      );
+      expect(
+        captureError(() => requiredSpeakingUserId(context(userId))),
+      ).toMatchObject({ code: 'USER_IDENTITY_REQUIRED' });
     },
   );
 });
@@ -52,11 +61,11 @@ describe('parseSpeakingGradingError', () => {
       capture('grading-convert-audio.500.json'),
     );
 
-    expect(hint).toEqual({
+    expect(hint).toMatchObject({
       code: 'AUDIO_UNREADABLE',
-      message: expect.any(String),
       retryable: false,
     });
+    expect(typeof hint?.message).toBe('string');
     expect(hint?.message).not.toContain('error_convert_audio');
   });
 

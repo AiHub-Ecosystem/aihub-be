@@ -77,7 +77,7 @@ async function seedOperator(username: string): Promise<string> {
 }
 
 async function rows(sql: string): Promise<Record<string, unknown>[]> {
-  return (await pool.query(sql)).rows;
+  return (await pool.query<Record<string, unknown>>(sql)).rows;
 }
 
 withBuild('operator CLI against PostgreSQL', () => {

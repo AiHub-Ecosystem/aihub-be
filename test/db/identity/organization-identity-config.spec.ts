@@ -92,7 +92,7 @@ function input(
 }
 
 async function auditEvents(): Promise<Record<string, unknown>[]> {
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<Record<string, unknown>>(
     `SELECT action, outcome, target_type, target_id, target_label, detail
      FROM organization_audit_events WHERE organization_id = $1`,
     [organizationId],

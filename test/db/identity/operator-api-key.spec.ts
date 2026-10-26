@@ -98,14 +98,14 @@ function revokeInput(
 }
 
 async function keys(): Promise<Record<string, unknown>[]> {
-  const result = await pool.query(
+  const result = await pool.query<Record<string, unknown>>(
     'SELECT id, status, revoked_at FROM api_keys ORDER BY id',
   );
   return result.rows;
 }
 
 async function events(action?: string): Promise<Record<string, unknown>[]> {
-  const result = await pool.query(
+  const result = await pool.query<Record<string, unknown>>(
     `SELECT organization_id, actor_user_account_id, action, outcome,
             target_type, target_id, target_label, detail, request_id
      FROM organization_audit_events

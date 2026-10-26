@@ -11,11 +11,38 @@ const outputPath = resolve(
   root,
   'src/modules/auth/email-delivery/application/templates/transactional-email.template.generated.ts',
 );
-const { default: mjml2html } = await import('mjml');
-const { html, errors } = await mjml2html(await readFile(templatePath, 'utf8'), {
-  filePath: templatePath,
-  validationLevel: 'strict',
-});
+/** @typedef {(input: string, options: {filePath: string, validationLevel: 'strict'}) => Promise<{html: string, errors: unknown[]}>} MjmlCompiler */
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
+}
+
+/** @param {unknown} value @returns {value is MjmlCompiler} */
+function isMjmlCompiler(value) {
+  return typeof value === 'function';
+}
+
+const mjmlModule = /** @type {unknown} */ (await import('mjml'));
+const compiler = isRecord(mjmlModule) ? mjmlModule.default : undefined;
+if (!isMjmlCompiler(compiler)) {
+  throw new Error('MJML compiler is unavailable');
+}
+
+const compiled = /** @type {unknown} */ (
+  await compiler(await readFile(templatePath, 'utf8'), {
+    filePath: templatePath,
+    validationLevel: 'strict',
+  })
+);
+if (
+  !isRecord(compiled) ||
+  typeof compiled.html !== 'string' ||
+  !Array.isArray(compiled.errors)
+) {
+  throw new Error('MJML compiler returned an invalid result');
+}
+const html = compiled.html;
+const errors = /** @type {unknown[]} */ (compiled.errors);
 
 if (errors.length > 0) {
   throw new Error(

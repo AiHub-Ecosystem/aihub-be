@@ -35,6 +35,7 @@ const TS_GATES = [
 ];
 
 /** Gate -> the command that runs it. `test:related` reads the changed files. */
+/** @type {Readonly<Record<string, string>>} */
 export const GATE_COMMANDS = {
   'arch-check': 'arch-check',
   build: 'build',
@@ -64,6 +65,7 @@ export const GATE_COMMANDS = {
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
+/** @param {string} p */
 function norm(p) {
   return String(p).replace(/\\/g, '/');
 }
@@ -72,8 +74,10 @@ function norm(p) {
  * The gates one changed path can break, or `undefined` when no rule claims it.
  * An unclassified path is not a quiet skip: the caller runs the full loop.
  */
+/** @param {string} p @returns {string[] | undefined} */
 export function classifyPath(p) {
   const path = norm(p);
+  /** @type {Set<string>} */
   const gates = new Set();
 
   if (path === 'openapi.json') {
@@ -147,18 +151,21 @@ export function classifyPath(p) {
   return undefined;
 }
 
+/** @param {Set<string>} gates @returns {string[]} */
 function sorted(gates) {
   return [...gates].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /**
- * @returns {{ gates: string[] } | { fullVerify: true, reason: string }}
+ * @param {readonly string[]} files
+ * @returns {{ gates: string[], fullVerify?: false, reason?: never } | { gates?: never, fullVerify: true, reason: string }}
  */
 export function planChangedFiles(files) {
   if (files.length === 0) {
     return { fullVerify: true, reason: 'no changed files resolved' };
   }
 
+  /** @type {Set<string>} */
   const gates = new Set();
   for (const file of files) {
     const matched = classifyPath(file);
@@ -171,6 +178,7 @@ export function planChangedFiles(files) {
   return { gates: sorted(gates) };
 }
 
+/** @param {string[]} args @returns {string} */
 function defaultGit(args) {
   // execFileSync, not a shell string: a path or ref is an argument, never
   // something to be re-parsed.
@@ -185,6 +193,7 @@ function defaultGit(args) {
  * committed yet. Uncommitted work is the common case and the reason this tool
  * exists: a diff that read only commits would report nothing and pass.
  */
+/** @param {(args: string[]) => string} [git] @returns {string[]} */
 export function resolveChangedFiles(git = defaultGit) {
   const mergeBase = git(['merge-base', 'HEAD', 'origin/main']);
   const chunks = [
@@ -194,6 +203,7 @@ export function resolveChangedFiles(git = defaultGit) {
     git(['ls-files', '--others', '--exclude-standard']),
   ];
 
+  /** @type {Set<string>} */
   const files = new Set();
   for (const chunk of chunks) {
     for (const line of chunk.split(/\r?\n/)) {
@@ -207,14 +217,20 @@ export function resolveChangedFiles(git = defaultGit) {
  * @returns {string} `full-verify` when it deferred to the whole loop, `passed`
  *   when every selected gate passed, otherwise the gate that failed.
  */
+/**
+ * @param {{resolveFiles: () => string[], runGate: (gate: string) => number, runFullVerify: () => unknown}} options
+ * @returns {string}
+ */
 export function runCheckChanged({ resolveFiles, runGate, runFullVerify }) {
+  /** @type {string[]} */
   let files;
   try {
     files = resolveFiles();
   } catch (error) {
+    const message = error instanceof Error ? error.message : undefined;
     console.error(
       '[check:changed] could not resolve the changed set:',
-      error && error.message,
+      message,
     );
     runFullVerify();
     return 'full-verify';
@@ -247,9 +263,10 @@ export function runCheckChanged({ resolveFiles, runGate, runFullVerify }) {
  * longer escaped for us, and the changed-file arguments can hold a space, so
  * they are quoted here rather than assumed.
  */
+/** @param {string} script @param {string[]} args @returns {number} */
 function runPnpm(script, args) {
   const windows = process.platform === 'win32';
-  const quote = (arg) =>
+  const quote = (/** @type {string} */ arg) =>
     /[\s"&|<>^]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg;
   const result = spawnSync(
     windows ? 'pnpm.cmd' : 'pnpm',
@@ -263,6 +280,7 @@ function runPnpm(script, args) {
 }
 
 function main() {
+  /** @type {string[]} */
   let files = [];
   let fullVerifyStatus = 1;
 
@@ -304,6 +322,7 @@ function main() {
  * having run no gate at all. `pathToFileURL` is the only spelling both
  * platforms agree on.
  */
+/** @param {string} moduleUrl @param {string | undefined} argv1 @returns {boolean} */
 export function isEntryPoint(moduleUrl, argv1) {
   return Boolean(argv1) && moduleUrl === pathToFileURL(argv1).href;
 }

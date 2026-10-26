@@ -23,6 +23,7 @@ if (
   throw new Error('invalid capacity benchmark latency or error-rate setting');
 }
 
+/** @type {Map<string, Buffer>} */
 const fixtures = new Map([
   [
     '/grading-feedback-task1',
@@ -42,8 +43,12 @@ const fixtures = new Map([
   ],
 ]);
 
+/** @type {Map<string, number>} */
 const requests = new Map();
+/** @type {Map<string, number>} */
 const errors = new Map();
+
+/** @param {import('node:http').IncomingMessage} request @param {import('node:http').ServerResponse} response */
 function handleStubRequest(request, response) {
   if (request.method === 'GET' && request.url === '/__health') {
     response.writeHead(200, { 'content-type': 'text/plain' }).end('ok\n');
@@ -52,8 +57,8 @@ function handleStubRequest(request, response) {
   if (request.method === 'GET' && request.url === '/__stats') {
     response.writeHead(200, { 'content-type': 'application/json' }).end(
       JSON.stringify({
-        requests: Object.fromEntries(requests),
-        errors: Object.fromEntries(errors),
+        requests: mapToRecord(requests),
+        errors: mapToRecord(errors),
         redisOneWayDelayMs: oneWayDelayMs,
         redisRoundTripDelayMs: oneWayDelayMs * 2,
         stubLatencyMs,
@@ -77,7 +82,7 @@ function handleStubRequest(request, response) {
     return;
   }
 
-  const route = request.url;
+  const route = request.url ?? '';
   const requestCount = (requests.get(route) ?? 0) + 1;
   requests.set(route, requestCount);
   request.on('end', () => {
@@ -100,6 +105,14 @@ function handleStubRequest(request, response) {
   request.resume();
 }
 
+/** @param {Map<string, number>} values @returns {Record<string, number>} */
+function mapToRecord(values) {
+  /** @type {Record<string, number>} */
+  const record = {};
+  for (const [key, value] of values) record[key] = value;
+  return record;
+}
+
 // Production reaches AI Writing and AI Speaking at separate origins, and the
 // gateway keeps one connection pool per origin, so each service gets a port.
 const writingServer = createHttpServer(handleStubRequest);
@@ -112,24 +125,32 @@ speakingServer.listen(8081, '0.0.0.0');
 // stream and stretched the configured 60 ms round trip to as much as 120 ms.
 // Equal-delay timers fire in insertion order, so byte order is kept; the source
 // pauses only when the destination applies backpressure.
+/** @param {import('node:stream').Duplex} source @param {import('node:stream').Duplex} destination */
 function forwardDelayed(source, destination) {
-  source.on('data', (chunk) => {
+  source.on('data', (/** @type {Buffer} */ chunk) => {
     setTimeout(() => {
       if (destination.destroyed) return;
       if (!destination.write(chunk) && !source.isPaused()) {
         source.pause();
-        destination.once('drain', () => source.resume());
+        destination.once('drain', () => {
+          source.resume();
+        });
       }
     }, oneWayDelayMs);
   });
   source.on('end', () => {
-    setTimeout(() => destination.end(), oneWayDelayMs);
+    setTimeout(() => {
+      destination.end();
+    }, oneWayDelayMs);
   });
   source.on('error', () => destination.destroy());
 }
 
 const redisServer = createTcpServer((client) => {
   const [host, portText] = redisTarget.split(':');
+  if (host === undefined || portText === undefined) {
+    throw new Error('invalid capacity benchmark Redis target');
+  }
   const upstream = connect(Number(portText), host);
   // ioredis disables Nagle on its socket. Without the same here, a command
   // longer than one TCP segment (the retry-budget EVAL) waits a delayed ACK,

@@ -154,7 +154,9 @@ describe('Organization rename over HTTP', () => {
     const response = await patch({ name: 'Acme' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.organization.name).toBe('Acme');
+    expect(response.json()).toMatchObject({
+      data: { organization: { name: 'Acme' } },
+    });
   });
 
   it('treats a change of case as a rename', async () => {
@@ -184,7 +186,9 @@ describe('Organization rename over HTTP', () => {
       const response = await patch(body);
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe('INVALID_REQUEST');
+      expect(response.json()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
       expect(rename.calls).toHaveLength(0);
     },
   );
@@ -196,7 +200,7 @@ describe('Organization rename over HTTP', () => {
   });
 
   it('gives admin, member, outsider, disabled, and suspended callers one indistinguishable denial', async () => {
-    const bodies = [];
+    const bodies: unknown[] = [];
     for (const token of [
       ADMIN_TOKEN,
       MEMBER_TOKEN,
@@ -209,7 +213,7 @@ describe('Organization rename over HTTP', () => {
       bodies.push(response.json());
     }
 
-    expect(bodies[0].error.code).toBe('FORBIDDEN');
+    expect(bodies[0]).toMatchObject({ error: { code: 'FORBIDDEN' } });
     for (const body of bodies) {
       expect(body).toEqual(bodies[0]);
     }
@@ -233,7 +237,9 @@ describe('Organization rename over HTTP', () => {
 
     expect(first.headers['idempotent-replay']).toBeUndefined();
     expect(second.headers['idempotent-replay']).toBeUndefined();
-    expect(second.json().data.organization.name).toBe('Acme Academy');
+    expect(second.json()).toMatchObject({
+      data: { organization: { name: 'Acme Academy' } },
+    });
     expect(rename.calls).toHaveLength(2);
   });
 

@@ -36,6 +36,10 @@ const KEYS_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys`;
 
 type OrganizationStatus = 'active' | 'suspended';
 
+function listBody(response: { json(): unknown }) {
+  return Value.Parse(ListOrganizationApiKeysResponseSchema, response.json());
+}
+
 function keyRecord(
   overrides: Partial<OrganizationApiKeyRecord> = {},
 ): OrganizationApiKeyRecord {
@@ -173,7 +177,7 @@ describe('Organization API key listing HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(listBody(response)).toEqual({
       data: {
         api_keys: [
           {
@@ -199,7 +203,10 @@ describe('Organization API key listing HTTP flow', () => {
     const response = await list();
 
     expect(
-      Value.Check(ListOrganizationApiKeysResponseSchema, response.json()),
+      Value.Check(
+        ListOrganizationApiKeysResponseSchema,
+        response.json<unknown>(),
+      ),
     ).toBe(true);
   });
 
@@ -245,7 +252,10 @@ describe('Organization API key listing HTTP flow', () => {
 
       const response = await list();
 
-      expect({ status: response.statusCode, body: response.json() }).toEqual({
+      expect({
+        status: response.statusCode,
+        body: response.json<unknown>(),
+      }).toEqual({
         status: 403,
         body: {
           error: {
@@ -271,7 +281,7 @@ describe('Organization API key listing HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.api_keys).toEqual([]);
+    expect(listBody(response).data.api_keys).toEqual([]);
   });
 
   it('scopes the query to the organization named in the path', async () => {
@@ -291,7 +301,7 @@ describe('Organization API key listing HTTP flow', () => {
     // dead credential live.
     const response = await list();
 
-    expect(response.json().data.api_keys[0].status).toBe('expired');
+    expect(listBody(response).data.api_keys[0]?.status).toBe('expired');
   });
 
   it('reports a key with a future expiry as active', async () => {
@@ -301,7 +311,7 @@ describe('Organization API key listing HTTP flow', () => {
 
     const response = await list();
 
-    expect(response.json().data.api_keys[0].status).toBe('active');
+    expect(listBody(response).data.api_keys[0]?.status).toBe('active');
   });
 
   it('reports a key with no expiry as active', async () => {
@@ -309,7 +319,7 @@ describe('Organization API key listing HTTP flow', () => {
 
     const response = await list();
 
-    expect(response.json().data.api_keys[0].status).toBe('active');
+    expect(listBody(response).data.api_keys[0]?.status).toBe('active');
   });
 
   it('preserves the order the store yields rather than re-sorting', async () => {
@@ -321,9 +331,11 @@ describe('Organization API key listing HTTP flow', () => {
 
     const response = await list();
 
-    expect(
-      response.json().data.api_keys.map((key: { name: string }) => key.name),
-    ).toEqual(['third', 'first', 'second']);
+    expect(listBody(response).data.api_keys.map(({ name }) => name)).toEqual([
+      'third',
+      'first',
+      'second',
+    ]);
   });
 
   it('exposes no credential material', async () => {

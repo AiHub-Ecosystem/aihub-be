@@ -10,7 +10,7 @@ overrides:
   uuid@<11.1.1: ^11.1.1
   brace-expansion@<1.1.21: ^1.1.21
 
-pnpmfileChecksum: sha256-V69EhrLwr1ZK37B1w3VZbNdNHUhxmtQuWqrM5VHL2HA=
+pnpmfileChecksum: sha256-ro0roKok/sxPHhrsl4KfZ1os82b8pTB3+Pxw5kg//xo=
 
 importers:
 

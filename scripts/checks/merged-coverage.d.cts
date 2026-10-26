@@ -50,6 +50,8 @@ export declare function compareCoverage(
   marginPoints?: number,
 ): CoverageComparison;
 
+export declare function parseCoverageReport(value: unknown): CoverageReport;
+
 export declare function isProductionCode(relativePath: string): boolean;
 
 /** Merges the lane reports, prints them, and applies the gate. Exit code is the result. */

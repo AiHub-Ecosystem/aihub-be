@@ -13,24 +13,12 @@ if (databaseUrl === undefined) {
   throw new Error('invalid benchmark database configuration');
 }
 
-const credentials = JSON.parse(
-  await readFile(path.join(outputDir, 'credentials.json'), 'utf8'),
+/** @typedef {{userId: string, refreshToken: string}} BenchmarkUser */
+
+const credentials = /** @type {unknown} */ (
+  JSON.parse(await readFile(path.join(outputDir, 'credentials.json'), 'utf8'))
 );
-const users = credentials.users;
-if (
-  !Array.isArray(users) ||
-  users.length === 0 ||
-  users.some(
-    (user) =>
-      typeof user.userId !== 'string' ||
-      !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(user.userId) ||
-      typeof user.refreshToken !== 'string' ||
-      !/^[A-Za-z0-9_-]{43}$/.test(user.refreshToken),
-  ) ||
-  new Set(users.map((user) => user.userId)).size !== users.length
-) {
-  throw new Error('benchmark refresh-token seed is incomplete');
-}
+const users = parseBenchmarkUsers(credentials);
 
 const now = new Date();
 const expiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -43,6 +31,40 @@ const tokenRows = users.map((user) => ({
     .digest('hex'),
 }));
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+
+/** @param {unknown} value @returns {BenchmarkUser[]} */
+function parseBenchmarkUsers(value) {
+  if (!isRecord(value)) {
+    throw new Error('benchmark refresh-token seed is incomplete');
+  }
+  const userValues = value.users;
+  if (!Array.isArray(userValues) || userValues.length === 0) {
+    throw new Error('benchmark refresh-token seed is incomplete');
+  }
+  /** @type {unknown[]} */
+  const users = userValues;
+  const parsed = users.map((user) => {
+    if (
+      !isRecord(user) ||
+      typeof user.userId !== 'string' ||
+      !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(user.userId) ||
+      typeof user.refreshToken !== 'string' ||
+      !/^[A-Za-z0-9_-]{43}$/.test(user.refreshToken)
+    ) {
+      throw new Error('benchmark refresh-token seed is incomplete');
+    }
+    return { userId: user.userId, refreshToken: user.refreshToken };
+  });
+  if (new Set(parsed.map(({ userId }) => userId)).size !== parsed.length) {
+    throw new Error('benchmark refresh-token seed is incomplete');
+  }
+  return parsed;
+}
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 try {
   const client = await pool.connect();

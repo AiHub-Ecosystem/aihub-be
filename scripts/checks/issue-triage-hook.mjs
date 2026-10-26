@@ -10,14 +10,25 @@ import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+/** @param {string} command */
 export function touchesIssue(command) {
   return /\bgh\s+issue\s+(create|edit)\b/.test(command);
+}
+
+/** @param {unknown} input @returns {string} */
+export function commandFromInput(input) {
+  if (typeof input !== 'object' || input === null) return '';
+  const toolInput = /** @type {unknown} */ (Reflect.get(input, 'tool_input'));
+  if (typeof toolInput !== 'object' || toolInput === null) return '';
+  const command = /** @type {unknown} */ (Reflect.get(toolInput, 'command'));
+  return typeof command === 'string' ? command : '';
 }
 
 async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
-  const command = JSON.parse(input || '{}').tool_input?.command ?? '';
+  const parsed = /** @type {unknown} */ (JSON.parse(input || '{}'));
+  const command = commandFromInput(parsed);
   if (!touchesIssue(command)) return;
 
   const audit = spawnSync(

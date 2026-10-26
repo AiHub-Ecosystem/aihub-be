@@ -243,7 +243,7 @@ describe('Organization API key revocation HTTP flow', () => {
     const second = await revoke();
 
     expect(second.statusCode).toBe(200);
-    expect(second.json().data.status).toBe('revoked');
+    expect(second.json()).toMatchObject({ data: { status: 'revoked' } });
   });
 
   it('still succeeds when the cache purge fails', async () => {
@@ -321,15 +321,13 @@ describe('Organization API key revocation HTTP flow', () => {
 
     const response = await revoke();
 
-    expect({ status: response.statusCode, body: response.json() }).toEqual({
-      status: 403,
-      body: {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Organization API key revocation is forbidden',
-          request_id: REQUEST_ID,
-          retryable: false,
-        },
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Organization API key revocation is forbidden',
+        request_id: REQUEST_ID,
+        retryable: false,
       },
     });
     expect(apiKeys.revokeApiKey.mock.calls.length > 0).toBe(storeReached);
@@ -350,7 +348,9 @@ describe('Organization API key revocation HTTP flow', () => {
     const response = await revoke(undefined, `${REVOKE_URL}%00`);
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(response.json()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(apiKeys.revokeApiKey.mock.calls).toHaveLength(0);
   });
 
@@ -360,7 +360,7 @@ describe('Organization API key revocation HTTP flow', () => {
     const response = await revoke();
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
+    expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
     expect(cache.delete.mock.calls).toHaveLength(0);
   });
 });

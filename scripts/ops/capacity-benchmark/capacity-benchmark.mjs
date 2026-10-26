@@ -24,6 +24,31 @@ import {
   summarizeGradedPathTimings,
 } from './capacity-benchmark-utils.mjs';
 
+/** @typedef {'writing_task1' | 'writing_task2' | 'speaking_multipart' | 'speaking_json'} GradingRouteName */
+/** @typedef {'login' | 'refresh' | 'web_session_exchange'} AuthRouteName */
+/** @typedef {GradingRouteName | AuthRouteName} BenchmarkRouteName */
+/** @typedef {BenchmarkRouteName | 'mixed_grading' | 'auth_and_grading'} BenchmarkWorkload */
+/** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
+/** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
+/** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
+/** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
+/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, sampleAdequacy?: {routes?: Record<string, {count: number, status: string}>, paths?: Record<string, Record<string, {count: number, status: string}>>}}} BenchmarkRun */
+/** @typedef {Record<string, {values?: Record<string, unknown>}>} MetricSet */
+/** @typedef {{totalMs: number[], admissionMs: number[], completionMs: number[], paths: Record<string, {admissionMs: number[], completionMs: number[]}>, errorsByCode: Record<string, number>}} RequestTiming */
+/** @typedef {BenchmarkRoute & {path: string, errorsByCode: Record<string, number>, transportErrorCount: number, correctedTotalMs: PathPercentiles, admissionMs: PathPercentiles, completionMs: PathPercentiles, timingsByPath: Record<string, PathTimings>, downstreamMs: Percentiles, gatewayTotalMs: Percentiles, responseShare?: number | null}} RouteResult */
+/** @typedef {{NCPU: number, MemTotal: number, ServerVersion: string}} DockerInfo */
+/** @typedef {{dnsLookupSampleCount: number, dnsLookupP95Ms: number | null, jwtVerifySampleCount: number, jwtVerifyP95Ms: number | null, probeFailures: number, processRssPeakBytes: number}} ProbeSamples */
+/** @typedef {{waits: number, refusals: number}} Argon2QueueMetrics */
+/** @typedef {ProbeSamples & {queueMetrics: Argon2QueueMetrics}} Argon2BurstResponse */
+/** @typedef {{accepted: boolean, queueWaitCount: number, startedAt: string}} Argon2ChartResponse */
+/** @typedef {{startedAt: string, completedAt: string, result: string} | null} Argon2ChartVerification */
+/** @typedef {{idle: ProbeSamples, burst: ProbeSamples, chartVerification: Argon2ChartVerification, queueMetrics: Argon2QueueMetrics}} Argon2StopResponse */
+/** @typedef {{cpuPercent: number | null, memoryBytes: number | null, usedMemoryBytes: number | null}} ResourcePeak */
+/** @typedef {{cpuPercent: number | null, usedMemoryBytes: number, freeMemoryBytes: number}} HostSample */
+/** @typedef {{exitCode: number | null, stdout: string, stderr: string, durationMs: number}} AppCommandResult */
+/** @typedef {{metrics: MetricSet}} K6Summary */
+/** @typedef {{errors: number, redisRoundTripDelayMs: number}} StubStats */
+
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), '../../..');
 const composeFile = path.join(
@@ -61,6 +86,7 @@ const jobContentionDurationMs = 30_000;
 const jobContentionMarginMs = 3000;
 const appCpuLimit = 1.5;
 const appMemoryLimitBytes = 768 * 1024 * 1024;
+/** @type {GradingRouteName[]} */
 const gradingRouteNames = [
   'writing_task1',
   'writing_task2',
@@ -174,8 +200,11 @@ const composePrefix = [
   composeFile,
 ];
 const startedAt = new Date();
+/** @type {Array<BenchmarkRun & {processRssPeakBytes?: number | null, postgresPoolWaitingPeak?: Record<string, number>, appContainerResourcePeak?: ResourcePeak & {cpuPercentOfLimit: number | null, memoryPercentOfLimit: number | null}, hostResourcePeak?: ResourcePeak & {memoryPercentUsed: number | null}}>} */
 const runs = [];
+/** @type {ReturnType<typeof watchDockerStats> | undefined} */
 let statsWatcher;
+/** @type {ReturnType<typeof watchHostResources> | undefined} */
 let hostWatcher;
 let recovery;
 let contention;
@@ -241,8 +270,10 @@ try {
   let argon2BurstStartedAt;
   /** @type {number | undefined} */
   let argon2BurstFinishedAt;
-  /** @type {ReturnType<typeof controlArgon2Probe> | undefined} */
+  /** @type {Promise<Argon2ChartResponse> | undefined} */
   let chartProbeStart;
+  /** @type {string | null} */
+  let chartProbeError = null;
   const argon2Burst = await runK6({
     appContainerId,
     workload: 'login',
@@ -256,10 +287,11 @@ try {
     onLoadStarted: (startedAt) => {
       argon2BurstStartedAt = startedAt;
       chartProbeStart = controlArgon2Probe(appContainerId, '/chart').catch(
-        (error) => ({
-          accepted: false,
-          error: error instanceof Error ? error.message : String(error),
-        }),
+        (error) => {
+          chartProbeError =
+            error instanceof Error ? error.message : String(error);
+          return { accepted: false, queueWaitCount: 0, startedAt: '' };
+        },
       );
     },
   });
@@ -335,7 +367,7 @@ try {
       duringBurst: argon2Probe.burst,
     },
     chartVerification: argon2Probe.chartVerification,
-    chartProbeError: chartProbeAccepted.error ?? null,
+    chartProbeError,
     peakProcessRssBytes: argon2ProcessRssPeakBytes,
     adr0080RssGateBytes: argon2RssGateBytes,
     checks: argon2Checks,
@@ -343,6 +375,7 @@ try {
   };
   runs.push(argon2Burst);
 
+  /** @type {Record<GradingRouteName, number>} */
   const deadlines = {
     writing_task1: 60_000,
     writing_task2: 60_000,
@@ -625,12 +658,15 @@ try {
     killProcessGroup: true,
     stdio: 'ignore',
   }).catch((error) => {
-    process.stderr.write(`Benchmark cleanup warning: ${error.message}\n`);
+    process.stderr.write(
+      `Benchmark cleanup warning: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     // GitHub discards its hosted runner after the already-written report uploads.
     if (process.env.GITHUB_ACTIONS !== 'true') process.exitCode = 1;
   });
 }
 
+/** @param {string | undefined} value @param {number} [fallback] */
 function positiveInteger(value, fallback) {
   if (value === undefined) return fallback;
   if (!/^\d+$/.test(value))
@@ -642,6 +678,7 @@ function positiveInteger(value, fallback) {
   return parsed;
 }
 
+/** @param {string} value */
 function positiveIntegerList(value) {
   const items = value.split(',').map((item) => positiveInteger(item));
   if (new Set(items).size !== items.length) {
@@ -650,6 +687,7 @@ function positiveIntegerList(value) {
   return items;
 }
 
+/** @param {BenchmarkWorkload} workload @param {number} rate */
 function stageDuration(workload, rate) {
   const seconds = minimumGradingHoldSeconds(
     workload,
@@ -660,6 +698,7 @@ function stageDuration(workload, rate) {
   return `${seconds}s`;
 }
 
+/** @returns {string} */
 function gitRevision() {
   if (
     runSync('git', ['status', '--porcelain', '--untracked-files=all']).trim()
@@ -672,6 +711,7 @@ function gitRevision() {
   return result.trim();
 }
 
+/** @param {string} command @param {string[]} args @returns {string} */
 function runSync(command, args) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
@@ -686,6 +726,7 @@ function runSync(command, args) {
   return result.stdout;
 }
 
+/** @param {string[]} args @param {import('./capacity-benchmark-process.mjs').RunProcessOptions} [options] */
 function dockerCompose(args, options = {}) {
   return runProcess('docker', [...composePrefix, ...args], {
     ...options,
@@ -693,6 +734,31 @@ function dockerCompose(args, options = {}) {
   });
 }
 
+/**
+ * @overload
+ * @param {string} containerId
+ * @param {'/reset'} pathName
+ * @returns {Promise<{phase: string}>}
+ */
+/**
+ * @overload
+ * @param {string} containerId
+ * @param {'/burst'} pathName
+ * @returns {Promise<Argon2BurstResponse>}
+ */
+/**
+ * @overload
+ * @param {string} containerId
+ * @param {'/chart'} pathName
+ * @returns {Promise<Argon2ChartResponse>}
+ */
+/**
+ * @overload
+ * @param {string} containerId
+ * @param {'/stop'} pathName
+ * @returns {Promise<Argon2StopResponse>}
+ */
+/** @param {string} containerId @param {'/reset' | '/burst' | '/chart' | '/stop'} pathName */
 async function controlArgon2Probe(containerId, pathName) {
   const url = `http://127.0.0.1:39117${pathName}`;
   const script = `fetch(${JSON.stringify(url)}, { method: 'POST' }).then(async (response) => { const body = await response.text(); if (!response.ok) throw new Error(body); process.stdout.write(body); }).catch((error) => { process.stderr.write(error.message); process.exitCode = 1; });`;
@@ -701,24 +767,144 @@ async function controlArgon2Probe(containerId, pathName) {
     ['exec', '-e', 'NODE_OPTIONS=', containerId, 'node', '-e', script],
     { env: benchmarkEnvironment },
   );
-  return JSON.parse(result.stdout);
+  const parsed = /** @type {unknown} */ (JSON.parse(result.stdout));
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Argon2 contention probe returned an invalid response');
+  }
+  const body = /** @type {Record<string, unknown>} */ (parsed);
+  if (pathName === '/reset' && typeof body.phase === 'string') {
+    return { phase: body.phase };
+  }
+  if (
+    pathName === '/chart' &&
+    body.accepted === true &&
+    typeof body.queueWaitCount === 'number' &&
+    typeof body.startedAt === 'string'
+  ) {
+    return {
+      accepted: true,
+      queueWaitCount: body.queueWaitCount,
+      startedAt: body.startedAt,
+    };
+  }
+  if (pathName === '/burst') {
+    return {
+      ...parseProbeSamples(body),
+      queueMetrics: parseQueueMetrics(body.queueMetrics),
+    };
+  }
+  if (pathName === '/stop') {
+    return {
+      idle: parseProbeSamples(body.idle),
+      burst: parseProbeSamples(body.burst),
+      chartVerification: parseChartVerification(body.chartVerification),
+      queueMetrics: parseQueueMetrics(body.queueMetrics),
+    };
+  }
+  throw new Error('Argon2 contention probe returned an invalid response');
+}
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {ProbeSamples} */
+function parseProbeSamples(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.dnsLookupSampleCount !== 'number' ||
+    (typeof value.dnsLookupP95Ms !== 'number' &&
+      value.dnsLookupP95Ms !== null) ||
+    typeof value.jwtVerifySampleCount !== 'number' ||
+    (typeof value.jwtVerifyP95Ms !== 'number' &&
+      value.jwtVerifyP95Ms !== null) ||
+    typeof value.probeFailures !== 'number' ||
+    typeof value.processRssPeakBytes !== 'number'
+  ) {
+    throw new Error('invalid Argon2 probe samples');
+  }
+  return {
+    dnsLookupSampleCount: value.dnsLookupSampleCount,
+    dnsLookupP95Ms: value.dnsLookupP95Ms,
+    jwtVerifySampleCount: value.jwtVerifySampleCount,
+    jwtVerifyP95Ms: value.jwtVerifyP95Ms,
+    probeFailures: value.probeFailures,
+    processRssPeakBytes: value.processRssPeakBytes,
+  };
+}
+
+/** @param {unknown} value @returns {Argon2QueueMetrics} */
+function parseQueueMetrics(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.waits !== 'number' ||
+    typeof value.refusals !== 'number'
+  ) {
+    throw new Error('invalid Argon2 queue metrics');
+  }
+  return { waits: value.waits, refusals: value.refusals };
+}
+
+/** @param {unknown} value @returns {Argon2ChartVerification} */
+function parseChartVerification(value) {
+  if (value === null) return null;
+  if (
+    !isRecord(value) ||
+    typeof value.startedAt !== 'string' ||
+    typeof value.completedAt !== 'string' ||
+    typeof value.result !== 'string'
+  ) {
+    throw new Error('Argon2 contention probe returned an invalid chart result');
+  }
+  return {
+    startedAt: value.startedAt,
+    completedAt: value.completedAt,
+    result: value.result,
+  };
+}
+
+/** @param {unknown} value @returns {value is K6Summary} */
+function isK6Summary(value) {
+  if (!isRecord(value) || !isRecord(value.metrics)) return false;
+  return Object.values(value.metrics).every(
+    (metric) =>
+      metric === undefined ||
+      (isRecord(metric) &&
+        (metric.values === undefined || isRecord(metric.values))),
+  );
+}
+
+/** @param {unknown} value @returns {value is StubStats} */
+function isStubStats(value) {
+  return (
+    isRecord(value) &&
+    typeof value.errors === 'number' &&
+    typeof value.redisRoundTripDelayMs === 'number'
+  );
 }
 
 // Samples keep accumulating while the probe refuses to start the burst, so a
 // slow idle window gets more time instead of discarding the stages already run.
+/** @param {string} containerId @returns {Promise<Argon2BurstResponse>} */
 async function waitForIdleProbeSamples(containerId) {
   for (let attempt = 1; ; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
     try {
       return await controlArgon2Probe(containerId, '/burst');
     } catch (error) {
-      if (attempt >= 6 || !error.message.includes('insufficient idle probe')) {
+      if (
+        attempt >= 6 ||
+        !(error instanceof Error) ||
+        !error.message.includes('insufficient idle probe')
+      ) {
         throw error;
       }
     }
   }
 }
 
+/** @returns {Promise<string>} */
 async function waitForHealthyApp() {
   const containerId = (
     await dockerCompose(['ps', '-q', 'aihub'])
@@ -740,7 +926,10 @@ async function waitForHealthyApp() {
         '--tail',
         '30',
         'aihub',
-      ]).catch((error) => ({ stdout: '', stderr: error.message }));
+      ]).catch((error) => ({
+        stdout: '',
+        stderr: error instanceof Error ? error.message : String(error),
+      }));
       throw new Error(
         `AIHUB benchmark container became unhealthy:\n${lastLines(`${logs.stdout}${logs.stderr}`, 30)}`,
       );
@@ -750,15 +939,31 @@ async function waitForHealthyApp() {
   throw new Error('AIHUB did not become healthy within 120 seconds');
 }
 
+/** @returns {Promise<DockerInfo>} */
 async function readDockerInfo() {
   const result = await runProcess(
     'docker',
     ['info', '--format', '{{json .}}'],
     { env: benchmarkEnvironment },
   );
-  return JSON.parse(result.stdout.trim());
+  const parsed = /** @type {unknown} */ (JSON.parse(result.stdout.trim()));
+  if (
+    !isRecord(parsed) ||
+    typeof parsed.NCPU !== 'number' ||
+    typeof parsed.MemTotal !== 'number' ||
+    typeof parsed.ServerVersion !== 'string'
+  ) {
+    throw new Error('Docker returned incomplete engine information');
+  }
+  return {
+    NCPU: parsed.NCPU,
+    MemTotal: parsed.MemTotal,
+    ServerVersion: parsed.ServerVersion,
+  };
 }
 
+/** @param {string} containerId */
+/** @param {string} containerId @returns {Promise<number>} */
 async function dockerRestartCount(containerId) {
   const result = await runProcess(
     'docker',
@@ -777,6 +982,7 @@ async function dockerRestartCount(containerId) {
   return count;
 }
 
+/** @returns {Promise<Array<{reference: string, id: string, repoDigests: string[]}>>} */
 async function dockerImageIdentities() {
   const { stdout } = await dockerCompose(['config', '--images']);
   const references = stdout.trim().split(/\r?\n/);
@@ -798,6 +1004,10 @@ async function dockerImageIdentities() {
   );
 }
 
+/**
+ * @param {{appContainerId: string, workload: BenchmarkWorkload, rate: number, routeNames: BenchmarkRouteName[], runDuration: string, label: string, onLoadFinished?: (time: number) => void, onLoadStarted?: (time: number) => void, isOverload?: boolean, isRecovery?: boolean}} options
+ * @returns {Promise<BenchmarkRun & {processRssPeakBytes: number | null, postgresPoolWaitingPeak: Record<string, number>, appContainerResourcePeak: ResourcePeak & {cpuPercentOfLimit: number | null, memoryPercentOfLimit: number | null}, hostResourcePeak: ResourcePeak & {memoryPercentUsed: number | null}}>}
+ */
 async function runK6({
   appContainerId,
   workload,
@@ -830,6 +1040,7 @@ async function runK6({
   let loadStartSignaled = false;
   // k6 sends console output to stderr unless --log-output redirects it, so scan
   // both streams for the readiness marker.
+  /** @returns {(chunk: string) => void} */
   const loadStartScanner = () => {
     let markerTail = '';
     return (chunk) => {
@@ -874,13 +1085,15 @@ async function runK6({
   const endMs = Date.now();
   onLoadFinished?.(endMs);
   const output = `${result.stdout}\n${result.stderr}`;
-  const summary = jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON ');
-  const stub = jsonAfterPrefix(output, 'BENCHMARK_STUB_STATS ');
-  if (summary === undefined || stub === undefined) {
+  const summaryValue = jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON ');
+  const stubValue = jsonAfterPrefix(output, 'BENCHMARK_STUB_STATS ');
+  if (!isK6Summary(summaryValue) || !isStubStats(stubValue)) {
     throw new Error(
       `${label}: k6 did not return its summary and stub counters\n${lastLines(result.stdout, 20)}\n${lastLines(result.stderr, 20)}`,
     );
   }
+  const summary = summaryValue;
+  const stub = stubValue;
   const logs = await requestTimingLogs(appContainerId, startIso, startMs);
   const routeResults = Object.fromEntries(
     routeNames.map((name) => [
@@ -1005,6 +1218,7 @@ async function runK6({
   };
 }
 
+/** @param {MetricSet} metrics @param {BenchmarkRouteName} name @param {RequestTiming} [logTiming] @returns {RouteResult} */
 function routeSummary(metrics, name, logTiming) {
   const latency = metrics[`benchmark_latency_${name}`]?.values ?? {};
   const routePaths = {
@@ -1068,6 +1282,7 @@ function routeSummary(metrics, name, logTiming) {
   };
 }
 
+/** @param {string} containerId @param {string} since @param {number} sinceMs @returns {Promise<Partial<Record<BenchmarkRouteName, RequestTiming>>>} */
 async function requestTimingLogs(containerId, since, sinceMs) {
   const output = await runProcess(
     'docker',
@@ -1079,7 +1294,9 @@ async function requestTimingLogs(containerId, since, sinceMs) {
       env: benchmarkEnvironment,
     },
   ).catch(() => ({ stdout: '' }));
+  /** @type {Partial<Record<BenchmarkRouteName, RequestTiming>>} */
   const results = {};
+  /** @type {Record<string, BenchmarkRouteName>} */
   const byPath = {
     '/v1/ielts/writing/task1/grade': 'writing_task1',
     '/v1/ielts/writing/task2/grade': 'writing_task2',
@@ -1092,23 +1309,34 @@ async function requestTimingLogs(containerId, since, sinceMs) {
   for (const line of output.stdout.split(/\r?\n/)) {
     const start = line.indexOf('{');
     if (start < 0) continue;
-    let event;
+    /** @type {unknown} */
+    let parsedEvent;
     try {
-      event = JSON.parse(line.slice(start));
+      parsedEvent = JSON.parse(line.slice(start));
     } catch {
       continue;
     }
+    if (!isRecord(parsedEvent)) continue;
+    const event = parsedEvent;
     const timeMs =
-      typeof event.time === 'number' ? event.time : Date.parse(event.time);
+      typeof event.time === 'number'
+        ? event.time
+        : typeof event.time === 'string'
+          ? Date.parse(event.time)
+          : Number.NaN;
     if (!Number.isFinite(timeMs) || timeMs < sinceMs) continue;
+    /** @type {Record<string, BenchmarkRouteName>} */
+    const operationToRoute = {
+      'writing.task1.grade': 'writing_task1',
+      'writing.task2.grade': 'writing_task2',
+      'speaking.grading': 'speaking_multipart',
+      'speaking.grading-json': 'speaking_json',
+    };
     const name =
-      Object.entries({
-        'writing.task1.grade': 'writing_task1',
-        'writing.task2.grade': 'writing_task2',
-        'speaking.grading': 'speaking_multipart',
-        'speaking.grading-json': 'speaking_json',
-      }).find(([operation]) => operation === event.operation)?.[1] ??
-      byPath[event.route];
+      (typeof event.operation === 'string'
+        ? operationToRoute[event.operation]
+        : undefined) ??
+      (typeof event.route === 'string' ? byPath[event.route] : undefined);
     if (name === undefined) continue;
     const record = (results[name] ??= {
       totalMs: [],
@@ -1117,15 +1345,30 @@ async function requestTimingLogs(containerId, since, sinceMs) {
       paths: {},
       errorsByCode: {},
     });
-    if (Number.isInteger(event.http_status) && event.http_status >= 400) {
-      const key = `${event.http_status} ${event.error_code ?? 'NO_ERROR_CODE'}`;
+    if (
+      typeof event.http_status === 'number' &&
+      Number.isInteger(event.http_status) &&
+      event.http_status >= 400
+    ) {
+      const errorCode =
+        typeof event.error_code === 'string'
+          ? event.error_code
+          : 'NO_ERROR_CODE';
+      const key = `${event.http_status} ${errorCode}`;
       record.errorsByCode[key] = (record.errorsByCode[key] ?? 0) + 1;
     }
-    if (Number.isFinite(event.total_ms)) record.totalMs.push(event.total_ms);
-    if (Number.isFinite(event.admission_ms)) {
+    if (typeof event.total_ms === 'number' && Number.isFinite(event.total_ms))
+      record.totalMs.push(event.total_ms);
+    if (
+      typeof event.admission_ms === 'number' &&
+      Number.isFinite(event.admission_ms)
+    ) {
       record.admissionMs.push(event.admission_ms);
     }
-    if (Number.isFinite(event.completion_ms)) {
+    if (
+      typeof event.completion_ms === 'number' &&
+      Number.isFinite(event.completion_ms)
+    ) {
       record.completionMs.push(event.completion_ms);
     }
     if (
@@ -1138,10 +1381,16 @@ async function requestTimingLogs(containerId, since, sinceMs) {
         admissionMs: [],
         completionMs: [],
       });
-      if (Number.isFinite(event.admission_ms)) {
+      if (
+        typeof event.admission_ms === 'number' &&
+        Number.isFinite(event.admission_ms)
+      ) {
         sample.admissionMs.push(event.admission_ms);
       }
-      if (Number.isFinite(event.completion_ms)) {
+      if (
+        typeof event.completion_ms === 'number' &&
+        Number.isFinite(event.completion_ms)
+      ) {
         sample.completionMs.push(event.completion_ms);
       }
     }
@@ -1149,22 +1398,26 @@ async function requestTimingLogs(containerId, since, sinceMs) {
   return results;
 }
 
+/** @param {MetricSet} metrics @returns {Record<string, number>} */
 function poolWaitingPeaks(metrics) {
   const peak = metricValue(metrics, 'benchmark_postgres_waiting');
   return peak === null ? {} : { allPools: peak };
 }
 
+/** @param {MetricSet} metrics @returns {Record<string, number>} */
 function downstreamQueuePeaks(metrics) {
   const peak = metricValue(metrics, 'benchmark_downstream_queued');
   return peak === null ? {} : { allOrigins: peak };
 }
 
+/** @param {unknown} value @returns {number | null} */
 function finite(value) {
   return typeof value === 'number' && Number.isFinite(value)
     ? round(value, 2)
     : null;
 }
 
+/** @param {number[]} values */
 function percentileSet(values) {
   if (values.length === 0) return { count: 0, p50: null, p95: null, p99: null };
   const sorted = [...values].sort((a, b) => a - b);
@@ -1178,12 +1431,15 @@ function percentileSet(values) {
   };
 }
 
+/** @param {number} value @param {number} [decimals] */
 function round(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
 }
 
+/** @param {string} containerId @returns {{samples: Array<{at: string, cpuPercent: number, memoryBytes: number | null}>, stop: () => void}} */
 function watchDockerStats(containerId) {
+  /** @type {Array<{at: string, cpuPercent: number, memoryBytes: number | null}>} */
   const samples = [];
   const child = spawn(
     'docker',
@@ -1195,9 +1451,9 @@ function watchDockerStats(containerId) {
     },
   );
   let buffer = '';
-  child.stdout.setEncoding('utf8');
+  child.stdout?.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
-    buffer += chunk;
+    buffer += String(chunk);
     const lines = buffer.split(/[\r\n]+/);
     buffer = lines.pop() ?? '';
     for (const line of lines) {
@@ -1223,7 +1479,9 @@ function watchDockerStats(containerId) {
   };
 }
 
+/** @returns {{samples: HostSample[], stop: () => void}} */
 function watchHostResources() {
+  /** @type {HostSample[]} */
   const samples = [];
   let previous = cpuTimes();
   const sample = () => {
@@ -1245,6 +1503,7 @@ function watchHostResources() {
   return { samples, stop: () => clearInterval(timer) };
 }
 
+/** @returns {{idle: number, total: number}} */
 function cpuTimes() {
   return os.cpus().reduce(
     (totals, cpu) => ({
@@ -1257,25 +1516,29 @@ function cpuTimes() {
   );
 }
 
+/** @param {Array<{cpuPercent?: number | null, memoryBytes?: number | null, usedMemoryBytes?: number | null}>} samples @returns {ResourcePeak} */
+/** @param {Array<{cpuPercent?: number | null, memoryBytes?: number | null, usedMemoryBytes?: number | null}>} samples @returns {ResourcePeak} */
 function peak(samples) {
-  const fields = ['cpuPercent', 'memoryBytes', 'usedMemoryBytes'];
   if (samples.length === 0) {
-    return Object.fromEntries(fields.map((field) => [field, null]));
+    return { cpuPercent: null, memoryBytes: null, usedMemoryBytes: null };
   }
-  return Object.fromEntries(
-    fields.map((field) => [
-      field,
-      samples.reduce(
-        (maximum, sample) =>
-          typeof sample[field] === 'number'
-            ? Math.max(maximum, sample[field])
-            : maximum,
-        0,
-      ),
-    ]),
-  );
+  /** @param {'cpuPercent' | 'memoryBytes' | 'usedMemoryBytes'} field */
+  const maximum = (field) =>
+    samples.reduce(
+      (highest, sample) =>
+        typeof sample[field] === 'number'
+          ? Math.max(highest, sample[field])
+          : highest,
+      0,
+    );
+  return {
+    cpuPercent: maximum('cpuPercent'),
+    memoryBytes: maximum('memoryBytes'),
+    usedMemoryBytes: maximum('usedMemoryBytes'),
+  };
 }
 
+/** @template {{at: string}} T @param {T[]} samples @param {number} startMs @param {number} endMs @returns {T[]} */
 function samplesInWindow(samples, startMs, endMs) {
   return samples.filter((sample) => {
     const at = Date.parse(sample.at);
@@ -1283,16 +1546,20 @@ function samplesInWindow(samples, startMs, endMs) {
   });
 }
 
+/** @param {{appContainerId: string, rate: number, routeNames: GradingRouteName[], runDuration: string}} options */
 async function runJobContention({
   appContainerId,
   rate,
   routeNames,
   runDuration,
 }) {
+  /** @type {(timestamp: number) => void} */
   let signalLoadStarted;
-  const loadStarted = new Promise((resolve) => {
-    signalLoadStarted = resolve;
-  });
+  const loadStarted = new Promise(
+    (/** @type {(timestamp: number) => void} */ resolve) => {
+      signalLoadStarted = resolve;
+    },
+  );
   const loadPromise = runK6({
     appContainerId,
     workload: 'mixed_grading',
@@ -1328,6 +1595,7 @@ async function runJobContention({
   if (loadResult.status === 'rejected') throw loadResult.reason;
   const jobs = jobsResult.value;
   const load = loadResult.value;
+  /** @type {Record<GradingRouteName, number>} */
   const deadlines = {
     writing_task1: 60_000,
     writing_task2: 60_000,
@@ -1402,6 +1670,7 @@ async function runJobContention({
   };
 }
 
+/** @param {string} containerId @param {string[]} args @returns {Promise<AppCommandResult>} */
 async function runAppCommand(containerId, args) {
   const start = Date.now();
   const result = await runProcess(

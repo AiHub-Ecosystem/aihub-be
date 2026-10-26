@@ -386,7 +386,9 @@ describe('web session HTTP boundary', () => {
         try {
           const response = await exchange(token);
           expect(response.statusCode).toBe(401);
-          expect(response.json().error.code).toBe('AUTH_WEB_SESSION_INVALID');
+          expect(response.json()).toMatchObject({
+            error: { code: 'AUTH_WEB_SESSION_INVALID' },
+          });
           expect(response.payload).not.toContain('access_token');
           expect(response.headers['cache-control']).toBe('no-store');
         } finally {
@@ -411,7 +413,9 @@ describe('web session HTTP boundary', () => {
     try {
       const response = await exchange(token);
       expect(response.statusCode).toBe(503);
-      expect(response.json().error.code).toBe('AUTH_WEB_SESSION_UNAVAILABLE');
+      expect(response.json()).toMatchObject({
+        error: { code: 'AUTH_WEB_SESSION_UNAVAILABLE' },
+      });
       expect(response.payload).not.toContain('access_token');
     } finally {
       unavailable.mockRestore();
@@ -428,7 +432,9 @@ describe('web session HTTP boundary', () => {
         payload: { unexpected: 'field' },
       });
       expect(response.statusCode).toBe(401);
-      expect(response.json().error.code).toBe('UNAUTHORIZED');
+      expect(response.json()).toMatchObject({
+        error: { code: 'UNAUTHORIZED' },
+      });
       expect(response.headers['cache-control']).toBe('no-store');
     },
   );
