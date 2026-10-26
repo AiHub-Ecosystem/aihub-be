@@ -68,6 +68,8 @@ scrape_configs:
           - sandbox.aihubproduction.com:443
           - aihubproduction.com:443
           - www.aihubproduction.com:443
+          - grafana.aihubproduction.com:443
+          - otel.aihubproduction.com:443
           - s3.wispace.app:443
     relabel_configs:
       - source_labels: [__address__]
