@@ -110,9 +110,7 @@ jobs:
 
       - name: Check public API compatibility
         if: github.event_name == 'pull_request'
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: pnpm check:api-compatibility -- base-contract/openapi.json openapi.json
+        run: pnpm check:api-compatibility -- base-contract . CHANGELOG.md
 
       - name: Install nginx for the edge compression check
         run: sudo apt-get update && sudo apt-get install --yes nginx logrotate

@@ -2,29 +2,27 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { buildOpenApiDocument } from './build-openapi-document';
+import { PUBLIC_API_CONTRACT_VERSION } from './public-api-contract-version';
 
 const REPO_ROOT = join(__dirname, '../..');
 const SPEC_PATH = join(REPO_ROOT, 'openapi.json');
+const VERSIONED_SPEC_PATH = join(REPO_ROOT, 'openapi/v1.json');
 
 function committedDocument(): unknown {
   return JSON.parse(readFileSync(SPEC_PATH, 'utf8'));
-}
-
-function packageVersion(): string {
-  const packageJson = JSON.parse(
-    readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
-  ) as { version: string };
-  return packageJson.version;
 }
 
 describe('committed openapi.json', () => {
   it('matches what the generator produces right now — catches "changed a schema, forgot to regenerate"', () => {
     const committed = committedDocument();
     const fresh: unknown = JSON.parse(
-      JSON.stringify(buildOpenApiDocument(packageVersion())),
+      JSON.stringify(buildOpenApiDocument(PUBLIC_API_CONTRACT_VERSION)),
     );
 
     expect(committed).toEqual(fresh);
+    expect(JSON.parse(readFileSync(VERSIONED_SPEC_PATH, 'utf8'))).toEqual(
+      committed,
+    );
   });
 
   it('publishes the owner-only identity configuration read and both data shapes', () => {

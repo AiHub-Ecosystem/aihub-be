@@ -1,14 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { PUBLIC_API_CONTRACT_VERSION } from '@/openapi/public-api-contract-version';
 import {
   buildPostmanCollection,
   preservePostmanIds,
 } from '@/postman/build-postman-collection';
 
-const packageJson = JSON.parse(
-  readFileSync(join(__dirname, '../../package.json'), 'utf8'),
-) as { version: string };
 const openApiDocument = JSON.parse(
   readFileSync(join(__dirname, '../../openapi.json'), 'utf8'),
 ) as unknown;
@@ -17,7 +15,7 @@ const collectionPath = join(__dirname, '../../aihub.postman_collection.json');
 async function main(): Promise<void> {
   const generated = await buildPostmanCollection(
     openApiDocument,
-    packageJson.version,
+    PUBLIC_API_CONTRACT_VERSION,
   );
   const collection = existsSync(collectionPath)
     ? preservePostmanIds(
