@@ -425,8 +425,9 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   try {
-    const [baseRoot, candidateRoot, changelogPath, ...extraArgs] =
-      process.argv.slice(2);
+    const args = process.argv.slice(2);
+    if (args[0] === '--') args.shift();
+    const [baseRoot, candidateRoot, changelogPath, ...extraArgs] = args;
     if (!baseRoot || !candidateRoot || !changelogPath || extraArgs.length > 0) {
       throw new Error(
         'Usage: node scripts/ci/api-compatibility/check-release.mjs <base-repository> <candidate-repository> <candidate-changelog>',

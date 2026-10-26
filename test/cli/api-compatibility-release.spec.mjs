@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
@@ -151,6 +152,31 @@ void test('bootstraps public contract 1.0.0 from the current unversioned OpenAPI
   assert.doesNotThrow(() =>
     checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath),
   );
+});
+
+void test('accepts pnpm’s forwarded argument separator before release paths', (t) => {
+  const legacy = document('0.1.0');
+  const baseline = document('1.0.0');
+  const roots = setup(
+    t,
+    { 'openapi.json': legacy },
+    versionedFiles({ 1: baseline }),
+    '# AIHUB Public API Changelog\n\n## [1.0.0] — `/v1` baseline\n',
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(ROOT, 'scripts/ci/api-compatibility/check-release.mjs'),
+      '--',
+      roots.baseRoot,
+      roots.candidateRoot,
+      roots.changelogPath,
+    ],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Public API release contract passed/);
 });
 
 void test('accepts a compatible response-property addition with a minor version and changelog entry', (t) => {
