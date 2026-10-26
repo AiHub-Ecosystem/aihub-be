@@ -55,7 +55,8 @@ const ErrorDetailsSchema = Type.Object({
 });
 
 function responseError(response: { json(): unknown }) {
-  return Value.Parse(ErrorDetailsSchema, response.json()).error;
+  const body = response.json();
+  return Value.Check(ErrorDetailsSchema, body) ? body.error : undefined;
 }
 
 type MutationRoute = keyof typeof ROUTE_DENIAL;
@@ -587,8 +588,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: responseError(response).code,
-          message: responseError(response).message,
+          code: responseError(response)?.code,
+          message: responseError(response)?.message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: testCase.status,
@@ -609,8 +610,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: responseError(response).code,
-          message: responseError(response).message,
+          code: responseError(response)?.code,
+          message: responseError(response)?.message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -630,8 +631,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: responseError(response).code,
-          message: responseError(response).message,
+          code: responseError(response)?.code,
+          message: responseError(response)?.message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -651,8 +652,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: responseError(response).code,
-          message: responseError(response).message,
+          code: responseError(response)?.code,
+          message: responseError(response)?.message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -687,8 +688,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         expect({
           status: response.statusCode,
-          code: responseError(response).code,
-          message: responseError(response).message,
+          code: responseError(response)?.code,
+          message: responseError(response)?.message,
           audit: (await auditEvents()).length,
         }).toEqual({
           status: 403,
@@ -801,12 +802,12 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
     expect({
       disable: {
         status: disableResponse.statusCode,
-        code: responseError(disableResponse).code,
+        code: responseError(disableResponse)?.code,
         denial: disableAudit.map((event) => event.detail?.['denial']),
       },
       demote: {
         status: demoteResponse.statusCode,
-        code: responseError(demoteResponse).code,
+        code: responseError(demoteResponse)?.code,
         denial: (await auditEvents()).map((event) => event.detail?.['denial']),
       },
       owners: await activeOwners(),

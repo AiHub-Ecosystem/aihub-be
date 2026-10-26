@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { createPublicKey } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
@@ -12,8 +14,10 @@ const PROBE_INTERVAL_MS = 100;
 /** @typedef {{dnsLookupSampleCount: number, dnsLookupP95Ms: number | null, jwtVerifySampleCount: number, jwtVerifyP95Ms: number | null, probeFailures: number, processRssPeakBytes: number}} ProbeSummary */
 /** @typedef {{waits: number, refusals: number}} QueueMetrics */
 /** @typedef {{startedAt: string, completedAt: string, result: string}} ChartVerification */
-/** @typedef {typeof import('../../../dist/modules/writing/application/writing-chart-image-verifier.js')} ChartVerifierModule */
-/** @typedef {typeof import('../../../dist/modules/writing/application/writing-chart-image-processing.js')} ChartProcessingModule */
+/** @typedef {{kind: string} | undefined} ChartVerificationResult */
+/** @typedef {{sanitizeWritingChartImage: (input: {readonly contentType: 'image/png', readonly bytes: Uint8Array}) => Promise<ChartVerificationResult>}} ChartVerifierModule */
+/** @typedef {{serializeWritingChartImageProcessing: (operation: () => Promise<ChartVerificationResult>) => Promise<ChartVerificationResult>}} ChartProcessingModule */
+/** @typedef {{default: (input: {create: {width: number, height: number, channels: number, background: {r: number, g: number, b: number, alpha: number}}}) => {png: () => {toBuffer: () => Promise<Uint8Array>}}}} SharpModule */
 /** @type {Record<ProbePhase, ProbeSamples>} */
 const phaseSamples = { idle: emptySamples(), burst: emptySamples() };
 /** @type {'off' | ProbePhase} */
@@ -223,9 +227,9 @@ function importJoseFromApp() {
   );
 }
 
-/** @returns {Promise<typeof import('sharp')>} */
+/** @returns {Promise<SharpModule>} */
 function importSharpFromApp() {
-  return /** @type {Promise<typeof import('sharp')>} */ (
+  return /** @type {Promise<SharpModule>} */ (
     import(pathToFileURL(requireFromApp.resolve('sharp')))
   );
 }
