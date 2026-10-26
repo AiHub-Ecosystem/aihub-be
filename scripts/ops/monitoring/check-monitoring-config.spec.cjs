@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
@@ -5,7 +7,7 @@ const test = require('node:test');
 
 /** @typedef {{host_ip?: string, target?: number, published?: string, protocol?: string}} MonitoringPort */
 /** @typedef {{target: string, read_only?: boolean}} MonitoringVolume */
-/** @typedef {{command?: string[], ports?: MonitoringPort[], volumes?: MonitoringVolume[], networks?: {monitoring?: {ipv4_address?: string}, redis?: object}, build?: {args?: Record<string, string>}, user?: string, privileged?: boolean, cap_add?: string[], profiles?: string[], mem_limit?: string | number, cpus?: number, read_only?: boolean, [key: string]: unknown}} MonitoringService */
+/** @typedef {{command?: string[], ports?: MonitoringPort[], volumes?: MonitoringVolume[], networks?: {monitoring?: {ipv4_address?: string}, redis?: object | null}, build?: {args?: Record<string, string>}, user?: string, privileged?: boolean, cap_add?: string[], profiles?: string[], mem_limit?: string | number, cpus?: number, read_only?: boolean, [key: string]: unknown}} MonitoringService */
 /** @typedef {{services: Record<string, MonitoringService>}} MonitoringCompose */
 
 const monitoringConfig = /** @type {{
@@ -276,6 +278,12 @@ void test('accepts loopback or private exporter listeners without published port
     'blackbox-exporter',
     'ssh-tunnel',
   ]);
+});
+
+void test('accepts Compose network attachments without per-network options', () => {
+  const compose = validExporterCompose();
+  compose.services['redis-exporter'].networks.redis = null;
+  assert.doesNotThrow(() => validateExporterCompose(compose));
 });
 
 void test('reserves the source address used by host firewall rules', () => {

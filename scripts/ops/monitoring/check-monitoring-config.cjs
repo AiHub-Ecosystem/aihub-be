@@ -1,10 +1,12 @@
+/// <reference types="node" />
+
 const { spawnSync } = require('node:child_process');
 const net = require('node:net');
 const path = require('node:path');
 
 /** @typedef {{host_ip?: string, target?: string | number, published?: string | number, protocol?: string}} MonitoringPort */
 /** @typedef {{target: string, read_only?: boolean}} MonitoringVolume */
-/** @typedef {{command?: string[], ports?: (string | MonitoringPort)[], volumes?: MonitoringVolume[], networks?: Record<string, {ipv4_address?: string}>, network_mode?: string, user?: string, build?: {args?: Record<string, string | number>}, environment?: Record<string, string | null>, read_only?: boolean, cap_drop?: string[], privileged?: boolean, cap_add?: string[], security_opt?: string[], profiles?: string[], mem_limit?: string | number, cpus?: string | number, pids_limit?: string | number, image?: string}} MonitoringService */
+/** @typedef {{command?: string[], ports?: (string | MonitoringPort)[], volumes?: MonitoringVolume[], networks?: Record<string, {ipv4_address?: string} | null>, network_mode?: string, user?: string, build?: {args?: Record<string, string | number>}, environment?: Record<string, string | null>, read_only?: boolean, cap_drop?: string[], privileged?: boolean, cap_add?: string[], security_opt?: string[], profiles?: string[], mem_limit?: string | number, cpus?: string | number, pids_limit?: string | number, image?: string}} MonitoringService */
 /** @typedef {{services: Record<string, MonitoringService>}} MonitoringCompose */
 /** @typedef {(command: string, args: string[], options: {encoding?: 'utf8', stdio?: 'pipe' | 'inherit'}) => {error?: Error | null, status: number | null, stdout?: string | Buffer | null, stderr?: string | Buffer | null}} MonitoringCommandRunner */
 
@@ -164,9 +166,10 @@ function isMonitoringService(value) {
     if (!isRecord(value.networks)) return false;
     for (const network of Object.values(value.networks)) {
       if (
-        !isRecord(network) ||
-        (network.ipv4_address !== undefined &&
-          typeof network.ipv4_address !== 'string')
+        network !== null &&
+        (!isRecord(network) ||
+          (network.ipv4_address !== undefined &&
+            typeof network.ipv4_address !== 'string'))
       ) {
         return false;
       }
