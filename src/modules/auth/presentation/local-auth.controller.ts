@@ -76,10 +76,6 @@ interface ForgotPasswordEnvelope {
   readonly meta: { readonly request_id: string };
 }
 
-function parseEmptyBody(body: unknown, request?: any): void {
-  parseRequestBody(EmptyAuthRequestSchema, body, request);
-}
-
 function authenticatedUserId(request: FastifyRequest): string {
   const userId = request.aihubUser?.userId;
   if (userId === undefined) {
@@ -273,7 +269,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
-    parseEmptyBody(body, request);
+    parseRequestBody(EmptyAuthRequestSchema, body, request);
     const rawToken = hasAlternateRefreshSource(request)
       ? undefined
       : refreshCookieFrom(request);
@@ -300,7 +296,7 @@ export class LocalAuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    parseEmptyBody(body, request);
+    parseRequestBody(EmptyAuthRequestSchema, body, request);
     const rawToken = hasAlternateRefreshSource(request)
       ? undefined
       : refreshCookieFrom(request);

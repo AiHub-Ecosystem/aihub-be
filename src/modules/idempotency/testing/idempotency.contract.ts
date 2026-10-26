@@ -1,4 +1,5 @@
 import { ORGANIZATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
+import type { IdempotencyOperation } from '@/modules/idempotency/application/idempotency-operation';
 import type { IdempotencyRepositoryPort } from '@/modules/idempotency/application/idempotency-repository.port';
 
 export function idempotencyRepositoryContract(
@@ -15,7 +16,7 @@ export function idempotencyRepositoryContract(
   const baseInput = (
     overrides: Partial<{
       organizationId: string | null;
-      operation: any;
+      operation: IdempotencyOperation;
       idempotencyKey: string;
       fingerprintHex: string;
       requestId: string;

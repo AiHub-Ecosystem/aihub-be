@@ -74,8 +74,11 @@ export class PostgresOrganizationMembershipRepository
   }
 
   async onModuleDestroy(): Promise<void> {
-    if ('close' in this.client && typeof this.client.close === 'function') {
-      await this.client.close();
+    if ('close' in this.client) {
+      const close: unknown = Reflect.get(this.client, 'close');
+      if (typeof close === 'function') {
+        await Reflect.apply(close, this.client, []);
+      }
     }
   }
 }

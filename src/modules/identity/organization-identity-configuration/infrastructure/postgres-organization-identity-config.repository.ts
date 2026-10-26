@@ -131,8 +131,9 @@ function algorithmArrayValue(
     return undefined;
   }
 
+  const candidates: readonly unknown[] = value;
   const algorithms: IdentityConfigAlgorithm[] = [];
-  for (const candidate of value) {
+  for (const candidate of candidates) {
     if (
       candidate !== IDENTITY_CONFIG_ALGORITHMS[0] &&
       candidate !== IDENTITY_CONFIG_ALGORITHMS[1]

@@ -78,19 +78,28 @@ export function interceptStatements(
         ) {
           return async (text: string, ...values: unknown[]) => {
             await before({ kind: 'raw', text, values });
-            return Reflect.apply(value, owner, [text, ...values]);
+            const result: unknown = Reflect.apply(value, owner, [
+              text,
+              ...values,
+            ]);
+            return result;
           };
         }
 
         if (property === '$transaction' && typeof value === 'function') {
-          return (callback: unknown, options?: unknown) =>
-            typeof callback === 'function'
-              ? Reflect.apply(value, owner, [
-                  (transaction: object) =>
-                    (callback as (tx: object) => unknown)(wrap(transaction)),
-                  options,
-                ])
-              : Reflect.apply(value, owner, [callback, options]);
+          return (callback: unknown, options?: unknown) => {
+            let result: unknown;
+            if (typeof callback === 'function') {
+              result = Reflect.apply(value, owner, [
+                (transaction: object) =>
+                  (callback as (tx: object) => unknown)(wrap(transaction)),
+                options,
+              ]);
+            } else {
+              result = Reflect.apply(value, owner, [callback, options]);
+            }
+            return result;
+          };
         }
 
         if (
@@ -107,13 +116,18 @@ export function interceptStatements(
               }
               return async (...args: unknown[]) => {
                 await before({ kind: 'model', model: property, action, args });
-                return Reflect.apply(method, delegate, args);
+                const result: unknown = Reflect.apply(method, delegate, args);
+                return result;
               };
             },
           });
         }
 
-        return typeof value === 'function' ? value.bind(owner) : value;
+        if (typeof value !== 'function') {
+          return value;
+        }
+        const bound: unknown = value.bind(owner);
+        return bound;
       },
     });
 
@@ -226,7 +240,8 @@ export class ScriptedPrisma {
             );
           };
         }
-        return Reflect.get(target, property);
+        const value: unknown = Reflect.get(target, property);
+        return value;
       },
     }) as unknown as PrismaClient;
   }

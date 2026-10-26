@@ -93,7 +93,8 @@ export function createIdentityTransactionRunner(
         return PrismaClient;
       }
       if (Object.prototype.hasOwnProperty.call(target, property)) {
-        return Reflect.get(target, property, target);
+        const value: unknown = Reflect.get(target, property, target);
+        return value;
       }
       if (property === '$transaction') {
         return (callback: unknown, options?: unknown) => {
@@ -112,8 +113,12 @@ export function createIdentityTransactionRunner(
           );
         };
       }
-      const value = Reflect.get(prisma, property, prisma);
-      return typeof value === 'function' ? value.bind(prisma) : value;
+      const value: unknown = Reflect.get(prisma, property, prisma);
+      if (typeof value !== 'function') {
+        return value;
+      }
+      const bound: unknown = value.bind(prisma);
+      return bound;
     },
   });
 }
@@ -156,7 +161,8 @@ function testIdentityClient(
       if (property === 'close') {
         return close;
       }
-      return Reflect.get(target, property, receiver);
+      const value: unknown = Reflect.get(target, property, receiver);
+      return value;
     },
   });
 }

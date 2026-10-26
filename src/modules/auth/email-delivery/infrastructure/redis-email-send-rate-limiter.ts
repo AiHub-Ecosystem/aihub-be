@@ -172,13 +172,14 @@ export class RedisEmailSendRateLimiter
       return this.unavailable();
     }
     try {
-      const result = await this.redis.eval(
+      const result: unknown = await this.redis.eval(
         EMAIL_SEND_RATE_RESERVATION_SCRIPT,
         1,
         EMAIL_SEND_RATE_RESERVATION_KEY,
         String(this.intervalMs),
       );
-      const [reserved, retryAfterMs] = Array.isArray(result) ? result : [];
+      const resultValues: unknown[] = Array.isArray(result) ? result : [];
+      const [reserved, retryAfterMs] = resultValues;
       if (
         (reserved === 0 || reserved === 1) &&
         typeof retryAfterMs === 'number' &&
@@ -199,7 +200,7 @@ export class RedisEmailSendRateLimiter
     if (this.redis === undefined) return this.unavailablePermit();
     const probeToken = randomUUID();
     try {
-      const result = await this.redis.eval(
+      const result: unknown = await this.redis.eval(
         EMAIL_PROVIDER_OUTAGE_ACQUIRE_SCRIPT,
         1,
         EMAIL_PROVIDER_OUTAGE_STATE_KEY,
@@ -208,9 +209,8 @@ export class RedisEmailSendRateLimiter
         String(RETRY_WHEN_UNAVAILABLE_MS),
         String(OUTAGE_PROBE_STALE_MS),
       );
-      const [allowed, retryAfterMs, acquiredToken] = Array.isArray(result)
-        ? result
-        : [];
+      const resultValues: unknown[] = Array.isArray(result) ? result : [];
+      const [allowed, retryAfterMs, acquiredToken] = resultValues;
       if (
         (allowed === 0 || allowed === 1) &&
         typeof retryAfterMs === 'number' &&
@@ -253,7 +253,7 @@ export class RedisEmailSendRateLimiter
     const jitter =
       Number.isFinite(sample) && sample >= 0 && sample < 1 ? sample : 0.5;
     try {
-      const result = await this.redis.eval(
+      const result: unknown = await this.redis.eval(
         EMAIL_PROVIDER_OUTAGE_FAILURE_SCRIPT,
         1,
         EMAIL_PROVIDER_OUTAGE_STATE_KEY,
@@ -263,7 +263,7 @@ export class RedisEmailSendRateLimiter
         probeToken ?? '',
         String(OUTAGE_PROBE_STATE_TTL_MS),
       );
-      const delayMs = Array.isArray(result) ? result[0] : result;
+      const delayMs: unknown = Array.isArray(result) ? result[0] : result;
       if (
         typeof delayMs === 'number' &&
         Number.isSafeInteger(delayMs) &&

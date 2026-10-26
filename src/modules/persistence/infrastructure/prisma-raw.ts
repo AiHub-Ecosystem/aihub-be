@@ -87,16 +87,20 @@ export function postgresError(error: unknown): unknown {
   if (typeof error !== 'object' || error === null) {
     return error;
   }
-  const driverError = Reflect.get(error, 'meta')?.driverAdapterError;
-  const cause =
+  const metadata: unknown = Reflect.get(error, 'meta');
+  const driverError: unknown =
+    typeof metadata === 'object' && metadata !== null
+      ? Reflect.get(metadata, 'driverAdapterError')
+      : undefined;
+  const cause: unknown =
     typeof driverError === 'object' && driverError !== null
       ? Reflect.get(driverError, 'cause')
       : undefined;
-  const originalCode =
+  const originalCode: unknown =
     typeof cause === 'object' && cause !== null
       ? Reflect.get(cause, 'originalCode')
       : undefined;
-  const prismaCode = Reflect.get(error, 'code');
+  const prismaCode: unknown = Reflect.get(error, 'code');
   const code =
     typeof originalCode === 'string'
       ? originalCode
@@ -106,7 +110,7 @@ export function postgresError(error: unknown): unknown {
   if (code === undefined) {
     return error;
   }
-  const message =
+  const message: unknown =
     typeof cause === 'object' && cause !== null
       ? Reflect.get(cause, 'originalMessage')
       : undefined;
@@ -169,7 +173,7 @@ export function runGuardedTransaction<T>(
 
   const guarded = new Proxy(transaction, {
     get(target, property) {
-      const value = Reflect.get(target, property, target) as unknown;
+      const value: unknown = Reflect.get(target, property, target);
 
       if (RAW_QUERY_METHODS.has(property) && typeof value === 'function') {
         return track(value as (...args: unknown[]) => unknown, target);
@@ -192,7 +196,11 @@ export function runGuardedTransaction<T>(
         });
       }
 
-      return typeof value === 'function' ? value.bind(target) : value;
+      if (typeof value !== 'function') {
+        return value;
+      }
+      const bound: unknown = value.bind(target);
+      return bound;
     },
   });
 

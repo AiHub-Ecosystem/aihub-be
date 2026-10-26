@@ -41,7 +41,10 @@ import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipa
 const OPERATION = 'speaking.grading' as const;
 const JSON_OPERATION = 'speaking.grading-json' as const;
 
-function parseJsonBody(body: unknown, request?: any): SpeakingGradeJsonInput {
+function parseJsonBody(
+  body: unknown,
+  request: AuthenticatedRequest,
+): SpeakingGradeJsonInput {
   const parsed = parseRequestBody(
     SpeakingGradeJsonRequestSchema,
     body,

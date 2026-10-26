@@ -8,7 +8,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function stripKey<T>(value: T, key: string): T {
   if (Array.isArray(value)) {
-    return value.map((entry) => stripKey(entry, key)) as unknown as T;
+    const entries: readonly unknown[] = value;
+    return entries.map((entry) => stripKey(entry, key)) as unknown as T;
   }
   if (value !== null && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>).filter(

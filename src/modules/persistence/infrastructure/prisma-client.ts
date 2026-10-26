@@ -127,8 +127,12 @@ function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
         return undefined;
       }
       const prisma = getPrisma();
-      const value = Reflect.get(prisma, property, prisma);
-      return typeof value === 'function' ? value.bind(prisma) : value;
+      const value: unknown = Reflect.get(prisma, property, prisma);
+      if (typeof value !== 'function') {
+        return value;
+      }
+      const bound: unknown = value.bind(prisma);
+      return bound;
     },
   });
 }

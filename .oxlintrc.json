@@ -53,26 +53,27 @@
     "promise/always-return": "error",
     "import/no-named-as-default-member": "error",
     // Type-aware rules for #110 — gateway defect class. `no-floating-promises`,
-    // `no-misused-promises`, `await-thenable` are the direct gateway failure modes
-    // (dropped await on usage/quota, misused await). They are `error` and currently
-    // 0 findings — the gateway boundary is clean. The remaining type-aware rules
-    // are correct but their backlog is measured below; they are not left off to
-    // keep green silently — each `off` carries its reason and will be re-enabled
-    // in follow-ups once the `any` surface (scripts/test, untyped DB rows, mocks)
-    // is narrowed. Runtime measured with `--debug timings` at 2.6s (<8s) so this
-    // set stays in `pnpm verify` rather than a separate lane.
+    // `no-misused-promises`, and `await-thenable` are the direct gateway failure
+    // modes. They are `error` with 0 findings. Runtime measured at 2.6s (<8s),
+    // so this set stays in `pnpm verify`.
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/await-thenable": "error",
-    // Backlog 665 `no-unsafe-*` (351 member-access, 142 assignment, 67 call, 63 return, 42 argument)
-    // across src/scripts/test/ops — mostly `any` from CJS interop, Prisma `any` rows, and Jest `any` mocks.
-    // Not gateway promise defects; disabled with reason, not silently. Follow-up: narrow `any` at
-    // ports/adapters and add typed fixtures, then re-enable one rule at a time.
-    "typescript/no-unsafe-assignment": "off",
-    "typescript/no-unsafe-member-access": "off",
-    "typescript/no-unsafe-call": "off",
-    "typescript/no-unsafe-return": "off",
-    "typescript/no-unsafe-argument": "off",
+    // Remeasured #823 on 2026-10-26: 3,487 findings before narrowing (838
+    // assignment, 1,671 member-access, 492 call, 209 return, 277 argument).
+    // Cause buckets at start: 27 Prisma-derived snapshot accesses, 33 other
+    // production TS adapter/body seams, 2,478 CJS/MJS runtime findings (588
+    // .cjs, 1,890 .mjs), 170 .js runtime findings, 758 test findings (651 TS,
+    // 95 .mjs, 12 .cjs), and 21 benchmark-seed findings outside the TS project.
+    // Typed boundaries removed all 60 production TS findings. Four typed
+    // contract/transaction/HTTP fixtures are now enforced. Remaining 3,397
+    // findings: 2,478 CJS/MJS + 170 JS runtime (infrastructure), 728 tests
+    // (testing), and 21 seed (infrastructure). Keep those measured residuals off below.
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
     "typescript/unbound-method": "error",
     "typescript/no-base-to-string": "error",
     "typescript/restrict-template-expressions": "error",
@@ -109,6 +110,41 @@
       "rules": {
         "complexity": "off",
         "max-depth": "off"
+      }
+    },
+    {
+      "files": [
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.mjs",
+        "**/*.spec.ts",
+        "test/**/*.ts",
+        "prisma/seed.ts"
+      ],
+      "rules": {
+        // Residual 2026-10-26 after narrowing: 811 assignment, 1,632
+        // member-access, 489 call, 198 return, 267 argument.
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-argument": "off"
+      }
+    },
+    {
+      "files": [
+        "src/modules/auth/application/verification-token-repository.contract.spec.ts",
+        "test/db/auth/verification-token-repository.contract.spec.ts",
+        "src/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository.spec.ts",
+        "src/modules/auth/presentation/local-auth.controller.access.spec.ts"
+      ],
+      "rules": {
+        // Typed contract fixtures and the Prisma transaction fixture stay enforced.
+        "typescript/no-unsafe-assignment": "error",
+        "typescript/no-unsafe-member-access": "error",
+        "typescript/no-unsafe-call": "error",
+        "typescript/no-unsafe-return": "error",
+        "typescript/no-unsafe-argument": "error"
       }
     }
   ],

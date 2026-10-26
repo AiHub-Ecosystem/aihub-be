@@ -3,7 +3,10 @@ import {
   seedAccount as seedAccountHelper,
 } from '@/modules/auth/testing/in-memory-auth.state';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
-import { verificationTokenRepositoryContract } from '@/modules/auth/testing/verification-token.contract';
+import {
+  type VerificationTokenContractHarness,
+  verificationTokenRepositoryContract,
+} from '@/modules/auth/testing/verification-token.contract';
 
 const NOW = new Date('2026-09-23T00:00:00.000Z');
 const EXPIRES_AT = new Date('2026-09-24T00:00:00.000Z');
@@ -31,15 +34,17 @@ verificationTokenRepositoryContract({
   reset: async () => {
     state.reset();
   },
-  seedAccount: async (status: string) => {
+  seedAccount: async (status) => {
     seedAccountHelper(state, {
       userId: USER_ID,
       email: EMAIL,
       passwordHash: PASSWORD_HASH,
-      status: status as any,
+      status,
     });
   },
-  insertToken: async (options: any) => {
+  insertToken: async (
+    options: Parameters<VerificationTokenContractHarness['insertToken']>[0],
+  ) => {
     state.verificationTokens.set(options.hash, {
       tokenId: options.hash,
       userId: USER_ID,
@@ -56,9 +61,9 @@ verificationTokenRepositoryContract({
     consumedReason: state.verificationTokens.get(hash)?.consumedReason,
     passwordFailures: state.verificationTokens.get(hash)?.passwordFailures ?? 0,
   }),
-  setAccountStatus: async (_userId: string, status: string) => {
+  setAccountStatus: async (_userId, status) => {
     const account = state.accounts.get(USER_ID);
-    if (account) (account as any).status = status;
+    if (account) account.status = status;
   },
   getTokenSignedInAt: async (hash: string) => {
     return state.verificationTokens.get(hash)?.signedInAt;

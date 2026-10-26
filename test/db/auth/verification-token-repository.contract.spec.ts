@@ -2,7 +2,10 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
-import { verificationTokenRepositoryContract } from '@/modules/auth/testing/verification-token.contract';
+import {
+  type VerificationTokenContractHarness,
+  verificationTokenRepositoryContract,
+} from '@/modules/auth/testing/verification-token.contract';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
 import { createPostgresAuthClient } from './postgres-auth.client';
 
@@ -92,7 +95,9 @@ verificationTokenRepositoryContract({
   seedAccount: async (status: string) => {
     await seedAccount(status);
   },
-  insertToken: async (options: any) => {
+  insertToken: async (
+    options: Parameters<VerificationTokenContractHarness['insertToken']>[0],
+  ) => {
     await insertToken(options);
   },
   readToken: async (hash: string) => {

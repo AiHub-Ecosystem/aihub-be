@@ -89,13 +89,14 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     const hashed = hashRateLimitKey(input.scope, input.key);
     if (this.redis !== undefined) {
       try {
-        const result = await this.redis.eval(
+        const result: unknown = await this.redis.eval(
           AUTH_RATE_LIMIT_WINDOW_SCRIPT,
           1,
           `aihub:auth:rate:${hashed}`,
           String(input.windowMs),
         );
-        const [count, ttl] = Array.isArray(result) ? result : [];
+        const resultValues: unknown[] = Array.isArray(result) ? result : [];
+        const [count, ttl] = resultValues;
         if (typeof count === 'number' && typeof ttl === 'number') {
           return {
             allowed: count <= input.limit,
@@ -115,12 +116,13 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     const hashed = hashRateLimitKey(input.scope, input.key);
     if (this.redis !== undefined) {
       try {
-        const result = await this.redis.eval(
+        const result: unknown = await this.redis.eval(
           AUTH_RATE_LIMIT_CHECK_SCRIPT,
           1,
           `aihub:auth:rate:${hashed}`,
         );
-        const [count, ttl] = Array.isArray(result) ? result : [];
+        const resultValues: unknown[] = Array.isArray(result) ? result : [];
+        const [count, ttl] = resultValues;
         if (typeof count === 'number' && typeof ttl === 'number') {
           return count < input.limit
             ? { allowed: true }

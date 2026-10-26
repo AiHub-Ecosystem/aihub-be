@@ -149,10 +149,10 @@ function snapshotMap(
   rows: readonly UsageReportSnapshotRow[],
   operations: readonly UsageReportOperationDefinition[],
 ): ReadonlyMap<string, UsageReportSnapshotRow> {
-  if (!Array.isArray(rows)) {
+  const candidate: unknown = rows;
+  if (!Array.isArray(candidate)) {
     throw new UsageReportSnapshotError();
   }
-
   const eligible = new Set(operations.map(({ operation }) => operation));
   const result = new Map<string, UsageReportSnapshotRow>();
   for (const row of rows) {

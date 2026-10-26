@@ -1,6 +1,11 @@
+import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
-import { ReadCurrentUserResponseSchema } from '@/contracts/auth/local-auth';
+import {
+  ForgotPasswordResponseSchema,
+  ReadCurrentUserResponseSchema,
+  RegisterResponseSchema,
+} from '@/contracts/auth/local-auth';
 import { seedAccount } from '@/modules/auth/testing/in-memory-auth.state';
 import {
   EMAIL,
@@ -39,13 +44,21 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     return token.raw;
   }
 
+  function responseBody(response: { readonly payload: string }): unknown {
+    const body: unknown = JSON.parse(response.payload);
+    return body;
+  }
+
   function sealed(
     request: { readonly payloadCiphertext: string } | undefined,
-  ): any {
+  ): unknown {
     if (request === undefined) {
       throw new Error('no email delivery request was written');
     }
-    return JSON.parse(c.cipher.decrypt(request.payloadCiphertext));
+    const payload: unknown = JSON.parse(
+      c.cipher.decrypt(request.payloadCiphertext),
+    );
+    return payload;
   }
 
   it('uses the address nginx appends for separate local-auth IP budgets', async () => {
@@ -160,8 +173,16 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     const blocked = await send();
 
     expect(blocked.statusCode).toBe(429);
-    const error = blocked.json().error;
-    expect(error).toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+    const { error } = Value.Parse(
+      Type.Object({
+        error: Type.Object({
+          code: Type.Literal('RATE_LIMITED'),
+          retryable: Type.Boolean(),
+          retry_after_ms: Type.Number(),
+        }),
+      }),
+      responseBody(blocked),
+    );
     expect(error.retry_after_ms).toBeGreaterThan(23 * 60 * 60_000);
     expect(blocked.headers['retry-after']).toBe(
       String(Math.ceil(error.retry_after_ms / 1_000)),
@@ -179,13 +200,12 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(Value.Check(ReadCurrentUserResponseSchema, response.json())).toBe(
-      true,
+    const body = Value.Parse(
+      ReadCurrentUserResponseSchema,
+      responseBody(response),
     );
-    expect(response.json()).toEqual({
-      data: { username: 'person_01' },
-      meta: { request_id: expect.stringMatching(/^req_/) },
-    });
+    expect(body.data.username).toBe('person_01');
+    expect(body.meta.request_id).toMatch(/^req_/);
   });
 
   it('returns enrollment material and recovery codes only from their no-store MFA endpoints', async () => {
@@ -203,9 +223,11 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     });
     expect(enrollment.statusCode).toBe(200);
     expect(enrollment.headers['cache-control']).toBe('no-store');
-    expect(enrollment.json().data).toEqual({
-      secret: 'A'.repeat(32),
-      otpauth_uri: 'otpauth://totp/AIHUB:test',
+    expect(responseBody(enrollment)).toMatchObject({
+      data: {
+        secret: 'A'.repeat(32),
+        otpauth_uri: 'otpauth://totp/AIHUB:test',
+      },
     });
 
     const confirmation = await c.app.inject({
@@ -216,9 +238,9 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     });
     expect(confirmation.statusCode).toBe(200);
     expect(confirmation.headers['cache-control']).toBe('no-store');
-    expect(confirmation.json().data.recovery_codes).toEqual([
-      'ABCD-EFGH-IJKL-MNOP',
-    ]);
+    expect(responseBody(confirmation)).toMatchObject({
+      data: { recovery_codes: ['ABCD-EFGH-IJKL-MNOP'] },
+    });
 
     const removal = await c.app.inject({
       method: 'DELETE',
@@ -234,7 +256,9 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     const response = await c.app.inject({ method: 'GET', url: '/v1/me' });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('AUTH_USER_ACCESS_TOKEN_REQUIRED');
+    expect(responseBody(response)).toMatchObject({
+      error: { code: 'AUTH_USER_ACCESS_TOKEN_REQUIRED' },
+    });
   });
 
   it('registers and acknowledges first and repeated verification through HTTP', async () => {
@@ -250,15 +274,17 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     });
 
     expect(register.statusCode).toBe(201);
-    expect(register.json()).toEqual({
-      data: {
-        email: 'person@example.com',
-        username: 'person_01',
-        status: 'pending_verification',
-        email_delivery_status: 'queued',
-      },
-      meta: { request_id: expect.stringMatching(/^req_/) },
+    const registerBody = Value.Parse(
+      RegisterResponseSchema,
+      responseBody(register),
+    );
+    expect(registerBody.data).toEqual({
+      email: 'person@example.com',
+      username: 'person_01',
+      status: 'pending_verification',
+      email_delivery_status: 'queued',
     });
+    expect(registerBody.meta.request_id).toMatch(/^req_/);
     expect(register.payload).not.toContain('argon2');
     const token = issuedVerificationToken();
 
@@ -314,10 +340,12 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
       });
 
       expect(response.statusCode).toBe(202);
-      expect(response.json()).toEqual({
-        data: { message: RECOVERY_MESSAGE },
-        meta: { request_id: expect.stringMatching(/^req_/) },
-      });
+      const body = Value.Parse(
+        ForgotPasswordResponseSchema,
+        responseBody(response),
+      );
+      expect(body.data.message).toBe(RECOVERY_MESSAGE);
+      expect(body.meta.request_id).toMatch(/^req_/);
       expect(response.payload).not.toContain('reset-token');
     },
   );

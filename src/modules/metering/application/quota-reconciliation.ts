@@ -142,7 +142,8 @@ interface OrderedSnapshot {
 function orderedSnapshots(
   snapshots: readonly QuotaOrganizationSnapshot[],
 ): readonly OrderedSnapshot[] {
-  if (!Array.isArray(snapshots)) {
+  const candidate: unknown = snapshots;
+  if (!Array.isArray(candidate)) {
     throw new QuotaReconciliationSnapshotError();
   }
   return snapshots

@@ -1,3 +1,8 @@
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
+import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
+import { ulid } from 'ulid';
+
 /**
  * Port contract suite for VerificationTokenRepositoryPort.
  *
@@ -6,10 +11,6 @@
  * against the in-memory adapter and in `pnpm test:db` against the Postgres
  * repository, so the two implementations cannot drift.
  */
-import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
-import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
-import { ulid } from 'ulid';
-
 export interface VerificationTokenContractHarness {
   readonly userId: string;
   readonly email: string;
@@ -23,7 +24,7 @@ export interface VerificationTokenContractHarness {
     failSessionWrite?: boolean;
   };
   reset(): Promise<void>;
-  seedAccount(status: string): Promise<void>;
+  seedAccount(status: LocalAccountStatus): Promise<void>;
   insertToken(options: {
     readonly hash: string;
     readonly expiresAt?: Date;
@@ -38,7 +39,7 @@ export interface VerificationTokenContractHarness {
     readonly consumedReason: string | undefined;
     readonly passwordFailures: number;
   }>;
-  setAccountStatus(userId: string, status: string): Promise<void>;
+  setAccountStatus(userId: string, status: LocalAccountStatus): Promise<void>;
   getTokenSignedInAt(hash: string): Promise<Date | undefined>;
   /** Enrols the seeded account in an enabled second factor. */
   enableSecondFactor(): Promise<void>;
