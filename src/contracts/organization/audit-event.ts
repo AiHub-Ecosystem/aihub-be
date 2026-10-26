@@ -38,9 +38,13 @@ export const ORGANIZATION_AUDIT_OUTCOMES = ['applied', 'denied'] as const;
 export const DEFAULT_ORGANIZATION_AUDIT_PAGE_SIZE = 50;
 export const MAX_ORGANIZATION_AUDIT_PAGE_SIZE = 200;
 
-const OrganizationAuditActionSchema = Type.Union(
+const OrganizationAuditActionQuerySchema = Type.Union(
   ORGANIZATION_AUDIT_ACTIONS.map((action) => Type.Literal(action)),
 );
+// The response may gain values; keep the request filter's accepted set exact.
+const OrganizationAuditActionSchema = Type.String({
+  'x-extensible-enum': [...ORGANIZATION_AUDIT_ACTIONS],
+});
 
 const OrganizationAuditOutcomeSchema = Type.Union(
   ORGANIZATION_AUDIT_OUTCOMES.map((outcome) => Type.Literal(outcome)),
@@ -50,8 +54,8 @@ export const OrganizationAuditEventQuerySchema = Type.Object(
   {
     action: Type.Optional(
       Type.Union([
-        OrganizationAuditActionSchema,
-        Type.Array(OrganizationAuditActionSchema),
+        OrganizationAuditActionQuerySchema,
+        Type.Array(OrganizationAuditActionQuerySchema),
       ]),
     ),
     outcome: Type.Optional(OrganizationAuditOutcomeSchema),

@@ -20,6 +20,22 @@ specifications and work tracking.
 - Use Conventional Commit headers and write commits, issues, pull requests, and
   comments in English, as described in [AGENTS.md](AGENTS.md).
 
+## Public API compatibility
+
+CI compares the generated OpenAPI contract with the pull request's base. Adding
+a route, response field, or value to an `x-extensible-enum` is additive.
+Removing or renaming a route or field, requiring a request field, narrowing
+accepted request values, changing a field's meaning or type, or changing a
+closed response enum is breaking. To record an intentional break, add these
+lines to the pull request description:
+
+```text
+API-Breaking-Change: intentional
+API-Breaking-Change-Reason: <non-empty explanation>
+```
+
+The declaration records intent for review; it does not approve the change.
+
 ## Pull requests
 
 Open a pull request against `main`, link the issue it addresses, and summarize

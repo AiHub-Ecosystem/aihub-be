@@ -81,8 +81,38 @@ jobs:
       - name: Check import style
         run: pnpm check:imports
 
-      - name: Validate OpenAPI
-        run: pnpm validate:openapi
+      - name: Generate and validate OpenAPI
+        run: pnpm generate:openapi && pnpm validate:openapi
+
+      - name: Install oasdiff
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location \
+            --output "$RUNNER_TEMP/oasdiff.tar.gz" \
+            https://github.com/oasdiff/oasdiff/releases/download/v1.34.1/oasdiff_1.34.1_linux_amd64.tar.gz
+          echo '75775f65b0adebd26a8e013af51a799342dfdc6262d89efa9e3b7bdf89657d90  '"$RUNNER_TEMP/oasdiff.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/oasdiff"
+          tar -xzf "$RUNNER_TEMP/oasdiff.tar.gz" -C "$RUNNER_TEMP/oasdiff" oasdiff
+          echo "$RUNNER_TEMP/oasdiff" >> "$GITHUB_PATH"
+
+      - name: Check out pull request base contract
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base-contract
+          persist-credentials: false
+
+      - name: Test API compatibility checker
+        if: github.event_name == 'pull_request'
+        run: pnpm test:api-compatibility
+
+      - name: Check public API compatibility
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm check:api-compatibility -- base-contract/openapi.json openapi.json
 
       - name: Install nginx for the edge compression check
         run: sudo apt-get update && sudo apt-get install --yes nginx logrotate

@@ -8,7 +8,7 @@ export function errorResponseSchema(codes: readonly ErrorCode[]): TSchema {
     {
       error: Type.Object(
         {
-          code: Type.Union(codes.map((code) => Type.Literal(code))),
+          code: Type.String({ 'x-extensible-enum': [...codes] }),
           message: Type.String(),
           request_id: Type.String(),
           retryable: Type.Boolean(),

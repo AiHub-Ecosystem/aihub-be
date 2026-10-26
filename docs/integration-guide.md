@@ -7,6 +7,27 @@ timeouts, and errors.
 
 The endpoint reference lives at `GET /docs`, generated from the same schemas
 the server validates against. This guide is the surrounding context.
+
+## Compatibility promise
+
+Within an API version, adding a public route or a response field is additive
+when existing fields keep their meaning and type. Clients must ignore response
+fields they do not recognize and must not reject a response only because it
+contains an extra field.
+
+Response enum values are closed unless their OpenAPI schema has
+`x-extensible-enum`. AIHUB may add values to `error.code` and Organization Audit
+event `action`; clients must handle unknown values with fallback logic. For an
+unknown error code, fall back to HTTP status and `error.retryable`. For an
+unknown Audit action, use generic handling rather than failing the event page.
+Marking a previously closed response enum as extensible is itself breaking;
+clients need that change announced before AIHUB sends a new value.
+
+Removing or renaming a route or existing field, making a request field
+required, narrowing accepted request values, changing an existing field's type
+or meaning, removing a response enum value, or adding a value to a closed
+response enum is breaking and may require customer changes.
+
 \nAIHUB sets a baseline Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, and Referrer-Policy: no-referrer on every response.\n
 Every grading request needs an `X-User-Identity` value, but a JWKS is optional.
 Choose the identity mode saved for your Organization:
@@ -1175,7 +1196,8 @@ not a longer delay.
 - [ ] Speaking: catalog fetched from `GET /v1/ielts/speaking/questions`; the submitted `question_id` and `prompt_text` come from the same entry
 - [ ] Speaking audio is one supported file within the documented size limit
 - [ ] Client timeout is ≥ 90s for Writing and Speaking multipart; ≥ 60s for Speaking JSON-by-URL
-- [ ] Error handling branches on `code`, not on `message` or status alone
+- [ ] Branch on known `error.code` values; for an unknown code, use HTTP status
+      and `error.retryable`, never the message
 - [ ] Retries limited to `retryable: true`, with jittered backoff; do not blindly retry Speaking
 - [ ] `request_id` logged for every call, and `X-Correlation-Id` sent
 - [ ] Bounded parallelism for grading
