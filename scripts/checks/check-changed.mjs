@@ -58,6 +58,7 @@ export const GATE_COMMANDS = {
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
   'test:issue-triage': 'test:issue-triage',
+  'test:lint-staged': 'test:lint-staged',
   'test:monitoring-config': 'test:monitoring-config',
   'test:related': 'test:related',
   'type-check': 'type-check',
@@ -144,6 +145,9 @@ function classifyPathGates(p) {
   }
   if (path.includes('check-doc-drift')) {
     return ['check:doc-drift', 'lint', 'test:doc-drift'];
+  }
+  if (path.includes('lint-staged-config')) {
+    return ['lint', 'test:lint-staged'];
   }
 
   if (path.includes('nginx')) {

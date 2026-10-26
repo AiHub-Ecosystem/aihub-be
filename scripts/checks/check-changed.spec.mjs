@@ -63,6 +63,10 @@ const pathCases = [
     gates: ['check:doc-drift', 'lint', 'test:doc-drift'],
   },
   {
+    path: 'scripts/checks/lint-staged-config.spec.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:lint-staged'],
+  },
+  {
     path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
     gates: ['check:doc-drift', 'lint', 'test:capacity-benchmark'],
   },

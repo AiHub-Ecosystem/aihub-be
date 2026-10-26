@@ -35,20 +35,22 @@ Say which one: "gone from `scripts/cli/cli.mjs`" or "its `scripts/cli/<tool>.cjs
 
 ## Closing an issue
 
-Ask first: **does this change run in production?** A controller, an adapter, a migration, or a deployment manifest does; a test, a check script, and a doc do not. The two kinds close on different evidence, and closing on the wrong one either ships an unreleased claim or blocks a finished doc.
+Classify the change by whether its behavior runs in production:
 
-An issue whose change runs in production closes on evidence that it runs there, not on a green test run or a merge into a feature branch. A fix that is merged only into an unmerged branch has not reached production: `main` deploys, nothing else does.
+- **Production behavior** (a controller, adapter, migration, or deployment
+  manifest): close after the commit is on `origin/main` and production evidence
+  confirms it. The closing comment names the commit and the observation after
+  CD, such as `ops/status.sh` reporting that commit healthy, a migration row, or
+  a probe of the changed behavior. A green test or an unmerged branch is not
+  production evidence; `main` deploys, nothing else does.
+- **Docs, tests, CI, or tooling only**: close once the commit is on
+  `origin/main`. The main commit is the closure evidence; host checks such as
+  `ops/status.sh` apply to production behavior.
 
-The closing comment names:
-
-- the commit on `main` that carries the change;
-- what was observed on the host after CD finished, for example `ops/status.sh` reporting that commit as healthy, a `schema_migrations` row for a migration, or a probe of the changed behaviour.
-
-Until then, leave the issue open and say in a comment where the fix is and what still has to happen. If an issue was closed too early, reopen it with the evidence.
-
-A commit that is not on `origin/main` has not deployed, whatever the local checks say. `git log origin/main..HEAD --oneline` settles it before the closing comment is written.
-
-Changes that never run in production (docs, tests, CI, tooling) close when they are merged into `main`.
+If the required evidence is not ready, leave the issue open and comment where
+the fix is and what remains. If an issue was closed too early, reopen it with
+the evidence. Check `git log origin/main..HEAD --oneline` before writing the
+closing comment to confirm the commit is on the remote default branch.
 
 Why: #261 was closed after its fix passed the database lane, while the fix sat on an unmerged feature branch. Production kept rejecting every registration until the migration was shipped to `main` separately.
 

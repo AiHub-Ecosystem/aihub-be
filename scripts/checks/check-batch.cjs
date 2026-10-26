@@ -52,6 +52,7 @@ const BATCHED_GATES = [
   'test:capacity-benchmark',
   'test:check-changed',
   'test:issue-triage',
+  'test:lint-staged',
   'check:doc-drift',
   'test:doc-drift',
 ];
