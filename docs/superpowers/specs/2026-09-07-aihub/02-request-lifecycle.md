@@ -4,6 +4,15 @@
 
 ## D.1 Pipeline — Deliberate Execution Order
 
+> **Runtime correction for §D.1–D.3:** These sketches predate the current
+> graded-request chain. Fastify parses JSON before Nest guards; use the order
+> defined by [ADR-0057](../../../adr/0057-graded-request-order-is-a-declared-contract.md)
+> and [`GradedRequest`](../../../../src/modules/gateway/presentation/graded-request.decorator.ts).
+> Concurrency is acquired before idempotency. The interceptor records usage
+> for internal metering; public success responses omit `meta.usage`
+> ([ADR-0016](../../../adr/0016-metering-boundary-and-billing-evidence.md),
+> [envelope implementation](../../../../src/common/http/success-envelope.ts)).
+
 Guiding principle: **cheap operations first, expensive operations later; fail closed**.
 
 ```
@@ -72,7 +81,7 @@ Customer BE ──X-API-Key, X-User-Identity, Idempotency-Key──► AIHUB
                                           t3 ─┤ total_ms sampled
    await metering finalization -> write usage_records
                                           t4 ─┘
-◄── 200 { data, meta{ request_id, usage, timing } }
+◄── 200 { data, meta{ request_id, timing } }
 
 total_ms = t3-t0    admission_ms = t1-t0
 downstream_ms = t2-t1    gateway_overhead_ms = total - downstream

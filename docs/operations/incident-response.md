@@ -296,7 +296,7 @@ Postmortems so far:
 
 | Drill                                                                                                                                  | Cadence                                         | Owner                              | Next due   |
 | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------- | ---------- |
-| Postgres restore rehearsal, both databases (`scripts/ops/restore-postgres-rehearsal.sh`)                                               | Monthly, and after any change to the backup job | The operator who holds the age key | 2026-11-18 |
+| Postgres restore rehearsal, both databases (`scripts/ops/backups/restore-postgres-rehearsal.sh`)                                       | Monthly, and after any change to the backup job | The operator who holds the age key | 2026-11-18 |
 | Game day: fault scenarios (#328), a rollback (#289), a restore, a reboot drill (#396), compared with the previous run's recovery times | Quarterly                                       | Responder                          | 2027-01-18 |
 | Tabletop of this process against a past incident, including one security scenario                                                      | With each game day                              | Responder                          | 2027-01-18 |
 

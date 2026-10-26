@@ -2,7 +2,9 @@
 
 Status: accepted; the Organization name rule amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
 
-Date: 2026-09-22; related issue: [#133](https://github.com/AiHub-Ecosystem/aihub-be/issues/133). Supersedes the sentence in [ADR-0027](0027-organization-membership-and-key-management.md) that kept Organization creation and first-owner assignment operator-provisioned.
+Date: 2026-09-22; related issue: [#133](https://github.com/AiHub-Ecosystem/aihub-be/issues/133)
+
+Supersedes: [ADR-0027](0027-organization-membership-and-key-management.md) on Organization creation and first-owner assignment only.
 
 No shipped path created the first Organization Membership: `org:create` wrote only the `organizations` row, invitation needs an active owner or admin, and acceptance needs an invitation, so every new Organization was unreachable without a hand-written `INSERT`. An active AIHUB User Account may now create a Self-serve Organization through the Bearer boundary and becomes its first active `owner`. Creation, first-owner membership, and the `organization.created` Organization Audit Event commit in one transaction; an Organization with no owner is the state this decision exists to remove, so a partial result is never acceptable.
 

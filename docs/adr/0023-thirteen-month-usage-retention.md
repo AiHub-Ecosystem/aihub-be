@@ -1,5 +1,7 @@
 # Thirteen-month usage retention
 
+Status: accepted
+
 AIHUB retains every durable metering record for a rolling 13-calendar-month
 window so operators can compare year-over-year usage without keeping an
 unbounded billing evidence table. The `usage:prune` CLI is a thin operator

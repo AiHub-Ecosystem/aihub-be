@@ -55,6 +55,8 @@ export const GATE_COMMANDS = {
   test: 'test',
   'test:capacity-benchmark': 'test:capacity-benchmark',
   'test:check-changed': 'test:check-changed',
+  'check:doc-drift': 'check:doc-drift',
+  'test:doc-drift': 'test:doc-drift',
   'test:issue-triage': 'test:issue-triage',
   'test:monitoring-config': 'test:monitoring-config',
   'test:related': 'test:related',
@@ -64,6 +66,7 @@ export const GATE_COMMANDS = {
 
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const DOC_DRIFT_INPUT = /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/)/;
 
 /** @param {string} p */
 function norm(p) {
@@ -75,7 +78,7 @@ function norm(p) {
  * An unclassified path is not a quiet skip: the caller runs the full loop.
  */
 /** @param {string} p @returns {string[] | undefined} */
-export function classifyPath(p) {
+function classifyPathGates(p) {
   const path = norm(p);
   /** @type {Set<string>} */
   const gates = new Set();
@@ -139,6 +142,9 @@ export function classifyPath(p) {
   if (path.includes('issue-triage')) {
     return ['lint', 'test:issue-triage'];
   }
+  if (path.includes('check-doc-drift')) {
+    return ['check:doc-drift', 'lint', 'test:doc-drift'];
+  }
 
   if (path.includes('nginx')) {
     return ['check:nginx-headers', 'lint'];
@@ -149,6 +155,26 @@ export function classifyPath(p) {
   }
 
   return undefined;
+}
+
+/**
+ * The documentation drift gate also reads ADRs and operations runbooks and
+ * checks paths they reference, so changes or removals under those source roots
+ * must select it alongside their other gates.
+ * @param {string} p
+ * @returns {string[] | undefined}
+ */
+export function classifyPath(p) {
+  const path = norm(p);
+  const gates = classifyPathGates(path);
+  if (
+    gates === undefined ||
+    !DOC_DRIFT_INPUT.test(path) ||
+    gates.includes('check:doc-drift')
+  ) {
+    return gates;
+  }
+  return sorted(new Set([...gates, 'check:doc-drift']));
 }
 
 /** @param {Set<string>} gates @returns {string[]} */
@@ -197,9 +223,9 @@ function defaultGit(args) {
 export function resolveChangedFiles(git = defaultGit) {
   const mergeBase = git(['merge-base', 'HEAD', 'origin/main']);
   const chunks = [
-    git(['diff', '--name-only', mergeBase, 'HEAD']),
-    git(['diff', '--name-only']),
-    git(['diff', '--cached', '--name-only']),
+    git(['diff', '--no-renames', '--name-only', mergeBase, 'HEAD']),
+    git(['diff', '--no-renames', '--name-only']),
+    git(['diff', '--no-renames', '--cached', '--name-only']),
     git(['ls-files', '--others', '--exclude-standard']),
   ];
 

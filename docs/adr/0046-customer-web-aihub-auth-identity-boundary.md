@@ -1,6 +1,6 @@
 # ADR-0046: Customer Web identity boundary on AIHUB auth and Organization Membership
 
-- Status: Accepted
+- Status: Accepted; the session and authorization boundary was amended by [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md)
 - Related issue: #94
 - Supersedes: ADR-0020 — Amends: ADR-0021 (identity clauses only), ADR-0025 (password-reset URL behavior only) — Updates notes: ADR-0022, ADR-0027
 - Amended by: [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md) — the "Session and authorization boundary" section below is superseded

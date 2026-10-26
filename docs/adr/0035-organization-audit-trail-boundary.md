@@ -1,6 +1,6 @@
 # Organization audit trail boundary
 
-Status: accepted
+Status: accepted; the target-label-only redaction constraint was superseded by [ADR-0043](0043-organization-rename-boundary.md), and the operator-act actor boundary was amended by [ADR-0044](0044-organization-suspension-boundary.md)
 
 Organization control-plane mutations become durable evidence. One append-only table, `organization_audit_events`, records membership, invitation, and API-key changes for every Organization, closing the audit deferral [ADR-0027](0027-organization-membership-and-key-management.md) declared. Membership, invitations, and keys share one table because they share one shape — actor, Organization, target, action, outcome, request correlation, moment — and because the question the trail exists to answer is "what happened in this Organization", which across three tables is a union rather than a query. The difference between the domains lives in `target_type` and `detail`, which is where a difference that narrow belongs.
 

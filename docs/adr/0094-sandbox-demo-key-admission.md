@@ -1,6 +1,6 @@
 # Admit Organization-owned Sandbox keys to public grading demos
 
-- Status: Accepted
+- Status: Accepted; demo environment selection and fresh admission were amended by [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md)
 - Date: 2026-10-13
 - Related: [AiHub-Frontend #68](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/68), [FE PR #67](https://github.com/AiHub-Ecosystem/AiHub-Frontend/pull/67), [BE PR #602](https://github.com/AiHub-Ecosystem/aihub-be/pull/602), [#687](https://github.com/AiHub-Ecosystem/aihub-be/issues/687), [AiHub-Frontend #78](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/78)
 - Amends: [ADR-0056](0056-customer-sandbox-test-tier.md) for public-demo key admission and the allowed Sandbox grading scopes; Sandbox quotas and host isolation remain unchanged

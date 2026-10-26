@@ -1,6 +1,6 @@
 # ADR-0079: Managed nginx configuration on the shared VPS
 
-- Status: Accepted
+- Status: Accepted; logrotate policy and active-log rollback behavior were amended by [ADR-0093](0093-correlate-request-completion-with-ingress-logs.md)
 - Date: 2026-10-07
 - Related: [#112](https://github.com/AiHub-Ecosystem/aihub-be/issues/112), [#298](https://github.com/AiHub-Ecosystem/aihub-be/issues/298)
 

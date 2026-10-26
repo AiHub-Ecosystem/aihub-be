@@ -1,6 +1,6 @@
 # ADR-0114: Keep local identity cache tiers inside existing validity ceilings
 
-- Status: Proposed
+- Status: Implemented and deployed under [#402](https://github.com/AiHub-Ecosystem/aihub-be/issues/402): bounded API-key L1 and JWKS last-good cache tiers; probabilistic early refresh remains deferred.
 - Date: 2026-10-19
 - Related: [#402](https://github.com/AiHub-Ecosystem/aihub-be/issues/402), [#75](https://github.com/AiHub-Ecosystem/aihub-be/issues/75), [ADR-0091](0091-bounded-cancellable-jwks-resolution.md)
 
@@ -26,4 +26,4 @@ Implement local cache tiers with bounded maps and fixed entry limits and TTLs; d
 
 Memory use stays bounded, and evictions may cause another backend lookup. A process-local API-key copy cannot extend the existing 60-second authorization lease; another process may retain it only until that same absolute deadline. During a JWKS refresh cooldown, an assertion using a newly introduced `kid` may fail quickly until a synchronous refresh is allowed.
 
-This is a proposed design from the #402 review. Implementation, tests, and production confirmation remain pending; the decision is not evidence that the cache tiers are already present.
+The bounded API-key L1 and JWKS last-good cache tiers described here are implemented and deployed under #402. Probabilistic early refresh remains a deferred follow-up, with its revisit trigger recorded in the #402 discussion.

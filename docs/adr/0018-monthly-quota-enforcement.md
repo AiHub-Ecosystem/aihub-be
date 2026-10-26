@@ -1,6 +1,6 @@
 # ADR-0018: Organization monthly quota uses a heuristic Redis gate
 
-- Status: Accepted; production replay handling amended by #659/#632; sandbox dispatch budgets amended by ADR-0056
+- Status: Accepted; production replay handling amended by #659/#632; sandbox dispatch budgets amended by ADR-0056; graded Redis-control outage timing amended by [ADR-0116](0116-post-result-grading-completion-timing.md)
 - Related issue: #51
 - Related issue: #53
 

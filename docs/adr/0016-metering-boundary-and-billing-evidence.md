@@ -1,6 +1,6 @@
 # ADR-0016: Durable metering boundary and billing evidence
 
-- Status: Accepted
+- Status: Accepted; billed usage evidence and closed-month behavior were amended by [ADR-0097](0097-billing-statements-adjustments-and-closed-months.md)
 - Related issues: #9, #56, #57
 - Amended by: [ADR-0097](0097-billing-statements-adjustments-and-closed-months.md) for billing statements, internal keys, adjustments, closed months, and the charge for a Writing grading completed after its `504`
 

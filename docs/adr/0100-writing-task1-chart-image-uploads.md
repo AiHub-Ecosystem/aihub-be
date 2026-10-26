@@ -1,6 +1,6 @@
 # ADR-0100: Upload Writing Task 1 chart images for authenticated callers
 
-- Status: Accepted
+- Status: Accepted; the shared-host decision was amended by [ADR-0101](0101-writing-charts-use-shared-seaweedfs-host.md), and abuse-report response handling by [ADR-0111](0111-revoke-reported-public-writing-charts.md)
 - Date: 2026-10-14
 - Related issue: [#580](https://github.com/AiHub-Ecosystem/aihub-be/issues/580)
 - Amends: [ADR-0099](0099-writing-task1-charts-remain-caller-hosted.md), which declined chart uploads

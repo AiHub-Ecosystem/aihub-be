@@ -6,8 +6,11 @@
 
 ## I.1 Cascading Timeout Budgets
 
+> **Runtime value:** Managed AIHUB nginx uses a 75-second read timeout; see
+> [the deployed configuration](../../../../ops/nginx/aihub-api.conf).
+
 ```
-Host nginx                120s     must always EXCEED upstream application limits
+Host nginx                 75s     must always EXCEED upstream application limits
  └─ AIHUB op.timeoutMs     60s     grading    (generation: 10s / 30s)
      └─ undici headers/bodyTimeout = remainder of the allocated budget
          └─ x-request-deadline header -> informs AI Writing how much time remains
@@ -118,11 +121,14 @@ Requests without an idempotency key are aborted immediately to conserve tokens.
 
 ## I.6 Bulkheads & Load Shedding
 
+> **Runtime value:** The downstream pool uses 10 connections per origin; see
+> [the client configuration](../../../../src/modules/gateway/infrastructure/downstream-http.client.ts).
+
 Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 
 - Per-organization concurrency limits (Redis sorted set) — prevents single-tenant monopolization.
 - Local in-memory backstop `GLOBAL_MAX_INFLIGHT` — protects gateway processes during Redis outages.
-- Undici pool `connections: 64` per downstream — establishes hard ceilings on concurrent load to AI Writing.
+- Undici pool `connections: 10` per downstream — establishes hard ceilings on concurrent load to AI Writing.
 
 ---
 

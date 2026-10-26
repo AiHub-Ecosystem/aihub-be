@@ -1,6 +1,6 @@
 # ADR-0056: Customer API-key sandbox test tier
 
-- Status: Accepted
+- Status: Accepted; public-demo key admission was amended by [ADR-0094](0094-sandbox-demo-key-admission.md), and demo environment selection and allowance by [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md)
 - Date: 2026-09-27
 - Related issue: [aihub-be #182](https://github.com/AiHub-Ecosystem/aihub-be/issues/182)
 - Related issue: [AiHub-Frontend #27](https://github.com/AiHub-Ecosystem/AiHub-Frontend/issues/27)
