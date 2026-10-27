@@ -114,6 +114,14 @@ not-found check, #705 an Organization-scoped query that omits its predicate,
 - A8, I12, I13, M14 and the M13 extension were added on 2026-10-27 from a jscpd
   run with the same thresholds: 9 clones, 151 duplicated lines, or 0.27%. A run
   at 60 tokens found 25 clones (0.58%) and supplied A8 and I13.
+- Final run for #1315 on 2026-10-27, same thresholds (`src`, at least 8 lines
+  and 70 tokens; spec, testing, and generated files excluded): 2 clones, 30
+  duplicated lines of 56,905, or 0.05%. One was the Writing chart storage
+  construction in the revoke and sweep commands, now
+  `createCliWritingChartStorage`. The other stays separate: the 17-line
+  `eval` and `expire` wrappers in `redis-gateway.client.ts` and
+  `redis-identity.store.ts` implement two different module ports, and sharing
+  them would need one module to import the other's infrastructure.
 
 - B1, I6 and the other consolidations closed under #1315 leave three known
   residual spellings, each kept on purpose: the billing statement's

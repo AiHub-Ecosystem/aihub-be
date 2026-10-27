@@ -1,16 +1,13 @@
-import process from 'node:process';
-
 import type {
   WritingChartPublicEdgeOutcome,
   WritingChartRevocationAuditRepositoryPort,
   WritingChartRevocationStoragePort,
 } from '@/modules/writing/application/writing-chart-revocation.port';
-import { S3WritingChartUploadStorage } from '@/modules/writing/infrastructure/s3-writing-chart-upload.storage';
 import {
   type WritingChartEnvironment,
   isWritingChartAssetId,
 } from '@/modules/writing/public/chart-revocation';
-import { createCliSeaweedFsClient } from './seaweedfs-client';
+import { createCliWritingChartStorage } from './seaweedfs-client';
 
 export type WritingChartRevokeErrorCode =
   | 'INVALID_PUBLIC_URL'
@@ -125,21 +122,6 @@ async function probePublicChartEdge(url: string): Promise<{
   }
 }
 
-function createStorage(environment: WritingChartEnvironment) {
-  return new S3WritingChartUploadStorage(createCliSeaweedFsClient(), {
-    environment,
-    ...(process.env.SEAWEEDFS_CHART_STAGING_BUCKET === undefined
-      ? {}
-      : { stagingBucket: process.env.SEAWEEDFS_CHART_STAGING_BUCKET }),
-    ...(process.env.SEAWEEDFS_CHART_PUBLIC_BUCKET === undefined
-      ? {}
-      : { publicBucket: process.env.SEAWEEDFS_CHART_PUBLIC_BUCKET }),
-    ...(process.env.AIHUB_CHART_PUBLIC_BASE_URL === undefined
-      ? {}
-      : { publicBaseUrl: process.env.AIHUB_CHART_PUBLIC_BASE_URL }),
-  });
-}
-
 export async function runWritingChartRevokeCommand(
   input: WritingChartRevokeCliInput,
 ) {
@@ -203,7 +185,8 @@ export async function runWritingChartRevokeCommand(
 
     let origin: 'deleted' | 'already_absent' | 'failed' = 'failed';
     try {
-      const storage = input.storage ?? createStorage(input.environment);
+      const storage =
+        input.storage ?? createCliWritingChartStorage(input.environment);
       origin = await storage.deletePublishedObjectIfPresent({
         environment: input.environment,
         publishedKey: parsed.publishedKey,

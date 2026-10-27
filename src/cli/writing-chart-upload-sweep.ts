@@ -5,8 +5,7 @@ import type {
   WritingChartUploadStoragePort,
 } from '@/modules/writing/application/writing-chart-upload.port';
 import { WritingChartUploadSweep } from '@/modules/writing/application/writing-chart-upload.sweep';
-import { S3WritingChartUploadStorage } from '@/modules/writing/infrastructure/s3-writing-chart-upload.storage';
-import { createCliSeaweedFsClient } from './seaweedfs-client';
+import { createCliWritingChartStorage } from './seaweedfs-client';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -44,18 +43,7 @@ export async function runWritingChartUploadSweepCommand(
       process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
         ? 'sandbox'
         : 'production';
-    storage = new S3WritingChartUploadStorage(createCliSeaweedFsClient(), {
-      environment,
-      ...(process.env.SEAWEEDFS_CHART_STAGING_BUCKET === undefined
-        ? {}
-        : { stagingBucket: process.env.SEAWEEDFS_CHART_STAGING_BUCKET }),
-      ...(process.env.SEAWEEDFS_CHART_PUBLIC_BUCKET === undefined
-        ? {}
-        : { publicBucket: process.env.SEAWEEDFS_CHART_PUBLIC_BUCKET }),
-      ...(process.env.AIHUB_CHART_PUBLIC_BASE_URL === undefined
-        ? {}
-        : { publicBaseUrl: process.env.AIHUB_CHART_PUBLIC_BASE_URL }),
-    });
+    storage = createCliWritingChartStorage(environment);
   }
   const sweep = new WritingChartUploadSweep(
     repository,
