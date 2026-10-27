@@ -3,6 +3,7 @@ import {
   IDENTITY_CONFIG_ALGORITHMS,
   type IdentityConfigAlgorithm,
   type IdentityConfigStatus,
+  isSafeJwksUrl,
   parsePublicJsonWebKeySet,
 } from '@/modules/identity/domain/organization-identity-config';
 import type {
@@ -170,19 +171,6 @@ function positiveTtlValue(
     : undefined;
 }
 
-function isHttpsUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      url.username.length === 0 &&
-      url.password.length === 0
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function identityConfigFromRow(
   value: unknown,
 ): OrganizationIdentityConfig | undefined {
@@ -209,7 +197,7 @@ export function identityConfigFromRow(
     jwksCacheVersion === undefined ||
     issuer === undefined ||
     jwksUrl === undefined ||
-    (jwksUrl !== null && !isHttpsUrl(jwksUrl)) ||
+    (jwksUrl !== null && !isSafeJwksUrl(jwksUrl)) ||
     publicKeysJwks === undefined ||
     (jwksUrl === null && publicKeysJwks === null) ||
     allowedAlgorithms === undefined ||

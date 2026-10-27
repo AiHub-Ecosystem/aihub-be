@@ -1,19 +1,22 @@
 import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
 
 import { AppError } from '@/common/errors/app-error';
-import { parsePublicJsonWebKeySet } from '@/modules/identity/domain/organization-identity-config';
+import {
+  isSafeJwksUrl,
+  parsePublicJsonWebKeySet,
+} from '@/modules/identity/domain/organization-identity-config';
 import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import {
+  invalidJwks,
+  unsafeJwksUrl,
+} from '@/modules/identity/shared/application/jwks-errors';
 
 import {
   type DnsResolverFactory,
   assertSafeHost,
   pinnedLookup,
 } from './jwks-host-safety';
-import {
-  invalidJwks,
-  sourceUnavailable,
-  unsafeUrl,
-} from './jwks-source-errors';
+import { sourceUnavailable } from './jwks-source-errors';
 
 const JWKS_FETCH_TIMEOUT_MS = 3_000;
 export const JWKS_MAX_RESPONSE_BYTES = 64 * 1024;
@@ -109,12 +112,8 @@ export async function fetchRemoteJwks(
     throw new Error('JWKS URL is invalid', { cause: error });
   }
 
-  if (
-    url.protocol !== 'https:' ||
-    url.username.length > 0 ||
-    url.password.length > 0
-  ) {
-    throw unsafeUrl();
+  if (!isSafeJwksUrl(url)) {
+    throw unsafeJwksUrl();
   }
 
   const deadlineAt = Date.now() + JWKS_FETCH_TIMEOUT_MS;
@@ -147,7 +146,7 @@ export async function fetchRemoteJwks(
     }
 
     if (response.status >= 300 && response.status < 400) {
-      throw unsafeUrl();
+      throw unsafeJwksUrl();
     }
     if (!response.ok) {
       const retryable =
