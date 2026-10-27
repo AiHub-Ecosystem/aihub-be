@@ -43,11 +43,11 @@ export async function requireActiveMembership(
 }
 
 /**
- * Admits an active owner or admin of an active Organization. Every other
- * caller receives the same Safe Authorization Denial, so the refusal reveals
- * neither the Organization's status nor which condition refused.
+ * Admits an active member of an Organization whose management surfaces are
+ * open. A suspended Organization answers with the same refusal as a missing
+ * Membership, so the refusal does not reveal the Organization's status.
  */
-export async function requireOrganizationManager(
+export async function requireMembershipOfOpenOrganization(
   membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
   input: ResolveMembershipInput,
   forbiddenMessage: string,
@@ -57,10 +57,28 @@ export async function requireOrganizationManager(
     input,
     forbiddenMessage,
   );
-  if (
-    organizationSuspensionClosesSurface(caller.organizationStatus) ||
-    caller.role === 'member'
-  ) {
+  if (organizationSuspensionClosesSurface(caller.organizationStatus)) {
+    throw forbidden(forbiddenMessage);
+  }
+  return caller;
+}
+
+/**
+ * Admits an active owner or admin of an active Organization. Every other
+ * caller receives the same Safe Authorization Denial, so the refusal reveals
+ * neither the Organization's status nor which condition refused.
+ */
+export async function requireOrganizationManager(
+  membership: Pick<OrganizationMembershipPort, 'resolveMembership'>,
+  input: ResolveMembershipInput,
+  forbiddenMessage: string,
+): Promise<OrganizationMembershipRecord> {
+  const caller = await requireMembershipOfOpenOrganization(
+    membership,
+    input,
+    forbiddenMessage,
+  );
+  if (caller.role === 'member') {
     throw forbidden(forbiddenMessage);
   }
   return caller;

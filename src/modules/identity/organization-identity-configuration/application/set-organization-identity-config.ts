@@ -3,14 +3,18 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
   IDENTITY_CONFIG_ALGORITHMS,
+  isSafeJwksUrl,
   parsePublicJsonWebKeySet,
 } from '@/modules/identity/domain/organization-identity-config';
-
 import {
   forbidden,
-  requireActiveMembership,
+  requireMembershipOfOpenOrganization,
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
+import {
+  invalidJwks,
+  unsafeJwksUrl,
+} from '@/modules/identity/shared/application/jwks-errors';
 import type { JwksCachePort } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import type {
@@ -37,40 +41,11 @@ export interface SetOrganizationIdentityConfigInput {
 export type SetOrganizationIdentityConfigResult =
   StoredOrganizationIdentityConfig;
 
-function httpsUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      url.username.length === 0 &&
-      url.password.length === 0
-    );
-  } catch {
-    return false;
-  }
-}
-
 function cacheUnavailable(): AppError {
   return new AppError({
     code: 'IDENTITY_CONFIG_CACHE_UNAVAILABLE',
     message: 'Identity configuration cache could not be cleared',
     retryable: true,
-  });
-}
-
-function invalidJwks(): AppError {
-  return new AppError({
-    code: 'IDENTITY_JWKS_INVALID',
-    message: 'Public JWKS is invalid',
-    retryable: false,
-  });
-}
-
-function unsafeJwksUrl(): AppError {
-  return new AppError({
-    code: 'IDENTITY_JWKS_URL_UNSAFE',
-    message: 'JWKS URL is not safe',
-    retryable: false,
   });
 }
 
@@ -91,7 +66,7 @@ export class SetOrganizationIdentityConfig {
   async set(
     input: SetOrganizationIdentityConfigInput,
   ): Promise<SetOrganizationIdentityConfigResult> {
-    const caller = await requireActiveMembership(
+    const caller = await requireMembershipOfOpenOrganization(
       this.membership,
       {
         context: input.context,
@@ -100,7 +75,7 @@ export class SetOrganizationIdentityConfig {
       },
       IDENTITY_CONFIG_ACCESS_FORBIDDEN,
     );
-    if (caller.role !== 'owner' || caller.organizationStatus !== 'active') {
+    if (caller.role !== 'owner') {
       throw forbidden(IDENTITY_CONFIG_ACCESS_FORBIDDEN);
     }
 
@@ -138,7 +113,7 @@ export class SetOrganizationIdentityConfig {
       throw invalidRequest();
     }
 
-    if (jwksUrl !== null && !httpsUrl(jwksUrl)) {
+    if (jwksUrl !== null && !isSafeJwksUrl(jwksUrl)) {
       throw unsafeJwksUrl();
     }
     if (hasInlineSource && publicKeysJwks === undefined) {

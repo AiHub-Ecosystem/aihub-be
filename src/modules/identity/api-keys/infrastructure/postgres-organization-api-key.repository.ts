@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   hasRequiredOrganizationApiKeyEntitlements,
   reachedOrganizationApiKeyLimit,
@@ -19,6 +20,8 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  stringArrayValue,
+  stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 
 import {
@@ -108,28 +111,6 @@ const LOCK_API_KEY_FOR_REVOKE_SQL = `
     AND organization_id = $2
   FOR UPDATE
 `;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringArrayValue(
-  record: Record<string, unknown>,
-  key: string,
-): readonly string[] | undefined {
-  const value = record[key];
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value
-    : undefined;
-}
-
-function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
 
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   if (!isRecord(value)) {

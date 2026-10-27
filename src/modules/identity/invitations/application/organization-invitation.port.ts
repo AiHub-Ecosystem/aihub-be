@@ -23,7 +23,6 @@ export interface CreateOrganizationInvitationInput {
  * in the message.
  */
 export interface OrganizationInviteEmailDelivery {
-  readonly id: string;
   readonly token: string;
   readonly createdAt: Date;
 }

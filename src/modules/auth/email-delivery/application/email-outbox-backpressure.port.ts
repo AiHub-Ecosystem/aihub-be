@@ -1,11 +1,9 @@
 import type { EmailDeliveryKind } from './email-delivery-request.port';
+import type { BackpressureEmailKind } from './email-kind-handler.registry';
 
 export const ADMIT_EMAIL_REQUEST = Symbol('ADMIT_EMAIL_REQUEST');
 
-export type BackpressureEmailKind = Extract<
-  EmailDeliveryKind,
-  'verification_email' | 'password_reset_email' | 'organization_invite_email'
->;
+export type { BackpressureEmailKind } from './email-kind-handler.registry';
 
 /**
  * Asked by a route before it queues a credential email. It rejects with a

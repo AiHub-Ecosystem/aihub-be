@@ -80,6 +80,26 @@ describe('readEmailPayload', () => {
     ).toBe('unreadable');
   });
 
+  it('rejects near-expiry notice payloads with extra properties', () => {
+    const cipher: EmailPayloadCipherPort = {
+      encrypt: (): string => 'sealed',
+      decrypt: (): string =>
+        JSON.stringify({
+          organizationId: 'org_1',
+          userAccountId: 'usr_1',
+          apiKeyIds: ['key_1'],
+          extra: true,
+        }),
+    };
+
+    expect(
+      readEmailPayload(
+        cipher,
+        claimed({ kind: 'api_key_near_expiry_notification' }),
+      ),
+    ).toBe('unreadable');
+  });
+
   it('distinguishes a key version the instance does not hold from unreadable ciphertext', () => {
     expect(readEmailPayload(unknownKeyVersionCipher(), claimed())).toBe(
       'key_unavailable',

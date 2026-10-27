@@ -53,6 +53,18 @@ export function isKeyEnvironment(
 /** The grading scopes a Sandbox key may carry and the public demo may select. */
 const GRADING_SCOPES: readonly string[] = ['writing.grade', 'speaking.grade'];
 
+/**
+ * An Entitlement is the leading segment of a Scope: `writing.grade` requires
+ * `writing`. A scope with no leading segment names none, so an Entitlement
+ * check on it fails closed at issuance and at authentication alike.
+ */
+export function entitlementOfScope(scope: string): string | undefined {
+  const [entitlement] = scope.split('.');
+  return entitlement === undefined || entitlement.length === 0
+    ? undefined
+    : entitlement;
+}
+
 export function isGradingScope(scope: string): boolean {
   return GRADING_SCOPES.includes(scope);
 }

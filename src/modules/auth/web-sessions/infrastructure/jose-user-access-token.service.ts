@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
+import { invalidUserAccessToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
 
 import {
   type CryptoKey,
@@ -37,14 +38,6 @@ const INVALID_KEY_CONFIGURATION_MESSAGE =
 const INVALID_SIGNING_KEY_MESSAGE =
   `AIHUB_USER_ACCESS_JWT_PRIVATE_KEY must be an RSA key with at least ` +
   `${USER_ACCESS_TOKEN_MINIMUM_RSA_MODULUS_BITS} bits`;
-
-function invalidToken(): AppError {
-  return new AppError({
-    code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
-    message: 'User access token is invalid',
-    retryable: false,
-  });
-}
 
 export class JoseUserAccessTokenService
   implements UserAccessTokenIssuerPort, UserAccessTokenVerifierPort
@@ -119,7 +112,7 @@ export class JoseUserAccessTokenService
     try {
       const header = decodeProtectedHeader(token);
       if (header.alg !== 'RS256' || header.kid !== this.config.keyId) {
-        throw invalidToken();
+        throw invalidUserAccessToken();
       }
       const verified = await jwtVerify(token, this.publicKey, {
         algorithms: ['RS256'],
@@ -143,7 +136,7 @@ export class JoseUserAccessTokenService
         !isSafeInteger(payload.iat) ||
         !isSafeInteger(payload.exp)
       ) {
-        throw invalidToken();
+        throw invalidUserAccessToken();
       }
 
       const now = this.now();
@@ -153,12 +146,12 @@ export class JoseUserAccessTokenService
         payload.iat > now + this.config.clockSkewSeconds ||
         payload.exp < now - this.config.clockSkewSeconds
       ) {
-        throw invalidToken();
+        throw invalidUserAccessToken();
       }
 
       return { userId: payload.sub, jti: payload.jti };
     } catch {
-      throw invalidToken();
+      throw invalidUserAccessToken();
     }
   }
 }

@@ -3,7 +3,7 @@ import type {
   EmailPayloadCipherPort,
 } from './email-delivery-request.port';
 import { EnvelopeCipherError } from './email-delivery-request.port';
-import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
+import { EMAIL_KIND_POLICIES } from './email-kind-handler.registry';
 import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
 
 /**
@@ -32,8 +32,7 @@ export function readEmailPayload(
     }
     return 'unreadable';
   }
-  const handler = EMAIL_KIND_HANDLERS[request.kind];
-  return handler !== undefined && handler.isPayload(parsed)
-    ? { handler, payload: parsed }
-    : 'unreadable';
+  const handler = EMAIL_KIND_POLICIES[request.kind].handler;
+  if (!handler.isPayload(parsed)) return 'unreadable';
+  return { handler, payload: parsed };
 }

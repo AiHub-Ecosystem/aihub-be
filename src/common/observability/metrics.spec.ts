@@ -1,4 +1,8 @@
-import { METRICS_ROUTE_PATH, getMetrics } from './metrics';
+import {
+  METRICS_ROUTE_PATH,
+  getMetrics,
+  registerEmailDeliveryMetrics,
+} from './metrics';
 import {
   observeDispatchDeadlineMsRemaining,
   recordArgon2QueueRefusal,
@@ -19,6 +23,17 @@ import {
 } from './metrics';
 
 const GRADE = 'writing.task1.grade';
+const EMAIL_DELIVERY_KINDS = [
+  'verification_email',
+  'password_reset_email',
+  'organization_invite_email',
+  'mfa_enabled_notification',
+  'mfa_removed_notification',
+  'api_key_near_expiry_notification',
+] as const;
+const EMAIL_BACKPRESSURE_KINDS = EMAIL_DELIVERY_KINDS.slice(0, 3);
+
+registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
 
 /**
  * The value of one sample, or undefined when the series is absent. Prometheus
@@ -253,6 +268,10 @@ describe('email delivery failure series before any failure', () => {
       // A fresh module, so the failures other specs record in the shared registry do not count.
       await jest.isolateModulesAsync(async () => {
         const fresh = await import('./metrics');
+        fresh.registerEmailDeliveryMetrics(
+          EMAIL_DELIVERY_KINDS,
+          EMAIL_BACKPRESSURE_KINDS,
+        );
 
         expect(await fresh.getMetrics()).toContain(
           `aihub_email_delivery_failed_total{kind="${kind}"} 0`,
@@ -292,6 +311,10 @@ describe('email outbox backpressure metric', () => {
     async (kind) => {
       await jest.isolateModulesAsync(async () => {
         const fresh = await import('./metrics');
+        fresh.registerEmailDeliveryMetrics(
+          EMAIL_DELIVERY_KINDS,
+          EMAIL_BACKPRESSURE_KINDS,
+        );
 
         expect(await fresh.getMetrics()).toContain(
           `aihub_email_outbox_backpressure_refusals_total{kind="${kind}"} 0`,
@@ -612,7 +635,7 @@ describe('runtime resource metrics', () => {
     setPostgresPoolStatsSource(undefined);
   });
 
-  it('scrapes process memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
+  it('scrapes process CPU and memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
     let queued = 3;
     setPostgresPoolStatsSource(() => [
       {
@@ -630,6 +653,7 @@ describe('runtime resource metrics', () => {
     const payload = await getMetrics();
 
     for (const name of [
+      'aihub_process_cpu_seconds_total',
       'aihub_process_resident_memory_bytes',
       'aihub_process_heap_used_bytes',
       'aihub_event_loop_lag_seconds',
@@ -654,6 +678,7 @@ describe('runtime resource metrics', () => {
     );
     expect(payload).toMatch(/^aihub_process_resident_memory_bytes [\d.]+$/m);
     expect(payload).toMatch(/^aihub_process_heap_used_bytes [\d.]+$/m);
+    expect(payload).toMatch(/^aihub_process_cpu_seconds_total [\d.]+$/m);
     const lagSeconds = Number(
       payload.match(/^aihub_event_loop_lag_seconds (\S+)$/m)?.[1],
     );

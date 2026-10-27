@@ -38,11 +38,7 @@ export async function runNotificationsSweepCommand(
 ): Promise<ApiKeyNearExpirySweepSummary> {
   const emit = input.emit ?? console.log;
   const records = await openRecords(input);
-  const sweep = new SweepApiKeyNearExpiry(
-    records,
-    prefixedIdGenerator('nev_'),
-    prefixedIdGenerator('edr_'),
-  );
+  const sweep = new SweepApiKeyNearExpiry(records, prefixedIdGenerator('nev_'));
 
   const { result } = await runOperatorCommand(
     records,

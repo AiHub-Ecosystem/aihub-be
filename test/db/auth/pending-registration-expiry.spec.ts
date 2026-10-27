@@ -7,6 +7,7 @@ import { PostgresPendingRegistrationRecords } from '@/modules/auth/accounts/infr
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { PostgresEmailCredentialRepository } from '@/modules/auth/local-credentials/infrastructure/postgres-email-credential.repository';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { createPostgresAuthClient } from './postgres-auth.client';
 
 import {
@@ -71,7 +72,7 @@ function expire(limit = 100) {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
-  accounts = new PostgresUserAccountRepository(client);
+  accounts = new PostgresUserAccountRepository(client, UNUSED_EMAIL_OUTBOX);
   records = new PostgresPendingRegistrationRecords(client);
 });
 

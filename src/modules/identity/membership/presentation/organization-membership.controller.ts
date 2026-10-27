@@ -148,24 +148,13 @@ export class OrganizationMembershipController {
     @Param('username') username: string,
     @Body() body: unknown,
   ): Promise<OrganizationMembershipMutationResponse> {
-    const { context, requestId, userId } = bearerRequestContext(
+    return this.emptyBodyMutation(
+      'disable',
       request,
-      organizationId,
-    );
-    parseRequestBody(
-      EmptyOrganizationMembershipMutationRequestSchema,
-      body,
-      request,
-    );
-
-    const result = await this.mutation.disable({
-      context,
-      userId,
       organizationId,
       username,
-    });
-
-    return mutationResponse(result, requestId);
+      body,
+    );
   }
 
   @Post(PUBLIC_ROUTES['organizations.members.transfer'].path)
@@ -175,6 +164,24 @@ export class OrganizationMembershipController {
     @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Param('username') username: string,
     @Body() body: unknown,
+  ): Promise<OrganizationMembershipMutationResponse> {
+    return this.emptyBodyMutation(
+      'transfer',
+      request,
+      organizationId,
+      username,
+      body,
+    );
+  }
+
+  // Disable and transfer take no body: the same Bearer context, an empty-body
+  // check, and one mutation call.
+  private async emptyBodyMutation(
+    action: 'disable' | 'transfer',
+    request: FastifyRequest,
+    organizationId: string,
+    username: string,
+    body: unknown,
   ): Promise<OrganizationMembershipMutationResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -186,7 +193,7 @@ export class OrganizationMembershipController {
       request,
     );
 
-    const result = await this.mutation.transfer({
+    const result = await this.mutation[action]({
       context,
       userId,
       organizationId,

@@ -5,6 +5,7 @@ import type {
   OrganizationFirstOwnerPort,
 } from '@/modules/identity/organizations/application/organization-first-owner.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditEvent,
@@ -13,7 +14,6 @@ import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/ac
 import {
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {

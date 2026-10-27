@@ -1,8 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
-import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { normalizeEmail } from '@/modules/auth/public/local-auth';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
@@ -82,8 +81,7 @@ export class InviteOrganizationMember {
     private readonly invitations: OrganizationInvitationPort,
     private readonly tokenIssuer: OrganizationInviteTokenPort,
     private readonly rateLimiter: AuthRateLimiterPort,
-    private readonly newEmailDeliveryId: IdMinter,
-    private readonly emailBackpressure: AdmitEmailRequestPort,
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async authorize(input: InviteOrganizationMemberInput): Promise<void> {
@@ -102,48 +100,51 @@ export class InviteOrganizationMember {
       throw invalidRequest(error);
     }
 
-    // Before the limits are spent: an outage is not the caller's fault.
-    await this.emailBackpressure.admit('organization_invite_email');
-    await this.enforceRateLimits(input, email);
+    return this.emailOutbox.withAdmission(
+      'organization_invite_email',
+      async () => {
+        // Before the limits are spent: an outage is not the caller's fault.
+        await this.enforceRateLimits(input, email);
 
-    const now = new Date();
-    const issued = this.tokenIssuer.issue(now);
-    const result = await this.invitations.createInvitation({
-      context: input.context,
-      invitationId: issued.id,
-      organizationId: input.organizationId,
-      email,
-      role: input.role,
-      invitedBy: input.userId,
-      tokenHash: issued.hash,
-      expiresAt: issued.expiresAt,
-      // The request that carries the credential is committed with the
-      // invitation, so a caller retrying after a delivery failure re-sends
-      // nothing: a worker dispatches the row (ADR-0074).
-      emailDelivery: {
-        id: this.newEmailDeliveryId(now),
-        token: issued.raw,
-        createdAt: now,
+        const now = new Date();
+        const issued = this.tokenIssuer.issue(now);
+        const result = await this.invitations.createInvitation({
+          context: input.context,
+          invitationId: issued.id,
+          organizationId: input.organizationId,
+          email,
+          role: input.role,
+          invitedBy: input.userId,
+          tokenHash: issued.hash,
+          expiresAt: issued.expiresAt,
+          // The request that carries the credential is committed with the
+          // invitation, so a caller retrying after a delivery failure re-sends
+          // nothing: a worker dispatches the row (ADR-0074).
+          emailDelivery: {
+            token: issued.raw,
+            createdAt: now,
+          },
+          now,
+        });
+
+        if (result.kind === 'member_exists') {
+          throw new AppError({
+            code: 'ORGANIZATION_MEMBER_EXISTS',
+            message: 'Email already holds an active membership',
+            retryable: false,
+          });
+        }
+
+        return {
+          invitationId: issued.id,
+          organizationId: input.organizationId,
+          email,
+          role: input.role,
+          expiresAt: issued.expiresAt,
+          emailDeliveryStatus: 'queued',
+        };
       },
-      now,
-    });
-
-    if (result.kind === 'member_exists') {
-      throw new AppError({
-        code: 'ORGANIZATION_MEMBER_EXISTS',
-        message: 'Email already holds an active membership',
-        retryable: false,
-      });
-    }
-
-    return {
-      invitationId: issued.id,
-      organizationId: input.organizationId,
-      email,
-      role: input.role,
-      expiresAt: issued.expiresAt,
-      emailDeliveryStatus: 'queued',
-    };
+    );
   }
 
   private async resolveCaller(

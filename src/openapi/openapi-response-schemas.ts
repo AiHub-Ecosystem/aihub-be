@@ -1,8 +1,4 @@
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null;
-}
+import { isRecord } from '@/common/is-record';
 
 function extendSchema(schema: unknown): void {
   if (Array.isArray(schema)) {

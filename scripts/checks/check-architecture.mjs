@@ -203,6 +203,37 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   }
 }
 
+// `isRecord` means one thing: the guard in `src/common/is-record.ts`. A local
+// declaration brings back the second meaning (one that accepts arrays) the
+// register's M10 row removed. Domain code may not import `src/common`, so a
+// domain copy, or any other that must stay, says why on its own line or the
+// line above, with the same marker the other rules use.
+const IS_RECORD_DECLARATION =
+  /\b(?:function\s+isRecord\b|(?:const|let)\s+isRecord\s*[=:])/;
+const IS_RECORD_OWNER = join(srcDirectory, 'common', 'is-record.ts');
+
+for (const file of collectTypeScriptFiles(srcDirectory)) {
+  if (file.endsWith('.spec.ts') || file === IS_RECORD_OWNER) {
+    continue;
+  }
+
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (!IS_RECORD_DECLARATION.test(line)) {
+      continue;
+    }
+
+    const markedOn = `${lines[index - 1] ?? ''}\n${line}`;
+    if (markedOn.includes(BODY_VALIDATION_MARKER)) {
+      continue;
+    }
+
+    fail(
+      `${relative(root, file)}:${index + 1} declares its own isRecord; import it from '@/common/is-record', or mark the declaration with "${BODY_VALIDATION_MARKER} <reason>"`,
+    );
+  }
+}
+
 const QUERY_VALIDATION_MARKER = 'arch-check:';
 
 /** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */

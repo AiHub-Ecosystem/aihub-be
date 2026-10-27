@@ -108,5 +108,6 @@ describe('parseGradeResponse', () => {
     expect(appError.httpStatus).toBe(502);
     expect(appError.retryable).toBe(false);
     expect(appError.message).not.toContain('overall_band');
+    expect(appError.diagnostic).toBe('missing numeric data.overall_band');
   });
 });

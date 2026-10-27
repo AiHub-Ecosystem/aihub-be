@@ -5,8 +5,6 @@ import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import type {
   AcceptOrganizationInvitationResult,
@@ -20,13 +18,13 @@ import {
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
   testDatabaseUrl,
   waitForBlockedBy,
 } from '../shared/database';
+import { createDatabaseTestEmailOutbox } from '../shared/email-outbox';
 
 const ORGANIZATION_ID = 'org_acme';
 const OTHER_ORGANIZATION_ID = 'org_other';
@@ -41,7 +39,6 @@ type MembershipStatus = 'active' | 'disabled';
 let pool: Pool;
 let client: IdentityFixtureClient;
 let repository: PostgresOrganizationInvitationRepository;
-let cipher: EmailPayloadCipherPort;
 
 function userId(): string {
   return `usr_${ulid()}`;
@@ -150,7 +147,6 @@ async function invite(options: {
     tokenHash: options.tokenHash ?? tokenHash(),
     expiresAt: EXPIRES_AT,
     emailDelivery: {
-      id: `edr_${ulid()}`,
       token: 'raw-invite-token',
       createdAt: NOW,
     },
@@ -274,13 +270,10 @@ async function invitationByHash(tokenHash: string) {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresIdentityClient(testDatabaseUrl());
-  cipher = createEmailPayloadCipher(
-    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
-  );
+  const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
   repository = new PostgresOrganizationInvitationRepository(
     client,
-    cipher,
-    new PostgresEmailDeliveryRequestRepository(),
+    createDatabaseTestEmailOutbox(secrets),
   );
 });
 

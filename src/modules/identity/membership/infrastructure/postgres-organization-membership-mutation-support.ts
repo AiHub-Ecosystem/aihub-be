@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditDenial,
@@ -27,7 +28,6 @@ import type {
 import {
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,
@@ -40,6 +40,7 @@ import {
 import {
   type IdentityRepositoryClient,
   identityRows,
+  identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 type IdentitySqlClient = Parameters<typeof identityRows>[0];
@@ -425,4 +426,64 @@ export function prepareMembershipMutation(
     },
     rethrow: (error) => rethrowMutationFailure(client, stamp, refused, error),
   };
+}
+
+interface AuthorizedMutation {
+  readonly transaction: IdentitySqlClient;
+  readonly caller: MutationMembershipRow;
+  readonly target: MutationMembershipRow;
+  readonly stamp: ReturnType<typeof auditStamp>;
+  readonly refuse: (draft: OrganizationAuditDraft) => void;
+}
+
+/**
+ * The skeleton every Membership mutation shares: validate, open the
+ * transaction, lock the Organization and Memberships, decide, record the
+ * refusal audit a forbidden target earns, and refuse in the one order the
+ * route promises. `run` receives an authorized target and does the write.
+ */
+export async function runAuthorizedMutation(
+  client: IdentityRepositoryClient,
+  input: OrganizationMembershipMutationInput,
+  action: OrganizationMembershipMutationAction,
+  forbiddenDraft: (
+    target: MutationMembershipRow,
+    caller: MutationMembershipRow,
+  ) => OrganizationAuditDraft,
+  run: (
+    context: AuthorizedMutation,
+  ) => Promise<OrganizationMembershipMutationResult>,
+): Promise<OrganizationMembershipMutationResult> {
+  const mutation = prepareMembershipMutation(client, input, {
+    kind: 'required',
+    organizationId: input.organizationId,
+  });
+  try {
+    return await identityTransaction(client, async (transaction) => {
+      const { caller, target } = await lockMutationContext(
+        transaction,
+        input,
+        ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action],
+      );
+      const decision = mutationDecision(action, caller, target);
+      if (target !== undefined && decision?.kind === 'forbidden') {
+        mutation.refuse(forbiddenDraft(target, caller));
+      }
+      const authorizedTarget = requireAuthorizedMutationTarget(
+        action,
+        caller,
+        target,
+        decision,
+      );
+      return run({
+        transaction,
+        caller,
+        target: authorizedTarget,
+        stamp: mutation.stamp,
+        refuse: mutation.refuse,
+      });
+    });
+  } catch (error) {
+    return mutation.rethrow(error);
+  }
 }

@@ -3,6 +3,7 @@ import {
   IDENTITY_CONFIG_ALGORITHMS,
   type IdentityConfigAlgorithm,
   type IdentityConfigStatus,
+  isSafeJwksUrl,
   parsePublicJsonWebKeySet,
 } from '@/modules/identity/domain/organization-identity-config';
 import type {
@@ -13,6 +14,7 @@ import type {
   StoredOrganizationIdentityConfig,
 } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditEvent,
@@ -21,9 +23,10 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
   membershipStatusValue,
+  nullableStringValue,
+  oneOf,
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -97,17 +100,6 @@ const INSERT_OR_UPDATE_CONFIG_SQL = `
   RETURNING ${STORED_CONFIG_COLUMNS_SQL}
 `;
 
-function nullableStringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
 /**
  * The database holds a `bigint`; the application port holds its digits. The
  * conversion happens here so no application code has to know which one it is
@@ -149,14 +141,6 @@ function algorithmArrayValue(
   return algorithms;
 }
 
-function statusValue(
-  record: Record<string, unknown>,
-  key: string,
-): IdentityConfigStatus | undefined {
-  const value = record[key];
-  return value === 'active' || value === 'disabled' ? value : undefined;
-}
-
 function positiveTtlValue(
   record: Record<string, unknown>,
   key: string,
@@ -168,19 +152,6 @@ function positiveTtlValue(
     value <= 3_600
     ? value
     : undefined;
-}
-
-function isHttpsUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      url.username.length === 0 &&
-      url.password.length === 0
-    );
-  } catch {
-    return false;
-  }
 }
 
 export function identityConfigFromRow(
@@ -202,14 +173,17 @@ export function identityConfigFromRow(
     value,
     'maxAssertionTtlSeconds',
   );
-  const status = statusValue(value, 'status');
+  const status = oneOf<IdentityConfigStatus>(value, 'status', [
+    'active',
+    'disabled',
+  ]);
 
   if (
     organizationId === undefined ||
     jwksCacheVersion === undefined ||
     issuer === undefined ||
     jwksUrl === undefined ||
-    (jwksUrl !== null && !isHttpsUrl(jwksUrl)) ||
+    (jwksUrl !== null && !isSafeJwksUrl(jwksUrl)) ||
     publicKeysJwks === undefined ||
     (jwksUrl === null && publicKeysJwks === null) ||
     allowedAlgorithms === undefined ||

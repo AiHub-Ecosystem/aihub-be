@@ -9,13 +9,13 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { isApiKeyNearExpiryNotificationPayload } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { PostgresApiKeyNearExpiryNotices } from '@/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices';
 import {
   type IdentityFixtureClient,
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { createDatabaseTestEmailOutbox } from '../shared/email-outbox';
 
 import {
   createTestPool,
@@ -66,15 +66,12 @@ function decodeNoticePayload(
 let pool: Pool;
 let client: IdentityFixtureClient;
 let cipher: EmailPayloadCipherPort;
+let emailOutbox: ReturnType<typeof createDatabaseTestEmailOutbox>;
 
 function noticesOver(
   over: IdentityFixtureClient,
 ): PostgresApiKeyNearExpiryNotices {
-  return new PostgresApiKeyNearExpiryNotices(
-    over,
-    cipher,
-    new PostgresEmailDeliveryRequestRepository(),
-  );
+  return new PostgresApiKeyNearExpiryNotices(over, emailOutbox);
 }
 
 /**
@@ -214,7 +211,6 @@ function sweep(notices: PostgresApiKeyNearExpiryNotices, now: Date) {
     now,
     windowEnd: new Date(now.getTime() + 14 * DAY),
     newEventId: prefixedIdGenerator('nev_'),
-    newEmailDeliveryId: prefixedIdGenerator('edr_'),
   });
 }
 
@@ -280,9 +276,9 @@ async function actionableNotices(now: Date): Promise<number> {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresIdentityClient(testDatabaseUrl());
-  cipher = createEmailPayloadCipher(
-    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
-  );
+  const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
+  cipher = createEmailPayloadCipher(secrets);
+  emailOutbox = createDatabaseTestEmailOutbox(secrets);
 });
 
 afterAll(async () => {

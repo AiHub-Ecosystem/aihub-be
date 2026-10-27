@@ -3,6 +3,7 @@ import {
   apiKeyDisplayPrefix,
   apiKeyPrefixForEnvironment,
   apiKeyStatus,
+  entitlementOfScope,
   isApiKeyFormat,
   isGradingScope,
   isKeyEnvironment,
@@ -80,5 +81,18 @@ describe('API key material', () => {
     expect(isGradingScope('writing.grade')).toBe(true);
     expect(isGradingScope('speaking.grade')).toBe(true);
     expect(isGradingScope('writing.read')).toBe(false);
+  });
+});
+
+describe('entitlementOfScope', () => {
+  it.each([
+    ['writing.grade', 'writing'],
+    ['speaking', 'speaking'],
+  ])('reads the leading segment of %s', (scope, entitlement) => {
+    expect(entitlementOfScope(scope)).toBe(entitlement);
+  });
+
+  it.each(['', '.grade'])('names no Entitlement for %p', (scope) => {
+    expect(entitlementOfScope(scope)).toBeUndefined();
   });
 });

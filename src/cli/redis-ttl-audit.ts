@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { connectCliRedis } from './cli-redis';
 
 const AIHUB_KEY_SCAN_COUNT = 250;
 const JWKS_GENERATION_PREFIX = 'aihub:v1:jwks-generation:';
@@ -22,21 +22,7 @@ interface RedisTtlAuditInput {
 }
 
 async function connectRedis(url: string): Promise<RedisTtlAuditClient> {
-  const redis = new Redis(url, {
-    commandTimeout: 5_000,
-    connectTimeout: 5_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    lazyConnect: true,
-  });
-  redis.on('error', () => undefined);
-
-  try {
-    await redis.connect();
-  } catch (error) {
-    redis.disconnect();
-    throw error;
-  }
+  const redis = await connectCliRedis(url);
 
   return {
     scan: (cursor) =>

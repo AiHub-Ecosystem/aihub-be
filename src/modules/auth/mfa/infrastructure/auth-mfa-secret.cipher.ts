@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
-import { readFileSync } from 'node:fs';
+import { isRecord } from '@/common/is-record';
+import { readUtf8File } from '@/common/security/secret-document';
 
 import { EnvelopeCipherError } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EnvelopeCipher } from '@/modules/auth/email-delivery/infrastructure/envelope-cipher';
@@ -87,7 +88,7 @@ function loadKeyring(options: AuthMfaCipherOptions): AuthMfaKeyring {
   if (!path) throw new Error('AIHUB_AUTH_MFA_SECRETS_FILE is required');
   let parsed: unknown;
   try {
-    parsed = JSON.parse((options.readFile ?? defaultReadFile)(path));
+    parsed = JSON.parse((options.readFile ?? readUtf8File)(path));
   } catch {
     throw new Error('Auth MFA secret file is invalid');
   }
@@ -106,10 +107,6 @@ function loadKeyring(options: AuthMfaCipherOptions): AuthMfaKeyring {
   return { currentKeyId: parsed.current_key_id, keys: parsed.keys };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function isStringRecord(
   value: unknown,
 ): value is Readonly<Record<string, string>> {
@@ -117,8 +114,4 @@ function isStringRecord(
     isRecord(value) &&
     Object.values(value).every((entry) => typeof entry === 'string')
   );
-}
-
-function defaultReadFile(path: string): string {
-  return readFileSync(path, 'utf8');
 }

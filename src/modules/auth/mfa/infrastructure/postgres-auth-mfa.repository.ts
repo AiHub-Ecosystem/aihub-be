@@ -1,6 +1,7 @@
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { lockActivePasswordIdentity } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,
@@ -16,7 +17,7 @@ import { revokeUserWebSessions } from '@/modules/auth/web-sessions/infrastructur
 export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
   constructor(
     private readonly client: AuthRepositoryClient,
-    private readonly emailRequests = new PostgresEmailDeliveryRequestRepository(),
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async findActiveFactor(
@@ -40,20 +41,11 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      const accounts = await authQueryRows(
+      const identity = await lockActivePasswordIdentity(
         transaction,
-        'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
-        [input.userId],
+        input.userId,
       );
-      if (accounts[0]?.['status'] !== 'active') return false;
-
-      const identities = await authQueryRows(
-        transaction,
-        `SELECT password_hash FROM auth_identities
-         WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
-        [input.userId],
-      );
-      if (identities[0]?.['password_hash'] !== input.expectedPasswordHash) {
+      if (identity?.passwordHash !== input.expectedPasswordHash) {
         return false;
       }
 
@@ -96,7 +88,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly userId: string;
     readonly email: string;
     readonly recoveryCodeHashes: readonly string[];
-    readonly emailDelivery: InsertEmailDeliveryRequestInput;
+    readonly emailDelivery: QueueEmailDeliveryRequestInput;
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
@@ -143,26 +135,18 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly userId: string;
     readonly email: string;
     readonly expectedPasswordHash?: string;
-    readonly emailDelivery: InsertEmailDeliveryRequestInput | undefined;
+    readonly emailDelivery: QueueEmailDeliveryRequestInput | undefined;
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      const accounts = await authQueryRows(
+      const identity = await lockActivePasswordIdentity(
         transaction,
-        'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
-        [input.userId],
-      );
-      if (accounts[0]?.['status'] !== 'active') return false;
-      const identities = await authQueryRows(
-        transaction,
-        `SELECT canonical_email, password_hash FROM auth_identities
-         WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
-        [input.userId],
+        input.userId,
       );
       if (
-        identities[0]?.['canonical_email'] !== input.email ||
+        identity?.canonicalEmail !== input.email ||
         (input.expectedPasswordHash !== undefined &&
-          identities[0]?.['password_hash'] !== input.expectedPasswordHash)
+          identity.passwordHash !== input.expectedPasswordHash)
       ) {
         return false;
       }
@@ -238,9 +222,9 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
 
   private async insertEmailDelivery(
     transaction: AuthTransactionClient,
-    input: InsertEmailDeliveryRequestInput,
+    input: QueueEmailDeliveryRequestInput,
   ): Promise<void> {
-    await this.emailRequests.insert(
+    await this.emailOutbox.queue(
       new EmailDeliveryTransactionAdapter(transaction),
       input,
     );

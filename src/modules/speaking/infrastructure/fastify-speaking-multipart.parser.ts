@@ -1,4 +1,5 @@
 import { Blob } from 'node:buffer';
+import { isRecord } from '@/common/is-record';
 
 import multipart from '@fastify/multipart';
 import { Injectable } from '@nestjs/common';
@@ -16,14 +17,7 @@ import type {
   SpeakingMultipartParserPort,
   SpeakingMultipartSource,
 } from '@/modules/speaking/application/speaking-multipart-parser.port';
-
-/**
- * Audio-file ceiling. Mirrors the AI Speaking provider contract (v1 section
- * 3): the provider itself rejects audio above 25 MiB with 413, so AIHUB
- * enforces the file cap locally instead of forwarding a request that cannot
- * grade.
- */
-export const SPEAKING_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 
 const MULTIPART_LIMITS = {
   fileSize: SPEAKING_AUDIO_MAX_BYTES,
@@ -46,10 +40,6 @@ const ALLOWED_FIELDS = new Set([
 interface MultipartRegistrableInstance {
   register(...args: never[]): unknown;
   addHook(...args: never[]): unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function invalidRequest(message = 'Request failed validation'): AppError {

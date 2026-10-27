@@ -25,17 +25,38 @@ to reject unknown fields.
 Clients must ignore response fields they do not recognize and must not reject a
 response only because it contains an extra field.
 
+Clients using a JSON deserializer should configure it to ignore unknown object
+properties. In Java with Jackson, also give open enum values a fallback:
+
+```java
+ObjectMapper mapper = new ObjectMapper()
+    .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+    .enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE);
+```
+
+Mark the fallback enum constant with `@JsonEnumDefaultValue`. In other
+languages, use the equivalent lenient response-field handling and represent
+open enums with an unknown-value case. Every `switch` over `error.code` or an
+open enum needs a default branch.
+
+Within a supported major, AIHUB may add response headers without changing the
+meaning of existing headers. Clients must ignore headers they do not recognize;
+an unfamiliar response header alone must not make an otherwise valid response
+fail.
+
 Response enum values are closed unless their OpenAPI schema has
 `x-extensible-enum`. AIHUB may add values to `error.code` and Organization Audit
 event `action`; clients must handle unknown values with fallback logic. For an
 unknown error code, fall back to HTTP status and `error.retryable`. For an
 unknown Audit action, use generic handling rather than failing the event page.
 Marking a previously closed response enum as extensible is itself breaking;
-clients need that change announced before AIHUB sends a new value.
+clients need that change announced before AIHUB sends a new value. Each new
+error code and value added to an open enum is an additive change and appears
+under `Added` in the dated `CHANGELOG.md` entry for its release.
 
-Removing or renaming a route or existing field, making a request field
-required, narrowing accepted request values, changing an existing field's type
-or meaning, removing a response enum value, or adding a value to a closed
+Removing or renaming a route, existing field, or error code; making a request
+field required; narrowing accepted request values; changing an existing field's
+type or meaning; removing a response enum value; or adding a value to a closed
 response enum is breaking and may require customer changes.
 
 AIHUB introduces a new URI major only for a breaking contract change. A

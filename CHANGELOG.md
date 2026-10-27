@@ -2,8 +2,11 @@
 
 This changelog tracks the public API contract version, independently of the
 backend package version. `/v1` is the current supported major.
+Version headings use the date the release shipped. Record each newly added
+public error code and value for an open response enum by name under `Added` in
+the dated entry that introduced it.
 
-## [1.0.0] — `/v1` baseline
+## [1.0.0] - 2026-10-27 — `/v1` baseline
 
 This baseline records the current customer-facing contract, including behavior
 that changed before public contract versioning was introduced.
@@ -19,3 +22,6 @@ that changed before public contract versioning was introduced.
 
 - Response object schemas allow unknown properties; clients must ignore fields
   they do not recognize. Request body schemas remain closed.
+- AIHUB may add response headers and clients must ignore headers they do not
+  recognize. `error.code` and Organization Audit event `action` are open
+  response enums; clients must handle values they do not recognize.

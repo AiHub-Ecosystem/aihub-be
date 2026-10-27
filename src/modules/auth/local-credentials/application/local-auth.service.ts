@@ -1,6 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { ResetPasswordRequest } from '@/contracts/auth/local-auth';
 import { type UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
 import {
@@ -10,13 +9,11 @@ import {
   normalizeRegistration,
   validatePassword,
 } from '@/modules/auth/domain/local-auth';
-import {
-  type EmailDeliveryKind,
-  type EmailDeliveryPayload,
-  type EmailPayloadCipherPort,
-  type InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
+import type { AuthEmailDeliveryPayload } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type {
+  EmailOutboxPort,
+  QueueEmailDeliveryRequestInput,
+} from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   type AuthMfaServicePort,
   type MfaSessionProof,
@@ -122,15 +119,12 @@ export class LocalAuthService {
     private readonly passwordHasher: PasswordHasherPort,
     private readonly tokenIssuer: VerificationTokenPort,
     private readonly passwordResetTokenIssuer: PasswordResetTokenPort,
-    private readonly payloadCipher: EmailPayloadCipherPort,
+    private readonly emailOutbox: EmailOutboxPort,
     private readonly rateLimiter: AuthRateLimiterPort,
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
     private readonly refreshTokenIssuer: RefreshTokenIssuerPort,
     private readonly clock: LocalAuthServiceClock,
-    private readonly newEmailDeliveryId: IdMinter,
     private readonly mfa: AuthMfaServicePort,
-    /** Sheds a request the outbox cannot deliver within its credential's lifetime. */
-    private readonly emailBackpressure: AdmitEmailRequestPort,
     /** Tokens issued from now on need the registration password (ADR-0123). */
     private readonly requireVerificationPassword: boolean,
   ) {
@@ -157,60 +151,61 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    // Before the limits are spent: an outage is not the caller's fault.
-    await this.emailBackpressure.admit('verification_email');
-    await enforceAuthRateLimits(this.rateLimiter, [
-      { ...LOCAL_AUTH_RATE_LIMITS.register.ip, key: ip },
-      {
-        ...AUTH_EMAIL_REQUEST_LIMIT,
-        key: JSON.stringify([ip, normalized.email]),
-      },
-    ]);
+    return this.emailOutbox.withAdmission('verification_email', async () => {
+      // Before the limits are spent: an outage is not the caller's fault.
+      await enforceAuthRateLimits(this.rateLimiter, [
+        { ...LOCAL_AUTH_RATE_LIMITS.register.ip, key: ip },
+        {
+          ...AUTH_EMAIL_REQUEST_LIMIT,
+          key: JSON.stringify([ip, normalized.email]),
+        },
+      ]);
 
-    const now = this.clock.now();
-    const issued = this.tokenIssuer.issue(now);
-    const passwordHash = await this.passwordHasher.hash(normalized.password);
-    let emailDeliveryStatus: 'queued' | 'suppressed';
+      const now = this.clock.now();
+      const issued = this.tokenIssuer.issue(now);
+      const passwordHash = await this.passwordHasher.hash(normalized.password);
+      let emailDeliveryStatus: 'queued' | 'suppressed';
 
-    try {
-      emailDeliveryStatus = await this.userAccounts.register({
+      try {
+        emailDeliveryStatus = await this.userAccounts.register({
+          email: normalized.email,
+          username: normalized.username,
+          passwordHash,
+          tokenId: issued.id,
+          tokenHash: issued.hash,
+          tokenExpiresAt: issued.expiresAt,
+          requiresPassword: this.requireVerificationPassword,
+          ...browserBindingHash(this.tokenIssuer, browserBinding),
+          // Committed with the account or not at all (ADR-0074).
+          emailDelivery: this.emailDeliveryRequest(
+            'verification_email',
+            {
+              email: normalized.email,
+              token: issued.raw,
+              expiresAt: issued.expiresAt.toISOString(),
+            },
+            now,
+          ),
+          now,
+        });
+      } catch (error) {
+        if (error instanceof AuthIdentityConflictError) {
+          throw new AppError({
+            code: 'AUTH_IDENTITY_UNAVAILABLE',
+            message: 'Email or username is unavailable',
+            retryable: false,
+          });
+        }
+        throw error;
+      }
+
+      return {
         email: normalized.email,
         username: normalized.username,
-        passwordHash,
-        tokenId: issued.id,
-        tokenHash: issued.hash,
-        tokenExpiresAt: issued.expiresAt,
-        requiresPassword: this.requireVerificationPassword,
-        ...browserBindingHash(this.tokenIssuer, browserBinding),
-        // Committed with the account or not at all (ADR-0074).
-        emailDelivery: this.emailDeliveryRequest(
-          'verification_email',
-          {
-            email: normalized.email,
-            token: issued.raw,
-            expiresAt: issued.expiresAt.toISOString(),
-          },
-          now,
-        ),
-        now,
-      });
-    } catch (error) {
-      if (error instanceof AuthIdentityConflictError) {
-        throw new AppError({
-          code: 'AUTH_IDENTITY_UNAVAILABLE',
-          message: 'Email or username is unavailable',
-          retryable: false,
-        });
-      }
-      throw error;
-    }
-
-    return {
-      email: normalized.email,
-      username: normalized.username,
-      status: 'pending_verification',
-      emailDeliveryStatus,
-    };
+        status: 'pending_verification',
+        emailDeliveryStatus,
+      };
+    });
   }
 
   async verify(
@@ -263,38 +258,39 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    await this.emailBackpressure.admit('verification_email');
-    await enforceAuthRateLimits(this.rateLimiter, [
-      { ...LOCAL_AUTH_RATE_LIMITS.resend.ip, key: ip },
-      {
-        ...AUTH_EMAIL_REQUEST_LIMIT,
-        key: JSON.stringify([ip, normalizedEmail]),
-      },
-    ]);
-
-    const now = this.clock.now();
-    const issued = this.tokenIssuer.issue(now);
-    // The address is already canonical here, so the request can be sealed before
-    // the repository knows whether a target exists. A repository that finds no
-    // target writes neither the rotation nor the request, and the route stays
-    // generic either way: it must not reveal that a request was queued.
-    await this.verificationTokens.rotateVerificationToken({
-      email: normalizedEmail,
-      tokenId: issued.id,
-      tokenHash: issued.hash,
-      tokenExpiresAt: issued.expiresAt,
-      requiresPassword: this.requireVerificationPassword,
-      ...browserBindingHash(this.tokenIssuer, browserBinding),
-      emailDelivery: this.emailDeliveryRequest(
-        'verification_email',
+    await this.emailOutbox.withAdmission('verification_email', async () => {
+      await enforceAuthRateLimits(this.rateLimiter, [
+        { ...LOCAL_AUTH_RATE_LIMITS.resend.ip, key: ip },
         {
-          email: normalizedEmail,
-          token: issued.raw,
-          expiresAt: issued.expiresAt.toISOString(),
+          ...AUTH_EMAIL_REQUEST_LIMIT,
+          key: JSON.stringify([ip, normalizedEmail]),
         },
+      ]);
+
+      const now = this.clock.now();
+      const issued = this.tokenIssuer.issue(now);
+      // The address is already canonical here, so the request can be sealed before
+      // the repository knows whether a target exists. A repository that finds no
+      // target writes neither the rotation nor the request, and the route stays
+      // generic either way: it must not reveal that a request was queued.
+      await this.verificationTokens.rotateVerificationToken({
+        email: normalizedEmail,
+        tokenId: issued.id,
+        tokenHash: issued.hash,
+        tokenExpiresAt: issued.expiresAt,
+        requiresPassword: this.requireVerificationPassword,
+        ...browserBindingHash(this.tokenIssuer, browserBinding),
+        emailDelivery: this.emailDeliveryRequest(
+          'verification_email',
+          {
+            email: normalizedEmail,
+            token: issued.raw,
+            expiresAt: issued.expiresAt.toISOString(),
+          },
+          now,
+        ),
         now,
-      ),
-      now,
+      });
     });
   }
 
@@ -309,41 +305,42 @@ export class LocalAuthService {
       throw invalidRequest(error);
     }
 
-    await this.emailBackpressure.admit('password_reset_email');
-    await enforceAuthRateLimits(this.rateLimiter, [
-      {
-        ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.ip,
-        key: ip,
-      },
-      {
-        ...AUTH_EMAIL_REQUEST_LIMIT,
-        key: JSON.stringify([ip, normalizedEmail]),
-      },
-    ]);
-
-    const now = this.clock.now();
-    const issued = this.passwordResetTokenIssuer.issue(now);
-    // Sealed before the repository resolves the target, because the request is
-    // written inside that transaction. An ineligible address yields neither the
-    // token nor the request, and the reply is identical either way.
-    await this.passwordResetTokens.issuePasswordResetToken({
-      email: normalizedEmail,
-      tokenId: issued.id,
-      tokenHash: issued.hash,
-      tokenExpiresAt: issued.expiresAt,
-      emailDelivery: this.emailDeliveryRequest(
-        'password_reset_email',
+    return this.emailOutbox.withAdmission('password_reset_email', async () => {
+      await enforceAuthRateLimits(this.rateLimiter, [
         {
-          email: normalizedEmail,
-          token: issued.raw,
-          expiresAt: issued.expiresAt.toISOString(),
+          ...LOCAL_AUTH_RATE_LIMITS.forgotPassword.ip,
+          key: ip,
         },
-        now,
-      ),
-      now,
-    });
+        {
+          ...AUTH_EMAIL_REQUEST_LIMIT,
+          key: JSON.stringify([ip, normalizedEmail]),
+        },
+      ]);
 
-    return { message: PASSWORD_RECOVERY_MESSAGE };
+      const now = this.clock.now();
+      const issued = this.passwordResetTokenIssuer.issue(now);
+      // Sealed before the repository resolves the target, because the request is
+      // written inside that transaction. An ineligible address yields neither the
+      // token nor the request, and the reply is identical either way.
+      await this.passwordResetTokens.issuePasswordResetToken({
+        email: normalizedEmail,
+        tokenId: issued.id,
+        tokenHash: issued.hash,
+        tokenExpiresAt: issued.expiresAt,
+        emailDelivery: this.emailDeliveryRequest(
+          'password_reset_email',
+          {
+            email: normalizedEmail,
+            token: issued.raw,
+            expiresAt: issued.expiresAt.toISOString(),
+          },
+          now,
+        ),
+        now,
+      });
+
+      return { message: PASSWORD_RECOVERY_MESSAGE };
+    });
   }
 
   async resetPassword(input: ResetPasswordRequest, ip: string): Promise<void> {
@@ -462,18 +459,13 @@ export class LocalAuthService {
    * resolve when it claims the row.
    */
   private emailDeliveryRequest(
-    kind: Exclude<EmailDeliveryKind, 'organization_invite_email'>,
-    payload: EmailDeliveryPayload,
+    kind: 'verification_email' | 'password_reset_email',
+    payload: AuthEmailDeliveryPayload,
     now: Date,
-  ): InsertEmailDeliveryRequestInput {
-    const id = this.newEmailDeliveryId(now);
+  ): QueueEmailDeliveryRequestInput {
     return {
-      id,
       kind,
-      payloadCiphertext: this.payloadCipher.encrypt(JSON.stringify(payload), {
-        id,
-        kind,
-      }),
+      payload,
       createdAt: now,
     };
   }

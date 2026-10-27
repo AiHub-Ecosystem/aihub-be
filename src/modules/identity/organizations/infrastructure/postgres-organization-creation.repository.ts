@@ -8,14 +8,12 @@ import type {
   OrganizationCreationRecordPort,
 } from '@/modules/identity/organizations/application/organization-creation-record.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
-import {
-  identityStoreUnavailable,
-  isRecord,
-} from '@/modules/identity/shared/infrastructure/identity-row';
+import { identityStoreUnavailable } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
   type IdentityRepositoryClient,
   identityRows,

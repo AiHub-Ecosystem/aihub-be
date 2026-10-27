@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import { Value } from '@sinclair/typebox/value';
 
 import {
@@ -45,10 +46,6 @@ export type CatalogLookup = Readonly<
     >
   >
 >;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function idempotencyKeyOf(command: BaseGradingCommand): string | undefined {
   if (

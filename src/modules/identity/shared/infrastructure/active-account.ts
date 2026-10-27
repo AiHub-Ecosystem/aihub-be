@@ -1,4 +1,5 @@
-import { isRecord, stringValue } from './identity-row';
+import { isRecord } from '@/common/is-record';
+import { stringValue } from './identity-row';
 import { identityRows } from './postgres-identity.client';
 
 const ACTIVE_ACCOUNT_BY_USERNAME_SQL = `

@@ -1,11 +1,7 @@
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 
-import type {
-  EmailDeliveryRequestWriterPort,
-  EmailPayloadCipherPort,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { InviteOrganizationMember } from '@/modules/identity/invitations/application/invite-organization-member';
 import type { OrganizationInvitationPort } from '@/modules/identity/invitations/application/organization-invitation.port';
@@ -73,8 +69,7 @@ describe('a suspended Organization closes every management surface', () => {
         {} as OrganizationInvitationPort,
         {} as OrganizationInviteTokenPort,
         {} as AuthRateLimiterPort,
-        () => 'edr_01J00000000000000000000000',
-        {} as AdmitEmailRequestPort,
+        UNUSED_EMAIL_OUTBOX,
       );
 
       await expect(
@@ -194,8 +189,7 @@ describe('a suspended Organization closes every management surface', () => {
       ]);
       const repository = new PostgresOrganizationInvitationRepository(
         db,
-        {} as EmailPayloadCipherPort,
-        {} as EmailDeliveryRequestWriterPort,
+        UNUSED_EMAIL_OUTBOX,
       );
 
       await expect(
@@ -229,8 +223,7 @@ describe('a suspended Organization closes every management surface', () => {
       ]);
       const repository = new PostgresOrganizationInvitationRepository(
         db,
-        {} as EmailPayloadCipherPort,
-        {} as EmailDeliveryRequestWriterPort,
+        UNUSED_EMAIL_OUTBOX,
       );
 
       await expect(

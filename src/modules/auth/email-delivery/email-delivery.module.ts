@@ -3,7 +3,10 @@ import type { ConfigType } from '@nestjs/config';
 
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
-import { recordEmailOutboxBackpressureRefusal } from '@/common/observability/metrics';
+import {
+  recordEmailOutboxBackpressureRefusal,
+  registerEmailDeliveryMetrics,
+} from '@/common/observability/metrics';
 import { hashOpaqueToken } from '@/common/security/opaque-token-issuer';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
@@ -33,9 +36,18 @@ import {
   type EmailNoticeResolvers,
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
+import {
+  EMAIL_BACKPRESSURE_KINDS,
+  EMAIL_DELIVERY_KINDS,
+} from './application/email-kind-handler.registry';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
+import { EmailOutbox } from './application/email-outbox';
 import { EmailOutboxBackpressureGate } from './application/email-outbox-backpressure.gate';
 import { ADMIT_EMAIL_REQUEST } from './application/email-outbox-backpressure.port';
+import {
+  EMAIL_OUTBOX,
+  type EmailOutboxPort,
+} from './application/email-outbox.port';
 import {
   EMAIL_PROVIDER_OUTAGE_CIRCUIT,
   type EmailProviderOutageCircuitPort,
@@ -72,6 +84,8 @@ import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-disp
 import { PostgresEmailOutboxQueueAge } from './infrastructure/postgres-email-outbox-queue-age';
 import { RedisEmailSendRateLimiter } from './infrastructure/redis-email-send-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
+
+registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
 
 @Module({
   imports: [RuntimeConfigurationModule, PersistenceModule, SecretsModule],
@@ -120,6 +134,22 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
       useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipherPort =>
         createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
       inject: [RUNTIME_SECRET_PROVIDER],
+    },
+    {
+      provide: EMAIL_OUTBOX,
+      inject: [
+        EMAIL_DELIVERY_REQUEST_WRITER,
+        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_DELIVERY_ID,
+        ADMIT_EMAIL_REQUEST,
+      ],
+      useFactory: (
+        requests: EmailDeliveryRequestWriterPort,
+        cipher: EmailPayloadCipherPort,
+        newId: ReturnType<typeof prefixedIdGenerator>,
+        backpressure: EmailOutboxBackpressureGate,
+      ): EmailOutboxPort =>
+        new EmailOutbox(requests, cipher, newId, backpressure),
     },
     // Empty here; the module owning a notice's facts fills its slot (ADR-0120).
     {
@@ -255,13 +285,6 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
       ],
     },
   ],
-  exports: [
-    EMAIL_DELIVERY_ID,
-    ADMIT_EMAIL_REQUEST,
-    EMAIL_DELIVERY_REQUEST_WRITER,
-    EMAIL_NOTICE_RESOLVERS,
-    EMAIL_PAYLOAD_CIPHER,
-    EMAIL_SENDER,
-  ],
+  exports: [EMAIL_OUTBOX, EMAIL_NOTICE_RESOLVERS, EMAIL_SENDER],
 })
 export class EmailDeliveryModule {}

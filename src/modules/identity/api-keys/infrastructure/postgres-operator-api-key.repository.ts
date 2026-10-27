@@ -7,6 +7,7 @@ import type {
   RevokeOperatorApiKeyResult,
 } from '@/modules/identity/api-keys/application/operator-api-key.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditEvent,
@@ -15,7 +16,6 @@ import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/ac
 import {
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {

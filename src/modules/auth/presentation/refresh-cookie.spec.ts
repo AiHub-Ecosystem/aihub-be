@@ -1,6 +1,12 @@
 import type { FastifyRequest } from 'fastify';
 
 import {
+  SESSION_LIFETIME_MS,
+  WEB_SESSION_POLICY,
+} from '@/modules/auth/web-sessions/application/web-session-policy';
+import { CryptoRefreshToken } from '@/modules/auth/web-sessions/infrastructure/crypto-refresh-token';
+import {
+  REFRESH_COOKIE_MAX_AGE_SECONDS,
   REFRESH_COOKIE_NAME,
   hasAlternateRefreshSource,
   refreshCookieFrom,
@@ -38,6 +44,16 @@ const single = request({
 const duplicated = request({
   cookieHeader: `${REFRESH_COOKIE_NAME}=token-a; ${REFRESH_COOKIE_NAME}=planted`,
   cookies: { [REFRESH_COOKIE_NAME]: 'token-a' },
+});
+
+describe('the 30-day session lifetime', () => {
+  it('is one value for the Web Session, the Refresh Token and the cookie', () => {
+    expect(REFRESH_COOKIE_MAX_AGE_SECONDS * 1000).toBe(SESSION_LIFETIME_MS);
+    expect(WEB_SESSION_POLICY.ttlMs).toBe(SESSION_LIFETIME_MS);
+    expect(
+      new CryptoRefreshToken().issue(new Date(0)).expiresAt.getTime(),
+    ).toBe(SESSION_LIFETIME_MS);
+  });
 });
 
 describe('refreshCookieFrom', () => {

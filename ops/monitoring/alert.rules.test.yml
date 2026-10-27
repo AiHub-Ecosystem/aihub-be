@@ -879,3 +879,28 @@ tests:
       - eval_time: 6m
         alertname: AIHUBAIWritingAvailabilityFastBurn
         exp_alerts: []
+
+  # #900: warn per process at 80% of the 1.5 CPU limit.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_process_cpu_seconds_total{job="aihub-production-app",instance="prod"}'
+        values: "0+78x10"
+      - series: 'aihub_process_cpu_seconds_total{job="aihub-sandbox-app",instance="sandbox"}'
+        values: "0+60x10"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AIHUBProcessCpuNearLimit
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: AIHUBProcessCpuNearLimit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              instance: prod
+            exp_annotations:
+              summary: "AIHUB process CPU use is near its 1.5 CPU limit"
+              description: "aihub-production-app instance prod used at least 1.2 CPU for five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#process-cpu

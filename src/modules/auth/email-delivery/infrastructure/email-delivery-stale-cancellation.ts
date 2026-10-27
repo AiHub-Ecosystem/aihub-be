@@ -1,3 +1,13 @@
+import {
+  EMAIL_DELIVERY_KINDS,
+  EMAIL_KIND_POLICIES,
+} from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+
+const STALE_CANCELLATION_REASON_CASE = EMAIL_DELIVERY_KINDS.map(
+  (kind) =>
+    `WHEN '${kind}' THEN '${EMAIL_KIND_POLICIES[kind].staleCancellationReason}'`,
+).join('\n        ');
+
 /**
  * Removes queued rows of the given kinds created at or before the cutoff the
  * caller chose for them. Credential-bearing kinds are expired; notices have no
@@ -10,10 +20,8 @@
 export const CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL = `
   UPDATE email_delivery_requests
   SET status = 'cancelled',
-      cancel_reason = CASE
-        WHEN kind IN ('mfa_enabled_notification', 'mfa_removed_notification',
-                      'api_key_near_expiry_notification')
-          THEN 'not_actionable'
+      cancel_reason = CASE kind
+        ${STALE_CANCELLATION_REASON_CASE}
         ELSE 'credential_expired'
       END,
       payload_ciphertext = NULL, completed_at = $1,

@@ -24,6 +24,7 @@ const PRIVATE_JWK_MEMBERS = new Set([
   'k',
 ]);
 
+// arch-check: domain code may not import src/common, so it keeps its own guard.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -119,4 +120,24 @@ export function parsePublicJsonWebKeySet(
   }
 
   return { keys };
+}
+
+/**
+ * The one rule for a customer JWKS URL: HTTPS with no embedded credentials.
+ * Saving a configuration, reading one back, and fetching the keys all ask this
+ * function, so they cannot disagree on what a safe URL is. Whether the host
+ * resolves to a public address is a network question the fetcher answers.
+ */
+export function isSafeJwksUrl(value: string | URL): boolean {
+  let url: URL;
+  try {
+    url = typeof value === 'string' ? new URL(value) : value;
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === 'https:' &&
+    url.username.length === 0 &&
+    url.password.length === 0
+  );
 }

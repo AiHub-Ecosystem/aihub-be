@@ -1,9 +1,5 @@
 import type { OrganizationMembershipMutationPort } from './organization-membership-mutation.port';
-import {
-  forbidden,
-  organizationSuspensionClosesSurface,
-  requireActiveMembership,
-} from './organization-membership.authorization';
+import { requireMembershipOfOpenOrganization } from './organization-membership.authorization';
 import {
   ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL,
   type OrganizationMembershipMutationAction,
@@ -53,7 +49,7 @@ export class ManageOrganizationMembership
     action: OrganizationMembershipMutationAction,
   ): Promise<void> {
     const denial = ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action];
-    const caller = await requireActiveMembership(
+    await requireMembershipOfOpenOrganization(
       this.membership,
       {
         context: input.context,
@@ -62,9 +58,5 @@ export class ManageOrganizationMembership
       },
       denial,
     );
-
-    if (organizationSuspensionClosesSurface(caller.organizationStatus)) {
-      throw forbidden(denial);
-    }
   }
 }

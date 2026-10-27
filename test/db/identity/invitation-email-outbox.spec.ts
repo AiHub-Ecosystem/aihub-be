@@ -41,8 +41,8 @@ import {
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 import type { PrismaClient } from '@prisma-client/client';
+import { createDatabaseTestEmailOutbox } from '../shared/email-outbox';
 
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
@@ -133,15 +133,13 @@ beforeAll(async () => {
   identityClient = new SwitchableIdentityClient(
     createPostgresIdentityClient(testDatabaseUrl()),
   );
-  cipher = createEmailPayloadCipher(
-    createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
-  );
+  const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
+  cipher = createEmailPayloadCipher(secrets);
 
   const invitations: OrganizationInvitationPort =
     new PostgresOrganizationInvitationRepository(
       identityClient.asPrisma(),
-      cipher,
-      new PostgresEmailDeliveryRequestRepository(),
+      createDatabaseTestEmailOutbox(secrets),
     );
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token: string) => {

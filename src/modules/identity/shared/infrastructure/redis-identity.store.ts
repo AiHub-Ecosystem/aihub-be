@@ -6,7 +6,9 @@ import {
   type ApiKeyCacheInvalidationSeam,
   recordRedisUnavailable,
 } from '@/common/observability/redis-unavailable-metric';
+import { createRedisClient } from '@/common/redis/create-redis-client';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
+import { numberReply } from '@/common/redis/number-reply';
 import type {
   ApiKeyCachePort,
   ApiKeyRecord,
@@ -82,12 +84,7 @@ class IoredisIdentityClient implements RedisIdentityClient {
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<number> {
-    return this.client.eval(script, numberOfKeys, ...args).then((result) => {
-      if (typeof result !== 'number') {
-        throw new Error('Redis command result is invalid');
-      }
-      return result;
-    });
+    return this.client.eval(script, numberOfKeys, ...args).then(numberReply);
   }
 
   expire(key: string, seconds: number): Promise<number> {
@@ -110,12 +107,9 @@ function connect(url: string): RedisIdentityClient | undefined {
     return undefined;
   }
 
-  const client = new Redis(url, {
-    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+  const client = createRedisClient(url, {
+    commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
   });
-  client.on('error', () => undefined);
   return new IoredisIdentityClient(client);
 }
 

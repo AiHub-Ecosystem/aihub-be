@@ -1,15 +1,12 @@
 import { AppError } from '@/common/errors/app-error';
-import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
-import type {
-  EmailDeliveryKind,
-  EmailPayloadCipherPort,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailDeliveryKind } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
 import type {
   BackpressureEmailKind,
   EmailOutboxQueueAgePort,
 } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { AuthMfaServicePort } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type {
   IssuedPasswordResetToken,
@@ -116,31 +113,6 @@ class FakePasswordResetTokenIssuer implements PasswordResetTokenPort {
   }
 }
 
-/**
- * Reversible so a test can read what the worker would later read back out of
- * the ciphertext. The real cipher is exercised by its own spec.
- */
-class FakeCipher implements EmailPayloadCipherPort {
-  sealed: string[] = [];
-
-  encrypt(plaintext: string): string {
-    this.sealed.push(plaintext);
-    return `sealed:${Buffer.from(plaintext, 'utf8').toString('base64url')}`;
-  }
-
-  decrypt(envelope: string): string {
-    return Buffer.from(envelope.slice('sealed:'.length), 'base64url').toString(
-      'utf8',
-    );
-  }
-}
-
-interface SealedEmailDelivery {
-  readonly email: string;
-  readonly token: string;
-  readonly expiresAt: string;
-}
-
 class FakeAccessTokenIssuer implements UserAccessTokenIssuerPort {
   async issue(userId: string): Promise<IssuedUserAccessToken> {
     return {
@@ -237,12 +209,30 @@ function service(
   const refreshSessions = new InMemoryRefreshSessionAdapter(state);
   const tokenIssuer = new FakeTokenIssuer();
   const passwordResetTokenIssuer = new FakePasswordResetTokenIssuer();
-  const cipher = new FakeCipher();
   const limiter = new FakeLimiter();
   const hasher = new FakeHasher();
   const clock = new FakeClock();
   const mfa = new FakeMfaService();
 
+  const gate = new EmailOutboxBackpressureGate(
+    {
+      oldestQueuedAgeSeconds: async (kind) => {
+        queueAges.push(kind);
+        return (options.queueAge ?? (async () => 0))(kind);
+      },
+    },
+    (kind) => refusals.push(kind),
+    () => 0,
+  );
+  const emailOutbox: EmailOutboxPort = {
+    withAdmission: async (kind, operation) => {
+      await gate.admit(kind);
+      return operation();
+    },
+    reserveAuthenticationEmailRecipient: async () => true,
+    queue: async () => undefined,
+    withdraw: async () => undefined,
+  };
   const local = new LocalAuthService(
     userAccounts,
     verificationTokens,
@@ -251,23 +241,12 @@ function service(
     hasher,
     tokenIssuer,
     passwordResetTokenIssuer,
-    cipher,
+    emailOutbox,
     limiter,
     new FakeAccessTokenIssuer(),
     new FakeRefreshTokenIssuer(),
     clock,
-    prefixedIdGenerator('edr_'),
     mfa,
-    new EmailOutboxBackpressureGate(
-      {
-        oldestQueuedAgeSeconds: async (kind) => {
-          queueAges.push(kind);
-          return (options.queueAge ?? (async () => 0))(kind);
-        },
-      },
-      (kind) => refusals.push(kind),
-      () => 0,
-    ),
     options.requireVerificationPassword ?? false,
   );
   return {
@@ -278,7 +257,6 @@ function service(
     passwordResetTokenIssuer,
     passwordResetTokens,
     refreshSessions,
-    cipher,
     limiter,
     hasher,
     clock,
@@ -321,19 +299,6 @@ function issuedToken(
     throw new Error(`no token was issued at position ${index}`);
   }
   return token.raw;
-}
-
-/** What the worker would read back out of the ciphertext once it claims a row. */
-function sealed(
-  cipher: FakeCipher,
-  request: { readonly payloadCiphertext: string } | undefined,
-): SealedEmailDelivery {
-  if (request === undefined) {
-    throw new Error('no email delivery request was written');
-  }
-  return JSON.parse(
-    cipher.decrypt(request.payloadCiphertext),
-  ) as SealedEmailDelivery;
 }
 
 function issuedVerificationExpiresAt(
@@ -450,7 +415,7 @@ describe('LocalAuthService', () => {
   });
 
   it('registers a canonical pending account and queues its verification email', async () => {
-    const { local, state, cipher, limiter, tokenIssuer } = service();
+    const { local, state, limiter, tokenIssuer } = service();
 
     await expect(
       local.register(
@@ -485,8 +450,7 @@ describe('LocalAuthService', () => {
       kind: 'verification_email',
       createdAt: NOW,
     });
-    expect(request?.id).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(sealed(cipher, state.emailDeliveryRequests[0])).toEqual({
+    expect(request?.payload).toEqual({
       email: 'person@example.com',
       token: 'opaque-token-1',
       expiresAt: issuedVerificationExpiresAt(tokenIssuer),
@@ -653,7 +617,7 @@ describe('LocalAuthService', () => {
   });
 
   it('queues the replacement verification email with the rotation', async () => {
-    const { local, state, cipher, tokenIssuer } = service();
+    const { local, state, tokenIssuer } = service();
     await local.register(
       {
         email: EMAIL,
@@ -670,7 +634,7 @@ describe('LocalAuthService', () => {
     expect(state.emailDeliveryRequests).toHaveLength(2);
     const resend = state.emailDeliveryRequests[1];
     expect(resend?.kind).toBe('verification_email');
-    expect(sealed(cipher, resend)).toEqual({
+    expect(resend?.payload).toEqual({
       email: EMAIL,
       token: 'opaque-token-2',
       expiresAt: issuedVerificationExpiresAt(tokenIssuer, 1),
@@ -684,8 +648,7 @@ describe('LocalAuthService', () => {
   });
 
   it('returns one recovery message for an active target and keeps its rate limits', async () => {
-    const { local, state, cipher, limiter, passwordResetTokenIssuer } =
-      service();
+    const { local, state, limiter, passwordResetTokenIssuer } = service();
     seedActiveAccount(state);
 
     await expect(
@@ -695,7 +658,7 @@ describe('LocalAuthService', () => {
       passwordResetTokenIssuer.hash('reset-token-1'),
     ]);
     expect(state.emailDeliveryRequests).toHaveLength(1);
-    expect(sealed(cipher, state.emailDeliveryRequests[0])).toEqual({
+    expect(state.emailDeliveryRequests[0]?.payload).toEqual({
       email: EMAIL,
       token: 'reset-token-1',
       expiresAt: passwordResetTokenIssuer.issued[0]?.expiresAt.toISOString(),

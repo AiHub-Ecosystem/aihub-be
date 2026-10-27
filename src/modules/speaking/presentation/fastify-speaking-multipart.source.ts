@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type {
   SpeakingMultipartLimits,
   SpeakingMultipartPart,
@@ -33,10 +34,6 @@ interface FastifyMultipartRequest {
   readonly raw?: {
     destroy(error?: Error): void;
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function isFastifyMultipartRequest(

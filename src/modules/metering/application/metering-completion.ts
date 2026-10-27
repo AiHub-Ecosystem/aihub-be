@@ -1,4 +1,7 @@
-import type { MeteringEvidence } from './metering-evidence';
+import {
+  type MeteringEvidence,
+  attributionFromEvidence,
+} from './metering-evidence';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
@@ -48,14 +51,10 @@ function record(
 ): MeteringFinalizeInput {
   return {
     requestId: completion.requestId,
-    organizationId: evidence.organizationId,
-    apiKeyId: evidence.apiKeyId,
-    operation: evidence.operation,
-    environment: evidence.environment,
+    ...attributionFromEvidence(evidence),
     outcome: completion.outcome,
     httpStatus: completion.httpStatus,
     totalMs: completion.totalMs,
-    ...(evidence.actorId === undefined ? {} : { actorId: evidence.actorId }),
     ...(completion.errorCode === undefined
       ? {}
       : { errorCode: completion.errorCode }),
@@ -73,9 +72,6 @@ function record(
     ...(evidence.modelCalled === undefined
       ? {}
       : { modelCalled: evidence.modelCalled }),
-    ...(evidence.quotaTracked === undefined
-      ? {}
-      : { quotaTracked: evidence.quotaTracked }),
     ...(evidence.quotaUnverified === undefined
       ? {}
       : { quotaUnverified: evidence.quotaUnverified }),

@@ -1,5 +1,5 @@
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { RefreshTokenRecord } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 
 export interface InMemoryAccount {
@@ -71,7 +71,7 @@ export interface InMemoryAuthState {
   readonly mfaFactors: Map<string, InMemoryMfaFactor>;
   readonly recoveryCodes: Map<string, Set<string>>;
   /** Email Delivery Requests recorded by the adapters, in call order. */
-  readonly emailDeliveryRequests: InsertEmailDeliveryRequestInput[];
+  readonly emailDeliveryRequests: QueueEmailDeliveryRequestInput[];
   /** Empties the durable state so the next test starts from nothing. */
   reset(): void;
 }

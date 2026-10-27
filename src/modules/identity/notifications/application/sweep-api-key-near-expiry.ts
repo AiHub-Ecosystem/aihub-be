@@ -15,7 +15,6 @@ export class SweepApiKeyNearExpiry {
   constructor(
     private readonly records: ApiKeyNearExpiryNoticeRecordPort,
     private readonly newEventId: IdMinter,
-    private readonly newEmailDeliveryId: IdMinter,
   ) {}
 
   run(now: Date): Promise<ApiKeyNearExpirySweepSummary> {
@@ -23,7 +22,6 @@ export class SweepApiKeyNearExpiry {
       now,
       windowEnd: new Date(now.getTime() + API_KEY_NEAR_EXPIRY_WINDOW_MS),
       newEventId: this.newEventId,
-      newEmailDeliveryId: this.newEmailDeliveryId,
     });
   }
 }

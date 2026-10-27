@@ -1,15 +1,12 @@
 import { publishedEntitlements } from '@/catalog/operation-catalog';
-import {
-  apiKeyCacheKey,
-  apiKeyCacheMissKey,
-} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import {} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type {
   GrantOrganizationEntitlementResult,
   OrganizationEntitlementPort,
 } from '@/modules/identity/organizations/application/organization-entitlement.port';
 import { PostgresOrganizationEntitlementRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-entitlement.repository';
 import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';
-import Redis from 'ioredis';
+import { purgeApiKeyCache } from './cli-redis';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
 import { reportOperatorRedisFailure } from './operator-redis-failure';
@@ -30,32 +27,6 @@ export interface GrantOrganizationEntitlementCliInput {
 export type GrantOrganizationEntitlementCliOutcome =
   | GrantOrganizationEntitlementResult['kind']
   | 'entitlement_invalid';
-
-async function purgeApiKeyCache(
-  redisUrl: string,
-  hashes: readonly string[],
-): Promise<void> {
-  if (hashes.length === 0) return;
-  const redis = new Redis(redisUrl, {
-    commandTimeout: 5_000,
-    connectTimeout: 5_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    lazyConnect: true,
-  });
-  redis.on('error', () => undefined);
-  try {
-    await redis.connect();
-    await redis.del(
-      ...hashes.flatMap((hash) => [
-        apiKeyCacheKey(hash),
-        apiKeyCacheMissKey(hash),
-      ]),
-    );
-  } finally {
-    redis.disconnect();
-  }
-}
 
 export async function runGrantOrganizationEntitlementCommand(
   input: GrantOrganizationEntitlementCliInput,

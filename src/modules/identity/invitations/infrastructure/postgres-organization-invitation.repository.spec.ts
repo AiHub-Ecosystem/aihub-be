@@ -1,9 +1,6 @@
 import type { RequestContext } from '@/common/request-context/request-context';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type {
-  EmailDeliveryRequestWriterPort,
-  EmailPayloadCipherPort,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresOrganizationInvitationRepository } from './postgres-organization-invitation.repository';
 
@@ -19,22 +16,17 @@ function context(organizationId?: string): RequestContext {
 }
 
 const now = new Date('2026-09-21T00:00:00.000Z');
-const payloadCipher: EmailPayloadCipherPort = {
-  encrypt: (plaintext) => plaintext,
-  decrypt: (envelope) => envelope,
-};
-const emailRequests: EmailDeliveryRequestWriterPort = {
+const emailOutbox: EmailOutboxPort = {
+  withAdmission: async (_kind, operation) => operation(),
   reserveAuthenticationEmailRecipient: async () => true,
-  insert: async () => undefined,
-  queuedPayloadCiphertexts: async () => [],
-  cancelQueued: async () => undefined,
+  queue: async () => undefined,
+  withdraw: async () => undefined,
 };
 
 function repository(prisma: ScriptedPrisma) {
   return new PostgresOrganizationInvitationRepository(
     prisma.client(),
-    payloadCipher,
-    emailRequests,
+    emailOutbox,
   );
 }
 
@@ -55,7 +47,6 @@ const requiredMethods = [
         tokenHash: 'a'.repeat(64),
         expiresAt: new Date(now.getTime() + 60_000),
         emailDelivery: {
-          id: 'edr_01J00000000000000000000000',
           token: 'opaque-token',
           createdAt: now,
         },

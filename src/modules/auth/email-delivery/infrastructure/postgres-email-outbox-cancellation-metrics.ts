@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type { EmailOutboxCancellationSample } from '@/common/observability/metrics';
 import {
   EMAIL_DELIVERY_CANCEL_REASONS,
@@ -8,7 +9,7 @@ import {
   type AuthSqlClient,
   authQueryRows,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
-import { isRecord, oneOf } from '@/modules/auth/shared/infrastructure/auth-row';
+import { oneOf } from '@/modules/auth/shared/infrastructure/auth-row';
 
 const CANCELLATION_TIMESTAMP_SQL = `
   SELECT kind, cancel_reason AS reason,

@@ -2,7 +2,10 @@ import { AppError } from '@/common/errors/app-error';
 import { recordIdentityCacheCoalescedWait } from '@/common/observability/metrics';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
-import { isApiKeyFormat } from '@/modules/identity/domain/api-key';
+import {
+  entitlementOfScope,
+  isApiKeyFormat,
+} from '@/modules/identity/domain/api-key';
 import { hashApiKey } from './organization-api-key-generator';
 
 import type {
@@ -26,7 +29,7 @@ const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
   return record.scopes.filter((scope) => {
-    const [entitlement] = scope.split('.');
+    const entitlement = entitlementOfScope(scope);
     return (
       entitlement !== undefined && record.entitlements.includes(entitlement)
     );

@@ -3,6 +3,7 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
   type KeyEnvironment,
+  entitlementOfScope,
   isGradingScope,
 } from '@/modules/identity/domain/api-key';
 import { isDisplayText } from '@/modules/identity/domain/display-text';
@@ -48,17 +49,6 @@ export interface CreatedOrganizationApiKey {
   readonly allowedEnvironments: readonly string[];
   readonly expiresAt: Date | null;
   readonly createdAt: Date;
-}
-
-/**
- * An Entitlement is the leading segment of a Scope: `writing.grade` requires
- * `writing`.
- */
-function entitlementOf(scope: string): string | undefined {
-  const [entitlement] = scope.split('.');
-  return entitlement === undefined || entitlement.length === 0
-    ? undefined
-    : entitlement;
 }
 
 function validatedName(name: string): string {
@@ -179,7 +169,7 @@ export class CreateOrganizationApiKey {
     const requiredEntitlements = [
       ...new Set(
         scopes.map((scope) => {
-          const entitlement = entitlementOf(scope);
+          const entitlement = entitlementOfScope(scope);
           if (entitlement === undefined) {
             throw invalidRequest();
           }

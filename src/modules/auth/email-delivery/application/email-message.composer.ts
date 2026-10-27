@@ -1,7 +1,9 @@
+import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationInput,
-} from './email-delivery-request.port';
+  type InviteEmailRole,
+} from './email-delivery-payload';
 import type { EmailMessage } from './email-sender.port';
 import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
 
@@ -20,7 +22,7 @@ export interface PasswordResetEmailInput {
 export interface OrganizationInviteEmailInput {
   readonly email: string;
   readonly organizationName: string;
-  readonly role: 'owner' | 'admin' | 'member';
+  readonly role: InviteEmailRole;
   readonly token: string;
   readonly expiresAt: Date;
   readonly inviterUsername?: string;
@@ -74,24 +76,11 @@ export function normalizeCustomerWebBaseUrl(
     }
     return undefined;
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
+  const normalized = parseCustomerWebBaseUrl(trimmed, requireHttps);
+  if (normalized === undefined) {
     throw new Error(invalidMessage);
   }
-  if (
-    (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-    parsed.hostname.length === 0 ||
-    parsed.username.length > 0 ||
-    parsed.password.length > 0 ||
-    trimmed.includes('?') ||
-    trimmed.includes('#') ||
-    (requireHttps && parsed.protocol !== 'https:')
-  ) {
-    throw new Error(invalidMessage);
-  }
-  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+  return normalized;
 }
 
 function deepLink(

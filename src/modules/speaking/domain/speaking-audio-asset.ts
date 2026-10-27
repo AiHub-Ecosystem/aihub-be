@@ -10,6 +10,13 @@ export type SpeakingAudioContentType =
   (typeof SPEAKING_AUDIO_CONTENT_TYPES)[number];
 
 export const SPEAKING_AUDIO_MIN_BYTES = 100;
+/**
+ * Audio-file ceiling, enforced by the multipart parser, the upload service and
+ * the published contract. Mirrors the AI Speaking provider contract (v1 section
+ * 3): the provider itself rejects audio above 25 MiB with 413, so AIHUB
+ * enforces the file cap locally instead of forwarding a request that cannot
+ * grade.
+ */
 export const SPEAKING_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 export const SPEAKING_AUDIO_UPLOAD_URL_TTL_SECONDS = 5 * 60;
 export const SPEAKING_AUDIO_UPLOAD_INTENT_TTL_MS = 60 * 60 * 1000;

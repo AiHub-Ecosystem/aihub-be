@@ -56,6 +56,13 @@ If your output contradicts an existing ADR, surface it explicitly rather than si
 
 ## Release compatibility
 
+Classify customer-facing API changes with the Compatibility promise in
+`docs/integration-guide.md`; ADR-0127 defines versioning and release rules.
+Keep those two sources aligned instead of maintaining another breaking-change
+list. The pull request CI gate compares every supported OpenAPI major and its
+changelog entry. Follow the rollback rule in `docs/operations/deploy-vps.md`
+before documenting a new optional request field for customer use.
+
 Expand-only migrations preserve the schema shape across adjacent releases; they do not make new persisted values, runtime configuration, or Vault template keys compatible with N-1.
 
 - Ship a new persisted enum/value in two releases. Release N-1 first learns to read or safely skip the value without writing it; a later release starts writing it only after that reader is deployed.

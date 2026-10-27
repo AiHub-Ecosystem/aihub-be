@@ -1,4 +1,5 @@
-import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { LOCK_PASSWORD_IDENTITY_SQL } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
@@ -27,31 +28,35 @@ const input = {
 const USER_ID = 'usr_01J00000000000000000000000';
 
 function repositoryOver(script: ScriptedPrisma): PostgresUserAccountRepository {
-  return new PostgresUserAccountRepository(script.client());
+  return new PostgresUserAccountRepository(
+    script.client(),
+    scriptedEmailOutbox(true),
+  );
 }
 
-/** A writer whose recipient reservation answers `reserve` and records inserts. */
-function scriptedEmailWriter(
-  reserve: boolean,
-): EmailDeliveryRequestWriterPort & {
-  readonly inserted: unknown[];
+/** An outbox whose recipient reservation answers `reserve` and records queues. */
+function scriptedEmailOutbox(reserve: boolean): EmailOutboxPort & {
+  readonly queued: QueueEmailDeliveryRequestInput[];
 } {
-  const inserted: unknown[] = [];
+  const queued: QueueEmailDeliveryRequestInput[] = [];
   return {
-    inserted,
+    queued,
+    withAdmission: async (_kind, operation) => operation(),
     reserveAuthenticationEmailRecipient: async () => reserve,
-    insert: async (_transaction, request) => {
-      inserted.push(request);
+    queue: async (_transaction, request) => {
+      queued.push(request);
     },
-    queuedPayloadCiphertexts: async () => [],
-    cancelQueued: async () => undefined,
+    withdraw: async () => undefined,
   };
 }
 
 const emailDelivery = {
-  id: 'edr_01J00000000000000000000000',
   kind: 'verification_email',
-  payloadCiphertext: 'sealed',
+  payload: {
+    email: 'person@example.com',
+    token: 'opaque-token',
+    expiresAt: '2026-09-20T00:00:00.000Z',
+  },
   createdAt: input.now,
 } as const;
 
@@ -127,7 +132,7 @@ describe('PostgresUserAccountRepository', () => {
         },
       ],
     ];
-    const emailRequests = scriptedEmailWriter(false);
+    const emailRequests = scriptedEmailOutbox(false);
 
     const result = await new PostgresUserAccountRepository(
       script.client(),
@@ -141,7 +146,7 @@ describe('PostgresUserAccountRepository', () => {
     expect(script.statements.map(({ name }) => name)).toEqual([
       LOCK_PASSWORD_IDENTITY_SQL,
     ]);
-    expect(emailRequests.inserted).toEqual([]);
+    expect(emailRequests.queued).toEqual([]);
   });
 
   it('replaces and queues when the reservation allows the replacement', async () => {
@@ -155,7 +160,7 @@ describe('PostgresUserAccountRepository', () => {
         },
       ],
     ];
-    const emailRequests = scriptedEmailWriter(true);
+    const emailRequests = scriptedEmailOutbox(true);
 
     const result = await new PostgresUserAccountRepository(
       script.client(),
@@ -170,12 +175,12 @@ describe('PostgresUserAccountRepository', () => {
       'emailVerificationToken.updateMany',
       'emailVerificationToken.create',
     ]);
-    expect(emailRequests.inserted).toEqual([emailDelivery]);
+    expect(emailRequests.queued).toEqual([emailDelivery]);
   });
 
   it('still creates a new suppressed account when the reservation is refused', async () => {
     const script = new ScriptedPrisma();
-    const emailRequests = scriptedEmailWriter(false);
+    const emailRequests = scriptedEmailOutbox(false);
 
     const result = await new PostgresUserAccountRepository(
       script.client(),
@@ -191,7 +196,7 @@ describe('PostgresUserAccountRepository', () => {
       'authIdentity.create',
       'emailVerificationToken.create',
     ]);
-    expect(emailRequests.inserted).toEqual([]);
+    expect(emailRequests.queued).toEqual([]);
   });
 
   it.each(['active', 'disabled'])(

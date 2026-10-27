@@ -1,6 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
-import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type { RequestContext } from '@/common/request-context/request-context';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type {
   AuthRateLimitScope,
   AuthRateLimiterPort,
@@ -262,9 +262,19 @@ describe('organization invitation management idempotency seam', () => {
   let rateLimiter: RateLimiterFake;
   let issuedTokenCount: number;
   let admitEmail: () => Promise<void>;
+  let emailOutbox: EmailOutboxPort;
 
   beforeEach(() => {
     admitEmail = async () => undefined;
+    emailOutbox = {
+      withAdmission: async (_kind, operation) => {
+        await admitEmail();
+        return operation();
+      },
+      reserveAuthenticationEmailRecipient: async () => true,
+      queue: async () => undefined,
+      withdraw: async () => undefined,
+    };
     repository = new ManagementRepository();
     service = new IdempotencyService(repository);
     rateLimiter = new RateLimiterFake();
@@ -317,8 +327,7 @@ describe('organization invitation management idempotency seam', () => {
       invitations,
       tokenIssuer,
       rateLimiter,
-      prefixedIdGenerator('edr_'),
-      { admit: () => admitEmail() },
+      emailOutbox,
     );
   });
 

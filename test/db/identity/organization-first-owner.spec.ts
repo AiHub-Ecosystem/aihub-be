@@ -5,8 +5,6 @@ import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
 import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
@@ -18,17 +16,17 @@ import {
   createPostgresIdentityClient,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import {
   createTestPool,
   resetIdentityTables,
   waitForBlockedBy,
 } from '../shared/database';
+import { createDatabaseTestEmailOutbox } from '../shared/email-outbox';
 
 let pool: Pool;
 let client: IdentityFixtureClient;
 let repository: PostgresOrganizationFirstOwnerRepository;
-let cipher: EmailPayloadCipherPort;
+let emailOutbox: ReturnType<typeof createDatabaseTestEmailOutbox>;
 
 beforeAll(() => {
   pool = createTestPool();
@@ -36,7 +34,7 @@ beforeAll(() => {
     (pool.options as { connectionString?: string }).connectionString ?? '',
   );
   repository = new PostgresOrganizationFirstOwnerRepository(client);
-  cipher = createEmailPayloadCipher(
+  emailOutbox = createDatabaseTestEmailOutbox(
     createCliRuntimeSecretProvider().getSnapshot().emailOutbox,
   );
 });
@@ -342,8 +340,7 @@ describe('First Owner Attachment against PostgreSQL', () => {
     await expect(
       new PostgresOrganizationInvitationRepository(
         client,
-        cipher,
-        new PostgresEmailDeliveryRequestRepository(),
+        emailOutbox,
       ).createInvitation({
         context,
         invitationId: `oiv_${ulid()}`,
@@ -354,7 +351,6 @@ describe('First Owner Attachment against PostgreSQL', () => {
         tokenHash: createHash('sha256').update('token').digest('hex'),
         expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
         emailDelivery: {
-          id: `edr_${ulid()}`,
           token: 'raw-invite-token',
           createdAt: now,
         },

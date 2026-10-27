@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
-import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
@@ -10,18 +9,13 @@ import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import {
-  EMAIL_DELIVERY_ID,
-  EMAIL_DELIVERY_REQUEST_WRITER,
   EMAIL_NOTICE_RESOLVERS,
-  EMAIL_PAYLOAD_CIPHER,
-  type EmailDeliveryRequestWriterPort,
   type EmailNoticeResolvers,
-  type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
-  ADMIT_EMAIL_REQUEST,
-  type AdmitEmailRequestPort,
-} from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
+  EMAIL_OUTBOX,
+  type EmailOutboxPort,
+} from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
@@ -227,20 +221,17 @@ type IdentityTransactionClient = ReturnType<
       provide: API_KEY_NEAR_EXPIRY_NOTICES,
       inject: [
         IDENTITY_TRANSACTION_CLIENT,
-        EMAIL_PAYLOAD_CIPHER,
-        EMAIL_DELIVERY_REQUEST_WRITER,
+        EMAIL_OUTBOX,
         EMAIL_NOTICE_RESOLVERS,
       ],
       useFactory: (
         client: IdentityTransactionClient,
-        payloadCipher: EmailPayloadCipherPort,
-        emailRequests: EmailDeliveryRequestWriterPort,
+        emailOutbox: EmailOutboxPort,
         notices: EmailNoticeResolvers,
       ): PostgresApiKeyNearExpiryNotices => {
         const resolver = new PostgresApiKeyNearExpiryNotices(
           client,
-          payloadCipher,
-          emailRequests,
+          emailOutbox,
         );
         notices.apiKeyNearExpiry = resolver;
         return resolver;
@@ -422,19 +413,10 @@ type IdentityTransactionClient = ReturnType<
       provide: ORGANIZATION_INVITATION,
       useFactory: (
         client: IdentityTransactionClient,
-        payloadCipher: EmailPayloadCipherPort,
-        emailRequests: EmailDeliveryRequestWriterPort,
+        emailOutbox: EmailOutboxPort,
       ): OrganizationInvitationPort =>
-        new PostgresOrganizationInvitationRepository(
-          client,
-          payloadCipher,
-          emailRequests,
-        ),
-      inject: [
-        IDENTITY_TRANSACTION_CLIENT,
-        EMAIL_PAYLOAD_CIPHER,
-        EMAIL_DELIVERY_REQUEST_WRITER,
-      ],
+        new PostgresOrganizationInvitationRepository(client, emailOutbox),
+      inject: [IDENTITY_TRANSACTION_CLIENT, EMAIL_OUTBOX],
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,
@@ -451,24 +433,21 @@ type IdentityTransactionClient = ReturnType<
         invitations: OrganizationInvitationPort,
         tokenIssuer: OrganizationInviteTokenPort,
         rateLimiter: AuthRateLimiterPort,
-        newEmailDeliveryId: IdMinter,
-        emailBackpressure: AdmitEmailRequestPort,
+        emailOutbox: EmailOutboxPort,
       ) =>
         new InviteOrganizationMember(
           membership,
           invitations,
           tokenIssuer,
           rateLimiter,
-          newEmailDeliveryId,
-          emailBackpressure,
+          emailOutbox,
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,
         ORGANIZATION_INVITATION,
         ORGANIZATION_INVITE_TOKEN,
         AUTH_RATE_LIMITER,
-        EMAIL_DELIVERY_ID,
-        ADMIT_EMAIL_REQUEST,
+        EMAIL_OUTBOX,
       ],
     },
     {
