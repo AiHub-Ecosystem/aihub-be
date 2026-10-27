@@ -1,4 +1,9 @@
-import { readFileSync } from 'node:fs';
+import {
+  asDocument,
+  assertOnlyFields,
+  readUtf8File,
+  requiredDocumentString,
+} from '@/common/security/secret-document';
 
 type RuntimeConnectionScope = 'production' | 'sandbox';
 type RuntimeConnectionDocument = Readonly<Record<string, unknown>>;
@@ -42,7 +47,7 @@ export function loadRuntimeConnectionEnvironment(
 
   let raw: string;
   try {
-    raw = (options.readFile ?? defaultReadFile)(path);
+    raw = (options.readFile ?? readUtf8File)(path);
   } catch {
     throw configurationError('runtime connection secret file cannot be read');
   }
@@ -147,15 +152,22 @@ function resolveScope(value: string | undefined): RuntimeConnectionScope {
   return scope;
 }
 
+function configurationError(
+  message: string,
+): RuntimeConnectionConfigurationError {
+  return new RuntimeConnectionConfigurationError(message);
+}
+
+function asRecord(value: unknown, label: string): RuntimeConnectionDocument {
+  return asDocument(value, label, configurationError);
+}
+
 function assertAllowedKeys(
   record: RuntimeConnectionDocument,
   allowedKeys: readonly string[],
   label: string,
 ): void {
-  const allowed = new Set(allowedKeys);
-  if (Object.keys(record).some((key) => !allowed.has(key))) {
-    throw configurationError(`${label} contains unexpected fields`);
-  }
+  assertOnlyFields(record, allowedKeys, label, configurationError);
 }
 
 function requiredRecordString(
@@ -163,28 +175,10 @@ function requiredRecordString(
   key: string,
   label: string,
 ): string {
-  const value = record[key];
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw configurationError(
-      `required runtime connection is missing: ${label}`,
-    );
-  }
-  return value;
-}
-
-function asRecord(value: unknown, label: string): RuntimeConnectionDocument {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw configurationError(`${label} has an invalid shape`);
-  }
-  return value as RuntimeConnectionDocument;
-}
-
-function defaultReadFile(path: string): string {
-  return readFileSync(path, 'utf8');
-}
-
-function configurationError(
-  message: string,
-): RuntimeConnectionConfigurationError {
-  return new RuntimeConnectionConfigurationError(message);
+  return requiredDocumentString(
+    record,
+    key,
+    `required runtime connection is missing: ${label}`,
+    configurationError,
+  );
 }

@@ -1,5 +1,10 @@
-import { readFileSync } from 'node:fs';
 import { isRecord } from '@/common/is-record';
+import {
+  asDocument,
+  assertOnlyFields,
+  readUtf8File,
+  requiredDocumentString,
+} from '@/common/security/secret-document';
 
 import type {
   AiSpeakingRuntimeSecrets,
@@ -143,7 +148,7 @@ function loadFromAgentFile(
 
   let raw: string;
   try {
-    raw = (options.readFile ?? defaultReadFile)(path);
+    raw = (options.readFile ?? readUtf8File)(path);
   } catch {
     throw configurationError('runtime secret file cannot be read');
   }
@@ -387,36 +392,6 @@ function loadSeaweedFsRecord(
   };
 }
 
-function assertAllowedKeys(
-  record: Record<string, unknown>,
-  allowedKeys: readonly string[],
-  label: string,
-): void {
-  const allowed = new Set(allowedKeys);
-  if (Object.keys(record).some((key) => !allowed.has(key))) {
-    throw configurationError(`${label} contains unexpected fields`);
-  }
-}
-
-function requiredRecordString(
-  record: Record<string, unknown>,
-  key: string,
-  label: string,
-): string {
-  const value = record[key];
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw configurationError(`required runtime secret is missing: ${label}`);
-  }
-  return value;
-}
-
-function asRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!isRecord(value)) {
-    throw configurationError(`${label} has an invalid shape`);
-  }
-  return value;
-}
-
 function freezeSnapshot(
   aiSpeaking: AiSpeakingRuntimeSecrets,
   aiWriting: AiWritingRuntimeSecrets,
@@ -447,10 +422,31 @@ function hasValue(value: string | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function defaultReadFile(path: string): string {
-  return readFileSync(path, 'utf8');
-}
-
 function configurationError(message: string): RuntimeSecretConfigurationError {
   return new RuntimeSecretConfigurationError(message);
+}
+
+function asRecord(value: unknown, label: string): Record<string, unknown> {
+  return asDocument(value, label, configurationError);
+}
+
+function assertAllowedKeys(
+  record: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  label: string,
+): void {
+  assertOnlyFields(record, allowedKeys, label, configurationError);
+}
+
+function requiredRecordString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+): string {
+  return requiredDocumentString(
+    record,
+    key,
+    `required runtime secret is missing: ${label}`,
+    configurationError,
+  );
 }
