@@ -18,12 +18,28 @@ import {
   rateLimitWindow,
 } from '@/modules/gateway/application/rate-limit-window';
 import type { RedisGatewayClient } from './redis-gateway.client';
-import {
-  ORGANIZATION_RETRY_SEEN_CAP,
-  RETRY_BUDGET_WINDOW_MS,
-} from './redis-organization-retry-budget';
 import { quotaKeyForMonth } from './redis-quota-counter';
 import { rateLimitKey } from './redis-rate-limiter';
+
+/** How long a same-key repeat is refused for: one window of first attempts. */
+export const RETRY_BUDGET_WINDOW_MS = 60_000;
+
+/**
+ * How many distinct Idempotency-Keys one Organization's retry budget remembers.
+ *
+ * A safety bound, not a capacity promise: without it the ledger tracks the
+ * Organization's first-attempt volume for a rolling day, so one busy tenant
+ * could grow the shared Redis by hundreds of megabytes. The gateway's quota
+ * counter, rate limit, and concurrency leases share that instance and AIHUB
+ * requires `noeviction` (#371), so an unbounded ledger would turn every Redis
+ * write into an error, not only this one.
+ *
+ * At the ceiling the oldest remembered keys are dropped, so a dropped key's
+ * next request counts as a first attempt. That direction is deliberate: the
+ * budget may become more permissive for an old key, but it never refuses a
+ * first attempt it could not classify.
+ */
+export const ORGANIZATION_RETRY_SEEN_CAP = 10_000;
 
 const QUOTA_COUNTER_MISSING = 5;
 const UNAVAILABLE_RETRY_AFTER_MS = 1_000;

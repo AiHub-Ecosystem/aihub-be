@@ -1,16 +1,14 @@
-import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
-
+import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
 import { RedisConcurrencyLimiter } from '@/modules/gateway/infrastructure/redis-concurrency-limiter';
 import {
-  RedisOrganizationRetryBudget,
-  type RedisOrganizationRetryBudgetClient,
-} from '@/modules/gateway/infrastructure/redis-organization-retry-budget';
+  RedisGradedAdmission,
+  type RedisGradedAdmissionClient,
+} from '@/modules/gateway/infrastructure/redis-graded-admission';
 import {
   RedisQuotaCounter,
   quotaKeyForMonth,
 } from '@/modules/gateway/infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
-import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
 import { createTestPool } from '../shared/database';
@@ -32,17 +30,39 @@ const NOOP_LOGGER = {
   log: () => undefined,
 };
 
-function quotaContext(organizationId: string): ExecutionContextHost {
-  return new ExecutionContextHost([
-    {
-      headers: {},
-      aihubAuth: {
-        organizationId,
-        monthlyRequestQuota: 1,
-        hardStopOnQuota: true,
-      },
-    },
-  ]);
+let requestNumber = 0;
+
+/** A graded request that is a first attempt unless it reuses a key. */
+function gradedRequest(
+  organizationId: string,
+  overrides: Partial<GradedAdmissionRequest> = {},
+): GradedAdmissionRequest {
+  requestNumber += 1;
+  return {
+    apiKeyId: `ak_${organizationId}`,
+    rateLimitRpm: 10_000,
+    organizationId,
+    requestId: `req_quota_concurrency_${requestNumber}`,
+    operation: 'writing.task1.grade',
+    monthlyRequestQuota: null,
+    hardStopOnQuota: false,
+    ...overrides,
+  };
+}
+
+/** Graded admission that rebuilds a missing month from no durable usage. */
+function gradedAdmission(
+  client: RedisGradedAdmissionClient = redisClients.gateway,
+): RedisGradedAdmission {
+  return new RedisGradedAdmission(
+    client,
+    () => TEST_NOW.getTime(),
+    () => 0,
+    NOOP_LOGGER,
+    new RedisQuotaSeeder(redisClients.gateway, {
+      billableCount: async () => 0,
+    }),
+  );
 }
 
 /** A quota counter that rebuilds a missing month from no durable usage. */
@@ -120,14 +140,15 @@ describe('tenant isolation for Redis counters', () => {
     const counter = quotaCounter();
     await counter.read({ organizationId: ORGANIZATION_A });
     await counter.increment({ organizationId: ORGANIZATION_A });
-    const guard = new QuotaGuard(counter, () => TEST_NOW);
+    const admission = gradedAdmission();
+    const limited = { monthlyRequestQuota: 1, hardStopOnQuota: true };
 
     await expect(
-      guard.canActivate(quotaContext(ORGANIZATION_A)),
-    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
-    await expect(guard.canActivate(quotaContext(ORGANIZATION_B))).resolves.toBe(
-      true,
-    );
+      admission.consume(gradedRequest(ORGANIZATION_A, limited)),
+    ).resolves.toMatchObject({ stage: 'quota' });
+    await expect(
+      admission.consume(gradedRequest(ORGANIZATION_B, limited)),
+    ).resolves.toMatchObject({ stage: 'admitted' });
   });
 
   // Refusal-shaped: a second lease for A is refused while B still holds one.
@@ -176,45 +197,36 @@ describe('tenant isolation for Redis counters', () => {
       secondRedis.once('ready', resolve);
       secondRedis.once('error', reject);
     });
-    const secondClient: RedisOrganizationRetryBudgetClient = {
-      eval: async (script, numberOfKeys, ...args) => {
+    const secondClient: RedisGradedAdmissionClient = {
+      evalNumbers: async (script, numberOfKeys, ...args) => {
         const result = await secondRedis.eval(
           script,
           numberOfKeys,
           ...args.map(String),
         );
-        if (typeof result !== 'number') {
+        if (
+          !Array.isArray(result) ||
+          !result.every((item): item is number => typeof item === 'number')
+        ) {
           throw new Error('Redis eval result is invalid');
         }
         return result;
       },
       quit: () => secondRedis.quit(),
     };
-    const firstInstance = new RedisOrganizationRetryBudget(
-      '',
-      redisClients.gateway,
-      () => 0,
-      NOOP_LOGGER,
-    );
-    const secondInstance = new RedisOrganizationRetryBudget(
-      '',
-      secondClient,
-      () => 0,
-      NOOP_LOGGER,
-    );
-    let requestNumber = 0;
-    const consume = (
-      budget: RedisOrganizationRetryBudget,
+    const firstInstance = gradedAdmission();
+    const secondInstance = gradedAdmission(secondClient);
+    const consume = async (
+      admission: RedisGradedAdmission,
       organizationId: string,
       idempotencyKey: string,
       operation: 'writing.task1.grade' | 'writing.task2.grade',
     ) =>
-      budget.consume({
-        organizationId,
-        idempotencyKey,
-        operation,
-        requestId: `req_retry_storm_${requestNumber++}`,
-      });
+      (
+        await admission.consume(
+          gradedRequest(organizationId, { idempotencyKey, operation }),
+        )
+      ).stage === 'admitted';
 
     try {
       const firstAttempts = await Promise.all(
@@ -227,7 +239,7 @@ describe('tenant isolation for Redis counters', () => {
           ),
         ),
       );
-      expect(firstAttempts.every(({ allowed }) => allowed)).toBe(true);
+      expect(firstAttempts.every(Boolean)).toBe(true);
 
       const retries = await Promise.all(
         Array.from({ length: 40 }, (_, index) => {
@@ -243,10 +255,9 @@ describe('tenant isolation for Redis counters', () => {
         }),
       );
       const admittedIngress =
-        firstAttempts.filter(({ allowed }) => allowed).length +
-        retries.filter(({ allowed }) => allowed).length;
+        firstAttempts.filter(Boolean).length + retries.filter(Boolean).length;
 
-      expect(retries.filter(({ allowed }) => allowed)).toHaveLength(1);
+      expect(retries.filter(Boolean)).toHaveLength(1);
       expect(admittedIngress).toBeLessThanOrEqual(10 * 1.1);
 
       const lowVolumeFirst = await consume(
@@ -266,8 +277,8 @@ describe('tenant isolation for Redis counters', () => {
         ),
       );
 
-      expect(lowVolumeFirst.allowed).toBe(true);
-      expect(lowVolumeRetries.filter(({ allowed }) => allowed)).toHaveLength(1);
+      expect(lowVolumeFirst).toBe(true);
+      expect(lowVolumeRetries.filter(Boolean)).toHaveLength(1);
     } finally {
       await secondRedis.quit();
     }

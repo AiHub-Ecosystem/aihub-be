@@ -3,93 +3,25 @@ import {
   type ExecutionContext,
   Inject,
   Injectable,
-  Optional,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
 
-import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
-import { routeTemplate } from '@/common/http/request-tracing.hook';
 import { recordRejected } from '@/common/observability/rejected-metric';
-import type {
-  GradedAdmissionDecision,
-  GradedAdmissionPort,
-} from '@/modules/gateway/application/graded-admission.port';
-import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { RATE_WINDOW_MS } from '@/modules/gateway/application/rate-limit-window';
 import {
   RATE_LIMITER,
-  type RateLimitStanding,
   type RateLimiterPort,
 } from '@/modules/gateway/application/rate-limiter.port';
-import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
-import { setGradedRequestDimensions } from '@/modules/metering/public/graded-request-timing';
-import { getMeteringEvidence } from '@/modules/metering/public/metering-evidence';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    aihubGradedAdmission?: GradedAdmissionDecision;
-  }
-}
-
-function rateLimited(retryAfterMs: number | undefined): AppError {
-  return new AppError({
-    code: 'RATE_LIMITED',
-    message: 'Rate limit exceeded',
-    retryable: true,
-    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-  });
-}
+import { reportStanding } from './rate-limit-standing';
 
 /**
- * The caller's own per-key limit, in the `RateLimit-Policy` and `RateLimit`
- * fields of draft-ietf-httpapi-ratelimit-headers-11, so a client can slow
- * down before it is refused. Only the key's own figures are ever reported.
- */
-function reportStanding(
-  context: ExecutionContext,
-  standing: RateLimitStanding | undefined,
-): void {
-  if (standing === undefined) return;
-  const reply = context.switchToHttp().getResponse<FastifyReply>();
-  reply.header(
-    'RateLimit-Policy',
-    `"per-key";q=${standing.limit};w=${RATE_WINDOW_MS / 1_000}`,
-  );
-  reply.header(
-    'RateLimit',
-    `"per-key";r=${standing.remaining};t=${Math.ceil(standing.resetInMs / 1_000)}`,
-  );
-}
-
-function idempotencyKeyForRequest(
-  request: AuthenticatedRequest,
-  operation: OperationId,
-): string | undefined {
-  if (
-    operation !== 'writing.task1.grade' &&
-    operation !== 'writing.task2.grade'
-  ) {
-    return undefined;
-  }
-  const rawKey = request.headers['idempotency-key'];
-  if (typeof rawKey !== 'string') return undefined;
-  try {
-    return resolveIdempotencyKey(operation, rawKey);
-  } catch (error) {
-    if (error instanceof AppError && error.code === 'INVALID_REQUEST') {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
-/**
+ * The plain per-key rate limit for routes outside the graded-request chain
+ * (uploads, sandbox). Graded requests are admitted by `GradedAdmissionGuard`,
+ * which applies this same limit together with the retry budget and the quota.
+ *
  * Lives in `gateway` rather than any one operation's module: rate limiting
  * applies to every operation, keyed on the identity `ApiKeyGuard` already
  * attached to the request, and the port it consumes (`RATE_LIMITER`) is
@@ -100,61 +32,11 @@ export class RateLimitGuard implements CanActivate {
   constructor(
     @Inject(RATE_LIMITER)
     private readonly limiter: RateLimiterPort,
-    @Optional()
-    @Inject(GRADED_ADMISSION)
-    private readonly gradedAdmission?: GradedAdmissionPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const authenticated = getAuthenticatedApiKey(request);
-    const evidence = getMeteringEvidence(request);
-
-    if (
-      evidence !== undefined &&
-      routeTemplate(request) === OPERATION_CATALOG[evidence.operation].path
-    ) {
-      if (this.gradedAdmission === undefined) {
-        throw new AppError({
-          code: 'REDIS_UNAVAILABLE',
-          message: 'Grading controls are temporarily unavailable',
-          retryable: true,
-          retryAfterMs: 1_000,
-        });
-      }
-      const idempotencyKey = idempotencyKeyForRequest(
-        request,
-        evidence.operation,
-      );
-
-      setGradedRequestDimensions(request, {
-        operation: evidence.operation,
-        identityMode: request.aihubIdentity?.mode ?? 'unknown',
-        retryBudget: idempotencyKey === undefined ? 'none' : 'keyed_writing',
-      });
-
-      const decision = await this.gradedAdmission.consume({
-        apiKeyId: authenticated.apiKeyId,
-        rateLimitRpm: authenticated.rateLimitRpm,
-        organizationId: authenticated.organizationId,
-        requestId: String(request.id),
-        operation: evidence.operation,
-        ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
-        monthlyRequestQuota:
-          authenticated.environment === 'sandbox'
-            ? null
-            : authenticated.monthlyRequestQuota,
-        hardStopOnQuota: authenticated.hardStopOnQuota,
-      });
-      request.aihubGradedAdmission = decision;
-      reportStanding(context, decision.rate);
-
-      if (decision.stage === 'rate_limit') {
-        recordRejected('rate_limit');
-        throw rateLimited(decision.retryAfterMs);
-      }
-      return true;
-    }
 
     const decision = await this.limiter.consume({
       keyId: authenticated.apiKeyId,
@@ -164,7 +46,14 @@ export class RateLimitGuard implements CanActivate {
 
     if (!decision.allowed) {
       recordRejected('rate_limit');
-      throw rateLimited(decision.retryAfterMs);
+      throw new AppError({
+        code: 'RATE_LIMITED',
+        message: 'Rate limit exceeded',
+        retryable: true,
+        ...(decision.retryAfterMs === undefined
+          ? {}
+          : { retryAfterMs: decision.retryAfterMs }),
+      });
     }
 
     return true;

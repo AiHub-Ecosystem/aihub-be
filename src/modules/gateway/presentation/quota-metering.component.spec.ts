@@ -1,7 +1,13 @@
 import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
+import type {
+  GradedAdmissionDecision,
+  GradedAdmissionPort,
+} from '@/modules/gateway/application/graded-admission.port';
+import { quotaUnverifiableError } from '@/modules/gateway/application/quota-admission';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
@@ -15,20 +21,14 @@ import type {
 } from '@/modules/metering/application/usage-repository.port';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
-import { QuotaGuard } from './quota.guard';
+import { GradedAdmissionGuard } from './graded-admission.guard';
 
 class FakeQuotaCounter implements QuotaCounterPort {
-  current = 0;
   unavailable = false;
-  readonly reads: string[] = [];
   readonly increments: string[] = [];
 
-  async read(request: QuotaCounterRequest): Promise<number> {
-    this.reads.push(request.organizationId);
-    if (this.unavailable) {
-      throw new Error('redis unavailable');
-    }
-    return this.current;
+  async read(): Promise<number> {
+    return this.increments.length;
   }
 
   async increment(request: QuotaCounterRequest): Promise<void> {
@@ -65,6 +65,7 @@ function requestFor(
   const request: Record<string, unknown> = {
     id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
     headers: {},
+    routeOptions: { url: OPERATION_CATALOG['writing.task1.grade'].path },
   };
   const authenticated = { ...baseAuthenticated, ...overrides };
   request.aihubAuth = authenticated;
@@ -97,14 +98,27 @@ function httpContextFor(
   } as ArgumentsHost;
 }
 
-describe('quota and metering component behaviour', () => {
-  const now = () => new Date('2026-09-16T12:00:00.000Z');
+const now = () => new Date('2026-09-16T12:00:00.000Z');
 
+/** Graded admission with a fixed outcome: a decision, or a thrown refusal. */
+function admissionGuard(
+  outcome: GradedAdmissionDecision | AppError,
+): GradedAdmissionGuard {
+  const port: GradedAdmissionPort = {
+    consume: async () => {
+      if (outcome instanceof AppError) throw outcome;
+      return outcome;
+    },
+  };
+  return new GradedAdmissionGuard(port, undefined, now);
+}
+
+describe('quota and metering component behaviour', () => {
   it('hard-stop refuses an unverifiable quota with a retryable 503 and records a non-billable error', async () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor({ hardStopOnQuota: true });
-    const quota = new QuotaGuard(counter, now);
+    const quota = admissionGuard(quotaUnverifiableError());
 
     const failure = await quota.canActivate(executionContextFor(request)).then(
       () => undefined,
@@ -146,7 +160,10 @@ describe('quota and metering component behaviour', () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor();
-    const quota = new QuotaGuard(counter, now);
+    const quota = admissionGuard({
+      stage: 'admitted',
+      quotaUnverified: true,
+    });
 
     await expect(quota.canActivate(executionContextFor(request))).resolves.toBe(
       true,
@@ -183,7 +200,10 @@ describe('quota and metering component behaviour', () => {
     counter.unavailable = true;
     const request = requestFor();
     await expect(
-      new QuotaGuard(counter, now).canActivate(executionContextFor(request)),
+      admissionGuard({
+        stage: 'admitted',
+        quotaUnverified: true,
+      }).canActivate(executionContextFor(request)),
     ).resolves.toBe(true);
 
     const repository = new FakeUsageRepository();
@@ -215,7 +235,9 @@ describe('quota and metering component behaviour', () => {
     const counter = new FakeQuotaCounter();
     const request = requestFor();
     await expect(
-      new QuotaGuard(counter, now).canActivate(executionContextFor(request)),
+      admissionGuard({ stage: 'admitted' }).canActivate(
+        executionContextFor(request),
+      ),
     ).resolves.toBe(true);
 
     const repository = new FakeUsageRepository();
@@ -241,7 +263,9 @@ describe('quota and metering component behaviour', () => {
     const counter = new FakeQuotaCounter();
     const request = requestFor();
     await expect(
-      new QuotaGuard(counter, now).canActivate(executionContextFor(request)),
+      admissionGuard({ stage: 'admitted' }).canActivate(
+        executionContextFor(request),
+      ),
     ).resolves.toBe(true);
 
     const repository = new FakeUsageRepository();

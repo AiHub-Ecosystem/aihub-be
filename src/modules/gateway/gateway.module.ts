@@ -55,7 +55,6 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from './application/operation-dispatcher.port';
-import { ORGANIZATION_RETRY_BUDGET } from './application/organization-retry-budget.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -83,7 +82,6 @@ import {
   createRedisGatewayClient,
 } from './infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
-import { RedisOrganizationRetryBudget } from './infrastructure/redis-organization-retry-budget';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from './infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
@@ -182,12 +180,6 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
           seeder,
         ),
       inject: [REDIS_GATEWAY_CLIENT, RedisQuotaSeeder],
-    },
-    {
-      provide: ORGANIZATION_RETRY_BUDGET,
-      useFactory: (client: RedisGatewayClient | undefined) =>
-        new RedisOrganizationRetryBudget('', client),
-      inject: [REDIS_GATEWAY_CLIENT],
     },
     {
       provide: DOWNSTREAM_RETRY_BUDGET,

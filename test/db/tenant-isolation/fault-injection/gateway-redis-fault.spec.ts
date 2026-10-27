@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type Redis from 'ioredis';
 
-import { admitMonthlyQuota } from '@/modules/gateway/application/quota-admission';
 import {
   LEASE_REMOVAL_RETRY_MS,
   RedisConcurrencyLimiter,
@@ -12,7 +11,6 @@ import {
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import { RedisQuotaCounter } from '@/modules/gateway/infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from '@/modules/gateway/infrastructure/redis-rate-limiter';
 
@@ -187,46 +185,6 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
 
       expect(decisions).toEqual([true, true, false]);
       expect(await redisUnavailableCount('rate_limit')).toBeGreaterThan(before);
-    });
-
-    it('admits an unverified quota, or refuses a hard-stop quota, when the counter cannot be read', async () => {
-      const counter = new RedisQuotaCounter(
-        client,
-        () => new Date(),
-        NOOP_LOGGER,
-      );
-      await redisAnswers(client);
-      const before = await redisUnavailableCount('quota');
-
-      await proxy.setMode(mode);
-      const open = await timed(() =>
-        admitMonthlyQuota(
-          counter,
-          {
-            organizationId: organizationId(),
-            quota: 10,
-            hardStopOnQuota: false,
-          },
-          () => new Date(),
-        ),
-      );
-      const hardStop = await timed(() =>
-        admitMonthlyQuota(
-          counter,
-          {
-            organizationId: organizationId(),
-            quota: 10,
-            hardStopOnQuota: true,
-          },
-          () => new Date(),
-        ),
-      );
-
-      expect(open.result).toEqual({ status: 'fulfilled', value: 'unverified' });
-      // Not a quota refusal with next month's hint (#373).
-      expect(rejection(hardStop.result)).toMatchObject(REDIS_UNAVAILABLE);
-      expect(Math.max(open.ms, hardStop.ms)).toBeLessThan(FAIL_FAST_BOUND_MS);
-      expect(await redisUnavailableCount('quota')).toBeGreaterThan(before);
     });
   },
 );

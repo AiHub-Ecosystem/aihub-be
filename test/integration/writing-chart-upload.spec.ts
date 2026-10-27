@@ -21,7 +21,6 @@ import {
 } from '@/contracts/writing/chart-upload';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { ORGANIZATION_RETRY_BUDGET } from '@/modules/gateway/application/organization-retry-budget.port';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
@@ -357,8 +356,6 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
           lease: { release: async () => undefined },
         }),
       })
-      .overrideProvider(ORGANIZATION_RETRY_BUDGET)
-      .useValue({ consume: async () => ({ allowed: true }) })
       .overrideProvider(WRITING_CHART_UPLOAD_REPOSITORY)
       .useValue(repository)
       .overrideProvider(WRITING_CHART_UPLOAD_STORAGE)

@@ -5,7 +5,6 @@ import {
   Injectable,
   Optional,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
@@ -21,8 +20,6 @@ import {
   GRADED_ADMISSION,
   type GradedAdmissionPort,
 } from '@/modules/gateway/application/graded-admission.port';
-import { RATE_WINDOW_MS } from '@/modules/gateway/application/rate-limit-window';
-import type { RateLimitStanding } from '@/modules/gateway/application/rate-limiter.port';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
@@ -38,27 +35,7 @@ import {
   getMeteringEvidence,
 } from '@/modules/metering/public/metering-evidence';
 import { confirmCompletedWritingReplay } from './completed-writing-replay';
-
-/**
- * The caller's own per-key limit, in the `RateLimit-Policy` and `RateLimit`
- * fields of draft-ietf-httpapi-ratelimit-headers-11, so a client can slow
- * down before it is refused. Only the key's own figures are ever reported.
- */
-function reportStanding(
-  context: ExecutionContext,
-  standing: RateLimitStanding | undefined,
-): void {
-  if (standing === undefined) return;
-  const reply = context.switchToHttp().getResponse<FastifyReply>();
-  reply.header(
-    'RateLimit-Policy',
-    `"per-key";q=${standing.limit};w=${RATE_WINDOW_MS / 1_000}`,
-  );
-  reply.header(
-    'RateLimit',
-    `"per-key";r=${standing.remaining};t=${Math.ceil(standing.resetInMs / 1_000)}`,
-  );
-}
+import { reportStanding } from './rate-limit-standing';
 
 /** An invalid key counts as absent here; the executor answers `INVALID_REQUEST`. */
 function idempotencyKeyOf(

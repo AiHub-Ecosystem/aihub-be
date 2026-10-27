@@ -126,6 +126,54 @@ describe('graded admission script on a real Redis', () => {
     expect(second.retryAfterMs).toBeGreaterThan(0);
   });
 
+  it('counts nothing for a refused repeat, and the allowance widens as first attempts grow', async () => {
+    const organizationId = `org_${randomUUID()}`;
+    const input = request({ organizationId });
+    const prefix = retryPrefix(organizationId);
+
+    await admission.consume({ ...input, requestId: 'r1' });
+    await admission.consume({ ...input, requestId: 'r2' });
+    const refusedOnce = await admission.consume({ ...input, requestId: 'r3' });
+    const refusedTwice = await admission.consume({ ...input, requestId: 'r4' });
+
+    expect([refusedOnce.stage, refusedTwice.stage]).toEqual([
+      'retry_budget',
+      'retry_budget',
+    ]);
+    await expect(redis.zcard(`${prefix}:first`)).resolves.toBe(1);
+    await expect(redis.zcard(`${prefix}:repeats`)).resolves.toBe(1);
+
+    // 20 first attempts in the window allow floor(20 * 10%) = 2 repeats.
+    for (let index = 0; index < 19; index += 1) {
+      await admission.consume(request({ organizationId }));
+    }
+    const widened = await admission.consume({ ...input, requestId: 'r5' });
+
+    expect(widened.stage).toBe('admitted');
+    await expect(redis.zcard(`${prefix}:repeats`)).resolves.toBe(2);
+  });
+
+  it('treats the same key on another operation as a new first attempt', async () => {
+    const organizationId = `org_${randomUUID()}`;
+    const input = request({ organizationId });
+
+    await admission.consume({ ...input, requestId: 'r1' });
+    await admission.consume({ ...input, requestId: 'r2' });
+    const otherOperation = await admission.consume({
+      ...input,
+      requestId: 'r3',
+      operation: 'writing.task2.grade',
+    });
+
+    expect(otherOperation.stage).toBe('admitted');
+    await expect(
+      redis.zcard(`${retryPrefix(organizationId)}:first`),
+    ).resolves.toBe(2);
+    await expect(
+      redis.zcard(`${retryPrefix(organizationId)}:repeats`),
+    ).resolves.toBe(1);
+  });
+
   it('applies the rate limit before the retry budget', async () => {
     const input = request({ rateLimitRpm: 2 });
 
@@ -252,6 +300,19 @@ describe('graded admission retry ledger', () => {
     await expect(
       redis.zscore(keys[3] ?? '', 'member-4'),
     ).resolves.not.toBeNull();
+  });
+
+  it('counts a key dropped at the cap as a first attempt, not a repeat', async () => {
+    const keys = scriptKeys(`org_${randomUUID()}`, `ak_${randomUUID()}`);
+
+    for (let index = 0; index < 4; index += 1) {
+      await run(keys, `member-${index}`, `req-${index}`, 3);
+    }
+    const [result] = await run(keys, 'member-0', 'req-again', 3);
+
+    expect(result).toBe(0);
+    await expect(redis.zcard(keys[2] ?? '')).resolves.toBe(0);
+    await expect(redis.zcard(keys[1] ?? '')).resolves.toBe(5);
   });
 
   it('forgets attempts older than the 60-second window', async () => {

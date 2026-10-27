@@ -1,55 +1,34 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ExecutionContext } from '@nestjs/common';
-
+import { admitGradedRequest } from '@/modules/gateway/application/admit-graded-request';
 import { RedisDownstreamRetryBudget } from '@/modules/gateway/infrastructure/redis-downstream-retry-budget';
 import { createRedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
-import { RedisOrganizationRetryBudget } from '@/modules/gateway/infrastructure/redis-organization-retry-budget';
-import { OrganizationRetryBudgetGuard } from '@/modules/gateway/presentation/organization-retry-budget.guard';
-import type { MeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
 
 import { redisAnswers, redisThroughProxy } from './fault-targets';
 
-function requestFor(
-  requestId: string,
-  key: string,
-  organizationId: string,
-): Record<string, unknown> {
-  return {
-    id: requestId,
-    headers: { 'idempotency-key': key },
-    aihubAuth: { organizationId },
-    aihubMetering: {
-      operation: 'writing.task1.grade',
-      organizationId,
-      apiKeyId: 'ak_retry_fault_test',
-      environment: 'production',
-      settled: false,
-    } satisfies MeteringEvidence,
-  };
-}
-
-function contextFor(request: Record<string, unknown>): ExecutionContext {
-  return {
-    switchToHttp: () => ({ getRequest: () => request }),
-  } as ExecutionContext;
-}
-
-describe('Organization retry-budget admission through a Redis fault proxy', () => {
+describe('Graded admission through a Redis fault proxy', () => {
   it('fails closed on Redis disconnects and slow commands, then recovers', async () => {
     const { proxy, url } = await redisThroughProxy(400);
     const client = createRedisGatewayClient(url);
     if (client === undefined)
       throw new Error('Retry-budget Redis client was not created');
-    const guard = new OrganizationRetryBudgetGuard(
-      new RedisOrganizationRetryBudget('', client),
-    );
+    const admission = new RedisGradedAdmission(client);
     const downstream = jest.fn();
     const organizationId = `org_retry_fault_${randomUUID().replaceAll('-', '')}`;
     const run = async (requestId: string, key: string): Promise<void> => {
-      await guard.canActivate(
-        contextFor(requestFor(requestId, key, organizationId)),
-      );
+      const decision = await admitGradedRequest(admission, {
+        apiKeyId: 'ak_retry_fault_test',
+        rateLimitRpm: 10_000,
+        organizationId,
+        requestId,
+        operation: 'writing.task1.grade',
+        idempotencyKey: key,
+        environment: 'production',
+        monthlyRequestQuota: null,
+        hardStopOnQuota: false,
+      });
+      expect(decision.stage).toBe('admitted');
       downstream();
     };
 
@@ -114,7 +93,7 @@ describe('Organization retry-budget admission through a Redis fault proxy', () =
         ['retry-fault-repeat-down', 'retry-fault-seed-key'],
       ] as const) {
         await expect(run(requestId, key)).rejects.toMatchObject({
-          code: 'RETRY_BUDGET_UNAVAILABLE',
+          code: 'REDIS_UNAVAILABLE',
           httpStatus: 503,
           retryable: true,
           retryAfterMs: 1_000,
@@ -133,7 +112,7 @@ describe('Organization retry-budget admission through a Redis fault proxy', () =
         ['retry-fault-repeat-slow', 'retry-fault-slow-seed-key'],
       ] as const) {
         await expect(run(requestId, key)).rejects.toMatchObject({
-          code: 'RETRY_BUDGET_UNAVAILABLE',
+          code: 'REDIS_UNAVAILABLE',
           httpStatus: 503,
           retryable: true,
           retryAfterMs: 1_000,
