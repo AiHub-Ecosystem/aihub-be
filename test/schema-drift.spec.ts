@@ -48,6 +48,35 @@ describe('schemaDrift', () => {
     expect(drift(provider, ours)).toEqual(['optional data.note']);
   });
 
+  it('flags a field AIHUB requires that the provider no longer declares, at the top and nested', () => {
+    const provider = OBJECT(
+      { inner: OBJECT({ a: { type: 'string' } }, ['a']) },
+      ['inner'],
+    );
+    const ours = OBJECT(
+      {
+        inner: OBJECT({ a: { type: 'string' }, gone: { type: 'string' } }, [
+          'a',
+          'gone',
+        ]),
+        feedback: OBJECT({}),
+      },
+      ['inner', 'feedback'],
+    );
+
+    expect(drift(provider, ours)).toEqual([
+      'optional data.feedback',
+      'optional data.inner.gone',
+    ]);
+  });
+
+  it('does not flag a field the provider no longer declares when AIHUB treats it as optional', () => {
+    const provider = OBJECT({}, []);
+    const ours = OBJECT({ note: { type: 'string' } }, []);
+
+    expect(drift(provider, ours)).toEqual([]);
+  });
+
   it('does not flag AIHUB treating a required field as optional', () => {
     const provider = OBJECT({ note: { type: 'string' } }, ['note']);
     const ours = OBJECT({ note: { type: 'string' } }, []);

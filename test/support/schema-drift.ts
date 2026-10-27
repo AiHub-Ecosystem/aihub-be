@@ -4,7 +4,8 @@
  * contract would be refused here. Only those places count:
  *
  * - `nullable`: the provider allows null and AIHUB does not.
- * - `optional`: the provider may omit a field and AIHUB requires it.
+ * - `optional`: the provider may omit a field and AIHUB requires it, including
+ *   a field the provider no longer declares at all.
  * - `type`: the two disagree on the kind of value.
  * - `enum`: the provider may send a value AIHUB does not list.
  * - `extra-key`: the provider has a key that a closed AIHUB object rejects.
@@ -179,6 +180,18 @@ function walk(
       false,
       found,
     );
+  }
+
+  // A field the provider no longer declares is one it no longer guarantees;
+  // the loop above never reaches it, so requiredness is checked from our side.
+  for (const key of mine.required) {
+    if (!(key in theirs.properties)) {
+      found.push({
+        kind: 'optional',
+        path: `${path}.${key}`,
+        detail: 'provider no longer declares it, AIHUB requires it',
+      });
+    }
   }
 
   if (isSchema(theirs.items) && isSchema(mine.items)) {

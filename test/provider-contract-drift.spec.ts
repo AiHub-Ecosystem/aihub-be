@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
+import { parseSpeakingGradeResponse } from '@/downstream/speaking/speaking-grading-response.adapter';
 
 import { schemaDrift } from './support/schema-drift';
 
@@ -152,6 +153,86 @@ describe('AI Speaking: provider contract against the schema AIHUB checks', () =>
       [],
     );
   });
+});
+
+// A provider that stops declaring a field AIHUB requires must show up as a new
+// difference, because the adapter refuses the response that follows (#1180).
+describe('AI Speaking: a field the provider stops declaring', () => {
+  const allowed = readJson<Allowed[]>(
+    'ai-speaking/provider-drift.allowed.json',
+    isAllowedList,
+  );
+  const known = new Set(allowed.map((entry) => `${entry.kind} ${entry.path}`));
+
+  function component(document: Json, name: string): Json {
+    return dig(document, ['components', 'schemas', name]) as Json;
+  }
+
+  function withoutField(schema: Json, field: string): void {
+    delete (schema.properties as Json)[field];
+    schema.required = (schema.required as string[]).filter(
+      (name) => name !== field,
+    );
+  }
+
+  function newDifferences(document: Json): string[] {
+    return schemaDrift(
+      {
+        node: dig(document, ['components', 'schemas', 'PartnerAssessData']),
+        doc: document,
+      },
+      {
+        node: JSON.parse(JSON.stringify(SpeakingGradeResponseSchema)),
+        doc: {},
+      },
+    )
+      .map((entry) => `${entry.kind} ${entry.path}`)
+      .filter((entry) => !known.has(entry));
+  }
+
+  function refusal(mutate: (data: Json) => void): unknown {
+    const body = readJson<Json>('ai-speaking/grading.response.json', isRecord);
+    mutate(body.data as Json);
+    try {
+      parseSpeakingGradeResponse(body);
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  }
+
+  it.each([
+    {
+      field: 'data.feedback',
+      schema: 'PartnerAssessData',
+      key: 'feedback',
+      mutate: (data: Json) => {
+        delete data.feedback;
+      },
+    },
+    {
+      field: 'data.feedback.summary_vi',
+      schema: 'FeedbackInfo',
+      key: 'summary_vi',
+      mutate: (data: Json) => {
+        delete (data.feedback as Json).summary_vi;
+      },
+    },
+  ])(
+    '$field is a new difference and the adapter refuses the response',
+    ({ field, schema, key, mutate }) => {
+      const document = readJson<Json>(
+        'ai-speaking/provider-openapi.snapshot.json',
+        isRecord,
+      );
+      withoutField(component(document, schema), key);
+
+      expect(newDifferences(document)).toEqual([`optional ${field}`]);
+      expect(refusal(mutate)).toMatchObject({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      });
+    },
+  );
 });
 
 function resolveRef(node: unknown, document: Json): Json {
