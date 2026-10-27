@@ -1,4 +1,5 @@
 import { createHmac, hkdfSync } from 'node:crypto';
+import { asDateOrIso } from '@/common/postgres/row-readers';
 
 import {
   type AuthSqlClient,
@@ -65,8 +66,8 @@ function fingerprintEmailRecipients(
 }
 
 function counterDate(value: Date | string): Date {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = asDateOrIso(value);
+  if (date === undefined) {
     throw new Error('authentication email recipient counter is invalid');
   }
   return date;

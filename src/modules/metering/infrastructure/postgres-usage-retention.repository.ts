@@ -1,4 +1,5 @@
 import { isRecord } from '@/common/is-record';
+import { asDateOrIso } from '@/common/postgres/row-readers';
 import type {
   UsageRetentionBatch,
   UsageRetentionBatchRequest,
@@ -47,17 +48,8 @@ function cursorFromRow(value: unknown): UsageRetentionCursor {
   if (!isRecord(value) || typeof value.request_id !== 'string') {
     throw new Error('usage retention row is invalid');
   }
-  const createdAt =
-    value.created_at instanceof Date
-      ? new Date(value.created_at.getTime())
-      : typeof value.created_at === 'string'
-        ? new Date(value.created_at)
-        : null;
-  if (
-    createdAt === null ||
-    Number.isNaN(createdAt.getTime()) ||
-    value.request_id.length === 0
-  ) {
+  const createdAt = asDateOrIso(value.created_at);
+  if (createdAt === undefined || value.request_id.length === 0) {
     throw new Error('usage retention row is invalid');
   }
   return { createdAt, requestId: value.request_id };

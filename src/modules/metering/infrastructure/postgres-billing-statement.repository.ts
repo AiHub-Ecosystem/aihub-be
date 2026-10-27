@@ -1,3 +1,4 @@
+import { asDate } from '@/common/postgres/row-readers';
 import type {
   BillingAdjustmentRecord,
   BillingAdjustmentTarget,
@@ -107,10 +108,11 @@ function text(value: unknown, field: string): string {
 }
 
 function date(value: unknown, field: string): Date {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+  const parsed = asDate(value);
+  if (parsed === undefined) {
     throw new Error(`billing field ${field} is invalid`);
   }
-  return value;
+  return parsed;
 }
 
 function target(value: unknown): BillingAdjustmentTarget {

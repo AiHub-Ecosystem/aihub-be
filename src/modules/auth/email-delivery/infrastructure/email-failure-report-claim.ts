@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { asDate } from '@/common/postgres/row-readers';
 import type {
   ClaimedFailureReport,
   EmailDeliveryRequestRecord,
@@ -52,8 +53,8 @@ export function withFailureClaims(
 ): readonly ClaimedFailureReport[] {
   const claims = new Map(rows.map((row) => [row.id, row.claim]));
   return records.map((record) => {
-    const claim = claims.get(record.id);
-    if (!(claim instanceof Date) || Number.isNaN(claim.getTime())) {
+    const claim = asDate(claims.get(record.id));
+    if (claim === undefined) {
       throw new AppError({
         code: 'INTERNAL_ERROR',
         message: 'Email delivery failure claim is invalid',

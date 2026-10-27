@@ -3,6 +3,7 @@ import {
   databaseUnavailableError,
   isPostgresUnavailable,
 } from '@/common/postgres/postgres-unavailable-error';
+import { asDateOrIso } from '@/common/postgres/row-readers';
 import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type {
   OrganizationMembershipRole,
@@ -10,10 +11,9 @@ import type {
 } from '@/modules/identity/membership/application/organization-membership.port';
 
 /**
- * Shared row readers for the identity repositories. Every durable value that
- * reaches the application crosses one of these, so a column that is missing,
- * null, or outside its vocabulary fails loudly instead of flowing onward as an
- * unchecked cast.
+ * Row readers for the identity repositories. The generic ones live in
+ * `@/common/postgres/row-readers`, shared with Auth and Metering, and are
+ * re-exported here so every identity repository imports one module.
  */
 
 /** Identity data that broke an invariant: never retryable. */
@@ -36,13 +36,15 @@ export function identityStoreUnavailable(cause: unknown): AppError {
   });
 }
 
-export function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
+export {
+  booleanValue,
+  nullableNonNegativeIntegerValue,
+  nullableStringValue,
+  oneOf,
+  positiveIntegerValue,
+  stringArrayValue,
+  stringValue,
+} from '@/common/postgres/row-readers';
 
 export function membershipRoleValue(
   record: Record<string, unknown>,
@@ -70,20 +72,13 @@ export function organizationStatusValue(
   return value === 'active' || value === 'suspended' ? value : undefined;
 }
 
+/**
+ * A timestamp column that may be NULL and may arrive as text: `null` only for
+ * SQL NULL, a `Date` copy otherwise, `undefined` for anything malformed.
+ */
 export function dateValue(
   record: Record<string, unknown>,
   key: string,
 ): Date | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getTime());
-  }
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-  return undefined;
+  return record[key] === null ? null : asDateOrIso(record[key]);
 }
