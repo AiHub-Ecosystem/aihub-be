@@ -266,6 +266,7 @@ const fields = {
 } as const satisfies Record<string, RuntimeField>;
 
 type FieldMap = typeof fields;
+type RuntimeFieldName = keyof FieldMap;
 type FieldValue<F> = F extends { readonly kind: 'number' }
   ? number
   : F extends { readonly kind: 'boolean' }
@@ -293,6 +294,108 @@ export type PublicRuntimeConfiguration = Omit<
   RuntimeConfiguration,
   SecretFieldNames
 >;
+
+type RuntimeFieldGroups = Record<string, readonly RuntimeFieldName[]>;
+
+function defineRuntimeFieldGroups<const Groups extends RuntimeFieldGroups>(
+  groups: Groups,
+  ..._missing: Exclude<
+    RuntimeFieldName,
+    Groups[keyof Groups][number]
+  > extends never
+    ? []
+    : [never]
+): Groups {
+  return groups;
+}
+
+const runtimeFieldGroups = defineRuntimeFieldGroups({
+  runtime: [
+    'NODE_ENV',
+    'PORT',
+    'UV_THREADPOOL_SIZE',
+    'AIHUB_AUTH_ARGON2_MAX_CONCURRENCY',
+    'LOG_LEVEL',
+    'OTEL_SERVICE_NAME',
+    'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+    'AIHUB_ALLOW_UNAUTHENTICATED_DEV',
+    'AIHUB_RUNTIME_SECRET_SOURCE',
+    'AIHUB_RUNTIME_SECRETS_FILE',
+    'AIHUB_AUTH_MFA_SECRETS_FILE',
+    'AIHUB_RUNTIME_CONNECTION_SECRETS_FILE',
+    'AIHUB_RUNTIME_DATABASE_SCOPE',
+    'AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD',
+    'AIHUB_USER_ACCESS_ISSUER',
+    'AIHUB_PRODUCTION_HOST',
+    'AIHUB_TRUSTED_PROXY_IP',
+    'AIHUB_LISTEN_SOCKET',
+    'AIHUB_STAGING_HOST',
+    'AIHUB_DEVELOPMENT_HOST',
+    'AIHUB_SANDBOX_HOST',
+    'AIHUB_SANDBOX_ORG_IDS',
+  ],
+  connections: [
+    'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA',
+    'DATABASE_URL',
+    'CONTROL_PLANE_DATABASE_URL',
+    'CONTROL_PLANE_READ_DATABASE_URL',
+    'AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL',
+    'REDIS_URL',
+    'AIHUB_EMAIL_SEND_RATE_REDIS_URL',
+    'AIHUB_EMAIL_SEND_RATE_LIMIT',
+    'AIHUB_EMAIL_SEND_RATE_DURATION_MS',
+    'AIHUB_EMAIL_DAILY_SEND_BUDGET',
+    'DOWNSTREAM_AI_WRITING_URL',
+    'DOWNSTREAM_AI_SPEAKING_URL',
+  ],
+  delivery: [
+    'DOWNSTREAM_AI_WRITING_TOKEN',
+    'DOWNSTREAM_AI_SPEAKING_CLIENT_ID',
+    'DOWNSTREAM_AI_SPEAKING_SECRET_KEY',
+    'RESEND_API_KEY',
+    'RESEND_FROM',
+    'CUSTOMER_WEB_BASE_URL',
+  ],
+  identitySecrets: [
+    'AIHUB_USER_ACCESS_JWT_PRIVATE_KEY',
+    'AIHUB_USER_ACCESS_JWT_KID',
+    'AIHUB_WEB_SESSION_CLIENT_SECRET',
+    'EMAIL_OUTBOX_CURRENT_KEY_ID',
+    'EMAIL_OUTBOX_KEYS',
+    'AIHUB_AUTH_MFA_CURRENT_KEY_ID',
+    'AIHUB_AUTH_MFA_KEYS',
+  ],
+  storage: [
+    'SEAWEEDFS_ENDPOINT_URL',
+    'SEAWEEDFS_BUCKET',
+    'SEAWEEDFS_REGION',
+    'SEAWEEDFS_USER_ASSET_BUCKET',
+    'SEAWEEDFS_AUDIO_ASSET_BUCKET',
+    'SEAWEEDFS_CHART_STAGING_BUCKET',
+    'SEAWEEDFS_CHART_PUBLIC_BUCKET',
+    'AIHUB_CHART_PUBLIC_BASE_URL',
+    'SEAWEEDFS_ACCESS_KEY_ID',
+    'SEAWEEDFS_SECRET_ACCESS_KEY',
+    'AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY',
+    'AIHUB_SANDBOX_ASSERTION_KID',
+  ],
+});
+
+type RuntimeFieldGroup = keyof typeof runtimeFieldGroups;
+
+interface RuntimeLoadContext {
+  readonly modeValue: string;
+  readonly secretSource: string | undefined;
+  readonly connectionFile: string | undefined;
+  readonly databaseScope: string;
+}
+
+type RuntimeValue = string | number | boolean | undefined;
+
+interface RuntimeLoadStep {
+  readonly values: Record<string, RuntimeValue>;
+  readonly problems: string[];
+}
 
 export interface RuntimeConnectionConfiguration {
   readonly databaseUrl: string | undefined;
@@ -378,23 +481,29 @@ function addArgon2ConcurrencyProblem(
   }
 }
 
-export function loadRuntimeConfiguration(
+function createRuntimeLoadContext(
   raw: Readonly<Record<string, string | undefined>>,
-): RuntimeConfiguration {
-  const values: Record<string, string | number | boolean | undefined> = {};
-  const problems: string[] = [];
-  const modeValue = nonEmpty(raw.NODE_ENV) ?? 'production';
-  const secretSource = nonEmpty(raw.AIHUB_RUNTIME_SECRET_SOURCE);
-  const connectionFile = nonEmpty(raw.AIHUB_RUNTIME_SECRETS_FILE);
-  const databaseScope =
-    nonEmpty(raw.AIHUB_RUNTIME_DATABASE_SCOPE) ?? 'production';
+): RuntimeLoadContext {
+  return {
+    modeValue: nonEmpty(raw.NODE_ENV) ?? 'production',
+    secretSource: nonEmpty(raw.AIHUB_RUNTIME_SECRET_SOURCE),
+    connectionFile: nonEmpty(raw.AIHUB_RUNTIME_SECRETS_FILE),
+    databaseScope: nonEmpty(raw.AIHUB_RUNTIME_DATABASE_SCOPE) ?? 'production',
+  };
+}
 
-  for (const [name, field] of Object.entries(fields) as [
-    keyof FieldMap,
-    RuntimeField,
-  ][]) {
+function loadRuntimeFieldGroup(
+  raw: Readonly<Record<string, string | undefined>>,
+  context: RuntimeLoadContext,
+  group: RuntimeFieldGroup,
+): RuntimeLoadStep {
+  const values: Record<string, RuntimeValue> = {};
+  const problems: string[] = [];
+
+  for (const name of runtimeFieldGroups[group]) {
+    const field: RuntimeField = fields[name];
     const rawValue = field.allowEmpty ? raw[name] : nonEmpty(raw[name]);
-    let value: string | number | boolean | undefined = rawValue;
+    let value: RuntimeValue = rawValue;
 
     if (rawValue === undefined || rawValue === '') {
       value = field.defaultValue;
@@ -420,10 +529,10 @@ export function loadRuntimeConfiguration(
     if (
       value === undefined &&
       (field.requiredWhenSecretSource
-        ? secretSource === 'env' &&
+        ? context.secretSource === 'env' &&
           (field.requiredIn === undefined ||
-            field.requiredIn.includes(modeValue as RuntimeMode))
-        : field.requiredIn?.includes(modeValue as RuntimeMode))
+            field.requiredIn.includes(context.modeValue as RuntimeMode))
+        : field.requiredIn?.includes(context.modeValue as RuntimeMode))
     ) {
       problems.push(name);
     }
@@ -451,68 +560,137 @@ export function loadRuntimeConfiguration(
         problems.push(name);
       }
     }
+
     values[name] = value;
   }
 
-  addArgon2ConcurrencyProblem(values, problems);
+  return { values, problems };
+}
 
-  if (!MODES.includes(modeValue as RuntimeMode)) problems.push('NODE_ENV');
+function loadRuntimeSettings(
+  raw: Readonly<Record<string, string | undefined>>,
+  context: RuntimeLoadContext,
+): RuntimeLoadStep {
+  const step = loadRuntimeFieldGroup(raw, context, 'runtime');
+  addArgon2ConcurrencyProblem(step.values, step.problems);
+
+  if (!MODES.includes(context.modeValue as RuntimeMode)) {
+    step.problems.push('NODE_ENV');
+  }
   if (
-    (values.SEAWEEDFS_ENDPOINT_URL as string | undefined) !== undefined &&
-    values.SEAWEEDFS_ENDPOINT_URL !== DEFAULT_SEAWEEDFS_ENDPOINT
+    context.secretSource !== undefined &&
+    context.secretSource !== 'env' &&
+    context.secretSource !== 'agent-file'
   ) {
-    problems.push('SEAWEEDFS_ENDPOINT_URL');
+    step.problems.push('AIHUB_RUNTIME_SECRET_SOURCE');
   }
   if (
-    isProductionLike(modeValue as RuntimeMode) &&
-    databaseScope !== 'sandbox' &&
-    nonEmpty(raw.CUSTOMER_WEB_BASE_URL) === undefined
+    context.secretSource === undefined &&
+    context.connectionFile === undefined
   ) {
-    problems.push('CUSTOMER_WEB_BASE_URL');
+    step.problems.push(
+      'AIHUB_RUNTIME_SECRET_SOURCE',
+      'AIHUB_RUNTIME_SECRETS_FILE',
+    );
   }
   if (
-    secretSource !== undefined &&
-    secretSource !== 'env' &&
-    secretSource !== 'agent-file'
-  ) {
-    problems.push('AIHUB_RUNTIME_SECRET_SOURCE');
-  }
-  if (secretSource === undefined && connectionFile === undefined) {
-    problems.push('AIHUB_RUNTIME_SECRET_SOURCE', 'AIHUB_RUNTIME_SECRETS_FILE');
-  }
-  if (
-    secretSource === 'agent-file' &&
+    context.secretSource === 'agent-file' &&
     nonEmpty(raw.AIHUB_RUNTIME_SECRETS_FILE) === undefined
   ) {
-    problems.push('AIHUB_RUNTIME_SECRETS_FILE');
+    step.problems.push('AIHUB_RUNTIME_SECRETS_FILE');
   }
   if (
-    secretSource === 'agent-file' &&
+    context.secretSource === 'agent-file' &&
     nonEmpty(raw.AIHUB_AUTH_MFA_SECRETS_FILE) === undefined
   ) {
-    problems.push('AIHUB_AUTH_MFA_SECRETS_FILE');
+    step.problems.push('AIHUB_AUTH_MFA_SECRETS_FILE');
   }
   if (
-    secretSource === 'env' &&
-    modeValue !== 'development' &&
-    modeValue !== 'test'
+    context.secretSource === 'env' &&
+    context.modeValue !== 'development' &&
+    context.modeValue !== 'test'
   ) {
-    problems.push('AIHUB_RUNTIME_SECRET_SOURCE');
+    step.problems.push('AIHUB_RUNTIME_SECRET_SOURCE');
+  }
+
+  return step;
+}
+
+function loadConnectionSettings(
+  raw: Readonly<Record<string, string | undefined>>,
+  context: RuntimeLoadContext,
+): RuntimeLoadStep {
+  return loadRuntimeFieldGroup(raw, context, 'connections');
+}
+
+function loadDeliverySettings(
+  raw: Readonly<Record<string, string | undefined>>,
+  context: RuntimeLoadContext,
+): RuntimeLoadStep {
+  const step = loadRuntimeFieldGroup(raw, context, 'delivery');
+
+  if (
+    isProductionLike(context.modeValue as RuntimeMode) &&
+    context.databaseScope !== 'sandbox' &&
+    nonEmpty(raw.CUSTOMER_WEB_BASE_URL) === undefined
+  ) {
+    step.problems.push('CUSTOMER_WEB_BASE_URL');
+  }
+
+  return step;
+}
+
+function loadIdentitySecrets(
+  raw: Readonly<Record<string, string | undefined>>,
+  context: RuntimeLoadContext,
+): RuntimeLoadStep {
+  return loadRuntimeFieldGroup(raw, context, 'identitySecrets');
+}
+
+function loadStorageSettings(
+  raw: Readonly<Record<string, string | undefined>>,
+  context: RuntimeLoadContext,
+): RuntimeLoadStep {
+  const step = loadRuntimeFieldGroup(raw, context, 'storage');
+
+  if (
+    step.values.SEAWEEDFS_ENDPOINT_URL !== undefined &&
+    step.values.SEAWEEDFS_ENDPOINT_URL !== DEFAULT_SEAWEEDFS_ENDPOINT
+  ) {
+    step.problems.push('SEAWEEDFS_ENDPOINT_URL');
   }
   if (
     raw.SEAWEEDFS_ACCESS_KEY_ID !== undefined &&
     nonEmpty(raw.SEAWEEDFS_ACCESS_KEY_ID) !== undefined &&
     nonEmpty(raw.SEAWEEDFS_SECRET_ACCESS_KEY) === undefined
   ) {
-    problems.push('SEAWEEDFS_SECRET_ACCESS_KEY');
+    step.problems.push('SEAWEEDFS_SECRET_ACCESS_KEY');
   }
   if (
     raw.SEAWEEDFS_SECRET_ACCESS_KEY !== undefined &&
     nonEmpty(raw.SEAWEEDFS_SECRET_ACCESS_KEY) !== undefined &&
     nonEmpty(raw.SEAWEEDFS_ACCESS_KEY_ID) === undefined
   ) {
-    problems.push('SEAWEEDFS_ACCESS_KEY_ID');
+    step.problems.push('SEAWEEDFS_ACCESS_KEY_ID');
   }
+
+  return step;
+}
+
+export function loadRuntimeConfiguration(
+  raw: Readonly<Record<string, string | undefined>>,
+): RuntimeConfiguration {
+  const context = createRuntimeLoadContext(raw);
+  const steps = [
+    loadRuntimeSettings(raw, context),
+    loadConnectionSettings(raw, context),
+    loadDeliverySettings(raw, context),
+    loadIdentitySecrets(raw, context),
+    loadStorageSettings(raw, context),
+  ];
+  const values: Record<string, RuntimeValue> = {};
+  for (const step of steps) Object.assign(values, step.values);
+  const problems = steps.flatMap((step) => step.problems);
 
   const validationErrors = [...Value.Errors(runtimeEnvironmentSchema, values)];
   for (const error of validationErrors) {
