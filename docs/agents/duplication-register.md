@@ -115,6 +115,15 @@ not-found check, #705 an Organization-scoped query that omits its predicate,
   run with the same thresholds: 9 clones, 151 duplicated lines, or 0.27%. A run
   at 60 tokens found 25 clones (0.58%) and supplied A8 and I13.
 
+- B1, I6 and the other consolidations closed under #1315 leave three known
+  residual spellings, each kept on purpose: the billing statement's
+  `excluded_replays` writes the complement (`billable_requests = 0`) by hand;
+  `scripts/ops/capacity-benchmark/benchmark-control-plane.mjs` and
+  `scripts/ops/postgres-query-plan-baseline/query-set.ts` keep a comment-synced
+  copy of the usage aggregate because scripts do not import `src`; and three
+  guards still test `organizationStatus !== 'active'` under their own row locks
+  or admission table, which equals the shared suspension predicate while
+  `OrganizationStatus` has two values.
 - Rows are closed only when the copies are gone or the reason it stays separate
   is written. Rows are never deleted.
 - New duplication found later is appended here rather than becoming its own
