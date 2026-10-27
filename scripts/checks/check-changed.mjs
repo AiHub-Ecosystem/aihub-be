@@ -335,7 +335,14 @@ function main() {
     },
   });
 
-  if (outcome === 'full-verify') return fullVerifyStatus;
+  if (outcome === 'full-verify') {
+    console.log(
+      fullVerifyStatus === 0
+        ? '[check:changed] PASS (full verify ran; no separate pnpm verify needed)'
+        : '[check:changed] FAIL (full verify)',
+    );
+    return fullVerifyStatus;
+  }
   if (outcome === 'passed') {
     console.log('[check:changed] PASS');
     return 0;

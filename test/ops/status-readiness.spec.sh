@@ -120,6 +120,20 @@ run_status normal 200 "$all_up"
 assert_contains "$output" "production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200 $expected_dependencies"
 assert_contains "$output" "sandbox    ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200 $expected_dependencies"
 
+assert_not_contains "$output" 'expected='
+
+other_revision=89abcdef89abcdef89abcdef89abcdef89abcdef
+if output="$(PATH="$bin_dir:$PATH" \
+  FAKE_FETCH_SHIM="$fetch_shim" \
+  FAKE_READY_MODE=normal \
+  FAKE_READY_STATUS=200 \
+  FAKE_READY_BODY="$all_up" \
+  bash "$test_root/status.sh" "$other_revision")"; then
+  fail "a container on another commit exited 0"
+fi
+assert_contains "$output" 'production FAIL revision=0123456'
+assert_contains "$output" ' expected=89abcde'
+
 run_status normal 200 "$one_down"
 [[ "$exit_code" == 1 ]] || fail "one dependency down exited $exit_code"
 assert_contains "$output" 'production FAIL'

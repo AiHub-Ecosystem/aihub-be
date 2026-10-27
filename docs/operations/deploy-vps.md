@@ -1398,8 +1398,10 @@ ssh <user>@<host> 'bash -s -- <expected-commit-sha>' < ops/status.sh
 ```
 
 Pass the commit you expect (for example `git rev-parse origin/main`) and a
-container on any other commit is reported `FAIL`, so "is the latest code live?"
-has a yes-or-no answer. The exit status is 1 when any container is missing, not
+container on any other commit is reported `FAIL` with `expected=<short-sha>` at
+the end of its line, so "is the latest code live?" has a yes-or-no answer. Pass
+the full SHA of the commit you pushed, not `HEAD`: in a checkout other agents
+commit to, `HEAD` can already be a later, undeployed commit. The exit status is 1 when any container is missing, not
 running, not healthy, failing either probe, or on another commit. A non-zero
 `errors=` count is not a failure by itself: read those lines, because they
 include real errors such as a downstream contract violation.

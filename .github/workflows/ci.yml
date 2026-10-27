@@ -244,12 +244,14 @@ jobs:
         id: customer-web-pr
         if: github.event_name == 'pull_request'
         shell: bash
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+        # The body is read from the event file, not passed as `env:`: GitHub
+        # prints a step's env in the log, and a Dependabot body is pages of
+        # release notes.
         run: |
           node <<'NODE'
           const fs = require('node:fs');
-          const matches = [...(process.env.PR_BODY ?? '').matchAll(
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          const matches = [...(event.pull_request?.body ?? '').matchAll(
             /https:\/\/github\.com\/AiHub-Ecosystem\/AiHub-Frontend\/pull\/(\d+)/g,
           )];
           const numbers = [...new Set(matches.map((match) => match[1]))];

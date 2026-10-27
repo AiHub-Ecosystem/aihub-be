@@ -155,13 +155,15 @@ for label in production sandbox; do
   [ "$health_probe" = 200 ] || verdict=FAIL
   [ "$readiness_probe" = 200 ] || verdict=FAIL
   [ "$readiness_verdict" = ok ] || verdict=FAIL
+  wanted=
   if [ -n "$expected" ] && [ "${revision#"$expected"}" = "$revision" ]; then
     verdict=FAIL
+    wanted=" expected=${expected:0:7}"
   fi
   [ "$verdict" = ok ] || status=1
 
-  printf '%-10s %-4s revision=%s state=%s health=%s health_probe=%s readiness_probe=%s readiness_dependencies=%s restarts=%s errors=%s since=%s\n' \
-    "$label" "$verdict" "${revision:0:7}" "$state" "$health" "$health_probe" "$readiness_probe" "$readiness_dependencies" "$restarts" "$errors" "$started"
+  printf '%-10s %-4s revision=%s state=%s health=%s health_probe=%s readiness_probe=%s readiness_dependencies=%s restarts=%s errors=%s since=%s%s\n' \
+    "$label" "$verdict" "${revision:0:7}" "$state" "$health" "$health_probe" "$readiness_probe" "$readiness_dependencies" "$restarts" "$errors" "$started" "$wanted"
 done
 
 exit "$status"

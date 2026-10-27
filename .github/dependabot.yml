@@ -20,6 +20,15 @@ updates:
     labels:
       - "dependencies"
     groups:
+      # OpenTelemetry packages version in lockstep: the SDK, core, resources,
+      # sdk-trace, and the 0.x exporter and instrumentation packages must come
+      # from one generation. A 0.x "minor" such as 0.223 to 0.300 is a generation
+      # change, and mixed into the group below it left half the packages on the
+      # old SDK (PR #1287). Listed first so it claims these packages before
+      # minor-and-patch does; its majors arrive together as one PR to migrate.
+      opentelemetry:
+        patterns:
+          - "@opentelemetry/*"
       # Minor and patch bumps share one PR: they rarely break anything, and one
       # PR beats a dozen single-bump PRs that each fail CI on their own.
       #

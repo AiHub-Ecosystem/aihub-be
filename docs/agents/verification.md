@@ -8,6 +8,13 @@ Check free memory before starting a full loop. The unit lane lowers its own work
 
 Run one full loop at a time on a machine. Concurrent agents double the resident workers, and that overlap, not the code under test, is the usual source of a heap death here.
 
+## Reading a red CI run
+
+`gh run view <run> --log-failed` shows only the aggregate `CI` job, which holds `STATIC_RESULT: failure` and no cause. Find the failing job, then read its log:
+
+1. `gh pr checks <pr>` (or `gh run view <run> --json jobs`) lists each job with its id; take the one marked fail.
+2. `gh run view <run> --job <id> --log`, filtered to the first failing step (`| grep -n -m1 -B5 -A40 'error\|FAIL'`).
+
 ## Running one database-lane spec
 
 `pnpm test:db` needs a Postgres the lane can prove is AIHUB's. On a machine whose ports 5432 and 6379 belong to another project, run one spec against a throwaway container:
