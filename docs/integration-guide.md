@@ -8,6 +8,10 @@ timeouts, and errors.
 The endpoint reference lives at `GET /docs`, generated from the same schemas
 the server validates against. This guide is the surrounding context.
 
+The current API major is `/v1`. Choose a contract in the `/docs` version
+selector, and read the [Public API changelog](../CHANGELOG.md) for customer-visible
+changes by contract version.
+
 ## Compatibility promise
 
 The URI major version applies to the whole Public API Contract. All current

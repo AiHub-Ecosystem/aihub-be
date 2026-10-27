@@ -109,7 +109,7 @@ function runChecker(t, candidate, body = '', baseline = BASELINE) {
   });
 }
 
-void test('rejects a removed required response field and explains the declaration', (t) => {
+void test('rejects a removed required response field even when declared intentional', (t) => {
   const result = runChecker(
     t,
     fixture((document) => {
@@ -120,11 +120,11 @@ void test('rejects a removed required response field and explains the declaratio
       delete response.properties.id;
       response.required = ['status'];
     }),
+    API_BREAK_DECLARATION,
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /API-Breaking-Change: intentional/);
-  assert.match(result.stderr, /API-Breaking-Change-Reason:/);
+  assert.match(result.stderr, /Breaking API contract changes detected/);
 });
 
 void test('allows an additive optional response field', (t) => {
@@ -175,10 +175,10 @@ void test('rejects a new value in a closed response enum', (t) => {
   );
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /API-Breaking-Change: intentional/);
+  assert.match(result.stderr, /Breaking API contract changes detected/);
 });
 
-void test('requires an intentional declaration when a closed response enum becomes extensible', (t) => {
+void test('rejects changing a closed response enum to extensible in a supported major', (t) => {
   const candidate = fixture((document) => {
     const status =
       document.paths['/v1/items'].get.responses['200'].content[
@@ -191,11 +191,12 @@ void test('requires an intentional declaration when a closed response enum becom
   const declared = runChecker(t, candidate, API_BREAK_DECLARATION);
 
   assert.notEqual(undeclared.status, 0);
-  assert.match(undeclared.stderr, /API-Breaking-Change: intentional/);
-  assert.equal(declared.status, 0, declared.stderr);
+  assert.match(undeclared.stderr, /Breaking API contract changes detected/);
+  assert.notEqual(declared.status, 0);
+  assert.match(declared.stderr, /Breaking API contract changes detected/);
 });
 
-void test('allows a declared intentional break when comparison found breaking changes', (t) => {
+void test('does not let a declared intentional break bypass the supported-major gate', (t) => {
   const result = runChecker(
     t,
     fixture((document) => {
@@ -209,8 +210,8 @@ void test('allows a declared intentional break when comparison found breaking ch
     API_BREAK_DECLARATION,
   );
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /remove field for v2 migration/);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Breaking API contract changes detected/);
 });
 
 void test('does not let an intentional-break declaration hide an invalid contract', (t) => {
@@ -258,17 +259,14 @@ void test('allows extending the generated Audit action response enum', (t) => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-void test('runs the checker against the pull request base contract and passes the PR body', () => {
+void test('runs the versioned release checker against the pull request base', () => {
   assert.ok(
     WORKFLOW.includes('ref: ${{ github.event.pull_request.base.sha }}'),
   );
   assert.ok(WORKFLOW.includes('path: base-contract'));
   assert.ok(
-    WORKFLOW.includes('PR_BODY: ${{ github.event.pull_request.body }}'),
-  );
-  assert.ok(
     WORKFLOW.includes(
-      'pnpm check:api-compatibility -- base-contract/openapi.json openapi.json',
+      'pnpm check:api-compatibility -- base-contract . CHANGELOG.md',
     ),
   );
   assert.ok(WORKFLOW.includes('run: pnpm test:api-compatibility'));

@@ -1,20 +1,20 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { Controller, Get, Header, Query } from '@nestjs/common';
+import { Type } from '@sinclair/typebox';
 
-import { Controller, Get, Header } from '@nestjs/common';
-
+import { parseRequestQuery } from '@/common/http/parse-request-query';
 import { buildOpenApiDocument } from './build-openapi-document';
+import {
+  PUBLIC_API_CONTRACT_VERSION,
+  PUBLIC_API_MAJOR_PATH,
+} from './public-api-contract-version';
 
-function readPackageVersion(): string {
-  // `../../package.json` from the compiled `dist/openapi/`, matching the
-  // repo root the same way `scripts/generate/generate-openapi.ts` does from `scripts/generate/`.
-  const packageJson = JSON.parse(
-    readFileSync(join(__dirname, '../../package.json'), 'utf8'),
-  ) as { version: string };
-  return packageJson.version;
-}
+const DOCS_QUERY_SCHEMA = Type.Object(
+  { version: Type.Optional(Type.Literal(PUBLIC_API_MAJOR_PATH)) },
+  { additionalProperties: false },
+);
 
-const DOCS_PAGE = `<!doctype html>
+function docsPage(version: string): string {
+  return `<!doctype html>
 <html>
 <head>
   <title>AIHUB API Reference</title>
@@ -22,14 +22,22 @@ const DOCS_PAGE = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <body>
-  <script id="api-reference" data-url="/openapi.json"></script>
+  <form action="/docs" method="get">
+    <label for="api-version">API version</label>
+    <select id="api-version" name="version">
+      <option value="${version}" selected>${version} (current)</option>
+    </select>
+    <button type="submit">View</button>
+  </form>
+  <script id="api-reference" data-url="/openapi/${version}.json"></script>
   <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1" integrity="sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY" crossorigin="anonymous"></script>
 </body>
 </html>
 `;
+}
 
 const DOCS_CONTENT_SECURITY_POLICY =
-  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com";
+  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com";
 
 /**
  * No `@UseGuards` here, deliberately: this is public reference material, not
@@ -47,13 +55,22 @@ export class OpenApiController {
     // spec to always match the running build with no regeneration step
     // anyone can forget. The committed file exists for git diffing and for
     // `pnpm generate:postman`'s input, not as this endpoint's source.
-    return buildOpenApiDocument(readPackageVersion());
+    return buildOpenApiDocument(PUBLIC_API_CONTRACT_VERSION);
+  }
+
+  @Get('openapi/v1.json')
+  getVersionOneSpec(): unknown {
+    return buildOpenApiDocument(PUBLIC_API_CONTRACT_VERSION);
   }
 
   @Get('docs')
   @Header('Content-Type', 'text/html; charset=utf-8')
   @Header('Content-Security-Policy', DOCS_CONTENT_SECURITY_POLICY)
-  getDocsPage(): string {
-    return DOCS_PAGE;
+  getDocsPage(@Query() rawQuery: unknown): string {
+    const { version = PUBLIC_API_MAJOR_PATH } = parseRequestQuery(
+      DOCS_QUERY_SCHEMA,
+      rawQuery,
+    );
+    return docsPage(version);
   }
 }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "0.1.0"
+    "version": "1.0.0"
   },
   "servers": [
     {
@@ -80,12 +80,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -131,12 +131,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -183,12 +183,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -229,12 +229,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -281,12 +281,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -333,12 +333,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -376,12 +376,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -440,12 +440,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -487,12 +487,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -530,12 +530,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -585,12 +585,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -643,12 +643,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -695,12 +695,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
+              "additionalProperties": true,
               "type": "object",
               "required": ["error"],
               "properties": {
                 "error": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["code", "message", "request_id", "retryable"],
                   "properties": {
@@ -849,12 +849,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "overall_band",
@@ -881,7 +881,7 @@
                           "maxItems": 4,
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "id",
@@ -961,7 +961,7 @@
                         "annotations": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "criterion",
@@ -1009,7 +1009,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "request_id",
@@ -1032,7 +1032,7 @@
                           "type": "string"
                         },
                         "timing": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "downstream_ms",
@@ -1176,12 +1176,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "overall_band",
@@ -1208,7 +1208,7 @@
                           "maxItems": 4,
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "id",
@@ -1288,7 +1288,7 @@
                         "annotations": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "criterion",
@@ -1336,7 +1336,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "request_id",
@@ -1359,7 +1359,7 @@
                           "type": "string"
                         },
                         "timing": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "downstream_ms",
@@ -1535,12 +1535,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "question_id",
@@ -1569,7 +1569,7 @@
                           "type": "string"
                         },
                         "scorability": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "is_scorable",
@@ -1600,7 +1600,7 @@
                           }
                         },
                         "estimated_band": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "overall",
@@ -1643,7 +1643,7 @@
                           }
                         },
                         "transcript": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "text",
@@ -1665,7 +1665,7 @@
                           }
                         },
                         "relevance": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["on_topic", "score", "feedback_vi"],
                           "properties": {
@@ -1692,7 +1692,7 @@
                         "fluency_metrics": {
                           "anyOf": [
                             {
-                              "additionalProperties": false,
+                              "additionalProperties": true,
                               "type": "object",
                               "required": [
                                 "speech_rate_wpm",
@@ -1741,12 +1741,12 @@
                           ]
                         },
                         "pronunciation_detail": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["summary", "words"],
                           "properties": {
                             "summary": {
-                              "additionalProperties": false,
+                              "additionalProperties": true,
                               "type": "object",
                               "required": [
                                 "good_count",
@@ -1771,7 +1771,7 @@
                             "words": {
                               "type": "array",
                               "items": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": [
                                   "word",
@@ -1795,7 +1795,7 @@
                                   "syllables": {
                                     "type": "array",
                                     "items": {
-                                      "additionalProperties": false,
+                                      "additionalProperties": true,
                                       "type": "object",
                                       "required": [
                                         "letters",
@@ -1865,7 +1865,7 @@
                                   "phonemes": {
                                     "type": "array",
                                     "items": {
-                                      "additionalProperties": false,
+                                      "additionalProperties": true,
                                       "type": "object",
                                       "required": [
                                         "phone",
@@ -1931,14 +1931,14 @@
                           }
                         },
                         "language_analysis": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["grammar_errors", "vocabulary_upgrades"],
                           "properties": {
                             "grammar_errors": {
                               "type": "array",
                               "items": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": [
                                   "sentence",
@@ -1969,7 +1969,7 @@
                             "vocabulary_upgrades": {
                               "type": "array",
                               "items": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": [
                                   "original_word",
@@ -1999,7 +1999,7 @@
                           }
                         },
                         "feedback": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "summary_vi",
@@ -2021,7 +2021,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "request_id",
@@ -2044,7 +2044,7 @@
                           "type": "string"
                         },
                         "timing": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "downstream_ms",
@@ -2221,12 +2221,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "question_id",
@@ -2255,7 +2255,7 @@
                           "type": "string"
                         },
                         "scorability": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "is_scorable",
@@ -2286,7 +2286,7 @@
                           }
                         },
                         "estimated_band": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "overall",
@@ -2329,7 +2329,7 @@
                           }
                         },
                         "transcript": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "text",
@@ -2351,7 +2351,7 @@
                           }
                         },
                         "relevance": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["on_topic", "score", "feedback_vi"],
                           "properties": {
@@ -2378,7 +2378,7 @@
                         "fluency_metrics": {
                           "anyOf": [
                             {
-                              "additionalProperties": false,
+                              "additionalProperties": true,
                               "type": "object",
                               "required": [
                                 "speech_rate_wpm",
@@ -2427,12 +2427,12 @@
                           ]
                         },
                         "pronunciation_detail": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["summary", "words"],
                           "properties": {
                             "summary": {
-                              "additionalProperties": false,
+                              "additionalProperties": true,
                               "type": "object",
                               "required": [
                                 "good_count",
@@ -2457,7 +2457,7 @@
                             "words": {
                               "type": "array",
                               "items": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": [
                                   "word",
@@ -2481,7 +2481,7 @@
                                   "syllables": {
                                     "type": "array",
                                     "items": {
-                                      "additionalProperties": false,
+                                      "additionalProperties": true,
                                       "type": "object",
                                       "required": [
                                         "letters",
@@ -2551,7 +2551,7 @@
                                   "phonemes": {
                                     "type": "array",
                                     "items": {
-                                      "additionalProperties": false,
+                                      "additionalProperties": true,
                                       "type": "object",
                                       "required": [
                                         "phone",
@@ -2617,14 +2617,14 @@
                           }
                         },
                         "language_analysis": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["grammar_errors", "vocabulary_upgrades"],
                           "properties": {
                             "grammar_errors": {
                               "type": "array",
                               "items": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": [
                                   "sentence",
@@ -2655,7 +2655,7 @@
                             "vocabulary_upgrades": {
                               "type": "array",
                               "items": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": [
                                   "original_word",
@@ -2685,7 +2685,7 @@
                           }
                         },
                         "feedback": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "summary_vi",
@@ -2707,7 +2707,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "request_id",
@@ -2730,7 +2730,7 @@
                           "type": "string"
                         },
                         "timing": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "downstream_ms",
@@ -2834,12 +2834,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["assertion", "user_id", "expires_at"],
                       "properties": {
@@ -2858,7 +2858,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -2978,12 +2978,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "valid",
@@ -3036,7 +3036,7 @@
                         "allowance": {
                           "anyOf": [
                             {
-                              "additionalProperties": false,
+                              "additionalProperties": true,
                               "type": "object",
                               "required": [
                                 "monthly_limit",
@@ -3071,7 +3071,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -3151,12 +3151,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["part", "questions"],
                       "properties": {
@@ -3175,7 +3175,7 @@
                         "questions": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "question_id",
@@ -3208,7 +3208,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id", "service", "operation"],
                       "properties": {
@@ -3366,12 +3366,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -3395,7 +3395,7 @@
                           "type": "string"
                         },
                         "headers": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["Content-Type", "Content-Length"],
                           "properties": {
@@ -3440,7 +3440,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -3523,12 +3523,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -3552,7 +3552,7 @@
                           "type": "string"
                         },
                         "headers": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["Content-Type", "Content-Length"],
                           "properties": {
@@ -3597,7 +3597,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -3680,12 +3680,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -3739,7 +3739,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -3768,12 +3768,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -3827,7 +3827,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -3937,12 +3937,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -3971,7 +3971,8 @@
                             "^(.*)$": {
                               "type": "string"
                             }
-                          }
+                          },
+                          "additionalProperties": true
                         },
                         "expires_at": {
                           "format": "date-time",
@@ -3984,7 +3985,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4066,12 +4067,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -4100,7 +4101,8 @@
                             "^(.*)$": {
                               "type": "string"
                             }
-                          }
+                          },
+                          "additionalProperties": true
                         },
                         "expires_at": {
                           "format": "date-time",
@@ -4113,7 +4115,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4195,12 +4197,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -4251,7 +4253,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4356,12 +4358,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -4384,7 +4386,7 @@
                           "type": "string"
                         },
                         "headers": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "Content-Type",
@@ -4425,7 +4427,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4490,12 +4492,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -4540,7 +4542,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4560,12 +4562,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "asset_id",
@@ -4610,7 +4612,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4671,19 +4673,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["avatar"],
                       "properties": {
                         "avatar": {
                           "anyOf": [
                             {
-                              "additionalProperties": false,
+                              "additionalProperties": true,
                               "type": "object",
                               "required": [
                                 "asset_id",
@@ -4735,7 +4737,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -4887,17 +4889,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["organization", "role"],
                       "properties": {
                         "organization": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["organization_id", "name", "status"],
                           "properties": {
@@ -4923,7 +4925,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -5003,17 +5005,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["organization"],
                       "properties": {
                         "organization": {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["organization_id", "name", "status"],
                           "properties": {
@@ -5035,7 +5037,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -5087,19 +5089,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["organizations"],
                       "properties": {
                         "organizations": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "organization_id",
@@ -5142,7 +5144,7 @@
                                 }
                               },
                               "membership": {
-                                "additionalProperties": false,
+                                "additionalProperties": true,
                                 "type": "object",
                                 "required": ["role"],
                                 "properties": {
@@ -5167,7 +5169,7 @@
                               "members": {
                                 "type": "array",
                                 "items": {
-                                  "additionalProperties": false,
+                                  "additionalProperties": true,
                                   "type": "object",
                                   "required": ["username", "role"],
                                   "properties": {
@@ -5200,7 +5202,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -5299,19 +5301,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["members"],
                       "properties": {
                         "members": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": ["username", "role", "status"],
                             "properties": {
@@ -5353,7 +5355,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -5466,19 +5468,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["invitations"],
                       "properties": {
                         "invitations": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "invitation_id",
@@ -5537,7 +5539,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -5648,12 +5650,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "invitation_id",
@@ -5709,7 +5711,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -5880,12 +5882,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["organization_id", "role", "status"],
                       "properties": {
@@ -5916,7 +5918,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6012,12 +6014,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "organization_id",
@@ -6065,7 +6067,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6139,12 +6141,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "organization_id",
@@ -6192,7 +6194,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6268,12 +6270,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "organization_id",
@@ -6321,7 +6323,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6388,19 +6390,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["api_keys"],
                       "properties": {
                         "api_keys": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "id",
@@ -6488,7 +6490,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6601,12 +6603,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "api_key",
@@ -6696,7 +6698,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6812,12 +6814,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "id",
@@ -6902,7 +6904,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -6984,12 +6986,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "api_key",
@@ -7079,7 +7081,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -7326,14 +7328,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
                       "anyOf": [
                         {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "configured",
@@ -7369,7 +7371,7 @@
                             "public_keys_jwks": {
                               "anyOf": [
                                 {
-                                  "additionalProperties": false,
+                                  "additionalProperties": true,
                                   "type": "object",
                                   "required": ["keys"],
                                   "properties": {
@@ -7382,7 +7384,8 @@
                                             "type": "object",
                                             "patternProperties": {
                                               "^(.*)$": {}
-                                            }
+                                            },
+                                            "additionalProperties": true
                                           },
                                           {
                                             "not": {
@@ -7506,7 +7509,7 @@
                           }
                         },
                         {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["configured"],
                           "properties": {
@@ -7519,7 +7522,7 @@
                       ]
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -7584,14 +7587,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
                       "anyOf": [
                         {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": [
                             "configured",
@@ -7627,7 +7630,7 @@
                             "public_keys_jwks": {
                               "anyOf": [
                                 {
-                                  "additionalProperties": false,
+                                  "additionalProperties": true,
                                   "type": "object",
                                   "required": ["keys"],
                                   "properties": {
@@ -7640,7 +7643,8 @@
                                             "type": "object",
                                             "patternProperties": {
                                               "^(.*)$": {}
-                                            }
+                                            },
+                                            "additionalProperties": true
                                           },
                                           {
                                             "not": {
@@ -7764,7 +7768,7 @@
                           }
                         },
                         {
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "type": "object",
                           "required": ["configured"],
                           "properties": {
@@ -7777,7 +7781,7 @@
                       ]
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -7965,19 +7969,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["events", "next_cursor"],
                       "properties": {
                         "events": {
                           "type": "array",
                           "items": {
-                            "additionalProperties": false,
+                            "additionalProperties": true,
                             "type": "object",
                             "required": [
                               "event_id",
@@ -8064,7 +8068,8 @@
                                 "type": "object",
                                 "patternProperties": {
                                   "^(.*)$": {}
-                                }
+                                },
+                                "additionalProperties": true
                               },
                               "actor_username": {
                                 "minLength": 1,
@@ -8095,7 +8100,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -8310,7 +8315,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
@@ -8345,7 +8350,8 @@
                             }
                           ]
                         }
-                      }
+                      },
+                      "additionalProperties": true
                     },
                     "meta": {
                       "type": "object",
@@ -8354,7 +8360,8 @@
                         "request_id": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "additionalProperties": true
                     }
                   }
                 }
@@ -8441,12 +8448,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["access_token", "token_type", "expires_in"],
                       "properties": {
@@ -8465,7 +8472,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -8493,12 +8500,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["status"],
                       "properties": {
@@ -8509,7 +8516,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -8593,12 +8600,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["secret", "otpauth_uri"],
                       "properties": {
@@ -8615,7 +8622,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -8699,12 +8706,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["recovery_codes"],
                       "properties": {
@@ -8720,7 +8727,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -8893,12 +8900,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["access_token", "token_type", "expires_in"],
                       "properties": {
@@ -8917,7 +8924,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -8940,12 +8947,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",
@@ -9086,12 +9093,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["message"],
                       "properties": {
@@ -9102,7 +9109,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -9248,12 +9255,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["access_token", "token_type", "expires_in"],
                       "properties": {
@@ -9272,7 +9279,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -9295,12 +9302,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",
@@ -9430,12 +9437,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["username"],
                       "properties": {
@@ -9447,7 +9454,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -9573,12 +9580,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["web_session_token", "expires_at"],
                       "properties": {
@@ -9595,7 +9602,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -9623,12 +9630,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["status"],
                       "properties": {
@@ -9639,7 +9646,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -9662,12 +9669,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",
@@ -9781,12 +9788,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["web_session_token", "expires_at"],
                       "properties": {
@@ -9803,7 +9810,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -9826,12 +9833,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",
@@ -9878,12 +9885,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",
@@ -9983,12 +9990,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["data", "meta"],
                   "properties": {
                     "data": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["access_token", "token_type", "expires_in"],
                       "properties": {
@@ -10007,7 +10014,7 @@
                       }
                     },
                     "meta": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": ["request_id"],
                       "properties": {
@@ -10030,12 +10037,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",
@@ -10144,12 +10151,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "type": "object",
                   "required": ["error"],
                   "properties": {
                     "error": {
-                      "additionalProperties": false,
+                      "additionalProperties": true,
                       "type": "object",
                       "required": [
                         "code",

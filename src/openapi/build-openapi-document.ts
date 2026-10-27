@@ -11,6 +11,7 @@ import { OrganizationIdSchema } from '@/contracts/organization/organization-id';
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
 import { buildErrorResponses } from './openapi-error-responses';
 import { localAuthPathItems } from './openapi-local-auth-path-items';
+import { extendPublicResponseSchemas } from './openapi-response-schemas';
 import {
   sandboxAssertionPathItem,
   sandboxDemoKeyValidationPathItem,
@@ -139,7 +140,7 @@ export function buildOpenApiDocument(version: string): unknown {
     }
   }
 
-  return {
+  const document = {
     openapi: OPENAPI_VERSION,
     info: {
       title: 'AIHUB API',
@@ -189,4 +190,7 @@ export function buildOpenApiDocument(version: string): unknown {
     },
     paths,
   };
+
+  extendPublicResponseSchemas(document);
+  return document;
 }
