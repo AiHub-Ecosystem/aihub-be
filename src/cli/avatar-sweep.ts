@@ -5,8 +5,7 @@ import {
 import type { AvatarRepositoryPort } from '@/modules/avatar/application/avatar-repository.port';
 import type { AvatarStoragePort } from '@/modules/avatar/application/avatar-storage.port';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
-import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
-import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
+import { createCliSeaweedFsClient } from './seaweedfs-client';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -44,14 +43,8 @@ export async function runAvatarSweepCommand(
   const repository = await openRepository(input);
   let storage = input.storage;
   if (storage === undefined) {
-    const secretProvider = createCliRuntimeSecretProvider();
     storage = new S3AvatarStorage(
-      createSeaweedFsS3Client({
-        workload: 'operator',
-        endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
-        region: process.env.SEAWEEDFS_REGION,
-        credentials: secretProvider.getSnapshot().seaweedfs,
-      }),
+      createCliSeaweedFsClient(),
       process.env.SEAWEEDFS_USER_ASSET_BUCKET === undefined
         ? {}
         : { bucket: process.env.SEAWEEDFS_USER_ASSET_BUCKET },

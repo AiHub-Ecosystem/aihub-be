@@ -5,10 +5,10 @@ import type {
 } from '@/modules/identity/api-keys/application/operator-api-key.port';
 import { PostgresOperatorApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-operator-api-key.repository';
 import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';
+import { purgeApiKeyCache } from './cli-redis';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
 import { reportOperatorRedisFailure } from './operator-redis-failure';
-import { purgeApiKeyCache } from './organization-status';
 
 /**
  * A credential `scripts/cli/cli.mjs` already generated. The raw value is carried

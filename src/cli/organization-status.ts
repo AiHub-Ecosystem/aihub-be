@@ -1,16 +1,11 @@
-import Redis from 'ioredis';
-
-import {
-  type OrganizationStatus,
-  apiKeyCacheKey,
-  apiKeyCacheMissKey,
-} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { type OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusResult,
 } from '@/modules/identity/organizations/application/organization-status.port';
 import { PostgresOrganizationStatusRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-status.repository';
 import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';
+import { purgeApiKeyCache } from './cli-redis';
 import { runOperatorCommand } from './operator-command-context';
 import { createOperatorIdentityClient } from './operator-identity-client';
 import { reportOperatorRedisFailure } from './operator-redis-failure';
@@ -38,34 +33,6 @@ const CACHE_CEILING =
  * explicit `connect()` so the delete is not issued before the socket is ready,
  * and timeouts loose enough for a workstation reaching Redis through a tunnel.
  */
-export async function purgeApiKeyCache(
-  redisUrl: string,
-  keyHashes: readonly string[],
-): Promise<void> {
-  if (keyHashes.length === 0) {
-    return;
-  }
-  const redis = new Redis(redisUrl, {
-    commandTimeout: 5_000,
-    connectTimeout: 5_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    lazyConnect: true,
-  });
-  redis.on('error', () => undefined);
-  try {
-    await redis.connect();
-    await redis.del(
-      ...keyHashes.flatMap((hash) => [
-        apiKeyCacheKey(hash),
-        apiKeyCacheMissKey(hash),
-      ]),
-    );
-  } finally {
-    redis.disconnect();
-  }
-}
-
 /**
  * Suspends or restores an Organization as an operator (ADR-0044). The status
  * and its audit event commit first; the cache purge follows and its failure is

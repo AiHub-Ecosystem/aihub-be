@@ -8,7 +8,7 @@ import {
   QuotaReconciliationService,
   type QuotaReconciliationSummary,
 } from '@/modules/metering/public/quota-reconciliation';
-import Redis from 'ioredis';
+import { connectCliRedis } from './cli-redis';
 import { createOperatorMeteringClient } from './operator-metering-client';
 
 export { parseTargetMonth } from '@/modules/metering/public/quota-reconciliation';
@@ -74,20 +74,7 @@ export function formatQuotaReconciliationEvent(
 async function connectRedis(
   url: string,
 ): Promise<RedisQuotaReconciliationClient> {
-  const redis = new Redis(url, {
-    commandTimeout: 5_000,
-    connectTimeout: 5_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    lazyConnect: true,
-  });
-  redis.on('error', () => undefined);
-  try {
-    await redis.connect();
-  } catch (error) {
-    redis.disconnect();
-    throw error;
-  }
+  const redis = await connectCliRedis(url);
   return {
     get: (key) => redis.get(key),
     set: (key, value, mode, seconds) => redis.set(key, value, mode, seconds),
