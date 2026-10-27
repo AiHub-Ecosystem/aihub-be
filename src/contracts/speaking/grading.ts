@@ -7,28 +7,36 @@ if (!FormatRegistry.Has('binary')) {
   FormatRegistry.Set('binary', (value) => typeof value === 'string');
 }
 
+/**
+ * The request fields both transports of one grading operation carry, so the
+ * multipart and the JSON schema cannot drift apart. Only the audio differs.
+ */
+const SpeakingGradeFields = {
+  part: Type.Integer({ minimum: 1, maximum: 3 }),
+  question_id: Type.String({ minLength: 1 }),
+  prompt_text: Type.Optional(
+    Type.Union([Type.String(), Type.Null()], { default: null }),
+  ),
+  test_type: Type.Optional(
+    Type.Union([Type.Literal('Practice'), Type.Literal('Full-test')], {
+      default: 'Practice',
+    }),
+  ),
+  test_code: Type.Optional(
+    Type.Union([Type.String(), Type.Null()], { default: null }),
+  ),
+  transcript: Type.Optional(
+    Type.Union([Type.String(), Type.Null()], { default: null }),
+  ),
+} as const;
+
 export const SpeakingGradeRequestSchema = Type.Object(
   {
     audio: Type.String({
       format: 'binary',
       'x-max-bytes': SPEAKING_AUDIO_MAX_BYTES,
     }),
-    part: Type.Integer({ minimum: 1, maximum: 3 }),
-    question_id: Type.String({ minLength: 1 }),
-    prompt_text: Type.Optional(
-      Type.Union([Type.String(), Type.Null()], { default: null }),
-    ),
-    test_type: Type.Optional(
-      Type.Union([Type.Literal('Practice'), Type.Literal('Full-test')], {
-        default: 'Practice',
-      }),
-    ),
-    test_code: Type.Optional(
-      Type.Union([Type.String(), Type.Null()], { default: null }),
-    ),
-    transcript: Type.Optional(
-      Type.Union([Type.String(), Type.Null()], { default: null }),
-    ),
+    ...SpeakingGradeFields,
   },
   { additionalProperties: false },
 );
@@ -41,22 +49,7 @@ export const SpeakingGradeJsonRequestSchema = Type.Object(
       description:
         'HTTPS URL on s3.wispace.app; signed query parameters are allowed',
     }),
-    part: Type.Integer({ minimum: 1, maximum: 3 }),
-    question_id: Type.String({ minLength: 1 }),
-    prompt_text: Type.Optional(
-      Type.Union([Type.String(), Type.Null()], { default: null }),
-    ),
-    test_type: Type.Optional(
-      Type.Union([Type.Literal('Practice'), Type.Literal('Full-test')], {
-        default: 'Practice',
-      }),
-    ),
-    test_code: Type.Optional(
-      Type.Union([Type.String(), Type.Null()], { default: null }),
-    ),
-    transcript: Type.Optional(
-      Type.Union([Type.String(), Type.Null()], { default: null }),
-    ),
+    ...SpeakingGradeFields,
   },
   { additionalProperties: false },
 );
