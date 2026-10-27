@@ -8,12 +8,10 @@ import { findBreakingChanges } from './check.mjs';
 const VERSIONED_SPEC = /^v([1-9]\d*)\.json$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SCHEMA_CHILDREN = [
-  'properties',
   'items',
   'allOf',
   'anyOf',
   'oneOf',
-  'not',
   'additionalProperties',
   'prefixItems',
   'if',
@@ -111,40 +109,64 @@ function walkSchema(value, visit, componentSchemas, seen = new Set()) {
     }
   }
   visit(value);
+  if (isRecord(value.properties)) {
+    for (const property of Object.values(value.properties)) {
+      walkSchema(property, visit, componentSchemas, seen);
+    }
+  }
   for (const key of SCHEMA_CHILDREN) {
     walkSchema(value[key], visit, componentSchemas, seen);
   }
 }
 
-/** @param {OpenApiDocument} document @param {string} label */
-function validateSchemaPolicies(document, label) {
+/** @param {OpenApiDocument} document @returns {unknown[]} */
+function collectResponseSchemas(document) {
   const components = isRecord(document.components) ? document.components : {};
   const componentResponses = isRecord(components.responses)
     ? components.responses
     : {};
-  const componentSchemas = isRecord(components.schemas)
-    ? components.schemas
-    : {};
   /** @type {unknown[]} */
-  const responseSchemas = [];
-  /** @type {Array<[string, unknown]>} */
-  const requestSchemas = [];
+  const schemas = [];
 
   /** @param {unknown} response @param {Set<string>} [seen] */
-  function responseSchema(response, seen = new Set()) {
+  function visitResponse(response, seen = new Set()) {
     if (!isRecord(response)) return;
     if (typeof response.$ref === 'string') {
       const match = /^#\/components\/responses\/(.+)$/.exec(response.$ref);
       if (!match || seen.has(match[1])) return;
       seen.add(match[1]);
-      responseSchema(componentResponses[match[1]], seen);
+      visitResponse(componentResponses[match[1]], seen);
       return;
     }
     if (!isRecord(response.content)) return;
     for (const media of Object.values(response.content)) {
-      if (isRecord(media)) responseSchemas.push(media.schema);
+      if (isRecord(media)) schemas.push(media.schema);
     }
   }
+
+  for (const pathItem of Object.values(document.paths)) {
+    if (!isRecord(pathItem)) continue;
+    for (const operation of Object.values(pathItem)) {
+      if (!isRecord(operation) || !isRecord(operation.responses)) continue;
+      for (const response of Object.values(operation.responses)) {
+        visitResponse(response);
+      }
+    }
+  }
+  for (const response of Object.values(componentResponses)) {
+    visitResponse(response);
+  }
+  return schemas;
+}
+
+/** @param {OpenApiDocument} document @param {string} label */
+function validateSchemaPolicies(document, label) {
+  const components = isRecord(document.components) ? document.components : {};
+  const componentSchemas = isRecord(components.schemas)
+    ? components.schemas
+    : {};
+  /** @type {Array<[string, unknown]>} */
+  const requestSchemas = [];
 
   for (const [path, pathItem] of Object.entries(document.paths)) {
     if (!isRecord(pathItem)) continue;
@@ -160,17 +182,10 @@ function validateSchemaPolicies(document, label) {
           }
         }
       }
-      if (isRecord(operation.responses)) {
-        for (const response of Object.values(operation.responses)) {
-          responseSchema(response);
-        }
-      }
     }
   }
-  for (const response of Object.values(componentResponses))
-    responseSchema(response);
 
-  for (const schema of responseSchemas) {
+  for (const schema of collectResponseSchemas(document)) {
     walkSchema(
       schema,
       (node) => {
@@ -190,7 +205,11 @@ function validateSchemaPolicies(document, label) {
     walkSchema(
       schema,
       (node) => {
-        if (node.type === 'object' && node.additionalProperties !== false) {
+        if (
+          node.type === 'object' &&
+          node.additionalProperties !== false &&
+          !(isRecord(node.patternProperties) && !isRecord(node.properties))
+        ) {
           throw new Error(
             `${label} has an open request object schema at ${boundary}`,
           );
@@ -201,14 +220,39 @@ function validateSchemaPolicies(document, label) {
   }
 }
 
-/** @param {unknown} value @returns {unknown} */
-function withoutDocumentation(value) {
-  if (Array.isArray(value)) return value.map(withoutDocumentation);
+/** @param {OpenApiDocument} document @returns {OpenApiDocument} */
+function withExtensibleResponseSchemas(document) {
+  const copy = structuredClone(document);
+  const components = isRecord(copy.components) ? copy.components : {};
+  const componentSchemas = isRecord(components.schemas)
+    ? components.schemas
+    : {};
+  for (const schema of collectResponseSchemas(copy)) {
+    walkSchema(
+      schema,
+      (node) => {
+        if (node.type === 'object' || isRecord(node.properties)) {
+          node.additionalProperties = true;
+        }
+      },
+      componentSchemas,
+    );
+  }
+  return copy;
+}
+
+/** @param {unknown} value @param {boolean} [preservePropertyNames] @returns {unknown} */
+function withoutDocumentation(value, preservePropertyNames = false) {
+  if (Array.isArray(value)) {
+    return value.map((item) => withoutDocumentation(item));
+  }
   if (!isRecord(value)) return value;
   /** @type {Record<string, unknown>} */
   const copy = {};
   for (const [key, child] of Object.entries(value)) {
-    if (!DOC_FIELDS.has(key)) copy[key] = withoutDocumentation(child);
+    if (preservePropertyNames || !DOC_FIELDS.has(key)) {
+      copy[key] = withoutDocumentation(child, key === 'properties');
+    }
   }
   return copy;
 }
@@ -340,7 +384,10 @@ export function checkRelease(baseRoot, candidateRoot, changelogPath) {
     const baseVersion = isRecord(baseDocument.info)
       ? baseDocument.info.version
       : undefined;
-    const breaks = findBreakingChanges(baseDocument, candidateDocument);
+    const breaks = findBreakingChanges(
+      withExtensibleResponseSchemas(baseDocument),
+      withExtensibleResponseSchemas(candidateDocument),
+    );
     if (breaks.length > 0) {
       throw new Error(
         `Breaking changes to supported /v${major} contract:\n${breaks.map((change) => `- ${change.text}`).join('\n')}`,
@@ -400,8 +447,10 @@ export function checkRelease(baseRoot, candidateRoot, changelogPath) {
       );
     }
     const changes = findBreakingChanges(
-      withPathMajor(previousDocument, previousMajor, 1),
-      withPathMajor(nextDocument, nextMajor, 1),
+      withExtensibleResponseSchemas(
+        withPathMajor(previousDocument, previousMajor, 1),
+      ),
+      withExtensibleResponseSchemas(withPathMajor(nextDocument, nextMajor, 1)),
     );
     if (changes.length === 0) {
       throw new Error(

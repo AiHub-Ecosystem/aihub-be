@@ -15,13 +15,17 @@ function extendSchema(schema: unknown): void {
     schema.additionalProperties = true;
   }
 
+  if (isRecord(schema.properties)) {
+    for (const property of Object.values(schema.properties)) {
+      extendSchema(property);
+    }
+  }
+
   for (const key of [
-    'properties',
     'items',
     'allOf',
     'anyOf',
     'oneOf',
-    'not',
     'additionalProperties',
     'prefixItems',
     'if',
@@ -36,7 +40,11 @@ function extendResponse(response: unknown): void {
   if (!isRecord(response) || !isRecord(response.content)) return;
 
   for (const media of Object.values(response.content)) {
-    if (isRecord(media)) extendSchema(media.schema);
+    if (isRecord(media) && media.schema !== undefined) {
+      // Response and request TypeBox schemas can share references.
+      media.schema = JSON.parse(JSON.stringify(media.schema)) as unknown;
+      extendSchema(media.schema);
+    }
   }
 }
 

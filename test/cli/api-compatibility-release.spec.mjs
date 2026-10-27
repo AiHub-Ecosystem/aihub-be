@@ -154,6 +154,42 @@ void test('bootstraps public contract 1.0.0 from the current unversioned OpenAPI
   );
 });
 
+void test('normalizes old response closure flags before checking the v1 baseline', (t) => {
+  const legacy = document('0.1.0');
+  const baseline = document('1.0.0');
+  for (const [spec, additionalProperties] of [
+    [legacy, false],
+    [baseline, true],
+  ]) {
+    const schema = responseSchema(spec, 1);
+    schema.additionalProperties = additionalProperties;
+    schema.properties.data = {
+      anyOf: [
+        {
+          type: 'object',
+          properties: { configured: { type: 'boolean' } },
+          additionalProperties,
+        },
+        {
+          type: 'object',
+          properties: { unconfigured: { type: 'boolean' } },
+          additionalProperties,
+        },
+      ],
+    };
+  }
+  const roots = setup(
+    t,
+    { 'openapi.json': legacy },
+    versionedFiles({ 1: baseline }),
+    '# AIHUB Public API Changelog\n\n## [1.0.0] — `/v1` baseline\n',
+  );
+
+  assert.doesNotThrow(() =>
+    checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath),
+  );
+});
+
 void test('accepts pnpm’s forwarded argument separator before release paths', (t) => {
   const legacy = document('0.1.0');
   const baseline = document('1.0.0');
@@ -190,6 +226,37 @@ void test('accepts a compatible response-property addition with a minor version 
     versionedFiles({ 1: base }),
     versionedFiles({ 1: candidate }),
     '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n- Optional response property.\n',
+  );
+
+  assert.doesNotThrow(() =>
+    checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath),
+  );
+});
+
+void test('counts additions inside a response property named summary as contract changes', (t) => {
+  const base = document('1.0.0');
+  const candidate = document('1.1.0');
+  const baseProperties = responseSchema(base, 1).properties;
+  const candidateProperties = responseSchema(candidate, 1).properties;
+  if (!baseProperties || !candidateProperties) {
+    throw new Error('Missing response properties');
+  }
+  baseProperties.summary = {
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    additionalProperties: true,
+  };
+  candidateProperties.summary = structuredClone(baseProperties.summary);
+  const summary = candidateProperties.summary;
+  if (!summary || !summary.properties) {
+    throw new Error('Missing summary response properties');
+  }
+  summary.properties.confidence = { type: 'number' };
+  const roots = setup(
+    t,
+    versionedFiles({ 1: base }),
+    versionedFiles({ 1: candidate }),
+    '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n- Optional summary property.\n',
   );
 
   assert.doesNotThrow(() =>
@@ -302,7 +369,13 @@ void test('rejects response schemas that are closed or request schemas that are 
   const base = document('1.0.0');
   const closedResponse = document('1.0.0');
   const closedSchema = structuredClone(responseSchema(closedResponse, 1));
-  closedSchema.additionalProperties = false;
+  const closedProperties = closedSchema.properties;
+  if (!closedProperties) throw new Error('Missing response properties');
+  closedProperties.data = {
+    type: 'object',
+    properties: { id: { type: 'string' } },
+    additionalProperties: false,
+  };
   closedResponse.components.schemas = { ClosedResponse: closedSchema };
   const path = closedResponse.paths['/v1/items'];
   const response = path?.get?.responses['200'];

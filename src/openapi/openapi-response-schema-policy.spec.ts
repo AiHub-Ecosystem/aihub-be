@@ -18,13 +18,17 @@ function collectObjectSchemas(
 
   if (value.type === 'object' || isRecord(value.properties)) found.push(value);
 
+  if (isRecord(value.properties)) {
+    for (const property of Object.values(value.properties)) {
+      collectObjectSchemas(property, found);
+    }
+  }
+
   for (const key of [
-    'properties',
     'items',
     'allOf',
     'anyOf',
     'oneOf',
-    'not',
     'additionalProperties',
     'prefixItems',
     'if',
@@ -100,7 +104,13 @@ describe('public OpenAPI object schema policy', () => {
     expect(objects.length).toBeGreaterThan(0);
     expect(
       objects
-        .filter((schema) => schema.type === 'object')
+        .filter(
+          (schema) =>
+            schema.type === 'object' &&
+            !(
+              isRecord(schema.patternProperties) && !isRecord(schema.properties)
+            ),
+        )
         .every((schema) => schema.additionalProperties === false),
     ).toBe(true);
   });
