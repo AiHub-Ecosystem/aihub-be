@@ -122,7 +122,10 @@ describe('cross-module import rules', () => {
       ),
     ).toBe(false);
     expect(
-      matches(pathNot, 'src/modules/gateway/presentation/quota.guard.ts'),
+      matches(
+        pathNot,
+        'src/modules/gateway/presentation/graded-admission.guard.ts',
+      ),
     ).toBe(true);
   });
 
