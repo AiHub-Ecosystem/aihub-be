@@ -1,143 +1,21 @@
-/**
- * Each vocabulary is declared as the runtime list the table's own checks
- * mirror, and the union is derived from it. A repository validating a row
- * reads the same list, so a column outside the vocabulary is refused rather
- * than widened into the record.
- */
-export const EMAIL_DELIVERY_KINDS = [
-  'verification_email',
-  'password_reset_email',
-  'organization_invite_email',
-  'mfa_enabled_notification',
-  'mfa_removed_notification',
-  'api_key_near_expiry_notification',
-] as const;
+import type { EmailDeliveryKind } from './email-kind-handler.registry';
 
-export type EmailDeliveryKind = (typeof EMAIL_DELIVERY_KINDS)[number];
-
-/**
- * How far ahead the near-expiry sweep looks, and so how long its notice stays
- * worth sending: by the end of the window every key it lists has expired
- * (ADR-0120). It replaces the one-day credential cutoff for that kind.
- */
-export const API_KEY_NEAR_EXPIRY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-
-/**
- * Only references are sealed. Who receives it, which keys are still active,
- * and what they are called are read again at dispatch (ADR-0120).
- */
-export interface ApiKeyNearExpiryNotificationPayload {
-  readonly organizationId: string;
-  readonly userAccountId: string;
-  readonly apiKeyIds: readonly string[];
-}
-
-/**
- * Recognizes a near-expiry notice payload after decryption, so the module
- * that decides which queued notices a withdrawal supersedes (#1098) fails
- * loudly on a shape change instead of silently skipping the cancellation.
- */
-export function isApiKeyNearExpiryNotificationPayload(
-  value: unknown,
-): value is ApiKeyNearExpiryNotificationPayload {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.organizationId === 'string' &&
-    candidate.organizationId.length > 0 &&
-    typeof candidate.userAccountId === 'string' &&
-    candidate.userAccountId.length > 0 &&
-    Array.isArray(candidate.apiKeyIds) &&
-    candidate.apiKeyIds.length > 0 &&
-    candidate.apiKeyIds.every((id) => typeof id === 'string' && id.length > 0)
-  );
-}
-
-/** What the notice is composed from once its facts are read at dispatch. */
-export interface ApiKeyNearExpiryNotificationInput {
-  readonly email: string;
-  readonly organizationId: string;
-  readonly organizationName: string;
-  /** Never empty: a notice with no active key left is not sent. */
-  readonly apiKeys: readonly {
-    readonly id: string;
-    readonly name: string;
-    readonly expiresAt: Date;
-  }[];
-}
-
-/**
- * Answers for a notice whose facts live in another module. `undefined` means
- * nothing is left to tell: the recipient or Organization no longer qualifies,
- * or no listed key is still active.
- */
-export interface ApiKeyNearExpiryNoticeResolverPort {
-  /**
-   * The facts to compose the notice from, or nothing when it is not actionable.
-   * When the Organization is no longer active, it also withdraws the notice's
-   * events, so restoring the Organization inside the window notifies it again
-   * (#996).
-   */
-  resolve(
-    payload: ApiKeyNearExpiryNotificationPayload,
-    now: Date,
-  ): Promise<ApiKeyNearExpiryNotificationInput | undefined>;
-}
-
-/**
- * Filled by the module that owns each notice's facts when it is constructed,
- * because that module imports Auth and Auth cannot import it back. A process
- * that never fills a slot leaves those requests queued rather than guessing.
- */
-export interface EmailNoticeResolvers {
-  apiKeyNearExpiry?: ApiKeyNearExpiryNoticeResolverPort;
-}
+export { EMAIL_DELIVERY_KINDS } from './email-kind-handler.registry';
+export type { EmailDeliveryKind } from './email-kind-handler.registry';
+export {
+  API_KEY_NEAR_EXPIRY_WINDOW_MS,
+  isApiKeyNearExpiryNotificationPayload,
+} from './email-delivery-payload';
+export type {
+  ApiKeyNearExpiryNotificationInput,
+  ApiKeyNearExpiryNotificationPayload,
+  ApiKeyNearExpiryNoticeResolverPort,
+  AuthEmailDeliveryPayload,
+  EmailNoticeResolvers,
+} from './email-delivery-payload';
+export type { EmailDeliveryPayload } from './email-kind-handler.registry';
 
 export const EMAIL_NOTICE_RESOLVERS = Symbol('EMAIL_NOTICE_RESOLVERS');
-
-/**
- * What a worker needs once it claims a request: the inputs the matching Auth
- * email composer needs. It exists only inside the ciphertext, which is why the
- * expiry is an ISO string rather than a `Date`.
- *
- * The two shapes are one type because the row's `kind` column already says
- * which sender call the payload belongs to: only the organization invitation
- * names an organization and a role.
- */
-export interface AuthEmailDeliveryPayload {
-  readonly email: string;
-  readonly token: string;
-  readonly expiresAt: string;
-}
-
-/**
- * The roles an invitation email can name. The one list: the composer's labels
- * are keyed by it and the payload reader checks against it, so a fourth role
- * is a compile error in the first and cannot make the second fail a valid
- * payload as `payload_unreadable`. Auth cannot import the Identity role type.
- */
-export const INVITE_EMAIL_ROLES = ['owner', 'admin', 'member'] as const;
-
-export type InviteEmailRole = (typeof INVITE_EMAIL_ROLES)[number];
-
-export interface OrganizationInviteEmailDeliveryPayload
-  extends AuthEmailDeliveryPayload {
-  readonly organizationName: string;
-  readonly role: InviteEmailRole;
-  readonly inviterUsername?: string;
-}
-
-export interface MfaSecurityNotificationPayload {
-  readonly email: string;
-}
-
-export type EmailDeliveryPayload =
-  | AuthEmailDeliveryPayload
-  | OrganizationInviteEmailDeliveryPayload
-  | MfaSecurityNotificationPayload
-  | ApiKeyNearExpiryNotificationPayload;
 
 export declare const emailDeliveryTransactionBrand: unique symbol;
 

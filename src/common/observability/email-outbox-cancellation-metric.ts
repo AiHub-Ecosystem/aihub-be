@@ -1,12 +1,6 @@
 import { Gauge, type Registry } from '@prometheus-io/client';
 
-export type EmailDeliveryKindLabel =
-  | 'verification_email'
-  | 'password_reset_email'
-  | 'organization_invite_email'
-  | 'mfa_enabled_notification'
-  | 'mfa_removed_notification'
-  | 'api_key_near_expiry_notification';
+export type EmailDeliveryKindLabel = string;
 
 export interface EmailOutboxCancellationSample {
   readonly kind: EmailDeliveryKindLabel;

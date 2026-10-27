@@ -1,22 +1,12 @@
 import type {
-  ApiKeyNearExpiryNotificationPayload,
-  AuthEmailDeliveryPayload,
   EmailDeliveryCancelReason,
   EmailDeliveryKind,
   EmailDeliveryTransaction,
-  MfaSecurityNotificationPayload,
-  OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
+import type { EmailDeliveryPayloadByKind } from './email-kind-handler.registry';
 import type { BackpressureEmailKind } from './email-outbox-backpressure.port';
 
-export interface EmailDeliveryPayloadByKind {
-  verification_email: AuthEmailDeliveryPayload;
-  password_reset_email: AuthEmailDeliveryPayload;
-  organization_invite_email: OrganizationInviteEmailDeliveryPayload;
-  mfa_enabled_notification: MfaSecurityNotificationPayload;
-  mfa_removed_notification: MfaSecurityNotificationPayload;
-  api_key_near_expiry_notification: ApiKeyNearExpiryNotificationPayload;
-}
+export type { EmailDeliveryPayloadByKind } from './email-kind-handler.registry';
 
 export type QueueEmailDeliveryRequestInput = {
   [K in EmailDeliveryKind]: {

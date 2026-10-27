@@ -3,7 +3,10 @@ import type { ConfigType } from '@nestjs/config';
 
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
-import { recordEmailOutboxBackpressureRefusal } from '@/common/observability/metrics';
+import {
+  recordEmailOutboxBackpressureRefusal,
+  registerEmailDeliveryMetrics,
+} from '@/common/observability/metrics';
 import { hashOpaqueToken } from '@/common/security/opaque-token-issuer';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
@@ -33,6 +36,10 @@ import {
   type EmailNoticeResolvers,
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
+import {
+  EMAIL_BACKPRESSURE_KINDS,
+  EMAIL_DELIVERY_KINDS,
+} from './application/email-kind-handler.registry';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
 import { EmailOutbox } from './application/email-outbox';
 import { EmailOutboxBackpressureGate } from './application/email-outbox-backpressure.gate';
@@ -77,6 +84,8 @@ import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-disp
 import { PostgresEmailOutboxQueueAge } from './infrastructure/postgres-email-outbox-queue-age';
 import { RedisEmailSendRateLimiter } from './infrastructure/redis-email-send-rate-limiter';
 import { ResendEmailSender } from './infrastructure/resend-email.sender';
+
+registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
 
 @Module({
   imports: [RuntimeConfigurationModule, PersistenceModule, SecretsModule],

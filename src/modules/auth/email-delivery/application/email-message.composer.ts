@@ -3,7 +3,7 @@ import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationInput,
   type InviteEmailRole,
-} from './email-delivery-request.port';
+} from './email-delivery-payload';
 import type { EmailMessage } from './email-sender.port';
 import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
 

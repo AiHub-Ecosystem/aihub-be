@@ -1,9 +1,11 @@
 import type {
   ClaimEmailDeliveryRequestsInput,
-  EmailDeliveryKind,
   EmailDeliveryRequestRecord,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import {
+  EMAIL_DELIVERY_KINDS,
+  EMAIL_KIND_POLICIES,
+} from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
 import {
   type AuthRepositoryClient,
   type AuthSqlClient,
@@ -13,15 +15,14 @@ import {
 
 const EMAIL_OUTBOX_CLAIM_LOCK = 'auth-email-outbox-claim';
 
+const CLAIM_PRIORITY_CASE = EMAIL_DELIVERY_KINDS.map(
+  (kind) => `WHEN '${kind}' THEN ${EMAIL_KIND_POLICIES[kind].priorityTier}`,
+).join('\n             ');
+
 const CLAIM_SQL = `
   WITH eligible AS (
     SELECT id, kind, created_at, organization_id, inviter_id,
-           CASE kind
-             WHEN 'password_reset_email' THEN 0
-             WHEN 'verification_email' THEN 1
-             WHEN 'mfa_enabled_notification' THEN 2
-             WHEN 'mfa_removed_notification' THEN 2
-             WHEN 'organization_invite_email' THEN 3
+           CASE kind ${CLAIM_PRIORITY_CASE}
              ELSE 4
            END AS priority
     FROM email_delivery_requests
@@ -143,25 +144,10 @@ async function claimEmailDeliveryRequestsInTransaction(
     String(input.leaseMs),
     EMAIL_DELIVERY_KINDS,
   ]);
-  const priority = (kind: EmailDeliveryKind): number => {
-    switch (kind) {
-      case 'password_reset_email':
-        return 0;
-      case 'verification_email':
-        return 1;
-      case 'mfa_enabled_notification':
-      case 'mfa_removed_notification':
-        return 2;
-      case 'organization_invite_email':
-        return 3;
-      // The SQL ranks it in its ELSE tier; ADR-0120 puts notices last.
-      case 'api_key_near_expiry_notification':
-        return 4;
-    }
-  };
   return [...toKnownRecords(rows)].sort(
     (left, right) =>
-      priority(left.kind) - priority(right.kind) ||
+      EMAIL_KIND_POLICIES[left.kind].priorityTier -
+        EMAIL_KIND_POLICIES[right.kind].priorityTier ||
       left.createdAt.getTime() - right.createdAt.getTime() ||
       left.id.localeCompare(right.id),
   );

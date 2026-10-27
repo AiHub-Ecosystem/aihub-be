@@ -6,7 +6,7 @@ import type {
   EmailDeliveryTransaction,
   EmailPayloadCipherPort,
 } from './email-delivery-request.port';
-import { EMAIL_KIND_HANDLERS } from './email-kind-handler.registry';
+import { EMAIL_KIND_POLICIES } from './email-kind-handler.registry';
 import type { AdmitEmailRequestPort } from './email-outbox-backpressure.port';
 import type {
   EmailDeliveryPayloadByKind,
@@ -74,7 +74,7 @@ export class EmailOutbox implements EmailOutboxPort {
     const queued = await this.requests.queuedPayloadCiphertexts(transaction, {
       kind: input.kind,
     });
-    const handler = EMAIL_KIND_HANDLERS[input.kind];
+    const handler = EMAIL_KIND_POLICIES[input.kind].handler;
     const ids: string[] = [];
     for (const request of queued) {
       let payload: unknown;
