@@ -2,31 +2,20 @@ import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { parseRequestBody } from '@/common/http/parse-request-body';
-import {
-  type RequestLifecycleState,
-  getRequestLifecycle,
-} from '@/common/http/request-lifecycle.hook';
-import { markRequestAdmission } from '@/common/http/request-timing.hook';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
   type SpeakingGradeResponse,
 } from '@/contracts/speaking/grading';
-import {
-  GRADING_ORCHESTRATOR,
-  type GradingOrchestratorPort,
-  type GradingRequestMetadata,
-} from '@/modules/gateway/application/grading-orchestrator.port';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
-  type AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '@/modules/identity/shared/presentation/authenticated-request';
+  GRADED_REQUEST_EXECUTOR,
+  type GradedRequestExecutorPort,
+} from '@/modules/gateway/public/graded-request-executor';
+import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import { markGradedCompletionStarted } from '@/modules/metering/public/graded-request-timing';
 import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,
@@ -61,8 +50,7 @@ function parseJsonBody(
     ...(parsed.prompt_text === undefined
       ? {}
       : { promptText: parsed.prompt_text }),
-    // The schema declares `default: 'Practice'`, which the parse above
-    // applies; the fallback only satisfies `exactOptionalPropertyTypes`.
+    // Parsing applies this default; fallback satisfies exact optional types.
     testType: parsed.test_type ?? 'Practice',
     ...(parsed.test_code === undefined ? {} : { testCode: parsed.test_code }),
     ...(parsed.transcript === undefined
@@ -71,51 +59,12 @@ function parseJsonBody(
   };
 }
 
-function userId(request: AuthenticatedRequest): string {
-  const value = request.aihubIdentity?.userId;
-  if (value === undefined || value.trim().length === 0) {
-    throw userIdentityRequired();
-  }
-  return value;
-}
-
-function requestLifecycle(
-  request: AuthenticatedRequest,
-): RequestLifecycleState {
-  const lifecycle = getRequestLifecycle(request.raw);
-  if (lifecycle === undefined) {
-    throw new Error('Request lifecycle is missing');
-  }
-  return lifecycle;
-}
-
-function requestMetadata(
-  request: AuthenticatedRequest,
-  lifecycle: RequestLifecycleState,
-): GradingRequestMetadata {
-  const authenticated = getAuthenticatedApiKey(request);
-  const verifiedUserId = userId(request);
-
-  return {
-    requestId: String(request.id),
-    receivedAt: lifecycle.receivedAt,
-    signal: lifecycle.signal,
-    onDispatchStart: () => markRequestAdmission(request.raw),
-    onAiServiceResultAvailable: () => markGradedCompletionStarted(request),
-    organizationId: authenticated.organizationId,
-    apiKeyId: authenticated.apiKeyId,
-    environment: authenticated.environment,
-    userId: verifiedUserId,
-    scopes: authenticated.scopes,
-  };
-}
-
 @Controller()
 @GradedRequest()
 export class SpeakingGradingController {
   constructor(
-    @Inject(GRADING_ORCHESTRATOR)
-    private readonly orchestrator: GradingOrchestratorPort,
+    @Inject(GRADED_REQUEST_EXECUTOR)
+    private readonly gradedRequest: GradedRequestExecutorPort,
     @Inject(SPEAKING_MULTIPART_PARSER)
     private readonly multipartParser: SpeakingMultipartParserPort,
     @Inject(SPEAKING_UPLOAD_CEILING)
@@ -128,24 +77,18 @@ export class SpeakingGradingController {
   async grade(
     @Req() request: AuthenticatedRequest,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
-    const lifecycle = requestLifecycle(request);
-    let leave: (() => void) | undefined;
-    try {
-      // Before the body is read, so a refused request never buffers audio.
-      leave = this.uploadCeiling.enter();
-      const source = createFastifySpeakingMultipartSource(request);
-      const input = await this.multipartParser.parse(source, lifecycle.signal);
-      const metadata = requestMetadata(request, lifecycle);
-
-      return await this.orchestrator.execute({
-        operation: OPERATION,
-        input,
-        ...metadata,
-      });
-    } finally {
-      leave?.();
-      lifecycle.dispose();
-    }
+    return this.gradedRequest.execute(request, OPERATION, async (signal) => {
+      // Acquire before reading the body, so a refused upload never buffers audio.
+      const release = this.uploadCeiling.enter();
+      try {
+        const source = createFastifySpeakingMultipartSource(request);
+        const input = await this.multipartParser.parse(source, signal);
+        return { input, release };
+      } catch (error) {
+        release();
+        throw error;
+      }
+    });
   }
 
   @Post(OPERATION_CATALOG[JSON_OPERATION].path)
@@ -155,18 +98,8 @@ export class SpeakingGradingController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
-    const lifecycle = requestLifecycle(request);
-    try {
-      const input = parseJsonBody(body, request);
-      const metadata = requestMetadata(request, lifecycle);
-
-      return await this.orchestrator.execute({
-        operation: JSON_OPERATION,
-        input,
-        ...metadata,
-      });
-    } finally {
-      lifecycle.dispose();
-    }
+    return this.gradedRequest.execute(request, JSON_OPERATION, () => ({
+      input: parseJsonBody(body, request),
+    }));
   }
 }

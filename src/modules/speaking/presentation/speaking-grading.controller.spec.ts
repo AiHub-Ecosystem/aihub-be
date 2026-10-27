@@ -21,10 +21,6 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import {
-  GRADING_ORCHESTRATOR,
-  type GradingOrchestratorPort,
-} from '@/modules/gateway/application/grading-orchestrator.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
@@ -391,64 +387,6 @@ describe('Speaking grading HTTP flow', () => {
       test_code: 'TEST-001',
       transcript: null,
     });
-  });
-
-  it('passes decoded Speaking inputs and the upload signal to the orchestrator', async () => {
-    const parser = app.get<SpeakingMultipartParserPort>(
-      SPEAKING_MULTIPART_PARSER,
-    );
-    const orchestrator = app.get<GradingOrchestratorPort>(GRADING_ORCHESTRATOR);
-    const parse = jest.spyOn(parser, 'parse');
-    const execute = jest.spyOn(orchestrator, 'execute');
-
-    try {
-      const multipart = multipartPayload(
-        { part: '1', question_id: 'p1_hometown' },
-        Buffer.alloc(200, 1),
-      );
-      const upload = await app.inject({
-        method: 'POST',
-        url: '/v1/ielts/speaking/grading',
-        headers: { 'content-type': multipart.contentType },
-        payload: multipart.payload,
-      });
-      expect(upload.statusCode).toBe(200);
-      const multipartCall = execute.mock.calls[0]?.[0];
-      expect(multipartCall).toMatchObject({
-        operation: 'speaking.grading',
-        input: { part: 1, questionId: 'p1_hometown' },
-        signal: parse.mock.calls[0]?.[1],
-        userId: 'local-development',
-      });
-      expect(multipartCall?.receivedAt).toBeInstanceOf(Date);
-
-      execute.mockClear();
-      const json = await app.inject({
-        method: 'POST',
-        url: '/v1/ielts/speaking/grading-json',
-        headers: { 'content-type': 'application/json' },
-        payload: {
-          audio_url: 'https://s3.wispace.app/audio/sample.mp3',
-          part: 1,
-          question_id: 'p1_hometown',
-        },
-      });
-      expect(json.statusCode).toBe(200);
-      const jsonCall = execute.mock.calls[0]?.[0];
-      expect(jsonCall).toMatchObject({
-        operation: 'speaking.grading-json',
-        input: {
-          audioUrl: 'https://s3.wispace.app/audio/sample.mp3',
-          testType: 'Practice',
-        },
-        userId: 'local-development',
-      });
-      expect(jsonCall?.receivedAt).toBeInstanceOf(Date);
-      expect(jsonCall?.signal).toBeInstanceOf(AbortSignal);
-    } finally {
-      parse.mockRestore();
-      execute.mockRestore();
-    }
   });
 
   it('maps a JSON upload deadline that expires while parsing to 504', async () => {

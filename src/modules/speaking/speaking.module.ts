@@ -5,6 +5,7 @@ import type { ConfigType } from '@nestjs/config';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
+import { GatewayGradedRequestModule } from '@/modules/gateway/gateway-graded-request.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
@@ -50,6 +51,7 @@ import { SpeakingQuestionsController } from './presentation/speaking-questions.c
 @Module({
   imports: [
     RuntimeConfigurationModule,
+    GatewayGradedRequestModule,
     GatewayModule,
     IdentityModule,
     MeteringModule,

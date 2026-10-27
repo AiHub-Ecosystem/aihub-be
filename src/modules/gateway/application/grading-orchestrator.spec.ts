@@ -1,6 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 import type { RequestContext } from '@/common/request-context/request-context';
+import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
 import type { GradeResponse } from '@/contracts/writing/grading';
 import type {
@@ -10,7 +15,11 @@ import type {
   IdempotencyServicePort,
   IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { GradingOrchestrator } from './grading-orchestrator';
+import { Value } from '@sinclair/typebox/value';
+import {
+  type CatalogLookup,
+  GradingOrchestrator,
+} from './grading-orchestrator';
 import type {
   GradingOrchestratorPort,
   GradingRequestMetadata,
@@ -60,8 +69,24 @@ const writingData: GradeResponse = {
   annotations: [],
 };
 
-const speakingData = {} as SpeakingGradeResponse;
+const speakingData = speakingResponseFixture();
 const receivedAt = new Date('2026-09-27T04:00:00.000Z');
+
+function speakingResponseFixture(): SpeakingGradeResponse {
+  const value: unknown = JSON.parse(
+    readFileSync(
+      join(
+        __dirname,
+        '../../../../test/fixtures/ai-speaking/grading.response.json',
+      ),
+      'utf8',
+    ),
+  );
+  if (!isRecord(value) || !('data' in value)) {
+    throw new Error('Speaking response fixture must contain data');
+  }
+  return Value.Parse(SpeakingGradeResponseSchema, value.data);
+}
 
 function metadata(signal: AbortSignal): GradingRequestMetadata {
   return {
@@ -76,7 +101,7 @@ function metadata(signal: AbortSignal): GradingRequestMetadata {
   };
 }
 
-function fixture() {
+function fixture(catalog: CatalogLookup = OPERATION_CATALOG) {
   const calls: Array<{
     operation: OperationId;
     input: unknown;
@@ -128,6 +153,7 @@ function fixture() {
   const port: GradingOrchestratorPort = new GradingOrchestrator(
     dispatcher,
     idempotency,
+    catalog,
   );
   return { port, calls, executions, stored, workSignal, workDeadline };
 }
@@ -383,5 +409,65 @@ describe('GradingOrchestratorPort', () => {
       });
       expect(call.context.signal).toBe(lifecycle.signal);
     }
+  });
+
+  it('ignores preloaded replay data for an operation cataloged without idempotency', async () => {
+    const { port, calls, executions } = fixture();
+
+    const result = await port.execute({
+      ...metadata(new AbortController().signal),
+      operation: 'speaking.grading-json',
+      input: {
+        audioUrl: 'https://example.com/answer.wav',
+        part: 1,
+        questionId: 'p1_hometown',
+      },
+      completedReplay: {
+        responseStatus: 200,
+        responseBody: { malformed: true },
+      },
+    });
+
+    expect(result).toMatchObject({
+      operation: 'speaking.grading-json',
+      data: speakingData,
+    });
+    expect(result.idempotentReplay).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(executions).toHaveLength(0);
+  });
+
+  it('decodes a Speaking replay when idempotency is enabled by its catalog entry', async () => {
+    const catalog: CatalogLookup = {
+      ...OPERATION_CATALOG,
+      'speaking.grading-json': {
+        ...OPERATION_CATALOG['speaking.grading-json'],
+        idempotency: 'required',
+      },
+    };
+    const { port, calls, executions } = fixture(catalog);
+    const command = {
+      ...metadata(new AbortController().signal),
+      operation: 'speaking.grading-json' as const,
+      input: {
+        audioUrl: 'https://example.com/answer.wav',
+        part: 1 as const,
+        questionId: 'p1_hometown',
+      },
+      idempotencyKey: 'speaking-grade-key',
+    };
+
+    const first = await port.execute(command);
+    const replay = await port.execute(command);
+
+    expect(first.data).toEqual(speakingData);
+    expect(replay).toMatchObject({
+      operation: 'speaking.grading-json',
+      data: speakingData,
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+    expect(calls).toHaveLength(1);
+    expect(executions).toHaveLength(2);
   });
 });

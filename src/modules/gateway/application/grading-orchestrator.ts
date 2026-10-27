@@ -7,24 +7,16 @@ import {
 } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import {
-  type GradeResponse,
-  decodeGradeResponse,
-} from '@/contracts/writing/grading';
 import type {
-  IdempotencyBackgroundLifecycle,
   IdempotencyServicePort,
   IdempotencyWorkContext,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import type { CompletedIdempotencyReplay } from '@/modules/idempotency/public/idempotency-operation';
 import {
   readDispatchTelemetry,
   withDispatchTelemetry,
 } from './dispatch-telemetry';
 import type {
   BaseGradingCommand,
-  GradeTask1Command,
-  GradeTask2Command,
   GradingOrchestratorPort,
   ResponseForCommand,
 } from './grading-orchestrator.port';
@@ -35,40 +27,12 @@ import {
   type ResponseFor,
 } from './operation-dispatcher.port';
 
-type WritingCommand = GradeTask1Command | GradeTask2Command;
-
 export type CatalogLookup = Readonly<
   Record<
     string,
-    Pick<
-      OperationDef,
-      'timeoutMs' | 'idempotency' | 'family' | 'responseContract'
-    >
+    Pick<OperationDef, 'timeoutMs' | 'idempotency' | 'responseContract'>
   >
 >;
-
-function idempotencyKeyOf(command: BaseGradingCommand): string | undefined {
-  if (
-    'idempotencyKey' in command &&
-    typeof command.idempotencyKey === 'string'
-  ) {
-    return command.idempotencyKey;
-  }
-  return undefined;
-}
-
-function backgroundLifecycleOf(
-  command: BaseGradingCommand,
-): IdempotencyBackgroundLifecycle | undefined {
-  if (
-    'backgroundLifecycle' in command &&
-    typeof command.backgroundLifecycle === 'object' &&
-    command.backgroundLifecycle !== null
-  ) {
-    return command.backgroundLifecycle as IdempotencyBackgroundLifecycle;
-  }
-  return undefined;
-}
 
 function isMalformed(
   value: Record<string, unknown>,
@@ -83,43 +47,20 @@ function isMalformed(
   );
 }
 
-function decodeWritingReplay(
-  value: unknown,
-  operation: WritingCommand['operation'],
-): DispatchResult<GradeResponse> {
-  if (!isRecord(value) || isMalformed(value, operation)) {
-    throw new Error(`stored ${operation} grading response is malformed`);
-  }
-
-  return withDispatchTelemetry(
-    {
-      operation,
-      data: decodeGradeResponse(value.data),
-      downstreamMs: value.downstreamMs as number,
-    },
-    readDispatchTelemetry(value),
-  );
-}
-
 function decodeStoredResult<K extends OperationId>(
   value: unknown,
   operation: K,
-  def: Pick<OperationDef, 'family' | 'responseContract'>,
+  def: Pick<OperationDef, 'responseContract'>,
 ): DispatchResult<ResponseFor<K>> {
-  if (def.family === 'writing') {
-    return decodeWritingReplay(
-      value,
-      operation as WritingCommand['operation'],
-    ) as DispatchResult<ResponseFor<K>>;
-  }
-
   if (
     !isRecord(value) ||
     isMalformed(value, operation) ||
     def.responseContract === 'unresolved' ||
     !Value.Check(def.responseContract, value.data)
   ) {
-    throw new Error(`stored ${operation} grading response is malformed`);
+    const operationGroup = operation.split('.')[0] ?? 'graded';
+    const label = `${operationGroup[0]?.toUpperCase()}${operationGroup.slice(1)}`;
+    throw new Error(`stored ${label} grading response is malformed`);
   }
 
   // `value.data` just passed `Value.Check` against the operation's own
@@ -180,11 +121,11 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       })();
     };
 
-    const preloadedReplay = (
-      command as BaseGradingCommand & {
-        readonly completedReplay?: CompletedIdempotencyReplay;
-      }
-    ).completedReplay;
+    if (def.idempotency === 'none') {
+      return dispatch();
+    }
+
+    const preloadedReplay = command.completedReplay;
     if (preloadedReplay !== undefined) {
       if (
         preloadedReplay.responseStatus < 200 ||
@@ -203,24 +144,22 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       } as DispatchResult<ResponseForCommand<C>>;
     }
 
-    if (def.idempotency === 'none') {
-      return dispatch();
-    }
-
-    const idempotencyKey = idempotencyKeyOf(command);
-    const backgroundLifecycle = backgroundLifecycleOf(command);
     const execution = await this.idempotency.execute(
       {
         organizationId: command.organizationId,
         operation: command.operation,
-        ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+        ...(command.idempotencyKey === undefined
+          ? {}
+          : { idempotencyKey: command.idempotencyKey }),
         actorId: command.userId,
         requestBody: command.input,
         requestId: command.requestId,
         timeoutMs: def.timeoutMs,
         signal: context.signal,
         deadlineAt: context.deadlineAt,
-        ...(backgroundLifecycle === undefined ? {} : { backgroundLifecycle }),
+        ...(command.backgroundLifecycle === undefined
+          ? {}
+          : { backgroundLifecycle: command.backgroundLifecycle }),
       },
       dispatch,
       (value) =>
