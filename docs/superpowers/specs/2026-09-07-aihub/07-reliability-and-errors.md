@@ -127,7 +127,7 @@ Requests without an idempotency key are aborted immediately to conserve tokens.
 Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 
 - Per-organization concurrency limits (Redis sorted set) — prevents single-tenant monopolization.
-- Local in-memory backstop `GLOBAL_MAX_INFLIGHT` — protects gateway processes during Redis outages.
+- No local in-flight backstop: under [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md) a graded request needs a verified Redis permit, so a Redis outage refuses grading with `503 REDIS_UNAVAILABLE` instead of capping it (see [04 §F.5](04-redis.md#f5-what-happens-when-redis-dies-item-by-item-decisions)).
 - Undici pool `connections: 10` per downstream — establishes hard ceilings on concurrent load to AI Writing.
 
 ---

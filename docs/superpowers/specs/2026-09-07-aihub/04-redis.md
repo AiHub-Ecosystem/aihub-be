@@ -112,7 +112,9 @@ The last line represents an absolute boundary: failing open on rate limiting ris
 
 > **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE` (`retry_after_ms: 1000`); no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and to local-auth rate limits. A post-result quota increment failure still marks usage `quota_unverified`. The fault-injection tests in `test/db/tenant-isolation/fault-injection/` (#328) cover every row of this table as amended.
 
-### Why Quotas Fail Open
+### Why Non-Graded Quotas Fail Open
+
+Graded routes refuse instead (ADR-0116, amendment above); this rationale now covers non-graded routes only.
 
 **Allowing a request through can be corrected post-facto; rejecting it cannot.**
 
