@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   type JWK,
   compactVerify,
@@ -10,10 +11,6 @@ import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from '@/modules/identity/user-assertions/application/user-assertion-crypto.port';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function toJwk(key: PublicJsonWebKey): JWK {
   if (

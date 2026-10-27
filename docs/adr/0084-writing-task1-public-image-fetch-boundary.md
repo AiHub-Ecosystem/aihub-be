@@ -1,6 +1,6 @@
 # ADR-0084: Bound AI Writing Task 1 image fetches to public HTTPS targets
 
-- Status: Accepted
+- Status: Accepted; the Task 1 image URL shape check was amended by [ADR-0102](0102-writing-task1-image-url-shape-check.md)
 - Date: 2026-10-09
 - Related issue: [#376](https://github.com/AiHub-Ecosystem/aihub-be/issues/376)
 

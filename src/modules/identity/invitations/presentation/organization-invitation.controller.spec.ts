@@ -484,7 +484,6 @@ describe('Organization invitation HTTP flow', () => {
     // token, never a re-mint, and never persisted in the clear.
     expect(persisted.emailDelivery.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(persisted.emailDelivery.token).not.toBe(persisted.tokenHash);
-    expect(persisted.emailDelivery.id).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(persisted.emailDelivery.createdAt).toBe(persisted.now);
     // The provider is not called in the request path.
     expect(emailSender.send.mock.calls).toHaveLength(0);

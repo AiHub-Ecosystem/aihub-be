@@ -6,6 +6,13 @@
 
 ## N.1 Compose Stack
 
+> **Runtime topology:** Production uses the shared `aihub-db` and Wispace Redis,
+> one steady-state app per enabled tier plus a temporary blue-green candidate,
+> and monitoring on the separate monitoring host. See the
+> [deployment runbook](../../../operations/deploy-vps.md),
+> [shared infrastructure register](../../../operations/shared-infrastructure.md),
+> and [ADR-0085](../../../adr/0085-per-tier-blue-green-cutover.md).
+
 ```
 nginx            :80 :443, host TLS termination; AIHUB API and Sandbox upstreams
 app              active Production service on its loopback port
@@ -110,6 +117,11 @@ rclone copy /tmp/aihub-*.age r2:aihub-backups/
 <a id="n5-triggers-to-exit-this-architecture"></a>
 
 ## N.5 Triggers to Exit This Architecture
+
+> **Runtime update:** Vault already supplies runtime secrets under
+> [ADR-0013](../../../adr/0013-vault-runtime-secret-management.md). The Vault/SOPS
+> migration trigger below is historical; SOPS remains an unadopted alternative.
+> See the [runtime secrets runbook](../../../operations/vault-runtime-secrets.md).
 
 Documented explicitly to prevent premature, speculative refactoring:
 

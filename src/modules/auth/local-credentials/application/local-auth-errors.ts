@@ -31,3 +31,11 @@ export function invalidVerificationToken(): AppError {
     retryable: false,
   });
 }
+
+export function invalidCredentials(): AppError {
+  return new AppError({
+    code: 'AUTH_CREDENTIALS_INVALID',
+    message: 'Email or password is invalid',
+    retryable: false,
+  });
+}

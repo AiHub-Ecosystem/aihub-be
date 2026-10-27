@@ -1,4 +1,7 @@
-import type { MeteringEvidence } from './metering-evidence';
+import {
+  type MeteringEvidence,
+  attributionFromEvidence,
+} from './metering-evidence';
 import type { MeteringFinalizerPort } from './metering-finalizer.port';
 
 /** Structurally the idempotency background lifecycle, without importing it. */
@@ -50,20 +53,11 @@ export function billBackgroundCompletion(
       await input.finalizer
         .finalize({
           requestId: backgroundCompletionRequestId(input.requestId),
-          organizationId: evidence.organizationId,
-          apiKeyId: evidence.apiKeyId,
-          ...(evidence.actorId === undefined
-            ? {}
-            : { actorId: evidence.actorId }),
-          operation: evidence.operation,
-          environment: evidence.environment,
+          ...attributionFromEvidence(evidence),
           outcome: 'success',
           httpStatus: 200,
           totalMs: Math.max(0, now() - input.receivedAt.getTime()),
           modelCalled: true,
-          ...(evidence.quotaTracked === undefined
-            ? {}
-            : { quotaTracked: evidence.quotaTracked }),
           billingBasis: 'background_completion',
         })
         .catch(() => undefined);

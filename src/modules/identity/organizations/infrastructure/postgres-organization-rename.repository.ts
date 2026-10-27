@@ -7,6 +7,7 @@ import type {
   RenameOrganizationRecordResult,
 } from '@/modules/identity/organizations/application/organization-rename-record.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditDenial,
@@ -15,7 +16,6 @@ import {
 import {
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,

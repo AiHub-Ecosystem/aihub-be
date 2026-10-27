@@ -2,7 +2,9 @@
 
 Status: accepted
 
-Date: 2026-09-23; related issue: [#137](https://github.com/AiHub-Ecosystem/aihub-be/issues/137). Amends [ADR-0035](0035-organization-audit-trail-boundary.md) on who may stand as the actor of an operator act.
+Date: 2026-09-23; related issue: [#137](https://github.com/AiHub-Ecosystem/aihub-be/issues/137)
+
+Amends: [ADR-0035](0035-organization-audit-trail-boundary.md) on who may stand as the actor of an operator act.
 
 `organizations.status` is read on nearly every authorization decision, yet nothing could set it except a hand-written `UPDATE` against production. The one lever for stopping a non-paying or abusive tenant therefore had no record of who pulled it, and no trusted way back. Two operator commands now own it: `org:suspend --org <id> --actor <username>` and `org:restore --org <id> --actor <username>`. They live in `src/cli` as TypeScript beside the usage commands rather than as SQL in `scripts/cli/cli.mjs`, so the audit event is built by the same domain code every Bearer mutation uses. Neither act is reachable from the Bearer boundary: an owner who could suspend their Organization gains nothing, and one who could restore it would make suspension useless.
 

@@ -2023,6 +2023,13 @@ must detect the regression and use the manual helper rollback above. #240's
 response counter is implemented. #483 records the decision about the observation
 window and rollback policy.
 
+Do not document a new optional Public API request field for customer use until
+the release that introduced it has passed this automatic rollback window and
+both that release and its normal rollback target accept the field. The normal
+rollback target is the immediately preceding successful release. If an older
+image must be used, first follow a reviewed, migration-specific plan that keeps
+clients from sending fields that image does not support.
+
 The host helper supports `status`, `rollback production`, `rollback sandbox`,
 and `rehearse sandbox`. `status` reports `caller_ip_gate=<tier>` if an external
 caller-IP proof still needs resolution. The CD workflow uses `public-host`,

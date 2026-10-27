@@ -1,6 +1,6 @@
 # Organization API key rotation boundary
 
-Status: accepted
+Status: accepted; rotation environment binding was amended by [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md)
 
 Rotation replaces an Organization's credential while preserving the authority it carried. One Bearer-authenticated request names the key to replace; owners and admins may rotate, members may not, and a suspended Organization is denied as for every other key mutation. The replacement inherits the key's name, scopes, allowed environments, and expiry, because rotation changes the credential and not what the credential may do; changing the expiry would change the authority under cover of replacing the secret. The response is the shape creation already returns — the raw credential once, alongside the new key's metadata — so a caller installs a rotated key through the same model as a created one. The replacement is a new key with its own identifier: the caller's reference changes, and the identifier it supplied names only the key being retired.
 

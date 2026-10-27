@@ -1,6 +1,6 @@
 # ADR-0089: Measure request duration from ingress
 
-- Status: Accepted
+- Status: Accepted; admission timing labels were amended by [ADR-0116](0116-post-result-grading-completion-timing.md)
 - Related issue: #471
 - Amends: [ADR-0061](0061-one-module-owns-the-metering-record-and-its-completion.md) (request timing only)
 

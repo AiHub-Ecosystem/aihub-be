@@ -1,5 +1,6 @@
 import type { OperationId } from '@/catalog/operation-id';
 import type {
+  MeteringFinalizeInput,
   MeteringModel,
   MeteringStatus,
   MeteringUsage,
@@ -118,4 +119,35 @@ export function addMeteringEvidence(
       Object.assign(existing, { [key]: value });
     }
   }
+}
+
+/** The finalizer input fields a Metering record takes from request evidence. */
+export type MeteringEvidenceAttribution = Pick<
+  MeteringFinalizeInput,
+  | 'organizationId'
+  | 'apiKeyId'
+  | 'actorId'
+  | 'operation'
+  | 'environment'
+  | 'quotaTracked'
+>;
+
+/**
+ * The one assembler of those fields, so the response record and the
+ * background-completion record cannot disagree on which request they belong
+ * to. A field the evidence never gathered stays absent.
+ */
+export function attributionFromEvidence(
+  evidence: MeteringEvidence,
+): MeteringEvidenceAttribution {
+  return {
+    organizationId: evidence.organizationId,
+    apiKeyId: evidence.apiKeyId,
+    operation: evidence.operation,
+    environment: evidence.environment,
+    ...(evidence.actorId === undefined ? {} : { actorId: evidence.actorId }),
+    ...(evidence.quotaTracked === undefined
+      ? {}
+      : { quotaTracked: evidence.quotaTracked }),
+  };
 }

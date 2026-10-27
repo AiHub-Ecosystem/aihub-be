@@ -7,6 +7,11 @@ export async function createOperatorNotificationClient(databaseUrl: string) {
     { PostgresApiKeyNearExpiryNotices },
     { createEmailPayloadCipher },
     { PostgresEmailDeliveryRequestRepository },
+    { EmailOutbox, EmailOutboxBackpressureGate },
+    { prefixedIdGenerator },
+    { PostgresEmailOutboxQueueAge },
+    { PostgresEmailDispatchStore },
+    { recordEmailOutboxBackpressureRefusal },
   ] = await Promise.all([
     import('@/modules/identity/shared/infrastructure/postgres-identity.client'),
     import('@/modules/persistence/infrastructure/prisma-client'),
@@ -17,15 +22,33 @@ export async function createOperatorNotificationClient(databaseUrl: string) {
     import(
       '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository'
     ),
+    import('@/modules/auth/public/email-outbox'),
+    import('@/common/ids/prefixed-id'),
+    import(
+      '@/modules/auth/email-delivery/infrastructure/postgres-email-outbox-queue-age'
+    ),
+    import(
+      '@/modules/auth/email-delivery/infrastructure/postgres-email-dispatch-store'
+    ),
+    import('@/common/observability/metrics'),
   ]);
-  const emailOutbox =
+  const emailOutboxSecrets =
     createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
   const holder = createOperatorPrismaClient('control-plane', databaseUrl);
+  const dispatchStore = new PostgresEmailDispatchStore(holder.prisma);
+  const emailOutbox = new EmailOutbox(
+    new PostgresEmailDeliveryRequestRepository(emailOutboxSecrets),
+    createEmailPayloadCipher(emailOutboxSecrets),
+    prefixedIdGenerator('edr_'),
+    new EmailOutboxBackpressureGate(
+      new PostgresEmailOutboxQueueAge(dispatchStore),
+      recordEmailOutboxBackpressureRefusal,
+    ),
+  );
   return Object.assign(
     new PostgresApiKeyNearExpiryNotices(
       createIdentityTransactionRunner(holder.prisma),
-      createEmailPayloadCipher(emailOutbox),
-      new PostgresEmailDeliveryRequestRepository(emailOutbox),
+      emailOutbox,
     ),
     { close: () => holder.close() },
   );

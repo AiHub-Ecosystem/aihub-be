@@ -6,6 +6,7 @@ import { ulid } from 'ulid';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import { PostgresRefreshSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository';
 import {
@@ -38,7 +39,10 @@ beforeAll(async () => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
   refreshSessions = new PostgresRefreshSessionRepository(client);
-  passwordResets = new PostgresPasswordResetTokenRepository(client);
+  passwordResets = new PostgresPasswordResetTokenRepository(
+    client,
+    UNUSED_EMAIL_OUTBOX,
+  );
   const hasher = new Argon2PasswordHasher();
   firstPasswordHash = await hasher.hash('the first new passphrase');
   secondPasswordHash = await hasher.hash('the second new passphrase');
@@ -161,7 +165,10 @@ describe('a password reset and a sign-in that verified the old password', () => 
       const asFirst = (pausedClient: PostgresAuthClient) =>
         firstOperation === 'reset'
           ? reset(
-              new PostgresPasswordResetTokenRepository(pausedClient),
+              new PostgresPasswordResetTokenRepository(
+                pausedClient,
+                UNUSED_EMAIL_OUTBOX,
+              ),
               resetHash,
             )
           : login(new PostgresRefreshSessionRepository(pausedClient));
@@ -205,7 +212,10 @@ describe('a password reset and a Refresh Token rotation', () => {
       const asFirst = (pausedClient: PostgresAuthClient) =>
         firstOperation === 'reset'
           ? reset(
-              new PostgresPasswordResetTokenRepository(pausedClient),
+              new PostgresPasswordResetTokenRepository(
+                pausedClient,
+                UNUSED_EMAIL_OUTBOX,
+              ),
               resetHash,
             )
           : rotate(new PostgresRefreshSessionRepository(pausedClient));
@@ -242,7 +252,10 @@ describe('a password reset and a Refresh Token rotation', () => {
     );
 
     const resetting = reset(
-      new PostgresPasswordResetTokenRepository(gated.client),
+      new PostgresPasswordResetTokenRepository(
+        gated.client,
+        UNUSED_EMAIL_OUTBOX,
+      ),
       resetHash,
     );
     let rotating:
@@ -285,7 +298,10 @@ describe('two resets consuming one Password Reset Token', () => {
       client,
       (pausedClient) =>
         reset(
-          new PostgresPasswordResetTokenRepository(pausedClient),
+          new PostgresPasswordResetTokenRepository(
+            pausedClient,
+            UNUSED_EMAIL_OUTBOX,
+          ),
           resetHash,
           firstPasswordHash,
         ),

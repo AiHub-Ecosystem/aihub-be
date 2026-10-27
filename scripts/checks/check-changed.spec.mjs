@@ -20,6 +20,7 @@ const pathCases = [
       'build',
       'check:data-ownership',
       'check:deprecation',
+      'check:doc-drift',
       'check:domain-globals',
       'check:file-size',
       'check:imports',
@@ -38,6 +39,7 @@ const pathCases = [
       'build',
       'check:data-ownership',
       'check:deprecation',
+      'check:doc-drift',
       'check:file-size',
       'check:imports',
       'check:imports:dist',
@@ -50,19 +52,27 @@ const pathCases = [
   },
   {
     path: 'scripts/checks/check-changed.spec.mjs',
-    gates: ['lint', 'test:check-changed'],
+    gates: ['check:doc-drift', 'lint', 'test:check-changed'],
   },
   {
     path: 'scripts/checks/issue-triage-hook.mjs',
-    gates: ['lint', 'test:issue-triage'],
+    gates: ['check:doc-drift', 'lint', 'test:issue-triage'],
+  },
+  {
+    path: 'scripts/checks/check-doc-drift.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:doc-drift'],
+  },
+  {
+    path: 'scripts/checks/lint-staged-config.spec.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:lint-staged'],
   },
   {
     path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
-    gates: ['lint', 'test:capacity-benchmark'],
+    gates: ['check:doc-drift', 'lint', 'test:capacity-benchmark'],
   },
   {
     path: 'scripts/ops/monitoring/check-monitoring-config.cjs',
-    gates: ['lint', 'test:monitoring-config'],
+    gates: ['check:doc-drift', 'lint', 'test:monitoring-config'],
   },
   {
     path: 'prisma/schema.prisma',
@@ -78,8 +88,19 @@ const pathCases = [
     ],
   },
   { path: 'docs/guide.md', gates: ['format:check'] },
+  {
+    path: 'docs/adr/0001-example.md',
+    gates: ['check:doc-drift', 'format:check'],
+  },
+  {
+    path: 'docs/operations/runbook.md',
+    gates: ['check:doc-drift', 'format:check'],
+  },
   { path: '.github/workflows/ci.yml', gates: ['format:check'] },
-  { path: 'ops/nginx/site.conf', gates: ['check:nginx-headers', 'lint'] },
+  {
+    path: 'ops/nginx/site.conf',
+    gates: ['check:doc-drift', 'check:nginx-headers', 'lint'],
+  },
   {
     path: 'src/contracts/date-time-format.ts',
     gates: [
@@ -87,6 +108,7 @@ const pathCases = [
       'build',
       'check:data-ownership',
       'check:deprecation',
+      'check:doc-drift',
       'check:file-size',
       'check:imports',
       'check:imports:dist',
@@ -117,6 +139,14 @@ await test('a domain source file still runs type-check and related specs', () =>
   assert.ok(gates.includes('check:domain-globals'));
 });
 
+await test('changed source paths keep the documentation path check selected', () => {
+  assert.ok(
+    planChangedFiles(['src/modules/removed-operation.ts']).gates.includes(
+      'check:doc-drift',
+    ),
+  );
+});
+
 await test('unknown paths force full verification, including mixed changes', () => {
   assert.deepEqual(planChangedFiles(['new-file.bin']), {
     fullVerify: true,
@@ -136,15 +166,37 @@ await test('empty changed set forces full verification rather than doing nothing
 await test('changed files union committed, staged, unstaged, and untracked paths', () => {
   const outputs = new Map([
     ['merge-base HEAD origin/main', 'merge-base-sha'],
-    ['diff --name-only merge-base-sha HEAD', 'committed.ts'],
-    ['diff --name-only', 'unstaged.ts'],
-    ['diff --cached --name-only', 'staged.ts'],
+    ['diff --no-renames --name-only merge-base-sha HEAD', 'committed.ts'],
+    ['diff --no-renames --name-only', 'unstaged.ts'],
+    ['diff --no-renames --cached --name-only', 'staged.ts'],
     ['ls-files --others --exclude-standard', 'new.ts'],
   ]);
   assert.deepEqual(
     resolveChangedFiles((args) => outputs.get(args.join(' ')) ?? ''),
     ['committed.ts', 'unstaged.ts', 'staged.ts', 'new.ts'],
   );
+});
+
+await test('renames preserve the old documentation path for gate selection', () => {
+  const outputs = new Map([
+    ['merge-base HEAD origin/main', 'merge-base-sha'],
+    [
+      'diff --no-renames --name-only merge-base-sha HEAD',
+      'docs/adr/0001-retired.md\ndocs/history/0001-retired.md',
+    ],
+    ['diff --no-renames --name-only', ''],
+    ['diff --no-renames --cached --name-only', ''],
+    ['ls-files --others --exclude-standard', ''],
+  ]);
+  const files = resolveChangedFiles(
+    (args) => outputs.get(args.join(' ')) ?? '',
+  );
+
+  assert.deepEqual(files, [
+    'docs/adr/0001-retired.md',
+    'docs/history/0001-retired.md',
+  ]);
+  assert.ok(planChangedFiles(files).gates.includes('check:doc-drift'));
 });
 
 await test('unresolvable git state falls back to full verify and runs no reduced gate', () => {

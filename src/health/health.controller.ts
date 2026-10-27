@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   Controller,
   Get,
@@ -26,10 +27,6 @@ const LOOPBACK_PEERS: ReadonlySet<string> = new Set([
   '::1',
   '::ffff:127.0.0.1',
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function safeDependencies(
   details: Readonly<Record<string, unknown>>,

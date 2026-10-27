@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   Body,
   Controller,
@@ -41,10 +42,6 @@ import {
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function decodeOrganizationReplay(value: unknown): CreatedOrganization {
   if (!isRecord(value)) {

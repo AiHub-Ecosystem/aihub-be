@@ -1,6 +1,6 @@
 # ADR-0113: Bound organization and service retry amplification
 
-- Status: Proposed
+- Status: Partly implemented: the Organization edge retry budget and bounded 10,000-key ledger shipped ([#850](https://github.com/AiHub-Ecosystem/aihub-be/issues/850)); the per-service retry bucket remains proposed pending capacity evidence in [#632](https://github.com/AiHub-Ecosystem/aihub-be/issues/632)
 - Date: 2026-10-19
 - Related: [#632](https://github.com/AiHub-Ecosystem/aihub-be/issues/632), [#332](https://github.com/AiHub-Ecosystem/aihub-be/issues/332), [#199](https://github.com/AiHub-Ecosystem/aihub-be/issues/199), [#403](https://github.com/AiHub-Ecosystem/aihub-be/issues/403), [#457](https://github.com/AiHub-Ecosystem/aihub-be/issues/457), [#273](https://github.com/AiHub-Ecosystem/aihub-be/issues/273), [#327](https://github.com/AiHub-Ecosystem/aihub-be/issues/327), [#304](https://github.com/AiHub-Ecosystem/aihub-be/issues/304), [#659](https://github.com/AiHub-Ecosystem/aihub-be/issues/659), [#494](https://github.com/AiHub-Ecosystem/aihub-be/issues/494)
 
@@ -59,7 +59,7 @@ This estimate does not cover Speaking retries until #304 resolves idempotency, o
 
 Use #457's per-Organization spend monitoring to detect when retry costs exceed expectations. It is an alarm, not a retry control. Keep replay identification distinct from ordinary non-billable successes as #494 specifies.
 
-The enforcement work is specified and tracked in #632 itself; no sibling issues are needed. The Organization edge budget can proceed at the gateway idempotency boundary. The absolute service-bucket rate remains gated on the #273 provider-capacity evidence and #327 AIHUB baseline; #327 currently measures one process against a stub and has no staged baseline, so its result needs a verified mapping to the bucket's deployment scope or a direct deployment-level measurement. Do not assume linear scaling or enable the service bucket with an invented rate. Coordinate its retry response with #403 and completed-replay behavior with #659. If #332's proposed retry loop is implemented, it must enforce the per-operation budget and shared service bucket. The current Speaking exclusion is accepted scope for this decision, with its future idempotency contract left to #304.
+The Organization edge budget shipped at the gateway idempotency boundary, and #850 bounded its remembered-key ledger. The per-service bucket rate remains gated on the #273 provider-capacity evidence and #327 AIHUB baseline; #327 currently measures one process against a stub and has no staged baseline, so its result needs a verified mapping to the bucket's deployment scope or a direct deployment-level measurement. Do not assume linear scaling or enable the service bucket with an invented rate. Coordinate its retry response with #403 and completed-replay behavior with #659. If #332's proposed retry loop is implemented, it must enforce the per-operation budget and shared service bucket. The current Speaking exclusion is accepted scope for this decision, with its future idempotency contract left to #304.
 
 ## Consequences
 

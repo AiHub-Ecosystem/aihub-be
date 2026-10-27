@@ -1,14 +1,15 @@
 # ADR-0017: Sandbox as a hostname-bound fourth environment
 
-- Status: Accepted; control-plane placement amended by ADR-0056; runtime secret boundary amended by [ADR-0105](0105-isolate-sandbox-runtime-secrets.md)
+- Status: Accepted; control-plane placement amended by [ADR-0056](0056-customer-sandbox-test-tier.md); Production and Sandbox still share the runtime secret bundle, with isolation tracked by [#351](https://github.com/AiHub-Ecosystem/aihub-be/issues/351)
 - Related issues: #47, #50
 
-## Amendment for Sandbox runtime secrets (#351)
+## Runtime secret isolation status (#351)
 
-[ADR-0105](0105-isolate-sandbox-runtime-secrets.md) replaces the original
-shared downstream runtime credential realm with tier-specific Vault policies,
-AppRoles, Agents, and rendered directories. The paragraph below records the
-initial deployment decision; use ADR-0105 for the current credential boundary.
+The proposed tier-specific Vault policies, AppRoles, Agents, and rendered
+directories have not shipped. Production and Sandbox still mount the shared
+read-only runtime secrets directory. [Issue #351](https://github.com/AiHub-Ecosystem/aihub-be/issues/351)
+tracks the isolation cutover; follow the [deployment runbook](../operations/deploy-vps.md)
+for the current setup and rollout procedure.
 
 ## Amendment for #182 (ADR-0056)
 

@@ -31,6 +31,23 @@ A file inside another business module that is not part of that module's public
 seam. Importing one couples two modules that should be able to change apart.
 _Avoid_: private file, implementation
 
+**Public API Major Version**:
+A versioned generation of the whole Public API Contract, covering dispatch
+operations and non-dispatch Public API Routes. Compatible changes stay within
+the current major; a breaking contract change requires a new major.
+_Avoid_: package version, endpoint version
+
+**API Compatibility Window**:
+The transition period after a successor major is released during which the
+preceding major remains supported. AIHUB sets a minimum of 12 months, publishes
+the sunset date, and requires an explicit decision to extend it.
+_Avoid_: rollback window
+
+**Public API Contract Version**:
+The SemVer identifier of a released Public API Contract, independent of the
+backend package version. Its major number matches the Public API Major Version.
+_Avoid_: package version
+
 **Shared presentation primitive**:
 A presentation file that declares `module 'fastify'` to extend the request type
 every module already agrees on, such as the accessor for `aihubAuth` or the

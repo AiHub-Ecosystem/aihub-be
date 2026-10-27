@@ -4,6 +4,10 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
+import {
+  defaultResource,
+  resourceFromAttributes,
+} from '@opentelemetry/resources';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { AlwaysOnSampler } from '@opentelemetry/sdk-trace-base';
@@ -28,6 +32,12 @@ export const tracingEnabled =
 
 if (exporterEndpoint !== undefined && exporterEndpoint.length > 0) {
   sdk = new NodeSDK({
+    resource: defaultResource().merge(
+      resourceFromAttributes({
+        'deployment.environment.name':
+          configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+      }),
+    ),
     serviceName: configuration.OTEL_SERVICE_NAME,
     sampler: new AlwaysOnSampler(),
     textMapPropagator: new W3CTraceContextPropagator(),

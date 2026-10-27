@@ -20,6 +20,7 @@ import type {
   RefreshTokenRotationResult,
   RotateRefreshTokenInput,
 } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
+import { decideRefreshTokenRotation } from '@/modules/auth/web-sessions/application/refresh-token-rotation-policy';
 
 /** The account a Refresh Token belongs to; the token's account never changes. */
 const REFRESH_TOKEN_ACCOUNT_SQL =
@@ -127,19 +128,16 @@ export class PostgresRefreshSessionRepository
       if (record === undefined) {
         return { kind: 'invalid', reason: 'missing' };
       }
-      if (row.status !== 'active') {
-        return { kind: 'invalid', reason: 'inactive' };
-      }
-      if (record.revokedAt !== undefined) {
-        await this.revokeFamily(transaction, record.familyId, input.now);
-        return { kind: 'invalid', reason: 'revoked' };
-      }
-      if (record.usedAt !== undefined) {
-        await this.revokeFamily(transaction, record.familyId, input.now);
-        return { kind: 'invalid', reason: 'used' };
-      }
-      if (record.expiresAt.getTime() <= input.now.getTime()) {
-        return { kind: 'invalid', reason: 'expired' };
+      const decision = decideRefreshTokenRotation({
+        record,
+        accountStatus: row.status,
+        now: input.now,
+      });
+      if (decision.kind === 'invalid') {
+        if (decision.revokeFamily) {
+          await this.revokeFamily(transaction, record.familyId, input.now);
+        }
+        return { kind: 'invalid', reason: decision.reason };
       }
 
       await transaction.refreshToken.updateMany({

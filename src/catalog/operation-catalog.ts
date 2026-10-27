@@ -1,6 +1,7 @@
 import type { TSchema } from '@sinclair/typebox';
 
 import type { ErrorCode } from '@/common/errors/error-code';
+import type { OpenApiOperationMetadata } from './openapi-operation-metadata';
 
 import {
   SpeakingGradeJsonRequestSchema,
@@ -35,6 +36,7 @@ export const TASK1_SAMPLE_IMAGE_URL =
   'https://s3.wispace.app/ielts-task1/ca95bd4ab522946d';
 
 export interface OperationDef {
+  readonly openApi: OpenApiOperationMetadata;
   readonly method: 'POST';
   readonly path: string;
   readonly requiredScope: string;
@@ -60,6 +62,7 @@ export interface OperationDef {
 
 export const OPERATION_CATALOG = {
   'writing.task1.grade': {
+    openApi: { summary: 'writing.task1.grade' },
     method: 'POST',
     path: '/v1/ielts/writing/task1/grade',
     requiredScope: 'writing.grade',
@@ -77,6 +80,7 @@ export const OPERATION_CATALOG = {
     responseContract: GradeResponseSchema,
   },
   'writing.task2.grade': {
+    openApi: { summary: 'writing.task2.grade' },
     method: 'POST',
     path: '/v1/ielts/writing/task2/grade',
     requiredScope: 'writing.grade',
@@ -94,6 +98,7 @@ export const OPERATION_CATALOG = {
     responseContract: GradeResponseSchema,
   },
   'speaking.grading': {
+    openApi: { summary: 'speaking.grading' },
     method: 'POST',
     path: '/v1/ielts/speaking/grading',
     requiredScope: 'speaking.grade',
@@ -117,6 +122,7 @@ export const OPERATION_CATALOG = {
     namedDownstreamErrors: ['AUDIO_UNREADABLE'],
   },
   'speaking.grading-json': {
+    openApi: { summary: 'speaking.grading-json' },
     method: 'POST',
     path: '/v1/ielts/speaking/grading-json',
     requiredScope: 'speaking.grade',

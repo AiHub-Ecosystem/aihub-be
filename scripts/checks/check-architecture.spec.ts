@@ -764,6 +764,48 @@ describe('request bodies reach their contract through parseRequestBody', () => {
   });
 });
 
+describe('isRecord has one declaration', () => {
+  it('fails a file that declares its own', () => {
+    const fixtureRoot = mkdtempSync(
+      join(process.cwd(), 'src', 'modules', 'identity', '.tmp-is-record-'),
+    );
+
+    try {
+      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
+      writeFileSync(
+        join(fixtureRoot, 'infrastructure', 'probe.ts'),
+        `function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+export const probe = isRecord({});
+`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(
+        `${result.stdout.toString()}
+${result.stderr.toString()}`,
+      ).toContain("import it from '@/common/is-record'");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('a session is stored only with the second-factor check', () => {
   it('fails a file that continues a session without it', () => {
     const fixtureRoot = mkdtempSync(

@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import type { MeteringTelemetry } from '@/modules/metering/application/metering-finalizer.port';
 import {
   normalizeMeteringModels,
@@ -5,10 +6,6 @@ import {
   normalizeMeteringUsage,
 } from '@/modules/metering/public/telemetry';
 import type { DispatchResult } from './operation-dispatcher.port';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 export function readDispatchTelemetry(
   value: Record<string, unknown>,

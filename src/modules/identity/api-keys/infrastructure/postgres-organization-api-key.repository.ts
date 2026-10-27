@@ -1,4 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
+import {
+  hasRequiredOrganizationApiKeyEntitlements,
+  reachedOrganizationApiKeyLimit,
+} from '@/modules/identity/api-keys/application/organization-api-key-policy';
 import type {
   CreateOrganizationApiKeyRecordInput,
   CreateOrganizationApiKeyRecordResult,
@@ -10,10 +15,13 @@ import type {
   RotateOrganizationApiKeyRecordInput,
   RotateOrganizationApiKeyRecordResult,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  stringArrayValue,
+  stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 
 import {
@@ -103,28 +111,6 @@ const LOCK_API_KEY_FOR_REVOKE_SQL = `
     AND organization_id = $2
   FOR UPDATE
 `;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringArrayValue(
-  record: Record<string, unknown>,
-  key: string,
-): readonly string[] | undefined {
-  const value = record[key];
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value
-    : undefined;
-}
-
-function stringValue(
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
 
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   if (!isRecord(value)) {
@@ -241,9 +227,12 @@ export class PostgresOrganizationApiKeyRepository
           throw identityStoreError('Identity data is invalid');
         }
 
+        if (key.status !== 'active' && key.status !== 'revoked') {
+          return { kind: 'key_not_rotatable' as const };
+        }
         if (
-          key.status !== 'active' ||
-          (expiresAt !== null && expiresAt.getTime() <= input.now.getTime())
+          apiKeyStatus({ status: key.status, expiresAt }, input.now) !==
+          'active'
         ) {
           return { kind: 'key_not_rotatable' as const };
         }
@@ -474,8 +463,9 @@ export class PostgresOrganizationApiKeyRepository
           throw identityStoreError('Identity data is invalid');
         }
         if (
-          input.requiredEntitlements.some(
-            (entitlement) => !entitlements.includes(entitlement),
+          !hasRequiredOrganizationApiKeyEntitlements(
+            entitlements,
+            input.requiredEntitlements,
           )
         ) {
           return { kind: 'entitlements_missing' as const };
@@ -484,7 +474,7 @@ export class PostgresOrganizationApiKeyRepository
         const activeKeys = await transaction.apiKey.count({
           where: { organizationId: input.organizationId, status: 'active' },
         });
-        if (activeKeys >= input.activeKeyLimit) {
+        if (reachedOrganizationApiKeyLimit(activeKeys, input.activeKeyLimit)) {
           return { kind: 'limit_reached' as const };
         }
 

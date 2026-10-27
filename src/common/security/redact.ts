@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 const REDACTED = '[REDACTED]';
 const SENSITIVE_KEYS = new Set([
   'api_key',
@@ -38,8 +39,4 @@ function redactValue(value: unknown): unknown {
   }
 
   return value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

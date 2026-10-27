@@ -1,8 +1,8 @@
 import { AppError } from '@/common/errors/app-error';
-import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 
+import { EMAIL_KIND_POLICIES } from './email-kind-handler.registry';
 import type {
   AdmitEmailRequestPort,
   BackpressureEmailKind,
@@ -19,12 +19,6 @@ const BACKLOG_SHARE_OF_LIFETIME = 0.75;
 
 export const BACKPRESSURE_MIN_RETRY_MS = 30_000;
 export const BACKPRESSURE_MAX_RETRY_MS = 15 * 60_000;
-
-const CREDENTIAL_LIFETIME_MS: Record<BackpressureEmailKind, number> = {
-  verification_email: OPAQUE_TOKEN_BINDINGS.verification.ttlMs,
-  password_reset_email: OPAQUE_TOKEN_BINDINGS.passwordReset.ttlMs,
-  organization_invite_email: OPAQUE_TOKEN_BINDINGS.organizationInvite.ttlMs,
-};
 
 /**
  * Sheds an email request at the request boundary when the outbox cannot get it
@@ -50,7 +44,7 @@ export class EmailOutboxBackpressureGate implements AdmitEmailRequestPort {
       return;
     }
     const ageMs = (ageSeconds ?? 0) * 1000;
-    const lifetimeMs = CREDENTIAL_LIFETIME_MS[kind];
+    const lifetimeMs = EMAIL_KIND_POLICIES[kind].backpressureLifetimeMs;
     if (
       !Number.isFinite(ageMs) ||
       ageMs < lifetimeMs * BACKLOG_SHARE_OF_LIFETIME

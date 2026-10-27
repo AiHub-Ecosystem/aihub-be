@@ -1,13 +1,10 @@
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { isRecord } from '@/common/is-record';
 import type {
   MeteringModel,
   MeteringTelemetry,
   MeteringUsage,
 } from './metering-finalizer.port';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function nonNegativeInteger(value: unknown): number | undefined {
   return isUsableCount(value) ? value : undefined;

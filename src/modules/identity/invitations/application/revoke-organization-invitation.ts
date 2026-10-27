@@ -3,8 +3,7 @@ import type { RequestContext } from '@/common/request-context/request-context';
 
 import {
   forbidden,
-  organizationSuspensionClosesSurface,
-  requireActiveMembership,
+  requireMembershipOfOpenOrganization,
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import type { OrganizationInvitationPort } from './organization-invitation.port';
@@ -38,7 +37,7 @@ export class RevokeOrganizationInvitation {
   ) {}
 
   async revoke(input: RevokeOrganizationInvitationCommand): Promise<void> {
-    const caller = await requireActiveMembership(
+    const caller = await requireMembershipOfOpenOrganization(
       this.membership,
       {
         context: input.context,
@@ -47,10 +46,6 @@ export class RevokeOrganizationInvitation {
       },
       INVITATION_REVOCATION_FORBIDDEN,
     );
-
-    if (organizationSuspensionClosesSurface(caller.organizationStatus)) {
-      throw forbidden(INVITATION_REVOCATION_FORBIDDEN);
-    }
 
     const result = await this.invitations.revokeInvitation({
       context: input.context,

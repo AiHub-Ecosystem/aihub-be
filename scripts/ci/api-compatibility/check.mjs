@@ -13,8 +13,6 @@ import { isDeepStrictEqual } from 'node:util';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const TEMP_ROOT = join(REPO_ROOT, 'temp');
-const DECLARATION = /^API-Breaking-Change:\s*intentional\s*$/im;
-const REASON = /^API-Breaking-Change-Reason:\s*([^\r\n]+)\s*$/im;
 
 /** @typedef {{level: number, text: string}} ApiChange */
 
@@ -80,12 +78,6 @@ function readOpenApi(path) {
   return document;
 }
 
-/** @param {string} body */
-function breakingReason(body) {
-  if (!DECLARATION.test(body)) return undefined;
-  return REASON.exec(body)?.[1]?.trim() || undefined;
-}
-
 /** @param {string} stdout @returns {ApiChange[]} */
 export function parseChanges(stdout) {
   const parsed = /** @type {unknown} */ (JSON.parse(stdout));
@@ -102,6 +94,48 @@ export function parseChanges(stdout) {
     throw new Error('oasdiff returned an unexpected breaking-change result');
   }
   return changes;
+}
+
+/** @param {unknown} base @param {unknown} revision @returns {ApiChange[]} */
+export function findBreakingChanges(base, revision) {
+  normalizeLegacyTuples(base);
+  normalizeLegacyTuples(revision);
+  mkdirSync(TEMP_ROOT, { recursive: true });
+  const scratch = mkdtempSync(join(TEMP_ROOT, 'api-compatibility-'));
+
+  try {
+    const basePath = join(scratch, 'base.json');
+    const revisionPath = join(scratch, 'revision.json');
+    writeFileSync(basePath, JSON.stringify(base));
+    writeFileSync(revisionPath, JSON.stringify(revision));
+
+    const comparison = spawnSync(
+      process.env.OASDIFF_BIN ?? 'oasdiff',
+      [
+        'breaking',
+        basePath,
+        revisionPath,
+        '--format',
+        'json',
+        '--fail-on',
+        'WARN',
+        '--allow-external-refs=false',
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+    );
+
+    if (comparison.error) throw comparison.error;
+    if (comparison.status === 0) return [];
+    if (comparison.status !== 1) {
+      throw new Error(
+        `oasdiff failed with exit code ${comparison.status}:\n${comparison.stderr || comparison.stdout}`,
+      );
+    }
+    return parseChanges(comparison.stdout);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+    cleanTempRoot();
+  }
 }
 
 /** @param {unknown} error */
@@ -135,58 +169,14 @@ function main() {
 
   const base = readOpenApi(basePath);
   const revision = readOpenApi(revisionPath);
-  mkdirSync(TEMP_ROOT, { recursive: true });
-  const scratch = mkdtempSync(join(TEMP_ROOT, 'api-compatibility-'));
-
-  try {
-    const normalizedBase = join(scratch, 'base.json');
-    const normalizedRevision = join(scratch, 'revision.json');
-    writeFileSync(normalizedBase, JSON.stringify(base));
-    writeFileSync(normalizedRevision, JSON.stringify(revision));
-
-    const comparison = spawnSync(
-      process.env.OASDIFF_BIN ?? 'oasdiff',
-      [
-        'breaking',
-        normalizedBase,
-        normalizedRevision,
-        '--format',
-        'json',
-        '--fail-on',
-        'WARN',
-        '--allow-external-refs=false',
-      ],
-      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
-    );
-
-    if (comparison.error) throw comparison.error;
-    if (comparison.status === 0) {
-      process.stdout.write('No breaking API contract changes.\n');
-      return;
-    }
-    if (comparison.status !== 1) {
-      throw new Error(
-        `oasdiff failed with exit code ${comparison.status}:\n${comparison.stderr || comparison.stdout}`,
-      );
-    }
-
-    const changes = parseChanges(comparison.stdout);
-    const details = changes.map((change) => `- ${change.text}`).join('\n');
-    const reason = breakingReason(process.env.PR_BODY ?? '');
-    if (reason !== undefined) {
-      process.stdout.write(
-        `Intentional breaking change declared: ${reason}\n${details}\n`,
-      );
-      return;
-    }
-
-    throw new Error(
-      `Breaking API contract changes detected:\n${details}\n\nTo declare an intentional break, add these lines to the pull request description:\nAPI-Breaking-Change: intentional\nAPI-Breaking-Change-Reason: <non-empty explanation>`,
-    );
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-    cleanTempRoot();
+  const changes = findBreakingChanges(base, revision);
+  if (changes.length === 0) {
+    process.stdout.write('No breaking API contract changes.\n');
+    return;
   }
+
+  const details = changes.map((change) => `- ${change.text}`).join('\n');
+  throw new Error(`Breaking API contract changes detected:\n${details}`);
 }
 
 if (

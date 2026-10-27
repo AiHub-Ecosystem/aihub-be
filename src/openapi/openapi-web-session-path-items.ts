@@ -50,6 +50,7 @@ function webSessionExchangeRefusedResponse(): Record<string, unknown> {
  * a server holding the BFF client secret, and the Web Session token comes back
  * in the body rather than in a cookie AIHUB could not set for another host.
  */
+// Manual: the shared builder cannot model route-specific BFF refusal schemas and MFA outcomes.
 export function webSessionPathItems(): Record<string, Record<string, unknown>> {
   const createResponses = {
     '201': {

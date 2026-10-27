@@ -1,3 +1,5 @@
+import { createRedisClient } from '@/common/redis/create-redis-client';
+import { numberReply } from '@/common/redis/number-reply';
 import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
@@ -72,12 +74,7 @@ class IoredisGatewayClient implements RedisGatewayClient {
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<number> {
-    return this.client.eval(script, numberOfKeys, ...args).then((result) => {
-      if (typeof result !== 'number') {
-        throw new Error('Redis command result is invalid');
-      }
-      return result;
-    });
+    return this.client.eval(script, numberOfKeys, ...args).then(numberReply);
   }
 
   evalNumbers(
@@ -112,14 +109,11 @@ export function createRedisGatewayClient(
     return undefined;
   }
 
-  const client = new Redis(url, {
+  const client = createRedisClient(url, {
     // Calibrated 2026-10-21 from Production app to remote Redis: ready p99 265.537 ms (100 samples), PING p99 71.184 ms (1,000).
-    connectTimeout: 1_000,
-    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+    connectTimeoutMs: 1_000,
+    commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
     autoResendUnfulfilledCommands: false,
   });
-  client.on('error', () => undefined);
   return new IoredisGatewayClient(client);
 }

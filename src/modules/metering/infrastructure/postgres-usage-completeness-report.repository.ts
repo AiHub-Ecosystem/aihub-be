@@ -1,21 +1,22 @@
+import { isRecord } from '@/common/is-record';
 import {
   type UsageReportRepositoryPort,
   UsageReportSnapshotError,
   type UsageReportSnapshotQuery,
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/usage-completeness-report';
-import { isRecord, safeNonNegativeCount } from './metering-row';
+import { billableRequestSql } from './billable-request-sql';
+import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_REPORT_SQL = `
   SELECT
     operation,
     COUNT(*) FILTER (
-      WHERE outcome = 'success' AND billable_requests = 1
+      WHERE ${billableRequestSql()}
     )::bigint AS successful_count,
     COUNT(*) FILTER (
-      WHERE outcome = 'success'
-        AND billable_requests = 1
+      WHERE ${billableRequestSql()}
         AND metering_status = 'missing_usage'
     )::bigint AS missing_usage_count
   FROM usage_records

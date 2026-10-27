@@ -1,5 +1,3 @@
-import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
-
 import type {
   ClaimedFailureReport,
   EmailDeliveryCancelReason,
@@ -10,15 +8,13 @@ import type {
   ReleaseUnspentEmailAttemptInput,
 } from './email-delivery-request.port';
 import {
-  API_KEY_NEAR_EXPIRY_WINDOW_MS,
   EMAIL_DELIVERY_KINDS,
-} from './email-delivery-request.port';
+  EMAIL_KIND_POLICIES,
+} from './email-kind-handler.registry';
 
 export const MAX_DELIVERY_ATTEMPTS = 3;
 
-export const MAX_CREDENTIAL_LIFETIME_MS = Math.max(
-  ...Object.values(OPAQUE_TOKEN_BINDINGS).map((binding) => binding.ttlMs),
-);
+export { MAX_CREDENTIAL_LIFETIME_MS } from './email-kind-handler.registry';
 
 export interface EmailDeliveryPollerMaintenanceOptions {
   readonly owner: string;
@@ -199,14 +195,12 @@ const STALE_CUTOFFS: readonly {
   readonly ageMs: number;
   readonly kinds: readonly EmailDeliveryKind[];
 }[] = [
-  {
-    ageMs: MAX_CREDENTIAL_LIFETIME_MS,
-    kinds: EMAIL_DELIVERY_KINDS.filter(
-      (kind) => kind !== 'api_key_near_expiry_notification',
-    ),
-  },
-  {
-    ageMs: API_KEY_NEAR_EXPIRY_WINDOW_MS,
-    kinds: ['api_key_near_expiry_notification'],
-  },
-];
+  ...new Set(
+    EMAIL_DELIVERY_KINDS.map((kind) => EMAIL_KIND_POLICIES[kind].staleCutoffMs),
+  ),
+].map((ageMs) => ({
+  ageMs,
+  kinds: EMAIL_DELIVERY_KINDS.filter(
+    (kind) => EMAIL_KIND_POLICIES[kind].staleCutoffMs === ageMs,
+  ),
+}));

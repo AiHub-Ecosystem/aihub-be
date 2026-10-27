@@ -1,4 +1,4 @@
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import type { IssuedWebSessionToken } from '@/modules/auth/web-sessions/application/web-session-token.port';
 
@@ -31,7 +31,7 @@ export interface RotateVerificationTokenInput {
   readonly requiresPassword: boolean;
   readonly now: Date;
   /** Written in the same transaction as the rotation, or nowhere. */
-  readonly emailDelivery?: InsertEmailDeliveryRequestInput;
+  readonly emailDelivery?: QueueEmailDeliveryRequestInput;
 }
 
 /** What a caller needs to prove a token's password before consuming it. */

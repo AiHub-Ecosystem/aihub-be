@@ -5,6 +5,7 @@ import { ulid } from 'ulid';
 
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import { createPostgresAuthClient } from './postgres-auth.client';
@@ -109,8 +110,11 @@ async function beginLockHolder(accountId: string) {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
-  accounts = new PostgresUserAccountRepository(client);
-  verificationTokens = new PostgresVerificationTokenRepository(client);
+  accounts = new PostgresUserAccountRepository(client, UNUSED_EMAIL_OUTBOX);
+  verificationTokens = new PostgresVerificationTokenRepository(
+    client,
+    UNUSED_EMAIL_OUTBOX,
+  );
 });
 
 afterAll(async () => {

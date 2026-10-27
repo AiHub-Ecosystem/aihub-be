@@ -4,9 +4,11 @@
 
 > The objective of this document is to answer question §18.8 from the brief: _How much effort is required to onboard a new AI Service?_ The litmus test is detailed in [§H.9](#h9-litmus-test-effort-to-add-ai-reading).
 >
-> **Scope update 2026-09-12:** AIHUB exposes only the two Writing grading
-> operations below. The question-generation entries and adapter examples later
-> in this historical design note are no longer part of the runtime catalog.
+> **Scope update 2026-10-26:** The public catalog has four operations:
+> `writing.task1.grade`, `writing.task2.grade`, `speaking.grading`, and
+> `speaking.grading-json` ([operation catalog](../../../../src/catalog/operation-catalog.ts)).
+> The two-row table below describes only the Writing grading slice;
+> question-generation entries and later adapter examples remain historical.
 
 <a id="h1-operation-catalog--code-có-kiểu"></a>
 <a id="h1-operation-catalog-typed-code"></a>

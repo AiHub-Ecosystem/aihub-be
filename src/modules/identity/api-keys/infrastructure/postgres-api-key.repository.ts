@@ -5,11 +5,16 @@ import type {
   OrganizationStatus,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 
+import { isRecord } from '@/common/is-record';
 import {
+  booleanValue,
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
+  nullableNonNegativeIntegerValue,
+  oneOf,
+  positiveIntegerValue,
+  stringArrayValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
@@ -40,58 +45,6 @@ export const API_KEY_LOOKUP_SQL = `
   LIMIT 1
 `;
 
-function stringArrayValue(
-  record: Record<string, unknown>,
-  key: string,
-): readonly string[] | undefined {
-  const value = record[key];
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value
-    : undefined;
-}
-
-function statusValue<T extends string>(
-  record: Record<string, unknown>,
-  key: string,
-  allowed: readonly T[],
-): T | undefined {
-  const value = record[key];
-  return typeof value === 'string'
-    ? allowed.find((candidate) => candidate === value)
-    : undefined;
-}
-
-function positiveIntegerValue(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const value = record[key];
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
-    ? value
-    : undefined;
-}
-
-function quotaValue(
-  record: Record<string, unknown>,
-  key: string,
-): number | null | undefined {
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0
-    ? value
-    : undefined;
-}
-
-function booleanValue(
-  record: Record<string, unknown>,
-  key: string,
-): boolean | undefined {
-  const value = record[key];
-  return typeof value === 'boolean' ? value : undefined;
-}
-
 /**
  * Last-used telemetry is best-effort, so it is written at most once per window.
  * The cutoff is the caller's own instant less this window, which is what the
@@ -111,12 +64,12 @@ export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
 
   const organizationId = stringValue(value, 'organizationId');
   const apiKeyId = stringValue(value, 'apiKeyId');
-  const organizationStatus = statusValue<OrganizationStatus>(
+  const organizationStatus = oneOf<OrganizationStatus>(
     value,
     'organizationStatus',
     ['active', 'suspended'],
   );
-  const status = statusValue<DurableApiKeyStatus>(value, 'status', [
+  const status = oneOf<DurableApiKeyStatus>(value, 'status', [
     'active',
     'revoked',
   ]);
@@ -126,7 +79,10 @@ export function apiKeyRecordFromRow(value: unknown): ApiKeyRecord | undefined {
   const expiresAt = dateValue(value, 'expiresAt');
   const rateLimitRpm = positiveIntegerValue(value, 'rateLimitRpm');
   const maxConcurrent = positiveIntegerValue(value, 'maxConcurrent');
-  const monthlyRequestQuota = quotaValue(value, 'monthlyRequestQuota');
+  const monthlyRequestQuota = nullableNonNegativeIntegerValue(
+    value,
+    'monthlyRequestQuota',
+  );
   const hardStopOnQuota = booleanValue(value, 'hardStopOnQuota');
 
   if (

@@ -5,6 +5,8 @@ import { registerAs } from '@nestjs/config';
 import { type TSchema, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
+import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
+
 type RuntimeMode = 'development' | 'test' | 'staging' | 'production';
 type RuntimeKind = 'string' | 'number' | 'boolean' | 'enum';
 
@@ -624,17 +626,9 @@ function validateCustomerWebUrl(
     }
     return;
   }
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    problems.push('CUSTOMER_WEB_BASE_URL');
-    return;
-  }
   if (
-    url.search ||
-    url.hash ||
-    (isProductionLike(config.NODE_ENV) && url.protocol !== 'https:')
+    parseCustomerWebBaseUrl(value, isProductionLike(config.NODE_ENV)) ===
+    undefined
   ) {
     problems.push('CUSTOMER_WEB_BASE_URL');
   }

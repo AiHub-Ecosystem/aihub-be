@@ -2,6 +2,8 @@ import {
   API_KEY_PREFIX,
   apiKeyDisplayPrefix,
   apiKeyPrefixForEnvironment,
+  apiKeyStatus,
+  entitlementOfScope,
   isApiKeyFormat,
   isGradingScope,
   isKeyEnvironment,
@@ -55,9 +57,42 @@ describe('API key material', () => {
     expect(rotatedKeyEnvironments([])).toEqual([]);
   });
 
+  it('derives rotatability status from durable status and expiry at the supplied time', () => {
+    const now = new Date('2026-10-26T12:00:00.000Z');
+
+    expect(apiKeyStatus({ status: 'active', expiresAt: null }, now)).toBe(
+      'active',
+    );
+    expect(apiKeyStatus({ status: 'active', expiresAt: now }, now)).toBe(
+      'expired',
+    );
+    expect(
+      apiKeyStatus(
+        {
+          status: 'revoked',
+          expiresAt: new Date('2026-11-01T00:00:00.000Z'),
+        },
+        now,
+      ),
+    ).toBe('revoked');
+  });
+
   it('names exactly the Writing and Speaking grading scopes', () => {
     expect(isGradingScope('writing.grade')).toBe(true);
     expect(isGradingScope('speaking.grade')).toBe(true);
     expect(isGradingScope('writing.read')).toBe(false);
+  });
+});
+
+describe('entitlementOfScope', () => {
+  it.each([
+    ['writing.grade', 'writing'],
+    ['speaking', 'speaking'],
+  ])('reads the leading segment of %s', (scope, entitlement) => {
+    expect(entitlementOfScope(scope)).toBe(entitlement);
+  });
+
+  it.each(['', '.grade'])('names no Entitlement for %p', (scope) => {
+    expect(entitlementOfScope(scope)).toBeUndefined();
   });
 });

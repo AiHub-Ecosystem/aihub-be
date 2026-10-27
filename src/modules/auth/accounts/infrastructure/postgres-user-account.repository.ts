@@ -7,8 +7,7 @@ import type {
   UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
-import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   LOCK_PASSWORD_IDENTITY_SQL,
   insertEmailDelivery,
@@ -37,7 +36,7 @@ export class PostgresUserAccountRepository
 {
   constructor(
     private readonly client: AuthRepositoryClient,
-    private readonly emailDeliveryRequests: EmailDeliveryRequestWriterPort = new PostgresEmailDeliveryRequestRepository(),
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async register(
@@ -68,7 +67,7 @@ export class PostgresUserAccountRepository
         // refuses the same reservation before its own token mutation.
         const recipientAllowed =
           input.emailDelivery === undefined ||
-          (await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+          (await this.emailOutbox.reserveAuthenticationEmailRecipient(
             new EmailDeliveryTransactionAdapter(transaction),
             { email: input.email, now: input.now },
           ));
@@ -129,7 +128,7 @@ export class PostgresUserAccountRepository
         if (recipientAllowed) {
           await insertEmailDelivery(
             transaction,
-            this.emailDeliveryRequests,
+            this.emailOutbox,
             input.emailDelivery,
           );
         }

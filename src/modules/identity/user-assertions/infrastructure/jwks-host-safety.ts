@@ -1,7 +1,8 @@
 import { Resolver } from 'node:dns/promises';
 import { type LookupFunction, isIP } from 'node:net';
 
-import { sourceUnavailable, unsafeUrl } from './jwks-source-errors';
+import { unsafeJwksUrl } from '@/modules/identity/shared/application/jwks-errors';
+import { sourceUnavailable } from './jwks-source-errors';
 
 const JWKS_DNS_TIMEOUT_MS = 1_000;
 
@@ -257,7 +258,7 @@ export async function assertSafeHost(
     throw sourceUnavailable(true);
   }
   if (addresses.some((address) => isUnsafeAddress(address.address))) {
-    throw unsafeUrl();
+    throw unsafeJwksUrl();
   }
   return addresses;
 }

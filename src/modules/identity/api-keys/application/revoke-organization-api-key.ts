@@ -1,6 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
-import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
 import type { ApiKeyCachePort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
@@ -9,7 +8,10 @@ import {
 } from '@/modules/identity/membership/application/organization-admission';
 import { forbidden } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
-import type { OrganizationApiKeyView } from './organization-api-key-view';
+import {
+  type OrganizationApiKeyView,
+  organizationApiKeyView,
+} from './organization-api-key-view';
 import type { OrganizationApiKeyPort } from './organization-api-key.port';
 
 export interface RevokeOrganizationApiKeyCommand {
@@ -80,17 +82,6 @@ export class RevokeOrganizationApiKey {
       .delete(result.keyHash, 'api_key_cache_invalidation_revoke')
       .catch(() => undefined);
 
-    const key = result.key;
-    return {
-      id: key.apiKeyId,
-      name: key.name,
-      keyPrefix: key.keyPrefix,
-      scopes: key.scopes,
-      allowedEnvironments: key.allowedEnvironments,
-      status: apiKeyStatus(key, now),
-      expiresAt: key.expiresAt,
-      lastUsedAt: key.lastUsedAt,
-      createdAt: key.createdAt,
-    };
+    return organizationApiKeyView(result.key, now);
   }
 }

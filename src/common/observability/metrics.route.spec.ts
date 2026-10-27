@@ -78,6 +78,7 @@ describe('metrics scrape endpoint', () => {
         'aihub_redis_unavailable_total',
         'aihub_otel_export_failures_total',
         'aihub_otel_dropped_spans_total',
+        'aihub_process_cpu_seconds_total',
         'aihub_process_resident_memory_bytes',
         'aihub_process_heap_used_bytes',
         'aihub_event_loop_lag_seconds',

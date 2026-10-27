@@ -1,4 +1,4 @@
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 
 export interface PasswordResetTarget {
   readonly email: string;
@@ -31,7 +31,7 @@ export interface IssuePasswordResetTokenInput {
   readonly tokenExpiresAt: Date;
   readonly now: Date;
   /** Written in the same transaction as the issue, or nowhere. */
-  readonly emailDelivery?: InsertEmailDeliveryRequestInput;
+  readonly emailDelivery?: QueueEmailDeliveryRequestInput;
 }
 
 /**

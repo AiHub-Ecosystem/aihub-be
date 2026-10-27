@@ -50,7 +50,7 @@ function isIntegerSeconds(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value);
 }
 
-function isUsableKeyForAlgorithm(
+function matchesAlgorithm(
   key: PublicJsonWebKey,
   algorithm: 'RS256' | 'ES256',
 ): boolean {
@@ -63,17 +63,7 @@ function isUsableKeyForAlgorithm(
     return false;
   }
 
-  if (key.use !== undefined && key.use !== 'sig') {
-    return false;
-  }
-
-  if (
-    key.key_ops !== undefined &&
-    (!Array.isArray(key.key_ops) || !key.key_ops.includes('verify'))
-  ) {
-    return false;
-  }
-
+  // `use` and `key_ops` are the domain's rule; selectKey asks it first.
   return true;
 }
 
@@ -87,7 +77,7 @@ function selectKey(
       return false;
     }
 
-    if (!isUsableKeyForAlgorithm(key, algorithm)) {
+    if (!matchesAlgorithm(key, algorithm)) {
       return false;
     }
 

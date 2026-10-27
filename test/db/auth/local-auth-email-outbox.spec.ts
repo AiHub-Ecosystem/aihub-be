@@ -9,6 +9,7 @@ import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   ForgotPasswordResponseSchema,
@@ -17,10 +18,11 @@ import {
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
 import {
-  EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryKind,
   type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailOutbox } from '@/modules/auth/email-delivery/application/email-outbox';
+import { EMAIL_OUTBOX } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   EMAIL_SENDER,
   type EmailProviderResponse,
@@ -186,14 +188,17 @@ beforeAll(async () => {
   const emailOutbox =
     createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
   outbox = new SwitchableEmailDeliveryRequests(emailOutbox);
-  const accounts = new PostgresUserAccountRepository(authClient, outbox);
+  cipher = createEmailPayloadCipher(emailOutbox);
+  const queue = new EmailOutbox(outbox, cipher, prefixedIdGenerator('edr_'), {
+    admit: async () => undefined,
+  });
+  const accounts = new PostgresUserAccountRepository(authClient, queue);
   const verification = new PostgresVerificationTokenRepository(
     authClient,
-    outbox,
+    queue,
   );
-  const resets = new PostgresPasswordResetTokenRepository(authClient, outbox);
+  const resets = new PostgresPasswordResetTokenRepository(authClient, queue);
   const refresh = new PostgresRefreshSessionRepository(authClient);
-  cipher = createEmailPayloadCipher(emailOutbox);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
@@ -206,8 +211,8 @@ beforeAll(async () => {
     .useValue(refresh)
     .overrideProvider(EMAIL_SENDER)
     .useValue(sender)
-    .overrideProvider(EMAIL_PAYLOAD_CIPHER)
-    .useValue(cipher)
+    .overrideProvider(EMAIL_OUTBOX)
+    .useValue(queue)
     .overrideProvider(AUTH_RATE_LIMITER)
     .useValue(new RateLimiterFake())
     .overrideProvider(PASSWORD_HASHER)

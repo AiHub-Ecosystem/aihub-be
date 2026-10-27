@@ -1,11 +1,10 @@
-import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
 } from '@/modules/speaking/application/speaking-audio-upload.port';
 import { SpeakingAudioUploadSweep } from '@/modules/speaking/application/speaking-audio-upload.sweep';
 import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';
-import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
+import { createCliSeaweedFsClient } from './seaweedfs-client';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -44,15 +43,9 @@ export async function runSpeakingAudioUploadSweepCommand(
   const repository = await openRepository(input);
   let storage = input.storage;
   if (storage === undefined) {
-    const secretProvider = createCliRuntimeSecretProvider();
     const bucket = process.env.SEAWEEDFS_AUDIO_ASSET_BUCKET;
     storage = new S3SpeakingAudioAssetStorage(
-      createSeaweedFsS3Client({
-        workload: 'operator',
-        endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
-        region: process.env.SEAWEEDFS_REGION,
-        credentials: secretProvider.getSnapshot().seaweedfs,
-      }),
+      createCliSeaweedFsClient(),
       process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
         ? bucket === undefined
           ? {}

@@ -621,13 +621,16 @@ tests:
         alertname: AIHUBPostgresConnectionsAboveBudget
         exp_alerts: []
 
-  # #237: alert only after sustained AIHUB traffic without service-specific
-  # Tempo span metrics; requests that stop or spans from another service stay quiet.
-  - interval: 1m
+  # #237: customer operations are matched to received spans from the same tier.
+  - interval: 30s
     input_series:
-      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod"}'
+      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod",operation="speaking.grading"}'
         values: "0+1x15"
-      - series: 'traces_spanmetrics_calls_total{service="other-service",span_name="GET /health"}'
+      - series: 'aihub_requests_total{job="aihub-sandbox-app",instance="sandbox",operation="speaking.grading"}'
+        values: "0+1x15"
+      - series: 'aihub_requests_total{job="aihub-sandbox-app",instance="sandbox",operation="unmatched"}'
+        values: "0+1x15"
+      - series: 'traces_spanmetrics_calls_total{service="aihub-be",deployment_environment_name="sandbox",span_name="POST /v1/grade"}'
         values: "0+1x15"
     alert_rule_test:
       - eval_time: 5m
@@ -642,55 +645,78 @@ tests:
               service: aihub
               job: aihub-production-app
             exp_annotations:
-              summary: "Tempo has not received AIHUB spans while requests continue"
-              description: "aihub-production-app has served requests while Tempo's service-specific span metric reports no received spans for five minutes. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
+              summary: "Tempo has not received AIHUB spans while customer operations continue"
+              description: "aihub-production-app has served customer-operation requests while its own Tempo span metric reports no new spans. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
 
+  # Monitoring probes alone are not customer traffic.
   - interval: 1m
     input_series:
-      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod"}'
+      - series: 'aihub_requests_total{job="aihub-production-app",operation="unmatched"}'
+        values: "0+1x15"
+      - series: 'aihub_requests_total{job="aihub-sandbox-app",operation="unmatched"}'
+        values: "0+1x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AIHUBTraceReceiverNotReceiving
+        exp_alerts: []
+
+  # Partial exporter failure is alerted even while other AIHUB spans arrive.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_otel_export_failures_total{job="aihub-production-app"}'
+        values: "0 1 1 1 1 1 1 1"
+      - series: 'aihub_otel_dropped_spans_total{job="aihub-production-app"}'
+        values: "0 4 4 4 4 4 4 4"
+      - series: 'traces_spanmetrics_calls_total{service="aihub-be",deployment_environment_name="production"}'
+        values: "0+1x7"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AIHUBTraceExportFailures
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AIHUBTraceExportFailures
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+            exp_annotations:
+              summary: "AIHUB trace exports are failing"
+              description: "aihub-production-app reported one or more failed OTLP trace batches in the last five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+      - eval_time: 2m
+        alertname: AIHUBTraceSpansDropped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+            exp_annotations:
+              summary: "AIHUB trace spans are being dropped"
+              description: "aihub-production-app dropped one or more spans in the last five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+
+  # Quiet when no customer operations are occurring.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_requests_total{job="aihub-production-app",operation="speaking.grading"}'
         values: "0x15"
-      - series: 'aihub_requests_total{job="aihub-sandbox-app",instance="sandbox"}'
-        values: "0+1x15"
-      - series: 'traces_spanmetrics_calls_total{service="aihub-be",span_name="POST /v1/grade"}'
-        values: "0+1x15"
     alert_rule_test:
       - eval_time: 12m
         alertname: AIHUBTraceReceiverNotReceiving
         exp_alerts: []
-
-  - interval: 15s
-    input_series:
-      - series: 'aihub_requests_total{job="aihub-production-app",instance="prod"}'
-        values: "0+1x48"
-      - series: 'traces_spanmetrics_calls_total{service="aihub-be",span_name="POST /v1/grade"}'
-        values: "0 1 1+0x46"
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: AIHUBTraceReceiverNotReceiving
-        exp_alerts: []
-      - eval_time: 6m
-        alertname: AIHUBTraceReceiverNotReceiving
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              owner: aihub-operations
-              service: aihub
-              job: aihub-production-app
-            exp_annotations:
-              summary: "Tempo has not received AIHUB spans while requests continue"
-              description: "aihub-production-app has served requests while Tempo's service-specific span metric reports no received spans for five minutes. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
-              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
 
   - interval: 1m
     input_series:
-      - series: 'traces_spanmetrics_calls_total{service="other-service",span_name="GET /health"}'
+      - series: 'traces_spanmetrics_calls_total{service="other-service",deployment_environment_name="production"}'
         values: "0+1x15"
     alert_rule_test:
       - eval_time: 12m
         alertname: AIHUBTraceReceiverNotReceiving
         exp_alerts: []
-
   - interval: 1m
     input_series:
       - series: 'aihub_critical_journey_requests_total{job="aihub-production-app",journey="graded_request",outcome="internal_error"}'
@@ -853,3 +879,28 @@ tests:
       - eval_time: 6m
         alertname: AIHUBAIWritingAvailabilityFastBurn
         exp_alerts: []
+
+  # #900: warn per process at 80% of the 1.5 CPU limit.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_process_cpu_seconds_total{job="aihub-production-app",instance="prod"}'
+        values: "0+78x10"
+      - series: 'aihub_process_cpu_seconds_total{job="aihub-sandbox-app",instance="sandbox"}'
+        values: "0+60x10"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AIHUBProcessCpuNearLimit
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: AIHUBProcessCpuNearLimit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              instance: prod
+            exp_annotations:
+              summary: "AIHUB process CPU use is near its 1.5 CPU limit"
+              description: "aihub-production-app instance prod used at least 1.2 CPU for five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#process-cpu

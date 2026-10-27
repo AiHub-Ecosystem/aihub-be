@@ -320,6 +320,7 @@ describe('UserAssertionVerifier', () => {
     ['an alg other than the token', { alg: 'ES256' }],
     ['a use other than sig', { use: 'enc' }],
     ['key_ops without verify', { key_ops: ['encrypt'] }],
+    ['a non-string key_ops entry', { key_ops: ['verify', 7] }],
   ])(
     'refuses a correctly signed assertion whose only key has %s',
     async (_name, override) => {

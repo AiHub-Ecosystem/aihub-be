@@ -1,7 +1,7 @@
-import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { type UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
 import { normalizeLogin } from '@/modules/auth/domain/local-auth';
+import { invalidCredentials } from '@/modules/auth/local-credentials/application/local-auth-errors';
 import {
   checkAuthRateLimits,
   enforceAuthRateLimits,
@@ -94,11 +94,7 @@ export async function rejectCredentials(
   email: string,
 ): Promise<never> {
   await consumeLoginFailureLimits(rateLimiter, ip, email);
-  throw new AppError({
-    code: 'AUTH_CREDENTIALS_INVALID',
-    message: 'Email or password is invalid',
-    retryable: false,
-  });
+  throw invalidCredentials();
 }
 
 /**

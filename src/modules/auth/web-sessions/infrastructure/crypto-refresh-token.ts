@@ -5,8 +5,8 @@ import type {
   IssuedRefreshToken,
   RefreshTokenIssuerPort,
 } from '@/modules/auth/web-sessions/application/refresh-token.port';
+import { SESSION_LIFETIME_MS } from '@/modules/auth/web-sessions/application/web-session-policy';
 
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Same-millisecond order, limited to this process. */
 const nextRefreshTokenFamilyId = monotonicFactory();
 
@@ -16,7 +16,7 @@ const nextRefreshTokenFamilyId = monotonicFactory();
 // (verification, password-reset, Organization invitation) have no such
 // grouping and come from `opaqueTokenIssuer` directly.
 export class CryptoRefreshToken implements RefreshTokenIssuerPort {
-  private readonly tokens = opaqueTokenIssuer('rft_', TOKEN_TTL_MS);
+  private readonly tokens = opaqueTokenIssuer('rft_', SESSION_LIFETIME_MS);
 
   issue(
     now: Date,

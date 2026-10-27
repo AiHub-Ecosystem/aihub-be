@@ -75,6 +75,25 @@ describe('PostgresDispatchAttemptRepository', () => {
     expect(query).toHaveBeenCalledWith(expect.any(String), [...OPERATION_IDS]);
   });
 
+  it('decodes a count with the shared rule: a decimal string passes, a loose number string does not', async () => {
+    const accepted = new PostgresDispatchAttemptRepository(
+      fakePrisma([{ operation: 'other', unresolved_count: '4' }]).client,
+    );
+    await expect(accepted.getUnresolvedByOperation()).resolves.toContainEqual({
+      operation: 'other',
+      count: 4,
+    });
+
+    for (const unresolved_count of ['1e3', ' 5 ', '', '-1', '007']) {
+      const rejected = new PostgresDispatchAttemptRepository(
+        fakePrisma([{ operation: 'other', unresolved_count }]).client,
+      );
+      await expect(rejected.getUnresolvedByOperation()).rejects.toThrow(
+        'dispatch attempt metric row is invalid',
+      );
+    }
+  });
+
   it('returns zero counts for every operation when no attempt is unresolved', async () => {
     const repository = new PostgresDispatchAttemptRepository(
       fakePrisma().client,

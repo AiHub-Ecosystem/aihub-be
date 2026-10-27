@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
+import { PUBLIC_API_CONTRACT_VERSION } from '@/openapi/public-api-contract-version';
 import {
   buildPostmanCollection,
   preservePostmanIds,
@@ -47,21 +48,12 @@ function committedOpenApiDocument(): unknown {
   return JSON.parse(readFileSync(OPENAPI_PATH, 'utf8'));
 }
 
-function packageVersion(): string {
-  const packageJson = JSON.parse(
-    readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
-  ) as {
-    version: string;
-  };
-  return packageJson.version;
-}
-
 describe('committed aihub.postman_collection.json', () => {
   it('matches generated OpenAPI content and preserves existing Postman IDs', async () => {
     const committed = committedCollection();
     const generated = await buildPostmanCollection(
       committedOpenApiDocument(),
-      packageVersion(),
+      PUBLIC_API_CONTRACT_VERSION,
     );
     const fresh = preservePostmanIds(generated, committed);
 
@@ -78,7 +70,7 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = JSON.stringify(
       await buildPostmanCollection(
         committedOpenApiDocument(),
-        packageVersion(),
+        PUBLIC_API_CONTRACT_VERSION,
       ),
     );
 
@@ -138,7 +130,7 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = JSON.stringify(
       await buildPostmanCollection(
         committedOpenApiDocument(),
-        packageVersion(),
+        PUBLIC_API_CONTRACT_VERSION,
       ),
     );
 

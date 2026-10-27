@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isRecord } from '@/common/is-record';
 
 import { canonicalJson } from '@/common/serialization/canonical-json';
 import type {
@@ -27,10 +28,6 @@ interface CursorPayload {
   readonly occurredAt: string;
   readonly id: string;
   readonly f: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

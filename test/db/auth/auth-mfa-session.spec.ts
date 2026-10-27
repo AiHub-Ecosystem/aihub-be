@@ -3,16 +3,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import type {
-  EmailDeliveryTransaction,
-  InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
+import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import type { MfaSessionProof } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import { PostgresAuthMfaRepository } from '@/modules/auth/mfa/infrastructure/postgres-auth-mfa.repository';
 import { PostgresRefreshSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository';
 import { PostgresWebSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-web-session.repository';
+import { createDatabaseTestEmailOutbox } from '../shared/email-outbox';
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,
@@ -30,7 +30,9 @@ const PASSWORD_HASH = ARGON2ID_DUMMY_HASH;
 
 class FailingEmailRequests extends PostgresEmailDeliveryRequestRepository {
   override async insert(
-    _transaction: EmailDeliveryTransaction,
+    _transaction: Parameters<
+      PostgresEmailDeliveryRequestRepository['insert']
+    >[0],
     _input: InsertEmailDeliveryRequestInput,
   ): Promise<void> {
     throw new Error('email delivery request store is unavailable');
@@ -48,7 +50,11 @@ beforeAll(() => {
   client = createPostgresAuthClient(testDatabaseUrl());
   refreshSessions = new PostgresRefreshSessionRepository(client);
   webSessions = new PostgresWebSessionRepository(client);
-  mfa = new PostgresAuthMfaRepository(client);
+  const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
+  mfa = new PostgresAuthMfaRepository(
+    client,
+    createDatabaseTestEmailOutbox(secrets),
+  );
 });
 
 afterAll(async () => {
@@ -128,11 +134,10 @@ async function createWebSession(
 
 function delivery(
   kind: 'mfa_enabled_notification' | 'mfa_removed_notification',
-): InsertEmailDeliveryRequestInput {
+): QueueEmailDeliveryRequestInput {
   return {
-    id: `edr_${ulid()}`,
     kind,
-    payloadCiphertext: 'sealed-email-only',
+    payload: { email: EMAIL },
     createdAt: NOW,
   };
 }
@@ -224,9 +229,10 @@ describe('MFA session persistence on PostgreSQL', () => {
     const factorId = await seedEnabledFactor(userId, codeHash);
     const notice = delivery('mfa_removed_notification');
 
+    const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
     const failingRepository = new PostgresAuthMfaRepository(
       client,
-      new FailingEmailRequests(),
+      createDatabaseTestEmailOutbox(secrets, new FailingEmailRequests()),
     );
     await expect(
       failingRepository.removeFactor({
@@ -284,8 +290,8 @@ describe('MFA session persistence on PostgreSQL', () => {
       sessions.rows.every(({ revoked_at }) => revoked_at instanceof Date),
     ).toBe(true);
     const notices = await pool.query<{ kind: string }>(
-      'SELECT kind FROM email_delivery_requests WHERE id = $1',
-      [notice.id],
+      'SELECT kind FROM email_delivery_requests WHERE kind = $1 AND created_at = $2',
+      [notice.kind, notice.createdAt],
     );
     expect(notices.rows).toEqual([{ kind: 'mfa_removed_notification' }]);
   });

@@ -1,4 +1,5 @@
 import type { EmailDeliveryKind } from './email-delivery-request.port';
+import { EMAIL_KIND_POLICIES } from './email-kind-handler.registry';
 import type { EmailDailySendBudgetLimits } from './email-send-daily-budget.port';
 
 export function emailDailySendBudgetLimits(
@@ -14,8 +15,5 @@ export function emailDailySendBudgetLimits(
 export function emailDailySendBudgetCategory(
   kind: EmailDeliveryKind,
 ): 'invitation' | 'priority' {
-  return kind === 'organization_invite_email' ||
-    kind === 'api_key_near_expiry_notification'
-    ? 'invitation'
-    : 'priority';
+  return EMAIL_KIND_POLICIES[kind].dailyBudgetBucket;
 }

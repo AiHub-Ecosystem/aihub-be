@@ -1,6 +1,8 @@
 import { isIP } from 'node:net';
 import type { FastifyRequest } from 'fastify';
 
+import { offersCredentialOutsideTransport } from './credential-transport';
+
 /**
  * The Customer Web BFF supplies the end user's address in its own header; the
  * client secret header and reader live in `@/common/http/client-secret-header`.
@@ -22,11 +24,5 @@ export function endUserIpFrom(request: FastifyRequest): string | undefined {
  * source depends on which transport happened to arrive.
  */
 export function hasAlternateWebSessionSource(request: FastifyRequest): boolean {
-  return (
-    request.headers.authorization !== undefined ||
-    (typeof request.query === 'object' &&
-      request.query !== null &&
-      Object.keys(request.query).length > 0) ||
-    Object.keys(request.cookies ?? {}).length > 0
-  );
+  return offersCredentialOutsideTransport(request);
 }

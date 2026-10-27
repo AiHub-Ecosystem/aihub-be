@@ -1,3 +1,4 @@
+import { invalidUserAccessToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -28,14 +29,6 @@ function requiredToken(): AppError {
   return new AppError({
     code: 'AUTH_USER_ACCESS_TOKEN_REQUIRED',
     message: 'User access token is required',
-    retryable: false,
-  });
-}
-
-function invalidToken(): AppError {
-  return new AppError({
-    code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
-    message: 'User access token is invalid',
     retryable: false,
   });
 }
@@ -94,7 +87,7 @@ export class UserAccessJwtGuard implements CanActivate {
     const header = request.headers.authorization;
     if (hasAlternateTokenSource(request)) {
       challenge(context);
-      throw invalidToken();
+      throw invalidUserAccessToken();
     }
     if (header === undefined) {
       challenge(context);
@@ -103,7 +96,7 @@ export class UserAccessJwtGuard implements CanActivate {
 
     if (typeof header !== 'string') {
       challenge(context);
-      throw invalidToken();
+      throw invalidUserAccessToken();
     }
 
     const parts = header.trim().split(/\s+/u);
@@ -115,7 +108,7 @@ export class UserAccessJwtGuard implements CanActivate {
       token.split('.').length !== 3
     ) {
       challenge(context);
-      throw invalidToken();
+      throw invalidUserAccessToken();
     }
 
     let verified: VerifiedUserAccessToken;
@@ -123,7 +116,7 @@ export class UserAccessJwtGuard implements CanActivate {
       verified = await this.verifier.verify(token);
     } catch {
       challenge(context);
-      throw invalidToken();
+      throw invalidUserAccessToken();
     }
 
     let status: LocalAccountStatus | undefined;
@@ -134,7 +127,7 @@ export class UserAccessJwtGuard implements CanActivate {
     }
     if (status !== 'active') {
       challenge(context);
-      throw invalidToken();
+      throw invalidUserAccessToken();
     }
 
     request.aihubUser = { userId: verified.userId };

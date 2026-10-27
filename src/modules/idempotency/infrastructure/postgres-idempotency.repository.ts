@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type {
   CompleteIdempotencyInput,
   CompletedIdempotencyReplay,
@@ -144,10 +145,6 @@ export const IDEMPOTENCY_RETENTION_CLEANUP_SQL = `
   WHERE expires_at <= now()
   RETURNING request_id
 `;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function repositoryError(message: string, cause?: unknown): AppError {
   return new AppError({

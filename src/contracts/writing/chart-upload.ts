@@ -1,5 +1,6 @@
 import { type Static, Type } from '@sinclair/typebox';
 import '@/contracts/date-time-format';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
 
 const MetaSchema = Type.Object(
   { request_id: Type.String() },
@@ -46,7 +47,10 @@ export const WritingChartAssetResponseSchema = Type.Object(
           Type.Literal('image/png'),
           Type.Literal('image/webp'),
         ]),
-        byte_size: Type.Integer({ minimum: 1, maximum: 10 * 1024 * 1024 }),
+        byte_size: Type.Integer({
+          minimum: 1,
+          maximum: WRITING_CHART_MAX_BYTES,
+        }),
         published_at: Type.String({ format: 'date-time' }),
         expires_at: Type.String({ format: 'date-time' }),
       },

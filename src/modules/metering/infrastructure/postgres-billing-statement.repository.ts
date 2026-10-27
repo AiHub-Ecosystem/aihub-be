@@ -1,3 +1,4 @@
+import { asDate } from '@/common/postgres/row-readers';
 import type {
   BillingAdjustmentRecord,
   BillingAdjustmentTarget,
@@ -9,6 +10,7 @@ import type {
   NewBillingAdjustment,
 } from '@/modules/metering/application/billing-statement';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { billableRequestSql } from './billable-request-sql';
 import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
@@ -34,21 +36,21 @@ export const BILLING_USAGE_SQL = `
   SELECT
     organization_id,
     operation,
-    COUNT(*) FILTER (WHERE outcome = 'success' AND billable_requests = 1
+    COUNT(*) FILTER (WHERE ${billableRequestSql()}
       AND environment = 'production' AND NOT internal
       AND billing_basis = 'response')::bigint AS billable_responses,
-    COUNT(*) FILTER (WHERE outcome = 'success' AND billable_requests = 1
+    COUNT(*) FILTER (WHERE ${billableRequestSql()}
       AND environment = 'production' AND NOT internal
       AND billing_basis = 'background_completion')::bigint AS billable_background,
-    COUNT(*) FILTER (WHERE outcome = 'success' AND billable_requests = 1
+    COUNT(*) FILTER (WHERE ${billableRequestSql()}
       AND environment = 'production' AND NOT internal
       AND metering_status = 'quota_unverified')::bigint AS quota_unverified,
     COUNT(*) FILTER (WHERE outcome = 'success'
       AND billable_requests = 0)::bigint AS excluded_replays,
     COUNT(*) FILTER (WHERE outcome <> 'success')::bigint AS excluded_failures,
-    COUNT(*) FILTER (WHERE outcome = 'success' AND billable_requests = 1
+    COUNT(*) FILTER (WHERE ${billableRequestSql()}
       AND environment = 'production' AND internal)::bigint AS excluded_internal,
-    COUNT(*) FILTER (WHERE outcome = 'success' AND billable_requests = 1
+    COUNT(*) FILTER (WHERE ${billableRequestSql()}
       AND environment <> 'production')::bigint AS excluded_non_production
   FROM scoped
   GROUP BY organization_id, operation
@@ -106,10 +108,11 @@ function text(value: unknown, field: string): string {
 }
 
 function date(value: unknown, field: string): Date {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+  const parsed = asDate(value);
+  if (parsed === undefined) {
     throw new Error(`billing field ${field} is invalid`);
   }
-  return value;
+  return parsed;
 }
 
 function target(value: unknown): BillingAdjustmentTarget {

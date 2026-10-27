@@ -1,3 +1,4 @@
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresVerificationTokenRepository } from './postgres-verification-token.repository';
 
@@ -32,7 +33,10 @@ const USER_ID = 'usr_01J00000000000000000000000';
 function repositoryOver(
   script: ScriptedPrisma,
 ): PostgresVerificationTokenRepository {
-  return new PostgresVerificationTokenRepository(script.client());
+  return new PostgresVerificationTokenRepository(
+    script.client(),
+    UNUSED_EMAIL_OUTBOX,
+  );
 }
 
 function allArgs(script: ScriptedPrisma): string {

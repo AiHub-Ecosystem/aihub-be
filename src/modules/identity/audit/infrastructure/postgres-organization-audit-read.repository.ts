@@ -13,11 +13,11 @@ import type {
   OrganizationAuditTargetType,
 } from '@/modules/identity/domain/organization-audit-event';
 
+import { isRecord } from '@/common/is-record';
 import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';

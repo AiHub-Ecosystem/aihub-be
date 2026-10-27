@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   Body,
   Controller,
@@ -13,7 +14,6 @@ import { Value } from '@sinclair/typebox/value';
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { AppError } from '@/common/errors/app-error';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   PublicJsonWebKeySetSchema,
@@ -31,6 +31,7 @@ import {
   SET_ORGANIZATION_IDENTITY_CONFIG,
   type SetOrganizationIdentityConfigPort,
 } from '@/modules/identity/organization-identity-configuration/application/set-organization-identity-config.port';
+import { invalidJwks } from '@/modules/identity/shared/application/jwks-errors';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
@@ -110,11 +111,7 @@ export class OrganizationIdentityConfigController {
       organizationId,
     );
     if (hasInvalidInlineJwks(body)) {
-      throw new AppError({
-        code: 'IDENTITY_JWKS_INVALID',
-        message: 'Public JWKS is invalid',
-        retryable: false,
-      });
+      throw invalidJwks();
     }
     const requested: SetOrganizationIdentityConfigRequest = parseRequestBody(
       SetOrganizationIdentityConfigRequestSchema,
@@ -141,10 +138,6 @@ export class OrganizationIdentityConfigController {
       meta: { request_id: requestId },
     };
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function hasInvalidInlineJwks(value: unknown): boolean {

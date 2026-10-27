@@ -1,6 +1,6 @@
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { isRecord } from '@/common/is-record';
 import { toOpenApiPath } from '@/openapi/openapi-path';
-import { isRecord } from './postman-collection-utils';
 import { BFF_CLIENT_SECRET_HEADER } from './postman-scenarios';
 
 const ORGANIZATION_ROSTER_PATH =

@@ -7,6 +7,7 @@ services:
     user: "65534:65534"
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=14d
       - --storage.tsdb.retention.size=512MB

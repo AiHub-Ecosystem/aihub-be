@@ -1,4 +1,8 @@
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+import {
+  SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
+  canReserveSandboxDispatch,
+} from '@/modules/gateway/application/sandbox-dispatch-budget-policy';
 import type {
   SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,
@@ -7,8 +11,6 @@ import type {
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
-
-export const SANDBOX_ENVIRONMENT_MONTHLY_LIMIT = 500;
 
 type PersistenceClient = PrismaClient & { close?: () => Promise<void> };
 type AllowanceReader = Pick<
@@ -89,8 +91,11 @@ export class PostgresSandboxDispatchBudget
       const environmentCount =
         await transaction.sandboxDispatchReservation.count({ where: reserved });
       if (
-        organizationCount >= monthlyLimit ||
-        environmentCount >= SANDBOX_ENVIRONMENT_MONTHLY_LIMIT
+        !canReserveSandboxDispatch({
+          organizationCount,
+          organizationLimit: monthlyLimit,
+          environmentCount,
+        })
       ) {
         return false;
       }

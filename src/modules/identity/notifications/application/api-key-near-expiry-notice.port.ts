@@ -24,7 +24,6 @@ export interface RecordDueApiKeyNearExpiryNoticesInput {
   readonly now: Date;
   readonly windowEnd: Date;
   readonly newEventId: IdMinter;
-  readonly newEmailDeliveryId: IdMinter;
 }
 
 export interface ApiKeyNearExpiryNoticeRecordPort {

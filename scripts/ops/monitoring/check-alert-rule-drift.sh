@@ -4,10 +4,12 @@
 # to main may never be loaded and nothing would say so. Two checks:
 #
 # - the host's rules file is byte-for-byte the repository's on main, which
-#   catches a copy that was missed, including a changed expression or
-#   annotation under an unchanged rule name;
+#   catches a copy that was missed;
 # - every alert in that file is loaded in Prometheus and nothing else is, which
-#   catches a copy that was never reloaded.
+#   catches a copy that was never reloaded;
+# - a recording-rule fingerprint from the loaded rules matches the current
+#   file, catching a missed reload when alert names stay the same but an
+#   expression, label, or annotation changed.
 #
 # It only reports. Copying and reloading stay a deliberate operator step
 # (docs/operations/aihub-observability.md, "Alert rule changes").
@@ -83,8 +85,9 @@ fi
 
 curl -fsS --max-time 10 -o "$work/rules.json" "$PROMETHEUS_URL/api/v1/rules" 2>/dev/null ||
   fail prometheus_unreachable
-# `tr` drops the carriage return a Windows Python prints, so `comm` compares
-# names; pipefail keeps Python's own failure.
+# The API exposes parsed definitions but not their source file. This fingerprint
+# rule is loaded with the alert rules and hashes the complete source file with
+# its own value zeroed.
 python3 - "$work/rules.json" <<'PY' | tr -d '\r' >"$work/loaded.names" || fail prometheus_answer_unreadable
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as answer:
@@ -98,5 +101,37 @@ loaded_not_in_file="$(only_in "$work/loaded.names" "$work/host.names")"
 if [[ "$not_loaded" != none || "$loaded_not_in_file" != none ]]; then
   fail "not_loaded not_loaded=$not_loaded loaded_not_in_file=$loaded_not_in_file"
 fi
+
+fingerprint_result="$(
+python3 - "$work/rules.json" "$work/repo.yml" <<'PY'
+import hashlib, json, re, sys
+try:
+    source = open(sys.argv[2], "rb").read()
+    marker = re.compile(rb'(?m)^([ \t]*rules_sha256: ")[0-9a-f]{64}(\")(\r?)$')
+    normalized, count = marker.subn(lambda match: match.group(1) + b"0" * 64 + match.group(2) + match.group(3), source)
+    if count != 1:
+        print("repo_fingerprint_missing")
+        raise SystemExit(0)
+    expected = hashlib.sha256(normalized).hexdigest()
+    with open(sys.argv[1], encoding="utf-8") as answer:
+        groups = json.load(answer)["data"]["groups"]
+    fingerprints = [rule for group in groups for rule in group["rules"] if rule.get("name") == "aihub:alert_rules_fingerprint" and rule.get("type") == "recording"]
+    if len(fingerprints) != 1:
+        print("loaded_fingerprint_missing")
+        raise SystemExit(0)
+    actual = fingerprints[0].get("labels", {}).get("rules_sha256")
+    if actual != expected:
+        print("loaded_definition_differs expected=" + expected + " loaded=" + (actual or "missing"))
+    else:
+        print("match")
+except Exception:
+    print("prometheus_answer_unreadable")
+PY
+)"
+case "$fingerprint_result" in
+  match) ;;
+  prometheus_answer_unreadable) fail prometheus_answer_unreadable ;;
+  *) fail "$fingerprint_result" ;;
+esac
 
 record_result success

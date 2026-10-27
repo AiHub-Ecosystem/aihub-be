@@ -7,10 +7,12 @@ import type { Pool } from 'pg';
 
 import { AppModule } from '@/app.module';
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
-import { EMAIL_PAYLOAD_CIPHER } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailOutbox } from '@/modules/auth/email-delivery/application/email-outbox';
+import { EMAIL_OUTBOX } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   EMAIL_SENDER,
   type EmailProviderResponse,
@@ -71,20 +73,28 @@ beforeAll(async () => {
 
   hasher = new Argon2PasswordHasher();
   authClient = createPostgresAuthClient(testDatabaseUrl());
-  const emailOutbox =
+  const emailOutboxSecrets =
     createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
-  const emailRequests = new PostgresEmailDeliveryRequestRepository(emailOutbox);
-  const accounts = new PostgresUserAccountRepository(authClient, emailRequests);
+  const emailRequests = new PostgresEmailDeliveryRequestRepository(
+    emailOutboxSecrets,
+  );
+  const cipher = createEmailPayloadCipher(emailOutboxSecrets);
+  const emailOutbox = new EmailOutbox(
+    emailRequests,
+    cipher,
+    prefixedIdGenerator('edr_'),
+    { admit: async () => undefined },
+  );
+  const accounts = new PostgresUserAccountRepository(authClient, emailOutbox);
   const verification = new PostgresVerificationTokenRepository(
     authClient,
-    emailRequests,
+    emailOutbox,
   );
   const resets = new PostgresPasswordResetTokenRepository(
     authClient,
-    emailRequests,
+    emailOutbox,
   );
   const refresh = new PostgresRefreshSessionRepository(authClient);
-  const cipher = createEmailPayloadCipher(emailOutbox);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
@@ -97,8 +107,8 @@ beforeAll(async () => {
     .useValue(refresh)
     .overrideProvider(EMAIL_SENDER)
     .useValue(new DiscardingSender())
-    .overrideProvider(EMAIL_PAYLOAD_CIPHER)
-    .useValue(cipher)
+    .overrideProvider(EMAIL_OUTBOX)
+    .useValue(emailOutbox)
     .overrideProvider(AUTH_RATE_LIMITER)
     .useValue(new RateLimiterFake())
     // The production binding, left in place on purpose: the stored hash is

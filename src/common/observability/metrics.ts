@@ -1,5 +1,3 @@
-import { monitorEventLoopDelay } from 'node:perf_hooks';
-
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
@@ -14,6 +12,7 @@ import {
   registerEmailOutboxCancellationMetric,
 } from './email-outbox-cancellation-metric';
 import { registerEmailProviderOutageMetric } from './email-provider-outage-metric';
+import { registerProcessRuntimeMetrics } from './process-runtime-metrics';
 
 export type {
   EmailDeliveryKindLabel,
@@ -28,6 +27,7 @@ export const METRICS_ROUTE_PATH = '/metrics';
 
 export const registry = new Registry();
 const recordCriticalJourneyMetrics = registerCriticalJourneyMetrics(registry);
+registerProcessRuntimeMetrics(registry);
 
 let objectStorageQueueSource: (() => number) | undefined;
 
@@ -84,38 +84,6 @@ new Gauge({
 export function setObjectStorageQueueSource(source: () => number): void {
   objectStorageQueueSource = source;
 }
-
-const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
-eventLoopDelay.enable();
-
-new Gauge({
-  name: 'aihub_process_resident_memory_bytes',
-  help: 'Resident memory used by this Node.js process, in bytes.',
-  registers: [registry],
-  collect() {
-    this.set(process.memoryUsage().rss);
-  },
-});
-
-new Gauge({
-  name: 'aihub_process_heap_used_bytes',
-  help: 'V8 heap currently used by this Node.js process, in bytes.',
-  registers: [registry],
-  collect() {
-    this.set(process.memoryUsage().heapUsed);
-  },
-});
-
-new Gauge({
-  name: 'aihub_event_loop_lag_seconds',
-  help: '99th percentile event-loop delay since the previous metrics scrape, in seconds.',
-  registers: [registry],
-  collect() {
-    const lagSeconds = eventLoopDelay.percentile(99) / 1_000_000_000;
-    this.set(Number.isFinite(lagSeconds) ? lagSeconds : 0);
-    eventLoopDelay.reset();
-  },
-});
 
 const requestsTotal = new Counter({
   name: 'aihub_requests_total',
@@ -422,29 +390,15 @@ export function recordDownstreamRetryEvent(
   downstreamRetryEventsTotal.inc({ operation, reason });
 }
 
-const EMAIL_DELIVERY_KIND_LABELS: readonly EmailDeliveryKindLabel[] = [
-  'verification_email',
-  'password_reset_email',
-  'organization_invite_email',
-  'mfa_enabled_notification',
-  'mfa_removed_notification',
-  'api_key_near_expiry_notification',
+let emailOutboxBacklogKindLabels: readonly EmailDeliveryKindLabel[] = [
+  'unknown',
 ];
 
 // A series that first appears at 1 has no earlier sample, so Prometheus'
 // `increase()` reads the first failure of a kind after a restart as 0 and the
 // terminal-failure alert would stay silent. Exposing every kind at 0 avoids that.
-for (const kind of EMAIL_DELIVERY_KIND_LABELS) {
-  emailDeliveryFailedTotal.inc({ kind }, 0);
-}
-
-const EMAIL_OUTBOX_BACKLOG_KIND_LABELS: readonly (
-  | EmailDeliveryKindLabel
-  | 'unknown'
-)[] = [...EMAIL_DELIVERY_KIND_LABELS, 'unknown'];
-
 export interface EmailOutboxBacklogSample {
-  readonly kind: EmailDeliveryKindLabel | 'unknown';
+  readonly kind: EmailDeliveryKindLabel;
   readonly queued: number;
   readonly oldestAgeSeconds: number;
 }
@@ -470,7 +424,7 @@ function readEmailOutboxBacklog(): Promise<void> {
   pendingBacklogRead ??= (async () => {
     try {
       const samples = await source();
-      for (const kind of EMAIL_OUTBOX_BACKLOG_KIND_LABELS) {
+      for (const kind of emailOutboxBacklogKindLabels) {
         const sample = samples.find((entry) => entry.kind === kind);
         emailOutboxQueued.set({ kind }, sample?.queued ?? 0);
         emailOutboxOldestAge.set({ kind }, sample?.oldestAgeSeconds ?? 0);
@@ -517,12 +471,24 @@ export function setEmailOutboxBacklogSource(
 
 export const setEmailOutboxCancellationSource =
   registerEmailOutboxCancellationMetric(registry);
-export const recordEmailOutboxBackpressureRefusal =
+const emailOutboxBackpressureMetric =
   registerEmailOutboxBackpressureMetric(registry);
+export const recordEmailOutboxBackpressureRefusal = (kind: string): void =>
+  emailOutboxBackpressureMetric.record(kind);
 export const setEmailDailySendBudgetSource =
   registerEmailDailySendBudgetMetric(registry);
 export const setEmailProviderOutageDurationSource =
   registerEmailProviderOutageMetric(registry);
+
+/** Registers the bounded labels supplied by the owning Auth module. */
+export function registerEmailDeliveryMetrics(
+  kinds: readonly EmailDeliveryKindLabel[],
+  backpressureKinds: readonly EmailDeliveryKindLabel[],
+): void {
+  emailOutboxBacklogKindLabels = [...kinds, 'unknown'];
+  for (const kind of kinds) emailDeliveryFailedTotal.inc({ kind }, 0);
+  emailOutboxBackpressureMetric.registerKinds(backpressureKinds);
+}
 
 export interface DispatchAttemptUnresolvedSample {
   readonly operation: OperationId | 'other';

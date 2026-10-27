@@ -1,7 +1,9 @@
 import type { RequestContext } from '@/common/request-context/request-context';
-import { apiKeyStatus } from '@/modules/identity/domain/api-key';
 
-import type { OrganizationApiKeyView } from './organization-api-key-view';
+import {
+  type OrganizationApiKeyView,
+  organizationApiKeyView,
+} from './organization-api-key-view';
 
 import { admitOrganizationApiKey } from '@/modules/identity/membership/application/organization-admission';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
@@ -53,16 +55,6 @@ export class ListOrganizationApiKeys {
 
     // The store settles which keys and in what order; this only projects the
     // published lifecycle onto each one.
-    return keys.map((key) => ({
-      id: key.apiKeyId,
-      name: key.name,
-      keyPrefix: key.keyPrefix,
-      scopes: key.scopes,
-      allowedEnvironments: key.allowedEnvironments,
-      status: apiKeyStatus(key, now),
-      expiresAt: key.expiresAt,
-      lastUsedAt: key.lastUsedAt,
-      createdAt: key.createdAt,
-    }));
+    return keys.map((key) => organizationApiKeyView(key, now));
   }
 }

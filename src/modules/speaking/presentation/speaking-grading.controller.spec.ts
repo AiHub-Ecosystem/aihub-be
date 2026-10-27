@@ -37,10 +37,8 @@ import {
   SPEAKING_UPLOADS_IN_FLIGHT_MAX,
   SPEAKING_UPLOAD_CEILING,
 } from '@/modules/speaking/application/speaking-upload-ceiling';
-import {
-  SPEAKING_AUDIO_MAX_BYTES,
-  registerSpeakingMultipartParser,
-} from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 import { registerSpeakingGradingHeaders } from './speaking-grading-headers.hook';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');

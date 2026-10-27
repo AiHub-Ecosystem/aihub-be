@@ -1,6 +1,6 @@
 # ADR-0083: Opaque transaction handle for Email Delivery writes
 
-- Status: Accepted
+- Status: Accepted; the transaction-handle lifetime rule was amended by [ADR-0088](0088-prisma-for-control-plane-persistence.md) to cover the Auth transaction runner
 - Date: 2026-10-08
 - Related issue: [#335](https://github.com/AiHub-Ecosystem/aihub-be/issues/335)
 - Amends: [ADR-0074](0074-transactional-email-outbox.md) (transaction-handle boundary)

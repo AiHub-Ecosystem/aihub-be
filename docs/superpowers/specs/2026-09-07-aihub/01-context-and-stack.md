@@ -4,6 +4,10 @@
 
 ## 0. Settled Constraints
 
+> **Historical constraint:** The exclusion of Vault was superseded by accepted
+> [ADR-0013](../../../adr/0013-vault-runtime-secret-management.md), which
+> adopted Vault for runtime secrets.
+
 Every decision across this specification suite derives from the following 8 constraints. If a constraint changes, all decisions linked to it must be revisited.
 
 | #   | Constraint                                                              | Primary Impact                                                                                |
@@ -64,6 +68,11 @@ Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches dire
 ---
 
 ## B. Recommended Tech Stack Matrix
+
+> **Historical proposal:** The `.env` and Cloudflare R2 entries below were
+> replaced by Vault for runtime secrets ([ADR-0013](../../../adr/0013-vault-runtime-secret-management.md))
+> and SeaweedFS for object storage ([ADR-0065](../../../adr/0065-aihub-owns-audio-asset-catalog-and-playback-urls.md),
+> [ADR-0068](../../../adr/0068-avatar-is-a-user-account-owned-asset.md)).
 
 | Layer            | Recommended                                                    | Alternatives Considered       | Rationale                                                                                                                                         |
 | ---------------- | -------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |

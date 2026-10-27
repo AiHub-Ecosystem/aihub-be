@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import { type UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
+import { invalidVerificationToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
 import { type LocalAuthServiceClock } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
   type AuthenticatedCredentials,
@@ -61,14 +62,6 @@ const EXCHANGE_TOKEN_RATE_LIMIT = {
   readonly limit: number;
   readonly windowMs: number;
 };
-
-function invalidVerificationToken(): AppError {
-  return new AppError({
-    code: 'AUTH_VERIFICATION_TOKEN_INVALID',
-    message: 'Verification token is invalid',
-    retryable: false,
-  });
-}
 
 /**
  * One code for every session that cannot be exchanged: expired, revoked,

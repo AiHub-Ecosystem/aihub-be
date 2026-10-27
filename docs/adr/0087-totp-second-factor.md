@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-10
-- Related: [#467](https://github.com/AiHub-Ecosystem/aihub-be/issues/467), [#461](https://github.com/AiHub-Ecosystem/aihub-be/issues/461), [#484](https://github.com/AiHub-Ecosystem/aihub-be/issues/484), [ADR-0074](0074-transactional-email-delivery-outbox.md), [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md)
+- Related: [#467](https://github.com/AiHub-Ecosystem/aihub-be/issues/467), [#461](https://github.com/AiHub-Ecosystem/aihub-be/issues/461), [#484](https://github.com/AiHub-Ecosystem/aihub-be/issues/484), [ADR-0074](0074-transactional-email-outbox.md), [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md)
 
 ## Decision
 

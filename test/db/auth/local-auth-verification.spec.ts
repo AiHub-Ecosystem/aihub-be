@@ -7,6 +7,7 @@ import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastru
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import { createPostgresAuthClient } from './postgres-auth.client';
@@ -123,9 +124,15 @@ async function beginLockHolderTransaction() {
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
-  accounts = new PostgresUserAccountRepository(client);
-  verificationTokens = new PostgresVerificationTokenRepository(client);
-  resets = new PostgresPasswordResetTokenRepository(client);
+  accounts = new PostgresUserAccountRepository(client, UNUSED_EMAIL_OUTBOX);
+  verificationTokens = new PostgresVerificationTokenRepository(
+    client,
+    UNUSED_EMAIL_OUTBOX,
+  );
+  resets = new PostgresPasswordResetTokenRepository(
+    client,
+    UNUSED_EMAIL_OUTBOX,
+  );
 });
 
 afterAll(async () => {
