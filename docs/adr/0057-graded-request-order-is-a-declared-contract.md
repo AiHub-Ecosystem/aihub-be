@@ -1,6 +1,6 @@
 # ADR-0057: The graded-request order is a declared contract verified against the real chain
 
-- Status: Accepted
+- Status: Accepted; the enforcement of the admission order inside the chain was amended by [#1312](https://github.com/AiHub-Ecosystem/aihub-be/issues/1312) (rate limit, retry budget, and quota are one Graded admission step; the order itself is unchanged)
 - Related issue: #174
 - Related: [ADR-0018](0018-monthly-quota-enforcement.md), [ADR-0026](0026-usage-completeness-report-boundary.md)
 
@@ -13,3 +13,9 @@ A single exported constant array of guard classes was rejected: any route could 
 ## Consequences
 
 This is a deliberate, narrow exception to the rule in `.claude/rules/testing.md` that tests should assert public state and boundary outputs rather than private call ordering. On a graded request the order is not a private detail: it decides whether a caller receives `RATE_LIMITED` or `QUOTA_EXCEEDED`, so it is observable behaviour and belongs under test. The carve-out is scoped to the graded-request chain only; every other test keeps the existing rule. The graded-request set is declared once, separately from the Operation Catalog, because "every public operation" and "every operation that runs the graded chain" are different sets that happen to coincide today. Quota-before-concurrency is not a new rule invented here; it is the ordering already recorded in ADR-0018, and this ADR only makes it executable and verified.
+
+### Amendment ([#1312](https://github.com/AiHub-Ecosystem/aihub-be/issues/1312))
+
+The order is unchanged: authenticate, resolve the End-User ID, apply rate limit, then the Organization retry budget, then quota, then take a concurrency slot. What changed is how the middle three steps are enforced. They were three guards that shared one Redis decision through a field on the request, so their order held only while the guards stayed in that array position. They are now one **Graded admission** step: an application use case applies the three checks in the declared order and returns one decision, and a single guard maps a refusal to its public error. The order inside Graded admission is therefore internal to that module and is verified by its own specs, including one against a real Redis. The order of the whole chain (`ApiKeyGuard`, `UserIdentityGuard`, Graded admission, concurrency permit) remains the declared contract and is still asserted against the real chain over HTTP; the carve-out in `.claude/rules/testing.md` is unchanged.
+
+A completed Writing replay passes the quota step only when the decision is a quota refusal, as ADR-0116 requires. An unverifiable quota or an unavailable Redis refuses with `503 REDIS_UNAVAILABLE` and does not consult replay.
