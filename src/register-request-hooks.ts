@@ -8,7 +8,6 @@ import { registerRequestTiming } from './common/http/request-timing.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
 import { registerSecurityHeaders } from './common/http/security-headers.hook';
 import { registerRequestCompletionLog } from './modules/metering/presentation/request-completion-log.hook';
-import { registerSpeakingGradingHeaders } from './modules/speaking/public';
 
 /**
  * Every Fastify hook the application runs around a request, in the order the
@@ -35,7 +34,6 @@ export function registerRequestHooks(
   registerRequestLifecycle(instance);
   registerSecurityHeaders(instance);
   registerRequestIdResponseHeader(instance);
-  registerSpeakingGradingHeaders(instance);
 
   // Registered last: tracing owns the span this line names, and the lifecycle
   // hook must already have let the `onResponse` chain through to reach it.

@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Header,
   HttpCode,
   Inject,
   Param,
@@ -103,7 +102,6 @@ export class SpeakingAudioUploadController {
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.create'].path)
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.create'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async requestUpload(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -124,7 +122,6 @@ export class SpeakingAudioUploadController {
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.refresh'].path)
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.refresh'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async refreshUpload(
     @Req() request: AuthenticatedRequest,
     @Param('assetId') assetId: string,
@@ -138,7 +135,6 @@ export class SpeakingAudioUploadController {
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.complete'].path)
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.complete'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async completeUpload(
     @Req() request: AuthenticatedRequest,
     @Param('assetId') assetId: string,

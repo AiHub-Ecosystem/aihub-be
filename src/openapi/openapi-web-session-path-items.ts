@@ -3,6 +3,7 @@ import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import { publishedLocalAuthRequestSchema } from './openapi-local-auth-path-items';
 import {
+  routeCacheControlHeadersOf,
   routeErrorResponsesOf,
   routeIdentityScopeOf,
   routePathOf,
@@ -56,11 +57,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
     '201': {
       description:
         'Web Session created. The opaque token travels in this body, never in a cookie: the Customer Web BFF stores it in its own HttpOnly cookie.',
-      headers: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
+      headers: routeCacheControlHeadersOf('auth.web_sessions.create'),
       content: {
         'application/json': { schema: CreateWebSessionResponseSchema },
       },
@@ -68,9 +65,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
     '202': {
       description:
         'Password accepted; submit the same email/password and a TOTP or unused recovery code in the next request. Customer Web keeps the password only in transient form memory, never local or session storage.',
-      headers: {
-        'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } },
-      },
+      headers: routeCacheControlHeadersOf('auth.web_sessions.create'),
       content: {
         'application/json': { schema: MfaRequiredResponseSchema },
       },
@@ -130,7 +125,12 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
           },
         },
         responses: {
-          '201': createResponses['201'],
+          '201': {
+            ...createResponses['201'],
+            headers: routeCacheControlHeadersOf(
+              'auth.web_sessions.verification',
+            ),
+          },
           ...routeErrorResponsesOf('auth.web_sessions.verification'),
           '400': errorResponse(
             'Malformed request, invalid verification token, or a registration password that is missing or does not match',
@@ -170,11 +170,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
           '200': {
             description:
               'User Access JWT issued. Same envelope as POST /v1/auth/login; no cookie is set for this route.',
-            headers: {
-              'Cache-Control': {
-                schema: { type: 'string', enum: ['no-store'] },
-              },
-            },
+            headers: routeCacheControlHeadersOf('auth.web_sessions.exchange'),
             content: {
               'application/json': {
                 schema: routeSchemaOf('auth.web_sessions.exchange', 'response'),
@@ -210,11 +206,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
           '204': {
             description:
               'Session revoked, or already revoked, unknown, or expired. One bodyless answer for every case, and no cookie is set for this route.',
-            headers: {
-              'Cache-Control': {
-                schema: { type: 'string', enum: ['no-store'] },
-              },
-            },
+            headers: routeCacheControlHeadersOf('auth.web_sessions.logout'),
           },
           ...routeErrorResponsesOf('auth.web_sessions.logout'),
           // The client secret, and nothing about the session: logout has no

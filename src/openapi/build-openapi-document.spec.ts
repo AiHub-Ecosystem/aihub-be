@@ -1,6 +1,8 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { OperationDef } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
 import { PUBLIC_ROUTES, isPublicRouteId } from '@/catalog/public-routes';
+import type { PublicRouteDef } from '@/catalog/public-routes';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 
@@ -136,6 +138,45 @@ function build(): OpenApiDocument {
 describe('buildOpenApiDocument', () => {
   it('declares OpenAPI 3.1', () => {
     expect(build().openapi).toBe('3.1.0');
+  });
+
+  it('derives success Cache-Control documentation from both catalogs', () => {
+    const document = build();
+
+    for (const route of Object.values(PUBLIC_ROUTES) as PublicRouteDef[]) {
+      const method = route.method.toLowerCase() as keyof OpenApiPathItem;
+      const operation = document.paths[toOpenApiPath(route.path)]?.[method];
+      const statuses = [
+        route.successStatus,
+        ...(route.alternateSuccessStatuses ?? []),
+      ];
+      const expected = route.cacheControl?.value
+        ? { type: 'string', enum: [route.cacheControl.value] }
+        : undefined;
+
+      for (const status of statuses) {
+        expect(
+          operation?.responses[String(status)]?.headers?.['Cache-Control']
+            ?.schema,
+        ).toEqual(expected);
+      }
+    }
+
+    for (const operationDef of Object.values(
+      OPERATION_CATALOG,
+    ) as OperationDef[]) {
+      const operation =
+        document.paths[toOpenApiPath(operationDef.path)]?.[
+          operationDef.method.toLowerCase() as keyof OpenApiPathItem
+        ];
+      const expected = operationDef.cacheControl?.value
+        ? { type: 'string', enum: [operationDef.cacheControl.value] }
+        : undefined;
+
+      expect(
+        operation?.responses['200']?.headers?.['Cache-Control']?.schema,
+      ).toEqual(expected);
+    }
   });
 
   it('publishes the Production and Sandbox servers', () => {

@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   Inject,
   Post,
@@ -141,7 +140,6 @@ export class LocalAuthController {
   @Get(PUBLIC_ROUTES['me.profile.read'].path)
   @UseGuards(UserAccessJwtGuard)
   @HttpCode(PUBLIC_ROUTES['me.profile.read'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async currentUser(
     @Req() request: FastifyRequest,
   ): Promise<ReadCurrentUserResponse> {
@@ -179,7 +177,6 @@ export class LocalAuthController {
 
   @Post(PUBLIC_ROUTES['auth.login'].path)
   @HttpCode(PUBLIC_ROUTES['auth.login'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async login(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -200,7 +197,6 @@ export class LocalAuthController {
   @Post(PUBLIC_ROUTES['auth.mfa.enrollment'].path)
   @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment'].successStatus)
   @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
-  @Header('Cache-Control', 'no-store')
   async beginMfaEnrollment(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -224,7 +220,6 @@ export class LocalAuthController {
   @Post(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].path)
   @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].successStatus)
   @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
-  @Header('Cache-Control', 'no-store')
   async confirmMfaEnrollment(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -248,7 +243,6 @@ export class LocalAuthController {
   @Delete(PUBLIC_ROUTES['auth.mfa.remove'].path)
   @HttpCode(PUBLIC_ROUTES['auth.mfa.remove'].successStatus)
   @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
-  @Header('Cache-Control', 'no-store')
   async removeMfaFactor(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -263,7 +257,6 @@ export class LocalAuthController {
 
   @Post(PUBLIC_ROUTES['auth.refresh'].path)
   @HttpCode(PUBLIC_ROUTES['auth.refresh'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async refresh(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -290,7 +283,6 @@ export class LocalAuthController {
 
   @Post(PUBLIC_ROUTES['auth.logout'].path)
   @HttpCode(PUBLIC_ROUTES['auth.logout'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async logout(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -308,7 +300,6 @@ export class LocalAuthController {
   // status. Verification Sign-in returns 200, a verify without a binding
   // returns 204, so the registry's primary success status would be a lie here.
   @Post(PUBLIC_ROUTES['auth.verify_email'].path)
-  @Header('Cache-Control', 'no-store')
   async verify(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -369,7 +360,6 @@ export class LocalAuthController {
 
   @Post(PUBLIC_ROUTES['auth.reset_password'].path)
   @HttpCode(PUBLIC_ROUTES['auth.reset_password'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async resetPassword(
     @Req() request: FastifyRequest,
     @Body() body: unknown,

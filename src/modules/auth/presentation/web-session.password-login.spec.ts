@@ -51,6 +51,7 @@ import { WEB_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const URL = '/v1/auth/web-sessions';
@@ -220,6 +221,7 @@ describe('web session HTTP boundary', () => {
     );
     const fastify = app.getHttpAdapter().getInstance();
     await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
+    registerSecurityHeaders(fastify);
     registerRequestCompletionLog(fastify);
     await app.init();
     await fastify.ready();

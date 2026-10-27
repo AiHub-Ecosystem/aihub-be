@@ -1,5 +1,6 @@
 import { type TSchema, Type } from '@sinclair/typebox';
 
+import type { CacheControlPolicy } from '@/catalog/openapi-operation-metadata';
 import type {
   IdempotencyMode,
   OperationDef,
@@ -39,6 +40,27 @@ export function routePathOf(routeId: PublicRouteId): string {
 
 export function routeSuccessKeyOf(routeId: PublicRouteId): string {
   return String(PUBLIC_ROUTES[routeId].successStatus);
+}
+
+function cacheControlHeadersOf(
+  policy: CacheControlPolicy | undefined,
+): Record<string, unknown> {
+  if (policy === undefined) return {};
+  return {
+    'Cache-Control': {
+      ...(policy.description === undefined
+        ? {}
+        : { description: policy.description }),
+      schema: { type: 'string', enum: [policy.value] },
+    },
+  };
+}
+
+export function routeCacheControlHeadersOf(
+  routeId: PublicRouteId,
+): Record<string, unknown> {
+  const route: PublicRouteDef = PUBLIC_ROUTES[routeId];
+  return cacheControlHeadersOf(route.cacheControl);
 }
 
 export function routeSecurityOf(
@@ -280,20 +302,24 @@ export function operationToPathItem(
     idempotencyKeyParameter(operation.idempotency),
   ].filter((parameter) => parameter !== undefined);
 
+  const successHeaders = {
+    ...cacheControlHeadersOf(operation.cacheControl),
+    ...(operation.idempotency !== 'none'
+      ? {
+          'Idempotent-Replay': {
+            description:
+              'Present with value true when the completed business result was replayed for this key.',
+            schema: { type: 'string', enum: ['true'] },
+          },
+        }
+      : {}),
+  };
   const responses: Record<string, unknown> = {
     '200': {
       description: 'Success',
-      ...(operation.idempotency !== 'none'
-        ? {
-            headers: {
-              'Idempotent-Replay': {
-                description:
-                  'Present with value true when the completed business result was replayed for this key.',
-                schema: { type: 'string', enum: ['true'] },
-              },
-            },
-          }
-        : {}),
+      ...(Object.keys(successHeaders).length === 0
+        ? {}
+        : { headers: successHeaders }),
       content: {
         'application/json': {
           schema: successEnvelopeSchema(
@@ -371,11 +397,10 @@ export function publicRouteToPathItem(
   ];
   const successResponse = (
     description: string,
-    responseHeaders?: Readonly<Record<string, unknown>>,
     includeReplayHeader = false,
   ): Record<string, unknown> => {
     const headers = {
-      ...responseHeaders,
+      ...routeCacheControlHeadersOf(routeId),
       ...(includeReplayHeader && metadata.replayHeaderDescription !== undefined
         ? routeReplayHeaderOf(routeId, metadata.replayHeaderDescription).headers
         : {}),
@@ -397,14 +422,12 @@ export function publicRouteToPathItem(
   const responses: Record<string, unknown> = {
     [routeSuccessKeyOf(routeId)]: successResponse(
       metadata.successDescription,
-      metadata.successHeaders,
       true,
     ),
   };
   for (const alternate of metadata.alternateSuccessResponses ?? []) {
     responses[String(alternate.status)] = successResponse(
       alternate.description,
-      alternate.headers,
     );
   }
   Object.assign(responses, routeErrorResponsesOf(routeId));

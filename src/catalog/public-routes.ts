@@ -95,7 +95,10 @@ import {
   WritingChartAssetResponseSchema,
   WritingChartUploadGrantResponseSchema,
 } from '@/contracts/writing/chart-upload';
-import type { PublicRouteOpenApiMetadata } from './openapi-operation-metadata';
+import type {
+  CacheControlPolicy,
+  PublicRouteOpenApiMetadata,
+} from './openapi-operation-metadata';
 import type { IdempotencyMode } from './operation-catalog';
 
 /**
@@ -145,6 +148,7 @@ export type ErrorStatuses =
 
 export interface PublicRouteDef {
   readonly openApi?: PublicRouteOpenApiMetadata;
+  readonly cacheControl?: CacheControlPolicy;
   readonly method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** Nest form, so a route declaration can bind it directly. */
   readonly path: string;
@@ -516,6 +520,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 500],
   },
   'organizations.apiKeys.create': {
+    cacheControl: { value: 'no-store' },
     openApi: {
       summary: 'Create an organization API key',
       parameters: [
@@ -529,11 +534,6 @@ export const PUBLIC_ROUTES = {
       ],
       successDescription:
         'API key created; the raw credential is returned in this response only and cannot be recovered afterwards. `status` is always `active`: a requested expiry must be in the future, so this response never carries `expired`.',
-      successHeaders: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/organizations/:organizationId/api-keys',
@@ -575,6 +575,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [401, 403, 500, 503],
   },
   'organizations.apiKeys.rotate': {
+    cacheControl: { value: 'no-store' },
     openApi: {
       summary: 'Rotate an organization API key',
       description:
@@ -597,11 +598,6 @@ export const PUBLIC_ROUTES = {
       ],
       successDescription:
         'API key rotated; the raw replacement is returned in this response only and cannot be recovered afterwards. `status` is always `active`.',
-      successHeaders: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/organizations/:organizationId/api-keys/:apiKeyId/rotate',
@@ -803,6 +799,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 409, 429, 500, 503],
   },
   'auth.login': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/login',
     callerAuth: 'none',
@@ -816,6 +813,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.mfa.enrollment': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/mfa/enrollment',
     callerAuth: 'bearer',
@@ -828,6 +826,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 409, 429, 500, 503],
   },
   'auth.mfa.enrollment.confirm': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/mfa/enrollment/confirm',
     callerAuth: 'bearer',
@@ -840,6 +839,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 429, 500],
   },
   'auth.mfa.remove': {
+    cacheControl: { value: 'no-store' },
     method: 'DELETE',
     path: '/v1/auth/mfa',
     callerAuth: 'bearer',
@@ -852,6 +852,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.verify_email': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/verify-email',
     callerAuth: 'none',
@@ -888,6 +889,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 429, 500, 503],
   },
   'auth.reset_password': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/reset-password',
     callerAuth: 'none',
@@ -900,6 +902,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 429, 500, 503],
   },
   'auth.refresh': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/refresh',
     callerAuth: 'refresh-cookie',
@@ -912,6 +915,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 429, 500],
   },
   'auth.logout': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/logout',
     callerAuth: 'refresh-cookie',
@@ -924,6 +928,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 500],
   },
   'me.profile.read': {
+    cacheControl: { value: 'no-store' },
     method: 'GET',
     path: '/v1/me',
     callerAuth: 'bearer',
@@ -936,6 +941,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [401, 500, 503],
   },
   'auth.web_sessions.create': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/web-sessions',
     callerAuth: 'bff-client-secret',
@@ -949,6 +955,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.web_sessions.verification': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/web-sessions/verification',
     callerAuth: 'bff-client-secret',
@@ -963,6 +970,7 @@ export const PUBLIC_ROUTES = {
   // The stateless exchange. Same envelope as login, no cookie, and AIHUB keeps
   // no record of the JWT it signs: only the sliding session expiry is durable.
   'auth.web_sessions.exchange': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/web-sessions/exchange',
     callerAuth: 'bff-client-secret',
@@ -979,6 +987,7 @@ export const PUBLIC_ROUTES = {
   // malformed token all answer the same bodyless 204. Only the presented session
   // is revoked, and there is no "log out all devices" route.
   'auth.web_sessions.logout': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/auth/web-sessions/logout',
     callerAuth: 'bff-client-secret',
@@ -1003,6 +1012,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: 'all-except-idempotency-conflict',
   },
   'sandbox.demo-key.validate': {
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/sandbox/demo/api-keys/validate',
     callerAuth: 'bff-api-key',
@@ -1015,17 +1025,13 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 429, 500, 503],
   },
   'me.avatar.uploads.create': {
+    cacheControl: { value: 'no-store' },
     openApi: {
       summary: 'Request an Avatar upload URL',
       description:
         'Mints a presigned `PUT` URL that writes one object for the signed-in AIHUB User Account, with the declared content type and `Cache-Control: public, max-age=3600` bound into the signature. `Content-Length` reports the declared size but is not signed because browser Fetch controls it; send the image as the request body and let the browser manage that header. The bytes go straight to storage, never through AIHUB. Nothing is recorded until completion verifies the stored object, including its actual size and type, within one hour of upload. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.',
       successDescription:
         'Upload URL minted. The URL is a write credential for one object and is returned only here.',
-      successHeaders: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/me/avatar/uploads',
@@ -1117,6 +1123,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [401, 409, 500, 503],
   },
   'speaking.questions': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
     openApi: {
       summary: 'List Speaking questions',
       includeCorrelationId: false,
@@ -1130,12 +1140,6 @@ export const PUBLIC_ROUTES = {
         },
       ],
       successDescription: 'Speaking questions and signed audio URLs',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'This response must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'GET',
     path: '/v1/ielts/speaking/questions',
@@ -1149,6 +1153,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 500],
   },
   'speaking.audioUploads.create': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and Audio metadata must not be cached.',
+    },
     openApi: {
       summary: 'Create a Speaking Audio upload intent',
       description: [
@@ -1157,12 +1165,6 @@ export const PUBLIC_ROUTES = {
       ].join('\n\n'),
       successDescription:
         'Returns the same server-generated key and signed headers for the upload intent.',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'Upload URLs and Audio metadata must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/speaking/audio/uploads',
@@ -1176,6 +1178,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 413, 429, 500, 503],
   },
   'speaking.audioUploads.refresh': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and Audio metadata must not be cached.',
+    },
     openApi: {
       summary: 'Refresh a Speaking Audio upload URL',
       description:
@@ -1192,12 +1198,6 @@ export const PUBLIC_ROUTES = {
       ],
       successDescription:
         'Returns the same server-generated key and signed headers for the upload intent.',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'Upload URLs and Audio metadata must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/speaking/audio/uploads/:assetId/refresh',
@@ -1211,6 +1211,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 404, 429, 500, 503],
   },
   'speaking.audioUploads.complete': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and Audio metadata must not be cached.',
+    },
     openApi: {
       summary: 'Complete a Speaking Audio upload',
       description: [
@@ -1228,23 +1232,11 @@ export const PUBLIC_ROUTES = {
         },
       ],
       successDescription: 'The verified Audio asset created by this request.',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'Upload URLs and Audio metadata must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
       alternateSuccessResponses: [
         {
           status: 200,
           description:
             'This intent was already completed; the same Audio asset is returned.',
-          headers: {
-            'Cache-Control': {
-              description: 'Upload URLs and Audio metadata must not be cached.',
-              schema: { type: 'string', enum: ['no-store'] },
-            },
-          },
         },
       ],
     },
@@ -1261,6 +1253,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
   },
   'writing.chartUploads.create': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and chart metadata must not be cached.',
+    },
     openApi: {
       summary: 'Create a Writing Task 1 chart upload intent',
       description: [
@@ -1269,12 +1265,6 @@ export const PUBLIC_ROUTES = {
       ].join('\n\n'),
       successDescription:
         'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'Upload URLs and chart metadata must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/ielts/writing/task1/chart-uploads',
@@ -1288,6 +1278,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 413, 429, 500, 503],
   },
   'writing.chartUploads.refresh': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and chart metadata must not be cached.',
+    },
     openApi: {
       summary: 'Refresh a Writing Task 1 chart upload URL',
       description:
@@ -1307,12 +1301,6 @@ export const PUBLIC_ROUTES = {
       ],
       successDescription:
         'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'Upload URLs and chart metadata must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     path: '/v1/ielts/writing/task1/chart-uploads/:assetId/refresh',
@@ -1326,6 +1314,10 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 403, 404, 429, 500, 503],
   },
   'writing.chartUploads.complete': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and chart metadata must not be cached.',
+    },
     openApi: {
       summary: 'Verify and publish a Writing Task 1 chart',
       description: [
@@ -1346,12 +1338,6 @@ export const PUBLIC_ROUTES = {
         },
       ],
       successDescription: 'The public image URL and its fixed expiration time.',
-      successHeaders: {
-        'Cache-Control': {
-          description: 'Upload URLs and chart metadata must not be cached.',
-          schema: { type: 'string', enum: ['no-store'] },
-        },
-      },
     },
     method: 'POST',
     timeoutMs: 10_000,

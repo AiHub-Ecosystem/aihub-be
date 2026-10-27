@@ -18,6 +18,7 @@ import {
 } from '@/modules/auth/domain/local-auth';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import {
+  routeCacheControlHeadersOf,
   routeErrorResponsesOf,
   routeIdentityScopeOf,
   routePathOf,
@@ -80,9 +81,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     '200': {
       description: 'Access token issued',
       headers: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
+        ...routeCacheControlHeadersOf('auth.login'),
         'Set-Cookie': {
           description: 'The host-only refresh cookie for the new session.',
           schema: { type: 'string' },
@@ -93,9 +92,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     '202': {
       description:
         'Password accepted; TOTP or an unused recovery code is required before a Refresh Session is created.',
-      headers: {
-        'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } },
-      },
+      headers: routeCacheControlHeadersOf('auth.login'),
       content: { 'application/json': { schema: MfaRequiredResponseSchema } },
     },
     ...routeErrorResponsesOf('auth.login'),
@@ -103,12 +100,20 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
   const verifyResponses = {
     '200': {
       ...loginResponses['200'],
+      headers: {
+        ...routeCacheControlHeadersOf('auth.verify_email'),
+        'Set-Cookie': {
+          description: 'The host-only refresh cookie for the new session.',
+          schema: { type: 'string' },
+        },
+      },
       description:
         'Verification Sign-in (ADR-0054): the request carried the Signup Browser Binding of the browser that requested this token, which had not signed in yet. Same session as a login.',
     },
     '204': {
       description:
         'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
+      headers: routeCacheControlHeadersOf('auth.verify_email'),
     },
     ...routeErrorResponsesOf('auth.verify_email'),
     '400': errorResponse(
@@ -137,9 +142,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     '204': {
       description: 'Password reset and refresh sessions revoked',
       headers: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
+        ...routeCacheControlHeadersOf('auth.reset_password'),
         'Set-Cookie': {
           description: 'An expired host-only refresh cookie.',
           schema: { type: 'string' },
@@ -152,9 +155,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     '200': {
       description: 'Access token issued and refresh cookie rotated',
       headers: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
+        ...routeCacheControlHeadersOf('auth.refresh'),
         'Set-Cookie': {
           description: 'The rotated host-only refresh cookie.',
           schema: { type: 'string' },
@@ -169,9 +170,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     '204': {
       description: 'Refresh session revoked and cookie cleared',
       headers: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
+        ...routeCacheControlHeadersOf('auth.logout'),
         'Set-Cookie': {
           description: 'An expired host-only refresh cookie.',
           schema: { type: 'string' },
@@ -184,9 +183,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     '200': {
       description: 'The authenticated AIHUB User Account profile',
       headers: {
-        'Cache-Control': {
-          schema: { type: 'string', enum: ['no-store'] },
-        },
+        ...routeCacheControlHeadersOf('me.profile.read'),
       },
       content: {
         'application/json': {
@@ -254,11 +251,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
           '200': {
             description:
               'Pending authenticator secret and otpauth URI; shown before confirmation only.',
-            headers: {
-              'Cache-Control': {
-                schema: { type: 'string', enum: ['no-store'] },
-              },
-            },
+            headers: routeCacheControlHeadersOf('auth.mfa.enrollment'),
             content: {
               'application/json': { schema: BeginMfaEnrollmentResponseSchema },
             },
@@ -288,11 +281,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
           '200': {
             description:
               'One-time recovery codes. Store them securely; AIHUB cannot show them again.',
-            headers: {
-              'Cache-Control': {
-                schema: { type: 'string', enum: ['no-store'] },
-              },
-            },
+            headers: routeCacheControlHeadersOf('auth.mfa.enrollment.confirm'),
             content: {
               'application/json': {
                 schema: ConfirmMfaEnrollmentResponseSchema,
@@ -323,11 +312,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
         responses: {
           '204': {
             description: 'Factor removed and durable sessions revoked.',
-            headers: {
-              'Cache-Control': {
-                schema: { type: 'string', enum: ['no-store'] },
-              },
-            },
+            headers: routeCacheControlHeadersOf('auth.mfa.remove'),
           },
           ...routeErrorResponsesOf('auth.mfa.remove'),
         },

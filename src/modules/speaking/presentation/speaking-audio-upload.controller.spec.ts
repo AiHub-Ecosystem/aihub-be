@@ -8,6 +8,7 @@ import { Value } from '@sinclair/typebox/value';
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import {
   SpeakingAudioAssetResponseSchema,
   SpeakingAudioUploadUrlResponseSchema,
@@ -309,7 +310,9 @@ describe('Speaking Audio upload HTTP flow', () => {
         genReqId: () => 'req_01J00000000000000000000000',
       }),
     );
-    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    const fastify = app.getHttpAdapter().getInstance();
+    registerRequestLifecycle(fastify);
+    registerSecurityHeaders(fastify);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });

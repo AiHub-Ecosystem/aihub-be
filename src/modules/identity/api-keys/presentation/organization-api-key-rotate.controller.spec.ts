@@ -3,6 +3,8 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
@@ -142,6 +144,7 @@ describe('Organization API key rotation HTTP flow', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => REQUEST_ID }),
     );
+    registerSecurityHeaders(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });

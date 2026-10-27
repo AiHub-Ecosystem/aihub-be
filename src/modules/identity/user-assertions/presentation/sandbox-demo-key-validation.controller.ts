@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Header,
   HttpCode,
   Inject,
   Post,
@@ -42,7 +41,6 @@ export class SandboxDemoKeyValidationController {
 
   @Post(PUBLIC_ROUTES['sandbox.demo-key.validate'].path)
   @HttpCode(PUBLIC_ROUTES['sandbox.demo-key.validate'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async validate(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,

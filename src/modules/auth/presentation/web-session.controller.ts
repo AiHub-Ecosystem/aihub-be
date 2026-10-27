@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Header,
   HttpCode,
   Inject,
   Post,
@@ -55,10 +54,9 @@ function createdWebSession(
 /**
  * The Customer Web BFF route group: server-to-server only, never a browser.
  *
- * Every route here answers `Cache-Control: no-store` — declared with
- * `@Header`, which Nest applies to the response it builds whatever status the
- * request ends with. None of them sets a cookie: the token travels in the JSON
- * body and the BFF stores it in its own HttpOnly cookie on the AIHUB host's
+ * Every route declares its `no-store` policy in the public route catalog.
+ * None sets a cookie: the token travels in the JSON body and the BFF stores it
+ * in its own HttpOnly cookie on the AIHUB host's
  * behalf, where no `Set-Cookie` for another host would reach.
  */
 @Controller()
@@ -71,7 +69,6 @@ export class WebSessionController {
 
   @Post(PUBLIC_ROUTES['auth.web_sessions.create'].path)
   @HttpCode(PUBLIC_ROUTES['auth.web_sessions.create'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async createWebSession(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -106,7 +103,6 @@ export class WebSessionController {
   // that only verified answers the bodyless 204 the browser-facing verify route
   // answers, so the registry's primary success status alone would be a lie.
   @Post(PUBLIC_ROUTES['auth.web_sessions.verification'].path)
-  @Header('Cache-Control', 'no-store')
   async createWebSessionFromVerification(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -137,7 +133,6 @@ export class WebSessionController {
 
   @Post(PUBLIC_ROUTES['auth.web_sessions.exchange'].path)
   @HttpCode(PUBLIC_ROUTES['auth.web_sessions.exchange'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async exchangeWebSession(
     @Req() request: FastifyRequest,
     @Body() body: unknown,
@@ -182,7 +177,6 @@ export class WebSessionController {
    */
   @Post(PUBLIC_ROUTES['auth.web_sessions.logout'].path)
   @HttpCode(PUBLIC_ROUTES['auth.web_sessions.logout'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async logoutWebSession(
     @Req() request: FastifyRequest,
     @Body() body: unknown,

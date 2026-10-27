@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   Param,
   Post,
@@ -67,7 +66,6 @@ export class AvatarController {
   @Post(PUBLIC_ROUTES['me.avatar.uploads.create'].path)
   @HttpCode(PUBLIC_ROUTES['me.avatar.uploads.create'].successStatus)
   // The upload URL is a write credential for one object.
-  @Header('Cache-Control', 'no-store')
   async requestUpload(
     @Req() request: FastifyRequest,
     @Body() body: unknown,

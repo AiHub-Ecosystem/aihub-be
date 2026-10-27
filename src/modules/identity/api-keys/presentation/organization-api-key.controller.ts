@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   Inject,
   Param,
@@ -92,7 +91,6 @@ export class OrganizationApiKeyController {
   // one act on one key, not a partial update of it.
   @Post(PUBLIC_ROUTES['organizations.apiKeys.rotate'].path)
   @HttpCode(PUBLIC_ROUTES['organizations.apiKeys.rotate'].successStatus)
-  @Header('Cache-Control', 'no-store')
   async rotate(
     @Req() request: FastifyRequest,
     @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
@@ -144,7 +142,6 @@ export class OrganizationApiKeyController {
   @HttpCode(PUBLIC_ROUTES['organizations.apiKeys.create'].successStatus)
   // The body carries a credential that is disclosed exactly once; no cache on
   // the way to the caller may keep a copy of it.
-  @Header('Cache-Control', 'no-store')
   async create(
     @Req() request: FastifyRequest,
     @Param('organizationId', new OrganizationIdPipe()) organizationId: string,

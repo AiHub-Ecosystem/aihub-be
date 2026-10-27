@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 
+import {
+  OPERATION_CATALOG,
+  type OperationDef,
+} from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 
 const BASELINE_CONTENT_SECURITY_POLICY =
@@ -8,6 +12,15 @@ const BASELINE_CONTENT_SECURITY_POLICY =
 const DEPRECATED_ROUTES = Object.values(PUBLIC_ROUTES).filter(
   (route) => (route as PublicRouteDef).sunset !== undefined,
 ) as PublicRouteDef[];
+
+const NO_STORE_ROUTES = new Set([
+  ...(Object.values(PUBLIC_ROUTES) as PublicRouteDef[])
+    .filter((route) => route.cacheControl?.value === 'no-store')
+    .map((route) => `${route.method} ${route.path}`),
+  ...(Object.values(OPERATION_CATALOG) as OperationDef[])
+    .filter((operation) => operation.cacheControl?.value === 'no-store')
+    .map((operation) => `${operation.method} ${operation.path}`),
+]);
 
 function matchDeprecatedRoute(
   method: string,
@@ -34,6 +47,11 @@ export function registerSecurityHeaders(instance: FastifyInstance): void {
     }
     if (!reply.hasHeader('x-frame-options')) {
       reply.header('X-Frame-Options', 'DENY');
+    }
+
+    const routeMethod = request.method === 'HEAD' ? 'GET' : request.method;
+    if (NO_STORE_ROUTES.has(`${routeMethod} ${request.routeOptions.url}`)) {
+      reply.header('Cache-Control', 'no-store');
     }
 
     const route = matchDeprecatedRoute(request.method, request.url) as

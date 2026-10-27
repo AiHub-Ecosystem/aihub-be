@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "servers": [
     {
@@ -1532,6 +1532,14 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2218,6 +2226,14 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2975,6 +2991,14 @@
         "responses": {
           "200": {
             "description": "Key is eligible for the requested live demo skill",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -8940,7 +8964,15 @@
             }
           },
           "204": {
-            "description": "Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds."
+            "description": "Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
           },
           "400": {
             "description": "Malformed request, invalid verification token, or (ADR-0123) a registration password that is missing for a token that needs it or does not match",

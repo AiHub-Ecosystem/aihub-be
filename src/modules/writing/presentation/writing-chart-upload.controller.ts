@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Header,
   HttpCode,
   Inject,
   Param,
@@ -97,7 +96,6 @@ export class WritingChartUploadController {
 
   @Post(PUBLIC_ROUTES['writing.chartUploads.create'].path)
   @HttpCode(PUBLIC_ROUTES['writing.chartUploads.create'].successStatus)
-  @Header('Cache-Control', 'no-store')
   @RequireOperation(OPERATION)
   async create(
     @Req() request: AuthenticatedRequest,
@@ -120,7 +118,6 @@ export class WritingChartUploadController {
 
   @Post(PUBLIC_ROUTES['writing.chartUploads.refresh'].path)
   @HttpCode(PUBLIC_ROUTES['writing.chartUploads.refresh'].successStatus)
-  @Header('Cache-Control', 'no-store')
   @RequireOperation(OPERATION)
   async refresh(
     @Req() request: AuthenticatedRequest,
@@ -134,7 +131,6 @@ export class WritingChartUploadController {
 
   @Post(PUBLIC_ROUTES['writing.chartUploads.complete'].path)
   @HttpCode(PUBLIC_ROUTES['writing.chartUploads.complete'].successStatus)
-  @Header('Cache-Control', 'no-store')
   @RequireOperation(OPERATION)
   async complete(
     @Req() request: AuthenticatedRequest,

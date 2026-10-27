@@ -1,7 +1,10 @@
 import type { TSchema } from '@sinclair/typebox';
 
 import type { ErrorCode } from '@/common/errors/error-code';
-import type { OpenApiOperationMetadata } from './openapi-operation-metadata';
+import type {
+  CacheControlPolicy,
+  OpenApiOperationMetadata,
+} from './openapi-operation-metadata';
 
 import {
   SpeakingGradeJsonRequestSchema,
@@ -37,6 +40,7 @@ export const TASK1_SAMPLE_IMAGE_URL =
 
 export interface OperationDef {
   readonly openApi: OpenApiOperationMetadata;
+  readonly cacheControl?: CacheControlPolicy;
   readonly method: 'POST';
   readonly path: string;
   readonly requiredScope: string;
@@ -99,6 +103,7 @@ export const OPERATION_CATALOG = {
   },
   'speaking.grading': {
     openApi: { summary: 'speaking.grading' },
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/ielts/speaking/grading',
     requiredScope: 'speaking.grade',
@@ -123,6 +128,7 @@ export const OPERATION_CATALOG = {
   },
   'speaking.grading-json': {
     openApi: { summary: 'speaking.grading-json' },
+    cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/ielts/speaking/grading-json',
     requiredScope: 'speaking.grade',

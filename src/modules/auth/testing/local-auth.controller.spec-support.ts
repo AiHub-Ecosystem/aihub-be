@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 
 import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
@@ -353,6 +354,7 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
   );
   const fastify = app.getHttpAdapter().getInstance();
   await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
+  registerSecurityHeaders(fastify);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 

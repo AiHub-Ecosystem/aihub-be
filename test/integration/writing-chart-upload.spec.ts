@@ -13,6 +13,7 @@ import { MockAgent } from 'undici';
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   WritingChartAssetResponseSchema,
@@ -376,9 +377,11 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
-    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    const fastify = app.getHttpAdapter().getInstance();
+    registerRequestLifecycle(fastify);
+    registerSecurityHeaders(fastify);
     await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    await fastify.ready();
   });
 
   afterAll(async () => {

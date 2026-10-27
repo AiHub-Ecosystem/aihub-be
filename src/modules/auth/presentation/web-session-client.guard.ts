@@ -15,7 +15,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyRequest } from 'fastify';
 
 function authenticateClient(
   context: ExecutionContext,
@@ -23,8 +23,6 @@ function authenticateClient(
   required: boolean,
 ): boolean {
   const http = context.switchToHttp();
-  // Nest's response decorators run after guards, so refusals set this here.
-  http.getResponse<FastifyReply>().header('Cache-Control', 'no-store');
   const request = http.getRequest<FastifyRequest>();
   const supplied =
     request.headers[WEB_SESSION_CLIENT_SECRET_HEADER.toLowerCase()] !==

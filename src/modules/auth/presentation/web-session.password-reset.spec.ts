@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import type { LightMyRequestResponse } from 'fastify';
 
 import { AppModule } from '@/app.module';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
@@ -213,6 +214,7 @@ describe('web session HTTP boundary', () => {
     );
     const fastify = app.getHttpAdapter().getInstance();
     await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
+    registerSecurityHeaders(fastify);
     registerRequestCompletionLog(fastify);
     await app.init();
     await fastify.ready();

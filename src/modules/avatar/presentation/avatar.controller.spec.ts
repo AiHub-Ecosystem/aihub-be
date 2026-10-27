@@ -8,6 +8,7 @@ import { Value } from '@sinclair/typebox/value';
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import {
   AvatarResponseSchema,
   AvatarUploadResponseSchema,
@@ -129,7 +130,9 @@ describe('Avatar upload HTTP flow', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => REQUEST_ID }),
     );
-    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    const fastify = app.getHttpAdapter().getInstance();
+    registerRequestLifecycle(fastify);
+    registerSecurityHeaders(fastify);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });

@@ -8,6 +8,7 @@ import { Value } from '@sinclair/typebox/value';
 import type { LightMyRequestResponse } from 'fastify';
 
 import { AppModule } from '@/app.module';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
@@ -205,6 +206,7 @@ describe('web session HTTP boundary', () => {
     );
     const fastify = app.getHttpAdapter().getInstance();
     await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
+    registerSecurityHeaders(fastify);
     registerRequestCompletionLog(fastify);
     await app.init();
     await fastify.ready();

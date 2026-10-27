@@ -39,7 +39,6 @@ import {
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
-import { registerSpeakingGradingHeaders } from './speaking-grading-headers.hook';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 const speakingResponseSchema = Type.Object({
@@ -256,7 +255,6 @@ describe('Speaking grading HTTP flow', () => {
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
     registerRequestLifecycle(app.getHttpAdapter().getInstance());
     registerSecurityHeaders(app.getHttpAdapter().getInstance());
-    registerSpeakingGradingHeaders(app.getHttpAdapter().getInstance());
     app
       .getHttpAdapter()
       .getInstance()

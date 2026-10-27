@@ -1,6 +1,21 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
+import {
+  OPERATION_CATALOG,
+  type OperationDef,
+} from '@/catalog/operation-catalog';
+import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { registerSecurityHeaders } from './security-headers.hook';
+
+const CATALOG_ROUTES = [
+  ...(Object.values(PUBLIC_ROUTES) as PublicRouteDef[]),
+  ...(Object.values(OPERATION_CATALOG) as OperationDef[]),
+];
+const ERROR_ROUTE_PATH = PUBLIC_ROUTES['sandbox.demo-key.validate'].path;
+
+function requestPath(path: string): string {
+  return path.replace(/:[^/]+/g, 'catalog-id');
+}
 
 describe('registerSecurityHeaders', () => {
   let app: FastifyInstance;
@@ -17,6 +32,16 @@ describe('registerSecurityHeaders', () => {
       reply.code(400);
       return { error: 'bad' };
     });
+    for (const route of CATALOG_ROUTES) {
+      app.route({
+        method: route.method,
+        url: route.path,
+        handler: async (_request, reply) => {
+          if (route.path === ERROR_ROUTE_PATH) reply.code(403);
+          return { ok: true };
+        },
+      });
+    }
     await app.ready();
   });
 
@@ -51,6 +76,32 @@ describe('registerSecurityHeaders', () => {
       "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
     );
     expect(response.headers['x-frame-options']).toBe('DENY');
+  });
+
+  it('applies Cache-Control from every route catalog entry', async () => {
+    for (const route of CATALOG_ROUTES) {
+      const response = await app.inject({
+        method: route.method,
+        url: requestPath(route.path),
+      });
+
+      expect(response.headers['cache-control']).toBe(route.cacheControl?.value);
+    }
+  });
+
+  it('keeps no-store on a catalogued error response and implicit HEAD route', async () => {
+    const error = await app.inject({
+      method: 'POST',
+      url: ERROR_ROUTE_PATH,
+    });
+    const head = await app.inject({
+      method: 'HEAD',
+      url: PUBLIC_ROUTES['speaking.questions'].path,
+    });
+
+    expect(error.statusCode).toBe(403);
+    expect(error.headers['cache-control']).toBe('no-store');
+    expect(head.headers['cache-control']).toBe('no-store');
   });
 
   it('lets a route-specific CSP override the global one without doubling', async () => {

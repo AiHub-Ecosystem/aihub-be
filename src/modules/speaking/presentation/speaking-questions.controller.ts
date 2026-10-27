@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Inject, Req } from '@nestjs/common';
+import { Controller, Get, Inject, Req } from '@nestjs/common';
 import type { Static } from '@sinclair/typebox';
 import type { FastifyRequest } from 'fastify';
 
@@ -45,7 +45,6 @@ export class SpeakingQuestionsController {
   ) {}
 
   @Get(PUBLIC_ROUTES['speaking.questions'].path)
-  @Header('Cache-Control', 'no-store')
   async list(
     @Req() request: FastifyRequest,
   ): Promise<SpeakingQuestionsResponse> {

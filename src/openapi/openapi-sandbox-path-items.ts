@@ -5,6 +5,7 @@ import type { ErrorCode } from '@/common/errors/error-code';
 import type { HttpStatus } from '@/common/errors/error-registry';
 import { MintSandboxAssertionResponseSchema } from '@/contracts/sandbox/assertion';
 import {
+  routeCacheControlHeadersOf,
   routeErrorResponsesOf,
   routeIdentityScopeOf,
   routeSchemaOf,
@@ -103,6 +104,7 @@ export function sandboxDemoKeyValidationPathItem(
       responses: {
         [routeSuccessKeyOf(id)]: {
           description: 'Key is eligible for the requested live demo skill',
+          headers: routeCacheControlHeadersOf(id),
           content: {
             'application/json': {
               schema: Type.Object(
