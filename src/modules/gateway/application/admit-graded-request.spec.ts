@@ -1,14 +1,18 @@
 import { AppError } from '@/common/errors/app-error';
 import {
   admitGradedRequest,
+  gradedAdmissionPolicy,
   gradedAdmissionRefusal,
-  retryBudgetKeyFor,
 } from './admit-graded-request';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
   GradedAdmissionRequest,
 } from './graded-admission.port';
+import {
+  QUOTA_ROLLOVER_SPREAD_MS,
+  quotaUnverifiableError,
+} from './quota-period';
 
 const now = () => new Date('2026-10-15T00:00:00.000Z');
 
@@ -70,6 +74,14 @@ describe('admitGradedRequest', () => {
     expect(calls[0]?.monthlyRequestQuota).toBeNull();
   });
 
+  it('hands a zero quota to the port as a zero, not as no quota', async () => {
+    const { port, calls } = portReturning({ stage: 'admitted' });
+
+    await admitGradedRequest(port, { ...input, monthlyRequestQuota: 0 });
+
+    expect(calls[0]?.monthlyRequestQuota).toBe(0);
+  });
+
   it('applies the retry budget to a Writing grade operation only', async () => {
     const { port, calls } = portReturning({ stage: 'admitted' });
 
@@ -89,30 +101,46 @@ describe('admitGradedRequest', () => {
   });
 });
 
-describe('retry budget eligibility', () => {
-  it('keys the budget only for a Writing grade operation with a key', () => {
-    expect(retryBudgetKeyFor('writing.task1.grade', 'k')).toBe('k');
-    expect(retryBudgetKeyFor('writing.task2.grade', 'k')).toBe('k');
-    expect(retryBudgetKeyFor('writing.task1.grade', undefined)).toBeUndefined();
-    expect(retryBudgetKeyFor('speaking.grading', 'k')).toBeUndefined();
-    expect(retryBudgetKeyFor('speaking.grading-json', 'k')).toBeUndefined();
+describe('gradedAdmissionPolicy', () => {
+  it('keys the retry budget only for a Writing grade operation with a key', () => {
+    const keyed = (operation: typeof input.operation | 'speaking.grading') =>
+      gradedAdmissionPolicy({ ...input, operation, idempotencyKey: 'k' });
+
+    expect(keyed('writing.task1.grade')).toMatchObject({
+      retryBudgetKey: 'k',
+      retryBudget: 'keyed_writing',
+    });
+    expect(keyed('speaking.grading')).toMatchObject({
+      retryBudgetKey: undefined,
+      retryBudget: 'none',
+    });
+    expect(
+      gradedAdmissionPolicy({
+        operation: 'writing.task1.grade',
+        environment: 'production',
+        monthlyRequestQuota: 100,
+      }),
+    ).toMatchObject({ retryBudgetKey: undefined, retryBudget: 'none' });
+  });
+
+  it('tracks a quota for a limited production key only', () => {
+    expect(gradedAdmissionPolicy(input)).toMatchObject({
+      quota: 100,
+      quotaTracked: true,
+    });
+    expect(
+      gradedAdmissionPolicy({ ...input, monthlyRequestQuota: 0 }),
+    ).toMatchObject({ quota: 0, quotaTracked: true });
+    expect(
+      gradedAdmissionPolicy({ ...input, monthlyRequestQuota: null }),
+    ).toMatchObject({ quota: null, quotaTracked: false });
+    expect(
+      gradedAdmissionPolicy({ ...input, environment: 'sandbox' }),
+    ).toMatchObject({ quota: null, quotaTracked: false });
   });
 });
 
 describe('gradedAdmissionRefusal', () => {
-  it('has no refusal for an admitted request', () => {
-    expect(
-      gradedAdmissionRefusal({ stage: 'admitted' }, 'org_1', now),
-    ).toBeUndefined();
-    expect(
-      gradedAdmissionRefusal(
-        { stage: 'admitted', quotaUnverified: true },
-        'org_1',
-        now,
-      ),
-    ).toBeUndefined();
-  });
-
   it('refuses a rate limit with the window reset as Retry-After', () => {
     const error = gradedAdmissionRefusal(
       { stage: 'rate_limit', retryAfterMs: 12_000 },
@@ -148,5 +176,32 @@ describe('gradedAdmissionRefusal', () => {
     expect(
       gradedAdmissionRefusal({ stage: 'quota', quota: 100 }, 'org_1', now),
     ).toMatchObject({ code: 'QUOTA_EXCEEDED', httpStatus: 429 });
+  });
+
+  it('points a December quota refusal at the first of the next year', () => {
+    const december = new Date('2026-12-15T00:00:00.000Z');
+    const untilJanuary =
+      Date.parse('2027-01-01T00:00:00.000Z') - december.getTime();
+
+    const error = gradedAdmissionRefusal(
+      { stage: 'quota', quota: 100 },
+      'org_1',
+      () => december,
+    );
+
+    expect(error.retryAfterMs).toBeGreaterThanOrEqual(untilJanuary);
+    expect(error.retryAfterMs).toBeLessThan(
+      untilJanuary + QUOTA_ROLLOVER_SPREAD_MS,
+    );
+  });
+});
+
+describe('quotaUnverifiableError', () => {
+  it('is a short retry, not a quota refusal with next month as its hint', () => {
+    expect(quotaUnverifiableError()).toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryable: true,
+      retryAfterMs: 1_000,
+    });
   });
 });

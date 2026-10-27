@@ -210,6 +210,29 @@ describe('graded admission script on a real Redis', () => {
     expect(reached).toMatchObject({ stage: 'quota', quota: 5 });
   });
 
+  it('refuses a zero quota with an empty counter', async () => {
+    const input = request({ monthlyRequestQuota: 0, hardStopOnQuota: true });
+    await redis.set(quotaKey(input.organizationId), '0');
+
+    await expect(admission.consume(input)).resolves.toMatchObject({
+      stage: 'quota',
+      quota: 0,
+    });
+  });
+
+  it('treats an invalid counter value as unavailable and leaves it unchanged', async () => {
+    const input = request({ monthlyRequestQuota: 5 });
+    await redis.set(quotaKey(input.organizationId), 'not-a-number');
+
+    await expect(admission.consume(input)).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+    });
+
+    await expect(redis.get(quotaKey(input.organizationId))).resolves.toBe(
+      'not-a-number',
+    );
+  });
+
   it('writes nothing when a hard-stop quota counter is missing and cannot be rebuilt', async () => {
     const input = request({ monthlyRequestQuota: 5, hardStopOnQuota: true });
 

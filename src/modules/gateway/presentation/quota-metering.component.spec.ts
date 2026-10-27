@@ -7,11 +7,11 @@ import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
 } from '@/modules/gateway/application/graded-admission.port';
-import { quotaUnverifiableError } from '@/modules/gateway/application/quota-admission';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
 } from '@/modules/gateway/application/quota-counter.port';
+import { quotaUnverifiableError } from '@/modules/gateway/application/quota-period';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import { MeteringService } from '@/modules/metering/application/metering.service';

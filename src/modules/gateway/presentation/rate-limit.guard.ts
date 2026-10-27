@@ -5,8 +5,8 @@ import {
   Injectable,
 } from '@nestjs/common';
 
-import { AppError } from '@/common/errors/app-error';
 import { recordRejected } from '@/common/observability/rejected-metric';
+import { rateLimitedError } from '@/modules/gateway/application/rate-limited-error';
 import {
   RATE_LIMITER,
   type RateLimiterPort,
@@ -46,14 +46,7 @@ export class RateLimitGuard implements CanActivate {
 
     if (!decision.allowed) {
       recordRejected('rate_limit');
-      throw new AppError({
-        code: 'RATE_LIMITED',
-        message: 'Rate limit exceeded',
-        retryable: true,
-        ...(decision.retryAfterMs === undefined
-          ? {}
-          : { retryAfterMs: decision.retryAfterMs }),
-      });
+      throw rateLimitedError(decision.retryAfterMs);
     }
 
     return true;

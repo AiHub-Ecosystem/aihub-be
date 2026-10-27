@@ -5,58 +5,73 @@ import {
   GradeTask2RequestSchema,
 } from '@/contracts/writing/grading';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
-import type {
-  AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '@/modules/identity/shared/presentation/authenticated-request';
-import { setCompletedReplay } from './completed-idempotency-replay';
+import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
+import type { CompletedReplayForRequest } from './completed-idempotency-replay';
+
+/** The Writing grading operations a completed replay can be confirmed for. */
+const WRITING_GRADE_SCHEMAS = {
+  'writing.task1.grade': GradeTask1RequestSchema,
+  'writing.task2.grade': GradeTask2RequestSchema,
+} as const;
+
+function isWritingGrade(
+  operation: OperationId,
+): operation is keyof typeof WRITING_GRADE_SCHEMAS {
+  return Object.hasOwn(WRITING_GRADE_SCHEMAS, operation);
+}
+
+export interface CompletedWritingReplayAttempt {
+  readonly organizationId: string;
+  readonly operation: OperationId;
+  readonly idempotencyKey: string | undefined;
+}
 
 /**
- * Whether this request repeats a Writing grading AIHUB already completed with
- * the same key and the same body. A confirmed replay costs no quota, so it may
- * pass an exhausted quota; the stored result is then handed to the executor
- * through the request. Anything short of a durable match answers `false`.
+ * The stored result of a Writing grading AIHUB already completed with the same
+ * key and the same body, or `undefined`. A confirmed replay costs no quota, so
+ * the caller may let it pass an exhausted quota; anything short of a durable
+ * match answers `undefined`.
  */
-export async function confirmCompletedWritingReplay(
+export async function findCompletedWritingReplay(
   request: AuthenticatedRequest,
-  authenticated: ReturnType<typeof getAuthenticatedApiKey>,
   idempotency: IdempotencyServicePort | undefined,
-  operation: OperationId,
-  idempotencyKey: string | undefined,
-): Promise<boolean> {
+  attempt: CompletedWritingReplayAttempt,
+): Promise<CompletedReplayForRequest | undefined> {
+  const { organizationId, operation, idempotencyKey } = attempt;
   const actorId = request.aihubIdentity?.userId;
   if (
     idempotency?.findCompletedReplay === undefined ||
     actorId === undefined ||
     idempotencyKey === undefined ||
-    (operation !== 'writing.task1.grade' && operation !== 'writing.task2.grade')
+    !isWritingGrade(operation)
   ) {
-    return false;
+    return undefined;
   }
 
   let requestBody: unknown;
   try {
-    requestBody =
-      operation === 'writing.task1.grade'
-        ? parseRequestBody(GradeTask1RequestSchema, request.body, request)
-        : parseRequestBody(GradeTask2RequestSchema, request.body, request);
+    requestBody = parseRequestBody(
+      WRITING_GRADE_SCHEMAS[operation],
+      request.body,
+      request,
+    );
   } catch {
-    return false;
+    return undefined;
   }
 
   try {
     const replay = await idempotency.findCompletedReplay({
-      organizationId: authenticated.organizationId,
+      organizationId,
       operation,
       actorId,
       idempotencyKey,
       requestBody,
     });
-    if (replay === undefined) return false;
-    setCompletedReplay(request, { operation, idempotencyKey, replay });
-    return true;
+    return replay === undefined
+      ? undefined
+      : { operation, idempotencyKey, replay };
   } catch {
     // A replay bypass at an exhausted quota needs a confirmed durable match.
-    return false;
+    return undefined;
   }
 }

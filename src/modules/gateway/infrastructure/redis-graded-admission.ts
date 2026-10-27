@@ -5,14 +5,17 @@ import { Logger } from '@nestjs/common';
 import { AppError } from '@/common/errors/app-error';
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { RETRY_BUDGET_WINDOW_MS } from '@/modules/gateway/application/admit-graded-request';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
   GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
-import { quotaUnverifiableError } from '@/modules/gateway/application/quota-admission';
 import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+import {
+  quotaPeriod,
+  quotaUnverifiableError,
+} from '@/modules/gateway/application/quota-period';
 import {
   rateLimitStanding,
   rateLimitWindow,
@@ -20,9 +23,6 @@ import {
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { quotaKeyForMonth } from './redis-quota-counter';
 import { rateLimitKey } from './redis-rate-limiter';
-
-/** How long a same-key repeat is refused for: one window of first attempts. */
-export const RETRY_BUDGET_WINDOW_MS = 60_000;
 
 /**
  * How many distinct Idempotency-Keys one Organization's retry budget remembers.
@@ -57,7 +57,7 @@ if rate_count > tonumber(ARGV[1]) then return 1 end
 if ARGV[2] == '1' then
   local clock = redis.call('TIME')
   local now = tonumber(clock[1]) * 1000 + math.floor(tonumber(clock[2]) / 1000)
-  local cutoff = now - 60000
+  local cutoff = now - ${RETRY_BUDGET_WINDOW_MS}
   redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', cutoff)
   redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', cutoff)
   redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', now)
@@ -90,8 +90,7 @@ if ARGV[2] == '1' then
 end
 
 if ARGV[6] ~= '' then
-  local raw_count = redis.call('GET', KEYS[5])
-  local count = raw_count and tonumber(raw_count) or 0
+  local count = tonumber(redis.call('GET', KEYS[5]))
   local quota = tonumber(ARGV[6])
   if not count or count < 0 or count ~= math.floor(count) or not quota then return 4 end
   if count >= quota then return 3 end

@@ -22,6 +22,12 @@ export type GradedAdmissionDecision =
     | { readonly stage: 'quota'; readonly quota: number }
   ) & { readonly rate?: RateLimitStanding };
 
+/** A decision that refuses the request, at the stage that refused it. */
+export type GradedAdmissionRefusal = Extract<
+  GradedAdmissionDecision,
+  { readonly stage: 'rate_limit' | 'retry_budget' | 'quota' }
+>;
+
 export interface GradedAdmissionPort {
   consume(request: GradedAdmissionRequest): Promise<GradedAdmissionDecision>;
 }

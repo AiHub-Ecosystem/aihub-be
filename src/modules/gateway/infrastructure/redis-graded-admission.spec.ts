@@ -249,6 +249,63 @@ describe('RedisGradedAdmission', () => {
     expect(redis.calls).toHaveLength(1);
   });
 
+  it('reports Redis unavailability once however many requests it refuses', async () => {
+    const redis = new FakeRedis();
+    redis.failure = new Error('redis down');
+    const logger = { warn: jest.fn(), log: jest.fn() };
+    const admission = new RedisGradedAdmission(
+      redis,
+      () => NOW,
+      Math.random,
+      logger,
+    );
+
+    await expect(admission.consume(request)).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+    });
+    await expect(admission.consume(request)).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+    });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.log).not.toHaveBeenCalled();
+  });
+
+  it('reports recovery once Redis answers again', async () => {
+    const redis = new FakeRedis();
+    redis.failure = new Error('redis timeout');
+    const logger = { warn: jest.fn(), log: jest.fn() };
+    const admission = new RedisGradedAdmission(
+      redis,
+      () => NOW,
+      Math.random,
+      logger,
+    );
+
+    await expect(admission.consume(request)).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+    });
+    redis.failure = undefined;
+    await expect(admission.consume(request)).resolves.toMatchObject({
+      stage: 'admitted',
+    });
+    await admission.consume(request);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.log).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats an invalid counter value as unavailable rather than resetting it', async () => {
+    const redis = new FakeRedis();
+    redis.result = 4;
+    const admission = new RedisGradedAdmission(redis);
+
+    await expect(admission.consume(request)).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryAfterMs: 1_000,
+    });
+  });
+
   it('fails unavailable when no Redis client is configured', async () => {
     await expect(
       new RedisGradedAdmission(undefined).consume(request),

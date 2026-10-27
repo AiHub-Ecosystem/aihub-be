@@ -12,9 +12,10 @@ import { AppError } from '@/common/errors/app-error';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import {
+  type AdmitGradedRequestInput,
   admitGradedRequest,
+  gradedAdmissionPolicy,
   gradedAdmissionRefusal,
-  retryBudgetKeyFor,
 } from '@/modules/gateway/application/admit-graded-request';
 import {
   GRADED_ADMISSION,
@@ -34,7 +35,8 @@ import {
   addMeteringEvidence,
   getMeteringEvidence,
 } from '@/modules/metering/public/metering-evidence';
-import { confirmCompletedWritingReplay } from './completed-writing-replay';
+import { setCompletedReplay } from './completed-idempotency-replay';
+import { findCompletedWritingReplay } from './completed-writing-replay';
 import { reportStanding } from './rate-limit-standing';
 
 /** An invalid key counts as absent here; the executor answers `INVALID_REQUEST`. */
@@ -93,55 +95,67 @@ export class GradedAdmissionGuard implements CanActivate {
 
     const operation = evidence.operation;
     const idempotencyKey = idempotencyKeyOf(request, operation);
-    setGradedRequestDimensions(request, {
-      operation,
-      identityMode: request.aihubIdentity?.mode ?? 'unknown',
-      retryBudget:
-        retryBudgetKeyFor(operation, idempotencyKey) === undefined
-          ? 'none'
-          : 'keyed_writing',
-    });
-
-    const decision = await admitGradedRequest(this.admission, {
+    const input: AdmitGradedRequestInput = {
       apiKeyId: authenticated.apiKeyId,
       rateLimitRpm: authenticated.rateLimitRpm,
       organizationId: authenticated.organizationId,
-      requestId: String(request.id),
+      requestId: request.id,
       operation,
       ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       environment:
         authenticated.environment === 'sandbox' ? 'sandbox' : 'production',
       monthlyRequestQuota: authenticated.monthlyRequestQuota,
       hardStopOnQuota: authenticated.hardStopOnQuota,
+    };
+    const policy = gradedAdmissionPolicy(input);
+    setGradedRequestDimensions(request, {
+      operation,
+      identityMode: request.aihubIdentity?.mode ?? 'unknown',
+      retryBudget: policy.retryBudget,
     });
+
+    const decision = await admitGradedRequest(this.admission, input);
     reportStanding(context, decision.rate);
 
-    if (decision.stage === 'rate_limit' || decision.stage === 'retry_budget') {
-      if (decision.stage === 'rate_limit') recordRejected('rate_limit');
-      throw refusalFor(decision, authenticated.organizationId, this.now);
+    if (decision.stage === 'rate_limit') {
+      recordRejected('rate_limit');
+      throw gradedAdmissionRefusal(
+        decision,
+        authenticated.organizationId,
+        this.now,
+      );
+    }
+    if (decision.stage === 'retry_budget') {
+      throw gradedAdmissionRefusal(
+        decision,
+        authenticated.organizationId,
+        this.now,
+      );
     }
 
-    addMeteringEvidence(request, {
-      quotaTracked:
-        authenticated.environment !== 'sandbox' &&
-        authenticated.monthlyRequestQuota !== null,
-    });
+    addMeteringEvidence(request, { quotaTracked: policy.quotaTracked });
 
     if (decision.stage === 'quota') {
       // A confirmed completed replay costs no quota (ADR-0116).
-      if (
-        await confirmCompletedWritingReplay(
-          request,
-          authenticated,
-          this.idempotency,
+      const replay = await findCompletedWritingReplay(
+        request,
+        this.idempotency,
+        {
+          organizationId: authenticated.organizationId,
           operation,
           idempotencyKey,
-        )
-      ) {
+        },
+      );
+      if (replay !== undefined) {
+        setCompletedReplay(request, replay);
         return true;
       }
       recordRejected('quota');
-      throw refusalFor(decision, authenticated.organizationId, this.now);
+      throw gradedAdmissionRefusal(
+        decision,
+        authenticated.organizationId,
+        this.now,
+      );
     }
 
     if (decision.quotaUnverified) {
@@ -149,16 +163,4 @@ export class GradedAdmissionGuard implements CanActivate {
     }
     return true;
   }
-}
-
-function refusalFor(
-  decision: Parameters<typeof gradedAdmissionRefusal>[0],
-  organizationId: string,
-  now: () => Date,
-): AppError {
-  const refusal = gradedAdmissionRefusal(decision, organizationId, now);
-  if (refusal === undefined) {
-    throw new Error('an admitted request has no refusal');
-  }
-  return refusal;
 }
