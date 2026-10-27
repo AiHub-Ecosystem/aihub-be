@@ -19,6 +19,7 @@ import type {
 // this authenticator, and the operator CLI share one definition. Only
 // `isApiKeyFormat` is re-exported: the spec suite asserts through this module.
 export { isApiKeyFormat } from '@/modules/identity/domain/api-key';
+import { entitlementOfScope } from '@/modules/identity/domain/api-key';
 
 export const AUTH_FAILURE_LIMIT = 20;
 const MAX_API_KEY_LOOKUP_FLIGHTS = 1_024;
@@ -26,7 +27,7 @@ const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
   return record.scopes.filter((scope) => {
-    const [entitlement] = scope.split('.');
+    const entitlement = entitlementOfScope(scope);
     return (
       entitlement !== undefined && record.entitlements.includes(entitlement)
     );
