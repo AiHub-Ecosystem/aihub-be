@@ -1,4 +1,5 @@
 import { createRedisClient } from '@/common/redis/create-redis-client';
+import { numberReply } from '@/common/redis/number-reply';
 import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
@@ -73,12 +74,7 @@ class IoredisGatewayClient implements RedisGatewayClient {
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<number> {
-    return this.client.eval(script, numberOfKeys, ...args).then((result) => {
-      if (typeof result !== 'number') {
-        throw new Error('Redis command result is invalid');
-      }
-      return result;
-    });
+    return this.client.eval(script, numberOfKeys, ...args).then(numberReply);
   }
 
   evalNumbers(

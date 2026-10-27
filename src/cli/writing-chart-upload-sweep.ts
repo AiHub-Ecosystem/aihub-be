@@ -5,7 +5,7 @@ import type {
   WritingChartUploadStoragePort,
 } from '@/modules/writing/application/writing-chart-upload.port';
 import { WritingChartUploadSweep } from '@/modules/writing/application/writing-chart-upload.sweep';
-import { createCliWritingChartStorage } from './seaweedfs-client';
+import { createCliWritingChartStorage } from './writing-chart-storage';
 
 import { runOperatorCommand } from './operator-command-context';
 

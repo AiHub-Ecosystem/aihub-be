@@ -86,7 +86,7 @@ not-found check, #705 an Organization-scoped query that omits its predicate,
 | M4  | The keyset pagination predicate and the sweep batch loop are duplicated between the speaking and writing sweeps.                                                                                                                                                      | open — owner: #677 (shared upload lifecycle core); close the row there                                                                                                                                                                                            |
 | M5  | The CLI's SeaweedFS client and secret provider composition is copied three times, four lines each.                                                                                                                                                                    | owner: `createCliSeaweedFsClient` in `src/cli/seaweedfs-client.ts`; the four operator commands call it                                                                                                                                                            |
 | M6  | The secrets loaders duplicate their parsing helpers and their error text, byte for byte.                                                                                                                                                                              | closed — `src/common/security/secret-document.ts` owns `readUtf8File`, `asDocument`, `assertOnlyFields` and `requiredDocumentString`; each loader keeps its own error class and message noun through a thin wrapper (#1315)                                       |
-| M7  | The `contractViolation` error is built in both downstream response adapters, and only the speaking one carries the sanitized diagnostic.                                                                                                                              | closed — `src/downstream/contract-violation.ts` builds the error for both adapters; the Writing adapter now carries the same sanitized diagnostic (#1315)                                                                                                         |
+| M7  | The `contractViolation` error is built in both downstream response adapters, and only the speaking one carries the sanitized diagnostic.                                                                                                                              | closed — `src/downstream/contract-violation.ts` builds the error for both adapters; the Writing adapter now carries the same sanitized diagnostic, and its unknown-criterion reason no longer echoes the provider's key (#1315)                                   |
 | M8  | `GradingRequestMetadata` is assembled in both grading controllers, and the upload deadline of 10 seconds is a literal in both upload controllers.                                                                                                                     | open — owner: #1306 (graded routes share one gateway request seam); close the row there                                                                                                                                                                           |
 | M9  | The writing module holds two promise-chain serialization helpers that mean different things: one serializes globally, one per asset with cleanup.                                                                                                                     | stays separate: the two helpers have different scopes (global vs per-asset) and different cleanup contracts; the duplication is the chain shape, which is incidental                                                                                              |
 | M10 | `isRecord` is declared 28 times under `src`. 25 copies exclude arrays; the multipart parser, the multipart source, and the OpenAPI builder accept them, so the same name means two things.                                                                            | owner: `isRecord` in `src/common/is-record.ts`; it excludes arrays, and the four copies that accepted them never received one. `pnpm arch-check` refuses a new local declaration. The identity domain copy stays, marked: domain code may not import `src/common` |
@@ -114,14 +114,14 @@ not-found check, #705 an Organization-scoped query that omits its predicate,
 - A8, I12, I13, M14 and the M13 extension were added on 2026-10-27 from a jscpd
   run with the same thresholds: 9 clones, 151 duplicated lines, or 0.27%. A run
   at 60 tokens found 25 clones (0.58%) and supplied A8 and I13.
-- Final run for #1315 on 2026-10-27, same thresholds (`src`, at least 8 lines
-  and 70 tokens; spec, testing, and generated files excluded): 2 clones, 30
-  duplicated lines of 56,905, or 0.05%. One was the Writing chart storage
-  construction in the revoke and sweep commands, now
-  `createCliWritingChartStorage`. The other stays separate: the 17-line
-  `eval` and `expire` wrappers in `redis-gateway.client.ts` and
-  `redis-identity.store.ts` implement two different module ports, and sharing
-  them would need one module to import the other's infrastructure.
+- Final run for #1315 on 2026-10-27, same thresholds (`npx jscpd@4 src
+--min-lines 8 --min-tokens 70 --ignore "**/*.spec.ts,**/testing/**,**/generated/**"`):
+  2 clones, 30 duplicated lines of 56,905, or 0.05%. Both are closed. One was
+  the Writing chart storage construction in the revoke and sweep commands, now
+  `createCliWritingChartStorage`. The other was the 17-line Redis `eval` reply
+  check in `redis-gateway.client.ts` and `redis-identity.store.ts`, now
+  `numberReply` in `src/common/redis`. Rows A6, M3, M4 and M8 stay open under
+  their owner issues, so their clones were still counted.
 
 - B1, I6 and the other consolidations closed under #1315 leave three known
   residual spellings, each kept on purpose: the billing statement's

@@ -1,4 +1,5 @@
 import {
+  type SecretDocument,
   asDocument,
   assertOnlyFields,
   readUtf8File,
@@ -6,7 +7,6 @@ import {
 } from '@/common/security/secret-document';
 
 type RuntimeConnectionScope = 'production' | 'sandbox';
-type RuntimeConnectionDocument = Readonly<Record<string, unknown>>;
 type ReadFile = (path: string) => string;
 
 export interface RuntimeConnectionEnvironmentOptions {
@@ -158,12 +158,12 @@ function configurationError(
   return new RuntimeConnectionConfigurationError(message);
 }
 
-function asRecord(value: unknown, label: string): RuntimeConnectionDocument {
+function asRecord(value: unknown, label: string): SecretDocument {
   return asDocument(value, label, configurationError);
 }
 
 function assertAllowedKeys(
-  record: RuntimeConnectionDocument,
+  record: SecretDocument,
   allowedKeys: readonly string[],
   label: string,
 ): void {
@@ -171,7 +171,7 @@ function assertAllowedKeys(
 }
 
 function requiredRecordString(
-  record: RuntimeConnectionDocument,
+  record: SecretDocument,
   key: string,
   label: string,
 ): string {

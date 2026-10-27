@@ -7,7 +7,7 @@ import {
   type WritingChartEnvironment,
   isWritingChartAssetId,
 } from '@/modules/writing/public/chart-revocation';
-import { createCliWritingChartStorage } from './seaweedfs-client';
+import { createCliWritingChartStorage } from './writing-chart-storage';
 
 export type WritingChartRevokeErrorCode =
   | 'INVALID_PUBLIC_URL'
