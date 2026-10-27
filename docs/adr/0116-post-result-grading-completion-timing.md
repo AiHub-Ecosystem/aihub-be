@@ -1,6 +1,6 @@
 # ADR-0116: Measure post-result grading completion through persistence
 
-- Status: Accepted
+- Status: Accepted; amended by [#1358](https://github.com/AiHub-Ecosystem/aihub-be/issues/1358) (`RETRY_BUDGET_UNAVAILABLE` is reserved and no longer emitted)
 - Related issue: #472
 - Amends: [ADR-0089](0089-ingress-based-request-timing.md) (admission labels only), [ADR-0018](0018-monthly-quota-enforcement.md) (graded Redis-control outages only), `04-redis.md` §F.5 (graded rate limit, concurrency, and quota rows; recorded 2026-10-22 by #328)
 
@@ -39,3 +39,18 @@ the paths that have different work, without changing public response timing or
 durable usage totals. A background Writing completion records its completion
 histogram when billing and permit settlement finish, even though its earlier
 504 response has already been logged.
+
+### Amendment ([#1358](https://github.com/AiHub-Ecosystem/aihub-be/issues/1358))
+
+`RETRY_BUDGET_UNAVAILABLE` is reserved: AIHUB no longer returns it. The
+Organization retry budget is one step of graded admission, so when Redis
+cannot answer, the refusal is `503 REDIS_UNAVAILABLE` whichever step could not
+be verified. The standalone retry-budget adapter that used to return the other
+code was removed by [#1312](https://github.com/AiHub-Ecosystem/aihub-be/issues/1312).
+
+The value stays in `ErrorCode`, the error registry, and the OpenAPI enum.
+Removing it would narrow a published response enum and fail the API
+compatibility and Customer Web contract checks, for no change in what a client
+receives. A client that already handles it treats it like `REDIS_UNAVAILABLE`:
+retry after `retry_after_ms`. The value can be removed at the next breaking
+contract version.

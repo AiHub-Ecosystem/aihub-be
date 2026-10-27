@@ -227,7 +227,7 @@ drops broken connections and reconnects; no connection stays checked out.
 |         503 | `DATABASE_UNAVAILABLE`          | Postgres unreachable, unanswered, or timed out    | Yes                                                  |
 |         503 | `IDENTITY_PROVIDER_UNAVAILABLE` | Unable to fetch customer's JWKS keys              | Yes                                                  |
 |         503 | `REDIS_UNAVAILABLE`             | Graded Redis admission or concurrency unavailable | Yes                                                  |
-|         503 | `RETRY_BUDGET_UNAVAILABLE`      | Redis retry budget unavailable                    | Yes                                                  |
+|         503 | `RETRY_BUDGET_UNAVAILABLE`      | Reserved, no longer emitted (ADR-0116)            | Yes                                                  |
 |         504 | `AI_SERVICE_TIMEOUT`            | Operation exceeded deadline budget                | Only with Idempotency-Key                            |
 
 ### Six Error Codes Added Beyond Initial D1 Specs

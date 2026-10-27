@@ -35,6 +35,8 @@ export const ERROR_CODES = [
   'ORGANIZATION_INVITE_TOKEN_INVALID',
   'ORGANIZATION_CREATION_LIMIT_REACHED',
   'REDIS_UNAVAILABLE',
+  // Reserved, no longer emitted: graded admission refuses with
+  // REDIS_UNAVAILABLE (ADR-0116). Kept so the published enum does not narrow.
   'RETRY_BUDGET_UNAVAILABLE',
   'AVATAR_CHANGED',
   'AVATAR_STORAGE_UNAVAILABLE',
