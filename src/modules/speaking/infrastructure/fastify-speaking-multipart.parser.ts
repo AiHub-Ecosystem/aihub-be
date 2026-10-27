@@ -17,14 +17,7 @@ import type {
   SpeakingMultipartParserPort,
   SpeakingMultipartSource,
 } from '@/modules/speaking/application/speaking-multipart-parser.port';
-
-/**
- * Audio-file ceiling. Mirrors the AI Speaking provider contract (v1 section
- * 3): the provider itself rejects audio above 25 MiB with 413, so AIHUB
- * enforces the file cap locally instead of forwarding a request that cannot
- * grade.
- */
-export const SPEAKING_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 
 const MULTIPART_LIMITS = {
   fileSize: SPEAKING_AUDIO_MAX_BYTES,
