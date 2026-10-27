@@ -54,19 +54,27 @@ rules() {
   local name
   printf 'groups:\n  - name: test\n    rules:\n'
   for name in "$@"; do
-    printf '      - alert: %s\n        expr: up == 0\n' "$name"
+    printf '      - alert: %s\n        expr: up == 0\n        labels:\n          severity: warning\n        annotations:\n          summary: test\n' "$name"
   done
+  printf '      - record: aihub:alert_rules_fingerprint\n        expr: vector(1)\n        labels:\n          rules_sha256: "%064d"\n' 0
+}
+
+fingerprint_repo() {
+  node "$repository_root/scripts/ops/monitoring/update-alert-rules-fingerprint.mjs" --file "$test_root/repo-rules.yml"
 }
 
 api() {
-  local name first=true
+  local name first=true fingerprint=${FAKE_LOADED_FINGERPRINT:-}
+  if [[ -z "$fingerprint" ]]; then
+    fingerprint="$(sed -nE 's/^[[:space:]]*rules_sha256: "([0-9a-f]{64})"/\1/p' "$test_root/repo-rules.yml")"
+  fi
   printf '{"status":"success","data":{"groups":[{"name":"test","rules":['
   for name in "$@"; do
     "$first" || printf ','
     first=false
     printf '{"name":"%s","type":"alerting","health":"ok"}' "$name"
   done
-  printf ',{"name":"aihub:recorded","type":"recording","health":"ok"}]}]}}'
+  printf ',{"name":"aihub:alert_rules_fingerprint","type":"recording","health":"ok","labels":{"rules_sha256":"%s"}}]}]}}' "$fingerprint"
 }
 
 run_check() {
@@ -90,6 +98,7 @@ expect_failure() {
 
 # Everything matches: success, with the hourly job's window, and nothing logged.
 rules First Second >"$test_root/repo-rules.yml"
+fingerprint_repo
 cp "$test_root/repo-rules.yml" "$test_root/host-rules.yml"
 api First Second >"$test_root/api.json"
 run_check env
@@ -99,17 +108,34 @@ assert_contains "$metrics/alert-rule-drift-success.prom" 'aihub_host_job_max_age
 
 # A rule merged to main and not copied to the host.
 rules First Second Third >"$test_root/repo-rules.yml"
+fingerprint_repo
 expect_failure env
 assert_contains "$test_root/drift.log" 'alert-rule-drift failed reason=repo_differs missing_on_host=Third extra_on_host=none'
 
 # The same names with a changed expression still differ.
 rules First Second | sed 's/up == 0/up == 1/' >"$test_root/repo-rules.yml"
+fingerprint_repo
 : >"$test_root/drift.log"
 expect_failure env
 assert_contains "$test_root/drift.log" 'reason=repo_differs missing_on_host=none extra_on_host=none repo_sha256='
 
+# Same alert names and a synchronized host file still fail when Prometheus has
+# not reloaded changed rule content.
+rules First Second >"$test_root/repo-rules.yml"
+fingerprint_repo
+old_fingerprint="$(sed -nE 's/^[[:space:]]*rules_sha256: "([0-9a-f]{64})"/\1/p' "$test_root/repo-rules.yml")"
+rules First Second | sed 's/up == 0/up == 1/' >"$test_root/repo-rules.yml"
+fingerprint_repo
+cp "$test_root/repo-rules.yml" "$test_root/host-rules.yml"
+FAKE_LOADED_FINGERPRINT=$old_fingerprint api First Second >"$test_root/api.json"
+: >"$test_root/drift.log"
+expect_failure env
+assert_contains "$test_root/drift.log" 'reason=loaded_definition_differs expected='
+unset FAKE_LOADED_FINGERPRINT
+
 # A rule copied to the host but not loaded, because Prometheus was not reloaded.
 rules First Second Third >"$test_root/repo-rules.yml"
+fingerprint_repo
 cp "$test_root/repo-rules.yml" "$test_root/host-rules.yml"
 api First Second >"$test_root/api.json"
 : >"$test_root/drift.log"

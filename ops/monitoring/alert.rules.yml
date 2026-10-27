@@ -111,12 +111,12 @@ groups:
       - alert: AIHUBTraceReceiverNotReceiving
         expr: |
           (
-            sum by (job) (increase(aihub_requests_total{job=~"aihub-(production|sandbox)-app"}[5m])) > 0
+            sum by (job) (increase(aihub_requests_total{job=~"aihub-(production|sandbox)-app",operation=~".+",operation!="unmatched"}[5m])) > 0
           )
-          and on()
-          (
-            sum(increase(traces_spanmetrics_calls_total{service="aihub-be"}[1m])) == 0
-            or absent_over_time(traces_spanmetrics_calls_total{service="aihub-be"}[1m])
+          unless on (job)
+          label_replace(
+            sum by (deployment_environment_name) (increase(traces_spanmetrics_calls_total{service="aihub-be",deployment_environment_name=~"production|sandbox"}[1m])) > 0,
+            "job", "aihub-$1-app", "deployment_environment_name", "(production|sandbox)"
           )
         for: 5m
         labels:
@@ -124,9 +124,41 @@ groups:
           owner: aihub-operations
           service: aihub
         annotations:
-          summary: "Tempo has not received AIHUB spans while requests continue"
-          description: "{{ $labels.job }} has served requests while Tempo's service-specific span metric reports no received spans for five minutes. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
+          summary: "Tempo has not received AIHUB spans while customer operations continue"
+          description: "{{ $labels.job }} has served customer-operation requests while its own Tempo span metric reports no new spans. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+
+      - alert: AIHUBTraceExportFailures
+        expr: sum by (job) (increase(aihub_otel_export_failures_total{job=~"aihub-(production|sandbox)-app"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "AIHUB trace exports are failing"
+          description: "{{ $labels.job }} reported one or more failed OTLP trace batches in the last five minutes."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+
+      - alert: AIHUBTraceSpansDropped
+        expr: sum by (job) (increase(aihub_otel_dropped_spans_total{job=~"aihub-(production|sandbox)-app"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "AIHUB trace spans are being dropped"
+          description: "{{ $labels.job }} dropped one or more spans in the last five minutes."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
+
+  # Identifies the exact rule-file revision that Prometheus loaded.
+  - name: aihub-rule-integrity
+    rules:
+      - record: aihub:alert_rules_fingerprint
+        expr: vector(1)
+        labels:
+          rules_sha256: "048061efc002cce96454af892b90f0fcc68ce278b930909c586cd23209745ab8"
 
   - name: aihub-email-outbox
     rules:

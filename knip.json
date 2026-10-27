@@ -57,6 +57,11 @@
     "scripts/cli/cli-options.d.cts",
     // Hand-written types for the dynamic CLI runner's source and built exports.
     "scripts/cli/load-cli-runner.d.cts",
+    // The shell drift-check fixture invokes this generator; Knip does not follow that edge.
+    "scripts/ops/monitoring/update-alert-rules-fingerprint.mjs",
+    // Direct `node --test` target in package.json, kept explicit because Knip
+    // does not treat this monitoring test target as an entry.
+    "scripts/ops/monitoring/update-alert-rules-fingerprint.spec.mjs",
     // Hand-written types for scripts/checks/prisma-drift/prisma-drift.cjs — same reason.
     "scripts/checks/prisma-drift/prisma-drift.d.cts",
     // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.

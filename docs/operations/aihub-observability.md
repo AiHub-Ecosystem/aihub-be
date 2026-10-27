@@ -4,28 +4,42 @@ This runbook covers the host, container, shared PostgreSQL, Redis, and TLS signa
 
 ## Monitoring stack recovery policy
 
-The accepted target in [ADR-0126](../adr/0126-self-hosted-monitoring-recovers-without-history.md) is not fully implemented until #237's source repository, drift check, clean-host runbook, and rehearsal are complete. Non-secret configuration belongs in a dedicated version-controlled repository outside application working trees; receiver credentials remain in Vault or the monitoring host's secret environment file.
+The shared stack's non-secret source of truth is the private [aihub-monitoring-config repository](https://github.com/AiHub-Ecosystem/aihub-monitoring-config). The host's environment and mounted secret files are restored from Vault and stay outside that checkout. The clean-host runbook is below; its four-hour recovery objective remains unverified until the rehearsal is completed.
 
-The monitoring data volumes are local. A lost monitoring host means complete loss of retained Prometheus and Tempo history; there is no off-host history restore in this recovery plan. The observed retention settings on 2026-10-24 were 30 days for the shared Prometheus, 14 days/512 MB for the AIHUB Prometheus, and 48 hours for Tempo. Verify these settings against the tracked configuration after it is established; they are live retention limits, not backup guarantees.
+The monitoring data volumes are local. A lost monitoring host means complete loss of retained Prometheus and Tempo history; this recovery plan does not restore history. The tracked settings and 2026-10-27 deployment evidence show 30 days for the shared Prometheus, 14 days/512 MB for AIHUB Prometheus, and 48 hours for Tempo. These are retention limits, not backups.
 
-The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means the expected targets are healthy, rules are loaded and evaluating, the Grafana and OTLP HTTPS routes are ready, Grafana authentication works, Tempo is ready, and a controlled Sandbox alert reaches its configured notification route. The rehearsal restores configuration and credentials, not historical telemetry. #826 separately owns the monitoring-host reboot drill.
+The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means expected targets are healthy, rules are loaded and evaluating, Grafana and OTLP HTTPS are ready, Grafana login works, Tempo is ready, and a controlled Sandbox alert reaches its configured route. The objective excludes history restoration. No clean-host rehearsal has yet established the measured RTO. #826 separately owns the monitoring-host reboot drill. The monitoring-host owner register is tracked in [#362](https://github.com/AiHub-Ecosystem/aihub-be/issues/362); the linked joint-host-loss recovery work is tracked in [#454](https://github.com/AiHub-Ecosystem/aihub-be/issues/454).
+
+## Clean-host recovery runbook
+
+Use the Compose files, Nginx sites, Tempo configuration, dashboards, and AIHUB Prometheus snapshot from the version-controlled monitoring repository. Restore the protected environment files and mounted credentials from Vault; keep them outside the checkout with owner-only permissions. The recovery also needs the existing `monitoring` and `redis_default` Docker networks and the dependent shared-stack services that own them.
+
+1. Start the four-hour timer when monitoring-host loss is declared. Provision the replacement host, restore SSH access and firewall policy, and point `grafana.aihubproduction.com` and `otel.aihubproduction.com` to it. Preserve the OTLP allowlist for the Production/Sandbox egress address `76.13.218.96/32`.
+2. Restore the protected shared-stack and AIHUB environment files and secret files from Vault. Keep `/home/ngoc_anh/infra/monitoring/.env` and the AIHUB exporter secrets outside Git; set the files to mode `0600` and their secret directory to `0700`.
+3. Clone `AiHub-Ecosystem/aihub-monitoring-config` to `/home/ngoc_anh/aihub-monitoring-config`. Keep the Compose project name `monitoring` so its named volumes attach if the old host is still available; on a truly clean host, create empty volumes and accept the history loss described above.
+4. Install `nginx/grafana-otel-bootstrap.conf`, reload Nginx, and issue the two-name certificate with Certbot's webroot at `/var/www/letsencrypt`. Install `nginx/grafana-otel.conf` and `certbot/deploy-hook.sh`, run `nginx -t`, then reload Nginx.
+5. Validate and start the shared stack with `docker compose --project-name monitoring --env-file /home/ngoc_anh/infra/monitoring/.env config --quiet` and the same command with `up -d`.
+6. From the repository's `aihub/` directory, validate and start `exporters.compose.yml` with the protected AIHUB environment file and `--profile monitoring`. This restores AIHUB Prometheus, exporters, and the restricted Production SSH tunnel. Restore its host-job cron entries and scheduled drift check from the tracked operations instructions.
+7. Verify both HTTPS routes, Grafana authentication, Tempo readiness, all expected Prometheus targets, loaded rule health and fingerprint, certificate probes, and a searchable real AIHUB trace. Run the controlled Sandbox L.4 alert drill and confirm the configured notification route receives it before stopping the timer.
+
+Record the start/end time, restored configuration commit, checks, and any gaps in #237 and link this section from #454. This procedure is not evidence that the recovery has been rehearsed.
 
 ## Grafana and OTLP HTTPS routes
 
-The current Grafana access path remains an SSH local forward until #237 is deployed. The accepted target uses two DNS names provided by the operator's domain team:
+The deployed HTTPS routes are `https://grafana.aihubproduction.com` and `https://otel.aihubproduction.com/v1/traces`. Grafana requires login; anonymous access and sign-up are disabled. OTLP accepts only the shared Production/Sandbox egress `76.13.218.96/32`, and Nginx returns 404 for other OTLP paths. The SAN certificate covers both names, Certbot renewal is enabled, and the certificate-expiry probes are provisioned. Grafana and Tempo container ports remain bound to loopback.
 
-- `grafana.<approved-domain>` terminates TLS at the monitoring host's existing Nginx and proxies to Grafana on `127.0.0.1:3100`. Keep Grafana login required, with anonymous access and sign-up disabled.
-- `otel.<approved-domain>/v1/traces` terminates TLS and proxies only the OTLP/HTTP traces route to Tempo's private receiver. Allow only the fixed Production egress IP, which also carries Sandbox traffic; deny other sources. Do not publish Tempo's receiver port directly.
+- `grafana.aihubproduction.com` terminates TLS at the monitoring host's existing Nginx and proxies to Grafana on `127.0.0.1:3100`. Keep Grafana login required, with anonymous access and sign-up disabled.
+- `otel.aihubproduction.com/v1/traces` terminates TLS and proxies only the OTLP/HTTP traces route to Tempo's private receiver. Allow only the fixed Production egress IP, which also carries Sandbox traffic; deny other sources. Do not publish Tempo's receiver port directly.
 
-Keep these virtual hosts, their TLS renewal, source-IP allowlists, and both certificate probes in the dedicated monitoring configuration repository. Do not set the application's OTLP endpoint until DNS, certificate validation, the allowlist, and a real Sandbox trace have been verified. The exact hostnames are still pending the domain team's record creation.
+Keep these virtual hosts, TLS renewal, source-IP allowlists, and both certificate probes in the dedicated monitoring configuration repository. The fixed Production/Sandbox egress is `76.13.218.96`; update the allowlist if that source changes. A real Sandbox trace has been verified through the HTTPS OTLP endpoint.
 
 ## Trace delivery
 
 When tracing is enabled, `/metrics` exposes the label-free counters `aihub_otel_export_failures_total` and `aihub_otel_dropped_spans_total`. The first counts failed OTLP batches; the second counts spans in failed batches and spans dropped when the bounded OpenTelemetry export queue fills. The production image enables the SDK's queue-full self-observation and bridges it into the application registry every five seconds. A failed receiver produces one safe warning log until an export succeeds; the log contains no endpoint, response body, or span data.
 
-The receive-side signal must come from Tempo's metrics-generator span metrics, remote-written to the AIHUB Prometheus with `traces_spanmetrics_calls_total{service="aihub-be"}`. `AIHUBTraceReceiverNotReceiving` fires only while the Production or Sandbox request counter is increasing and that service-specific counter is absent or flat. No application traffic is a no-alert condition. The dedicated monitoring configuration repository still needs the Tempo metrics-generator and remote-write settings before this alert can run against live samples.
+The app adds the bounded resource attribute `deployment.environment.name` from `AIHUB_RUNTIME_DATABASE_SCOPE`; Tempo's span-metrics generator includes it as the `deployment_environment_name` label and remote-writes samples to AIHUB Prometheus. `AIHUBTraceReceiverNotReceiving` matches Production or Sandbox customer-operation requests to received spans from that same tier. It excludes `operation="unmatched"`, so health checks and scrapes alone are quiet; no customer-operation traffic is also a no-alert case. Export failures and dropped spans have separate per-tier alerts, so partial loss is visible even while other traces still arrive.
 
-When it fires, check the app's OTLP failure/drop counters and safe outage log first, then DNS/TLS and the source-IP allowlist for `otel.<approved-domain>`, Tempo receiver readiness, and the metrics-generator remote-write path. Confirm recovery with a new searchable `service.name=aihub-be` trace; exporter success alone is not proof of delivery.
+When it fires, check the app's OTLP failure/drop counters and safe outage log first, then DNS/TLS and the source-IP allowlist for `otel.aihubproduction.com`, Tempo receiver readiness, and the metrics-generator remote-write path. Confirm recovery with a new searchable `service.name=aihub-be` trace; exporter success alone is not proof of delivery.
 
 ## Existing collectors audited
 
@@ -54,7 +68,7 @@ flowchart LR
   Prom -->|blackbox TLS probes every hour| Public
 ```
 
-The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19104`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. #237 owns the shared monitoring stack's configuration source and clean-host recovery; until that work lands, the shared Prometheus, Grafana, Alertmanager, and Tempo configuration remains host-managed. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
+The `monitoring` Docker network is the existing `172.27.0.0/16` bridge; its observed gateway is `172.27.0.1`. AIHUB Prometheus reserves `172.27.0.12` on that bridge so the host firewall can allow only this scraper. On the monitoring host, UFW allows TCP from `172.27.0.12` through the `monitoring` bridge to `172.27.0.1:9100` and `172.27.0.1:19100-19104`; its default-deny input policy blocks other sources. Redis is on the existing `redis_default` network. No exporter publishes a host port. Prometheus publishes only `127.0.0.1:9094`; operators reach it with an SSH local forward. #237 owns the shared monitoring stack's configuration source and clean-host recovery, with non-secret configuration versioned in the private monitoring repository. If this Docker network is recreated or its subnet changes, update the reserved address and matching firewall rules before restarting AIHUB Prometheus.
 
 On Production, node_exporter listens on `127.0.0.1:9100`, cAdvisor on `127.0.0.1:19101`, postgres_exporter on `127.0.0.1:9187`, and Nginx exposes app metrics on loopback ports `19103` (Production) and `19104` (Sandbox). Those Nginx listeners proxy only the exact `/metrics` path to the active app slot; all other paths return 404. Public API and Sandbox listeners continue to return 404 for `/metrics`. The restricted key's `authorized_keys` `permitopen` list must allow only the five approved loopback destinations `9100`, `19101`, `9187`, `19103`, and `19104`. The monitoring-host tunnel binds the forwards to `172.27.0.1:19100-19104`. The SSH host key is pinned in a separate `known_hosts` file.
 
@@ -263,16 +277,20 @@ touches the rules or their tests:
 1. Copy `alert.rules.yml` and `alert.rules.test.yml` to a new staging directory
    under `~/aihub-monitoring` on the monitoring host (mode `0755`, so the
    `nobody` user of the Prometheus image can read it).
-2. Run `promtool check rules` and `promtool test rules` on the staged files with
+2. Run `node scripts/ops/monitoring/update-alert-rules-fingerprint.mjs` before
+   validation. This updates the recording-rule fingerprint for the source file;
+   CI checks that it matches the expressions, labels, and annotations.
+3. Run `promtool check rules` and `promtool test rules` on the staged files with
    `prom/prometheus:v3.13.4`. Stop if either fails.
-3. Keep a dated backup of both files in `~/aihub-monitoring/ops/monitoring`.
-4. Replace the files **in place** (`cat staged > alert.rules.yml`). Each file
+4. Keep a dated backup of both files in `~/aihub-monitoring/ops/monitoring`.
+5. Replace `alert.rules.yml` **in place** (`cat staged > alert.rules.yml`). It
    is bind-mounted on its own, so a new inode (`mv`, `cp` over a new file) is
-   not seen by the container.
-5. Reload with `docker kill -s HUP aihub-monitoring-exporters-prometheus-aihub-1`
+   not seen by the container. Keep the test file beside it for the next check.
+6. Reload with `docker kill -s HUP aihub-monitoring-exporters-prometheus-aihub-1`
    (the container has no lifecycle API).
-6. Read `http://127.0.0.1:9094/api/v1/rules` and confirm the rule count matches
-   the file and every rule reports `health: ok`. Remove the staging directory.
+7. Read `http://127.0.0.1:9094/api/v1/rules` and confirm the alert names and
+   `aihub:alert_rules_fingerprint` match the file and every rule reports
+   `health: ok`. Remove the staging directory.
 
 ### Alert rule drift
 
@@ -282,10 +300,12 @@ It only reports; copying and reloading stay the steps above. It fails when:
 
 - the host's `alert.rules.yml` differs from the one on `main`
   (`reason=repo_differs`, with the alert names missing or extra on the host and
-  both short hashes; a changed expression under the same name shows as no names
-  and different hashes);
+  both short hashes);
 - an alert in that file is not loaded in Prometheus, or Prometheus has one the
   file does not (`reason=not_loaded`): the copy was not reloaded;
+- the loaded `aihub:alert_rules_fingerprint` does not match the current source
+  (`reason=loaded_definition_differs`), including a missed reload where names
+  and counts stayed the same but an expression, label, or annotation changed;
 - `main`, the file or Prometheus cannot be read.
 
 It reports as task `alert-rule-drift` in the scheduled-job format to the
