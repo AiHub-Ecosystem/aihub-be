@@ -79,26 +79,37 @@ export class AuthMfaService implements AuthMfaServicePort {
     };
   }
 
-  async beginEnrollment(input: {
-    readonly userId: string;
-    readonly password: string;
-    readonly ip: string;
-  }): Promise<{ readonly secret: string; readonly otpauthUri: string }> {
+  /**
+   * The fresh-password proof a factor change needs: the password must belong to
+   * the account whose factor changes. A password that opens another account
+   * consumes the login limits and fails like any wrong password.
+   */
+  private async reauthenticate(userId: string, password: string, ip: string) {
     const credentials = await authenticateCredentials(
       {
         userAccounts: this.userAccounts,
         passwordHasher: this.passwordHasher,
         rateLimiter: this.rateLimiter,
       },
-      {
-        email: await this.emailForUser(input.userId),
-        password: input.password,
-      },
+      { email: await this.emailForUser(userId), password },
+      ip,
+    );
+    if (credentials.userId !== userId) {
+      return rejectCredentials(this.rateLimiter, ip, credentials.email);
+    }
+    return credentials;
+  }
+
+  async beginEnrollment(input: {
+    readonly userId: string;
+    readonly password: string;
+    readonly ip: string;
+  }): Promise<{ readonly secret: string; readonly otpauthUri: string }> {
+    const credentials = await this.reauthenticate(
+      input.userId,
+      input.password,
       input.ip,
     );
-    if (credentials.userId !== input.userId) {
-      return rejectCredentials(this.rateLimiter, input.ip, credentials.email);
-    }
 
     const secret = generateTotpSecret();
     const factorId = this.newFactorId(this.clock.now());
@@ -163,21 +174,11 @@ export class AuthMfaService implements AuthMfaServicePort {
     let email = factor?.email;
     let expectedPasswordHash: string | undefined;
     if ('password' in input.proof) {
-      const credentials = await authenticateCredentials(
-        {
-          userAccounts: this.userAccounts,
-          passwordHasher: this.passwordHasher,
-          rateLimiter: this.rateLimiter,
-        },
-        {
-          email: await this.emailForUser(input.userId),
-          password: input.proof.password,
-        },
+      const credentials = await this.reauthenticate(
+        input.userId,
+        input.proof.password,
         input.ip,
       );
-      if (credentials.userId !== input.userId) {
-        return rejectCredentials(this.rateLimiter, input.ip, credentials.email);
-      }
       email = credentials.email;
       expectedPasswordHash = credentials.passwordHash;
     } else {

@@ -1,3 +1,4 @@
+import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type {
   EmailDeliveryRequestWriterPort,
   InsertEmailDeliveryRequestInput,
@@ -105,6 +106,77 @@ export async function insertRefreshSession(
       expiresAt: input.token.expiresAt,
     },
   });
+}
+
+/**
+ * The prologue a token issue shares: lock the password identity with its
+ * account, refuse an account outside the one status the flow serves, and
+ * reserve the recipient's daily email budget when a message will be queued.
+ * `undefined` answers a missing, wrongly-statused or over-budget recipient the
+ * same way, so a caller learns nothing about which it was.
+ */
+export async function lockIssuableIdentity(
+  transaction: AuthTransactionClient,
+  emailDeliveryRequests: EmailDeliveryRequestWriterPort,
+  input: {
+    readonly email: string;
+    readonly now: Date;
+    readonly emailDelivery?: InsertEmailDeliveryRequestInput | undefined;
+  },
+  acceptedStatus: LocalAccountStatus,
+): Promise<{ readonly id: string; readonly email: string } | undefined> {
+  const rows = await authQueryRows(transaction, LOCK_PASSWORD_IDENTITY_SQL, [
+    input.email,
+  ]);
+  const row = rows[0];
+  if (
+    row === undefined ||
+    row.status !== acceptedStatus ||
+    typeof row.id !== 'string' ||
+    typeof row.canonical_email !== 'string'
+  ) {
+    return undefined;
+  }
+
+  if (
+    input.emailDelivery !== undefined &&
+    !(await emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+      new EmailDeliveryTransactionAdapter(transaction),
+      { email: input.email, now: input.now },
+    ))
+  ) {
+    return undefined;
+  }
+  return { id: row.id, email: row.canonical_email };
+}
+
+/**
+ * The prologue an MFA factor change shares: the active account, then its
+ * password identity, both locked in that order. `undefined` when the account is
+ * not active or has no password identity.
+ */
+export async function lockActivePasswordIdentity(
+  transaction: AuthSqlClient,
+  userId: string,
+): Promise<
+  | { readonly canonicalEmail: unknown; readonly passwordHash: unknown }
+  | undefined
+> {
+  const accounts = await authQueryRows(transaction, LOCK_ACCOUNT_SQL, [userId]);
+  if (accounts[0]?.['status'] !== 'active') return undefined;
+  const identities = await authQueryRows(
+    transaction,
+    `SELECT canonical_email, password_hash FROM auth_identities
+     WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
+    [userId],
+  );
+  const identity = identities[0];
+  return identity === undefined
+    ? undefined
+    : {
+        canonicalEmail: identity['canonical_email'],
+        passwordHash: identity['password_hash'],
+      };
 }
 
 /**

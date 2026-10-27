@@ -1,6 +1,7 @@
 import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { lockActivePasswordIdentity } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,
@@ -40,20 +41,11 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      const accounts = await authQueryRows(
+      const identity = await lockActivePasswordIdentity(
         transaction,
-        'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
-        [input.userId],
+        input.userId,
       );
-      if (accounts[0]?.['status'] !== 'active') return false;
-
-      const identities = await authQueryRows(
-        transaction,
-        `SELECT password_hash FROM auth_identities
-         WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
-        [input.userId],
-      );
-      if (identities[0]?.['password_hash'] !== input.expectedPasswordHash) {
+      if (identity?.passwordHash !== input.expectedPasswordHash) {
         return false;
       }
 
@@ -147,22 +139,14 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      const accounts = await authQueryRows(
+      const identity = await lockActivePasswordIdentity(
         transaction,
-        'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
-        [input.userId],
-      );
-      if (accounts[0]?.['status'] !== 'active') return false;
-      const identities = await authQueryRows(
-        transaction,
-        `SELECT canonical_email, password_hash FROM auth_identities
-         WHERE user_account_id = $1 AND provider = 'password' FOR UPDATE`,
-        [input.userId],
+        input.userId,
       );
       if (
-        identities[0]?.['canonical_email'] !== input.email ||
+        identity?.canonicalEmail !== input.email ||
         (input.expectedPasswordHash !== undefined &&
-          identities[0]?.['password_hash'] !== input.expectedPasswordHash)
+          identity.passwordHash !== input.expectedPasswordHash)
       ) {
         return false;
       }

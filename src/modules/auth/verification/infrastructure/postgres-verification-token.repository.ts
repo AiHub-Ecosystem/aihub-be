@@ -1,10 +1,9 @@
 import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import {
-  LOCK_PASSWORD_IDENTITY_SQL,
   insertEmailDelivery,
   insertRefreshSession,
+  lockIssuableIdentity,
 } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import {
   type SessionAdmission,
@@ -57,28 +56,13 @@ export class PostgresVerificationTokenRepository
   ): Promise<ResendVerificationTarget | undefined> {
     try {
       return await authTransaction(this.client, async (transaction) => {
-        const rows = await authQueryRows(
+        const row = await lockIssuableIdentity(
           transaction,
-          LOCK_PASSWORD_IDENTITY_SQL,
-          [input.email],
+          this.emailDeliveryRequests,
+          input,
+          'pending_verification',
         );
-        const row = rows[0];
-        if (
-          row === undefined ||
-          row.status !== 'pending_verification' ||
-          typeof row.id !== 'string' ||
-          typeof row.canonical_email !== 'string'
-        ) {
-          return undefined;
-        }
-
-        if (
-          input.emailDelivery !== undefined &&
-          !(await this.emailDeliveryRequests.reserveAuthenticationEmailRecipient(
-            new EmailDeliveryTransactionAdapter(transaction),
-            { email: input.email, now: input.now },
-          ))
-        ) {
+        if (row === undefined) {
           return undefined;
         }
 
@@ -102,7 +86,7 @@ export class PostgresVerificationTokenRepository
           this.emailDeliveryRequests,
           input.emailDelivery,
         );
-        return { email: row.canonical_email };
+        return { email: row.email };
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
