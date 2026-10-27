@@ -12,7 +12,6 @@ import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { appConfig } from '@/config/runtime-configuration';
-import { invalidUserIdentity } from '@/modules/identity/user-assertions/application/user-identity-errors';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
@@ -27,6 +26,7 @@ import {
   isLocalAuthBypassEnabled,
 } from './request-environment';
 import { REQUIRED_OPERATION_METADATA } from './require-operation.decorator';
+import { resolveUserIdentity } from './resolve-user-identity';
 
 function configurationError(): AppError {
   return new AppError({
@@ -81,14 +81,11 @@ export class UserIdentityGuard implements CanActivate {
       throw userIdentityRequired();
     }
 
-    if (typeof header !== 'string' || header.trim().length === 0) {
-      throw invalidUserIdentity();
-    }
-
-    request.aihubIdentity = await this.resolver.resolve({
-      value: header,
-      organizationId: authenticated.organizationId,
-    });
+    request.aihubIdentity = await resolveUserIdentity(
+      header,
+      authenticated.organizationId,
+      this.resolver,
+    );
     addMeteringEvidence(request, { actorId: request.aihubIdentity.userId });
     return true;
   }

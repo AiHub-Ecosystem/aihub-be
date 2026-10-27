@@ -12,7 +12,6 @@ import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { invalidUserIdentity } from '@/modules/identity/user-assertions/application/user-identity-errors';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
@@ -20,6 +19,7 @@ import {
 
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
+import { resolveUserIdentity } from '@/modules/identity/shared/presentation/resolve-user-identity';
 import { authenticateApiKey } from './authenticate-api-key';
 
 /** Authenticates an API-key Public API Route that also resolves an End-User ID. */
@@ -47,20 +47,12 @@ export class ApiKeyUserIdentityGuard implements CanActivate {
       recordRejected('auth');
       throw userIdentityRequired();
     }
-    if (typeof header !== 'string' || header.trim().length === 0) {
-      throw invalidUserIdentity();
-    }
 
-    const identity = await this.resolver.resolve({
-      value: header,
-      organizationId: authenticated.organizationId,
-    });
-    if (identity.organizationId !== authenticated.organizationId) {
-      recordRejected('auth');
-      throw invalidUserIdentity();
-    }
-
-    request.aihubIdentity = identity;
+    request.aihubIdentity = await resolveUserIdentity(
+      header,
+      authenticated.organizationId,
+      this.resolver,
+    );
     return true;
   }
 }
