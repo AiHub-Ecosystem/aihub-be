@@ -35,6 +35,7 @@ describe('organization identity configuration invariants', () => {
     { keys: [{ kty: 'EC', crv: 'P-256', x: 'x', y: 'y', alg: 'RS256' }] },
     { keys: [{ ...rsaKey, use: 'enc' }] },
     { keys: [{ ...rsaKey, key_ops: ['sign'] }] },
+    { keys: [{ ...rsaKey, key_ops: ['verify', 7] }] },
     { keys: [{ ...rsaKey, kid: 42 }] },
   ])('rejects a non-public or incomplete JWKS: %p', (value) => {
     expect(parsePublicJsonWebKeySet(value)).toBeUndefined();
