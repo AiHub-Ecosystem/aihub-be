@@ -10,7 +10,7 @@ import {
   BatchSpanProcessor,
   InMemorySpanExporter,
   type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 import { AppModule } from '@/app.module';
 import { GracefulFastifyAdapter } from '@/common/http/graceful-fastify-adapter';
@@ -187,7 +187,7 @@ describe('application shutdown drain', () => {
     const exporter = new CapturingSpanExporter();
     const sdk = new NodeSDK({
       spanProcessors: [
-        new BatchSpanProcessor(exporter, { scheduledDelayMillis: 60_000 }),
+        new BatchSpanProcessor({ exporter, scheduledDelayMillis: 60_000 }),
       ],
       instrumentations: [],
     });

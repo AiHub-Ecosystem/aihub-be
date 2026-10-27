@@ -10,7 +10,7 @@ import {
 } from '@opentelemetry/resources';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { AlwaysOnSampler } from '@opentelemetry/sdk-trace-base';
+import { AlwaysOnSampler } from '@opentelemetry/sdk-trace';
 
 import { getRuntimeConfiguration } from '@/config/runtime-configuration';
 import {

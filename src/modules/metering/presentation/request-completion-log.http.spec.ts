@@ -12,7 +12,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
@@ -278,7 +278,7 @@ describe('request completion log over the HTTP boundary', () => {
     // A real SDK, so the span the request runs inside — and therefore the
     // trace id on its completion line — is a genuine one.
     sdk = new NodeSDK({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
       instrumentations: [],
     });
     sdk.start();

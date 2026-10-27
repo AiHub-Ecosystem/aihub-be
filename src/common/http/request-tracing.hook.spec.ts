@@ -3,7 +3,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { registerRequestTracing } from './request-tracing.hook';
@@ -12,11 +12,15 @@ describe('registerRequestTracing', () => {
   let app: FastifyInstance | undefined;
   let sdk: NodeSDK;
   let exporter: InMemorySpanExporter;
+  let processor: SimpleSpanProcessor;
 
   beforeAll(() => {
     exporter = new InMemorySpanExporter();
+    // The 3.x processor exports an ended span asynchronously, so a test reads
+    // the exporter only after the processor has flushed.
+    processor = new SimpleSpanProcessor({ exporter });
     sdk = new NodeSDK({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [processor],
       instrumentations: [],
     });
     sdk.start();
@@ -49,6 +53,7 @@ describe('registerRequestTracing', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    await processor.forceFlush();
     const spans = exporter.getFinishedSpans();
     expect(spans.map((span) => span.name)).toEqual(
       expect.arrayContaining(['GET /v1/items/:itemId', 'pg.query:SELECT']),

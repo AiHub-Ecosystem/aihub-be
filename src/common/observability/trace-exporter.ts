@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ExportResultCode } from '@opentelemetry/core';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 import { recordTraceExportFailure } from './trace-export-metrics';
 
