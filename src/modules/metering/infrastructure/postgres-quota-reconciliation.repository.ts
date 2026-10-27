@@ -3,6 +3,7 @@ import type {
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/quota-reconciliation.port';
+import { billableRequestSql } from './billable-request-sql';
 import { isRecord, safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
@@ -10,9 +11,8 @@ export const QUOTA_RECONCILIATION_SQL = `
   SELECT
     o.id AS organization_id,
     o.monthly_request_quota AS quota,
-    COALESCE(
-      SUM(u.billable_requests) FILTER (WHERE u.outcome = 'success'),
-      0
+    COUNT(*) FILTER (
+      WHERE ${billableRequestSql('u')}
     )::bigint AS billable_count
   FROM organizations AS o
   LEFT JOIN usage_records AS u

@@ -9,7 +9,7 @@ import type {
   DispatchAttemptRecordPort,
   DispatchAttemptStart,
 } from '@/modules/metering/application/dispatch-attempt-record.port';
-import { isRecord } from './metering-row';
+import { isRecord, safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 // The deadline is stamped with the database's own clock, so the evidence does
@@ -50,18 +50,10 @@ function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
   if (!isRecord(value) || typeof value.operation !== 'string') {
     throw new Error('dispatch attempt metric row is invalid');
   }
-  const count =
-    typeof value.unresolved_count === 'bigint'
-      ? Number(value.unresolved_count)
-      : typeof value.unresolved_count === 'number'
-        ? value.unresolved_count
-        : typeof value.unresolved_count === 'string'
-          ? Number(value.unresolved_count)
-          : Number.NaN;
+  const count = safeNonNegativeCount(value.unresolved_count);
   if (
     (!isOperationId(value.operation) && value.operation !== 'other') ||
-    !Number.isSafeInteger(count) ||
-    count < 0
+    count === undefined
   ) {
     throw new Error('dispatch attempt metric row is invalid');
   }
