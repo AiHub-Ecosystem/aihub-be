@@ -25,6 +25,11 @@ to reject unknown fields.
 Clients must ignore response fields they do not recognize and must not reject a
 response only because it contains an extra field.
 
+Within a supported major, AIHUB may add response headers without changing the
+meaning of existing headers. Clients must ignore headers they do not recognize;
+an unfamiliar response header alone must not make an otherwise valid response
+fail.
+
 Response enum values are closed unless their OpenAPI schema has
 `x-extensible-enum`. AIHUB may add values to `error.code` and Organization Audit
 event `action`; clients must handle unknown values with fallback logic. For an
