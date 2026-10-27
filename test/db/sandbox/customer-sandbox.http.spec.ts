@@ -13,6 +13,7 @@ import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   type RuntimeConnectionConfiguration,
@@ -262,6 +263,7 @@ beforeAll(async () => {
     controlPlaneModule.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
+  registerSecurityHeaders(controlPlaneApp.getHttpAdapter().getInstance());
   await controlPlaneApp.init();
   await controlPlaneApp.getHttpAdapter().getInstance().ready();
 
