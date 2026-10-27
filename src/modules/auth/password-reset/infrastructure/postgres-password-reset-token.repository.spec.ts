@@ -1,4 +1,5 @@
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresPasswordResetTokenRepository } from './postgres-password-reset-token.repository';
 
@@ -25,7 +26,10 @@ const USER_ID = 'usr_01J00000000000000000000000';
 function repositoryOver(
   script: ScriptedPrisma,
 ): PostgresPasswordResetTokenRepository {
-  return new PostgresPasswordResetTokenRepository(script.client());
+  return new PostgresPasswordResetTokenRepository(
+    script.client(),
+    UNUSED_EMAIL_OUTBOX,
+  );
 }
 
 function allArgs(script: ScriptedPrisma): string {

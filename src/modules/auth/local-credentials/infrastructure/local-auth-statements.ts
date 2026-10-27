@@ -1,8 +1,8 @@
 import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type {
-  EmailDeliveryRequestWriterPort,
-  InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+  EmailOutboxPort,
+  QueueEmailDeliveryRequestInput,
+} from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import {
   type SessionAdmission,
@@ -74,11 +74,11 @@ export async function lockOwningAccount(
  */
 export async function insertEmailDelivery(
   transaction: AuthTransactionClient,
-  emailDeliveryRequests: EmailDeliveryRequestWriterPort,
-  emailDelivery: InsertEmailDeliveryRequestInput | undefined,
+  emailOutbox: EmailOutboxPort,
+  emailDelivery: QueueEmailDeliveryRequestInput | undefined,
 ): Promise<void> {
   if (emailDelivery !== undefined) {
-    await emailDeliveryRequests.insert(
+    await emailOutbox.queue(
       new EmailDeliveryTransactionAdapter(transaction),
       emailDelivery,
     );
@@ -117,11 +117,11 @@ export async function insertRefreshSession(
  */
 export async function lockIssuableIdentity(
   transaction: AuthTransactionClient,
-  emailDeliveryRequests: EmailDeliveryRequestWriterPort,
+  emailOutbox: EmailOutboxPort,
   input: {
     readonly email: string;
     readonly now: Date;
-    readonly emailDelivery?: InsertEmailDeliveryRequestInput | undefined;
+    readonly emailDelivery?: QueueEmailDeliveryRequestInput | undefined;
   },
   acceptedStatus: LocalAccountStatus,
 ): Promise<{ readonly id: string; readonly email: string } | undefined> {
@@ -140,7 +140,7 @@ export async function lockIssuableIdentity(
 
   if (
     input.emailDelivery !== undefined &&
-    !(await emailDeliveryRequests.reserveAuthenticationEmailRecipient(
+    !(await emailOutbox.reserveAuthenticationEmailRecipient(
       new EmailDeliveryTransactionAdapter(transaction),
       { email: input.email, now: input.now },
     ))

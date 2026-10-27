@@ -1,10 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type {
-  EmailDeliveryRequestWriterPort,
-  EmailPayloadCipherPort,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
 import type {
   AcceptOrganizationInvitationInput,
@@ -43,7 +40,6 @@ import {
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { mapOpenOrganizationInvitation } from './map-open-organization-invitation';
-import { sealOrganizationInvitationEmailPayload } from './seal-organization-invitation-email-payload';
 
 /**
  * Locking the organization row serializes concurrent invitations for the same
@@ -131,8 +127,7 @@ export class PostgresOrganizationInvitationRepository
 {
   constructor(
     private readonly client: IdentityRepositoryClient,
-    private readonly payloadCipher: EmailPayloadCipherPort,
-    private readonly emailRequests: EmailDeliveryRequestWriterPort,
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async createInvitation(
@@ -235,22 +230,23 @@ export class PostgresOrganizationInvitationRepository
         // Sealed here because the Organization name is only readable in this
         // transaction, and queued here so the invitation and the request that
         // emails its credential commit or roll back together (ADR-0074).
-        await this.emailRequests.insert(
+        await this.emailOutbox.queue(
           {
             [emailDeliveryTransactionBrand]: undefined,
             client: transaction,
           } as EmailDeliveryTransaction,
           {
-            id: input.emailDelivery.id,
             kind: 'organization_invite_email',
             organizationId: input.organizationId,
             inviterId: input.invitedBy,
-            payloadCiphertext: sealOrganizationInvitationEmailPayload(
-              this.payloadCipher,
-              input,
-              name,
+            payload: {
+              email: input.email,
+              token: input.emailDelivery.token,
+              expiresAt: input.expiresAt.toISOString(),
+              organizationName: name,
+              role: input.role,
               inviterUsername,
-            ),
+            },
             createdAt: input.emailDelivery.createdAt,
           },
         );

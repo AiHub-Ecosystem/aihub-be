@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import {
   type VerificationTokenContractHarness,
   verificationTokenRepositoryContract,
@@ -88,7 +89,8 @@ verificationTokenRepositoryContract({
   expiresAt: EXPIRES_AT,
   expiredAt: EXPIRED_AT,
   passwordHash: PASSWORD_HASH,
-  createRepo: () => new PostgresVerificationTokenRepository(client),
+  createRepo: () =>
+    new PostgresVerificationTokenRepository(client, UNUSED_EMAIL_OUTBOX),
   reset: async () => {
     await resetIdentityTables(pool);
   },

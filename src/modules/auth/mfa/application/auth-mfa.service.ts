@@ -1,10 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
-import type {
-  EmailPayloadCipherPort,
-  InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { invalidCredentials } from '@/modules/auth/local-credentials/application/local-auth-errors';
 import type { LocalAuthServiceClock } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
@@ -45,8 +42,6 @@ export class AuthMfaService implements AuthMfaServicePort {
     private readonly userAccounts: UserAccountRepositoryPort,
     private readonly passwordHasher: PasswordHasherPort,
     private readonly rateLimiter: AuthRateLimiterPort,
-    private readonly emailCipher: EmailPayloadCipherPort,
-    private readonly newEmailDeliveryId: IdMinter,
     private readonly newFactorId: IdMinter,
     private readonly clock: LocalAuthServiceClock,
   ) {}
@@ -226,15 +221,10 @@ export class AuthMfaService implements AuthMfaServicePort {
     kind: 'mfa_enabled_notification' | 'mfa_removed_notification',
     payload: { readonly email: string },
     now: Date,
-  ): InsertEmailDeliveryRequestInput {
-    const id = this.newEmailDeliveryId(now);
+  ): QueueEmailDeliveryRequestInput {
     return {
-      id,
       kind,
-      payloadCiphertext: this.emailCipher.encrypt(JSON.stringify(payload), {
-        id,
-        kind,
-      }),
+      payload,
       createdAt: now,
     };
   }

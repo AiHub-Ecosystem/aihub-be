@@ -1,6 +1,6 @@
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { lockActivePasswordIdentity } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   AuthMfaFactorRecord,
@@ -17,7 +17,7 @@ import { revokeUserWebSessions } from '@/modules/auth/web-sessions/infrastructur
 export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
   constructor(
     private readonly client: AuthRepositoryClient,
-    private readonly emailRequests = new PostgresEmailDeliveryRequestRepository(),
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async findActiveFactor(
@@ -88,7 +88,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly userId: string;
     readonly email: string;
     readonly recoveryCodeHashes: readonly string[];
-    readonly emailDelivery: InsertEmailDeliveryRequestInput;
+    readonly emailDelivery: QueueEmailDeliveryRequestInput;
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
@@ -135,7 +135,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly userId: string;
     readonly email: string;
     readonly expectedPasswordHash?: string;
-    readonly emailDelivery: InsertEmailDeliveryRequestInput | undefined;
+    readonly emailDelivery: QueueEmailDeliveryRequestInput | undefined;
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
@@ -222,9 +222,9 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
 
   private async insertEmailDelivery(
     transaction: AuthTransactionClient,
-    input: InsertEmailDeliveryRequestInput,
+    input: QueueEmailDeliveryRequestInput,
   ): Promise<void> {
-    await this.emailRequests.insert(
+    await this.emailOutbox.queue(
       new EmailDeliveryTransactionAdapter(transaction),
       input,
     );

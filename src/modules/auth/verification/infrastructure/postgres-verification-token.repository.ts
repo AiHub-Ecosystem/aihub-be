@@ -1,5 +1,4 @@
-import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   insertEmailDelivery,
   insertRefreshSession,
@@ -48,7 +47,7 @@ export class PostgresVerificationTokenRepository
 {
   constructor(
     private readonly client: AuthRepositoryClient,
-    private readonly emailDeliveryRequests: EmailDeliveryRequestWriterPort = new PostgresEmailDeliveryRequestRepository(),
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async rotateVerificationToken(
@@ -58,7 +57,7 @@ export class PostgresVerificationTokenRepository
       return await authTransaction(this.client, async (transaction) => {
         const row = await lockIssuableIdentity(
           transaction,
-          this.emailDeliveryRequests,
+          this.emailOutbox,
           input,
           'pending_verification',
         );
@@ -83,7 +82,7 @@ export class PostgresVerificationTokenRepository
         });
         await insertEmailDelivery(
           transaction,
-          this.emailDeliveryRequests,
+          this.emailOutbox,
           input.emailDelivery,
         );
         return { email: row.email };

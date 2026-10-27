@@ -1,4 +1,4 @@
-import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,
@@ -68,7 +68,7 @@ export class InMemoryAuthMfaAdapter implements AuthMfaRepositoryPort {
     readonly userId: string;
     readonly email: string;
     readonly recoveryCodeHashes: readonly string[];
-    readonly emailDelivery: InsertEmailDeliveryRequestInput;
+    readonly emailDelivery: QueueEmailDeliveryRequestInput;
     readonly now: Date;
   }): Promise<boolean> {
     const account = this.state.accounts.get(input.userId);
@@ -95,7 +95,7 @@ export class InMemoryAuthMfaAdapter implements AuthMfaRepositoryPort {
     readonly userId: string;
     readonly email: string;
     readonly expectedPasswordHash?: string;
-    readonly emailDelivery: InsertEmailDeliveryRequestInput | undefined;
+    readonly emailDelivery: QueueEmailDeliveryRequestInput | undefined;
     readonly now: Date;
   }): Promise<boolean> {
     const account = this.state.accounts.get(input.userId);

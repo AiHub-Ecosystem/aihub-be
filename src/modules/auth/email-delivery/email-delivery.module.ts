@@ -34,8 +34,13 @@ import {
   type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
+import { EmailOutbox } from './application/email-outbox';
 import { EmailOutboxBackpressureGate } from './application/email-outbox-backpressure.gate';
 import { ADMIT_EMAIL_REQUEST } from './application/email-outbox-backpressure.port';
+import {
+  EMAIL_OUTBOX,
+  type EmailOutboxPort,
+} from './application/email-outbox.port';
 import {
   EMAIL_PROVIDER_OUTAGE_CIRCUIT,
   type EmailProviderOutageCircuitPort,
@@ -120,6 +125,22 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
       useFactory: (provider: RuntimeSecretProvider): EmailPayloadCipherPort =>
         createEmailPayloadCipher(provider.getSnapshot().emailOutbox),
       inject: [RUNTIME_SECRET_PROVIDER],
+    },
+    {
+      provide: EMAIL_OUTBOX,
+      inject: [
+        EMAIL_DELIVERY_REQUEST_WRITER,
+        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_DELIVERY_ID,
+        ADMIT_EMAIL_REQUEST,
+      ],
+      useFactory: (
+        requests: EmailDeliveryRequestWriterPort,
+        cipher: EmailPayloadCipherPort,
+        newId: ReturnType<typeof prefixedIdGenerator>,
+        backpressure: EmailOutboxBackpressureGate,
+      ): EmailOutboxPort =>
+        new EmailOutbox(requests, cipher, newId, backpressure),
     },
     // Empty here; the module owning a notice's facts fills its slot (ADR-0120).
     {
@@ -255,13 +276,6 @@ import { ResendEmailSender } from './infrastructure/resend-email.sender';
       ],
     },
   ],
-  exports: [
-    EMAIL_DELIVERY_ID,
-    ADMIT_EMAIL_REQUEST,
-    EMAIL_DELIVERY_REQUEST_WRITER,
-    EMAIL_NOTICE_RESOLVERS,
-    EMAIL_PAYLOAD_CIPHER,
-    EMAIL_SENDER,
-  ],
+  exports: [EMAIL_OUTBOX, EMAIL_NOTICE_RESOLVERS, EMAIL_SENDER],
 })
 export class EmailDeliveryModule {}

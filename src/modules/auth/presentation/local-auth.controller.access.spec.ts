@@ -49,16 +49,11 @@ describe('local auth HTTP boundary - access, registration, and rate limits', () 
     return body;
   }
 
-  function sealed(
-    request: { readonly payloadCiphertext: string } | undefined,
-  ): unknown {
+  function sealed(request: { readonly payload: unknown } | undefined): unknown {
     if (request === undefined) {
       throw new Error('no email delivery request was written');
     }
-    const payload: unknown = JSON.parse(
-      c.cipher.decrypt(request.payloadCiphertext),
-    );
-    return payload;
+    return request.payload;
   }
 
   it('uses the address nginx appends for separate local-auth IP budgets', async () => {

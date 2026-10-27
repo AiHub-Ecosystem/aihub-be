@@ -9,16 +9,15 @@ import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  EMAIL_PAYLOAD_CIPHER,
-  type EmailPayloadCipherPort,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
-import {
-  ADMIT_EMAIL_REQUEST,
-  type BackpressureEmailKind,
-  type EmailOutboxQueueAgePort,
+import type {
+  BackpressureEmailKind,
+  EmailOutboxQueueAgePort,
 } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
+import {
+  EMAIL_OUTBOX,
+  type EmailOutboxPort,
+} from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
@@ -68,19 +67,6 @@ export const USER_ID = 'usr_01J00000000000000000000000';
 export const EMAIL = 'person@example.com';
 export const RECOVERY_MESSAGE =
   'If the account exists and is eligible, AIHUB has accepted a request to send password reset instructions.';
-
-export class PayloadCipherFake implements EmailPayloadCipherPort {
-  encrypt(plaintext: string): string {
-    const sealed = Buffer.from(plaintext, 'utf8').toString('base64url');
-    return `sealed:${sealed}`;
-  }
-
-  decrypt(envelope: string): string {
-    return Buffer.from(envelope.slice('sealed:'.length), 'base64url').toString(
-      'utf8',
-    );
-  }
-}
 
 export class HasherFake implements PasswordHasherPort {
   result = true;
@@ -280,7 +266,6 @@ export interface LocalAuthTestContext {
   verificationTokens: InMemoryVerificationTokenAdapter;
   passwordResetTokens: InMemoryPasswordResetTokenAdapter;
   refreshSessions: InMemoryRefreshSessionAdapter;
-  cipher: PayloadCipherFake;
   hasher: HasherFake;
   limiter: LimiterFake;
   queueAge: QueueAgeFake;
@@ -298,7 +283,6 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
   const verificationTokens = new InMemoryVerificationTokenAdapter(state);
   const passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
   const refreshSessions = new InMemoryRefreshSessionAdapter(state);
-  const cipher = new PayloadCipherFake();
   const hasher = new HasherFake();
   const limiter = new LimiterFake();
   const queueAge = new QueueAgeFake();
@@ -326,8 +310,6 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     .useValue(passwordResetTokens)
     .overrideProvider(REFRESH_SESSION_REPOSITORY)
     .useValue(refreshSessions)
-    .overrideProvider(EMAIL_PAYLOAD_CIPHER)
-    .useValue(cipher)
     .overrideProvider(PASSWORD_HASHER)
     .useValue(hasher)
     .overrideProvider(VERIFICATION_TOKEN)
@@ -336,14 +318,23 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     .useValue(passwordResetTokenIssuer)
     .overrideProvider(AUTH_RATE_LIMITER)
     .useValue(limiter)
-    .overrideProvider(ADMIT_EMAIL_REQUEST)
-    .useValue(
-      new EmailOutboxBackpressureGate(
-        queueAge,
-        (kind) => queueAge.refusals.push(kind),
-        () => 0,
-      ),
-    )
+    .overrideProvider(EMAIL_OUTBOX)
+    .useValue({
+      withAdmission: async <T>(
+        kind: BackpressureEmailKind,
+        operation: () => Promise<T>,
+      ): Promise<T> => {
+        await new EmailOutboxBackpressureGate(
+          queueAge,
+          (kind) => queueAge.refusals.push(kind),
+          () => 0,
+        ).admit(kind);
+        return operation();
+      },
+      reserveAuthenticationEmailRecipient: async () => true,
+      queue: async () => undefined,
+      withdraw: async () => undefined,
+    } satisfies EmailOutboxPort)
     .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
     .useValue(accessTokenIssuer)
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
@@ -387,7 +378,6 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     verificationTokens,
     passwordResetTokens,
     refreshSessions,
-    cipher,
     hasher,
     limiter,
     queueAge,

@@ -4,12 +4,10 @@ import type {
   ApiKeyNearExpiryNoticeResolverPort,
   ApiKeyNearExpiryNotificationInput,
   ApiKeyNearExpiryNotificationPayload,
-  EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
-  EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { isApiKeyNearExpiryNotificationPayload } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type {
   ApiKeyNearExpiryNoticeRecordPort,
   ApiKeyNearExpirySweepSummary,
@@ -188,8 +186,7 @@ export class PostgresApiKeyNearExpiryNotices
 {
   constructor(
     private readonly client: IdentityRepositoryClient,
-    private readonly payloadCipher: EmailPayloadCipherPort,
-    private readonly emailRequests: EmailDeliveryRequestWriterPort,
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async recordDue(
@@ -235,14 +232,9 @@ export class PostgresApiKeyNearExpiryNotices
         const notices = planApiKeyNearExpiryNotices(recorded, recipients);
         const emailTransaction = emailDeliveryTransactionOver(transaction);
         for (const payload of notices) {
-          const id = input.newEmailDeliveryId(input.now);
-          await this.emailRequests.insert(emailTransaction, {
-            id,
+          await this.emailOutbox.queue(emailTransaction, {
             kind: NOTICE_EMAIL_KIND,
-            payloadCiphertext: this.payloadCipher.encrypt(
-              JSON.stringify(payload),
-              { id, kind: NOTICE_EMAIL_KIND },
-            ),
+            payload,
             createdAt: input.now,
           });
         }
@@ -382,33 +374,11 @@ export class PostgresApiKeyNearExpiryNotices
     now: Date,
   ): Promise<void> {
     const emailTransaction = emailDeliveryTransactionOver(transaction);
-    const queued = await this.emailRequests.queuedPayloadCiphertexts(
-      emailTransaction,
-      { kind: NOTICE_EMAIL_KIND },
-    );
-    const superseded: string[] = [];
-    for (const request of queued) {
-      let candidate: unknown;
-      try {
-        candidate = JSON.parse(
-          this.payloadCipher.decrypt(request.payloadCiphertext, {
-            id: request.id,
-            kind: NOTICE_EMAIL_KIND,
-          }),
-        );
-      } catch {
-        continue;
-      }
-      if (
-        isApiKeyNearExpiryNotificationPayload(candidate) &&
+    await this.emailOutbox.withdraw(emailTransaction, {
+      kind: NOTICE_EMAIL_KIND,
+      matches: (candidate) =>
         candidate.organizationId === payload.organizationId &&
-        candidate.apiKeyIds.some((id) => payload.apiKeyIds.includes(id))
-      ) {
-        superseded.push(request.id);
-      }
-    }
-    await this.emailRequests.cancelQueued(emailTransaction, {
-      ids: superseded,
+        candidate.apiKeyIds.some((id) => payload.apiKeyIds.includes(id)),
       reason: 'not_actionable',
       cancelledAt: now,
     });

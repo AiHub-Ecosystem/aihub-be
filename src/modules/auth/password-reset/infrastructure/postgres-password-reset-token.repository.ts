@@ -1,5 +1,4 @@
-import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   insertEmailDelivery,
   lockIssuableIdentity,
@@ -97,7 +96,7 @@ export class PostgresPasswordResetTokenRepository
 {
   constructor(
     private readonly client: AuthRepositoryClient,
-    private readonly emailDeliveryRequests: EmailDeliveryRequestWriterPort = new PostgresEmailDeliveryRequestRepository(),
+    private readonly emailOutbox: EmailOutboxPort,
   ) {}
 
   async issuePasswordResetToken(
@@ -106,7 +105,7 @@ export class PostgresPasswordResetTokenRepository
     return authTransaction(this.client, async (transaction) => {
       const row = await lockIssuableIdentity(
         transaction,
-        this.emailDeliveryRequests,
+        this.emailOutbox,
         input,
         'active',
       );
@@ -129,7 +128,7 @@ export class PostgresPasswordResetTokenRepository
       });
       await insertEmailDelivery(
         transaction,
-        this.emailDeliveryRequests,
+        this.emailOutbox,
         input.emailDelivery,
       );
       return { email: row.email };

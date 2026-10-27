@@ -1,5 +1,4 @@
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
-import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { InMemoryAuthMfaAdapter } from '@/modules/auth/testing/in-memory-auth-mfa.adapter';
@@ -36,19 +35,6 @@ class FakeCipher implements AuthMfaCipherPort {
   decrypt(_keyId: string, ciphertext: string): string {
     return Buffer.from(
       ciphertext.slice('sealed:'.length),
-      'base64url',
-    ).toString();
-  }
-}
-
-class FakeEmailCipher implements EmailPayloadCipherPort {
-  encrypt(plaintext: string): string {
-    return `sealed:${Buffer.from(plaintext).toString('base64url')}`;
-  }
-
-  decrypt(envelope: string): string {
-    return Buffer.from(
-      envelope.slice('sealed:'.length),
       'base64url',
     ).toString();
   }
@@ -96,8 +82,6 @@ function harness() {
     new InMemoryUserAccountAdapter(state),
     new FakeHasher(),
     limiter,
-    new FakeEmailCipher(),
-    prefixedIdGenerator('edr_'),
     prefixedIdGenerator('mfa_'),
     new FakeClock(),
   );
@@ -157,9 +141,11 @@ describe('AuthMfaService', () => {
     expect([...(storedHashes ?? [])]).not.toContain(codes[0]);
     const request = state.emailDeliveryRequests[0];
     expect(request?.kind).toBe('mfa_enabled_notification');
-    expect(
-      JSON.parse(new FakeEmailCipher().decrypt(request!.payloadCiphertext)),
-    ).toEqual({ email: EMAIL });
+    expect(request).toMatchObject({
+      kind: 'mfa_enabled_notification',
+      payload: { email: EMAIL },
+      createdAt: NOW,
+    });
     expect(limiter.calls).toHaveLength(0);
   });
 
@@ -273,8 +259,6 @@ describe('AuthMfaService', () => {
         accounts,
         new FakeHasher(),
         built.limiter,
-        new FakeEmailCipher(),
-        prefixedIdGenerator('edr_'),
         prefixedIdGenerator('mfa_'),
         new FakeClock(),
       );

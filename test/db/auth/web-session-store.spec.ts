@@ -6,6 +6,7 @@ import { ulid } from 'ulid';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
+import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { PostgresWebSessionRepository } from '@/modules/auth/web-sessions/infrastructure/postgres-web-session.repository';
 import { interceptStatements } from '@/modules/persistence/testing/query-fake-client';
 import { racePausedFirst } from './pause-before-commit';
@@ -44,7 +45,10 @@ beforeAll(async () => {
   pool = createTestPool();
   client = createPostgresAuthClient(testDatabaseUrl());
   webSessions = new PostgresWebSessionRepository(client);
-  passwordResets = new PostgresPasswordResetTokenRepository(client);
+  passwordResets = new PostgresPasswordResetTokenRepository(
+    client,
+    UNUSED_EMAIL_OUTBOX,
+  );
   resetPasswordHash = await new Argon2PasswordHasher().hash('a new passphrase');
 });
 
@@ -536,7 +540,12 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
         client,
         (pausedClient) =>
           firstOperation === 'reset'
-            ? reset(new PostgresPasswordResetTokenRepository(pausedClient))
+            ? reset(
+                new PostgresPasswordResetTokenRepository(
+                  pausedClient,
+                  UNUSED_EMAIL_OUTBOX,
+                ),
+              )
             : create(new PostgresWebSessionRepository(pausedClient)),
         () =>
           firstOperation === 'reset'
@@ -600,7 +609,10 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
     const failing = failingWebSessionRevocation();
 
     await expect(
-      new PostgresPasswordResetTokenRepository(failing).consumePasswordReset({
+      new PostgresPasswordResetTokenRepository(
+        failing,
+        UNUSED_EMAIL_OUTBOX,
+      ).consumePasswordReset({
         tokenHash: resetHash,
         passwordHash: resetPasswordHash,
         now: RESET_AT,

@@ -5,16 +5,11 @@ import { runNotificationsSweepCommand } from './notifications-sweep';
 const NOW = new Date('2026-10-22T03:00:00.000Z');
 
 function records(): ApiKeyNearExpiryNoticeRecordPort & {
-  calls: { now: Date; windowEnd: Date; eventId: string; emailId: string }[];
+  calls: { now: Date; windowEnd: Date; eventId: string }[];
   closed: number;
   close(): Promise<void>;
 } {
-  const calls: {
-    now: Date;
-    windowEnd: Date;
-    eventId: string;
-    emailId: string;
-  }[] = [];
+  const calls: { now: Date; windowEnd: Date; eventId: string }[] = [];
   const fake = {
     calls,
     closed: 0,
@@ -25,7 +20,6 @@ function records(): ApiKeyNearExpiryNoticeRecordPort & {
         now: input.now,
         windowEnd: input.windowEnd,
         eventId: input.newEventId(input.now),
-        emailId: input.newEmailDeliveryId(input.now),
       });
       return { eventsRecorded: 2, emailsQueued: 3, keysSkipped: 1 };
     },
@@ -63,7 +57,6 @@ describe('notifications:sweep', () => {
       windowEnd: new Date('2026-11-05T03:00:00.000Z'),
     });
     expect(call?.eventId).toMatch(/^nev_[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(call?.emailId).toMatch(/^edr_[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(store.closed).toBe(1);
   });
 

@@ -28,14 +28,10 @@ import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
 import { PostgresUserAccountRepository } from './accounts/infrastructure/postgres-user-account.repository';
 import {
-  EMAIL_DELIVERY_ID,
-  EMAIL_DELIVERY_REQUEST_WRITER,
-  EMAIL_PAYLOAD_CIPHER,
-  type EmailDeliveryRequestWriterPort,
-} from './email-delivery/application/email-delivery-request.port';
-import { ADMIT_EMAIL_REQUEST } from './email-delivery/application/email-outbox-backpressure.port';
+  EMAIL_OUTBOX,
+  type EmailOutboxPort,
+} from './email-delivery/application/email-outbox.port';
 import { EmailDeliveryModule } from './email-delivery/email-delivery.module';
-import { PostgresEmailDeliveryRequestRepository } from './email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { LOCAL_AUTH_SERVICE } from './local-credentials/application/local-auth-service.port';
 import {
   AUTH_CLOCK,
@@ -136,30 +132,30 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
     // transaction by writing the other tables through the shared statements.
     {
       provide: PostgresUserAccountRepository,
-      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_OUTBOX],
       useFactory: (
         runtime: PrismaClientHolder,
-        emailRequests: EmailDeliveryRequestWriterPort,
+        emailOutbox: EmailOutboxPort,
       ): PostgresUserAccountRepository =>
-        new PostgresUserAccountRepository(runtime.prisma, emailRequests),
+        new PostgresUserAccountRepository(runtime.prisma, emailOutbox),
     },
     {
       provide: PostgresVerificationTokenRepository,
-      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_OUTBOX],
       useFactory: (
         runtime: PrismaClientHolder,
-        emailRequests: EmailDeliveryRequestWriterPort,
+        emailOutbox: EmailOutboxPort,
       ): PostgresVerificationTokenRepository =>
-        new PostgresVerificationTokenRepository(runtime.prisma, emailRequests),
+        new PostgresVerificationTokenRepository(runtime.prisma, emailOutbox),
     },
     {
       provide: PostgresPasswordResetTokenRepository,
-      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_OUTBOX],
       useFactory: (
         runtime: PrismaClientHolder,
-        emailRequests: EmailDeliveryRequestWriterPort,
+        emailOutbox: EmailOutboxPort,
       ): PostgresPasswordResetTokenRepository =>
-        new PostgresPasswordResetTokenRepository(runtime.prisma, emailRequests),
+        new PostgresPasswordResetTokenRepository(runtime.prisma, emailOutbox),
     },
     {
       provide: PostgresRefreshSessionRepository,
@@ -171,12 +167,12 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
     },
     {
       provide: AUTH_MFA_REPOSITORY,
-      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_DELIVERY_REQUEST_WRITER],
+      inject: [RUNTIME_PRISMA_CLIENT, EMAIL_OUTBOX],
       useFactory: (
         runtime: PrismaClientHolder,
-        emailRequests: PostgresEmailDeliveryRequestRepository,
+        emailOutbox: EmailOutboxPort,
       ): PostgresAuthMfaRepository =>
-        new PostgresAuthMfaRepository(runtime.prisma, emailRequests),
+        new PostgresAuthMfaRepository(runtime.prisma, emailOutbox),
     },
     {
       provide: AUTH_MFA_CIPHER,
@@ -199,8 +195,6 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
         USER_ACCOUNT_REPOSITORY,
         PASSWORD_HASHER,
         AUTH_RATE_LIMITER,
-        EMAIL_PAYLOAD_CIPHER,
-        EMAIL_DELIVERY_ID,
         AUTH_MFA_ID,
         AUTH_CLOCK,
       ],
@@ -360,14 +354,12 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
         PASSWORD_HASHER,
         VERIFICATION_TOKEN,
         PASSWORD_RESET_TOKEN,
-        EMAIL_PAYLOAD_CIPHER,
+        EMAIL_OUTBOX,
         AUTH_RATE_LIMITER,
         USER_ACCESS_TOKEN_ISSUER,
         REFRESH_TOKEN_ISSUER,
         AUTH_CLOCK,
-        EMAIL_DELIVERY_ID,
         AUTH_MFA_SERVICE,
-        ADMIT_EMAIL_REQUEST,
         EMAIL_VERIFICATION_REQUIRES_PASSWORD,
       ],
     },

@@ -12,11 +12,9 @@ describe('SweepApiKeyNearExpiry', () => {
     };
     const now = new Date('2026-10-22T00:00:00.000Z');
 
-    const summary = await new SweepApiKeyNearExpiry(
-      records,
-      () => 'nev_x',
-      () => 'edr_x',
-    ).run(now);
+    const summary = await new SweepApiKeyNearExpiry(records, () => 'nev_x').run(
+      now,
+    );
 
     expect(calls).toEqual([
       { now, windowEnd: new Date('2026-11-05T00:00:00.000Z') },
