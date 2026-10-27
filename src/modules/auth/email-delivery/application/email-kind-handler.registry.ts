@@ -1,12 +1,14 @@
 import { isRecord } from '@/common/is-record';
-import type {
-  ApiKeyNearExpiryNotificationPayload,
-  AuthEmailDeliveryPayload,
-  EmailDeliveryKind,
-  EmailDeliveryPayload,
-  EmailNoticeResolvers,
-  MfaSecurityNotificationPayload,
-  OrganizationInviteEmailDeliveryPayload,
+import {
+  type ApiKeyNearExpiryNotificationPayload,
+  type AuthEmailDeliveryPayload,
+  type EmailDeliveryKind,
+  type EmailDeliveryPayload,
+  type EmailNoticeResolvers,
+  INVITE_EMAIL_ROLES,
+  type InviteEmailRole,
+  type MfaSecurityNotificationPayload,
+  type OrganizationInviteEmailDeliveryPayload,
 } from './email-delivery-request.port';
 import {
   composeApiKeyNearExpiryNotification,
@@ -56,10 +58,8 @@ function isAuthEmailPayload(value: unknown): value is AuthEmailDeliveryPayload {
   );
 }
 
-function isInvitationRole(
-  value: unknown,
-): value is OrganizationInviteEmailDeliveryPayload['role'] {
-  return value === 'owner' || value === 'admin' || value === 'member';
+function isInvitationRole(value: unknown): value is InviteEmailRole {
+  return INVITE_EMAIL_ROLES.some((role) => role === value);
 }
 
 function isOrganizationInvitePayload(

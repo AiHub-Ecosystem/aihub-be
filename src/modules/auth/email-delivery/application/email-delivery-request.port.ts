@@ -112,14 +112,20 @@ export interface AuthEmailDeliveryPayload {
   readonly expiresAt: string;
 }
 
+/**
+ * The roles an invitation email can name. The one list: the composer's labels
+ * are keyed by it and the payload reader checks against it, so a fourth role
+ * is a compile error in the first and cannot make the second fail a valid
+ * payload as `payload_unreadable`. Auth cannot import the Identity role type.
+ */
+export const INVITE_EMAIL_ROLES = ['owner', 'admin', 'member'] as const;
+
+export type InviteEmailRole = (typeof INVITE_EMAIL_ROLES)[number];
+
 export interface OrganizationInviteEmailDeliveryPayload
   extends AuthEmailDeliveryPayload {
   readonly organizationName: string;
-  /**
-   * The same three roles the invitation email composer accepts. Spelled out
-   * rather than imported from it, because the composer reads this port.
-   */
-  readonly role: 'owner' | 'admin' | 'member';
+  readonly role: InviteEmailRole;
   readonly inviterUsername?: string;
 }
 

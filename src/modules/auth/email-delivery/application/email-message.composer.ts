@@ -2,6 +2,7 @@ import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationInput,
+  type InviteEmailRole,
 } from './email-delivery-request.port';
 import type { EmailMessage } from './email-sender.port';
 import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
@@ -21,7 +22,7 @@ export interface PasswordResetEmailInput {
 export interface OrganizationInviteEmailInput {
   readonly email: string;
   readonly organizationName: string;
-  readonly role: 'owner' | 'admin' | 'member';
+  readonly role: InviteEmailRole;
   readonly token: string;
   readonly expiresAt: Date;
   readonly inviterUsername?: string;
