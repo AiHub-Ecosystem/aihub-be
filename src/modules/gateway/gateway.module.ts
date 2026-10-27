@@ -88,8 +88,7 @@ import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from './infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
-import { OrganizationRetryBudgetGuard } from './presentation/organization-retry-budget.guard';
-import { QuotaGuard } from './presentation/quota.guard';
+import { GradedAdmissionGuard } from './presentation/graded-admission.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
@@ -272,8 +271,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
     },
     RateLimitGuard,
-    OrganizationRetryBudgetGuard,
-    QuotaGuard,
+    GradedAdmissionGuard,
     ConcurrencyPermitInterceptor,
   ],
   exports: [
@@ -286,10 +284,8 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     RATE_LIMITER,
     GRADED_ADMISSION,
     RateLimitGuard,
-    ORGANIZATION_RETRY_BUDGET,
-    OrganizationRetryBudgetGuard,
+    GradedAdmissionGuard,
     QUOTA_COUNTER,
-    QuotaGuard,
     CONCURRENCY_LIMITER,
     ConcurrencyPermitInterceptor,
   ],

@@ -75,16 +75,15 @@ const task1Request = fixture('grade-task1.request.json') as {
  * the (mutable) declaration, reordering the declaration would still match
  * itself and pass, so "moving a step fails verification" would be false.
  * ADR-0018 requires quota to be read before concurrency admission; the retry
- * budget also precedes quota so its refusal takes priority over a replay. ADR-0058
+ * budget also precedes quota so its refusal takes priority over a replay; both
+ * now happen inside the one GradedAdmissionGuard (#1312). ADR-0058
  * moved concurrency admission to a permit interceptor, so it is recorded across
  * the guard/interceptor boundary as one sequence.
  */
 const EXPECTED_ORDER = [
   'ApiKeyGuard',
   'UserIdentityGuard',
-  'RateLimitGuard',
-  'OrganizationRetryBudgetGuard',
-  'QuotaGuard',
+  'GradedAdmissionGuard',
   'ConcurrencyPermitInterceptor',
 ] as const;
 
@@ -237,9 +236,7 @@ describe('graded request chain', () => {
     expect(GRADED_REQUEST_GUARDS.map((guard) => guard.name)).toEqual([
       'ApiKeyGuard',
       'UserIdentityGuard',
-      'RateLimitGuard',
-      'OrganizationRetryBudgetGuard',
-      'QuotaGuard',
+      'GradedAdmissionGuard',
     ]);
     expect(GRADED_REQUEST_INTERCEPTORS.map((i) => i.name)).toEqual([
       'ConcurrencyPermitInterceptor',

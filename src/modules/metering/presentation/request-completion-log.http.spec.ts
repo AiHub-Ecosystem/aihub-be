@@ -28,7 +28,7 @@ import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
-import { QuotaGuard } from '@/modules/gateway/presentation/quota.guard';
+import { GradedAdmissionGuard } from '@/modules/gateway/presentation/graded-admission.guard';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -486,7 +486,10 @@ describe('request completion log over the HTTP boundary', () => {
 
   it('includes a slow real guard in response, log, and histograms', async () => {
     const delayMs = 75;
-    const original = getOwnPrototypeMethod(QuotaGuard.prototype, 'canActivate');
+    const original = getOwnPrototypeMethod(
+      GradedAdmissionGuard.prototype,
+      'canActivate',
+    );
     const totalBefore = await metricValue(
       app,
       'aihub_request_duration_seconds_sum',
@@ -496,8 +499,8 @@ describe('request completion log over the HTTP boundary', () => {
       'aihub_admission_duration_seconds_sum',
     );
     const delayGuard = jest
-      .spyOn(QuotaGuard.prototype, 'canActivate')
-      .mockImplementation(async function (this: QuotaGuard, context) {
+      .spyOn(GradedAdmissionGuard.prototype, 'canActivate')
+      .mockImplementation(async function (this: GradedAdmissionGuard, context) {
         await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
         return original.call(this, context);
       });
@@ -636,7 +639,7 @@ describe('request completion log over the HTTP boundary', () => {
       'aihub_admission_duration_seconds_sum',
     );
     const refusalGuard = jest
-      .spyOn(QuotaGuard.prototype, 'canActivate')
+      .spyOn(GradedAdmissionGuard.prototype, 'canActivate')
       .mockImplementation(async () => {
         await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
         throw new AppError({
