@@ -81,10 +81,11 @@ The SSH tunnel image creates a passwd entry for that monitoring UID/GID because 
 
 | Host       | Services                                                                 | Memory ceiling | CPU ceiling |                             Persistent metrics |
 | ---------- | ------------------------------------------------------------------------ | -------------: | ----------: | ---------------------------------------------: |
+| Production | AIHUB app container                                                      |        768 MiB |    1.50 CPU |                                           None |
 | Production | node_exporter, cAdvisor, postgres_exporter                               |        384 MiB |    0.45 CPU |                                           None |
 | Monitoring | Prometheus, node_exporter, Redis exporter, blackbox exporter, SSH tunnel |        512 MiB |    0.70 CPU | 512 MiB TSDB retention-size target and 14 days |
 
-Memory/CPU are hard container ceilings approved for this rollout. TSDB retention size bounds stored blocks but is not a filesystem quota; WAL can add disk usage. Record observed `docker stats` and host memory/disk before considering the budget satisfied.
+Memory/CPU are hard container ceilings approved for this rollout. The app exports `aihub_process_cpu_seconds_total`, a label-free counter of Node process user and system CPU seconds; its five-minute rate is CPU cores. `AIHUBProcessCpuNearLimit` warns when one Production or Sandbox process sustains 1.2 CPU (80% of the 1.5 CPU ceiling) for five minutes, matching the capacity benchmark's headroom threshold. It measures the Node process, not aggregate host CPU. TSDB retention size bounds stored blocks but is not a filesystem quota; WAL can add disk usage. Record observed `docker stats` and host memory/disk before considering the budget satisfied.
 
 ## Secrets and data boundaries
 
@@ -142,7 +143,7 @@ Compare per-container `docker stats` and `free -m`/disk use with the ceilings ab
 
 ## Alert thresholds and routing
 
-The rule slice for this issue is listed in the [host/dependency alert catalog](alert-catalog.md), which is a scoped contribution to #412, not completion of the full #412 catalog. The existing Alertmanager currently routes `warning` to `discord-warning`, and `critical` to `discord-critical`, Pushover, and Telegram. Disk 80%, PostgreSQL connections 80% of measured `max_connections`, and certificate expiry within 14 days are issue-defined thresholds. The five-second clock bound, memory below 10%, Redis memory above 80% of the observed bound, Redis mean command latency above 100 ms, restart loop, and failed-probe severity are proposals for the #412 review. The owner approved collector and resource scope; this does not approve a general paging policy.
+The rule slice for this issue is listed in the [host, app, and dependency alert catalog](alert-catalog.md), a scoped contribution to #412, not completion of the full #412 catalog. The existing Alertmanager currently routes `warning` to `discord-warning`, and `critical` to `discord-critical`, Pushover, and Telegram. Disk 80%, PostgreSQL connections 80% of measured `max_connections`, and certificate expiry within 14 days are issue-defined thresholds. The app CPU alert uses the capacity benchmark's 80% operating threshold. The five-second clock bound, memory below 10%, Redis memory above 80% of the observed bound, Redis mean command latency above 100 ms, restart loop, and failed-probe severity are proposals for the #412 review. The owner approved collector and resource scope; this does not approve a general paging policy.
 
 The Redis threshold is static because its exporter is explicitly forbidden from calling `CONFIG`. The target-down alert covers every `aihub-*` scrape job. Do not claim alert delivery has been exercised unless it was deliberately tested through the configured receiver route.
 
@@ -161,6 +162,10 @@ Use `node_timex_offset_seconds` and `node_timex_sync_status` for Production and 
 ### Containers
 
 Use the cAdvisor `name` label to identify the affected `aihub...` container, then inspect `docker stats`, `docker ps -a`, and that container's restart history. cAdvisor has no stopped-container history, so its OOM/restart series are not a complete event log.
+
+### Process CPU
+
+`AIHUBProcessCpuNearLimit` fires per Production or Sandbox target when the rate of `aihub_process_cpu_seconds_total` is at least 1.2 cores for five minutes. Check the `job` and `instance` labels, compare with event-loop lag and request load, and inspect recent workload or deployment changes. The signal measures Node process CPU; use `docker stats` to inspect the whole container.
 
 ### PostgreSQL
 

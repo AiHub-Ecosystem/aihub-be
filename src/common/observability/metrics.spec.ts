@@ -612,7 +612,7 @@ describe('runtime resource metrics', () => {
     setPostgresPoolStatsSource(undefined);
   });
 
-  it('scrapes process memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
+  it('scrapes process CPU and memory, event-loop lag, Postgres pool counts, and downstream queue', async () => {
     let queued = 3;
     setPostgresPoolStatsSource(() => [
       {
@@ -630,6 +630,7 @@ describe('runtime resource metrics', () => {
     const payload = await getMetrics();
 
     for (const name of [
+      'aihub_process_cpu_seconds_total',
       'aihub_process_resident_memory_bytes',
       'aihub_process_heap_used_bytes',
       'aihub_event_loop_lag_seconds',
@@ -654,6 +655,7 @@ describe('runtime resource metrics', () => {
     );
     expect(payload).toMatch(/^aihub_process_resident_memory_bytes [\d.]+$/m);
     expect(payload).toMatch(/^aihub_process_heap_used_bytes [\d.]+$/m);
+    expect(payload).toMatch(/^aihub_process_cpu_seconds_total [\d.]+$/m);
     const lagSeconds = Number(
       payload.match(/^aihub_event_loop_lag_seconds (\S+)$/m)?.[1],
     );

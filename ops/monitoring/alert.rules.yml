@@ -45,6 +45,20 @@ groups:
           description: "Candidate rule: verify the deployed cAdvisor labels and restart behavior before enabling."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#containers
 
+  - name: aihub-process
+    rules:
+      - alert: AIHUBProcessCpuNearLimit
+        expr: rate(aihub_process_cpu_seconds_total{job=~"aihub-(production|sandbox)-app"}[5m]) >= 1.2
+        for: 5m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "AIHUB process CPU use is near its 1.5 CPU limit"
+          description: "{{ $labels.job }} instance {{ $labels.instance }} used at least 1.2 CPU for five minutes."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#process-cpu
+
   - name: aihub-postgres-and-redis
     rules:
       - alert: AIHUBPostgresConnectionsAboveBudget
@@ -158,7 +172,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "048061efc002cce96454af892b90f0fcc68ce278b930909c586cd23209745ab8"
+          rules_sha256: "1665bbef055058a7ea6254cac7654e3780c6ae794434d5fb285d1a9160ddaf2c"
 
   - name: aihub-email-outbox
     rules:

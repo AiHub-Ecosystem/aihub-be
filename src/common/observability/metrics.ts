@@ -1,5 +1,3 @@
-import { monitorEventLoopDelay } from 'node:perf_hooks';
-
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
@@ -14,6 +12,7 @@ import {
   registerEmailOutboxCancellationMetric,
 } from './email-outbox-cancellation-metric';
 import { registerEmailProviderOutageMetric } from './email-provider-outage-metric';
+import { registerProcessRuntimeMetrics } from './process-runtime-metrics';
 
 export type {
   EmailDeliveryKindLabel,
@@ -28,6 +27,7 @@ export const METRICS_ROUTE_PATH = '/metrics';
 
 export const registry = new Registry();
 const recordCriticalJourneyMetrics = registerCriticalJourneyMetrics(registry);
+registerProcessRuntimeMetrics(registry);
 
 let objectStorageQueueSource: (() => number) | undefined;
 
@@ -84,38 +84,6 @@ new Gauge({
 export function setObjectStorageQueueSource(source: () => number): void {
   objectStorageQueueSource = source;
 }
-
-const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
-eventLoopDelay.enable();
-
-new Gauge({
-  name: 'aihub_process_resident_memory_bytes',
-  help: 'Resident memory used by this Node.js process, in bytes.',
-  registers: [registry],
-  collect() {
-    this.set(process.memoryUsage().rss);
-  },
-});
-
-new Gauge({
-  name: 'aihub_process_heap_used_bytes',
-  help: 'V8 heap currently used by this Node.js process, in bytes.',
-  registers: [registry],
-  collect() {
-    this.set(process.memoryUsage().heapUsed);
-  },
-});
-
-new Gauge({
-  name: 'aihub_event_loop_lag_seconds',
-  help: '99th percentile event-loop delay since the previous metrics scrape, in seconds.',
-  registers: [registry],
-  collect() {
-    const lagSeconds = eventLoopDelay.percentile(99) / 1_000_000_000;
-    this.set(Number.isFinite(lagSeconds) ? lagSeconds : 0);
-    eventLoopDelay.reset();
-  },
-});
 
 const requestsTotal = new Counter({
   name: 'aihub_requests_total',
