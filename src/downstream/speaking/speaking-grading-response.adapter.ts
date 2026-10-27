@@ -4,25 +4,11 @@ import { Value } from '@sinclair/typebox/value';
 
 import type { TSchema } from '@sinclair/typebox';
 
-import { AppError } from '@/common/errors/app-error';
 import {
   type SpeakingGradeResponse,
   SpeakingGradeResponseSchema,
 } from '@/contracts/speaking/grading';
-
-/**
- * `reason` reaches the log as the violation's diagnostic, so it names fields
- * and kinds of mismatch and never a value from the provider's response.
- */
-function contractViolation(reason: string): AppError {
-  return new AppError({
-    code: 'AI_SERVICE_CONTRACT_VIOLATION',
-    message: 'AI service returned an unexpected response shape',
-    retryable: false,
-    diagnostic: reason,
-    cause: new Error(reason),
-  });
-}
+import { contractViolation } from '@/downstream/contract-violation';
 
 const MAX_REPORTED_FAILURES = 3;
 const MAX_PATH_LENGTH = 120;

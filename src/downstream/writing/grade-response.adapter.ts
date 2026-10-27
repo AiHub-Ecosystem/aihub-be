@@ -1,10 +1,10 @@
-import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
   CRITERION_IDS,
   type CriterionId,
   type GradeResponse,
 } from '@/contracts/writing/grading';
+import { contractViolation } from '@/downstream/contract-violation';
 
 const CRITERION_NAMES: Readonly<Record<CriterionId, string>> = {
   task_achievement: 'Task Achievement',
@@ -22,17 +22,6 @@ function isCriterionId(value: string): value is CriterionId {
 
 /** Downstream signals "nothing to add" with this sentinel instead of `[]`. */
 const EMPTY_SENTINEL = 'none specified';
-
-function contractViolation(reason: string): AppError {
-  return new AppError({
-    code: 'AI_SERVICE_CONTRACT_VIOLATION',
-    // Deliberately generic: the reason travels in `cause` for logs, never to
-    // the client.
-    message: 'AI service returned an unexpected response shape',
-    retryable: false,
-    cause: new Error(reason),
-  });
-}
 
 function toStringList(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -102,7 +91,7 @@ function toCriteria(value: unknown): GradeResponse['criteria'] {
       const entry = value[key];
 
       if (!isCriterionId(id)) {
-        throw contractViolation(`unknown criterion key: ${key}`);
+        throw contractViolation('unknown criterion key');
       }
 
       if (!isRecord(entry) || typeof entry.band_score !== 'number') {
