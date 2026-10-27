@@ -1,3 +1,4 @@
+import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationInput,
@@ -74,24 +75,11 @@ export function normalizeCustomerWebBaseUrl(
     }
     return undefined;
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
+  const normalized = parseCustomerWebBaseUrl(trimmed, requireHttps);
+  if (normalized === undefined) {
     throw new Error(invalidMessage);
   }
-  if (
-    (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-    parsed.hostname.length === 0 ||
-    parsed.username.length > 0 ||
-    parsed.password.length > 0 ||
-    trimmed.includes('?') ||
-    trimmed.includes('#') ||
-    (requireHttps && parsed.protocol !== 'https:')
-  ) {
-    throw new Error(invalidMessage);
-  }
-  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+  return normalized;
 }
 
 function deepLink(

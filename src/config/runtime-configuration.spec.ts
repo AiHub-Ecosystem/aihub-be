@@ -30,6 +30,37 @@ describe('runtime configuration', () => {
     expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
   });
 
+  it.each([
+    'https://user:password@customer.test.invalid',
+    'https://customer.test.invalid/?campaign=welcome',
+    'ftp://customer.test.invalid',
+  ])(
+    'refuses a Customer Web URL the email composer would refuse: %s',
+    (customerWebBaseUrl) => {
+      const env = {
+        NODE_ENV: 'test',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+      };
+
+      expect(() =>
+        loadRuntimeConfiguration({
+          ...env,
+          CUSTOMER_WEB_BASE_URL: customerWebBaseUrl,
+        }),
+      ).toThrow(RuntimeConfigurationError);
+      expect(
+        loadRuntimeConfiguration({
+          ...env,
+          CUSTOMER_WEB_BASE_URL: 'https://customer.test.invalid/app',
+        }).CUSTOMER_WEB_BASE_URL,
+      ).toBe('https://customer.test.invalid/app');
+    },
+  );
+
   it('requires the Argon2 cap to leave one libuv worker available', () => {
     let caught: unknown;
     try {
