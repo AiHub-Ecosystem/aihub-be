@@ -65,94 +65,179 @@ function dig(node: unknown, path: readonly string[]): unknown {
   return current;
 }
 
-describe('AI Speaking: provider contract against the schema AIHUB checks', () => {
-  const doc = readJson<Json>(
+describe.each([
+  ['speaking.grading', '/api/v1/speaking/grading'],
+  ['speaking.grading-json', '/api/v1/speaking/grading-json'],
+])(
+  'AI Speaking %s: provider contract against the schema AIHUB checks',
+  (_operation, path) => {
+    const doc = readJson<Json>(
+      'ai-speaking/provider-openapi.snapshot.json',
+      isRecord,
+    );
+    const allowed = readJson<Allowed[]>(
+      'ai-speaking/provider-drift.allowed.json',
+      isAllowedList,
+    );
+
+    const responseSchema = dig(doc, [
+      'paths',
+      path,
+      'post',
+      'responses',
+      '200',
+      'content',
+      'application/json',
+      'schema',
+    ]);
+    const providerEnvelope = resolveRef(responseSchema, doc);
+    const envelopeProperties = providerEnvelope.properties as Json;
+    const providerUsage = resolveRef(envelopeProperties.usage, doc);
+    const providerMetrics = resolveRef(envelopeProperties.metrics, doc);
+    // The provider wraps the result as `{ status, data }`; AIHUB's schema is the
+    // `data` object, which the adapter unwraps first.
+    const providerData = {
+      node: envelopeProperties.data,
+      doc,
+    };
+    const oursNode: unknown = JSON.parse(
+      JSON.stringify(SpeakingGradeResponseSchema),
+    );
+    const ours = {
+      node: oursNode,
+      doc: {},
+    };
+
+    const found = schemaDrift(providerData, ours);
+    const key = (entry: { kind: string; path: string }) =>
+      `${entry.kind} ${entry.path}`;
+
+    it('publishes root-level usage counts and AI processing time', () => {
+      expect(providerEnvelope.required).toEqual(
+        expect.arrayContaining(['data', 'usage', 'metrics']),
+      );
+      expect(envelopeProperties.status).toMatchObject({
+        type: 'string',
+        default: 'success',
+      });
+
+      const usageProperties = providerUsage.properties as Json;
+      expect(providerUsage.required).toEqual(
+        expect.arrayContaining([
+          'input_tokens',
+          'output_tokens',
+          'total_tokens',
+        ]),
+      );
+      for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
+        const property = usageProperties[field];
+        if (!isRecord(property) || !Array.isArray(property.anyOf)) {
+          throw new Error(`${field} has no nullable type list`);
+        }
+        expect(property.anyOf).toEqual(
+          expect.arrayContaining([{ type: 'integer' }, { type: 'null' }]),
+        );
+      }
+
+      expect(providerMetrics.required).toContain('ai_processing_ms');
+      expect(
+        (providerMetrics.properties as Json).ai_processing_ms,
+      ).toMatchObject({ type: 'integer' });
+    });
+
+    it('has no difference that is not on the allowed list', () => {
+      const known = new Set(allowed.map(key));
+
+      const unexpected = found
+        .filter((entry) => !known.has(key(entry)))
+        .map((entry) => `${key(entry)}: ${entry.detail}`);
+
+      expect(unexpected).toEqual([]);
+    });
+
+    it('lists nothing that no longer differs', () => {
+      const current = new Set(found.map(key));
+
+      expect(allowed.map(key).filter((entry) => !current.has(entry))).toEqual(
+        [],
+      );
+    });
+
+    it('gives every allowed difference a reason', () => {
+      expect(
+        allowed.filter((entry) => entry.reason.trim().length < 20),
+      ).toEqual([]);
+    });
+  },
+);
+
+it('reports a JSON-only response change against the JSON operation', () => {
+  const document = readJson<Json>(
     'ai-speaking/provider-openapi.snapshot.json',
     isRecord,
   );
-  const allowed = readJson<Allowed[]>(
-    'ai-speaking/provider-drift.allowed.json',
-    isAllowedList,
-  );
-
-  const responseSchema = dig(doc, [
+  const components = dig(document, ['components', 'schemas']) as Json;
+  const jsonResponse = dig(document, [
     'paths',
-    '/api/v1/speaking/grading',
+    '/api/v1/speaking/grading-json',
     'post',
     'responses',
     '200',
     'content',
     'application/json',
     'schema',
-  ]);
-  const providerEnvelope = resolveRef(responseSchema, doc);
-  const envelopeProperties = providerEnvelope.properties as Json;
-  const providerUsage = resolveRef(envelopeProperties.usage, doc);
-  const providerMetrics = resolveRef(envelopeProperties.metrics, doc);
-  // The provider wraps the result as `{ status, data }`; AIHUB's schema is the
-  // `data` object, which the adapter unwraps first.
-  const providerData = {
-    node: envelopeProperties.data,
-    doc,
-  };
-  const oursNode: unknown = JSON.parse(
-    JSON.stringify(SpeakingGradeResponseSchema),
+  ]) as Json;
+  const envelope = structuredClone(resolveRef(jsonResponse, document));
+  const data = structuredClone(
+    resolveRef((envelope.properties as Json).data, document),
   );
-  const ours = {
-    node: oursNode,
-    doc: {},
+  const feedback = structuredClone(
+    resolveRef((data.properties as Json).feedback, document),
+  );
+  (feedback.properties as Json).summary_vi = { type: 'integer' };
+  (data.properties as Json).feedback = {
+    $ref: '#/components/schemas/JsonOnlyFeedback',
   };
-
-  const found = schemaDrift(providerData, ours);
-  const key = (entry: { kind: string; path: string }) =>
-    `${entry.kind} ${entry.path}`;
-
-  it('publishes root-level usage counts and AI processing time', () => {
-    expect(providerEnvelope.required).toEqual(
-      expect.arrayContaining(['usage', 'metrics']),
-    );
-
-    const usageProperties = providerUsage.properties as Json;
-    expect(providerUsage.required).toEqual(
-      expect.arrayContaining(['input_tokens', 'output_tokens', 'total_tokens']),
-    );
-    for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
-      const property = usageProperties[field];
-      if (!isRecord(property) || !Array.isArray(property.anyOf)) {
-        throw new Error(`${field} has no nullable type list`);
-      }
-      expect(property.anyOf).toEqual(
-        expect.arrayContaining([{ type: 'integer' }, { type: 'null' }]),
-      );
-    }
-
-    expect(providerMetrics.required).toContain('ai_processing_ms');
-    expect((providerMetrics.properties as Json).ai_processing_ms).toMatchObject(
-      { type: 'integer' },
-    );
+  (envelope.properties as Json).data = {
+    $ref: '#/components/schemas/JsonOnlyData',
+  };
+  components.JsonOnlyFeedback = feedback;
+  components.JsonOnlyData = data;
+  components.JsonOnlyEnvelope = envelope;
+  jsonResponse.$ref = '#/components/schemas/JsonOnlyEnvelope';
+  const allowed = readJson<Allowed[]>(
+    'ai-speaking/provider-drift.allowed.json',
+    isAllowedList,
+  );
+  const known = new Set(allowed.map((entry) => `${entry.kind} ${entry.path}`));
+  const differences = [
+    '/api/v1/speaking/grading',
+    '/api/v1/speaking/grading-json',
+  ].flatMap((path) => {
+    const schema = dig(document, [
+      'paths',
+      path,
+      'post',
+      'responses',
+      '200',
+      'content',
+      'application/json',
+      'schema',
+    ]);
+    const provider = resolveRef(schema, document);
+    return schemaDrift(
+      { node: (provider.properties as Json).data, doc: document },
+      {
+        node: JSON.parse(JSON.stringify(SpeakingGradeResponseSchema)),
+        doc: {},
+      },
+    )
+      .filter((entry) => !known.has(`${entry.kind} ${entry.path}`))
+      .map((entry) => `${path} ${entry.kind} ${entry.path}`);
   });
-
-  it('has no difference that is not on the allowed list', () => {
-    const known = new Set(allowed.map(key));
-
-    const unexpected = found
-      .filter((entry) => !known.has(key(entry)))
-      .map((entry) => `${key(entry)}: ${entry.detail}`);
-
-    expect(unexpected).toEqual([]);
-  });
-
-  it('lists nothing that no longer differs', () => {
-    const current = new Set(found.map(key));
-
-    expect(allowed.map(key).filter((entry) => !current.has(entry))).toEqual([]);
-  });
-
-  it('gives every allowed difference a reason', () => {
-    expect(allowed.filter((entry) => entry.reason.trim().length < 20)).toEqual(
-      [],
-    );
-  });
+  expect(differences).toEqual([
+    '/api/v1/speaking/grading-json type data.feedback.summary_vi',
+  ]);
 });
 
 // A provider that stops declaring a field AIHUB requires must show up as a new

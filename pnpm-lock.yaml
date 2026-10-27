@@ -161,6 +161,9 @@ importers:
       '@typescript/native':
         specifier: npm:typescript@7.0.2
         version: typescript@7.0.2
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       dependency-cruiser:
         specifier: ^18.7.0
         version: 18.7.0

@@ -185,8 +185,14 @@ secret headers or raw audio.
 
 AI Speaking publishes its own OpenAPI document. A snapshot of it is committed
 at `test/fixtures/ai-speaking/provider-openapi.snapshot.json`, and
-`test/provider-contract-drift.spec.ts` compares it with the schema AIHUB checks
-a grading response against. It reports only the places where a response that
+`test/provider-contract-drift.spec.ts` compares each transport's HTTP-200
+envelope, data and consumed usage and timing fields with what AIHUB checks.
+`test/speaking-request-contract.spec.ts` sends both adapters' minimal and
+populated requests through the HTTP serializer and checks the resulting
+multipart and JSON values against their respective provider request schemas.
+Multipart scalar values are decoded according to their published types. The
+request check asks whether AIHUB's values are accepted, so a more permissive
+provider schema is compatible. The response check reports places where a response that
 obeys the provider's contract would be refused here, and each is a customer's
 `502 AI_SERVICE_CONTRACT_VIOLATION`:
 
