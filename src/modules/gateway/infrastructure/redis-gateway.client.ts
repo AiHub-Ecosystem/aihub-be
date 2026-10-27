@@ -1,3 +1,4 @@
+import { createRedisClient } from '@/common/redis/create-redis-client';
 import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
@@ -112,14 +113,11 @@ export function createRedisGatewayClient(
     return undefined;
   }
 
-  const client = new Redis(url, {
+  const client = createRedisClient(url, {
     // Calibrated 2026-10-21 from Production app to remote Redis: ready p99 265.537 ms (100 samples), PING p99 71.184 ms (1,000).
-    connectTimeout: 1_000,
-    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+    connectTimeoutMs: 1_000,
+    commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
     autoResendUnfulfilledCommands: false,
   });
-  client.on('error', () => undefined);
   return new IoredisGatewayClient(client);
 }

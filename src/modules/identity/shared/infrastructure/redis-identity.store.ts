@@ -6,6 +6,7 @@ import {
   type ApiKeyCacheInvalidationSeam,
   recordRedisUnavailable,
 } from '@/common/observability/redis-unavailable-metric';
+import { createRedisClient } from '@/common/redis/create-redis-client';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import type {
   ApiKeyCachePort,
@@ -110,12 +111,9 @@ function connect(url: string): RedisIdentityClient | undefined {
     return undefined;
   }
 
-  const client = new Redis(url, {
-    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+  const client = createRedisClient(url, {
+    commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
   });
-  client.on('error', () => undefined);
   return new IoredisIdentityClient(client);
 }
 
