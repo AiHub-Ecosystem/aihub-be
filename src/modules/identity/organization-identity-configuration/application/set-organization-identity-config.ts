@@ -8,7 +8,7 @@ import {
 } from '@/modules/identity/domain/organization-identity-config';
 import {
   forbidden,
-  requireActiveMembership,
+  requireMembershipOfOpenOrganization,
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import {
@@ -66,7 +66,7 @@ export class SetOrganizationIdentityConfig {
   async set(
     input: SetOrganizationIdentityConfigInput,
   ): Promise<SetOrganizationIdentityConfigResult> {
-    const caller = await requireActiveMembership(
+    const caller = await requireMembershipOfOpenOrganization(
       this.membership,
       {
         context: input.context,
@@ -75,7 +75,7 @@ export class SetOrganizationIdentityConfig {
       },
       IDENTITY_CONFIG_ACCESS_FORBIDDEN,
     );
-    if (caller.role !== 'owner' || caller.organizationStatus !== 'active') {
+    if (caller.role !== 'owner') {
       throw forbidden(IDENTITY_CONFIG_ACCESS_FORBIDDEN);
     }
 
