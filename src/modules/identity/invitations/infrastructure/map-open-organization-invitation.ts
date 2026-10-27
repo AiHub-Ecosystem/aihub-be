@@ -1,7 +1,7 @@
+import { isRecord } from '@/common/is-record';
 import type { OpenOrganizationInvitationRecord } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
   dateValue,
-  isRecord,
   membershipRoleValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';

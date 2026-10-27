@@ -24,6 +24,7 @@ const PRIVATE_JWK_MEMBERS = new Set([
   'k',
 ]);
 
+// arch-check: domain code may not import src/common, so it keeps its own guard.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

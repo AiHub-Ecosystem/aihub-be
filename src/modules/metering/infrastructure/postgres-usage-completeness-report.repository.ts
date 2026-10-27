@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   type UsageReportRepositoryPort,
   UsageReportSnapshotError,
@@ -5,7 +6,7 @@ import {
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/usage-completeness-report';
 import { billableRequestSql } from './billable-request-sql';
-import { isRecord, safeNonNegativeCount } from './metering-row';
+import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_REPORT_SQL = `

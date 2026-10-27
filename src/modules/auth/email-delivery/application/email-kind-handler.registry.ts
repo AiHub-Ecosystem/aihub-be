@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import type {
   ApiKeyNearExpiryNotificationPayload,
   AuthEmailDeliveryPayload,
@@ -40,10 +41,6 @@ export interface EmailKindHandler {
 export interface ValidatedEmailDelivery {
   readonly handler: EmailKindHandler;
   readonly payload: EmailDeliveryPayload;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isNonEmptyString(value: unknown): value is string {

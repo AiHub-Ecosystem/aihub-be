@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isRecord } from '@/common/is-record';
 
 import type {
   AiSpeakingRuntimeSecrets,
@@ -414,10 +415,6 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
     throw configurationError(`${label} has an invalid shape`);
   }
   return value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function freezeSnapshot(

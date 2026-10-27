@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   hasRequiredOrganizationApiKeyEntitlements,
   reachedOrganizationApiKeyLimit,
@@ -108,10 +109,6 @@ const LOCK_API_KEY_FOR_REVOKE_SQL = `
     AND organization_id = $2
   FOR UPDATE
 `;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function stringArrayValue(
   record: Record<string, unknown>,

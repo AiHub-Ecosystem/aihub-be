@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import { ValueErrorType } from '@sinclair/typebox/errors';
 import { Value } from '@sinclair/typebox/value';
 
@@ -46,10 +47,6 @@ function schemaFailures(schema: TSchema, body: unknown): string {
     }
   }
   return failures.join('; ');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function requiredString(data: Record<string, unknown>, field: string): string {

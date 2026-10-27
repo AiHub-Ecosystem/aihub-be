@@ -5,6 +5,7 @@ import type {
   SetOrganizationStatusResult,
 } from '@/modules/identity/organizations/application/organization-status.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditEvent,
@@ -13,7 +14,6 @@ import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/ac
 import {
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';

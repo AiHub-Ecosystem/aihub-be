@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   Body,
   Controller,
@@ -137,10 +138,6 @@ export class OrganizationIdentityConfigController {
       meta: { request_id: requestId },
     };
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function hasInvalidInlineJwks(value: unknown): boolean {

@@ -14,6 +14,7 @@ import type {
   StoredOrganizationIdentityConfig,
 } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditEvent,
@@ -22,7 +23,6 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,

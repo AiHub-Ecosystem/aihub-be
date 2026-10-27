@@ -1,7 +1,4 @@
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
+import { isRecord } from '@/common/is-record';
 /**
  * Removes converter-generated response examples with unstable schema-faked
  * values; intentional examples live in the D1 handover scenarios.

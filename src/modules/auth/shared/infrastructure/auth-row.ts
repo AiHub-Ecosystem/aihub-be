@@ -19,10 +19,6 @@ export function authStoreError(message: string): AppError {
   return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 export function stringValue(
   record: Record<string, unknown>,
   key: string,

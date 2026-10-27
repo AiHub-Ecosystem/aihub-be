@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditDenial,
@@ -27,7 +28,6 @@ import type {
 import {
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,

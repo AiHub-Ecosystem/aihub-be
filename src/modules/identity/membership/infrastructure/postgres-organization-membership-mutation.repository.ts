@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import { recordOrganizationAuditEvent } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import { ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL } from '@/modules/identity/membership/application/organization-membership.mutation-policy';
 import type {
@@ -8,7 +9,6 @@ import type {
 } from '@/modules/identity/membership/application/organization-membership.port';
 import {
   identityStoreError,
-  isRecord,
   membershipRoleValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {

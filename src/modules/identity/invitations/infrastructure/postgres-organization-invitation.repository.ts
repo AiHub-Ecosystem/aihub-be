@@ -22,6 +22,7 @@ import {
   organizationSuspensionClosesSurface,
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 
+import { isRecord } from '@/common/is-record';
 import {
   auditStamp,
   recordOrganizationAuditDenial,
@@ -31,7 +32,6 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   membershipRoleValue,
   organizationStatusValue,
   stringValue,

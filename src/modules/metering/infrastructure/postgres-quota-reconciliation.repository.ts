@@ -1,10 +1,11 @@
+import { isRecord } from '@/common/is-record';
 import type {
   QuotaOrganizationSnapshot,
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/quota-reconciliation.port';
 import { billableRequestSql } from './billable-request-sql';
-import { isRecord, safeNonNegativeCount } from './metering-row';
+import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const QUOTA_RECONCILIATION_SQL = `

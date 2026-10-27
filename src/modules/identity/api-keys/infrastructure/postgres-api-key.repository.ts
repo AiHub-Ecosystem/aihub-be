@@ -5,11 +5,11 @@ import type {
   OrganizationStatus,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 
+import { isRecord } from '@/common/is-record';
 import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {

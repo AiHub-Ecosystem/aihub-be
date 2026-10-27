@@ -26,6 +26,7 @@ import {
   withFailureClaims,
 } from './email-failure-report-claim';
 
+import { isRecord } from '@/common/is-record';
 import {
   type AuthSqlClient,
   authQueryRows,
@@ -33,7 +34,6 @@ import {
 import {
   dateValue,
   integerValue,
-  isRecord,
   nullableDateValue,
   nullableOneOf,
   nullableStringValue,

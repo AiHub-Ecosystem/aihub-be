@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   CRITERION_IDS,
   type CriterionId,
@@ -31,10 +32,6 @@ function contractViolation(reason: string): AppError {
     retryable: false,
     cause: new Error(reason),
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function toStringList(value: unknown): string[] {

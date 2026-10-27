@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import type {
   UsageRetentionBatch,
   UsageRetentionBatchRequest,
@@ -6,7 +7,6 @@ import type {
 } from '@/modules/metering/application/usage-retention';
 import { compareUsageRetentionCursor } from '@/modules/metering/application/usage-retention';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
-import { isRecord } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 export const USAGE_RETENTION_BATCH_SQL = [

@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
+import { isRecord } from '@/common/is-record';
 
 import { EnvelopeCipherError } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EnvelopeCipher } from '@/modules/auth/email-delivery/infrastructure/envelope-cipher';
@@ -104,10 +105,6 @@ function loadKeyring(options: AuthMfaCipherOptions): AuthMfaKeyring {
     throw new Error('Auth MFA secret file is invalid');
   }
   return { currentKeyId: parsed.current_key_id, keys: parsed.keys };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isStringRecord(

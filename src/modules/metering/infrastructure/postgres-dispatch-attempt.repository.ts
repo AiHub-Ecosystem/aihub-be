@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 import type { OnModuleDestroy } from '@nestjs/common';
 
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 import type { DispatchAttemptUnresolvedSample } from '@/common/observability/metrics';
 import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,
   DispatchAttemptStart,
 } from '@/modules/metering/application/dispatch-attempt-record.port';
-import { isRecord, safeNonNegativeCount } from './metering-row';
+import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 // The deadline is stamped with the database's own clock, so the evidence does

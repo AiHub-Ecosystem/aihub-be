@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type {
   ApiKeyNearExpiryNoticeResolverPort,
   ApiKeyNearExpiryNotificationInput,
@@ -20,7 +21,6 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
-  isRecord,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {

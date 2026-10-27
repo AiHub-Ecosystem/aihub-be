@@ -1,4 +1,5 @@
 import { Blob } from 'node:buffer';
+import { isRecord } from '@/common/is-record';
 
 import multipart from '@fastify/multipart';
 import { Injectable } from '@nestjs/common';
@@ -46,10 +47,6 @@ const ALLOWED_FIELDS = new Set([
 interface MultipartRegistrableInstance {
   register(...args: never[]): unknown;
   addHook(...args: never[]): unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function invalidRequest(message = 'Request failed validation'): AppError {
