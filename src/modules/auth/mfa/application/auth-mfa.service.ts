@@ -5,6 +5,7 @@ import type {
   EmailPayloadCipherPort,
   InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { invalidCredentials } from '@/modules/auth/local-credentials/application/local-auth-errors';
 import type { LocalAuthServiceClock } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
   authenticateCredentials,
@@ -27,14 +28,6 @@ import {
 } from './mfa-policy';
 
 const AUTHENTICATOR_LABEL = 'AIHUB';
-
-function invalidCredentials(): AppError {
-  return new AppError({
-    code: 'AUTH_CREDENTIALS_INVALID',
-    message: 'Email or password is invalid',
-    retryable: false,
-  });
-}
 
 function alreadyEnabled(): AppError {
   return new AppError({
