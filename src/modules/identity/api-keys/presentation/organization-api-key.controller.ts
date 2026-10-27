@@ -42,6 +42,10 @@ import {
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import {
+  apiKeyResponse,
+  mintedApiKeyResponse,
+} from './organization-api-key.response';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)
@@ -79,17 +83,7 @@ export class OrganizationApiKeyController {
     });
 
     return {
-      data: {
-        id: key.id,
-        name: key.name,
-        key_prefix: key.keyPrefix,
-        scopes: [...key.scopes],
-        allowed_environments: [...key.allowedEnvironments],
-        status: key.status,
-        expires_at: key.expiresAt?.toISOString() ?? null,
-        last_used_at: key.lastUsedAt?.toISOString() ?? null,
-        created_at: key.createdAt.toISOString(),
-      },
+      data: apiKeyResponse(key),
       meta: { request_id: requestId },
     };
   }
@@ -117,18 +111,7 @@ export class OrganizationApiKeyController {
     });
 
     return {
-      data: {
-        api_key: rotated.apiKey,
-        id: rotated.id,
-        name: rotated.name,
-        key_prefix: rotated.keyPrefix,
-        scopes: [...rotated.scopes],
-        allowed_environments: [...rotated.allowedEnvironments],
-        status: 'active',
-        expires_at: rotated.expiresAt?.toISOString() ?? null,
-        last_used_at: null,
-        created_at: rotated.createdAt.toISOString(),
-      },
+      data: mintedApiKeyResponse(rotated),
       meta: { request_id: requestId },
     };
   }
@@ -151,17 +134,7 @@ export class OrganizationApiKeyController {
 
     return {
       data: {
-        api_keys: keys.map((key) => ({
-          id: key.id,
-          name: key.name,
-          key_prefix: key.keyPrefix,
-          scopes: [...key.scopes],
-          allowed_environments: [...key.allowedEnvironments],
-          status: key.status,
-          expires_at: key.expiresAt?.toISOString() ?? null,
-          last_used_at: key.lastUsedAt?.toISOString() ?? null,
-          created_at: key.createdAt.toISOString(),
-        })),
+        api_keys: keys.map(apiKeyResponse),
       },
       meta: { request_id: requestId },
     };
@@ -203,18 +176,7 @@ export class OrganizationApiKeyController {
     });
 
     return {
-      data: {
-        api_key: created.apiKey,
-        id: created.id,
-        name: created.name,
-        key_prefix: created.keyPrefix,
-        scopes: [...created.scopes],
-        allowed_environments: [...created.allowedEnvironments],
-        status: 'active',
-        expires_at: created.expiresAt?.toISOString() ?? null,
-        last_used_at: null,
-        created_at: created.createdAt.toISOString(),
-      },
+      data: mintedApiKeyResponse(created),
       meta: { request_id: requestId },
     };
   }
