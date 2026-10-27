@@ -1,12 +1,14 @@
 import type { FastifyRequest } from 'fastify';
 
+import { SESSION_LIFETIME_MS } from '@/modules/auth/web-sessions/application/web-session-policy';
+
 import {
   hasDuplicateCookie,
   offersCredentialOutsideTransport,
 } from './credential-transport';
 
 export const REFRESH_COOKIE_NAME = '__Host-aihub_refresh';
-export const REFRESH_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+export const REFRESH_COOKIE_MAX_AGE_SECONDS = SESSION_LIFETIME_MS / 1000;
 
 export const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
