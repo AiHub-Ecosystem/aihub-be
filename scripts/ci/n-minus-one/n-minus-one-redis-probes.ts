@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { ERROR_CODES } from '@/common/errors/error-code';
-import { identityConfigFromRow } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 
@@ -166,7 +165,13 @@ export async function verifyRedisCompatibility(input: {
     remoteConfigFixture.rowCount === 1,
     'could not configure the cache-only JWKS fixture',
   );
-  const configFixture = await database.query(
+  const configFixture = await database.query<{
+    organizationId: string;
+    jwksCacheVersion: string;
+    jwksUrl: string;
+    publicKeysJwks: unknown;
+    status: string;
+  }>(
     `SELECT organization_id AS "organizationId", issuer, jwks_url AS "jwksUrl",
             public_keys_jwks AS "publicKeysJwks", allowed_algorithms AS "allowedAlgorithms",
             max_assertion_ttl_seconds AS "maxAssertionTtlSeconds", status,
@@ -174,8 +179,13 @@ export async function verifyRedisCompatibility(input: {
        FROM organization_identity_configs WHERE organization_id = $1`,
     [organizationId],
   );
+  const fixture = configFixture.rows[0];
   check(
-    identityConfigFromRow(configFixture.rows[0]) !== undefined,
+    fixture?.organizationId === organizationId &&
+      fixture?.jwksCacheVersion === configVersion &&
+      fixture?.jwksUrl === 'https://jwks.ci-boot.invalid/keys' &&
+      fixture?.publicKeysJwks === null &&
+      fixture?.status === 'active',
     'JWKS identity configuration fixture is invalid',
   );
   // The production resolver blocks loopback fixtures; seed through the candidate adapter and require N-1 to read this value without a fetch fallback.
