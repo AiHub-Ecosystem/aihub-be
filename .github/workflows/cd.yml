@@ -65,6 +65,12 @@ jobs:
           fi
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
+      - name: Record the digest used by this CD run
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-digest
+          path: image-digest.txt
+
   deploy:
     name: Blue-green deploy to VPS
     needs: resolve
@@ -236,8 +242,9 @@ jobs:
           printf 'Host revisions before deployment:\n%s\n' "$state"
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse refs/remotes/origin/main)"
-          previous_sha="$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/previous-release.txt")"
-          printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" "$previous_sha"
+          previous_shas="$(paste -sd, "$GITHUB_WORKSPACE/previous-release.txt")"
+          test -n "$previous_shas"
+          printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" "$previous_shas"
 
       - name: Stage host job installer
         if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}

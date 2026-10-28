@@ -674,6 +674,24 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: pnpm exec tsx scripts/ci/n-minus-one/previous-deployed-release.ts
 
+      - name: Recover active-tier image digests
+        id: previous_digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_DIGEST_RUN_ID: ${{ steps.previous_release.outputs.previous_digest_run_id }}
+          SANDBOX_DIGEST_RUN_ID: ${{ steps.previous_release.outputs.sandbox_digest_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p temp/n-minus-one/previous-production temp/n-minus-one/previous-sandbox
+          gh run download "$PREVIOUS_DIGEST_RUN_ID" --name image-digest --dir temp/n-minus-one/previous-production
+          gh run download "$SANDBOX_DIGEST_RUN_ID" --name image-digest --dir temp/n-minus-one/previous-sandbox
+          production_digest="$(tr -d '\r\n' < temp/n-minus-one/previous-production/image-digest.txt)"
+          sandbox_digest="$(tr -d '\r\n' < temp/n-minus-one/previous-sandbox/image-digest.txt)"
+          [[ "$production_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          [[ "$sandbox_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'production_digest=%s\nsandbox_digest=%s\n' \
+            "$production_digest" "$sandbox_digest" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR for the previous Production image
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -682,12 +700,22 @@ jobs:
           printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
       - name: Pull the previous Production image
+        shell: bash
         env:
           PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
+          SANDBOX_SHA: ${{ steps.previous_release.outputs.sandbox_sha }}
+          PREVIOUS_DIGEST: ${{ steps.previous_digests.outputs.production_digest }}
+          SANDBOX_DIGEST: ${{ steps.previous_digests.outputs.sandbox_digest }}
         run: |
           set -euo pipefail
           trap 'docker logout ghcr.io' EXIT
-          docker pull "ghcr.io/${GITHUB_REPOSITORY,,}:${PREVIOUS_SHA}"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          production_tag_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image:$PREVIOUS_SHA")"
+          sandbox_tag_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image:$SANDBOX_SHA")"
+          test "$production_tag_digest" = "$PREVIOUS_DIGEST"
+          test "$sandbox_tag_digest" = "$SANDBOX_DIGEST"
+          docker pull "$image@$PREVIOUS_DIGEST"
+          docker pull "$image@$SANDBOX_DIGEST"
 
       - name: Create the local Resend TLS fixture
         run: |
@@ -703,15 +731,35 @@ jobs:
         env:
           CANDIDATE_IMAGE: aihub:image-boot
           CANDIDATE_SHA: ${{ github.sha }}
-          PREVIOUS_IMAGE: ghcr.io/aihub-ecosystem/aihub-be:${{ steps.previous_release.outputs.previous_sha }}
+          PREVIOUS_IMAGE: ghcr.io/aihub-ecosystem/aihub-be@${{ steps.previous_digests.outputs.production_digest }}
           PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
+          PREVIOUS_DIGEST: ${{ steps.previous_digests.outputs.production_digest }}
+          PREVIOUS_TIER: Production
+          AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD: ${{ vars.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD || 'false' }}
+        run: pnpm ci:check-n-minus-one
+
+      - name: Reset isolated N-1 fixtures before the Sandbox predecessor check
+        if: ${{ steps.previous_release.outputs.sandbox_sha != steps.previous_release.outputs.previous_sha || steps.previous_digests.outputs.sandbox_digest != steps.previous_digests.outputs.production_digest }}
+        run: pnpm exec tsx scripts/ci/n-minus-one/reset-n-minus-one-state.ts
+
+      - name: Verify N-1 reads candidate writes against the active Sandbox image
+        if: ${{ steps.previous_release.outputs.sandbox_sha != steps.previous_release.outputs.previous_sha || steps.previous_digests.outputs.sandbox_digest != steps.previous_digests.outputs.production_digest }}
+        env:
+          CANDIDATE_IMAGE: aihub:image-boot
+          CANDIDATE_SHA: ${{ github.sha }}
+          PREVIOUS_IMAGE: ghcr.io/aihub-ecosystem/aihub-be@${{ steps.previous_digests.outputs.sandbox_digest }}
+          PREVIOUS_SHA: ${{ steps.previous_release.outputs.sandbox_sha }}
+          PREVIOUS_DIGEST: ${{ steps.previous_digests.outputs.sandbox_digest }}
+          PREVIOUS_TIER: Sandbox
+          AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD: ${{ vars.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD || 'false' }}
         run: pnpm ci:check-n-minus-one
 
       - name: Record the tested predecessor
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
-        run: printf '%s\n' "$PREVIOUS_SHA" > previous-release.txt
+          SANDBOX_SHA: ${{ steps.previous_release.outputs.sandbox_sha }}
+        run: printf '%s\n%s\n' "$PREVIOUS_SHA" "$SANDBOX_SHA" > previous-release.txt
 
       - name: Upload the tested predecessor
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -10,6 +10,8 @@ import { request as httpRequest } from 'node:http';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
+import type { RedisEndpoints } from './redis-endpoint-compatibility';
+
 export const ROOT = process.cwd();
 export const COMPAT_DIR = resolve(ROOT, 'temp/n-minus-one');
 export const DATABASE_URL = 'postgres://postgres:postgres@127.0.0.1:5432/aihub';
@@ -74,7 +76,7 @@ export function imageConfig(
   port: number,
   apiKey: string,
   sharedFrom: string | undefined,
-): void {
+): RedisEndpoints {
   mkdirSync(directory, { recursive: true });
   if (sharedFrom === undefined) {
     writeBootConfig(directory);
@@ -100,8 +102,13 @@ export function imageConfig(
   const connectionPath = resolve(directory, 'connection-secrets.json');
   const connection = JSON.parse(readFileSync(connectionPath, 'utf8')) as {
     database: Record<string, string>;
-    redis: Record<string, string>;
+    redis: {
+      url: string;
+      sandbox_url: string;
+      email_send_rate_url: string;
+    };
   };
+  const redisEndpoints: RedisEndpoints = { ...connection.redis };
   for (const field of Object.keys(connection.database)) {
     connection.database[field] = DATABASE_URL;
   }
@@ -137,6 +144,8 @@ globalThis.fetch = (input, init) => originalFetch(
     NODE_EXTRA_CA_CERTS: '/run/secrets/aihub/resend-ca.crt',
     NODE_OPTIONS: '--require=/run/secrets/aihub/resend-fetch-stub.cjs',
     AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: '100',
+    AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD:
+      process.env.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD ?? 'false',
     DOWNSTREAM_AI_WRITING_URL: 'http://127.0.0.1:18080',
   });
   writeFileSync(
@@ -146,6 +155,7 @@ globalThis.fetch = (input, init) => originalFetch(
       .join('\n')
       .concat('\n'),
   );
+  return redisEndpoints;
 }
 
 export function runMigration(image: string, directory: string): void {

@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { ERROR_CODES } from '@/common/errors/error-code';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 
+import { verifyApiKeyCacheCompatibility } from './n-minus-one-api-key-cache-probe';
 import {
   CANDIDATE_PORT,
   PREVIOUS_PORT,
@@ -19,7 +20,7 @@ import {
   waitFor,
 } from './n-minus-one-runtime';
 
-type JwksCacheMutation =
+export type JwksCacheMutation =
   | {
       readonly kind: 'set';
       readonly generation: string;
@@ -31,7 +32,7 @@ type JwksCacheMutation =
     }
   | { readonly kind: 'delete' };
 
-function mutateCandidateJwksCache(
+export function mutateCandidateJwksCache(
   organizationId: string,
   configVersion: string,
   mutation: JwksCacheMutation,
@@ -60,8 +61,10 @@ function mutateCandidateJwksCache(
     '-e',
     `void (async () => {
       const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
+      const { readFileSync } = require('node:fs');
       const Redis = require('ioredis');
-      const client = new Redis('redis://127.0.0.1:6379/0', { lazyConnect: true, enableOfflineQueue: false });
+      const redisUrl = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis.url;
+      const client = new Redis(redisUrl, { lazyConnect: true, enableOfflineQueue: false });
       client.on('error', () => {});
       await client.connect();
       const cache = new RedisIdentityStore('', client);
@@ -98,8 +101,10 @@ export async function verifyRedisCompatibility(input: {
   readonly organizationId: string;
   readonly userToken: string;
   readonly report: string[];
+  readonly previousSha: string;
 }): Promise<void> {
-  const { database, redis, organizationId, userToken, report } = input;
+  const { database, redis, organizationId, userToken, report, previousSha } =
+    input;
   const apiKeyResponse = await request(
     CANDIDATE_PORT,
     'POST',
@@ -252,54 +257,6 @@ export async function verifyRedisCompatibility(input: {
   }
   expect2xx(candidateGrade, 'candidate grade and usage write');
 
-  const apiKeyHash = createHash('sha256').update(apiKey).digest('hex');
-  const keyRecord = {
-    organizationId,
-    apiKeyId,
-    organizationStatus: 'active',
-    status: 'active',
-    scopes: ['writing.grade'],
-    entitlements: ['writing'],
-    allowedEnvironments: ['production'],
-    expiresAt: null,
-    rateLimitRpm: 60,
-    maxConcurrent: 1,
-    monthlyRequestQuota: 3,
-    hardStopOnQuota: true,
-  };
-  for (const [container, operation] of [
-    ['aihub-compat-candidate', 'set'],
-    ['aihub-compat-previous', 'get'],
-  ] as const) {
-    docker([
-      'exec',
-      '--env',
-      `COMPAT_HASH=${apiKeyHash}`,
-      '--env',
-      `COMPAT_RECORD=${Buffer.from(JSON.stringify(keyRecord)).toString('base64')}`,
-      container,
-      'node',
-      '-e',
-      `void (async () => {
-        const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
-        const Redis = require('ioredis');
-        const client = new Redis('redis://127.0.0.1:6379/0', { lazyConnect: true, enableOfflineQueue: false });
-        client.on('error', () => {});
-        await client.connect();
-        const store = new RedisIdentityStore('', client);
-        const expected = JSON.parse(Buffer.from(process.env.COMPAT_RECORD, 'base64').toString('utf8'));
-        try {
-          if ('${operation}' === 'set') await store.set(process.env.COMPAT_HASH, expected);
-          else if (JSON.stringify(await store.get(process.env.COMPAT_HASH)) !== JSON.stringify(expected)) throw new Error('N-1 API-key cache record mismatch');
-        } finally { await store.onModuleDestroy(); }
-      })().catch(() => { process.stderr.write('API-key cache compatibility failed'); process.exitCode = 1; });`,
-    ]);
-  }
-  const keyTtl = await redis.pttl(`aihub:v1:key:${apiKeyHash}`);
-  check(
-    keyTtl > 0 && keyTtl <= 60_000,
-    'API-key cache freshness is missing or exceeds its 60-second authority bound',
-  );
   const serializedJwks = await redis.get(initialJwksCacheKey);
   check(
     serializedJwks !== null,
@@ -320,33 +277,18 @@ export async function verifyRedisCompatibility(input: {
     'JWKS cache freshness or stale authority bounds are invalid',
   );
 
-  const oldReplay = await request(
-    PREVIOUS_PORT,
-    'POST',
-    '/v1/ielts/writing/task1/grade',
-    {
-      apiKey,
-      assertion: assertionA,
-      idempotencyKey: gradeKey,
-      body: gradeBody,
-    },
-  );
-  expect2xx(oldReplay, 'N-1 JWKS read and retry replay');
-  const retryRefusal = await request(
-    CANDIDATE_PORT,
-    'POST',
-    '/v1/ielts/writing/task1/grade',
-    {
-      apiKey,
-      assertion: assertionA,
-      idempotencyKey: gradeKey,
-      body: gradeBody,
-    },
-  );
-  expectStatus(retryRefusal, 429, 'shared keyed retry-budget refusal');
-  report.push(
-    'PASS: N-1 read the candidate API-key cache adapter entry and replayed a request using shared JWKS state; mixed-version retry admission shared one Redis window.',
-  );
+  const keyCacheKey = await verifyApiKeyCacheCompatibility({
+    database,
+    redis,
+    apiKey,
+    apiKeyId,
+    organizationId,
+    assertion: assertionA,
+    gradeKey,
+    gradeBody,
+    previousSha,
+    report,
+  });
 
   const identityB = identityA.rotate();
   const generationBefore = await redis.get(generationKey);
@@ -446,7 +388,7 @@ export async function verifyRedisCompatibility(input: {
   );
 
   const usage = await database.query<{ count: string }>(
-    'SELECT count(*)::text AS count FROM usage_records WHERE organization_id = $1',
+    'SELECT COALESCE(sum(billable_requests), 0)::text AS count FROM usage_records WHERE organization_id = $1',
     [organizationId],
   );
   const usageCount = Number(usage.rows[0]?.count ?? 0);
@@ -499,7 +441,6 @@ export async function verifyRedisCompatibility(input: {
     'PASS: authentication rate window was shared across both image revisions.',
   );
 
-  const keyCacheKey = `aihub:v1:key:${apiKeyHash}`;
   const keyCacheTtl = await redis.pttl(keyCacheKey);
   check(
     keyCacheTtl === -2 || (keyCacheTtl > 0 && keyCacheTtl <= 60_000),
@@ -523,12 +464,11 @@ export async function verifyRedisCompatibility(input: {
   const revokedKey = await request(
     PREVIOUS_PORT,
     'POST',
-    '/v1/ielts/writing/task1/grade',
+    '/v1/speaking/audio/uploads',
     {
       apiKey,
       assertion: assertionB,
-      idempotencyKey: `compat-revoked-key-${randomUUID()}`,
-      body: gradeBody,
+      body: {},
     },
   );
   expectStatus(revokedKey, 401, 'N-1 API-key cache invalidation');

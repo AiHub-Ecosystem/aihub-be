@@ -12,7 +12,7 @@ type DeployTargetGuard = {
   parseActiveRevisions: (status: string) => string[];
   validateTestedPredecessor: (
     activeShas: string[],
-    previousSha: string,
+    previousShas: string | string[],
     targetSha: string,
   ) => void;
   validateDeployTarget: (input: {
@@ -91,13 +91,23 @@ describe('CD deployment target guard', () => {
   it('stops deployment when a live tier differs from the tested predecessor', () => {
     expect(() =>
       validateTestedPredecessor([unrelatedSha], oldSha, mainSha),
-    ).toThrow(/not the tested predecessor/);
+    ).toThrow(/was not a tested predecessor/);
     expect(() =>
       validateTestedPredecessor([oldSha, mainSha], oldSha, mainSha),
     ).not.toThrow();
     expect(() => validateTestedPredecessor([oldSha], '', mainSha)).toThrow(
       /invalid/,
     );
+    expect(() =>
+      validateTestedPredecessor(
+        [oldSha, hostAheadSha],
+        [oldSha, hostAheadSha],
+        mainSha,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateTestedPredecessor([oldSha, hostAheadSha], oldSha, mainSha),
+    ).toThrow(/was not a tested predecessor/);
   });
   it('classifies the current main tip for deployment', () => {
     expect(

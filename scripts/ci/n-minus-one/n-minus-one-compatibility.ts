@@ -7,6 +7,8 @@ import Redis from 'ioredis';
 import { Pool, type PoolClient } from 'pg';
 
 import { verifyDurableReads } from './n-minus-one-durable-probes';
+import { verifyIncompatibleJwksKeyFormat } from './n-minus-one-jwks-key-format-probe';
+import { verifyPasswordRolloutCompatibility } from './n-minus-one-password-probes';
 import { verifyRedisCompatibility } from './n-minus-one-redis-probes';
 import {
   CANDIDATE_PORT,
@@ -37,6 +39,13 @@ async function main(): Promise<void> {
   const previousImage = required('PREVIOUS_IMAGE');
   const candidateSha = required('CANDIDATE_SHA');
   const previousSha = required('PREVIOUS_SHA');
+  const previousDigest = required('PREVIOUS_DIGEST');
+  const previousTier = required('PREVIOUS_TIER');
+  check(
+    /^sha256:[a-f0-9]{64}$/u.test(previousDigest) &&
+      previousImage.endsWith(`@${previousDigest}`),
+    'previous image must be pinned to its verified manifest digest',
+  );
   const report: string[] = [];
   const failures: string[] = [];
   let redisSummary: string[] = [];
@@ -59,37 +68,28 @@ async function main(): Promise<void> {
     'CI Resend key is missing',
   );
 
-  imageConfig(candidateDirectory, CANDIDATE_PORT, 'ci-candidate', undefined);
-  imageConfig(
+  const candidateRedis = imageConfig(
+    candidateDirectory,
+    CANDIDATE_PORT,
+    'ci-candidate',
+    undefined,
+  );
+  const previousRedis = imageConfig(
     previousDirectory,
     PREVIOUS_PORT,
     'ci-previous',
     candidateDirectory,
   );
-  const candidateConnections = JSON.parse(
-    readFileSync(
-      resolve(candidateDirectory, 'connection-secrets.json'),
-      'utf8',
-    ),
-  ) as {
-    redis: { url: string; sandbox_url: string; email_send_rate_url: string };
-  };
-  const previousConnections = JSON.parse(
-    readFileSync(resolve(previousDirectory, 'connection-secrets.json'), 'utf8'),
-  ) as {
-    redis: { url: string; sandbox_url: string; email_send_rate_url: string };
-  };
-
   try {
     let fixtureHeld = false;
     try {
       requireSharedRedisEndpoints(
         {
-          ...previousConnections.redis,
+          ...previousRedis,
           url: 'redis://fixture.internal:6379/1',
         },
         {
-          ...candidateConnections.redis,
+          ...candidateRedis,
           url: 'redis://fixture.internal:6379/0',
         },
         previousSha,
@@ -112,8 +112,8 @@ async function main(): Promise<void> {
       `PASS: the /0-to-/1 Redis fixture triggered the held/drained gate before shared-state writes for N-1 ${previousSha} and N ${candidateSha}.`,
     );
     redisSummary = requireSharedRedisEndpoints(
-      previousConnections.redis,
-      candidateConnections.redis,
+      previousRedis,
+      candidateRedis,
       previousSha,
       candidateSha,
     );
@@ -194,7 +194,7 @@ async function main(): Promise<void> {
     outboxClaimLock = undefined;
 
     startImage(previousImage, 'aihub-compat-previous', previousDirectory);
-    await waitReady(PREVIOUS_PORT, 'previous Production image');
+    await waitReady(PREVIOUS_PORT, `previous ${previousTier} image`);
     await verifyDurableReads({
       database,
       organizationCreateKey,
@@ -207,12 +207,25 @@ async function main(): Promise<void> {
     startImage(candidateImage, 'aihub-compat-candidate', candidateDirectory);
     await waitReady(CANDIDATE_PORT, 'restarted candidate image');
 
+    await verifyIncompatibleJwksKeyFormat({
+      redis,
+      report,
+      previousSha,
+      candidateSha,
+    });
+    await verifyPasswordRolloutCompatibility({
+      database,
+      previousSha,
+      candidateSha,
+      report,
+    });
     await verifyRedisCompatibility({
       database,
       redis,
       organizationId,
       userToken,
       report,
+      previousSha,
     });
   } catch (error) {
     failures.push(
@@ -221,7 +234,19 @@ async function main(): Promise<void> {
   } finally {
     stopImage('aihub-compat-candidate');
     stopImage('aihub-compat-previous');
-    stubs?.kill('SIGTERM');
+    const writer = stubs;
+    if (writer !== undefined && writer.exitCode === null) {
+      const exited = new Promise<void>((resolveExit) => {
+        writer.once('exit', () => resolveExit());
+      });
+      writer.kill('SIGTERM');
+      await Promise.race([
+        exited,
+        new Promise<void>((resolveTimeout) =>
+          setTimeout(resolveTimeout, 5_000),
+        ),
+      ]);
+    }
     if (outboxClaimLock !== undefined) {
       await outboxClaimLock.query('ROLLBACK').catch(() => undefined);
       outboxClaimLock.release();
@@ -234,7 +259,7 @@ async function main(): Promise<void> {
     '## N-1 release compatibility',
     '',
     `- Candidate image: \`${candidateSha}\``,
-    `- Previous Production image: \`${previousSha}\``,
+    `- Previous ${previousTier} image: \`${previousSha}@${previousDigest}\``,
     `- Redis endpoints: primary \`${redisSummary[0] ?? 'not checked'}\`, sandbox \`${redisSummary[1] ?? 'not checked'}\`, email rate \`${redisSummary[2] ?? 'not checked'}\``,
     ...report.map((line) => `- ${line}`),
     ...failures.map((line) => `- FAIL: ${line}`),

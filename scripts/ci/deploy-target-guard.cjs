@@ -88,13 +88,18 @@ function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
   }
 }
 
-/** @param {string[]} activeShas @param {string} previousSha @param {string} targetSha */
-function validateTestedPredecessor(activeShas, previousSha, targetSha) {
-  if (!isSha(previousSha)) throw new Error('tested predecessor SHA is invalid');
+/** @param {string[]} activeShas @param {string|string[]} previousShas @param {string} targetSha */
+function validateTestedPredecessor(activeShas, previousShas, targetSha) {
+  const testedShas = Array.isArray(previousShas)
+    ? previousShas
+    : previousShas.split(',');
+  if (testedShas.length === 0 || testedShas.some((sha) => !isSha(sha))) {
+    throw new Error('tested predecessor SHA is invalid');
+  }
   for (const sha of activeShas) {
-    if (sha !== previousSha && sha !== targetSha) {
+    if (!testedShas.includes(sha) && sha !== targetSha) {
       throw new Error(
-        `refusing deployment: active revision ${sha} was not the tested predecessor ${previousSha}`,
+        `refusing deployment: active revision ${sha} was not a tested predecessor (${testedShas.join(', ')})`,
       );
     }
   }
@@ -151,10 +156,10 @@ if (require.main === module) {
       !targetSha ||
       !mainSha ||
       extra.length ||
-      (mode !== '--classify' && !isSha(mode))
+      (mode !== '--classify' && mode.split(',').some((sha) => !isSha(sha)))
     ) {
       throw new Error(
-        'usage: deploy-target-guard.cjs <target-sha> <current-main-sha> <--classify|tested-predecessor-sha>',
+        'usage: deploy-target-guard.cjs <target-sha> <current-main-sha> <--classify|tested-predecessor-sha[,tested-predecessor-sha...]>',
       );
     }
 
@@ -165,7 +170,7 @@ if (require.main === module) {
     } else {
       const status = readFileSync(0, 'utf8');
       const activeShas = parseActiveRevisions(status);
-      validateTestedPredecessor(activeShas, mode, targetSha);
+      validateTestedPredecessor(activeShas, mode.split(','), targetSha);
       validateDeployTarget({
         targetSha,
         mainSha,
