@@ -74,12 +74,14 @@ async function main(): Promise<void> {
     'ci-candidate',
     undefined,
   );
-  const previousRedis = imageConfig(
+  imageConfig(
     previousDirectory,
     PREVIOUS_PORT,
     'ci-previous',
     candidateDirectory,
   );
+  // N-1 copies the candidate's CI connection config, so both use this pre-override identity.
+  const previousRedis = candidateRedis;
   try {
     let fixtureHeld = false;
     try {
