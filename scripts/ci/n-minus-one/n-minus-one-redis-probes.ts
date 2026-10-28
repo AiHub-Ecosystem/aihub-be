@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { ERROR_CODES } from '@/common/errors/error-code';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 
 import {
   CANDIDATE_PORT,
-  type HttpResult,
   PREVIOUS_PORT,
   check,
   docker,
@@ -190,6 +190,19 @@ export async function verifyRedisCompatibility(input: {
   );
   const gradeError = candidateGrade.body?.error;
   if (
+    typeof gradeError === 'object' &&
+    gradeError !== null &&
+    'code' in gradeError
+  ) {
+    const code = gradeError.code;
+    if (
+      typeof code === 'string' &&
+      ERROR_CODES.some((known) => known === code)
+    ) {
+      check(candidateGrade.status < 400, `candidate grade: ${code}`);
+    }
+  }
+  if (
     candidateGrade.status === 403 &&
     typeof gradeError === 'object' &&
     gradeError !== null
@@ -207,6 +220,44 @@ export async function verifyRedisCompatibility(input: {
   expect2xx(candidateGrade, 'candidate grade and usage write');
 
   const apiKeyHash = createHash('sha256').update(apiKey).digest('hex');
+  const keyRecord = {
+    organizationId,
+    apiKeyId,
+    organizationStatus: 'active',
+    status: 'active',
+    scopes: ['writing.grade'],
+    entitlements: ['writing'],
+    allowedEnvironments: ['production'],
+    expiresAt: null,
+    rateLimitRpm: 60,
+    maxConcurrent: 1,
+    monthlyRequestQuota: 3,
+    hardStopOnQuota: true,
+  };
+  for (const [container, operation] of [
+    ['aihub-compat-candidate', 'set'],
+    ['aihub-compat-previous', 'get'],
+  ] as const) {
+    docker([
+      'exec',
+      '--env',
+      `COMPAT_HASH=${apiKeyHash}`,
+      '--env',
+      `COMPAT_RECORD=${Buffer.from(JSON.stringify(keyRecord)).toString('base64')}`,
+      container,
+      'node',
+      '-e',
+      `void (async () => {
+        const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
+        const store = new RedisIdentityStore('redis://127.0.0.1:6379/0');
+        const expected = JSON.parse(Buffer.from(process.env.COMPAT_RECORD, 'base64').toString('utf8'));
+        try {
+          if ('${operation}' === 'set') await store.set(process.env.COMPAT_HASH, expected);
+          else if (JSON.stringify(await store.get(process.env.COMPAT_HASH)) !== JSON.stringify(expected)) throw new Error('N-1 API-key cache record mismatch');
+        } finally { await store.onModuleDestroy(); }
+      })().catch(() => { process.stderr.write('API-key cache compatibility failed'); process.exitCode = 1; });`,
+    ]);
+  }
   const keyTtl = await redis.pttl(`aihub:v1:key:${apiKeyHash}`);
   check(
     keyTtl > 0 && keyTtl <= 60_000,
@@ -232,38 +283,18 @@ export async function verifyRedisCompatibility(input: {
     'JWKS cache freshness or stale authority bounds are invalid',
   );
 
-  const revokedFixture = await database.query(
-    "UPDATE api_keys SET status = 'revoked', revoked_at = now() WHERE id = $1",
-    [apiKeyId],
+  const oldReplay = await request(
+    PREVIOUS_PORT,
+    'POST',
+    '/v1/ielts/writing/task1/grade',
+    {
+      apiKey,
+      assertion: assertionA,
+      idempotencyKey: gradeKey,
+      body: gradeBody,
+    },
   );
-  check(
-    revokedFixture.rowCount === 1,
-    'could not revoke the API-key row for the cache-only N-1 probe',
-  );
-  let oldReplay: HttpResult;
-  try {
-    oldReplay = await request(
-      PREVIOUS_PORT,
-      'POST',
-      '/v1/ielts/writing/task1/grade',
-      {
-        apiKey,
-        assertion: assertionA,
-        idempotencyKey: gradeKey,
-        body: gradeBody,
-      },
-    );
-  } finally {
-    const restoredFixture = await database.query(
-      "UPDATE api_keys SET status = 'active', revoked_at = NULL WHERE id = $1",
-      [apiKeyId],
-    );
-    check(
-      restoredFixture.rowCount === 1,
-      'could not restore the API-key row after the cache-only N-1 probe',
-    );
-  }
-  expect2xx(oldReplay, 'N-1 shared API-key/JWKS cache read and retry replay');
+  expect2xx(oldReplay, 'N-1 JWKS read and retry replay');
   const retryRefusal = await request(
     CANDIDATE_PORT,
     'POST',
@@ -277,7 +308,7 @@ export async function verifyRedisCompatibility(input: {
   );
   expectStatus(retryRefusal, 429, 'shared keyed retry-budget refusal');
   report.push(
-    'PASS: N-1 read candidate API-key and candidate-image JWKS adapter entries from Redis within freshness bounds; mixed-version retry admission shared one Redis window.',
+    'PASS: N-1 read the candidate API-key cache adapter entry and replayed a request using shared JWKS state; mixed-version retry admission shared one Redis window.',
   );
 
   const identityB = identityA.rotate();
