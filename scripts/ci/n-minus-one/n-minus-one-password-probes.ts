@@ -25,7 +25,7 @@ export async function verifyPasswordRolloutCompatibility(input: {
     'AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD must be true or false in CI',
   );
   const requiresPassword = setting === 'true';
-  const username = `rollback-${randomUUID().replaceAll('-', '').slice(0, 24)}`;
+  const username = `rollback-${randomUUID().replaceAll('-', '').slice(0, 23)}`;
   const password = `Release-compat-${randomUUID()}!A9`;
   const tokenBefore = (await stubState()).verificationToken;
   const registration = await request(
