@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { ERROR_CODES } from '@/common/errors/error-code';
+import { identityConfigFromRow } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 
@@ -74,6 +75,8 @@ function mutateCandidateJwksCache(
             process.env.AIHUB_COMPAT_GENERATION,
             JSON.parse(Buffer.from(process.env.AIHUB_COMPAT_JWKS_ENTRY, 'base64').toString('utf8')),
           );
+          const readBack = await cache.getJwks(process.env.AIHUB_COMPAT_ORGANIZATION_ID, process.env.AIHUB_COMPAT_CONFIG_VERSION);
+          if (!readBack.entry || readBack.generation !== process.env.AIHUB_COMPAT_GENERATION) throw new Error('candidate JWKS cache fixture cannot be read');
         }
       } finally {
         await cache.onModuleDestroy();
@@ -163,12 +166,28 @@ export async function verifyRedisCompatibility(input: {
     remoteConfigFixture.rowCount === 1,
     'could not configure the cache-only JWKS fixture',
   );
+  const configFixture = await database.query(
+    `SELECT organization_id AS "organizationId", issuer, jwks_url AS "jwksUrl",
+            public_keys_jwks AS "publicKeysJwks", allowed_algorithms AS "allowedAlgorithms",
+            max_assertion_ttl_seconds AS "maxAssertionTtlSeconds", status,
+            jwks_cache_version::text AS "jwksCacheVersion"
+       FROM organization_identity_configs WHERE organization_id = $1`,
+    [organizationId],
+  );
+  check(
+    identityConfigFromRow(configFixture.rows[0]) !== undefined,
+    'JWKS identity configuration fixture is invalid',
+  );
   // The production resolver blocks loopback fixtures; seed through the candidate adapter and require N-1 to read this value without a fetch fallback.
   mutateCandidateJwksCache(organizationId, configVersion, {
     kind: 'set',
     generation: initialGeneration,
     entry: initialJwksEntry,
   });
+  check(
+    (await redis.get(initialJwksCacheKey)) !== null,
+    'candidate JWKS cache fixture was not stored in Redis',
+  );
   const assertionA = identityA.signAssertion(issuerA, identityKid(identityA));
   const gradeBody = {
     question: gradeRequest.question,
