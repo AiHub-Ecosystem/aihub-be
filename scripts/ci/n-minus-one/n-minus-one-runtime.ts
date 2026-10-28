@@ -62,6 +62,14 @@ export function check(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+export function assertNMinusOneGatePasses(failures: readonly string[]): void {
+  if (failures.length > 0) {
+    throw new Error(
+      `N-1 release compatibility failed (${failures.length} finding(s))`,
+    );
+  }
+}
+
 export function docker(args: readonly string[], capture = false): string {
   const result = execFileSync('docker', [...args], {
     cwd: ROOT,

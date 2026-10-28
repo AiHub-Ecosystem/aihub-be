@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import Redis from 'ioredis';
 
 import { mutateCandidateJwksCache } from './n-minus-one-redis-probes';
-import { check, docker, identityKeys } from './n-minus-one-runtime';
+import {
+  assertNMinusOneGatePasses,
+  check,
+  docker,
+  identityKeys,
+} from './n-minus-one-runtime';
 
 export function requirePreviousJwksFormatCompatibility(input: {
   readonly previousCanReadCandidateEntry: boolean;
@@ -15,6 +20,21 @@ export function requirePreviousJwksFormatCompatibility(input: {
       `RELEASE HOLD: N-1 ${input.previousSha} cannot read the candidate JWKS cache format from N ${input.candidateSha}`,
     );
   }
+}
+
+export function incompatibleJwksHoldReport(input: {
+  readonly previousSha: string;
+  readonly candidateSha: string;
+}): string {
+  return `N_MINUS_ONE_COMPATIBILITY_FIXTURE ${JSON.stringify({
+    fixture: 'incompatible_jwks_key_format',
+    fixtureResult: 'passed',
+    releaseDecision: 'hold',
+    previousSha: input.previousSha,
+    candidateSha: input.candidateSha,
+    expectedGateResult: 'failed',
+    requiredAction: 'fail_release_gate_before_publish',
+  })}`;
 }
 
 function readPreviousJwksEntry(
@@ -79,6 +99,7 @@ export async function verifyIncompatibleJwksKeyFormat(input: {
     },
   });
 
+  // Leave the real candidate-format check uncaught so an actual incompatibility fails the release gate.
   requirePreviousJwksFormatCompatibility({
     previousCanReadCandidateEntry:
       readPreviousJwksEntry(organizationId, configVersion) === 'HIT',
@@ -96,7 +117,7 @@ export async function verifyIncompatibleJwksKeyFormat(input: {
       'could not create the incompatible JWKS key-format fixture',
     );
     const previousRead = readPreviousJwksEntry(organizationId, configVersion);
-    let mismatchWasHeld = false;
+    let mismatchHold: string | undefined;
     try {
       requirePreviousJwksFormatCompatibility({
         previousCanReadCandidateEntry: previousRead === 'HIT',
@@ -104,16 +125,27 @@ export async function verifyIncompatibleJwksKeyFormat(input: {
         candidateSha,
       });
     } catch (error) {
-      mismatchWasHeld =
-        error instanceof Error && error.message.startsWith('RELEASE HOLD:');
+      if (!(error instanceof Error)) throw error;
+      mismatchHold = error.message;
     }
     check(
-      previousRead === 'MISS' && mismatchWasHeld,
+      previousRead === 'MISS' &&
+        mismatchHold ===
+          `RELEASE HOLD: N-1 ${previousSha} cannot read the candidate JWKS cache format from N ${candidateSha}`,
       'the incompatible JWKS fixture did not produce a release hold',
     );
-    report.push(
-      `PASS: a deliberately incompatible JWKS cache format produced a RELEASE HOLD decision for N-1 ${previousSha} and N ${candidateSha}; the compatibility job rejects that release.`,
+    let fixtureGateFailure: string | undefined;
+    try {
+      assertNMinusOneGatePasses([mismatchHold]);
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      fixtureGateFailure = error.message;
+    }
+    check(
+      fixtureGateFailure === 'N-1 release compatibility failed (1 finding(s))',
+      'the incompatible JWKS fixture did not fail the N-1 gate',
     );
+    report.push(incompatibleJwksHoldReport({ previousSha, candidateSha }));
   } finally {
     await redis.del(key, incompatibleKey);
   }

@@ -48,7 +48,13 @@ new database constraint refuses, including a name with U+200B ZERO WIDTH
 SPACE. A create or rename with such a value may therefore fail at the database
 boundary. The #755 release compatibility gate reports this named rejection as
 an accepted exception; it does not count it as proof that all N-1 writes are
-compatible. Other N-1 writes remain subject to the compatibility gate.
+compatible. Other N-1 writes remain subject to the compatibility gate. This
+accepted product risk does not waive the release gate: if N-1 returns HTTP 500
+for the zero-width-space probe, the release is held even when an independent
+PostgreSQL probe confirms this constraint. That separate probe cannot establish
+that the constraint caused the request's HTTP 500. The probe passes only when
+N-1 rejects the name at the request boundary; unrelated HTTP 500 responses also
+hold the release.
 
 ### API key names in the near-expiry notice
 

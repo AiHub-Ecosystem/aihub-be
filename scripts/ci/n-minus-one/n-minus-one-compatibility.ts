@@ -18,6 +18,7 @@ import {
   ROOT,
   USERNAME,
   USER_ID,
+  assertNMinusOneGatePasses,
   check,
   expectStatus,
   imageConfig,
@@ -202,6 +203,8 @@ async function main(): Promise<void> {
       organizationCreateKey,
       organizationId,
       userToken,
+      previousSha,
+      candidateSha,
       report,
       failures,
     });
@@ -264,7 +267,10 @@ async function main(): Promise<void> {
     `- Previous ${previousTier} image: \`${previousSha}@${previousDigest}\``,
     `- Redis endpoints: primary \`${redisSummary[0] ?? 'not checked'}\`, sandbox \`${redisSummary[1] ?? 'not checked'}\`, email rate \`${redisSummary[2] ?? 'not checked'}\``,
     ...report.map((line) => `- ${line}`),
-    ...failures.map((line) => `- FAIL: ${line}`),
+    ...failures.map(
+      (line) =>
+        `- ${line.startsWith('FAIL:') || line.startsWith('RELEASE HOLD:') ? line : `FAIL: ${line}`}`,
+    ),
     '',
     'ADR-0122 mixed-poller account-wide Resend circuit state remains an explicit limitation; this gate checks durable outbox readability and does not assert cross-version provider-outage ownership.',
     '',
@@ -272,11 +278,7 @@ async function main(): Promise<void> {
   process.stdout.write(summary.replaceAll(/\x60/g, ''));
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (summaryPath) writeFileSync(summaryPath, summary, { flag: 'a' });
-  if (failures.length > 0) {
-    throw new Error(
-      `N-1 release compatibility failed (${failures.length} finding(s))`,
-    );
-  }
+  assertNMinusOneGatePasses(failures);
 }
 
 main().catch((error: unknown) => {

@@ -1,7 +1,21 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { API_HOST, request } from './n-minus-one-runtime';
+import {
+  API_HOST,
+  assertNMinusOneGatePasses,
+  request,
+} from './n-minus-one-runtime';
+
+it('passes the N-1 gate when no release hold is recorded', () => {
+  expect(() => assertNMinusOneGatePasses([])).not.toThrow();
+});
+
+it('fails the N-1 gate when a release hold is recorded', () => {
+  expect(() =>
+    assertNMinusOneGatePasses(['RELEASE HOLD: incompatible JWKS']),
+  ).toThrow('N-1 release compatibility failed (1 finding(s))');
+});
 
 it('sends the configured production host to the isolated image', async () => {
   const server = createServer((incoming, outgoing) => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 
 import {
   PREVIOUS_PORT,
@@ -40,11 +40,46 @@ async function organizationConstraintRejectsZeroWidthSpace(
   }
 }
 
+type ZeroWidthOrganizationWriteOutcome =
+  | { readonly kind: 'pass'; readonly message: string }
+  | { readonly kind: 'release_hold'; readonly message: string }
+  | { readonly kind: 'fail'; readonly message: string };
+
+export function classifyZeroWidthOrganizationWrite(
+  status: number,
+  constraintConfirmed: boolean,
+): ZeroWidthOrganizationWriteOutcome {
+  if (status === 400) {
+    return {
+      kind: 'pass',
+      message:
+        'N-1 rejected the known Organization-name probe at its request boundary.',
+    };
+  }
+  if (status === 500) {
+    return {
+      kind: 'release_hold',
+      message: constraintConfirmed
+        ? 'N-1 returned HTTP 500 for the zero-width-space write; PostgreSQL confirmed the ADR-0121 constraint, but that independent probe cannot attribute the response to the constraint.'
+        : 'N-1 returned HTTP 500 for the zero-width-space write, and PostgreSQL did not confirm the ADR-0121 constraint.',
+    };
+  }
+  return {
+    kind: 'fail',
+    message:
+      status === 201
+        ? 'N-1 wrote a zero-width-space Organization name despite the candidate constraint.'
+        : `N-1 zero-width-space write returned unexpected HTTP ${status}.`,
+  };
+}
+
 export async function verifyDurableReads(input: {
   readonly database: Pool;
   readonly organizationCreateKey: string;
   readonly organizationId: string;
   readonly userToken: string;
+  readonly previousSha: string;
+  readonly candidateSha: string;
   readonly report: string[];
   readonly failures: string[];
 }): Promise<void> {
@@ -53,6 +88,8 @@ export async function verifyDurableReads(input: {
     organizationCreateKey,
     organizationId,
     userToken,
+    previousSha,
+    candidateSha,
     report,
     failures,
   } = input;
@@ -105,35 +142,22 @@ export async function verifyDurableReads(input: {
       body: { name: 'Rollback\u200bProbe' },
     },
   );
-  if (previousUnicodeWrite.status === 500) {
-    const expectedConstraint =
-      await organizationConstraintRejectsZeroWidthSpace(
-        database,
-        organizationId,
-      );
-    if (expectedConstraint) {
-      report.push(
-        'EXCEPTION: PostgreSQL independently confirmed the ADR-0121 organizations_name_display_text_check (23514).',
-      );
-      failures.push(
-        'N-1 returned HTTP 500 for the zero-width-space write; its cause could not be tied to the accepted constraint exception.',
-      );
-    } else {
-      failures.push(
-        'N-1 returned HTTP 500 for the zero-width-space write, but PostgreSQL did not confirm the expected organization-name CHECK violation.',
-      );
-    }
-  } else if (previousUnicodeWrite.status === 201) {
-    failures.push(
-      'N-1 wrote a zero-width-space Organization name despite the candidate constraint; verify the constraint gate.',
-    );
-  } else if (previousUnicodeWrite.status !== 400) {
-    failures.push(
-      `N-1 zero-width-space write returned unexpected HTTP ${previousUnicodeWrite.status}.`,
-    );
+  const constraintConfirmed =
+    previousUnicodeWrite.status === 500 &&
+    (await organizationConstraintRejectsZeroWidthSpace(
+      database,
+      organizationId,
+    ));
+  const outcome = classifyZeroWidthOrganizationWrite(
+    previousUnicodeWrite.status,
+    constraintConfirmed,
+  );
+  const revisionContext = `(N-1 ${previousSha}, candidate ${candidateSha})`;
+  if (outcome.kind === 'pass') {
+    report.push(`PASS: ${outcome.message} ${revisionContext}`);
   } else {
-    report.push(
-      'PASS: N-1 rejected the known Organization-name probe at its request boundary.',
+    failures.push(
+      `${outcome.kind === 'release_hold' ? 'RELEASE HOLD' : 'FAIL'}: ${outcome.message} ${revisionContext}`,
     );
   }
 }
