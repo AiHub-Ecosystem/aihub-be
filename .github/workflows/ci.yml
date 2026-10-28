@@ -556,9 +556,8 @@ jobs:
   # the host's Node and the unit and database lanes each assemble a slice of
   # the application; none of them builds the image or boots the whole
   # dependency-injection graph under the image's own Node, entrypoint, and
-  # secret loading. This does, with throwaway configuration and no database,
-  # and fails before CD can ship a release that cannot start. It proves the
-  # image builds and starts, nothing more: docs/operations/ci-boot-check.md.
+  # secret loading. It then runs the database-backed N-1 release checks. Both
+  # gates run before the image can be published for CD.
   #
   # The image artifact CD ships must be the artifact this lane started, not a
   # second build of the same Dockerfile. The push-only job publishes it after
@@ -566,9 +565,33 @@ jobs:
   image:
     name: Image boot
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     permissions:
       contents: read
+      actions: read
+      packages: read
+    services:
+      postgres:
+        image: postgres:16.10-alpine
+        env:
+          POSTGRES_DB: aihub
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aihub"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.4.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Check out repository
@@ -578,10 +601,19 @@ jobs:
 
       # Only for the boot configuration script, which needs Node's built-ins
       # and no dependencies.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.20.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for the release compatibility gate
+        run: pnpm install --frozen-lockfile
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -635,6 +667,45 @@ jobs:
 
       - name: Boot the image and wait for its health check
         run: bash scripts/ci/image-boot-check.sh aihub:image-boot
+
+      - name: Find the active Production release revision
+        id: previous_release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm exec tsx scripts/ci/n-minus-one/previous-deployed-release.ts
+
+      - name: Log in to GHCR for the previous Production image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Pull the previous Production image
+        env:
+          PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
+        run: |
+          set -euo pipefail
+          trap 'docker logout ghcr.io' EXIT
+          docker pull "ghcr.io/${GITHUB_REPOSITORY,,}:${PREVIOUS_SHA}"
+
+      - name: Create the local Resend TLS fixture
+        run: |
+          set -euo pipefail
+          mkdir -p temp/n-minus-one
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout temp/n-minus-one/resend.key \
+            -out temp/n-minus-one/resend.crt \
+            -subj '/CN=api.resend.com' \
+            -addext 'subjectAltName=DNS:api.resend.com'
+
+      - name: Verify N-1 reads candidate writes and shares Redis state
+        env:
+          CANDIDATE_IMAGE: aihub:image-boot
+          CANDIDATE_SHA: ${{ github.sha }}
+          PREVIOUS_IMAGE: ghcr.io/aihub-ecosystem/aihub-be:${{ steps.previous_release.outputs.previous_sha }}
+          PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
+        run: pnpm ci:check-n-minus-one
 
       # Only the push-only job needs this archive. Pull requests build and boot
       # without entering production or receiving its secrets.

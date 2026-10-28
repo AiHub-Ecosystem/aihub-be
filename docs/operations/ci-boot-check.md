@@ -1,4 +1,4 @@
-# CI image boot and publish (issues #119, #202)
+# CI image boot, N-1 compatibility, and publish (issues #119, #202, #755)
 
 The `Image boot` job in CI builds the production image from the real
 Dockerfile, starts it with throwaway configuration, and waits for the image's
@@ -12,7 +12,46 @@ checking all services, including inactive profiles and migration services, for
 the required bounded `json-file` logging options. A service without the
 configured log bounds fails the job.
 
-It answers one question: **does this artifact start.**
+The boot check answers **does this artifact start**. The same `Image boot` job
+then runs the candidate's migrations, starts the current Production image
+against the same isolated PostgreSQL and Redis services, and exercises
+candidate writes through both images. CI publishes only after both checks pass.
+
+## N-1 release compatibility
+
+`scripts/ci/n-minus-one/previous-deployed-release.ts` selects the newest
+completed CD run whose Production cutover and smoke step passed, even when a
+later Sandbox step failed and left Production on the newer SHA. If any main CD
+run is still active, the lookup fails closed; rerun CI after that deployment
+settles. The gate pulls the immutable Production SHA tag from GHCR, migrates
+the isolated database with the candidate image, and runs both images
+concurrently against the same database and Redis endpoint. It fails if N-1
+cannot start, cannot read candidate-written idempotency, audit, usage, or
+email-outbox data, or returns a server error to those reads.
+
+The HTTP probes also exercise shared API-key and JWKS cache reads, cache
+freshness bounds, generation and revocation invalidation, idempotency retry
+admission, authentication rate windows, monthly quota reconstruction from
+durable usage, and concurrency acquisition/release. Redis endpoint changes are
+classified as a held/drained cutover; a deliberately mismatched `/0` to `/1`
+fixture passes through the same image-pair guard before shared-state writes and
+records both image SHAs. The generated image configs are checked before writes.
+The job summary names both image SHAs and records the accepted ADR-0121
+zero-width-space Organization-name constraint exception when the old image
+reaches it.
+
+The generated boot configuration leaves ADR-0123's verification-password
+setting off, as the approved rollout requires. This gate does not enable that
+setting ahead of the Customer Web change. ADR-0122's mixed-poller account-wide
+Resend circuit limitation is reported explicitly; this gate checks that N-1 can
+decrypt and dispatch a candidate outbox request, but it does not claim
+cross-version ownership of a provider-outage circuit.
+
+The local HTTP writing and HTTPS Resend fixtures return deterministic
+responses and never call external providers. The gate uses only fake secrets
+and a throwaway database and Redis service. It does not flush Redis between
+images; only the test Organization's quota counter is deleted to exercise the
+documented durable-usage rebuild path.
 
 When the boot passes on a push to `main`, CI saves that image as an artifact.
 A separate, main-only publishing job loads and pushes the artifact to GHCR under
@@ -57,7 +96,7 @@ the app. So a newly required secret, or a variable added to production, fails
 `pnpm verify` before the Docker job does. A new _validation rule_ on an
 existing non-secret value is caught only by the boot itself.
 
-## What a green check proves
+## What the boot check proves
 
 - The image builds from this commit, including its pinned Node version.
 - The container's entrypoint loads runtime secrets and connection settings
@@ -66,16 +105,15 @@ existing non-secret value is caught only by the boot itself.
   every module registers.
 - The server listens and answers `/health` under the image's own Node.
 
-## What it does not prove
+## Limits of the CI coverage
 
-- **No database, Redis, SeaweedFS, or downstream connectivity.** Connections
-  are opened lazily and the check provides none; the connection URLs point at
-  unresolvable hosts. `/health` is static and does not probe them.
-- **No migrations** are run or checked here; the database lane covers SQL.
-- **Real secret values:** the shapes match the Vault templates, but not what
+- **No production database, Redis, SeaweedFS, or downstream connectivity.**
+  The N-1 check uses isolated PostgreSQL and Redis services plus local provider
+  fixtures; it does not connect to production or external providers.
+- **No production secrets:** the shapes match the Vault templates, but not what
   Vault actually holds.
-- **Behavior under load, or any request beyond `/health`.** It is not an
-  integration suite and should not become one.
+- **Production traffic or sustained load.** The isolated N-1 probes exercise
+  only the release cases listed above; they are not a load test.
 - **That the deployment survives.** An image that boots can still fail its
   release, for reasons the boot check does not reach. That is what the deploy
   job's health gate is for.
@@ -83,8 +121,8 @@ existing non-secret value is caught only by the boot itself.
 ## The published image and its digest
 
 CI pushes `ghcr.io/aihub-be:<commit sha>` only for pushes to `main`, and only
-after the boot passes. Pull requests run the identical build and boot check and
-push nothing.
+after the boot and N-1 compatibility checks pass. Pull requests run the same
+checks and push nothing.
 
 The push authenticates with the `production` environment's `GHCR_USERNAME` and
 `GHCR_PULL_TOKEN`, the same credentials CD uses. Only the push-only job enters
@@ -94,7 +132,9 @@ workflow token may write to it only once "Allow GitHub Actions to create and
 update packages" is enabled in the package settings. That setting is off, so
 `GITHUB_TOKEN` fails with `denied: permission_denied: write_package`. Despite
 its name, `GHCR_PULL_TOKEN` is write-capable and is the credential used to push
-here; it is also used by CD to pull the image.
+here; it is also used by CD to pull the image. The `Image boot` job uses its
+read-only `GITHUB_TOKEN` permission to pull the previous private package for
+the N-1 check; it does not receive the production environment or its secrets.
 
 The boot job saves the loaded Docker image as `image-to-publish.tar` and uploads
 it only on a push to `main`. The isolated publisher downloads and loads that

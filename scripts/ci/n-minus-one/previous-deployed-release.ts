@@ -7,7 +7,7 @@ interface WorkflowRun {
   readonly head_branch: string;
   readonly head_sha: string;
   readonly event: string;
-  readonly conclusion: string | null;
+  readonly status: string;
 }
 
 interface WorkflowJob {
@@ -50,41 +50,54 @@ export async function previousDeployedRelease({
     return (await response.json()) as GitHubResponse;
   }
 
+  const runs: WorkflowRun[] = [];
   for (let page = 1; page <= 100; page += 1) {
     const result = await getJson(
-      `${baseUrl}/actions/workflows/cd.yml/runs?branch=main&status=completed&per_page=100&page=${page}`,
+      `${baseUrl}/actions/workflows/cd.yml/runs?branch=main&status=all&per_page=100&page=${page}`,
     );
-    const runs = result.workflow_runs ?? [];
+    const pageRuns = result.workflow_runs ?? [];
+    runs.push(...pageRuns);
+    if (pageRuns.length < 100) break;
+    if (page === 100) {
+      throw new Error('CD history exceeds the safe lookup limit');
+    }
+  }
 
-    for (const run of runs) {
-      if (
-        run.event !== 'workflow_run' ||
-        run.head_branch !== 'main' ||
-        run.conclusion !== 'success' ||
-        !/^[a-f0-9]{40}$/u.test(run.head_sha)
-      ) {
-        continue;
-      }
+  const activeRun = runs.find(
+    (run) =>
+      run.event === 'workflow_run' &&
+      run.head_branch === 'main' &&
+      run.status !== 'completed',
+  );
+  if (activeRun !== undefined) {
+    throw new Error(
+      `CD run ${activeRun.id} is still active; retry after it completes`,
+    );
+  }
 
-      const jobResult = await getJson(
-        `${baseUrl}/actions/runs/${run.id}/jobs?per_page=100&page=1`,
-      );
-      const deployJob = jobResult.jobs?.find(
-        (job) => job.name === 'Blue-green deploy to VPS',
-      );
-      const healthWindow = deployJob?.steps?.find(
-        (step) => step.name === 'Final public health window',
-      );
-
-      if (
-        deployJob?.conclusion === 'success' &&
-        healthWindow?.conclusion === 'success'
-      ) {
-        return { runId: run.id, sha: run.head_sha };
-      }
+  for (const run of runs) {
+    if (
+      run.event !== 'workflow_run' ||
+      run.head_branch !== 'main' ||
+      run.status !== 'completed' ||
+      !/^[a-f0-9]{40}$/u.test(run.head_sha)
+    ) {
+      continue;
     }
 
-    if (runs.length < 100) break;
+    const jobResult = await getJson(
+      `${baseUrl}/actions/runs/${run.id}/jobs?per_page=100&page=1`,
+    );
+    const deployJob = jobResult.jobs?.find(
+      (job) => job.name === 'Blue-green deploy to VPS',
+    );
+    const productionDeploy = deployJob?.steps?.find(
+      (step) => step.name === 'Deploy Production and verify caller IP',
+    );
+
+    if (productionDeploy?.conclusion === 'success') {
+      return { runId: run.id, sha: run.head_sha };
+    }
   }
 
   throw new Error('No successful deployed CD revision was found');

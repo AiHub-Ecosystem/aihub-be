@@ -1,14 +1,18 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const WORKFLOW_PATH = '.github/workflows/ci.yml';
 const TEST_FILE_PATTERN = /\.(?:spec|test)\.tsx?$/;
 const MARKDOWN_PATH_PATTERN = /['"`]((?:docs|ops)\/[^'"`\r\n]*\.md)['"`]/g;
 
 function testReadMarkdownPaths(): string[] {
-  const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+  const files = execFileSync(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    { encoding: 'utf8' },
+  )
     .split('\0')
-    .filter((file) => TEST_FILE_PATTERN.test(file));
+    .filter((file) => TEST_FILE_PATTERN.test(file) && existsSync(file));
   const paths = new Set<string>();
 
   for (const file of files) {
