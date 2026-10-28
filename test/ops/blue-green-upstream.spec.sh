@@ -36,7 +36,7 @@ extract() {
 }
 
 for function_name in slot_for_port slot_for_socket active_slot render_config \
-  port_for_slot service_for_slot; do
+  port_for_slot service_for_slot slot_target retarget_config; do
   definition="$(extract "$function_name" scripts/ops/blue-green/blue-green-host.sh)"
   [[ -n "$definition" ]] || fail "$function_name is missing from blue-green-host.sh"
   eval "$definition"

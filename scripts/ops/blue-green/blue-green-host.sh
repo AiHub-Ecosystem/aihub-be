@@ -14,6 +14,9 @@ readonly STATE_DIR=.aihub-deploy-state
 readonly HISTORY_FILE=$STATE_DIR/releases.tsv
 readonly PENDING_FILE=$STATE_DIR/pending.tsv
 readonly GATE_FILE=$STATE_DIR/caller-ip-gate.tsv
+# Known-good Compose and nginx inputs, one directory per tier and release SHA.
+readonly CONFIG_DIR=$STATE_DIR/config
+readonly CONFIG_KEEP=3
 readonly DEPLOY_ENV=.aihub-deploy.env
 readonly LOCK_FILE=.aihub-deploy.lock
 RESOURCE_LOG=
@@ -29,6 +32,14 @@ edge_monitor_offset=0
 edge_monitor_failures=""
 app_container_baseline_ids=()
 app_container_baseline_restarts=()
+# The nginx config the next apply_slots uses for a tier: empty keeps the live
+# one, `template` renders the synced template, a path retargets that file.
+# apply_slots reads and clears both, so an override never outlives one call.
+nginx_override_production=""
+nginx_override_sandbox=""
+# What select_rollback_inputs chose for a manual rollback.
+rollback_nginx_config=""
+rollback_compose_file=docker-compose.production.yml
 
 cd "$APP_DIR"
 mkdir -p "$STATE_DIR"
@@ -491,8 +502,52 @@ probe_window() {
   return "$failed"
 }
 
+# The upstream nginx reaches a slot through.
+slot_target() {
+  local tier="$1" slot="$2"
+  if [[ -n "$socket_dir" ]] && slot_listens_on_socket "$tier" "$slot"; then
+    printf 'unix:%s/%s.sock\n' "$socket_dir" "$(service_for_slot "$tier" "$slot")"
+  else
+    printf '127.0.0.1:%s\n' "$(port_for_slot "$tier" "$slot")"
+  fi
+}
+
+# An already rendered config with every upstream pointed at another slot. Used to
+# keep a policy that is not the current template: the live one, or the one a
+# release was serving with.
+retarget_config() {
+  local tier="$1" slot="$2" source="$3" output="$4" target
+  if ! grep -Eq '^[[:space:]]*proxy_pass[[:space:]]+http://[^;[:space:]]+;' "$source"; then
+    printf 'retained %s nginx config %s has no upstream\n' "$tier" "$source" >&2
+    return 1
+  fi
+  target="$(slot_target "$tier" "$slot")" || return 1
+  sed -E "s#(proxy_pass[[:space:]]+http://)[^;[:space:]]+;#\\1${target};#g" "$source" >"$output"
+}
+
+# Which nginx config a tier is rendered from: an override, else the live config
+# so a change to one tier leaves the other's policy alone, else the template.
+config_source() {
+  local tier="$1" override="$nginx_override_production" live="$API_CONFIG"
+  if [[ "$tier" == sandbox ]]; then
+    override="$nginx_override_sandbox"
+    live="$SANDBOX_CONFIG"
+  fi
+  if [[ -n "$override" ]]; then
+    printf '%s\n' "$override"
+  elif [[ -s "$live" ]]; then
+    printf '%s\n' "$live"
+  else
+    printf 'template\n'
+  fi
+}
+
 render_config() {
-  local tier="$1" slot="$2" output="$3" template default_port target ports=()
+  local tier="$1" slot="$2" output="$3" source="${4:-template}" template default_port target ports=()
+  if [[ "$source" != template ]]; then
+    retarget_config "$tier" "$slot" "$source" "$output"
+    return
+  fi
   default_port=3021
   template=ops/nginx/aihub-api.conf
   if [[ "$tier" == sandbox ]]; then
@@ -504,21 +559,22 @@ render_config() {
     printf '%s nginx source must use its slot-A port %s\n' "$tier" "$default_port" >&2
     return 1
   fi
-  if [[ -n "$socket_dir" ]] && slot_listens_on_socket "$tier" "$slot"; then
-    target="unix:$socket_dir/$(service_for_slot "$tier" "$slot").sock"
-  else
-    target="127.0.0.1:$(port_for_slot "$tier" "$slot")"
-  fi
+  target="$(slot_target "$tier" "$slot")" || return 1
   sed -E "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+;#\\1${target};#g" "$template" >"$output"
 }
 
 apply_slots() {
   local api_slot="$1" sandbox_slot="$2" include_sandbox="${3:-$sandbox_routed}" api_tmp sandbox_tmp
+  local api_source sandbox_source
+  api_source="$(config_source production)"
+  sandbox_source="$(config_source sandbox)"
+  nginx_override_production=""
+  nginx_override_sandbox=""
   api_tmp="$(mktemp)"
   sandbox_tmp="$(mktemp)"
-  render_config production "$api_slot" "$api_tmp"
+  render_config production "$api_slot" "$api_tmp" "$api_source"
   if [[ "$include_sandbox" == true ]]; then
-    render_config sandbox "$sandbox_slot" "$sandbox_tmp"
+    render_config sandbox "$sandbox_slot" "$sandbox_tmp" "$sandbox_source"
   fi
   install -o "$(id -u)" -g "$(id -g)" -m 0644 "$api_tmp" "$NGINX_STAGING/aihub-api.conf"
   if [[ "$include_sandbox" == true ]]; then
@@ -647,6 +703,98 @@ record_release() {
   chmod 600 "$HISTORY_FILE"
 }
 
+retained_dir() {
+  printf '%s/%s/%s\n' "$CONFIG_DIR" "$1" "$2"
+}
+
+live_config_for() {
+  if [[ "$1" == sandbox ]]; then
+    printf '%s\n' "$SANDBOX_CONFIG"
+  else
+    printf '%s\n' "$API_CONFIG"
+  fi
+}
+
+# Keeps the policy a tier is serving under the release that serves it, unless
+# one is already kept. It runs before a cutover, so a release that predates
+# retention still has a known-good policy to return to.
+retain_live_nginx() {
+  local tier="$1" sha="$2" dir live
+  [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || return 1
+  dir="$(retained_dir "$tier" "$sha")"
+  [[ -s "$dir/nginx.conf" ]] && return 0
+  live="$(live_config_for "$tier")"
+  [[ -s "$live" ]] || return 1
+  mkdir -p "$dir" || return 1
+  install -m 0600 "$live" "$dir/nginx.conf.tmp" || return 1
+  mv -f "$dir/nginx.conf.tmp" "$dir/nginx.conf"
+}
+
+prune_retained() {
+  local tier="$1" old
+  while IFS= read -r old; do
+    [[ "$old" =~ ^[a-f0-9]{40}$ ]] || continue
+    rm -rf -- "${CONFIG_DIR:?}/$tier/$old"
+  done < <(ls -1t "$CONFIG_DIR/$tier" 2>/dev/null | tail -n +$((CONFIG_KEEP + 1)))
+}
+
+# Called once a release is committed: its live nginx policy and the Compose file
+# it ran with are known good for that image. Holds no secrets; the Vault bundle
+# and .env.production are not part of it.
+retain_release_inputs() {
+  local tier="$1" sha="$2" dir live
+  [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || return 1
+  dir="$(retained_dir "$tier" "$sha")"
+  live="$(live_config_for "$tier")"
+  [[ -s "$live" && -s docker-compose.production.yml ]] || return 1
+  mkdir -p "$dir" || return 1
+  install -m 0600 "$live" "$dir/nginx.conf" || return 1
+  install -m 0600 docker-compose.production.yml "$dir/docker-compose.production.yml" || return 1
+  prune_retained "$tier"
+}
+
+# The inputs a manual rollback to `sha` runs with. Missing ones stop it before
+# anything changes, unless the operator accepts the current files for a release
+# that predates retention.
+select_rollback_inputs() {
+  local tier="$1" sha="$2" dir
+  dir="$(retained_dir "$tier" "$sha")"
+  rollback_nginx_config=""
+  rollback_compose_file=docker-compose.production.yml
+  if [[ -s "$dir/nginx.conf" && -s "$dir/docker-compose.production.yml" ]]; then
+    rollback_nginx_config="$dir/nginx.conf"
+    rollback_compose_file="$dir/docker-compose.production.yml"
+    return 0
+  fi
+  if [[ "${AIHUB_ROLLBACK_UNRETAINED:-false}" == true ]]; then
+    printf 'warning: no retained configuration for %s release %s; rolling back with the current Compose and nginx files\n' \
+      "$tier" "$sha" >&2
+    rollback_nginx_config=template
+    return 0
+  fi
+  printf 'no retained known-good configuration for %s release %s. Rollback would run the old image with the current Compose and nginx files. If that is acceptable, rerun with AIHUB_ROLLBACK_UNRETAINED=true.\n' \
+    "$tier" "$sha" >&2
+  return 1
+}
+
+# Sets the nginx config the next apply_slots uses for the tier a rollback returns
+# to, from what its release kept. Only the nginx policy is needed: the old
+# container already runs with its own Compose options.
+set_rollback_nginx_override() {
+  local tier="$1" sha="$2" config
+  config="$(retained_dir "$tier" "$sha")/nginx.conf"
+  if [[ ! -s "$config" ]]; then
+    printf 'no retained nginx policy for %s release %s; refusing to roll back with the current templates\n' \
+      "$tier" "$sha" >&2
+    return 1
+  fi
+  if [[ "$tier" == sandbox ]]; then
+    nginx_override_sandbox="$config"
+  else
+    nginx_override_production="$config"
+  fi
+}
+
 wait_service_ready() {
   local service="$1" timeout_seconds="${2:-120}" expected_id="${3:-}" expected_restart_count="${4:-}" check_edge="${5:-true}" check_app_containers="${6:-false}" id status
   for ((attempt = 0; attempt < timeout_seconds; attempt += 1)); do
@@ -753,7 +901,10 @@ drain_old_slot() {
 }
 
 rollback_current_tier() {
-  local tier="$1" old_slot="$2" new_slot="$3" old_service new_service old_id new_id api_slot sandbox_slot
+  local tier="$1" old_slot="$2" new_slot="$3" old_sha="$4" old_service new_service old_id new_id api_slot sandbox_slot
+  # The tier returns to the policy its old release kept; the other tier keeps
+  # its live one, because apply_slots leaves a tier with no override alone.
+  set_rollback_nginx_override "$tier" "$old_sha" || return 1
   old_service="$(service_for_slot "$tier" "$old_slot")"
   new_service="$(service_for_slot "$tier" "$new_slot")"
   api_slot="$(active_slot production "$API_CONFIG")"
@@ -817,6 +968,12 @@ deploy_tier() {
     return 1
   fi
   old_sha="$(container_revision "$old_id")"
+  # Before anything changes: the policy the old release serves with is kept, so a
+  # rollback has a known-good one to return to even if no earlier deploy kept it.
+  if ! retain_live_nginx "$tier" "$old_sha"; then
+    printf 'could not retain the live %s nginx policy; nothing was changed\n' "$tier" >&2
+    return 1
+  fi
   write_pending "$tier" "$old_slot" "$old_sha" "$new_slot" "$AIHUB_IMAGE"
 
   local expected_count=3
@@ -828,10 +985,13 @@ deploy_tier() {
     return 1
   }
 
+  # The deployed tier takes the synced template; the other tier keeps its live policy.
   if [[ "$tier" == production ]]; then
     api_slot="$new_slot"
+    nginx_override_production=template
   else
     sandbox_slot="$new_slot"
+    nginx_override_sandbox=template
   fi
   apply_slots "$api_slot" "$sandbox_slot"
   new_id="$(container_id "$new_service")"
@@ -857,7 +1017,7 @@ deploy_tier() {
   capture_resources "post-cutover-${tier}" || failed=1
   if [[ "$failed" -eq 1 ]]; then
     capture_resources "failed-cutover-${tier}" || true
-    rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
+    rollback_current_tier "$tier" "$old_slot" "$new_slot" "$old_sha" || return 1
     if [[ "$inject_failure" == true ]]; then
       printf '%s rollback rehearsal passed\n' "$tier"
       return 0
@@ -874,10 +1034,15 @@ deploy_tier() {
     ! candidate_state_safe "$new_id" "$candidate_restart_baseline" ||
     ! app_containers_safe "$old_id" "$new_id"; then
     capture_resources "failed-drain-${tier}" || true
-    rollback_current_tier "$tier" "$old_slot" "$new_slot" || return 1
+    rollback_current_tier "$tier" "$old_slot" "$new_slot" "$old_sha" || return 1
     printf '%s failed while the old slot drained; previous slot restored\n' "$tier" >&2
     return 1
   fi
+  # The release is live and healthy: keep the Compose file and policy it ran with.
+  # A failure here does not undo a good deploy; the next manual rollback to this
+  # release then needs AIHUB_ROLLBACK_UNRETAINED=true.
+  retain_release_inputs "$tier" "$(container_revision "$new_id")" ||
+    printf 'warning: could not retain the %s release inputs\n' "$tier" >&2
   record_release deploy "$tier" "$old_slot" "$old_sha" "$new_slot" "$(container_revision "$new_id")"
   clear_pending
   capture_resources "committed-${tier}"
@@ -936,6 +1101,8 @@ bootstrap_sandbox() {
     return 1
   fi
 
+  retain_release_inputs sandbox "$(container_revision "$id")" ||
+    printf 'warning: could not retain the sandbox release inputs\n' >&2
   record_release deploy sandbox disabled disabled a "$(container_revision "$id")"
   clear_pending
   printf 'Sandbox enabled active=%s\n' "$(container_revision "$id")"
@@ -1157,11 +1324,30 @@ deploy() {
   fi
 }
 
+# The live nginx configs as a manual rollback found them, so a failed rollback
+# restores exactly the policy it replaced rather than re-rendering templates.
+snapshot_live_configs() {
+  local tier live
+  for tier in production sandbox; do
+    live="$(live_config_for "$tier")"
+    rm -f "$STATE_DIR/live-before-rollback-$tier.conf"
+    if [[ -s "$live" ]]; then
+      install -m 0600 "$live" "$STATE_DIR/live-before-rollback-$tier.conf" || return 1
+    fi
+  done
+}
+
 restore_active_after_rollback_failure() {
   local service="$1" id="$2" api_slot="$3" sandbox_slot="$4"
   if ! container_running "$id"; then
     "${compose[@]}" start "$service" || return 1
     wait_service_ready "$service" 120 "" "" false || return 1
+  fi
+  if [[ -s "$STATE_DIR/live-before-rollback-production.conf" ]]; then
+    nginx_override_production="$STATE_DIR/live-before-rollback-production.conf"
+  fi
+  if [[ -s "$STATE_DIR/live-before-rollback-sandbox.conf" ]]; then
+    nginx_override_sandbox="$STATE_DIR/live-before-rollback-sandbox.conf"
   fi
   apply_slots "$api_slot" "$sandbox_slot" || return 1
   probe_window 10 || return 1
@@ -1236,9 +1422,15 @@ rollback() {
     rollback_sandbox_to_disabled "$new_slot" "$new_sha"
     return $?
   fi
+  # Before the image override changes: a rollback without a retained known-good
+  # configuration stops here with both slots as they were.
+  select_rollback_inputs "$tier" "$old_sha" || return 1
+  snapshot_live_configs || return 1
   AIHUB_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:${old_sha}"
   write_image_env "$AIHUB_IMAGE"
-  compose=(sudo -n docker compose --env-file .env.production --env-file "$DEPLOY_ENV" -f docker-compose.production.yml --profile blue-green)
+  # The release's own Compose file; --project-directory keeps its relative paths
+  # and the project name on this directory, as they are for the current file.
+  compose=(sudo -n docker compose --env-file .env.production --env-file "$DEPLOY_ENV" --project-directory "$PWD" -f "$rollback_compose_file" --profile blue-green)
   compose+=(--profile sandbox)
 
   local current_api current_sandbox current_slot candidate_service active_service active_id candidate_id
@@ -1278,6 +1470,12 @@ rollback() {
     current_api="$old_slot"
   else
     current_sandbox="$old_slot"
+  fi
+  # The tier returns to its release's policy; the other tier keeps its live one.
+  if [[ "$tier" == production ]]; then
+    nginx_override_production="$rollback_nginx_config"
+  else
+    nginx_override_sandbox="$rollback_nginx_config"
   fi
   if ! apply_slots "$current_api" "$current_sandbox"; then
     if restore_active_after_rollback_failure "$active_service" "$active_id" "$active_api" "$active_sandbox"; then

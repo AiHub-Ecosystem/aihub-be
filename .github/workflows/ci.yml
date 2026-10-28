@@ -192,6 +192,9 @@ jobs:
       - name: Exercise nginx upstream selection for port and socket slots
         run: bash test/ops/blue-green-upstream.spec.sh
 
+      - name: Exercise nginx and Compose retention across rollback
+        run: bash test/ops/blue-green-config-retention.spec.sh
+
       - name: Exercise deployed status readiness reporting with stubs
         run: bash test/ops/status-readiness.spec.sh
 

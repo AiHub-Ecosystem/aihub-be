@@ -1205,6 +1205,13 @@ against its pinned SHA-256 because its `postrotate` command runs as root. If a
 config update fails, it keeps the active log file and restrictive permissions;
 rollback never deletes records or restores a broader mode.
 
+A deploy re-renders nginx from the synced template only for the tier it
+deploys. The other tier keeps its live policy, retargeted to its active slot
+only. If a tier has no live config, its template renders as before. Before a
+cutover the helper keeps the live config of the release being replaced, so a
+rollback has a known-good policy even for releases that predate this retention.
+See [Roll back a blue-green release](#roll-back-a-blue-green-release).
+
 Both AIHUB hosts write to `/var/log/aihub-access.log`; this does not change the
 shared `/var/log/nginx/access.log` or another site's logging. Each JSON record
 contains only the observed IP, upstream `X-Request-Id`, method, `$uri` without
@@ -1683,6 +1690,39 @@ For Sandbox:
 ```bash
 APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh rollback sandbox
 ```
+
+#### Retained nginx and Compose inputs
+
+A rollback returns the tier to the inputs its target release ran with, not to
+whatever the synced templates hold now. The helper keeps these per tier under
+`.aihub-deploy-state/config/<tier>/<revision>/`:
+
+- `nginx.conf`: the live nginx policy for the tier (limits, headers, locations).
+- `docker-compose.production.yml`: the Compose file in use at commit time.
+
+Retention rules:
+
+- A successful deploy or Sandbox bootstrap keeps both files for the release it
+  commits. Before a cutover, the helper also keeps the live nginx config of the
+  release being replaced, unless a record for it already exists. Such a record
+  has no Compose file.
+- Only the newest three revisions per tier are kept. Older records are pruned.
+- No secret is kept. The Vault bundle, `.env` values, and the rendered deploy
+  environment are never copied. Vault rotation and expand-only database
+  behaviour are unchanged: roll back the application, not the data.
+
+Selection:
+
+- Manual `rollback` picks the retained inputs of the target revision before it
+  changes anything. If they are missing, it stops with nothing changed.
+- If only the nginx config is retained, or nothing is, set
+  `AIHUB_ROLLBACK_UNRETAINED=true` to accept the current Compose file and the
+  current nginx template for that one rollback. Use it only after reviewing both.
+- A rollback that the helper starts itself after a failed deploy never falls
+  back to the current templates. It needs the retained nginx config of the
+  release being restored, and the deploy refuses to start without it.
+- If a manual rollback fails, the helper restores the live nginx configs it
+  saved before the attempt, for both tiers.
 
 ### Legacy direct Compose rollback
 
