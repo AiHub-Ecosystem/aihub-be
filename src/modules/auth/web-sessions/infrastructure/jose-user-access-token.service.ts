@@ -32,7 +32,6 @@ export interface UserAccessTokenConfig {
 
 export const USER_ACCESS_TOKEN_CRYPTO = Symbol('USER_ACCESS_TOKEN_CRYPTO');
 
-const CLAIMS = ['aud', 'exp', 'iat', 'iss', 'jti', 'sub'] as const;
 const INVALID_KEY_CONFIGURATION_MESSAGE =
   'User Access JWT configuration is invalid';
 const INVALID_SIGNING_KEY_MESSAGE =
@@ -121,10 +120,9 @@ export class JoseUserAccessTokenService
         clockTolerance: this.config.clockSkewSeconds,
       });
       const payload = verified.payload;
-      const keys = Object.keys(payload).sort();
+      // Unknown claims are ignored so a token from the next release verifies
+      // here during a cutover or rollback; every required claim is still checked.
       if (
-        keys.length !== CLAIMS.length ||
-        keys.some((key, index) => key !== CLAIMS[index]) ||
         typeof payload.iss !== 'string' ||
         typeof payload.aud !== 'string' ||
         payload.aud !== this.config.audience ||

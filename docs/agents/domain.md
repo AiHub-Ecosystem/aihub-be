@@ -78,6 +78,7 @@ of claiming universal N-1 write compatibility.
 
 - Ship a new persisted enum/value in two releases. Release N-1 first learns to read or safely skip the value without writing it; a later release starts writing it only after that reader is deployed.
 - Add environment variables and Vault template keys without renaming or removing existing keys in the same release. Remove an old key only in a later release after no deployed image reads it. Where a strict Vault bundle reader rejects an added key, follow the coordinated cutover and rollback sequence in `docs/operations/deploy-vps.md` and the applicable ADR.
+- Change the User Access token's claims in two releases, as a stored enum value is. A token moves between releases in both directions during a blue-green cutover and after a rollback, and it lives up to 15 minutes. The verifier ignores a claim it does not know and still refuses a token that lacks a required claim or types one wrongly, so release N-1 accepts a token carrying the next claim. Teach the verifier the new claim in one release; start issuing it in a later one. Remove a claim in reverse: stop requiring it, then stop issuing it.
 - For every PR that changes persisted values or runtime configuration, name the old-reader behavior and the release that starts writing/removing the value or key. Keep unknown-value telemetry bounded and free of payloads or secret values.
 
 ## Finding Customer Web AIHUB consumers

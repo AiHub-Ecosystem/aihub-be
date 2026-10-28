@@ -101,9 +101,6 @@ describe('JoseUserAccessTokenService', () => {
       () => 1_800_000_000,
     );
     const issued = await service.issue('usr_01J00000000000000000000000');
-    const extraClaim = await signedToken(keys.privateKey, {
-      extra: { email: 'person@example.com' },
-    });
 
     await expect(service.verify('not-a-jwt')).rejects.toMatchObject({
       code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
@@ -121,10 +118,6 @@ describe('JoseUserAccessTokenService', () => {
     ).rejects.toMatchObject({
       code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
     });
-    await expect(service.verify(extraClaim)).rejects.toMatchObject({
-      code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
-    });
-
     const wrongKid = await signedToken(keys.privateKey, { kid: 'old-key' });
     await expect(service.verify(wrongKid)).rejects.toMatchObject({
       code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
@@ -161,6 +154,53 @@ describe('JoseUserAccessTokenService', () => {
         }),
       ),
     ).rejects.toMatchObject({ code: 'AUTH_USER_ACCESS_TOKEN_INVALID' });
+  });
+
+  it('accepts a token from the next release that carries an extra claim', async () => {
+    const keys = await keyPair();
+    const service = new JoseUserAccessTokenService(
+      config(keys.privateKeyPem),
+      () => 1_800_000_000,
+    );
+    const nextRelease = await signedToken(keys.privateKey, {
+      extra: { tier: 'pro', scopes: ['a', 'b'] },
+    });
+
+    await expect(service.verify(nextRelease)).resolves.toEqual({
+      userId: 'usr_01J00000000000000000000000',
+      jti: 'jti',
+    });
+  });
+
+  it('still refuses a token that lacks a required claim or shapes one wrongly', async () => {
+    const keys = await keyPair();
+    const service = new JoseUserAccessTokenService(
+      config(keys.privateKeyPem),
+      () => 1_800_000_000,
+    );
+    const base = () =>
+      new SignJWT({})
+        .setProtectedHeader({ alg: 'RS256', kid: 'user-access-2026-09' })
+        .setIssuer('https://api.test.aihub.example.com')
+        .setAudience('aihub-user-api')
+        .setSubject('usr_01J00000000000000000000000')
+        .setIssuedAt(1_800_000_000)
+        .setExpirationTime(1_800_000_900);
+
+    const withoutJti = await base().sign(keys.privateKey);
+    const oversizedJti = await base()
+      .setJti('x'.repeat(257))
+      .sign(keys.privateKey);
+    const wrongSubject = await base()
+      .setSubject('person@example.com')
+      .setJti('jti')
+      .sign(keys.privateKey);
+
+    for (const token of [withoutJti, oversizedJti, wrongSubject]) {
+      await expect(service.verify(token)).rejects.toMatchObject({
+        code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+      });
+    }
   });
 
   it('fails closed when key metadata is missing', async () => {
