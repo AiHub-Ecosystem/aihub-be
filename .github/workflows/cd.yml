@@ -516,6 +516,16 @@ jobs:
           fi
           if [[ "$active_sha" == "$target_sha" ]]; then
             printf 'Production already runs target; skipping cutover\n'
+            # A re-run of a half-finished release: reopen the gate the skipped
+            # cutover would have written, or the Sandbox deploy is refused.
+            if [[ -z "$caller_ip_gate" ]]; then
+              ssh "${ssh_opts[@]}" "$target" \
+                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          ./scripts/ops/blue-green/blue-green-host.sh resume production
+          REMOTE
+            fi
           else
             if ! ssh "${ssh_opts[@]}" "$target" \
               "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
@@ -700,12 +710,13 @@ jobs:
           cd "$APP_DIR"
           state="$(./scripts/ops/blue-green/blue-green-host.sh status)"
           target_sha="${AIHUB_IMAGE##*:}"
+          restore_hint='after the recovery, run ./scripts/ops/host-jobs/install-host-jobs.sh restore from the deployment directory'
           if grep -Eq '^pending=' <<<"$state" || grep -Fxq 'sandbox enabled but not routed' <<<"$state"; then
-            printf 'deployment state is unresolved; AIHUB host jobs remain suspended\n' >&2
+            printf 'deployment state is unresolved; AIHUB host jobs remain suspended; %s\n' "$restore_hint" >&2
             exit 1
           fi
           if grep -Eq '^caller_ip_gate=' <<<"$state"; then
-            printf 'caller-IP deployment gate remains unresolved; AIHUB host jobs remain suspended\n' >&2
+            printf 'caller-IP deployment gate remains unresolved; AIHUB host jobs remain suspended; re-run this CD run to resolve it\n' >&2
             exit 1
           fi
           if ! grep -Eq '^production active_slot=' <<<"$state" || ! grep -Eq '^sandbox (active_slot=|disabled$)' <<<"$state"; then
@@ -713,10 +724,13 @@ jobs:
             exit 1
           fi
           active_shas=()
+          revision_summary=
           while IFS= read -r line; do
             if [[ "$line" =~ ^(production|sandbox)[[:space:]]active_slot= ]]; then
+              tier_name="${BASH_REMATCH[1]}"
               if [[ "$line" =~ [[:space:]]sha=([^[:space:]]+) ]]; then
                 active_shas+=("${BASH_REMATCH[1]}")
+                revision_summary+="$tier_name=${BASH_REMATCH[1]:0:12} "
               else
                 printf 'an active AIHUB tier revision is missing; host jobs remain suspended\n' >&2
                 exit 1
@@ -733,7 +747,16 @@ jobs:
               exit 1
             fi
             if [[ "$sha" != "${active_shas[0]}" ]]; then
-              printf 'active AIHUB tiers run mixed revisions; host jobs remain suspended\n' >&2
+              printf 'active AIHUB tiers run mixed revisions (%starget=%s)\n' \
+                "$revision_summary" "${target_sha:0:12}" >&2
+              # A failed attempt that left no recovery state returns the jobs
+              # to the schedule they had before CD paused them; a successful
+              # deploy that is still mixed stays suspended.
+              if [[ "$DEPLOY_OUTCOME" != success ]]; then
+                ./scripts/ops/host-jobs/install-host-jobs.sh restore
+              else
+                printf 'host jobs remain suspended; %s\n' "$restore_hint" >&2
+              fi
               exit 1
             fi
           done

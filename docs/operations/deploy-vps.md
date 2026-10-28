@@ -548,12 +548,15 @@ revisions and only proceeds when every active tier runs the target revision.
 It smoke-tests the staged wrapper against every active tier, installs the
 wrapper, smokes the installed wrapper, then enables and verifies the managed
 schedule.
-If a failed rollout leaves every tier on the same previous revision and no
-pending recovery state, CD restores the saved crontab. Mixed, unknown, or
-pending tier state keeps AIHUB jobs suspended for operator recovery. This
-preserves ADR-0085's per-tier rollback behavior: Production can remain on the
-new release while Sandbox returns to its previous release, with scheduled
-jobs held until the revisions are aligned again.
+If a failed attempt leaves no pending recovery state and no unresolved
+caller-IP gate, CD restores the saved crontab, including when the tiers run
+different revisions; it reports each tier's revision and the target, then fails
+the run. Unknown or pending tier state, an unresolved gate, or a successful
+deploy that still reports mixed tiers keeps AIHUB jobs suspended; the message
+names the next step. This preserves ADR-0085's per-tier rollback behavior:
+Production can remain on the new release while Sandbox returns to its previous
+release. Re-running the CD run of the revision Production already runs then
+finishes the Sandbox rollout and reinstalls the jobs.
 
 If deployment-file synchronization fails after the pause, CD restores the
 previous Compose file, host deployment helper, and saved crontab before it
@@ -1742,11 +1745,15 @@ After rolling back one tier:
 
 - The helper runs `docker compose pull` even when the image is already local,
   so authenticate the Docker daemon to GHCR first, as above.
-- The two tiers now run different revisions, and CD keeps the scheduled host
-  jobs suspended until they match again. Re-running the CD run of the revision
-  Production already runs does not roll the other tier forward: it skips the
-  Production cutover and the Sandbox step is refused. Roll forward by letting CD
-  deploy a new revision, which deploys both tiers and reinstalls the host jobs.
+- The two tiers now run different revisions, and the scheduled host jobs stay
+  suspended until they match again. To roll the lagging tier forward, re-run the
+  CD run of the revision the other tier already runs. It skips the cutover of the
+  tier that is current, runs `blue-green-host.sh resume production` to reopen the
+  caller-IP gate, deploys the lagging tier, and reinstalls the host jobs. If that
+  run fails and the message says the gate is unresolved, re-run it again; if the
+  host jobs stay suspended with a pending rollout, finish the recovery and run
+  `./scripts/ops/host-jobs/install-host-jobs.sh restore` from the deployment
+  directory. Deploying a new revision also works, and deploys both tiers.
 
 ### Legacy direct Compose rollback
 

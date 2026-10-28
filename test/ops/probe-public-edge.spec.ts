@@ -115,7 +115,7 @@ describe('public edge health probe', () => {
       '"$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend',
     );
     expect(workflow).toContain(
-      'active AIHUB tiers run mixed revisions; host jobs remain suspended',
+      'active AIHUB tiers run mixed revisions (%starget=%s)',
     );
     expect(workflow).toContain(
       'if [[ "${active_shas[0]}" == "$target_sha" ]]; then',

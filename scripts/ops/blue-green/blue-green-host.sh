@@ -1245,7 +1245,7 @@ assert_gate_transition() {
   if [[ -z "$gate" ]]; then
     case "$COMMAND:$TIER" in
       deploy: | deploy:production | deploy:all | rollback:production | rollback:sandbox | \
-        public-host:production | public-host:sandbox | sandbox-enabled: | status: | rehearse:sandbox)
+        resume:production | public-host:production | public-host:sandbox | sandbox-enabled: | status: | rehearse:sandbox)
         return 0
         ;;
     esac
@@ -1263,6 +1263,35 @@ assert_gate_transition() {
   fi
   printf 'command is not allowed while caller-IP gate state is %s\n' "${gate:-none}" >&2
   return 1
+}
+
+# A re-run of a half-finished release finds Production already on the target, so
+# CD skips its cutover and no gate is written; the Sandbox deploy is refused
+# without one (#1381, #1382). This writes the gate that cutover would have, and
+# only when Production really runs the target and nothing is mid-rollout.
+resume_production() {
+  local target_sha slot service active_sha
+  [[ -z "$(gate_state)" ]] || {
+    printf 'a caller-IP gate is already set; refusing to resume Production\n' >&2
+    return 1
+  }
+  [[ ! -s "$PENDING_FILE" ]] || {
+    printf 'a rollout is pending; refusing to resume Production\n' >&2
+    return 1
+  }
+  target_sha="${AIHUB_IMAGE##*:}"
+  [[ "$target_sha" =~ ^[a-f0-9]{40}$ ]] || {
+    printf 'AIHUB_IMAGE with a commit SHA is required to resume Production\n' >&2
+    return 1
+  }
+  slot="$(active_slot production "$API_CONFIG")" || return 1
+  service="$(service_for_slot production "$slot")" || return 1
+  active_sha="$(container_revision "$(container_id "$service")")" || return 1
+  [[ "$active_sha" == "$target_sha" ]] || {
+    printf 'Production does not run the target revision; refusing to resume it\n' >&2
+    return 1
+  }
+  write_gate production
 }
 
 deploy() {
@@ -1586,6 +1615,11 @@ case "$COMMAND" in
     fi
     deploy "$TIER"
     ;;
+  resume)
+    assert_gate_transition || exit 1
+    resume_production || exit 1
+    printf 'Production already runs the target; caller-IP gate reopened\n'
+    ;;
   rollback)
     assert_gate_transition || exit 1
     if rollback "$TIER"; then
@@ -1670,7 +1704,7 @@ case "$COMMAND" in
     deploy_tier sandbox true
     ;;
   *)
-    printf 'usage: %s deploy [production|sandbox|all] | rollback <production|sandbox> | rehearse sandbox | status | public-host <production|sandbox> | sandbox-enabled | finalize | recover-gate\n' "$0" >&2
+    printf 'usage: %s deploy [production|sandbox|all] | rollback <production|sandbox> | resume production | rehearse sandbox | status | public-host <production|sandbox> | sandbox-enabled | finalize | recover-gate\n' "$0" >&2
     exit 2
     ;;
 esac
