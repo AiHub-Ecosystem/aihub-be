@@ -431,6 +431,39 @@ describe('Organization invitation HTTP flow', () => {
     expect(emailSender.send.mock.calls).toHaveLength(0);
   });
 
+  it('replays a stored record that carries members a newer release added', async () => {
+    // A rollback can leave a record written by the release it rolled back
+    // from; its extra members are ignored, not refused (#754).
+    idempotency.execute.mockImplementationOnce(
+      async (
+        _input: IdempotencyExecutionInput,
+        _work: IdempotencyWork<unknown>,
+        decodeReplay: IdempotencyReplayDecoder<unknown>,
+      ) => ({
+        result: decodeReplay({
+          invitationId: INVITATION_ID,
+          organizationId: ORGANIZATION_ID,
+          email: 'invitee@example.com',
+          role: 'member',
+          expiresAt: '2026-09-22T12:00:00.000Z',
+          emailDeliveryStatus: 'queued',
+          inviterDisplayName: 'Ada',
+        }),
+        replay: true,
+      }),
+    );
+
+    const response = await invite(undefined, {
+      authorization: 'Bearer valid.token.value',
+      'idempotency-key': 'invite-1',
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['idempotent-replay']).toBe('true');
+    expect(response.body).not.toContain('inviterDisplayName');
+    expect(invitations.createInvitation.mock.calls).toHaveLength(0);
+  });
+
   it('still refuses a stored record that carries a status it cannot report', async () => {
     idempotency.execute.mockImplementationOnce(
       async (

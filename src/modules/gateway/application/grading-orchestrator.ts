@@ -1,4 +1,5 @@
 import { isRecord } from '@/common/is-record';
+import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import {
@@ -52,27 +53,43 @@ function decodeStoredResult<K extends OperationId>(
   operation: K,
   def: Pick<OperationDef, 'responseContract'>,
 ): DispatchResult<ResponseFor<K>> {
-  if (
-    !isRecord(value) ||
-    isMalformed(value, operation) ||
-    def.responseContract === 'unresolved' ||
-    !Value.Check(def.responseContract, value.data)
-  ) {
+  const data =
+    isRecord(value) &&
+    !isMalformed(value, operation) &&
+    def.responseContract !== 'unresolved'
+      ? parseStoredData(def.responseContract, value.data)
+      : undefined;
+  if (!isRecord(value) || data === undefined) {
     const operationGroup = operation.split('.')[0] ?? 'graded';
     const label = `${operationGroup[0]?.toUpperCase()}${operationGroup.slice(1)}`;
     throw new Error(`stored ${label} grading response is malformed`);
   }
 
-  // `value.data` just passed `Value.Check` against the operation's own
-  // response contract, so the parse cannot produce a shape outside it.
   return withDispatchTelemetry(
     {
       operation,
-      data: Value.Parse(def.responseContract, value.data),
+      data,
       downstreamMs: value.downstreamMs as number,
     },
     readDispatchTelemetry(value),
   ) as DispatchResult<ResponseFor<K>>;
+}
+
+/**
+ * A stored body may have been written by a newer release that added members
+ * (#754), so unknown members are cleaned away rather than refused. `Convert`
+ * stays out: a known member of the wrong type is still a malformed body.
+ */
+function parseStoredData(contract: TSchema, data: unknown): unknown {
+  try {
+    return Value.Parse(
+      ['Clone', 'Clean', 'Default', 'Assert', 'Decode'],
+      contract,
+      data,
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 export class GradingOrchestrator implements GradingOrchestratorPort {

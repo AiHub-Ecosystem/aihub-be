@@ -345,6 +345,112 @@ describe('GradingOrchestratorPort', () => {
     expect(calls).toHaveLength(1);
   });
 
+  describe('a stored body carrying members a newer release added', () => {
+    const writingCommand = {
+      ...metadata(new AbortController().signal),
+      operation: 'writing.task2.grade' as const,
+      input: {
+        question: 'Discuss the topic.',
+        topic: 'education',
+        essay: 'A clear essay.',
+      },
+      idempotencyKey: 'newer-member-key',
+    };
+    const [firstCriterion, ...otherCriteria] = writingData.criteria;
+    const newerWritingData = {
+      ...writingData,
+      confidence: 0.9,
+      criteria: [{ ...firstCriterion, rubric_version: 2 }, ...otherCriteria],
+    };
+
+    it('replays through idempotency without the unknown members', async () => {
+      const { port, calls, stored } = fixture();
+      await port.execute(writingCommand);
+      stored.set('writing.task2.grade:newer-member-key', {
+        operation: 'writing.task2.grade',
+        data: newerWritingData,
+        downstreamMs: 23,
+      });
+
+      const replay = await port.execute(writingCommand);
+
+      expect(replay.data).toEqual(writingData);
+      expect(replay).toMatchObject({
+        downstreamMs: 0,
+        idempotentReplay: true,
+      });
+      expect(calls).toHaveLength(1);
+    });
+
+    it('replays a preloaded completed replay without the unknown members', async () => {
+      const { port, calls, executions } = fixture();
+
+      const replay = await port.execute({
+        ...writingCommand,
+        completedReplay: {
+          responseStatus: 200,
+          responseBody: {
+            operation: 'writing.task2.grade',
+            data: newerWritingData,
+            downstreamMs: 23,
+          },
+        },
+      });
+
+      expect(replay.data).toEqual(writingData);
+      expect(replay.idempotentReplay).toBe(true);
+      expect(calls).toHaveLength(0);
+      expect(executions).toHaveLength(0);
+    });
+
+    it('replays a Speaking body without the unknown members', async () => {
+      const { port, calls } = fixture({
+        ...OPERATION_CATALOG,
+        'speaking.grading-json': {
+          ...OPERATION_CATALOG['speaking.grading-json'],
+          idempotency: 'required',
+        },
+      });
+
+      const replay = await port.execute({
+        ...metadata(new AbortController().signal),
+        operation: 'speaking.grading-json',
+        input: {
+          audioUrl: 'https://example.com/answer.wav',
+          part: 1 as const,
+          questionId: 'p1_hometown',
+        },
+        idempotencyKey: 'speaking-newer-member-key',
+        completedReplay: {
+          responseStatus: 200,
+          responseBody: {
+            operation: 'speaking.grading-json',
+            data: { ...speakingData, confidence: 0.9 },
+            downstreamMs: 23,
+          },
+        },
+      });
+
+      expect(replay.data).toEqual(speakingData);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('still refuses a known member of the wrong type', async () => {
+      const { port, calls, stored } = fixture();
+      await port.execute(writingCommand);
+      stored.set('writing.task2.grade:newer-member-key', {
+        operation: 'writing.task2.grade',
+        data: { ...newerWritingData, overall_band: '7' },
+        downstreamMs: 23,
+      });
+
+      await expect(port.execute(writingCommand)).rejects.toThrow(
+        'stored Writing grading response is malformed',
+      );
+      expect(calls).toHaveLength(1);
+    });
+  });
+
   it('dispatches both Speaking operations directly with the lifecycle signal and individual deadlines', async () => {
     const { port, calls, executions } = fixture();
     const lifecycle = new AbortController();
