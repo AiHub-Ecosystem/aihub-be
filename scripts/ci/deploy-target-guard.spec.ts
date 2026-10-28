@@ -10,6 +10,11 @@ type DeployTargetGuard = {
     cwd: string;
   }) => 'deploy' | 'superseded';
   parseActiveRevisions: (status: string) => string[];
+  validateTestedPredecessor: (
+    activeShas: string[],
+    previousSha: string,
+    targetSha: string,
+  ) => void;
   validateDeployTarget: (input: {
     targetSha: string;
     mainSha: string;
@@ -26,6 +31,8 @@ function isDeployTargetGuard(value: unknown): value is DeployTargetGuard {
     typeof value.classifyDeployTarget === 'function' &&
     'parseActiveRevisions' in value &&
     typeof value.parseActiveRevisions === 'function' &&
+    'validateTestedPredecessor' in value &&
+    typeof value.validateTestedPredecessor === 'function' &&
     'validateDeployTarget' in value &&
     typeof value.validateDeployTarget === 'function'
   );
@@ -35,8 +42,12 @@ const deployTargetGuard: unknown = require('./deploy-target-guard.cjs');
 if (!isDeployTargetGuard(deployTargetGuard)) {
   throw new Error('deploy-target-guard.cjs exports are invalid');
 }
-const { classifyDeployTarget, parseActiveRevisions, validateDeployTarget } =
-  deployTargetGuard;
+const {
+  classifyDeployTarget,
+  parseActiveRevisions,
+  validateDeployTarget,
+  validateTestedPredecessor,
+} = deployTargetGuard;
 
 let repository: string;
 let oldSha: string;
@@ -77,6 +88,17 @@ afterAll(() => {
 });
 
 describe('CD deployment target guard', () => {
+  it('stops deployment when a live tier differs from the tested predecessor', () => {
+    expect(() =>
+      validateTestedPredecessor([unrelatedSha], oldSha, mainSha),
+    ).toThrow(/not the tested predecessor/);
+    expect(() =>
+      validateTestedPredecessor([oldSha, mainSha], oldSha, mainSha),
+    ).not.toThrow();
+    expect(() => validateTestedPredecessor([oldSha], '', mainSha)).toThrow(
+      /invalid/,
+    );
+  });
   it('classifies the current main tip for deployment', () => {
     expect(
       classifyDeployTarget({ targetSha: mainSha, mainSha, cwd: repository }),

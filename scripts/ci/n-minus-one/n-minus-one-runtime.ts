@@ -6,6 +6,7 @@ import {
   sign,
 } from 'node:crypto';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
@@ -246,14 +247,29 @@ export async function request(
   if (options.idempotencyKey)
     headers['idempotency-key'] = options.idempotencyKey;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
-  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-    method,
-    headers,
-    ...(options.body === undefined
-      ? {}
-      : { body: JSON.stringify(options.body) }),
-  });
-  const text = await response.text();
+  const response = await new Promise<{ status: number; text: string }>(
+    (resolveResponse, reject) => {
+      const outgoing = httpRequest(
+        { hostname: '127.0.0.1', port, path, method, headers },
+        (incoming) => {
+          let text = '';
+          incoming.setEncoding('utf8');
+          incoming.on('data', (chunk: string) => {
+            text += chunk;
+          });
+          incoming.on('error', reject);
+          incoming.on('end', () =>
+            resolveResponse({ status: incoming.statusCode ?? 0, text }),
+          );
+        },
+      );
+      outgoing.on('error', reject);
+      outgoing.end(
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      );
+    },
+  );
+  const { text } = response;
   let body: Record<string, unknown> | undefined;
   if (text.length > 0) {
     try {

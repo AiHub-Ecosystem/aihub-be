@@ -707,6 +707,19 @@ jobs:
           PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
         run: pnpm ci:check-n-minus-one
 
+      - name: Record the tested predecessor
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          PREVIOUS_SHA: ${{ steps.previous_release.outputs.previous_sha }}
+        run: printf '%s\n' "$PREVIOUS_SHA" > previous-release.txt
+
+      - name: Upload the tested predecessor
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: previous-release
+          path: previous-release.txt
+
       # Only the push-only job needs this archive. Pull requests build and boot
       # without entering production or receiving its secrets.
       - name: Save booted image for publishing

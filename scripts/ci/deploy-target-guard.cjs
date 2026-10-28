@@ -88,6 +88,18 @@ function validateDeployTarget({ targetSha, mainSha, activeShas, cwd }) {
   }
 }
 
+/** @param {string[]} activeShas @param {string} previousSha @param {string} targetSha */
+function validateTestedPredecessor(activeShas, previousSha, targetSha) {
+  if (!isSha(previousSha)) throw new Error('tested predecessor SHA is invalid');
+  for (const sha of activeShas) {
+    if (sha !== previousSha && sha !== targetSha) {
+      throw new Error(
+        `refusing deployment: active revision ${sha} was not the tested predecessor ${previousSha}`,
+      );
+    }
+  }
+}
+
 /** @param {{targetSha: string, mainSha: string, cwd: string}} options @returns {'deploy' | 'superseded'} */
 function classifyDeployTarget({ targetSha, mainSha, cwd }) {
   if (!isSha(targetSha) || !isSha(mainSha)) {
@@ -128,6 +140,7 @@ function classifyDeployTarget({ targetSha, mainSha, cwd }) {
 module.exports = {
   classifyDeployTarget,
   parseActiveRevisions,
+  validateTestedPredecessor,
   validateDeployTarget,
 };
 
@@ -138,10 +151,10 @@ if (require.main === module) {
       !targetSha ||
       !mainSha ||
       extra.length ||
-      (mode && mode !== '--classify')
+      (mode !== '--classify' && !isSha(mode))
     ) {
       throw new Error(
-        'usage: deploy-target-guard.cjs <target-sha> <current-main-sha> [--classify]',
+        'usage: deploy-target-guard.cjs <target-sha> <current-main-sha> <--classify|tested-predecessor-sha>',
       );
     }
 
@@ -151,10 +164,12 @@ if (require.main === module) {
       );
     } else {
       const status = readFileSync(0, 'utf8');
+      const activeShas = parseActiveRevisions(status);
+      validateTestedPredecessor(activeShas, mode, targetSha);
       validateDeployTarget({
         targetSha,
         mainSha,
-        activeShas: parseActiveRevisions(status),
+        activeShas,
         cwd: process.cwd(),
       });
       process.stdout.write(
