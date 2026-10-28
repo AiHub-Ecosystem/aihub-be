@@ -12,6 +12,16 @@ const CATALOG_ROUTES = [
   ...(Object.values(OPERATION_CATALOG) as OperationDef[]),
 ];
 const ERROR_ROUTE_PATH = PUBLIC_ROUTES['sandbox.demo-key.validate'].path;
+const DEPRECATED_ROUTE = {
+  method: 'GET',
+  path: '/v1/deprecated',
+  sunset: {
+    deprecationAt: '2023-01-01T00:00:00Z',
+    sunsetAt: '2027-06-30T00:00:00Z',
+    successorRouteId: 'organizations.create',
+    rationale: 'Use the current organization route.',
+  },
+} as const;
 
 function requestPath(path: string): string {
   return path.replace(/:[^/]+/g, 'catalog-id');
@@ -22,8 +32,9 @@ describe('registerSecurityHeaders', () => {
 
   beforeEach(async () => {
     app = Fastify();
-    registerSecurityHeaders(app);
+    registerSecurityHeaders(app, [DEPRECATED_ROUTE]);
     app.get('/health', async () => ({ status: 'ok' }));
+    app.get(DEPRECATED_ROUTE.path, async () => ({ ok: true }));
     app.get('/custom-csp', async (_request, reply) => {
       reply.header('Content-Security-Policy', "default-src 'self'");
       return { ok: true };
@@ -58,6 +69,27 @@ describe('registerSecurityHeaders', () => {
     expect(response.headers['x-frame-options']).toBe('DENY');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
+  });
+
+  it('emits separate RFC 9745 deprecation and HTTP Sunset dates', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: DEPRECATED_ROUTE.path,
+    });
+
+    expect(response.headers.deprecation).toBe('@1672531200');
+    expect(response.headers.sunset).toBe('Wed, 30 Jun 2027 00:00:00 GMT');
+    expect(response.headers.link).toBe(
+      '</docs#organizations.create>; rel="successor-version"; title="organizations.create"',
+    );
+  });
+
+  it('omits deprecation headers for a route without a sunset descriptor', async () => {
+    const response = await app.inject({ method: 'GET', url: '/health' });
+
+    expect(response.headers.deprecation).toBeUndefined();
+    expect(response.headers.sunset).toBeUndefined();
+    expect(response.headers.link).toBeUndefined();
   });
 
   it('sets the baseline header set on an unmatched 404', async () => {

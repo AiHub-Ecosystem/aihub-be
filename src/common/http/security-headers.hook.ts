@@ -13,6 +13,8 @@ const DEPRECATED_ROUTES = Object.values(PUBLIC_ROUTES).filter(
   (route) => (route as PublicRouteDef).sunset !== undefined,
 ) as PublicRouteDef[];
 
+type DeprecatedRoute = Pick<PublicRouteDef, 'method' | 'path' | 'sunset'>;
+
 const NO_STORE_ROUTES = new Set([
   ...(Object.values(PUBLIC_ROUTES) as PublicRouteDef[])
     .filter((route) => route.cacheControl?.value === 'no-store')
@@ -25,9 +27,10 @@ const NO_STORE_ROUTES = new Set([
 function matchDeprecatedRoute(
   method: string,
   url: string,
-): (typeof DEPRECATED_ROUTES)[number] | undefined {
+  deprecatedRoutes: readonly DeprecatedRoute[],
+): DeprecatedRoute | undefined {
   const path = url.split('?')[0] ?? url;
-  return DEPRECATED_ROUTES.find((route) => {
+  return deprecatedRoutes.find((route) => {
     if (route.method !== method) return false;
     const pattern = new RegExp(`^${route.path.replace(/:[^/]+/g, '[^/]+')}$`);
     return pattern.test(path);
@@ -38,7 +41,10 @@ function formatHttpDate(date: string): string {
   return new Date(date).toUTCString();
 }
 
-export function registerSecurityHeaders(instance: FastifyInstance): void {
+export function registerSecurityHeaders(
+  instance: FastifyInstance,
+  deprecatedRoutes: readonly DeprecatedRoute[] = DEPRECATED_ROUTES,
+): void {
   instance.addHook('onSend', (request, reply, payload, done) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
@@ -54,12 +60,17 @@ export function registerSecurityHeaders(instance: FastifyInstance): void {
       reply.header('Cache-Control', 'no-store');
     }
 
-    const route = matchDeprecatedRoute(request.method, request.url) as
-      | PublicRouteDef
-      | undefined;
+    const route = matchDeprecatedRoute(
+      request.method,
+      request.url,
+      deprecatedRoutes,
+    );
     if (route?.sunset !== undefined) {
       if (!reply.hasHeader('deprecation')) {
-        reply.header('Deprecation', `@${route.sunset.sunsetAt}`);
+        const deprecationTimestamp = Math.floor(
+          Date.parse(route.sunset.deprecationAt) / 1000,
+        );
+        reply.header('Deprecation', `@${deprecationTimestamp}`);
       }
       if (!reply.hasHeader('sunset')) {
         reply.header('Sunset', formatHttpDate(route.sunset.sunsetAt));

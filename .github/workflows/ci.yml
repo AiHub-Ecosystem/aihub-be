@@ -75,6 +75,9 @@ jobs:
       - name: Check migrations
         run: pnpm check:migrations
 
+      - name: Check deprecation descriptors
+        run: pnpm check:deprecation
+
       - name: Check architecture
         run: pnpm arch-check
 

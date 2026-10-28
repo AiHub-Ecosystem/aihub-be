@@ -1,5 +1,6 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { deprecationDateErrors } from './deprecation-dates';
 
 const liveRouteIds = new Set([
   ...Object.keys(PUBLIC_ROUTES),
@@ -11,6 +12,7 @@ for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
   const sunset = (
     route as {
       sunset?: {
+        deprecationAt: string;
         sunsetAt: string;
         successorRouteId?: string;
         rationale: string;
@@ -27,14 +29,8 @@ for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
     );
     failed = true;
   }
-  const sunsetDate = new Date(sunset.sunsetAt);
-  if (Number.isNaN(sunsetDate.getTime())) {
-    console.error(`${routeId}: sunsetAt is not a valid date.`);
-    failed = true;
-  } else if (sunsetDate.getTime() < Date.now()) {
-    console.error(
-      `${routeId}: sunsetAt is in the past without the route being marked removed.`,
-    );
+  for (const error of deprecationDateErrors(routeId, sunset)) {
+    console.error(error);
     failed = true;
   }
 }

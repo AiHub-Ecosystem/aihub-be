@@ -1264,10 +1264,15 @@ and when it is resolved. AIHUB has no public status page.
 ## Deprecation headers
 
 A route or major slated to retire publishes `Deprecation`, `Sunset`, and a
-`Link: rel="successor-version"` header. AIHUB keeps a superseded major available
-for at least 12 months after its successor is released and publishes the sunset
-date with that release. Before sunset, AIHUB reviews customer traffic and
-contacts affected Organizations. If customers are still migrating, the sunset
-may be extended by an explicit owner decision and a newly published date.
+`Link: rel="successor-version"` header. `Deprecation` is the RFC 9745 structured
+date (`@` followed by Unix seconds) when the route was deprecated; it may be in
+the past. `Sunset` is the HTTP-date when the route stops responding, and is not
+earlier than the deprecation date. In the OpenAPI `x-deprecated-sunset` object,
+`deprecationAt` and `sunsetAt` carry those separate dates. AIHUB keeps a
+superseded major available for at least 12 months after its successor is
+released and publishes the sunset date with that release. Before sunset, AIHUB
+reviews customer traffic and contacts affected Organizations. If customers are
+still migrating, the sunset may be extended by an explicit owner decision and
+a newly published date.
 Requests to a retired major return `410 Gone` with the standard error envelope
 and successor information.

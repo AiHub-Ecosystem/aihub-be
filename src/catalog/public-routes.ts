@@ -159,6 +159,7 @@ export interface PublicRouteDef {
   readonly successStatus: 200 | 201 | 202 | 204;
   readonly alternateSuccessStatuses?: readonly (200 | 201 | 202 | 204)[];
   readonly sunset?: {
+    readonly deprecationAt: string;
     readonly sunsetAt: string;
     readonly successorRouteId?: PublicRouteId | OperationId;
     readonly rationale: string;
