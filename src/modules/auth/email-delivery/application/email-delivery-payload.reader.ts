@@ -40,8 +40,9 @@ export function readEmailPayload(
     return 'unreadable';
   }
   const handler = EMAIL_KIND_POLICIES[request.kind].handler;
-  if (!handler.isPayload(parsed)) {
+  const delivery = handler.validate(parsed);
+  if (delivery === undefined) {
     return handler.hasUnrecognisedValue(parsed) ? 'unrecognised' : 'unreadable';
   }
-  return { handler, payload: parsed };
+  return delivery;
 }

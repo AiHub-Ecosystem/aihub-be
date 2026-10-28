@@ -294,7 +294,7 @@ export class EmailDeliveryPoller {
       return this.maintenance.cancel(request, 'not_actionable', now);
     }
 
-    const credential = delivery.handler.credential(delivery.payload);
+    const credential = delivery.credential();
     if (credential !== undefined) {
       if (isCredentialExpired(credential.expiresAt, now)) {
         return this.maintenance.cancel(request, 'credential_expired', now);
@@ -312,7 +312,7 @@ export class EmailDeliveryPoller {
 
     // Rendered before anything is reserved, because a notice that reads its
     // facts now can find nothing left to send.
-    const message = await delivery.handler.render(delivery.payload, {
+    const message = await delivery.render({
       ...(this.options.customerWebBaseUrl === undefined
         ? {}
         : { customerWebBaseUrl: this.options.customerWebBaseUrl }),
@@ -371,9 +371,7 @@ export class EmailDeliveryPoller {
       }
       if (!budgetReservation.reserved) {
         await this.releaseProbe(sendPermit.probeToken);
-        const expiresAt = delivery.handler.credential(
-          delivery.payload,
-        )?.expiresAt;
+        const expiresAt = delivery.credential()?.expiresAt;
         const remainingCredentialLifetime =
           expiresAt === undefined
             ? Infinity

@@ -1,3 +1,6 @@
+import { type Static, Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+
 /**
  * How far ahead the near-expiry sweep looks, and how long its notice stays
  * worth sending: by the end of the window every key it lists has expired
@@ -5,31 +8,27 @@
  */
 export const API_KEY_NEAR_EXPIRY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
+const NonEmptyString = Type.String({ minLength: 1 });
+
+// Stored payloads are read by a release older or newer than the one that wrote
+// them, so these object schemas stay open: a member this release does not know
+// is ignored, while a known member of the wrong type fails validation (#484).
+
 /** Only references are sealed; recipient and key facts are read at dispatch. */
-export interface ApiKeyNearExpiryNotificationPayload {
-  readonly organizationId: string;
-  readonly userAccountId: string;
-  readonly apiKeyIds: readonly string[];
-}
+export const ApiKeyNearExpiryNotificationPayloadSchema = Type.Object({
+  organizationId: NonEmptyString,
+  userAccountId: NonEmptyString,
+  apiKeyIds: Type.Array(NonEmptyString, { minItems: 1 }),
+});
+
+export type ApiKeyNearExpiryNotificationPayload = Static<
+  typeof ApiKeyNearExpiryNotificationPayloadSchema
+>;
 
 export function isApiKeyNearExpiryNotificationPayload(
   value: unknown,
 ): value is ApiKeyNearExpiryNotificationPayload {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const candidate = value as Record<string, unknown>;
-  // A member this release does not know is ignored: the previous release must
-  // still read what the next one writes (#484).
-  return (
-    typeof candidate.organizationId === 'string' &&
-    candidate.organizationId.length > 0 &&
-    typeof candidate.userAccountId === 'string' &&
-    candidate.userAccountId.length > 0 &&
-    Array.isArray(candidate.apiKeyIds) &&
-    candidate.apiKeyIds.length > 0 &&
-    candidate.apiKeyIds.every((id) => typeof id === 'string' && id.length > 0)
-  );
+  return Value.Check(ApiKeyNearExpiryNotificationPayloadSchema, value);
 }
 
 /** What a notice is composed from once its facts are read at dispatch. */
@@ -59,24 +58,28 @@ export interface EmailNoticeResolvers {
 }
 
 /** Worker input for authentication messages; it exists only inside ciphertext. */
-export interface AuthEmailDeliveryPayload {
-  readonly email: string;
-  readonly token: string;
-  readonly expiresAt: string;
-}
+export const AuthEmailDeliveryPayloadSchema = Type.Object({
+  email: NonEmptyString,
+  token: NonEmptyString,
+  expiresAt: NonEmptyString,
+});
+
+export type AuthEmailDeliveryPayload = Static<
+  typeof AuthEmailDeliveryPayloadSchema
+>;
 
 /** The roles an invitation email can name. */
 export const INVITE_EMAIL_ROLES = ['owner', 'admin', 'member'] as const;
 
 export type InviteEmailRole = (typeof INVITE_EMAIL_ROLES)[number];
 
-export interface OrganizationInviteEmailDeliveryPayload
-  extends AuthEmailDeliveryPayload {
-  readonly organizationName: string;
-  readonly role: InviteEmailRole;
-  readonly inviterUsername?: string;
-}
+export const OrganizationInviteEmailDeliveryPayloadSchema = Type.Object({
+  ...AuthEmailDeliveryPayloadSchema.properties,
+  organizationName: NonEmptyString,
+  role: Type.Union(INVITE_EMAIL_ROLES.map((role) => Type.Literal(role))),
+  inviterUsername: Type.Optional(NonEmptyString),
+});
 
-export interface MfaSecurityNotificationPayload {
-  readonly email: string;
-}
+export const MfaSecurityNotificationPayloadSchema = Type.Object({
+  email: NonEmptyString,
+});

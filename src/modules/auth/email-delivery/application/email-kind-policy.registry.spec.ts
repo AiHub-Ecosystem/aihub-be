@@ -72,8 +72,8 @@ describe('Email Delivery kind policies', () => {
 
       expect(policy).toEqual(expected);
       expect(typeof handler.isPayload).toBe('function');
-      expect(typeof handler.credential).toBe('function');
-      expect(typeof handler.render).toBe('function');
+      expect(typeof handler.hasUnrecognisedValue).toBe('function');
+      expect(typeof handler.validate).toBe('function');
     },
   );
 

@@ -17,12 +17,25 @@ function cipherThrowing(error: Error): EmailPayloadCipherPort {
   };
 }
 
-describe('readEmailPayload', () => {
-  it('returns the handler and payload of a request it can open', () => {
-    const read = readEmailPayload(sealed(VERIFICATION_PAYLOAD), claimed());
+function asDelivery(
+  read: ReturnType<typeof readEmailPayload>,
+): Exclude<ReturnType<typeof readEmailPayload>, string | undefined> {
+  if (typeof read !== 'object') {
+    throw new Error(`expected a delivery, got ${String(read)}`);
+  }
+  return read;
+}
 
-    expect(read).toMatchObject({ payload: VERIFICATION_PAYLOAD });
-    expect(read).not.toBe('unreadable');
+describe('readEmailPayload', () => {
+  it('returns a delivery that holds the typed payload of a request it can open', () => {
+    const read = asDelivery(
+      readEmailPayload(sealed(VERIFICATION_PAYLOAD), claimed()),
+    );
+
+    expect(read.credential()).toMatchObject({
+      token: VERIFICATION_PAYLOAD.token,
+      expiresAt: VERIFICATION_PAYLOAD.expiresAt,
+    });
   });
 
   it('answers nothing for a payload that was already erased', () => {
@@ -110,14 +123,14 @@ describe('readEmailPayload', () => {
     ] as const)(
       'is readable for %s when it carries a member this release does not know',
       (kind, payload) => {
-        const read = readEmailPayload(
-          cipherOf({ ...payload, addedLater: { nested: true } }),
-          claimed({ kind }),
-        );
-
-        expect(read).toMatchObject({
-          payload: { addedLater: { nested: true } },
-        });
+        expect(() =>
+          asDelivery(
+            readEmailPayload(
+              cipherOf({ ...payload, addedLater: { nested: true } }),
+              claimed({ kind }),
+            ),
+          ),
+        ).not.toThrow();
       },
     );
 

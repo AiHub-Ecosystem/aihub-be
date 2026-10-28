@@ -1,15 +1,18 @@
+import type { Static, TSchema } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+
 import { isRecord } from '@/common/is-record';
 import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationPayload,
+  ApiKeyNearExpiryNotificationPayloadSchema,
   type AuthEmailDeliveryPayload,
+  AuthEmailDeliveryPayloadSchema,
   type EmailNoticeResolvers,
   INVITE_EMAIL_ROLES,
-  type InviteEmailRole,
-  type MfaSecurityNotificationPayload,
-  type OrganizationInviteEmailDeliveryPayload,
-  isApiKeyNearExpiryNotificationPayload,
+  MfaSecurityNotificationPayloadSchema,
+  OrganizationInviteEmailDeliveryPayloadSchema,
 } from './email-delivery-payload';
 import {
   composeApiKeyNearExpiryNotification,
@@ -28,59 +31,28 @@ export interface EmailRenderContext {
   readonly notices: EmailNoticeResolvers;
 }
 
-/** `render` may answer `undefined` when a notice is no longer actionable. */
-export interface EmailKindHandler<T> {
-  isPayload(value: unknown): value is T;
-  /** True for a payload that is valid except for a value this release lacks. */
-  hasUnrecognisedValue(value: unknown): boolean;
-  credential(payload: unknown): Credential | undefined;
+/**
+ * A stored payload that passed its kind's schema. The typed payload is held
+ * inside, so reading the credential or rendering never validates it again.
+ * `render` may answer `undefined` when a notice is no longer actionable.
+ */
+export interface ValidatedEmailDelivery {
+  credential(): Credential | undefined;
   render(
-    payload: unknown,
     context: EmailRenderContext,
   ): EmailMessage | undefined | Promise<EmailMessage | undefined>;
 }
 
-export interface ValidatedEmailDelivery {
-  readonly handler: Pick<EmailKindHandler<unknown>, 'credential' | 'render'>;
-  readonly payload: unknown;
+export interface EmailKindHandler<T> {
+  isPayload(value: unknown): value is T;
+  /** True for a payload that is valid except for a value this release lacks. */
+  hasUnrecognisedValue(value: unknown): boolean;
+  /** The typed delivery for a stored payload, or `undefined` when it is not one. */
+  validate(value: unknown): ValidatedEmailDelivery | undefined;
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
-function isAuthEmailPayload(value: unknown): value is AuthEmailDeliveryPayload {
-  return (
-    isRecord(value) &&
-    isNonEmptyString(value.email) &&
-    isNonEmptyString(value.token) &&
-    isNonEmptyString(value.expiresAt)
-  );
-}
-
-function isInvitationRole(value: unknown): value is InviteEmailRole {
+function isInvitationRole(value: unknown): boolean {
   return INVITE_EMAIL_ROLES.some((role) => role === value);
-}
-
-function isOrganizationInvitePayload(
-  value: unknown,
-): value is OrganizationInviteEmailDeliveryPayload {
-  return (
-    isRecord(value) &&
-    isNonEmptyString(value.email) &&
-    isNonEmptyString(value.token) &&
-    isNonEmptyString(value.expiresAt) &&
-    isNonEmptyString(value.organizationName) &&
-    isInvitationRole(value.role) &&
-    (value.inviterUsername === undefined ||
-      isNonEmptyString(value.inviterUsername))
-  );
-}
-
-function isMfaSecurityPayload(
-  value: unknown,
-): value is MfaSecurityNotificationPayload {
-  return isRecord(value) && isNonEmptyString(value.email);
 }
 
 /**
@@ -91,9 +63,13 @@ function isMfaSecurityPayload(
 function hasUnrecognisedInvitationRole(value: unknown): boolean {
   return (
     isRecord(value) &&
-    isNonEmptyString(value.role) &&
+    typeof value.role === 'string' &&
+    value.role.length > 0 &&
     !isInvitationRole(value.role) &&
-    isOrganizationInvitePayload({ ...value, role: INVITE_EMAIL_ROLES[0] })
+    Value.Check(OrganizationInviteEmailDeliveryPayloadSchema, {
+      ...value,
+      role: INVITE_EMAIL_ROLES[0],
+    })
   );
 }
 
@@ -120,26 +96,28 @@ async function renderApiKeyNearExpiry(
     : composeApiKeyNearExpiryNotification(input, context.customerWebBaseUrl);
 }
 
-function createEmailKindHandler<T>(
-  isPayload: (value: unknown) => value is T,
-  credential: (payload: T) => Credential | undefined,
+function createEmailKindHandler<S extends TSchema>(
+  schema: S,
+  credential: (payload: Static<S>) => Credential | undefined,
   render: (
-    payload: T,
+    payload: Static<S>,
     context: EmailRenderContext,
   ) => EmailMessage | undefined | Promise<EmailMessage | undefined>,
   hasUnrecognisedValue: (value: unknown) => boolean = () => false,
-): EmailKindHandler<T> {
-  const forKind = (payload: unknown): T => {
-    if (!isPayload(payload))
-      throw new Error('email delivery payload is invalid');
-    return payload;
-  };
+): EmailKindHandler<Static<S>> {
+  const isPayload = (value: unknown): value is Static<S> =>
+    Value.Check(schema, value);
 
   return {
     isPayload,
     hasUnrecognisedValue,
-    credential: (payload) => credential(forKind(payload)),
-    render: (payload, context) => render(forKind(payload), context),
+    validate: (value) =>
+      isPayload(value)
+        ? {
+            credential: () => credential(value),
+            render: (context) => render(value, context),
+          }
+        : undefined,
   };
 }
 
@@ -157,7 +135,7 @@ export const EMAIL_KIND_POLICIES = {
     staleCancellationReason: 'credential_expired',
     backpressureLifetimeMs: OPAQUE_TOKEN_BINDINGS.verification.ttlMs,
     handler: createEmailKindHandler(
-      isAuthEmailPayload,
+      AuthEmailDeliveryPayloadSchema,
       (payload) => payload,
       (payload, { customerWebBaseUrl }) =>
         composeVerificationEmail(
@@ -177,7 +155,7 @@ export const EMAIL_KIND_POLICIES = {
     staleCancellationReason: 'credential_expired',
     backpressureLifetimeMs: OPAQUE_TOKEN_BINDINGS.passwordReset.ttlMs,
     handler: createEmailKindHandler(
-      isAuthEmailPayload,
+      AuthEmailDeliveryPayloadSchema,
       (payload) => payload,
       (payload, { customerWebBaseUrl }) =>
         composePasswordResetEmail(
@@ -197,7 +175,7 @@ export const EMAIL_KIND_POLICIES = {
     staleCancellationReason: 'credential_expired',
     backpressureLifetimeMs: OPAQUE_TOKEN_BINDINGS.organizationInvite.ttlMs,
     handler: createEmailKindHandler(
-      isOrganizationInvitePayload,
+      OrganizationInviteEmailDeliveryPayloadSchema,
       (payload) => payload,
       (payload, { customerWebBaseUrl }) =>
         composeOrganizationInviteEmail(
@@ -223,7 +201,7 @@ export const EMAIL_KIND_POLICIES = {
     staleCancellationReason: 'not_actionable',
     backpressureLifetimeMs: null,
     handler: createEmailKindHandler(
-      isMfaSecurityPayload,
+      MfaSecurityNotificationPayloadSchema,
       () => undefined,
       (payload) =>
         composeMfaSecurityNotification({
@@ -239,7 +217,7 @@ export const EMAIL_KIND_POLICIES = {
     staleCancellationReason: 'not_actionable',
     backpressureLifetimeMs: null,
     handler: createEmailKindHandler(
-      isMfaSecurityPayload,
+      MfaSecurityNotificationPayloadSchema,
       () => undefined,
       (payload) =>
         composeMfaSecurityNotification({
@@ -255,7 +233,7 @@ export const EMAIL_KIND_POLICIES = {
     staleCancellationReason: 'not_actionable',
     backpressureLifetimeMs: null,
     handler: createEmailKindHandler(
-      isApiKeyNearExpiryNotificationPayload,
+      ApiKeyNearExpiryNotificationPayloadSchema,
       () => undefined,
       renderApiKeyNearExpiry,
     ),
