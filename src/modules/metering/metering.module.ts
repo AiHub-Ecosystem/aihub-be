@@ -1,5 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 
+import { appConfig } from '@/config/runtime-configuration';
+import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -20,16 +23,25 @@ import {
 } from './application/metering-logger.port';
 import { MeteringService } from './application/metering.service';
 import {
+  PUBLIC_API_MAJOR_USAGE_BUFFER,
+  PUBLIC_API_MAJOR_USAGE_REPOSITORY,
+  PublicApiMajorUsageBuffer,
+  type PublicApiMajorUsageRepositoryPort,
+} from './application/public-api-major-usage';
+import { PublicApiMajorUsageFlusher } from './application/public-api-major-usage-flusher';
+import {
   USAGE_REPOSITORY,
   type UsageRepositoryPort,
 } from './application/usage-repository.port';
 import { NestMeteringFailureLogger } from './infrastructure/nest-metering-failure.logger';
+import { PostgresPublicApiMajorUsageRepository } from './infrastructure/postgres-public-api-major-usage.repository';
 import { PostgresUsageRepository } from './infrastructure/postgres-usage.repository';
+import { PublicApiMajorUsageScheduler } from './infrastructure/public-api-major-usage.scheduler';
 import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
 @Module({
-  imports: [PersistenceModule, GatewayModule],
+  imports: [RuntimeConfigurationModule, PersistenceModule, GatewayModule],
   providers: [
     {
       provide: USAGE_REPOSITORY,
@@ -51,12 +63,48 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
         new MeteringService(repository, logger, quotaCounter),
       inject: [USAGE_REPOSITORY, METERING_FAILURE_LOGGER, QUOTA_COUNTER],
     },
+    {
+      provide: PUBLIC_API_MAJOR_USAGE_BUFFER,
+      useFactory: (): PublicApiMajorUsageBuffer =>
+        new PublicApiMajorUsageBuffer(),
+    },
+    {
+      provide: PUBLIC_API_MAJOR_USAGE_REPOSITORY,
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (
+        runtime: PrismaClientHolder,
+      ): PublicApiMajorUsageRepositoryPort =>
+        new PostgresPublicApiMajorUsageRepository(runtime.prisma),
+    },
+    {
+      provide: PublicApiMajorUsageScheduler,
+      inject: [
+        PUBLIC_API_MAJOR_USAGE_BUFFER,
+        PUBLIC_API_MAJOR_USAGE_REPOSITORY,
+        appConfig.KEY,
+      ],
+      useFactory: (
+        buffer: PublicApiMajorUsageBuffer,
+        repository: PublicApiMajorUsageRepositoryPort,
+        configuration: ConfigType<typeof appConfig>,
+      ): PublicApiMajorUsageScheduler =>
+        new PublicApiMajorUsageScheduler(
+          new PublicApiMajorUsageFlusher(
+            buffer,
+            repository,
+            configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+            (message) => new Logger('PublicApiMajorUsage').warn(message),
+          ),
+          configuration.NODE_ENV !== 'test',
+        ),
+    },
     HttpExceptionFilter,
     SuccessEnvelopeInterceptor,
   ],
   exports: [
     METERING_FINALIZER,
     USAGE_REPOSITORY,
+    PUBLIC_API_MAJOR_USAGE_BUFFER,
     HttpExceptionFilter,
     SuccessEnvelopeInterceptor,
   ],

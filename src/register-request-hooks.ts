@@ -7,7 +7,9 @@ import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
 import { registerRequestTiming } from './common/http/request-timing.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
 import { registerSecurityHeaders } from './common/http/security-headers.hook';
+import { registerPublicApiMajorUsage } from './modules/metering/presentation/public-api-major-usage.hook';
 import { registerRequestCompletionLog } from './modules/metering/presentation/request-completion-log.hook';
+import type { PublicApiMajorUsageSample } from './modules/metering/public/public-api-major-usage';
 
 /**
  * Every Fastify hook the application runs around a request, in the order the
@@ -20,6 +22,7 @@ import { registerRequestCompletionLog } from './modules/metering/presentation/re
 export function registerRequestHooks(
   instance: FastifyInstance,
   tracer: Tracer | undefined,
+  recordPublicApiMajorUsage?: (sample: PublicApiMajorUsageSample) => void,
 ): void {
   // Capture ingress before tracing, body-size rejection, parsing, and Nest guards.
   registerRequestTiming(instance);
@@ -38,4 +41,9 @@ export function registerRequestHooks(
   // Registered last: tracing owns the span this line names, and the lifecycle
   // hook must already have let the `onResponse` chain through to reach it.
   registerRequestCompletionLog(instance);
+
+  // Absent in specs that run the hooks without the Metering module's buffer.
+  if (recordPublicApiMajorUsage !== undefined) {
+    registerPublicApiMajorUsage(instance, recordPublicApiMajorUsage);
+  }
 }

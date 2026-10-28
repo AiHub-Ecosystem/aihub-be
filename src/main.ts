@@ -17,6 +17,10 @@ import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
 import { generateRequestId } from './common/request-context/request-id';
 import { getRuntimeConfiguration } from './config/runtime-configuration';
+import {
+  PUBLIC_API_MAJOR_USAGE_BUFFER,
+  type PublicApiMajorUsageBuffer,
+} from './modules/metering/public/public-api-major-usage';
 import { registerSpeakingMultipartParser } from './modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 import { registerRequestHooks } from './register-request-hooks';
 
@@ -54,7 +58,13 @@ export async function bootstrap(): Promise<void> {
 
   // Ingress timing must precede plugins that do request work in onRequest,
   // including cookie parsing. registerRequestHooks registers its timer first.
-  registerRequestHooks(fastify, requestTracer);
+  const publicApiMajorUsage = app.get<PublicApiMajorUsageBuffer>(
+    PUBLIC_API_MAJOR_USAGE_BUFFER,
+    { strict: false },
+  );
+  registerRequestHooks(fastify, requestTracer, (sample) =>
+    publicApiMajorUsage.record(sample),
+  );
 
   await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
 

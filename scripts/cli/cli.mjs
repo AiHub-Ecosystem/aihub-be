@@ -153,6 +153,12 @@ const usageReportDescriptor = cliRunnerDescriptor(
   'runUsageReportCommand',
   'usage report command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/public-api-major-report.js').runPublicApiMajorReportCommand>} */
+const publicApiMajorReportDescriptor = cliRunnerDescriptor(
+  'public-api-major-report',
+  'runPublicApiMajorReportCommand',
+  'public API major report command is unavailable',
+);
 /** @type {CliRunnerDescriptor<import('../../src/cli/quota-reconcile.js').runQuotaReconciliationCommand>} */
 const quotaReconciliationDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
@@ -1042,6 +1048,28 @@ async function reportUsageCommand(options) {
   });
 }
 
+/** @param {CliOptions} options */
+async function reportPublicApiMajorCommand(options) {
+  for (const name of options.keys()) {
+    if (name !== 'from' && name !== 'to') {
+      usageError();
+    }
+  }
+
+  try {
+    await runCliCommand(publicApiMajorReportDescriptor, {
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      from: requiredOption(options, 'from'),
+      to: requiredOption(options, 'to'),
+    });
+  } catch (error) {
+    if (errorCode(error) === 'PUBLIC_API_MAJOR_REPORT_INVALID_WINDOW') {
+      usageError();
+    }
+    throw error;
+  }
+}
+
 function invalidBillingInput(error) {
   const code = errorCode(error);
   return (
@@ -1220,6 +1248,10 @@ async function main() {
   }
   if (command === 'usage:report') {
     await reportUsageCommand(options);
+    return;
+  }
+  if (command === 'usage:major-report') {
+    await reportPublicApiMajorCommand(options);
     return;
   }
   if (command === 'billing:statement') {

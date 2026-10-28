@@ -25,6 +25,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | SandboxDispatchReservation  | gateway     | 6       |
 | SandboxAllowanceDefault     | gateway     | 2       |
 | SandboxAllowanceOverride    | gateway     | 3       |
+| PublicApiMajorUsage         | metering    | 7       |
 | DispatchAttempt             | metering    | 7       |
 | SpeakingAudioAsset          | speaking    | 9       |
 | SpeakingAudioUploadIntent   | speaking    | 10      |
@@ -344,6 +345,20 @@ Owner: `gateway`
 | organizationId | String   | @map("organization_id")      |
 | monthStart     | DateTime | @map("month_start") @db.Date |
 | allowance      | Int      | @map("allowance")            |
+
+## PublicApiMajorUsage
+
+Owner: `metering`
+
+| Column         | Type     | Attributes                              |
+| -------------- | -------- | --------------------------------------- |
+| usageDay       | DateTime | @map("usage_day") @db.Date              |
+| environment    | String   |                                         |
+| major          | Int      |                                         |
+| organizationId | String   | @default("") @map("organization_id")    |
+| requestCount   | BigInt   | @default(0) @map("request_count")       |
+| failureCount   | BigInt   | @default(0) @map("failure_count")       |
+| lastSeenAt     | DateTime | @map("last_seen_at") @db.Timestamptz(6) |
 
 ## DispatchAttempt
 

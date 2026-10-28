@@ -439,6 +439,25 @@ model SandboxAllowanceOverride {
   @@map("sandbox_allowance_overrides")
 }
 
+/// Daily request counts per Public API major and Organization, kept so an
+/// operator can see who still uses a major before its sunset (ADR-0127). An
+/// empty `organizationId` counts requests with no authenticated Organization.
+///
+/// `CHECK` constraints are owned by migration 0052.
+/// @owner metering
+model PublicApiMajorUsage {
+  usageDay       DateTime @map("usage_day") @db.Date
+  environment    String
+  major          Int
+  organizationId String   @default("") @map("organization_id")
+  requestCount   BigInt   @default(0) @map("request_count")
+  failureCount   BigInt   @default(0) @map("failure_count")
+  lastSeenAt     DateTime @map("last_seen_at") @db.Timestamptz(6)
+
+  @@id([usageDay, environment, major, organizationId])
+  @@map("public_api_major_usage")
+}
+
 /// Dispatch evidence retained for ambiguous downstream outcomes.
 ///
 /// The `CHECK` constraints and partial index are owned by migration 0036.
