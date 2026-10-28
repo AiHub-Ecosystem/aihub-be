@@ -36,6 +36,7 @@ interface PreviousDeployedReleaseOptions {
   readonly token: string;
   readonly activeProductionSha?: string | undefined;
   readonly activeSandboxSha?: string | undefined;
+  readonly activeSandboxDisabled?: boolean | undefined;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -44,10 +45,11 @@ export async function previousDeployedRelease({
   token,
   activeProductionSha,
   activeSandboxSha,
+  activeSandboxDisabled = false,
   fetchImpl = fetch,
 }: PreviousDeployedReleaseOptions): Promise<{
   production: { runId: number; sha: string; digestRunId: number };
-  sandbox: { runId: number; sha: string; digestRunId: number };
+  sandbox: { runId: number; sha: string; digestRunId: number } | null;
 }> {
   const baseUrl = `https://api.github.com/repos/${repository}`;
   const headers = {
@@ -225,11 +227,13 @@ export async function previousDeployedRelease({
     'Deploy Production and verify caller IP',
     activeProductionSha,
   );
-  const sandbox = await selectTierRelease(
-    'Sandbox',
-    'Deploy Sandbox release and verify caller IP',
-    activeSandboxSha,
-  );
+  const sandbox = activeSandboxDisabled
+    ? null
+    : await selectTierRelease(
+        'Sandbox',
+        'Deploy Sandbox release and verify caller IP',
+        activeSandboxSha,
+      );
   return { production, sandbox };
 }
 
@@ -245,16 +249,17 @@ async function main(): Promise<void> {
     token,
     activeProductionSha: process.env.ACTIVE_PRODUCTION_SHA || undefined,
     activeSandboxSha: process.env.ACTIVE_SANDBOX_SHA || undefined,
+    activeSandboxDisabled: process.env.ACTIVE_SANDBOX_DISABLED === 'true',
   });
   const output = process.env.GITHUB_OUTPUT;
   if (output) {
     appendFileSync(
       output,
-      `previous_sha=${release.production.sha}\nprevious_run_id=${release.production.runId}\nprevious_digest_run_id=${release.production.digestRunId}\nsandbox_sha=${release.sandbox.sha}\nsandbox_run_id=${release.sandbox.runId}\nsandbox_digest_run_id=${release.sandbox.digestRunId}\n`,
+      `previous_sha=${release.production.sha}\nprevious_run_id=${release.production.runId}\nprevious_digest_run_id=${release.production.digestRunId}\nsandbox_sha=${release.sandbox?.sha ?? ''}\nsandbox_run_id=${release.sandbox?.runId ?? ''}\nsandbox_digest_run_id=${release.sandbox?.digestRunId ?? ''}\n`,
     );
   } else {
     process.stdout.write(
-      `${release.production.sha}\t${release.production.digestRunId}\t${release.sandbox.sha}\t${release.sandbox.digestRunId}\n`,
+      `${release.production.sha}\t${release.production.digestRunId}\t${release.sandbox?.sha ?? ''}\t${release.sandbox?.digestRunId ?? ''}\n`,
     );
   }
 }

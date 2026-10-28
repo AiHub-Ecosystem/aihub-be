@@ -163,6 +163,98 @@ describe('previousDeployedRelease', () => {
     ).rejects.toThrow('Active Production revision is not a commit SHA');
   });
 
+  it('skips the historical Sandbox release when the host says Sandbox is disabled', async () => {
+    const activeProductionSha = '3'.repeat(40);
+    const fetchImpl = queuedFetch(
+      {
+        workflow_runs: [
+          workflowRun(3, activeProductionSha),
+          workflowRun(2, '2'.repeat(40)),
+        ],
+      },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [productionStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeProductionSha,
+        activeSandboxDisabled: true,
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      production: { runId: 3, sha: activeProductionSha, digestRunId: 3 },
+      sandbox: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('allows an explicitly disabled Sandbox tier with no Sandbox deployment history', async () => {
+    const activeProductionSha = '3'.repeat(40);
+    const fetchImpl = queuedFetch(
+      { workflow_runs: [workflowRun(3, activeProductionSha)] },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [productionStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeProductionSha,
+        activeSandboxDisabled: true,
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      production: { runId: 3, sha: activeProductionSha, digestRunId: 3 },
+      sandbox: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails closed when Sandbox is enabled but its active revision is invalid', async () => {
+    const fetchImpl = queuedFetch(
+      { workflow_runs: [workflowRun(3, '3'.repeat(40))] },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [productionStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeSandboxSha: 'unknown',
+        fetchImpl,
+      }),
+    ).rejects.toThrow('Active Sandbox revision is not a commit SHA');
+  });
+
   it('falls back when the Production cutover did not pass', async () => {
     const fetchImpl = queuedFetch(
       {

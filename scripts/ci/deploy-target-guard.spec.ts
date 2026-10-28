@@ -210,6 +210,20 @@ describe('CD deployment target guard', () => {
     ).toEqual([oldSha, mainSha]);
   });
 
+  it('allows a release when Sandbox is disabled and only Production was tested', () => {
+    const activeShas = parseActiveRevisions(
+      [
+        `production active_slot=a sha=${oldSha} service=app`,
+        'sandbox disabled',
+      ].join('\n'),
+    );
+
+    expect(activeShas).toEqual([oldSha]);
+    expect(() =>
+      validateTestedPredecessor(activeShas, oldSha, mainSha),
+    ).not.toThrow();
+  });
+
   it('requires a readable Production revision before allowing deployment', () => {
     expect(() => parseActiveRevisions('sandbox disabled')).toThrow(
       /Production revision is missing/,
