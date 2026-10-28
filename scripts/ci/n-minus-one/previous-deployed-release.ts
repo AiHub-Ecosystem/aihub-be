@@ -34,12 +34,16 @@ interface GitHubResponse {
 interface PreviousDeployedReleaseOptions {
   readonly repository: string;
   readonly token: string;
+  readonly activeProductionSha?: string | undefined;
+  readonly activeSandboxSha?: string | undefined;
   readonly fetchImpl?: typeof fetch;
 }
 
 export async function previousDeployedRelease({
   repository,
   token,
+  activeProductionSha,
+  activeSandboxSha,
   fetchImpl = fetch,
 }: PreviousDeployedReleaseOptions): Promise<{
   production: { runId: number; sha: string; digestRunId: number };
@@ -155,13 +159,19 @@ export async function previousDeployedRelease({
   async function selectTierRelease(
     tier: 'Production' | 'Sandbox',
     stepName: string,
+    activeSha?: string,
   ): Promise<{ runId: number; sha: string; digestRunId: number }> {
+    if (activeSha !== undefined && !/^[a-f0-9]{40}$/u.test(activeSha)) {
+      throw new Error(`Active ${tier} revision is not a commit SHA`);
+    }
+
     for (const run of runs) {
       if (
         run.event !== 'workflow_run' ||
         run.head_branch !== 'main' ||
         run.status !== 'completed' ||
-        !/^[a-f0-9]{40}$/u.test(run.head_sha)
+        !/^[a-f0-9]{40}$/u.test(run.head_sha) ||
+        (activeSha !== undefined && run.head_sha !== activeSha)
       ) {
         continue;
       }
@@ -203,16 +213,22 @@ export async function previousDeployedRelease({
         digestRunId: await digestArtifactRunFor(run),
       };
     }
-    throw new Error(`No successful deployed ${tier} revision was found`);
+    throw new Error(
+      activeSha === undefined
+        ? `No successful deployed ${tier} revision was found`
+        : `No successful deployed ${tier} revision ${activeSha} was found`,
+    );
   }
 
   const production = await selectTierRelease(
     'Production',
     'Deploy Production and verify caller IP',
+    activeProductionSha,
   );
   const sandbox = await selectTierRelease(
     'Sandbox',
     'Deploy Sandbox release and verify caller IP',
+    activeSandboxSha,
   );
   return { production, sandbox };
 }
@@ -224,7 +240,12 @@ async function main(): Promise<void> {
     throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN are required');
   }
 
-  const release = await previousDeployedRelease({ repository, token });
+  const release = await previousDeployedRelease({
+    repository,
+    token,
+    activeProductionSha: process.env.ACTIVE_PRODUCTION_SHA || undefined,
+    activeSandboxSha: process.env.ACTIVE_SANDBOX_SHA || undefined,
+  });
   const output = process.env.GITHUB_OUTPUT;
   if (output) {
     appendFileSync(

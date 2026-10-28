@@ -107,6 +107,62 @@ describe('previousDeployedRelease', () => {
     });
   });
 
+  it('selects the host-active revision after a manual rollback', async () => {
+    const activeProductionSha = '2'.repeat(40);
+    const latestSha = '3'.repeat(40);
+    const fetchImpl = queuedFetch(
+      {
+        workflow_runs: [
+          workflowRun(3, latestSha),
+          workflowRun(2, activeProductionSha),
+        ],
+      },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [productionStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [sandboxStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeProductionSha,
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      production: { runId: 2, sha: activeProductionSha, digestRunId: 2 },
+      sandbox: { runId: 3, sha: latestSha, digestRunId: 3 },
+    });
+  });
+
+  it('fails closed when the host reports an invalid active revision', async () => {
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeProductionSha: 'unknown',
+        fetchImpl: queuedFetch({ workflow_runs: [] }),
+      }),
+    ).rejects.toThrow('Active Production revision is not a commit SHA');
+  });
+
   it('falls back when the Production cutover did not pass', async () => {
     const fetchImpl = queuedFetch(
       {

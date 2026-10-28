@@ -562,8 +562,95 @@ jobs:
   # The image artifact CD ships must be the artifact this lane started, not a
   # second build of the same Dockerfile. The push-only job publishes it after
   # this lane passes (ADR-0064).
+  resolve-active-release:
+    name: Resolve active release revisions
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    outputs:
+      production_sha: ${{ steps.revisions.outputs.production_sha }}
+      sandbox_sha: ${{ steps.revisions.outputs.sandbox_sha }}
+    steps:
+      - name: Configure read-only host access
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_SSH_PORT || '22' }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          test -n "$VPS_SSH_KNOWN_HOSTS"
+          [[ "$VPS_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
+          [[ "$VPS_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$VPS_PORT" =~ ^[0-9]{1,5}$ ]]
+          (( 10#$VPS_PORT >= 1 && 10#$VPS_PORT <= 65535 ))
+          ssh_dir="$RUNNER_TEMP/aihub-ssh"
+          install -m 700 -d "$ssh_dir"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          {
+            printf 'Host aihub-read-only\n'
+            printf '  HostName %s\n' "$VPS_HOST"
+            printf '  User %s\n' "$VPS_USER"
+            printf '  Port %s\n' "$VPS_PORT"
+            printf '  IdentityFile %s/key\n' "$ssh_dir"
+            printf '  UserKnownHostsFile %s/known_hosts\n' "$ssh_dir"
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  StrictHostKeyChecking yes\n'
+            printf '  ConnectTimeout 10\n'
+          } > "$ssh_dir/config"
+          chmod 600 "$ssh_dir/config"
+          printf 'AIHUB_SSH_CONFIG=%s\n' "$ssh_dir/config" >> "$GITHUB_ENV"
+
+      - name: Read active tier revisions
+        id: revisions
+        shell: bash
+        env:
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_APP_DIR"
+          printf -v app_dir_arg '%q' "$VPS_APP_DIR"
+          state="$(ssh -F "$AIHUB_SSH_CONFIG" aihub-read-only "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          helper=./scripts/ops/blue-green/blue-green-host.sh
+          if [[ ! -x "$helper" ]]; then
+            helper=./scripts/ops/blue-green-host.sh
+          fi
+          "$helper" status
+          REMOTE
+          )"
+          printf 'Active host state:\n%s\n' "$state"
+          production_sha="$(sed -nE 's/^production active_slot=[ab] sha=([a-f0-9]{40}) service=.*/\1/p' <<< "$state")"
+          [[ "$production_sha" =~ ^[a-f0-9]{40}$ ]] || {
+            printf 'Production active revision is missing or unknown\n' >&2
+            exit 1
+          }
+          sandbox_sha="$(sed -nE 's/^sandbox active_slot=[ab] sha=([a-f0-9]{40}) service=.*/\1/p' <<< "$state")"
+          if [[ ! "$sandbox_sha" =~ ^[a-f0-9]{40}$ ]] && ! grep -Fxq 'sandbox disabled' <<< "$state"; then
+            printf 'Sandbox active revision is missing or unknown\n' >&2
+            exit 1
+          fi
+          printf 'production_sha=%s\nsandbox_sha=%s\n' \
+            "$production_sha" "$sandbox_sha" >> "$GITHUB_OUTPUT"
+
   image:
     name: Image boot
+    needs: resolve-active-release
+    if: >-
+      always() &&
+      (github.event_name != 'push' || github.ref != 'refs/heads/main' ||
+      needs.resolve-active-release.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -668,10 +755,12 @@ jobs:
       - name: Boot the image and wait for its health check
         run: bash scripts/ci/image-boot-check.sh aihub:image-boot
 
-      - name: Find the active Production release revision
+      - name: Select active per-tier release revisions
         id: previous_release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ACTIVE_PRODUCTION_SHA: ${{ needs.resolve-active-release.outputs.production_sha }}
+          ACTIVE_SANDBOX_SHA: ${{ needs.resolve-active-release.outputs.sandbox_sha }}
         run: pnpm exec tsx scripts/ci/n-minus-one/previous-deployed-release.ts
 
       - name: Recover active-tier image digests
@@ -782,8 +871,8 @@ jobs:
           path: image-to-publish.tar
           compression-level: 0
 
-  # This is the only CI job that enters production. The branch allowlist is
-  # configured on the environment, and this job only exists for main pushes.
+  # This is the only CI job that publishes a release image to GHCR. The branch
+  # allowlist is configured on the environment, and this job only exists for main pushes.
   publish-image:
     name: Publish image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
