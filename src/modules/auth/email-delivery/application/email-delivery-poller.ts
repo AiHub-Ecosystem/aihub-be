@@ -67,6 +67,13 @@ export interface EmailDeliveryPollerOptions
   }) => void;
   /** Runtime dispatch supplies the shared durable account budget. */
   readonly dailySendBudget?: EmailDailySendBudgetPort;
+  /**
+   * One bounded signal per pass for a request whose payload only a newer
+   * release can open. It names the kind, never the payload (#484).
+   */
+  readonly onUnrecognisedPayload?: (request: {
+    readonly kind: EmailDeliveryRequestRecord['kind'];
+  }) => void;
 }
 
 function isTimeout(error: unknown): boolean {
@@ -252,10 +259,17 @@ export class EmailDeliveryPoller {
       | ValidatedEmailDelivery
       | 'key_unavailable'
       | 'unreadable'
+      | 'unrecognised'
       | undefined;
     try {
       delivery = readEmailPayload(this.cipher, request);
     } catch {
+      return this.defer(request, now);
+    }
+    if (delivery === 'unrecognised') {
+      // Only a newer release can open it, and one will once it runs: hand the
+      // row back unchanged instead of failing a payload that is not corrupt.
+      this.options.onUnrecognisedPayload?.({ kind: request.kind });
       return this.defer(request, now);
     }
     if (delivery === 'unreadable' || delivery === 'key_unavailable') {

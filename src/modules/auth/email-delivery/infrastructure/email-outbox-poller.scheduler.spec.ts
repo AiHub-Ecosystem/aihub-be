@@ -10,6 +10,7 @@ import {
   emailOutboxLeaseOwner,
   reportEmailProviderConfigurationFailure,
   reportTerminalEmailDeliveryFailure,
+  reportUnrecognisedEmailPayload,
 } from './email-outbox-poller.scheduler';
 
 /** Short enough to keep the suite fast, long enough to order deterministically. */
@@ -374,6 +375,27 @@ describe('reportTerminalEmailDeliveryFailure', () => {
       );
     },
   );
+});
+
+describe('reportUnrecognisedEmailPayload', () => {
+  it('counts the request under its kind and logs the kind alone', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+
+    try {
+      reportUnrecognisedEmailPayload({ kind: 'organization_invite_email' });
+
+      expect(await getMetrics()).toContain(
+        'aihub_email_outbox_unrecognised_payload_total{kind="organization_invite_email"} 1',
+      );
+      expect(warn).toHaveBeenCalledWith(
+        'email delivery request handed back: payload holds a value this release does not know kind=organization_invite_email',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe('reportEmailProviderConfigurationFailure', () => {

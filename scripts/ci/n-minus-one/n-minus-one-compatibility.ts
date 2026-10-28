@@ -8,6 +8,7 @@ import { Pool, type PoolClient } from 'pg';
 
 import { verifyDurableReads } from './n-minus-one-durable-probes';
 import { verifyIncompatibleJwksKeyFormat } from './n-minus-one-jwks-key-format-probe';
+import { queueUnrecognisedKindRow } from './n-minus-one-outbox-probes';
 import { verifyPasswordRolloutCompatibility } from './n-minus-one-password-probes';
 import { verifyRedisCompatibility } from './n-minus-one-redis-probes';
 import {
@@ -33,6 +34,7 @@ import {
   waitFor,
   waitReady,
 } from './n-minus-one-runtime';
+import { verifyAdditiveVaultKeyRollback } from './n-minus-one-vault-rehearsal';
 import { requireSharedRedisEndpoints } from './redis-endpoint-compatibility';
 
 async function main(): Promise<void> {
@@ -191,6 +193,7 @@ async function main(): Promise<void> {
       },
     );
     expectStatus(invitation, 201, 'candidate email outbox write');
+    await queueUnrecognisedKindRow(database);
     stopImage('aihub-compat-candidate');
     await outboxClaimLock.query('ROLLBACK');
     outboxClaimLock.release();
@@ -231,6 +234,14 @@ async function main(): Promise<void> {
       userToken,
       report,
       previousSha,
+    });
+    await verifyAdditiveVaultKeyRollback({
+      previousImage,
+      previousDirectory,
+      previousSha,
+      candidateSha,
+      report,
+      failures,
     });
   } catch (error) {
     failures.push(

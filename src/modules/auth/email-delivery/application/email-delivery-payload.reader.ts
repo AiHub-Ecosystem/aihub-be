@@ -14,11 +14,18 @@ import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
  * kind, or sealed under a key id that now holds other material), or plaintext
  * that is not the shape its kind needs. `'key_unavailable'` distinguishes a
  * valid envelope whose key version was removed from the instance's keyring.
+ * `'unrecognised'` is a payload that is valid except for a value only a newer
+ * release knows; it can open once that release runs, so it is not a failure.
  */
 export function readEmailPayload(
   cipher: EmailPayloadCipherPort,
   request: EmailDeliveryRequestRecord,
-): ValidatedEmailDelivery | 'key_unavailable' | 'unreadable' | undefined {
+):
+  | ValidatedEmailDelivery
+  | 'key_unavailable'
+  | 'unreadable'
+  | 'unrecognised'
+  | undefined {
   const ciphertext = request.payloadCiphertext;
   if (ciphertext === null) return undefined;
   let parsed: unknown;
@@ -33,6 +40,8 @@ export function readEmailPayload(
     return 'unreadable';
   }
   const handler = EMAIL_KIND_POLICIES[request.kind].handler;
-  if (!handler.isPayload(parsed)) return 'unreadable';
+  if (!handler.isPayload(parsed)) {
+    return handler.hasUnrecognisedValue(parsed) ? 'unrecognised' : 'unreadable';
+  }
   return { handler, payload: parsed };
 }

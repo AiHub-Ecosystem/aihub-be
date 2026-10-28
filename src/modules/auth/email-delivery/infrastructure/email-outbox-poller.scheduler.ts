@@ -16,6 +16,7 @@ import {
   type EmailOutboxBacklogSample,
   type EmailOutboxCancellationSample,
   recordEmailDeliveryFailed,
+  recordEmailOutboxUnrecognisedPayload,
   setEmailDailySendBudgetSource,
   setEmailOutboxBacklogSource,
   setEmailOutboxCancellationSource,
@@ -286,6 +287,19 @@ export function reportTerminalEmailDeliveryFailure(failure: {
   recordEmailDeliveryFailed(failure.kind);
   new Logger('EmailOutboxDispatch').error(
     `email delivery request ${failure.id} exhausted its attempts kind=${failure.kind} error=${failure.errorCode}`,
+  );
+}
+
+/**
+ * A payload only a newer release can open is handed back, not failed. The
+ * metric and the log line carry the kind alone: no id, address, or payload.
+ */
+export function reportUnrecognisedEmailPayload(request: {
+  readonly kind: EmailDeliveryKindLabel;
+}): void {
+  recordEmailOutboxUnrecognisedPayload(request.kind);
+  new Logger('EmailOutboxDispatch').warn(
+    `email delivery request handed back: payload holds a value this release does not know kind=${request.kind}`,
   );
 }
 

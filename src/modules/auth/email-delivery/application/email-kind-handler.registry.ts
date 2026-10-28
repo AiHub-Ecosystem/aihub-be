@@ -31,6 +31,8 @@ export interface EmailRenderContext {
 /** `render` may answer `undefined` when a notice is no longer actionable. */
 export interface EmailKindHandler<T> {
   isPayload(value: unknown): value is T;
+  /** True for a payload that is valid except for a value this release lacks. */
+  hasUnrecognisedValue(value: unknown): boolean;
   credential(payload: unknown): Credential | undefined;
   render(
     payload: unknown,
@@ -78,10 +80,20 @@ function isOrganizationInvitePayload(
 function isMfaSecurityPayload(
   value: unknown,
 ): value is MfaSecurityNotificationPayload {
+  return isRecord(value) && isNonEmptyString(value.email);
+}
+
+/**
+ * An invitation whose only fault is a role this release has not been taught:
+ * written by a newer release, so it waits for one that knows the role instead
+ * of failing as a corrupt payload (#484).
+ */
+function hasUnrecognisedInvitationRole(value: unknown): boolean {
   return (
     isRecord(value) &&
-    Object.keys(value).length === 1 &&
-    isNonEmptyString(value.email)
+    isNonEmptyString(value.role) &&
+    !isInvitationRole(value.role) &&
+    isOrganizationInvitePayload({ ...value, role: INVITE_EMAIL_ROLES[0] })
   );
 }
 
@@ -115,6 +127,7 @@ function createEmailKindHandler<T>(
     payload: T,
     context: EmailRenderContext,
   ) => EmailMessage | undefined | Promise<EmailMessage | undefined>,
+  hasUnrecognisedValue: (value: unknown) => boolean = () => false,
 ): EmailKindHandler<T> {
   const forKind = (payload: unknown): T => {
     if (!isPayload(payload))
@@ -124,6 +137,7 @@ function createEmailKindHandler<T>(
 
   return {
     isPayload,
+    hasUnrecognisedValue,
     credential: (payload) => credential(forKind(payload)),
     render: (payload, context) => render(forKind(payload), context),
   };
@@ -199,6 +213,7 @@ export const EMAIL_KIND_POLICIES = {
           },
           customerWebBaseUrl,
         ),
+      hasUnrecognisedInvitationRole,
     ),
   },
   mfa_enabled_notification: {

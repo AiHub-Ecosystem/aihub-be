@@ -1011,6 +1011,20 @@ additive; do not delete factor data or key versions during an image rollback.
 
 ### Release order when a rollout adds a runtime secret
 
+A new key in a strict Vault document ships reader-first
+([ADR-0128](../adr/0128-persisted-values-and-vault-document-keys-are-read-before-they-are-written.md)):
+one release teaches the runtime-secret or connection loader to accept the key as
+optional, and the Agent template and rendered document gain it only after that
+release is deployed. The cutover below is the recorded procedure for the Web
+Session key, which predates the rule. Use it for a new key only when an accepted
+exception says why a reader-first release is impossible.
+
+The CI N-1 gate rehearses the strict case on every release. It boots the
+previous image against a document with one added fixture key, records whether
+that image refuses or tolerates it, scans the output for the fixture value, then
+restores the previous document and proves the previous image ready again. Both
+image SHAs are in the gate summary.
+
 CD deploys `main` without normally restarting `vault-agent`; the #351
 Sandbox-isolation step is a narrow exception when the Production connection
 document still has its old Sandbox fields. The new image must have its required

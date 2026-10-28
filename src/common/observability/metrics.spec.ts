@@ -12,6 +12,7 @@ import {
   recordDownstreamRetryEvent,
   recordEmailDeliveryFailed,
   recordEmailOutboxBackpressureRefusal,
+  recordEmailOutboxUnrecognisedPayload,
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
   setDispatchAttemptUnresolvedSource,
@@ -297,6 +298,22 @@ describe('email delivery failure metric', () => {
 
     expect(await getMetrics()).not.toContain(
       'aihub_email_delivery_failed_total{kind="cancelled"}',
+    );
+  });
+});
+
+describe('email outbox unrecognised payload metric', () => {
+  it('counts a payload only a newer release can open under its email kind and nothing else', async () => {
+    recordEmailOutboxUnrecognisedPayload('organization_invite_email');
+    recordEmailOutboxUnrecognisedPayload('organization_invite_email');
+
+    expect(
+      await sample('aihub_email_outbox_unrecognised_payload_total', {
+        kind: 'organization_invite_email',
+      }),
+    ).toBe('2');
+    expect(await getMetrics()).not.toMatch(
+      /aihub_email_outbox_unrecognised_payload_total\{[^}]*(email|token|role)=/,
     );
   });
 });

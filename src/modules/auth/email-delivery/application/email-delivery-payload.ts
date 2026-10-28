@@ -19,8 +19,9 @@ export function isApiKeyNearExpiryNotificationPayload(
     return false;
   }
   const candidate = value as Record<string, unknown>;
+  // A member this release does not know is ignored: the previous release must
+  // still read what the next one writes (#484).
   return (
-    Object.keys(candidate).length === 3 &&
     typeof candidate.organizationId === 'string' &&
     candidate.organizationId.length > 0 &&
     typeof candidate.userAccountId === 'string' &&

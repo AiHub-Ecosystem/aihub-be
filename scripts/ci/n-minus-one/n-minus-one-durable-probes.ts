@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
 import {
+  classifyUnrecognisedKindRow,
+  readUnrecognisedKindRow,
+} from './n-minus-one-outbox-probes';
+import {
   PREVIOUS_PORT,
   check,
   expect2xx,
@@ -104,6 +108,15 @@ export async function verifyDurableReads(input: {
     'N-1 email outbox read was not observed',
   );
   report.push('PASS: N-1 started and read the candidate email outbox request.');
+
+  const unrecognised = classifyUnrecognisedKindRow(
+    await readUnrecognisedKindRow(database),
+  );
+  if (unrecognised.kind === 'pass') {
+    report.push(`PASS: ${unrecognised.message}`);
+  } else {
+    failures.push(`FAIL: ${unrecognised.message}`);
+  }
 
   const replay = await request(PREVIOUS_PORT, 'POST', '/v1/organizations', {
     token: userToken,

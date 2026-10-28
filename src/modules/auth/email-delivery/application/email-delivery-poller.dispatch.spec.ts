@@ -20,7 +20,10 @@ import {
   unknownKeyVersionCipher,
   unreadableCipher,
 } from './email-delivery-poller.spec-support';
-import type { EmailDeliveryPayload } from './email-delivery-request.port';
+import type {
+  EmailDeliveryPayload,
+  EmailPayloadCipherPort,
+} from './email-delivery-request.port';
 import { EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS } from './email-provider-retry-after.policy';
 import {
   EmailProviderTransportError,
@@ -825,12 +828,11 @@ describe('EmailDeliveryPoller', () => {
     },
   );
 
-  it('fails an invitation whose payload lacks its organization or role', async () => {
+  it('fails an invitation whose payload lacks its organization', async () => {
     const { poller, store, sender } = harness({
       payload: {
         ...VERIFICATION_PAYLOAD,
-        organizationName: 'Resonance',
-        role: 'superuser',
+        role: 'member',
       } as unknown as EmailDeliveryPayload,
     });
     store.claimResult = [
@@ -844,6 +846,54 @@ describe('EmailDeliveryPoller', () => {
     ]);
     expect(store.cancelled).toEqual([]);
     expect(sender.sends).toEqual([]);
+  });
+
+  it('hands an invitation with a role this release does not know back, reports it, and keeps dispatching the rows around it', async () => {
+    const unrecognised: string[] = [];
+    const invitation = {
+      ...VERIFICATION_PAYLOAD,
+      organizationName: 'Resonance',
+      role: 'auditor',
+    };
+    const store = new FakeStore();
+    const sender = new RecordingSender();
+    const cipher: EmailPayloadCipherPort = {
+      encrypt: (): string => 'sealed',
+      decrypt: (_envelope, { id }): string =>
+        JSON.stringify(id === 'edr_invite' ? invitation : VERIFICATION_PAYLOAD),
+    };
+    const poller = new EmailDeliveryPoller(
+      store,
+      new FakeCredentials(),
+      cipher,
+      sender,
+      new FakeEmailSendRateLimiter(),
+      new FakeEmailProviderOutageCircuit(),
+      (): Date => NOW,
+      { hash: () => TOKEN_HASH },
+      {
+        owner: 'instance-a',
+        onUnrecognisedPayload: ({ kind }) => unrecognised.push(kind),
+      },
+    );
+    store.claimResult = [
+      claimed({ id: 'edr_invite', kind: 'organization_invite_email' }),
+      claimed({ id: 'edr_neighbour' }),
+    ];
+
+    const summary = await poller.runOnce();
+
+    expect(store.deferred).toEqual(['edr_invite']);
+    expect(store.failed).toEqual([]);
+    expect(store.cancelled).toEqual([]);
+    expect(store.accepted).toEqual(['edr_neighbour']);
+    expect(sender.sends).toHaveLength(1);
+    expect(unrecognised).toEqual(['organization_invite_email']);
+    expect(summary).toMatchObject({
+      providerAccepted: 1,
+      deferred: 1,
+      failed: 0,
+    });
   });
 
   it('cancels requests older than every credential lifetime before claiming', async () => {

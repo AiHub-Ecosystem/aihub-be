@@ -192,6 +192,17 @@ const emailDeliveryFailedTotal = new Counter({
   registers: [registry],
 });
 
+/**
+ * Counts passes that handed back a request whose payload only a newer release
+ * can open (#484). Labelled by the bounded email kind, never by payload.
+ */
+const emailOutboxUnrecognisedPayloadTotal = new Counter({
+  name: 'aihub_email_outbox_unrecognised_payload_total',
+  help: 'Email Delivery Requests handed back because their payload holds a value this release does not know.',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+
 const postgresPoolErrorsTotal = new Counter({
   name: 'aihub_postgres_pool_errors_total',
   help: 'PostgreSQL pool and checked-out client errors by pool and SQLSTATE class.',
@@ -390,6 +401,12 @@ export function recordDownstreamRetryEvent(
   downstreamRetryEventsTotal.inc({ operation, reason });
 }
 
+export function recordEmailOutboxUnrecognisedPayload(
+  kind: EmailDeliveryKindLabel,
+): void {
+  emailOutboxUnrecognisedPayloadTotal.inc({ kind });
+}
+
 let emailOutboxBacklogKindLabels: readonly EmailDeliveryKindLabel[] = [
   'unknown',
 ];
@@ -486,7 +503,10 @@ export function registerEmailDeliveryMetrics(
   backpressureKinds: readonly EmailDeliveryKindLabel[],
 ): void {
   emailOutboxBacklogKindLabels = [...kinds, 'unknown'];
-  for (const kind of kinds) emailDeliveryFailedTotal.inc({ kind }, 0);
+  for (const kind of kinds) {
+    emailDeliveryFailedTotal.inc({ kind }, 0);
+    emailOutboxUnrecognisedPayloadTotal.inc({ kind }, 0);
+  }
   emailOutboxBackpressureMetric.registerKinds(backpressureKinds);
 }
 

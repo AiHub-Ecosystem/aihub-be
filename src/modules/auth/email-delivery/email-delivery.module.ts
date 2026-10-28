@@ -76,6 +76,7 @@ import {
   emailOutboxLeaseOwner,
   reportEmailProviderConfigurationFailure,
   reportTerminalEmailDeliveryFailure,
+  reportUnrecognisedEmailPayload,
 } from './infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
 import { PostgresEmailDailySendBudget } from './infrastructure/postgres-email-daily-send-budget';
@@ -222,6 +223,7 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
             ...(customerWebBaseUrl === undefined ? {} : { customerWebBaseUrl }),
             shouldStop: isShuttingDown,
             onTerminalFailure: reportTerminalEmailDeliveryFailure,
+            onUnrecognisedPayload: reportUnrecognisedEmailPayload,
             onProviderConfigurationFailure:
               reportEmailProviderConfigurationFailure,
             dailySendBudget,
