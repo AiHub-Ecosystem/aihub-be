@@ -1670,13 +1670,18 @@ workflow. The rollback retention floor is two SHA tags: the current release and
 its previous successful release. ADR-0064 currently retains every SHA tag; do
 not add cleanup that removes this floor. #115 may set a finite depth later, but
 it must preserve at least these two releases. Before rollback, verify the
-chosen tag is still listed in the private package. The blue-green helper runs
-`sudo -n docker compose pull`, so authenticate that Docker daemon to GHCR with
+chosen tag is still listed in the private package. The blue-green helper uses
+the target image from the host's local cache and pulls it only when the host no
+longer holds it, so a rollback to a release that ran here needs no registry
+login. When the image is absent, authenticate that Docker daemon to GHCR with
 an operator-managed `read:packages` credential through
-`sudo -n docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin`;
-log out after rollback. Never put the token in `.env.production` or a command
-argument. The legacy direct Compose command below checks the local cache and
-performs a temporary login only when the target image is absent.
+`sudo -n docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin`
+before the rollback, and log out after it. If the image is absent and cannot be
+pulled, the helper stops before it changes any slot, nginx config, or deploy
+environment, and its message names the missing image. Never put the token in
+`.env.production` or a command argument. The legacy direct Compose command
+below checks the local cache and performs a temporary login only when the
+target image is absent.
 
 ### Roll back a blue-green release
 
@@ -1688,8 +1693,8 @@ health, dependencies, readiness, and resource state before draining the old
 slot. Run one tier at a time. If rollback cannot be confirmed, preserve both
 slots and stop for operator repair.
 
-After the pause and GHCR authentication steps above, inspect status from the
-deployment directory:
+After the pause step above, and the GHCR authentication step when the target
+image is absent from the host, inspect status from the deployment directory:
 
 ```bash
 cd "$APP_DIR"
@@ -1743,8 +1748,6 @@ Selection:
 
 After rolling back one tier:
 
-- The helper runs `docker compose pull` even when the image is already local,
-  so authenticate the Docker daemon to GHCR first, as above.
 - The two tiers now run different revisions, and the scheduled host jobs stay
   suspended until they match again. To roll the lagging tier forward, re-run the
   CD run of the revision the other tier already runs. It skips the cutover of the

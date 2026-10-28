@@ -195,6 +195,9 @@ jobs:
       - name: Exercise nginx and Compose retention across rollback
         run: bash test/ops/blue-green-config-retention.spec.sh
 
+      - name: Exercise rollback image sourcing without a registry login
+        run: bash test/ops/blue-green-rollback-image.spec.sh
+
       - name: Exercise resuming a half-deployed release past the caller-IP gate
         run: bash test/ops/blue-green-resume.spec.sh
 

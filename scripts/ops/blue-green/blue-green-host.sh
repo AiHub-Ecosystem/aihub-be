@@ -40,6 +40,8 @@ nginx_override_sandbox=""
 # What select_rollback_inputs chose for a manual rollback.
 rollback_nginx_config=""
 rollback_compose_file=docker-compose.production.yml
+# True once a rollback holds its image locally, so the candidate is not pulled.
+skip_candidate_pull=false
 
 cd "$APP_DIR"
 mkdir -p "$STATE_DIR"
@@ -868,6 +870,18 @@ start_candidate() {
   return "$status"
 }
 
+# A rollback target is a release that already ran here, so its image is
+# normally local and the registry, which may be the thing that is failing, is
+# not needed. It is pulled only when the host no longer holds it (#1383).
+ensure_local_image() {
+  local image="$1"
+  sudo -n docker image inspect "$image" >/dev/null 2>&1 && return 0
+  sudo -n docker pull "$image" >/dev/null || {
+    printf 'image %s is not on this host and could not be pulled\n' "$image" >&2
+    return 1
+  }
+}
+
 prepare_candidate() {
   local service="$1" expected_count="$2" check_edge="$3" previous_id previous_restart_count id
   previous_id="$(container_id "$service")"
@@ -877,7 +891,7 @@ prepare_candidate() {
   fi
   capture_running_app_baseline || return 1
   save_service_logs "$service"
-  "${compose[@]}" pull "$service" || return 1
+  [[ "$skip_candidate_pull" == true ]] || "${compose[@]}" pull "$service" || return 1
   assert_container_count "$((expected_count - 1))" || return 1
   "${compose[@]}" up -d --no-deps --no-build "$service" || return 1
   id="$(container_id "$service")"
@@ -1454,6 +1468,8 @@ rollback() {
   # Before the image override changes: a rollback without a retained known-good
   # configuration stops here with both slots as they were.
   select_rollback_inputs "$tier" "$old_sha" || return 1
+  ensure_local_image "ghcr.io/aihub-ecosystem/aihub-be:${old_sha}" || return 1
+  skip_candidate_pull=true
   snapshot_live_configs || return 1
   AIHUB_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:${old_sha}"
   write_image_env "$AIHUB_IMAGE"
