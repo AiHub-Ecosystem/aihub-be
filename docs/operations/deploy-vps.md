@@ -2020,6 +2020,24 @@ bundle changes such as the Web Session key, restore the previous compatible
 templates and Agent render before restarting the old image; follow the
 [coordinated secret cutover](#release-order-when-a-rollout-adds-a-runtime-secret).
 
+### Stored-value and Vault-key rollback rehearsal
+
+The two-release rule is rehearsed by the CI N-1 gate on every release, against
+the real previous image, not once by hand. A hand rehearsal on Sandbox cannot
+queue a row of an unknown kind, because `email_delivery_requests_kind_check`
+bounds the kinds the table accepts; only a throwaway database can drop it.
+
+- **Unknown outbox row:** the gate queues a row of a kind no release knows, older
+  than the candidate's own rows, then starts the previous image. The previous
+  image must leave the row queued, unattempted and with its payload, and must
+  still dispatch the rows beside it.
+- **Added Vault document key:** the gate boots the previous image against a
+  document with one added fixture key and records whether it refuses or
+  tolerates the key. It scans the output for the fixture value, restores the
+  previous document, and requires the previous image ready again.
+- The gate summary names the candidate SHA and the previous image SHA with its
+  digest for both probes. A failed probe holds the release.
+
 ### Legacy direct-Compose rehearsal record
 
 Run one rehearsal against enabled Sandbox during a quiet window. Record UTC
