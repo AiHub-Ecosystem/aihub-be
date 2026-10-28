@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Related issue: [#353](https://github.com/AiHub-Ecosystem/aihub-be/issues/353), [#334](https://github.com/AiHub-Ecosystem/aihub-be/issues/334), [#779](https://github.com/AiHub-Ecosystem/aihub-be/issues/779)
-- Amends: [ADR-0041](0041-self-serve-organization-creation-boundary.md) and [ADR-0043](0043-organization-rename-boundary.md) (the Organization name rule, and its gap for operator-created names), [ADR-0074](0074-transactional-email-outbox.md) (the Organization Invitation email copy and payload)
+- Amends: [ADR-0041](0041-self-serve-organization-creation-boundary.md) and [ADR-0043](0043-organization-rename-boundary.md) (the Organization name rule, and its gap for operator-created names), [ADR-0074](0074-transactional-email-outbox.md) (the Organization Invitation email copy and payload), [ADR-0085](0085-per-tier-blue-green-cutover.md) (the scoped N-1 write exception below)
 
 ## Context
 
@@ -38,6 +38,17 @@ A `CHECK` constraint on `organizations.name` refuses the same characters, an unt
 ### Accepted risk: names that look like a URL
 
 Names such as `evil.com` or `http://…` stay allowed. Refusing them would also refuse real names such as "Acme.io", and some mail clients turn `evil.com` into a link even inside quotation marks. The risk is accepted because of the fixed subject, the quoted name, the visible inviter, and the send limit. Production held no such name on 2026-10-22. Refusing URL-like names is a product decision that can be added to the same rule later.
+
+### Scoped N-1 write exception for Organization names
+
+This constraint is the narrow exception to ADR-0085's rule that a migrated
+database accepts writes from both running releases. During the N-1 rollback
+window, the previous application can still accept an Organization name that the
+new database constraint refuses, including a name with U+200B ZERO WIDTH
+SPACE. A create or rename with such a value may therefore fail at the database
+boundary. The #755 release compatibility gate reports this named rejection as
+an accepted exception; it does not count it as proof that all N-1 writes are
+compatible. Other N-1 writes remain subject to the compatibility gate.
 
 ### API key names in the near-expiry notice
 

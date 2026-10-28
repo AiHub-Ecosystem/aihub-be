@@ -1,8 +1,8 @@
 # ADR-0085: Deploy each tier with a bounded blue-green cutover
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR-0121](0121-organization-name-in-invitation-email.md)
 - Date: 2026-10-09
-- Related: [#224](https://github.com/AiHub-Ecosystem/aihub-be/issues/224), [#114](https://github.com/AiHub-Ecosystem/aihub-be/issues/114), [#113](https://github.com/AiHub-Ecosystem/aihub-be/issues/113), [#289](https://github.com/AiHub-Ecosystem/aihub-be/issues/289), [#111](https://github.com/AiHub-Ecosystem/aihub-be/issues/111), [#112](https://github.com/AiHub-Ecosystem/aihub-be/issues/112), [ADR-0064](0064-ci-publishes-the-image-it-booted.md), [ADR-0076](0076-terminus-readiness-and-opossum-breakers.md), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md)
+- Related: [#224](https://github.com/AiHub-Ecosystem/aihub-be/issues/224), [#114](https://github.com/AiHub-Ecosystem/aihub-be/issues/114), [#113](https://github.com/AiHub-Ecosystem/aihub-be/issues/113), [#289](https://github.com/AiHub-Ecosystem/aihub-be/issues/289), [#111](https://github.com/AiHub-Ecosystem/aihub-be/issues/111), [#112](https://github.com/AiHub-Ecosystem/aihub-be/issues/112), [ADR-0064](0064-ci-publishes-the-image-it-booted.md), [ADR-0076](0076-terminus-readiness-and-opossum-breakers.md), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md), [ADR-0121](0121-organization-name-in-invitation-email.md)
 - Amends: [deployment roadmap §N.1–N.3](../superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md)
 
 The deployment roadmap's earlier four-vCPU, two-replica rolling design does not match the shared production host or the approved release path. The live host has two vCPUs and also runs AI Speaking and shared dependencies. Follow this ADR for deployment work; keep the roadmap's other historical architecture details out of the active rollout contract.
@@ -19,4 +19,9 @@ Automatic rollback covers candidate readiness, the cutover smoke, drain checks, 
 
 Complete and rehearse the operator rollback in #289 before enabling blue-green CD; implementation of #224 may proceed in parallel. A rollback counts as successful only when the fixed helper validates/reloads the restored upstream and the affected public hostname passes health and smoke checks. If that cannot be confirmed, preserve both slots, fail CD, stop subsequent deployments, and require operator repair through the #289 procedure. A running deployment is not cancelled; when another release is queued, the latest pending release wins.
 
-Database changes remain expand-only and compatible with both running releases. This decision does not permit changes to other nginx sites or host ports 80/443.
+Database changes remain expand-only and compatible with both running releases.
+The release gate also checks that N-1 writes remain accepted after N's
+migrations. The narrowly scoped Organization-name constraint exception recorded
+in ADR-0121 amends this rule: its expected N-1 rejection must be reported by the
+gate, and no release may describe that result as universal write compatibility.
+This decision does not permit changes to other nginx sites or host ports 80/443.

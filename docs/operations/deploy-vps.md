@@ -1627,6 +1627,18 @@ history and the helper below; for a legacy direct Compose release, use
 `direct-releases.tsv` and its matching Actions summary. Never infer the previous
 SHA from `.env.production`.
 
+### Customer Web compatibility before rollback
+
+The Customer Web deploys independently. Before rolling AIHUB back to a SHA
+older than the active release, identify the deployed Customer Web revision and
+check its release note or pull request for the minimum AIHUB SHA it requires.
+If the rollback target predates that SHA, first roll the Customer Web back to a
+compatible revision or keep AIHUB on a release that serves the required route
+and fields. If the deployed Customer Web revision or its minimum AIHUB SHA
+cannot be established, stop the rollback and resolve that compatibility before
+switching the AIHUB route. See the Customer Web contributing guide for the
+release-note requirement.
+
 GHCR was checked on 2026-10-09: the private package had 150 tagged versions,
 the oldest tagged version was from 2026-09-18, and the current and preceding
 commit-SHA image tags were present. This repository has no image cleanup

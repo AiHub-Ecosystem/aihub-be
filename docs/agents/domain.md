@@ -65,6 +65,17 @@ before documenting a new optional request field for customer use.
 
 Expand-only migrations preserve the schema shape across adjacent releases; they do not make new persisted values, runtime configuration, or Vault template keys compatible with N-1.
 
+Rollback runs N-1 against N's migrated database. A constraint added or tightened
+in N must accept every value that N-1 can write. `NOT VALID` does not defer
+checks for new writes: PostgreSQL enforces the constraint as soon as it is
+added. If a stricter rule cannot accept N-1 writes, ship a preceding release
+that stops those writes and verify it is deployed, or postpone enforcing the
+stricter rule until the N-1 rollback window has closed. Keep the intermediate
+constraint permissive through that window; do not use a down-migration during
+rollback. Any accepted exception must name the exact constraint and rejected
+write in an ADR, and the release compatibility result must report it instead
+of claiming universal N-1 write compatibility.
+
 - Ship a new persisted enum/value in two releases. Release N-1 first learns to read or safely skip the value without writing it; a later release starts writing it only after that reader is deployed.
 - Add environment variables and Vault template keys without renaming or removing existing keys in the same release. Remove an old key only in a later release after no deployed image reads it. Where a strict Vault bundle reader rejects an added key, follow the coordinated cutover and rollback sequence in `docs/operations/deploy-vps.md` and the applicable ADR.
 - For every PR that changes persisted values or runtime configuration, name the old-reader behavior and the release that starts writing/removing the value or key. Keep unknown-value telemetry bounded and free of payloads or secret values.
