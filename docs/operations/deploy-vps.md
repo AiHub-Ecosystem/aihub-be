@@ -1724,6 +1724,16 @@ Selection:
 - If a manual rollback fails, the helper restores the live nginx configs it
   saved before the attempt, for both tiers.
 
+After rolling back one tier:
+
+- The helper runs `docker compose pull` even when the image is already local,
+  so authenticate the Docker daemon to GHCR first, as above.
+- The two tiers now run different revisions, and CD keeps the scheduled host
+  jobs suspended until they match again. Re-running the CD run of the revision
+  Production already runs does not roll the other tier forward: it skips the
+  Production cutover and the Sandbox step is refused. Roll forward by letting CD
+  deploy a new revision, which deploys both tiers and reinstalls the host jobs.
+
 ### Legacy direct Compose rollback
 
 Use this only when the running release has no successful blue-green history.
