@@ -53,7 +53,7 @@ export async function previousDeployedRelease({
   const runs: WorkflowRun[] = [];
   for (let page = 1; page <= 100; page += 1) {
     const result = await getJson(
-      `${baseUrl}/actions/workflows/cd.yml/runs?branch=main&status=all&per_page=100&page=${page}`,
+      `${baseUrl}/actions/workflows/cd.yml/runs?branch=main&per_page=100&page=${page}`,
     );
     const pageRuns = result.workflow_runs ?? [];
     runs.push(...pageRuns);

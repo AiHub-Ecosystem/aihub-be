@@ -121,8 +121,8 @@ describe('previousDeployedRelease', () => {
       }),
     ).rejects.toThrow('CD run 4 is still active; retry after it completes');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(
-      expect.stringContaining('status=all'),
+    expect(fetchImpl.mock.calls[0]?.[0]).not.toEqual(
+      expect.stringContaining('status='),
     );
   });
 });
