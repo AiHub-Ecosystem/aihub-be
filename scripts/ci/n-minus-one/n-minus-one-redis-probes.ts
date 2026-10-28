@@ -188,6 +188,22 @@ export async function verifyRedisCompatibility(input: {
       body: gradeBody,
     },
   );
+  const gradeError = candidateGrade.body?.error;
+  if (
+    candidateGrade.status === 403 &&
+    typeof gradeError === 'object' &&
+    gradeError !== null
+  ) {
+    const message = (gradeError as { message?: unknown }).message;
+    for (const known of [
+      'API key is not authorized for this operation',
+      'Organization is not active',
+      'API key is not allowed in this environment',
+      'Request host is not bound to an AIHUB environment',
+    ]) {
+      check(message !== known, `candidate grade authorization: ${known}`);
+    }
+  }
   expect2xx(candidateGrade, 'candidate grade and usage write');
 
   const apiKeyHash = createHash('sha256').update(apiKey).digest('hex');
