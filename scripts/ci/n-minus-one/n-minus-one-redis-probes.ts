@@ -60,7 +60,11 @@ function mutateCandidateJwksCache(
     '-e',
     `void (async () => {
       const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
-      const cache = new RedisIdentityStore('redis://127.0.0.1:6379/0');
+      const Redis = require('ioredis');
+      const client = new Redis('redis://127.0.0.1:6379/0', { lazyConnect: true, enableOfflineQueue: false });
+      client.on('error', () => {});
+      await client.connect();
+      const cache = new RedisIdentityStore('', client);
       try {
         if (process.env.AIHUB_COMPAT_OPERATION === 'delete') {
           await cache.deleteJwks(
@@ -278,7 +282,11 @@ export async function verifyRedisCompatibility(input: {
       '-e',
       `void (async () => {
         const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
-        const store = new RedisIdentityStore('redis://127.0.0.1:6379/0');
+        const Redis = require('ioredis');
+        const client = new Redis('redis://127.0.0.1:6379/0', { lazyConnect: true, enableOfflineQueue: false });
+        client.on('error', () => {});
+        await client.connect();
+        const store = new RedisIdentityStore('', client);
         const expected = JSON.parse(Buffer.from(process.env.COMPAT_RECORD, 'base64').toString('utf8'));
         try {
           if ('${operation}' === 'set') await store.set(process.env.COMPAT_HASH, expected);
