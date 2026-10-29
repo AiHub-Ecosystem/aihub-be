@@ -4,22 +4,17 @@ import { ulid } from 'ulid';
 import { runWritingChartRevokeCommand } from '@/cli/writing-chart-revoke';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
-import type { WritingChartUploadStoragePort } from '@/modules/writing/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/application/writing-chart-upload.service';
 import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/infrastructure/postgres-writing-chart-revocation-audit.repository';
 import { PostgresWritingChartUploadRepository } from '@/modules/writing/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
+import { BUCKET, CHART_PNG, ChartBucket } from './support/chart-bucket';
 
 // An operator revocation fences the upload from publishing again (#1206). The
 // repositories, service, and revoke command are real; only object storage and
 // the public-edge probe are doubles, sharing one in-memory bucket.
 
-const CHART_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC',
-  'base64',
-);
 const ORGANIZATION_ID = 'org_chart_fence';
-const BUCKET = 'aihub-writing-charts';
 const ACTIVE_AT = new Date('2026-10-01T00:00:00.000Z');
 
 let pool: Pool;
@@ -42,45 +37,8 @@ afterAll(async () => {
   await pool.end();
 });
 
-/** One bucket the service publishes to and the revoke command deletes from. */
-class Bucket {
-  readonly published = new Set<string>();
-  publishes = 0;
-  /** Writes the object, then loses the acknowledgement. */
-  loseNextAck = false;
-  /** Holds the next public write until released. */
-  gate: Promise<void> | undefined;
-
-  storage(): WritingChartUploadStoragePort {
-    return {
-      createUploadUrl: async () => ({
-        url: 'https://storage.test/upload',
-        fields: {},
-        expiresAt: new Date(Date.now() + 300_000),
-      }),
-      inspectObject: async () => ({
-        contentType: 'image/png',
-        byteSize: CHART_PNG.length,
-        bytes: new Uint8Array(CHART_PNG),
-      }),
-      publishObject: async (input) => {
-        await this.gate;
-        this.publishes += 1;
-        this.published.add(input.publishedKey);
-        if (this.loseNextAck) {
-          this.loseNextAck = false;
-          throw new Error('connection reset after the write');
-        }
-      },
-      publicUrl: (input) =>
-        `https://s3.wispace.app/${BUCKET}/${input.publishedKey}`,
-      deleteStagingObject: async () => undefined,
-      deletePublishedObject: async (input) => {
-        this.published.delete(input.publishedKey);
-      },
-    };
-  }
-
+/** The shared bucket, which the revoke command also deletes from. */
+class Bucket extends ChartBucket {
   async revoke(url: string, now = new Date()) {
     return runWritingChartRevokeCommand({
       databaseUrl: testDatabaseUrl(),

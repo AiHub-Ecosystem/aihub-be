@@ -180,6 +180,14 @@ and End-User ownership scope upload and completion, not public reads
 [ADR-0101](docs/adr/0101-writing-charts-use-shared-seaweedfs-host.md),
 [ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md)).
 
+**Writing chart upload**:
+The short-lived record of one customer chart upload: a private staging object and
+the public object it becomes. It is `open` until completed, `rejected` when
+refused or revoked, `publishing` while the public object is being written, and
+`published` once it is a Writing Task 1 chart asset. Removing an expired upload
+removes both objects, whatever state it was in.
+_Avoid_: intent, candidate (code terms for a stage of the record, not the record)
+
 **Writing chart revocation**:
 Ending public serving of an AIHUB-published chart before its natural expiry.
 It stops access through AIHUB-controlled serving; it cannot retrieve copies
