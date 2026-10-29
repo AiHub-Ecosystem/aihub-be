@@ -147,3 +147,8 @@ carries only aggregate figures, because the repository is public.
    reminders is not a reason to extend.
 6. **Sunset.** Requests to the retired major are answered with `410 Gone`
    (#1367) and are no longer counted. The report keeps the history.
+
+There is no brownout before sunset. ADR-0127's "brownout deferred" update
+(#1379) says when to reconsider it: an Active Consumer that answered neither
+email by the 30-day step, or a customer that broke at sunset without seeing a
+notice.

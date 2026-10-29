@@ -41,6 +41,18 @@ The sunset clause above says to review customer traffic and contact affected cus
 - The Public API owner signs each retirement on a public retirement issue. That issue carries only aggregate figures per Environment: Active Consumer count, request totals, unattributed totals by caller kind, and inconclusive days. Organization lists and the outreach log stay private with the operator's report output, because the repository is public.
 - An operator emails the active `owner` members of each Organization by hand: every recorded Organization at the successor release, then the Active Consumers at 90 and 30 days before sunset. The final report and owner sign-off happen 7 days before sunset. No automated outreach channel is built.
 - An extension needs a contacted Active Consumer that says it is still migrating, plus an owner decision. Each extension is at most 3 months and needs its own decision; there is no overall cap. The revised date is published in the `Sunset` header and documentation, and the procedure restarts from its 90-day step. An Active Consumer that does not reply after both reminders is not a reason to extend.
-- Brownout is not part of this procedure; #1379 decides it separately. The procedure is in `docs/operations/public-api-major-adoption.md`, the report and its completeness signals are #1366 and #1389, and runtime retirement is #1367.
+- Brownout is not part of this procedure; the brownout update below defers it. The procedure is in `docs/operations/public-api-major-adoption.md`, the report and its completeness signals are #1366 and #1389, and runtime retirement is #1367.
 
 Approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#1376](https://github.com/AiHub-Ecosystem/aihub-be/issues/1376).
+
+### Update: brownout deferred (#1379, 2026-10-29)
+
+A brownout deliberately fails or degrades requests to a major before its sunset, so that a consumer who ignored every notice breaks briefly rather than for good at `410`. AIHUB defers it: no brownout is part of retirement, and production traffic is unchanged.
+
+- No successor major exists yet (#1374 waits for an approved breaking change), so any traffic selection, schedule, impact limit, or abort rule written now would be a guess about a retirement that has not been planned. Brownout also breaks paying customers on purpose, which needs safeguards that are worth building only for a real retirement.
+- The existing signals are sufficient for attributed callers: the `Deprecation` and `Sunset` headers (#1362), the per-Organization adoption report and its completeness verdict (#1366, #1389), and the three manual emails of the retirement procedure (#1376). Inconclusive evidence already widens the Active Consumer set to every Organization ever recorded.
+- Unattributed callers receive only the headers. Brownout would not reach them either: no Organization can be contacted, and a failed API-key caller is already failing.
+- Revisit when either happens: a retirement issue is open and an Active Consumer has replied to neither email by the 30-day step, in which case the owner decides for that retirement and any brownout needs its own implementation and release issue with verified safeguards; or a customer reports breaking at a sunset without having seen any notice. There is no scheduled review.
+- Runtime retirement and the `410` response stay in #1367.
+
+Approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#1379](https://github.com/AiHub-Ecosystem/aihub-be/issues/1379).
