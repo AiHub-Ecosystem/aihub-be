@@ -52,6 +52,17 @@ export function formatPublicApiMajorReport(
       unattributed_count: major.unattributedCount,
       organization_count: major.organizations.length,
     }),
+    ...major.unattributed.map((kind) =>
+      JSON.stringify({
+        event: 'public_api_major_unattributed',
+        ...window,
+        environment: major.environment,
+        major: major.major,
+        caller_kind: kind.callerKind,
+        request_count: kind.requestCount,
+        failure_count: kind.failureCount,
+      }),
+    ),
     ...major.organizations.map((organization) =>
       JSON.stringify({
         event: 'public_api_major_organization',
@@ -66,9 +77,20 @@ export function formatPublicApiMajorReport(
   ]);
   return [
     ...lines,
+    ...report.coverage.map((coverage) =>
+      JSON.stringify({
+        event: 'public_api_major_coverage',
+        ...window,
+        environment: coverage.environment,
+        verdict: coverage.verdict,
+        inconclusive_days: coverage.inconclusiveDays,
+        unclean_exits: coverage.uncleanExitDays,
+      }),
+    ),
     JSON.stringify({
       event: 'public_api_major_window',
       ...window,
+      as_of: report.asOf.toISOString(),
       ...(report.coverageStartDay === undefined
         ? {}
         : { coverage_start_day: report.coverageStartDay }),

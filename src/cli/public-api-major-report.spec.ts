@@ -17,6 +17,7 @@ class FakeRepository implements PublicApiMajorUsageRepositoryPort {
   async snapshot(window: PublicApiMajorWindow) {
     this.windows.push(window);
     return {
+      asOf: new Date('2026-10-28T12:59:00.000Z'),
       coverageStartDay: '2026-10-05',
       totals: [
         {
@@ -25,6 +26,7 @@ class FakeRepository implements PublicApiMajorUsageRepositoryPort {
           requestCount: 10,
           failureCount: 2,
           unattributedCount: 3,
+          unattributedFailureCount: 1,
         },
       ],
       organizations: [
@@ -36,6 +38,23 @@ class FakeRepository implements PublicApiMajorUsageRepositoryPort {
           lastSeenAt: new Date('2026-10-28T10:00:00.000Z'),
         },
       ],
+      unattributed: [
+        {
+          environment: 'production',
+          major: 1,
+          callerKind: 'bearer',
+          requestCount: 3,
+          failureCount: 1,
+        },
+      ],
+      collectors: [
+        {
+          environment: 'production',
+          startedAt: new Date('2026-10-20T08:00:00.000Z'),
+          coveredThrough: new Date('2026-10-28T12:58:40.000Z'),
+          stoppedCleanlyAt: null,
+        },
+      ],
     };
   }
 
@@ -45,7 +64,7 @@ class FakeRepository implements PublicApiMajorUsageRepositoryPort {
 }
 
 describe('public API major report CLI boundary', () => {
-  it('emits one JSONL line per major and Organization, then a window line', async () => {
+  it('emits lines per major, caller kind, and Organization, then coverage and window lines', async () => {
     const lines: string[] = [];
     const repository = new FakeRepository();
 
@@ -75,6 +94,16 @@ describe('public API major report CLI boundary', () => {
         organization_count: 1,
       },
       {
+        event: 'public_api_major_unattributed',
+        window_from: '2026-10-01',
+        window_to: '2026-10-29',
+        environment: 'production',
+        major: 1,
+        caller_kind: 'bearer',
+        request_count: 3,
+        failure_count: 1,
+      },
+      {
         event: 'public_api_major_organization',
         window_from: '2026-10-01',
         window_to: '2026-10-29',
@@ -85,9 +114,40 @@ describe('public API major report CLI boundary', () => {
         last_seen_at: '2026-10-28T10:00:00.000Z',
       },
       {
+        event: 'public_api_major_coverage',
+        window_from: '2026-10-01',
+        window_to: '2026-10-29',
+        environment: 'production',
+        verdict: 'inconclusive',
+        inconclusive_days: [
+          '2026-10-01',
+          '2026-10-02',
+          '2026-10-03',
+          '2026-10-04',
+          '2026-10-05',
+          '2026-10-06',
+          '2026-10-07',
+          '2026-10-08',
+          '2026-10-09',
+          '2026-10-10',
+          '2026-10-11',
+          '2026-10-12',
+          '2026-10-13',
+          '2026-10-14',
+          '2026-10-15',
+          '2026-10-16',
+          '2026-10-17',
+          '2026-10-18',
+          '2026-10-19',
+          '2026-10-20',
+        ],
+        unclean_exits: [],
+      },
+      {
         event: 'public_api_major_window',
         window_from: '2026-10-01',
         window_to: '2026-10-29',
+        as_of: '2026-10-28T12:59:00.000Z',
         coverage_start_day: '2026-10-05',
         majors: 1,
       },

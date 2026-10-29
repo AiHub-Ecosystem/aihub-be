@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Logger, Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
@@ -93,6 +95,9 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
             buffer,
             repository,
             configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+            // Built before the HTTP server listens, so the process's coverage
+            // starts no later than the first request it serves.
+            { processId: randomUUID(), startedAt: new Date() },
             (message) => new Logger('PublicApiMajorUsage').warn(message),
           ),
           configuration.NODE_ENV !== 'test',

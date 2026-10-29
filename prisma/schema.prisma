@@ -458,6 +458,41 @@ model PublicApiMajorUsage {
   @@map("public_api_major_usage")
 }
 
+/// One running process's collection of Public API major counts: every request
+/// it served between `startedAt` and `coveredThrough` is counted, so a stretch
+/// no process covers is where counts may be missing (#1389). A separate table
+/// keeps `PublicApiMajorUsage`'s key unchanged for the release being replaced.
+///
+/// `CHECK` constraints are owned by migration 0053.
+/// @owner metering
+model PublicApiMajorUsageCoverage {
+  processId        String    @id @map("process_id") @db.Uuid
+  environment      String
+  startedAt        DateTime  @map("started_at") @db.Timestamptz(6)
+  coveredThrough   DateTime  @map("covered_through") @db.Timestamptz(6)
+  stoppedCleanlyAt DateTime? @map("stopped_cleanly_at") @db.Timestamptz(6)
+
+  @@map("public_api_major_usage_coverage")
+}
+
+/// Daily unattributed requests per Public API major by how the route
+/// authenticates its caller, so an operator can tell Customer Web traffic from
+/// a failed API key before a sunset (#1376).
+///
+/// `CHECK` constraints are owned by migration 0053.
+/// @owner metering
+model PublicApiMajorUnattributedUsage {
+  usageDay     DateTime @map("usage_day") @db.Date
+  environment  String
+  major        Int
+  callerKind   String   @map("caller_kind")
+  requestCount BigInt   @default(0) @map("request_count")
+  failureCount BigInt   @default(0) @map("failure_count")
+
+  @@id([usageDay, environment, major, callerKind])
+  @@map("public_api_major_unattributed_usage")
+}
+
 /// Dispatch evidence retained for ambiguous downstream outcomes.
 ///
 /// The `CHECK` constraints and partial index are owned by migration 0036.

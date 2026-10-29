@@ -1,10 +1,37 @@
 import type { FastifyInstance } from 'fastify';
 
+import {
+  OPERATION_CATALOG,
+  type OperationDef,
+} from '@/catalog/operation-catalog';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
+import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
 import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
-import type { PublicApiMajorUsageSample } from '@/modules/metering/application/public-api-major-usage';
+import type {
+  PublicApiCallerKind,
+  PublicApiMajorUsageSample,
+} from '@/modules/metering/application/public-api-major-usage';
 import { requestOutcome } from '@/modules/metering/application/request-outcome';
+
+/**
+ * How each route authenticates its caller, keyed by method and route template.
+ * Every AI dispatch operation takes an Organization API key.
+ */
+const CALLER_KINDS = new Map<string, PublicApiCallerKind>([
+  ...(Object.values(PUBLIC_ROUTES) as PublicRouteDef[]).map(
+    (route) => [`${route.method} ${route.path}`, route.callerAuth] as const,
+  ),
+  ...(Object.values(OPERATION_CATALOG) as OperationDef[]).map(
+    (operation) =>
+      [`${operation.method} ${operation.path}`, 'api-key'] as const,
+  ),
+]);
+
+function callerKindOf(method: string, template: string): PublicApiCallerKind {
+  const routeMethod = method === 'HEAD' ? 'GET' : method;
+  return CALLER_KINDS.get(`${routeMethod} ${template}`) ?? 'undeclared';
+}
 
 /**
  * One sample per response to a matched `/vN/...` route (ADR-0127), taken from
@@ -19,7 +46,8 @@ export function registerPublicApiMajorUsage(
   record: (sample: PublicApiMajorUsageSample) => void,
 ): void {
   instance.addHook('onResponse', (request, reply, done) => {
-    const major = publicApiMajorOf(routeTemplate(request));
+    const template = routeTemplate(request);
+    const major = publicApiMajorOf(template);
     if (major !== undefined) {
       const organizationId =
         getMeteringEvidence(request)?.organizationId ??
@@ -27,6 +55,7 @@ export function registerPublicApiMajorUsage(
       record({
         major,
         ...(organizationId === undefined ? {} : { organizationId }),
+        callerKind: callerKindOf(request.method, template),
         failed:
           requestOutcome(reply.statusCode, request.aihubFailureCode) !==
           'success',

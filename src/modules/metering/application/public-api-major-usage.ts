@@ -1,3 +1,10 @@
+import type { CallerAuth } from '@/catalog/public-routes';
+import type {
+  PublicApiMajorCollectorRow,
+  PublicApiMajorCoverage,
+} from './public-api-major-coverage';
+import { assessPublicApiMajorCoverage } from './public-api-major-coverage';
+
 export const PUBLIC_API_MAJOR_USAGE_BUFFER = Symbol(
   'PUBLIC_API_MAJOR_USAGE_BUFFER',
 );
@@ -5,12 +12,20 @@ export const PUBLIC_API_MAJOR_USAGE_REPOSITORY = Symbol(
   'PUBLIC_API_MAJOR_USAGE_REPOSITORY',
 );
 
+/**
+ * How the matched route authenticates its caller, as the route registries
+ * declare it; `undeclared` for a versioned route neither registry lists.
+ */
+export type PublicApiCallerKind = CallerAuth | 'undeclared';
+
 /** One completed request to a matched Public API route (ADR-0127). */
 export interface PublicApiMajorUsageSample {
   readonly major: number;
   /** Absent when the request carried no authenticated Organization. */
   readonly organizationId?: string;
   readonly failed: boolean;
+  /** How the matched route authenticates its caller, as it declares it. */
+  readonly callerKind: PublicApiCallerKind;
   readonly at: Date;
 }
 
@@ -22,6 +37,41 @@ export interface PublicApiMajorUsageRow {
   readonly requestCount: number;
   readonly failureCount: number;
   readonly lastSeenAt: Date;
+}
+
+/**
+ * A day's unattributed traffic for one major, by how the route authenticates
+ * its caller, so an operator can tell Customer Web from a failed API key.
+ */
+export interface PublicApiMajorUnattributedRow {
+  readonly usageDay: string;
+  readonly major: number;
+  readonly callerKind: PublicApiCallerKind;
+  readonly requestCount: number;
+  readonly failureCount: number;
+}
+
+export interface PublicApiMajorUsageBatch {
+  readonly rows: readonly PublicApiMajorUsageRow[];
+  readonly unattributed: readonly PublicApiMajorUnattributedRow[];
+}
+
+/** One running process, identified only for its own collection record. */
+export interface PublicApiMajorCollector {
+  readonly processId: string;
+  readonly startedAt: Date;
+}
+
+/**
+ * Counts and the collection record they extend, written together: the record
+ * never claims coverage the counts did not reach.
+ */
+export interface PublicApiMajorUsageWrite extends PublicApiMajorUsageBatch {
+  readonly collector: PublicApiMajorCollector;
+  /** When the buffer was drained: every earlier sample is in this write. */
+  readonly coveredThrough: Date;
+  /** True for the last write of a clean shutdown. */
+  readonly stoppedCleanly: boolean;
 }
 
 export interface PublicApiMajorWindow {
@@ -37,6 +87,7 @@ export interface PublicApiMajorTotalRow {
   readonly requestCount: number;
   readonly failureCount: number;
   readonly unattributedCount: number;
+  readonly unattributedFailureCount: number;
 }
 
 export interface PublicApiMajorOrganizationRow {
@@ -47,24 +98,45 @@ export interface PublicApiMajorOrganizationRow {
   readonly lastSeenAt: Date;
 }
 
+export interface PublicApiMajorUnattributedTotalRow {
+  readonly environment: string;
+  readonly major: number;
+  readonly callerKind: string;
+  readonly requestCount: number;
+  readonly failureCount: number;
+}
+
+/** Everything one report reads, from one database snapshot taken at `asOf`. */
 export interface PublicApiMajorSnapshot {
+  readonly asOf: Date;
   readonly coverageStartDay: string | undefined;
   readonly totals: readonly PublicApiMajorTotalRow[];
   readonly organizations: readonly PublicApiMajorOrganizationRow[];
+  readonly unattributed: readonly PublicApiMajorUnattributedTotalRow[];
+  readonly collectors: readonly PublicApiMajorCollectorRow[];
 }
 
 export interface PublicApiMajorUsageRepositoryPort {
-  /** Adds these counts to the day rows of this process's Environment. */
-  add(
-    environment: string,
-    rows: readonly PublicApiMajorUsageRow[],
-  ): Promise<void>;
+  /**
+   * Adds these counts to the day rows of this process's Environment and
+   * extends its collection record, in one transaction.
+   */
+  add(environment: string, write: PublicApiMajorUsageWrite): Promise<void>;
   snapshot(window: PublicApiMajorWindow): Promise<PublicApiMajorSnapshot>;
   close?(): Promise<void>;
 }
 
+/**
+ * Unattributed counts written by a release that kept no caller breakdown are
+ * reported under this kind, so the breakdown always sums to the total.
+ */
+export const UNCLASSIFIED_CALLER_KIND = 'unclassified';
+
 export interface PublicApiMajorReport {
   readonly window: PublicApiMajorWindow;
+  readonly asOf: Date;
+  /** One per Environment the snapshot holds counts or collection for. */
+  readonly coverage: readonly PublicApiMajorCoverage[];
   /** The earliest day any row exists for, so a reader sees what was retained. */
   readonly coverageStartDay: string | undefined;
   readonly majors: readonly {
@@ -73,6 +145,11 @@ export interface PublicApiMajorReport {
     readonly requestCount: number;
     readonly failureCount: number;
     readonly unattributedCount: number;
+    readonly unattributed: readonly {
+      readonly callerKind: string;
+      readonly requestCount: number;
+      readonly failureCount: number;
+    }[];
     readonly organizations: readonly {
       readonly organizationId: string;
       readonly requestCount: number;
@@ -109,32 +186,51 @@ function dayOf(date: Date): string {
  */
 export class PublicApiMajorUsageBuffer {
   private rows = new Map<string, PublicApiMajorUsageRow>();
+  private unattributed = new Map<string, PublicApiMajorUnattributedRow>();
 
   record(sample: PublicApiMajorUsageSample): void {
-    this.add({
-      usageDay: dayOf(sample.at),
+    const usageDay = dayOf(sample.at);
+    const failureCount = sample.failed ? 1 : 0;
+    this.addRow({
+      usageDay,
       major: sample.major,
       organizationId: sample.organizationId ?? null,
       requestCount: 1,
-      failureCount: sample.failed ? 1 : 0,
+      failureCount,
       lastSeenAt: sample.at,
     });
-  }
-
-  drain(): readonly PublicApiMajorUsageRow[] {
-    const drained = [...this.rows.values()];
-    this.rows = new Map();
-    return drained;
-  }
-
-  /** Returns rows a failed flush could not write, merged with newer counts. */
-  restore(rows: readonly PublicApiMajorUsageRow[]): void {
-    for (const row of rows) {
-      this.add(row);
+    if (sample.organizationId === undefined) {
+      this.addUnattributed({
+        usageDay,
+        major: sample.major,
+        callerKind: sample.callerKind,
+        requestCount: 1,
+        failureCount,
+      });
     }
   }
 
-  private add(row: PublicApiMajorUsageRow): void {
+  drain(): PublicApiMajorUsageBatch {
+    const drained = {
+      rows: [...this.rows.values()],
+      unattributed: [...this.unattributed.values()],
+    };
+    this.rows = new Map();
+    this.unattributed = new Map();
+    return drained;
+  }
+
+  /** Returns counts a failed flush could not write, merged with newer ones. */
+  restore(batch: PublicApiMajorUsageBatch): void {
+    for (const row of batch.rows) {
+      this.addRow(row);
+    }
+    for (const row of batch.unattributed) {
+      this.addUnattributed(row);
+    }
+  }
+
+  private addRow(row: PublicApiMajorUsageRow): void {
     const key = `${row.usageDay}|${row.major}|${row.organizationId ?? ''}`;
     const held = this.rows.get(key);
     this.rows.set(
@@ -149,6 +245,21 @@ export class PublicApiMajorUsageBuffer {
               held.lastSeenAt > row.lastSeenAt
                 ? held.lastSeenAt
                 : row.lastSeenAt,
+          },
+    );
+  }
+
+  private addUnattributed(row: PublicApiMajorUnattributedRow): void {
+    const key = `${row.usageDay}|${row.major}|${row.callerKind}`;
+    const held = this.unattributed.get(key);
+    this.unattributed.set(
+      key,
+      held === undefined
+        ? row
+        : {
+            ...row,
+            requestCount: held.requestCount + row.requestCount,
+            failureCount: held.failureCount + row.failureCount,
           },
     );
   }
@@ -187,18 +298,53 @@ export function parsePublicApiMajorWindow(
   return { fromDay: from, toDay: to };
 }
 
-export function buildPublicApiMajorReport(input: {
-  readonly window: PublicApiMajorWindow;
-  readonly coverageStartDay: string | undefined;
-  readonly totals: readonly PublicApiMajorTotalRow[];
-  readonly organizations: readonly PublicApiMajorOrganizationRow[];
-}): PublicApiMajorReport {
+function unattributedOf(
+  total: PublicApiMajorTotalRow,
+  rows: readonly PublicApiMajorUnattributedTotalRow[],
+): PublicApiMajorReport['majors'][number]['unattributed'] {
+  const kinds = rows
+    .filter(
+      (row) =>
+        row.environment === total.environment && row.major === total.major,
+    )
+    .map(({ callerKind, requestCount, failureCount }) => ({
+      callerKind,
+      requestCount,
+      failureCount,
+    }))
+    .sort((a, b) => a.callerKind.localeCompare(b.callerKind));
+  const requestCount =
+    total.unattributedCount -
+    kinds.reduce((sum, kind) => sum + kind.requestCount, 0);
+  const failureCount =
+    total.unattributedFailureCount -
+    kinds.reduce((sum, kind) => sum + kind.failureCount, 0);
+  return requestCount > 0
+    ? [
+        ...kinds,
+        {
+          callerKind: UNCLASSIFIED_CALLER_KIND,
+          requestCount,
+          failureCount: Math.max(failureCount, 0),
+        },
+      ]
+    : kinds;
+}
+
+export function buildPublicApiMajorReport(
+  input: PublicApiMajorSnapshot & { readonly window: PublicApiMajorWindow },
+): PublicApiMajorReport {
   const majors = [...input.totals]
     .sort(
       (a, b) => a.environment.localeCompare(b.environment) || a.major - b.major,
     )
     .map((total) => ({
-      ...total,
+      environment: total.environment,
+      major: total.major,
+      requestCount: total.requestCount,
+      failureCount: total.failureCount,
+      unattributedCount: total.unattributedCount,
+      unattributed: unattributedOf(total, input.unattributed),
       organizations: input.organizations
         .filter(
           (row) =>
@@ -215,10 +361,27 @@ export function buildPublicApiMajorReport(input: {
           lastSeenAt,
         })),
     }));
+  const environments = [
+    ...new Set([
+      ...input.totals.map((row) => row.environment),
+      ...input.collectors.map((row) => row.environment),
+    ]),
+  ].sort();
 
   return {
     window: input.window,
+    asOf: input.asOf,
     coverageStartDay: input.coverageStartDay,
+    coverage: environments.map((environment) =>
+      assessPublicApiMajorCoverage({
+        environment,
+        window: input.window,
+        asOf: input.asOf,
+        collectors: input.collectors.filter(
+          (row) => row.environment === environment,
+        ),
+      }),
+    ),
     majors,
   };
 }

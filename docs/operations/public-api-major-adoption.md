@@ -17,16 +17,46 @@ Request Completion Event.
   unmatched, so they stop being counted at retirement.
 - A request that carries no authenticated Organization is counted under its
   major with no Organization. The report shows these as `unattributed_count`.
-- Counts are kept per UTC day in `public_api_major_usage`. The table holds
-  counts, Organization ids, and a last-seen time. It holds no API key, key
-  hash, user identity, request body, or downstream response.
+  Only an Organization API key attributes a request, so Customer Web traffic
+  (Bearer, refresh cookie, BFF) is always unattributed.
+- Unattributed requests are also counted by **caller kind**: how the matched
+  route authenticates its caller, as the route registry declares it (`none`,
+  `bearer`, `refresh-cookie`, `bff-client-secret`, `bff-api-key`, or `api-key`).
+  An unattributed `api-key` request is one whose key was missing or refused.
+  No credential is read to decide the kind.
+- Counts are kept per UTC day in `public_api_major_usage` and
+  `public_api_major_unattributed_usage`. They hold counts, Organization ids, a
+  last-seen time, and caller kinds. They hold no API key, key hash, user
+  identity, request body, or downstream response.
 - Organization ids are never a Prometheus label. They appear only in this
   report, on operator stdout.
 
-Each process buffers counts in memory and writes them every 30 seconds and
-once more at shutdown. A crash loses at most the last interval of counts, and a
-failed write is retried with the next one. These counts support a sunset
-review; they are not billing evidence.
+These counts support a sunset review; they are not billing evidence.
+
+### How collection gaps show
+
+Each process buffers counts in memory and writes them every 30 seconds. A write
+that fails keeps its counts for the next one, and a pass is skipped while the
+previous one is still writing. Every write also records the process in
+`public_api_major_usage_coverage`, in the same transaction, even when there was
+nothing to count. A process row means that every request the process served
+between `started_at` and `covered_through` is counted.
+
+On shutdown the process waits for a write in flight, then writes the rest and
+records `stopped_cleanly_at`, giving up after 10 seconds. A process that dies,
+or whose last write fails or times out, keeps `stopped_cleanly_at` empty. It
+loses only what it had not yet written: at most one interval while writes were
+succeeding, more if the database had been refusing them.
+
+The report joins the process rows of an Environment. A stretch that no process
+covers, longer than 5 minutes, makes every UTC day it touches inconclusive.
+That stretch may be lost counts or an outage; the report cannot tell which, so
+it never reads it as zero traffic. Days before the first process row, which
+includes every day before this record existed, are inconclusive. A shorter
+stretch is the bounded loss an unclean exit leaves while a replacement starts;
+it keeps the verdict but is listed. The release being replaced during a deploy
+keeps writing counts without a process row, while the new release covers the
+same time.
 
 ## Running the report
 
@@ -47,13 +77,24 @@ The output is JSONL:
 - `public_api_major_total`: one per Environment and major, with
   `request_count`, `failure_count`, `unattributed_count`, and
   `organization_count`.
+- `public_api_major_unattributed`: one per Environment, major, and caller
+  kind, with `request_count` and `failure_count`. Unattributed counts written
+  by a release that kept no caller kind appear as `unclassified`, so the kinds
+  always add up to `unattributed_count`.
 - `public_api_major_organization`: one per Organization that sent
   authenticated requests to that major, with `request_count` and
   `last_seen_at`.
-- `public_api_major_window`: the window the report covers and
-  `coverage_start_day`, the earliest day with any count. A window that starts
-  before `coverage_start_day` is not fully covered. A major with no recorded
-  day in the window does not appear.
+- `public_api_major_coverage`: one per Environment, with `verdict`
+  (`complete` or `inconclusive`), `inconclusive_days`, and `unclean_exits`
+  (the UTC day of each process that stopped without writing its last counts).
+  The verdict covers the requested window up to `as_of`.
+- `public_api_major_window`: the window the report covers, `as_of`, and
+  `coverage_start_day`, the earliest day with any count. A major with no
+  recorded day in the window does not appear.
+
+Every line comes from one database snapshot taken at `as_of`, so totals,
+Organizations, caller kinds, and coverage agree with each other even while
+processes keep writing.
 
 A failure prints `public_api_major_report_failed` with a fixed `error_code`
 and exits non-zero. A malformed window is a usage error and prints nothing on
@@ -85,15 +126,13 @@ carries only aggregate figures, because the repository is public.
    active `owner` members of every Active Consumer.
 3. **30 days before sunset.** Repeat step 2.
 4. **7 days before sunset.** Run the final report over the last 90 days and
-   decide per Environment whether its evidence is complete:
-   - Bounded loss from a process that exited uncleanly (at most one flush
-     interval each) is acceptable when the report shows it.
-   - Any longer gap makes that Environment's evidence inconclusive: repeated
-     failed writes, a day with no successful write while the major was served,
-     or a failed final write. Treat every Organization that Environment ever
-     recorded for the major as an Active Consumer, and confirm each was
-     contacted.
-   - `coverage_start_day` alone does not prove the history is continuous.
+   read each Environment's `public_api_major_coverage` line:
+   - `complete`: the listed `unclean_exits` are bounded losses the policy
+     accepts.
+   - `inconclusive`: treat every Organization that Environment ever recorded
+     for the major as an Active Consumer, and confirm each was contacted.
+   - `coverage_start_day` alone does not prove the history is continuous; the
+     verdict does.
 
    Explain the unattributed requests by caller kind. Confirm that Customer Web
    has moved to the successor major, and record the rest in the sign-off. Then
@@ -108,7 +147,3 @@ carries only aggregate figures, because the repository is public.
    reminders is not a reason to extend.
 6. **Sunset.** Requests to the retired major are answered with `410 Gone`
    (#1367) and are no longer counted. The report keeps the history.
-
-Until #1389 lands, the report cannot show gaps or break unattributed requests
-down by caller kind. Until then, treat every Environment's evidence as
-inconclusive.

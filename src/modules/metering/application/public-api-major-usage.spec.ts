@@ -14,23 +14,31 @@ describe('PublicApiMajorUsageBuffer', () => {
       major: 1,
       organizationId: 'org_a',
       failed: false,
+      callerKind: 'api-key',
       at: at('2026-10-28T23:59:59Z'),
     });
     buffer.record({
       major: 1,
       organizationId: 'org_a',
       failed: true,
+      callerKind: 'api-key',
       at: at('2026-10-28T10:00:00Z'),
     });
     buffer.record({
       major: 1,
       organizationId: 'org_a',
       failed: false,
+      callerKind: 'api-key',
       at: at('2026-10-29T00:00:00Z'),
     });
-    buffer.record({ major: 2, failed: false, at: at('2026-10-28T12:00:00Z') });
+    buffer.record({
+      major: 2,
+      failed: false,
+      callerKind: 'bearer',
+      at: at('2026-10-28T12:00:00Z'),
+    });
 
-    expect(buffer.drain()).toEqual([
+    expect(buffer.drain().rows).toEqual([
       {
         usageDay: '2026-10-28',
         major: 1,
@@ -60,14 +68,24 @@ describe('PublicApiMajorUsageBuffer', () => {
 
   it('empties on drain and merges restored rows back in', () => {
     const buffer = new PublicApiMajorUsageBuffer();
-    buffer.record({ major: 1, failed: false, at: at('2026-10-28T10:00:00Z') });
+    buffer.record({
+      major: 1,
+      failed: false,
+      callerKind: 'none',
+      at: at('2026-10-28T10:00:00Z'),
+    });
     const drained = buffer.drain();
-    expect(buffer.drain()).toEqual([]);
+    expect(buffer.drain()).toEqual({ rows: [], unattributed: [] });
 
-    buffer.record({ major: 1, failed: true, at: at('2026-10-28T11:00:00Z') });
+    buffer.record({
+      major: 1,
+      failed: true,
+      callerKind: 'none',
+      at: at('2026-10-28T11:00:00Z'),
+    });
     buffer.restore(drained);
 
-    expect(buffer.drain()).toEqual([
+    expect(buffer.drain().rows).toEqual([
       {
         usageDay: '2026-10-28',
         major: 1,
@@ -104,20 +122,70 @@ describe('parsePublicApiMajorWindow', () => {
   });
 });
 
+describe('PublicApiMajorUsageBuffer unattributed breakdown', () => {
+  it('counts unattributed requests by caller kind and leaves attributed ones out', () => {
+    const buffer = new PublicApiMajorUsageBuffer();
+    const unattributed = (callerKind: 'bearer' | 'api-key', failed: boolean) =>
+      buffer.record({
+        major: 1,
+        failed,
+        callerKind,
+        at: at('2026-10-28T10:00:00Z'),
+      });
+    unattributed('bearer', false);
+    unattributed('bearer', true);
+    unattributed('api-key', true);
+    buffer.record({
+      major: 1,
+      organizationId: 'org_a',
+      failed: false,
+      callerKind: 'api-key',
+      at: at('2026-10-28T10:00:00Z'),
+    });
+
+    expect(buffer.drain().unattributed).toEqual([
+      {
+        usageDay: '2026-10-28',
+        major: 1,
+        callerKind: 'bearer',
+        requestCount: 2,
+        failureCount: 1,
+      },
+      {
+        usageDay: '2026-10-28',
+        major: 1,
+        callerKind: 'api-key',
+        requestCount: 1,
+        failureCount: 1,
+      },
+    ]);
+  });
+});
+
 describe('buildPublicApiMajorReport', () => {
+  const WINDOW = { fromDay: '2026-10-01', toDay: '2026-10-29' };
+  const AS_OF = at('2026-10-28T12:00:00Z');
+  const TOTAL = {
+    environment: 'production',
+    major: 1,
+    requestCount: 10,
+    failureCount: 2,
+    unattributedCount: 3,
+    unattributedFailureCount: 1,
+  };
+  const COLLECTOR = {
+    environment: 'production',
+    startedAt: at('2026-09-30T00:00:00Z'),
+    coveredThrough: at('2026-10-28T11:59:40Z'),
+    stoppedCleanlyAt: null,
+  };
+
   it('groups totals by major and Environment and lists Organizations per major', () => {
     const report = buildPublicApiMajorReport({
-      window: { fromDay: '2026-10-01', toDay: '2026-10-29' },
+      window: WINDOW,
+      asOf: AS_OF,
       coverageStartDay: '2026-10-05',
-      totals: [
-        {
-          environment: 'production',
-          major: 1,
-          requestCount: 10,
-          failureCount: 2,
-          unattributedCount: 3,
-        },
-      ],
+      totals: [TOTAL],
       organizations: [
         {
           environment: 'production',
@@ -127,11 +195,30 @@ describe('buildPublicApiMajorReport', () => {
           lastSeenAt: at('2026-10-28T10:00:00Z'),
         },
       ],
+      unattributed: [
+        {
+          environment: 'production',
+          major: 1,
+          callerKind: 'bearer',
+          requestCount: 3,
+          failureCount: 1,
+        },
+      ],
+      collectors: [COLLECTOR],
     });
 
     expect(report).toEqual({
-      window: { fromDay: '2026-10-01', toDay: '2026-10-29' },
+      window: WINDOW,
+      asOf: AS_OF,
       coverageStartDay: '2026-10-05',
+      coverage: [
+        {
+          environment: 'production',
+          verdict: 'complete',
+          inconclusiveDays: [],
+          uncleanExitDays: [],
+        },
+      ],
       majors: [
         {
           environment: 'production',
@@ -139,6 +226,9 @@ describe('buildPublicApiMajorReport', () => {
           requestCount: 10,
           failureCount: 2,
           unattributedCount: 3,
+          unattributed: [
+            { callerKind: 'bearer', requestCount: 3, failureCount: 1 },
+          ],
           organizations: [
             {
               organizationId: 'org_a',
@@ -151,23 +241,50 @@ describe('buildPublicApiMajorReport', () => {
     });
   });
 
-  it('keeps a major with traffic but no attributed Organization', () => {
+  it('reports unattributed counts a release without the breakdown wrote as unclassified', () => {
     const report = buildPublicApiMajorReport({
-      window: { fromDay: '2026-10-01', toDay: '2026-10-29' },
+      window: WINDOW,
+      asOf: AS_OF,
       coverageStartDay: undefined,
-      totals: [
+      totals: [TOTAL],
+      organizations: [],
+      unattributed: [
         {
-          environment: 'sandbox',
+          environment: 'production',
           major: 1,
-          requestCount: 4,
-          failureCount: 0,
-          unattributedCount: 4,
+          callerKind: 'api-key',
+          requestCount: 1,
+          failureCount: 1,
         },
       ],
-      organizations: [],
+      collectors: [COLLECTOR],
     });
 
+    expect(report.majors[0]?.unattributed).toEqual([
+      { callerKind: 'api-key', requestCount: 1, failureCount: 1 },
+      { callerKind: 'unclassified', requestCount: 2, failureCount: 0 },
+    ]);
+  });
+
+  it('judges an Environment with counts but no collection record inconclusive', () => {
+    const report = buildPublicApiMajorReport({
+      window: { fromDay: '2026-10-27', toDay: '2026-10-29' },
+      asOf: AS_OF,
+      coverageStartDay: undefined,
+      totals: [{ ...TOTAL, environment: 'sandbox' }],
+      organizations: [],
+      unattributed: [],
+      collectors: [],
+    });
+
+    expect(report.coverage).toEqual([
+      {
+        environment: 'sandbox',
+        verdict: 'inconclusive',
+        inconclusiveDays: ['2026-10-27', '2026-10-28'],
+        uncleanExitDays: [],
+      },
+    ]);
     expect(report.majors[0]?.organizations).toEqual([]);
-    expect(report.coverageStartDay).toBeUndefined();
   });
 });

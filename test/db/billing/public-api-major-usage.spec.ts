@@ -1,6 +1,9 @@
 import type { Pool } from 'pg';
 
-import type { PublicApiMajorUsageRow } from '@/modules/metering/application/public-api-major-usage';
+import type {
+  PublicApiMajorUsageRow,
+  PublicApiMajorUsageWrite,
+} from '@/modules/metering/application/public-api-major-usage';
 import { PostgresPublicApiMajorUsageRepository } from '@/modules/metering/infrastructure/postgres-public-api-major-usage.repository';
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/prisma-metering.client';
@@ -22,8 +25,15 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await pool.query('TRUNCATE public_api_major_usage');
+  await pool.query(
+    'TRUNCATE public_api_major_usage, public_api_major_unattributed_usage, public_api_major_usage_coverage',
+  );
 });
+
+const PROCESS = {
+  processId: '0f8a4c2e-6b1d-4e3f-9a57-2c1d0e9b8a76',
+  startedAt: new Date('2026-10-28T08:00:00Z'),
+};
 
 const row = (
   overrides: Partial<PublicApiMajorUsageRow> = {},
@@ -37,16 +47,39 @@ const row = (
   ...overrides,
 });
 
+const write = (
+  rows: readonly PublicApiMajorUsageRow[],
+  overrides: Partial<PublicApiMajorUsageWrite> = {},
+): PublicApiMajorUsageWrite => ({
+  rows,
+  unattributed: [],
+  collector: PROCESS,
+  coveredThrough: new Date('2026-10-28T10:00:30Z'),
+  stoppedCleanly: false,
+  ...overrides,
+});
+
+async function coverageRows(): Promise<unknown[]> {
+  const { rows } = await pool.query<Record<string, unknown>>(
+    `SELECT process_id, environment, started_at, covered_through, stopped_cleanly_at
+     FROM public_api_major_usage_coverage`,
+  );
+  return rows;
+}
+
 describe('PostgresPublicApiMajorUsageRepository', () => {
   it('adds counts to the same day, major, and Organization and keeps the latest sighting', async () => {
-    await repository.add('production', [row()]);
-    await repository.add('production', [
-      row({
-        requestCount: 2,
-        failureCount: 0,
-        lastSeenAt: new Date('2026-10-28T09:00:00Z'),
-      }),
-    ]);
+    await repository.add('production', write([row()]));
+    await repository.add(
+      'production',
+      write([
+        row({
+          requestCount: 2,
+          failureCount: 0,
+          lastSeenAt: new Date('2026-10-28T09:00:00Z'),
+        }),
+      ]),
+    );
 
     const { rows } = await pool.query(
       `SELECT request_count::int AS requests, failure_count::int AS failures,
@@ -62,26 +95,123 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
     ]);
   });
 
-  it('reports totals by major and Environment and Organizations inside the window', async () => {
-    await repository.add('production', [
-      row(),
-      row({ organizationId: null, requestCount: 4, failureCount: 0 }),
-      row({ usageDay: '2026-10-20', organizationId: 'org_b', requestCount: 9 }),
-      row({
-        usageDay: '2026-09-01',
-        organizationId: 'org_c',
-        requestCount: 50,
+  it('records the process collection with its counts, moves it forward only, and keeps a clean stop', async () => {
+    await repository.add('production', write([row()]));
+    await repository.add(
+      'production',
+      write([], { coveredThrough: new Date('2026-10-28T10:01:00Z') }),
+    );
+    await repository.add(
+      'production',
+      write([], { coveredThrough: new Date('2026-10-28T10:00:45Z') }),
+    );
+
+    expect(await coverageRows()).toEqual([
+      {
+        process_id: PROCESS.processId,
+        environment: 'production',
+        started_at: PROCESS.startedAt,
+        covered_through: new Date('2026-10-28T10:01:00Z'),
+        stopped_cleanly_at: null,
+      },
+    ]);
+
+    await repository.add(
+      'production',
+      write([], {
+        coveredThrough: new Date('2026-10-28T10:02:00Z'),
+        stoppedCleanly: true,
       }),
+    );
+
+    expect(await coverageRows()).toMatchObject([
+      { stopped_cleanly_at: new Date('2026-10-28T10:02:00Z') },
     ]);
-    await repository.add('sandbox', [
-      row({ requestCount: 1, failureCount: 0 }),
+  });
+
+  it('writes neither the counts nor the collection when one part is refused', async () => {
+    await expect(
+      repository.add('production', write([row({ failureCount: 9 })])),
+    ).rejects.toThrow(/public_api_major_usage_counts_check/);
+
+    expect(await coverageRows()).toEqual([]);
+  });
+
+  it('adds unattributed counts by caller kind and accepts a kind this release does not know', async () => {
+    const unattributed = [
+      {
+        usageDay: '2026-10-28',
+        major: 1,
+        callerKind: 'bearer' as const,
+        requestCount: 2,
+        failureCount: 1,
+      },
+    ];
+    await repository.add('production', write([], { unattributed }));
+    await repository.add('production', write([], { unattributed }));
+    await pool.query(
+      `INSERT INTO public_api_major_unattributed_usage
+         (usage_day, environment, major, caller_kind, request_count, failure_count)
+       VALUES ('2026-10-28', 'production', 1, 'mtls-client', 1, 0)`,
+    );
+
+    const { rows } = await pool.query(
+      `SELECT caller_kind, request_count::int AS requests, failure_count::int AS failures
+       FROM public_api_major_unattributed_usage ORDER BY caller_kind`,
+    );
+    expect(rows).toEqual([
+      { caller_kind: 'bearer', requests: 4, failures: 2 },
+      { caller_kind: 'mtls-client', requests: 1, failures: 0 },
     ]);
+  });
+
+  it('reads totals, Organizations, breakdown, and collection from one snapshot', async () => {
+    await repository.add(
+      'production',
+      write(
+        [
+          row(),
+          row({ organizationId: null, requestCount: 4, failureCount: 1 }),
+          row({
+            usageDay: '2026-10-20',
+            organizationId: 'org_b',
+            requestCount: 9,
+          }),
+          row({
+            usageDay: '2026-09-01',
+            organizationId: 'org_c',
+            requestCount: 50,
+          }),
+        ],
+        {
+          unattributed: [
+            {
+              usageDay: '2026-10-28',
+              major: 1,
+              callerKind: 'api-key',
+              requestCount: 4,
+              failureCount: 1,
+            },
+          ],
+        },
+      ),
+    );
+    await repository.add(
+      'sandbox',
+      write([row({ requestCount: 1, failureCount: 0 })], {
+        collector: {
+          ...PROCESS,
+          processId: 'a3c5e7f9-1b2d-4f60-8a9c-0e1f2a3b4c5d',
+        },
+      }),
+    );
 
     const snapshot = await repository.snapshot({
       fromDay: '2026-10-01',
       toDay: '2026-10-29',
     });
 
+    expect(snapshot.asOf).toBeInstanceOf(Date);
     expect(snapshot.coverageStartDay).toBe('2026-09-01');
     expect(
       [...snapshot.totals].sort((a, b) =>
@@ -92,8 +222,9 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
         environment: 'production',
         major: 1,
         requestCount: 16,
-        failureCount: 2,
+        failureCount: 3,
         unattributedCount: 4,
+        unattributedFailureCount: 1,
       },
       {
         environment: 'sandbox',
@@ -101,6 +232,7 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
         requestCount: 1,
         failureCount: 0,
         unattributedCount: 0,
+        unattributedFailureCount: 0,
       },
     ]);
     expect(
@@ -115,21 +247,40 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
       { organizationId: 'org_a', requestCount: 3 },
       { organizationId: 'org_b', requestCount: 9 },
     ]);
+    expect(snapshot.unattributed).toEqual([
+      {
+        environment: 'production',
+        major: 1,
+        callerKind: 'api-key',
+        requestCount: 4,
+        failureCount: 1,
+      },
+    ]);
+    expect(
+      snapshot.collectors.map((collector) => collector.environment).sort(),
+    ).toEqual(['production', 'sandbox']);
   });
 
-  it('refuses a count that makes failures exceed requests', async () => {
-    await expect(
-      repository.add('production', [row({ failureCount: 9 })]),
-    ).rejects.toThrow(/public_api_major_usage_counts_check/);
+  it('leaves out a process whose collection ended before the window', async () => {
+    await repository.add('production', write([]));
+
+    const snapshot = await repository.snapshot({
+      fromDay: '2026-10-29',
+      toDay: '2026-10-30',
+    });
+
+    expect(snapshot.collectors).toEqual([]);
   });
 
-  it('reports no coverage when nothing was recorded', async () => {
+  it('reports nothing when nothing was recorded', async () => {
     await expect(
       repository.snapshot({ fromDay: '2026-10-01', toDay: '2026-10-29' }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       coverageStartDay: undefined,
       totals: [],
       organizations: [],
+      unattributed: [],
+      collectors: [],
     });
   });
 });

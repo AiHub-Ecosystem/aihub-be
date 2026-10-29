@@ -21,6 +21,8 @@ async function server(authenticatedAs?: string): Promise<{
     reply.code(503).send({ ok: false }),
   );
   instance.get('/v2/things', async () => ({ ok: true }));
+  instance.get('/v1/me', async () => ({ ok: true }));
+  instance.post('/v1/ielts/writing/task1/grade', async () => ({ ok: true }));
   instance.get('/health', async () => ({ ok: true }));
   instance.get('/docs', async () => 'docs');
   await instance.ready();
@@ -50,6 +52,25 @@ describe('registerPublicApiMajorUsage', () => {
     expect(samples).toHaveLength(1);
     expect(samples[0]).toMatchObject({ major: 1, failed: true });
     expect(samples[0]).not.toHaveProperty('organizationId');
+  });
+
+  it('records how the matched route authenticates its caller, as the registries declare it', async () => {
+    const { instance, samples } = await server();
+
+    await instance.inject({ method: 'GET', url: '/v1/me' });
+    await instance.inject({ method: 'HEAD', url: '/v1/me' });
+    await instance.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+    });
+    await instance.inject({ method: 'GET', url: '/v1/things/abc' });
+
+    expect(samples.map((sample) => sample.callerKind)).toEqual([
+      'bearer',
+      'bearer',
+      'api-key',
+      'undeclared',
+    ]);
   });
 
   it('ignores health probes, unversioned routes, and unmatched paths', async () => {

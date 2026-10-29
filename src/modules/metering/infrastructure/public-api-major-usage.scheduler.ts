@@ -7,8 +7,9 @@ export const PUBLIC_API_MAJOR_USAGE_FLUSH_INTERVAL_MS = 30_000;
 
 /**
  * Flushes the process's buffered Public API major counts on a timer, and once
- * more before shutdown while the database is still open. Disabled under test,
- * where a background write would land in a suite that is asserting on rows.
+ * more before shutdown while the database is still open: that last pass waits
+ * for one in flight and marks the clean stop. Disabled under test, where a
+ * background write would land in a suite that is asserting on rows.
  */
 export class PublicApiMajorUsageScheduler
   implements OnModuleInit, BeforeApplicationShutdown
@@ -35,7 +36,7 @@ export class PublicApiMajorUsageScheduler
       this.timer = undefined;
     }
     if (this.enabled) {
-      await this.flusher.flush();
+      await this.flusher.finish();
     }
   }
 }
