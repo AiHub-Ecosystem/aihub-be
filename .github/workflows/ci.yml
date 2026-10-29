@@ -212,6 +212,9 @@ jobs:
       - name: Exercise blue-green readiness probes across image revisions
         run: bash test/ops/blue-green-readiness.spec.sh
 
+      - name: Exercise Speaking gateway smoke identity handling with stubs
+        run: bash test/ops/speaking-gateway-smoke.spec.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest

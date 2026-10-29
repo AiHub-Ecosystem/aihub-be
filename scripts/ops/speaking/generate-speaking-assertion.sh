@@ -2,11 +2,11 @@
 
 set -euo pipefail
 
-user_id=${1:-${AIHUB_TEST_USER_ID:-student_456}}
-app_container=${AIHUB_APP_CONTAINER:-aihub-production-app-1}
-private_key_file=${AIHUB_ASSERTION_PRIVATE_KEY_FILE:-$HOME/speaking-gateway-test-private.pem}
-issuer=${AIHUB_ASSERTION_ISSUER:-https://wispace.aihubproduction.com}
-kid=${AIHUB_ASSERTION_KID:-wispace-speaking-test-2026-09}
+user_id=${1:-${AIHUB_TEST_USER_ID:?Set AIHUB_TEST_USER_ID or pass a user id}}
+app_container=${AIHUB_APP_CONTAINER:?Set AIHUB_APP_CONTAINER to the active AIHUB container}
+private_key_file=${AIHUB_ASSERTION_PRIVATE_KEY_FILE:?Set the assertion private key file for the Organization}
+issuer=${AIHUB_ASSERTION_ISSUER:?Set the issuer registered for the Organization}
+kid=${AIHUB_ASSERTION_KID:?Set a key ID published in the Organization JWKS}
 
 [[ -n "$user_id" ]] || { printf 'User id is required\n' >&2; exit 2; }
 [[ -r "$private_key_file" ]] || { printf 'Private key file is not readable\n' >&2; exit 1; }

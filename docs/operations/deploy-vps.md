@@ -1587,25 +1587,36 @@ its Agent. Certificates are renewed by certbot on the host, not by this stack.
 
 ## AI Speaking Production handoff
 
-The release image contains the authenticated multipart smoke helper. Run it from
-the VPS with a real WAV fixture after a deployment; set
-`AIHUB_API_KEY_FILE` to a restricted file containing a key for the same tier as
-`AIHUB_BASE_URL`. The helper reads that key and the assertion-signing key from
-their restricted files, keeps them out of output, and removes its in-container
-key copy on exit:
+The repository-managed multipart smoke helper sends the `X-User-Identity` value
+from a restricted, one-line file. The value must match the identity mode saved
+for the Organization that owns the API key: a plain Declared User ID when that
+Organization has no active identity configuration, or a Signed User Assertion
+verified by its configured JWKS when it does. The helper does not mint a
+default assertion that could belong to a different Organization. Run it from
+the deployment directory after a deployment with a dedicated test Organization
+and a Production-scoped key that has the `speaking` entitlement:
 
 ```sh
+umask 077
+printf '%s\n' 'speaking-smoke' > "$HOME/speaking-user-identity"
+chmod 600 "$HOME/speaking-user-identity"
 AIHUB_API_KEY_FILE=/path/to/production-scoped-api-key \
-  bash ~/speaking-gateway-smoke.sh \
-  ~/aihub-speaking-contract-probe.wav
+AIHUB_USER_IDENTITY_FILE="$HOME/speaking-user-identity" \
+  bash ./scripts/ops/speaking/speaking-gateway-smoke.sh \
+  "$HOME/aihub-speaking-contract-probe.wav"
 ```
 
-Expected output is `HTTP_STATUS=200`. The request is sent to
-`https://api.aihubproduction.com/v1/ielts/speaking/grading` by default and must
-return the normalized `{data, meta}` envelope. Run the same helper with an
-explicit `AIHUB_BASE_URL` and a key file scoped to that environment when
-validating another tier. The helper has no default API-key path; never send a
-Sandbox key to Production.
+For an Organization with active identity verification, put a short-lived
+assertion signed by that Organization in the identity file instead of the
+declared ID. If using `generate-speaking-assertion.sh`, provide that
+Organization's private key, issuer, published key ID, user ID, and the active
+container explicitly; redirect its output directly to a mode-`600` identity
+file. Expected output is `HTTP_STATUS=200`; the helper keeps both headers and
+the response body out of output and removes its temporary curl files. The
+request goes to `https://api.aihubproduction.com/v1/ielts/speaking/grading` by
+default, reaches the AI Speaking provider, and can incur provider cost. Use an
+explicit `AIHUB_BASE_URL` and a matching API key and identity file for another
+tier. Never send a Sandbox key to Production.
 
 The Production handoff matrix is split by safety boundary:
 
