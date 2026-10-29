@@ -269,6 +269,26 @@ void test('accepts a compatible response-property addition with a minor version 
   );
 });
 
+void test('rejects a contract version whose latest changelog entry is older', (t) => {
+  const base = document('1.0.0');
+  const candidate = document('1.1.0');
+  const properties = responseSchema(candidate, 1).properties;
+  if (!properties) throw new Error('Missing response properties');
+  properties.display_name = { type: 'string' };
+  const roots = setup(
+    t,
+    versionedFiles({ 1: base }),
+    versionedFiles({ 1: candidate }),
+    '# AIHUB Public API Changelog\n\n## [1.0.0] — `/v1` baseline\n',
+  );
+
+  assert.throws(
+    () =>
+      checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath),
+    /CHANGELOG.md latest entry must match public contract 1.1.0/,
+  );
+});
+
 void test('counts additions inside a response property named summary as contract changes', (t) => {
   const base = document('1.0.0');
   const candidate = document('1.1.0');
