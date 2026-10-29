@@ -105,11 +105,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       requestId ?? 'unknown',
     );
     // Standard HTTP clients and retry libraries read the header, not the body.
-    if (exception instanceof AppError && exception.retryAfterMs !== undefined) {
-      response.header(
-        'Retry-After',
-        String(Math.ceil(exception.retryAfterMs / 1_000)),
-      );
+    // It comes from the envelope's validated hint, so the two never disagree.
+    const retryAfterMs = envelope.error.retry_after_ms;
+    if (retryAfterMs !== undefined) {
+      response.header('Retry-After', String(Math.ceil(retryAfterMs / 1_000)));
     }
 
     // Reported for the Request Completion Event, so a failure line carries the
