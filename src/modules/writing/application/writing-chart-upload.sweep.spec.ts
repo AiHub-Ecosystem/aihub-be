@@ -63,7 +63,7 @@ describe('WritingChartUploadSweep', () => {
       dryRun: false,
     });
     expect(storage.deleteStagingObject).toHaveBeenCalledTimes(2);
-    expect(storage.deletePublishedObject).toHaveBeenCalledTimes(1);
+    expect(storage.deletePublishedObject).toHaveBeenCalledTimes(2);
     expect(repository.removeCleanupCandidate).toHaveBeenCalledTimes(2);
     expect(repository.cleanupCandidates).toHaveBeenCalledWith({
       now: new Date('2026-10-16T00:00:00.000Z'),
@@ -72,9 +72,35 @@ describe('WritingChartUploadSweep', () => {
     });
   });
 
+  it('deletes the published object of an expired upload that never said published', async () => {
+    // A publishing row past its expiry, or one returned to open after a
+    // publication the store accepted but reported as failed (#921).
+    const { sweep, repository, storage } = makeSweep();
+    repository.cleanupCandidates.mockResolvedValue([candidates[0]]);
+
+    await sweep.run({
+      dryRun: false,
+      now: new Date('2026-10-16T00:00:00.000Z'),
+    });
+
+    expect(storage.deleteStagingObject).toHaveBeenCalledWith({
+      environment: 'sandbox',
+      stagingKey: candidates[0]?.stagingKey,
+    });
+    expect(storage.deletePublishedObject).toHaveBeenCalledWith({
+      environment: 'sandbox',
+      publishedKey: candidates[0]?.publishedKey,
+    });
+    expect(repository.removeCleanupCandidate).toHaveBeenCalledWith(
+      candidates[0],
+    );
+  });
+
   it('retains the durable row when either object deletion fails', async () => {
     const { sweep, repository, storage } = makeSweep();
-    storage.deletePublishedObject.mockRejectedValue(new Error('storage down'));
+    storage.deletePublishedObject
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('storage down'));
 
     const summary = await sweep.run({
       dryRun: false,

@@ -45,20 +45,20 @@ export class WritingChartUploadSweep {
       if (!input.dryRun) {
         for (const candidate of candidates) {
           try {
+            // Every candidate, not only a published row: an interrupted or
+            // ambiguous publication can leave the public object behind a row
+            // that never said published, and nothing else records it (#921).
+            // Deleting an absent object succeeds.
             const deletions = [
               this.storage.deleteStagingObject({
                 environment: candidate.environment,
                 stagingKey: candidate.stagingKey,
               }),
+              this.storage.deletePublishedObject({
+                environment: candidate.environment,
+                publishedKey: candidate.publishedKey,
+              }),
             ];
-            if (candidate.kind === 'asset') {
-              deletions.push(
-                this.storage.deletePublishedObject({
-                  environment: candidate.environment,
-                  publishedKey: candidate.publishedKey,
-                }),
-              );
-            }
             const outcomes = await Promise.allSettled(deletions);
             if (outcomes.some((outcome) => outcome.status === 'rejected')) {
               failed += 1;
