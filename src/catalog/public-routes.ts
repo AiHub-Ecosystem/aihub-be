@@ -227,9 +227,339 @@ export interface PublicRouteDef {
  *
  * OpenAPI descriptions and route-specific parameters live beside these route
  * declarations; the shared builder supplies their repeated operation shape.
- * Specialized responses stay in the dedicated OpenAPI builders.
+ * Specialized responses stay in the dedicated OpenAPI builders. The builder
+ * publishes every entry with `openApi` metadata in declaration order, so moving
+ * an entry reorders the OpenAPI document and the Postman collection.
  */
 export const PUBLIC_ROUTES = {
+  'speaking.questions': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
+    openApi: {
+      summary: 'List Speaking questions',
+      includeCorrelationId: false,
+      parameters: [
+        {
+          name: 'part',
+          in: 'query',
+          required: false,
+          description: 'Filter by Speaking part; omit to list all parts.',
+          schema: SpeakingQuestionsQuerySchema.properties.part,
+        },
+      ],
+      successDescription: 'Speaking questions and signed audio URLs',
+    },
+    method: 'GET',
+    path: '/v1/ielts/speaking/questions',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: null,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingQuestionsResponseSchema,
+    errorStatuses: [400, 500],
+  },
+  'speaking.audioUploads.create': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and Audio metadata must not be cached.',
+    },
+    openApi: {
+      summary: 'Create a Speaking Audio upload intent',
+      description: [
+        'Creates a one-hour intent bound to the Organization and exact End-User ID resolved from `X-User-Identity`. The response contains a five-minute presigned `PUT` URL; send the audio directly to that URL with the returned `Content-Type` and `Content-Length` headers.',
+        'The URL is a write credential. Do not log, persist, or expose it. The intent is not an Audio asset until completion verifies the stored object.',
+      ].join('\n\n'),
+      successDescription:
+        'Returns the same server-generated key and signed headers for the upload intent.',
+    },
+    method: 'POST',
+    path: '/v1/speaking/audio/uploads',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 201,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: CreateSpeakingAudioUploadRequestSchema,
+    responseSchema: SpeakingAudioUploadUrlResponseSchema,
+    errorStatuses: [400, 401, 403, 413, 429, 500, 503],
+  },
+  'speaking.audioUploads.refresh': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and Audio metadata must not be cached.',
+    },
+    openApi: {
+      summary: 'Refresh a Speaking Audio upload URL',
+      description:
+        'Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.',
+      parameters: [
+        {
+          name: 'assetId',
+          in: 'path',
+          required: true,
+          description:
+            'The asset ID returned when the upload intent was created.',
+          schema: { type: 'string', pattern: '^aud_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      successDescription:
+        'Returns the same server-generated key and signed headers for the upload intent.',
+    },
+    method: 'POST',
+    path: '/v1/speaking/audio/uploads/:assetId/refresh',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingAudioUploadUrlResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
+  },
+  'speaking.audioUploads.complete': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and Audio metadata must not be cached.',
+    },
+    openApi: {
+      summary: 'Complete a Speaking Audio upload',
+      description: [
+        'Verifies the stored object metadata at the exact key recorded by the intent. A valid object creates the Audio asset and sets `retention_expires_at` to 30 days after acceptance; a missing object leaves the intent retryable, while invalid metadata rejects the intent.',
+        'Only the same Organization and End-User ID can complete the intent. Repeating a successful completion returns the same Audio asset.',
+      ].join('\n\n'),
+      parameters: [
+        {
+          name: 'assetId',
+          in: 'path',
+          required: true,
+          description:
+            'The asset ID returned when the upload intent was created.',
+          schema: { type: 'string', pattern: '^aud_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      successDescription: 'The verified Audio asset created by this request.',
+    },
+    method: 'POST',
+    timeoutMs: 10_000,
+    path: '/v1/speaking/audio/uploads/:assetId/complete',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 201,
+    alternateSuccesses: [
+      {
+        status: 200,
+        description:
+          'This intent was already completed; the same Audio asset is returned.',
+        responseSchema: SpeakingAudioAssetResponseSchema,
+      },
+    ],
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingAudioAssetResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
+  },
+  'writing.chartUploads.create': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and chart metadata must not be cached.',
+    },
+    openApi: {
+      summary: 'Create a Writing Task 1 chart upload intent',
+      description: [
+        'Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.',
+        'Upload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.',
+      ].join('\n\n'),
+      successDescription:
+        'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
+    },
+    method: 'POST',
+    path: '/v1/ielts/writing/task1/chart-uploads',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 201,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: CreateWritingChartUploadRequestSchema,
+    responseSchema: WritingChartUploadGrantResponseSchema,
+    errorStatuses: [400, 401, 403, 413, 429, 500, 503],
+  },
+  'writing.chartUploads.refresh': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and chart metadata must not be cached.',
+    },
+    openApi: {
+      summary: 'Refresh a Writing Task 1 chart upload URL',
+      description:
+        'Refreshes the signed URL for the same private staging object without extending the intent deadline.',
+      parameters: [
+        {
+          name: 'assetId',
+          in: 'path',
+          required: true,
+          description:
+            'The chart asset ID returned when the upload intent was created.',
+          schema: {
+            type: 'string',
+            pattern: '^chart_[0-9A-HJKMNP-TV-Z]{26}$',
+          },
+        },
+      ],
+      successDescription:
+        'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
+    },
+    method: 'POST',
+    path: '/v1/ielts/writing/task1/chart-uploads/:assetId/refresh',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: WritingChartUploadGrantResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
+  },
+  'writing.chartUploads.complete': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Upload URLs and chart metadata must not be cached.',
+    },
+    openApi: {
+      summary: 'Verify and publish a Writing Task 1 chart',
+      description: [
+        'Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.',
+        'The returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.',
+      ].join('\n\n'),
+      parameters: [
+        {
+          name: 'assetId',
+          in: 'path',
+          required: true,
+          description:
+            'The chart asset ID returned when the upload intent was created.',
+          schema: {
+            type: 'string',
+            pattern: '^chart_[0-9A-HJKMNP-TV-Z]{26}$',
+          },
+        },
+      ],
+      successDescription: 'The public image URL and its fixed expiration time.',
+    },
+    method: 'POST',
+    timeoutMs: 10_000,
+    path: '/v1/ielts/writing/task1/chart-uploads/:assetId/complete',
+    callerAuth: 'api-key',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: WritingChartAssetResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
+  },
+  'me.avatar.uploads.create': {
+    cacheControl: { value: 'no-store' },
+    openApi: {
+      summary: 'Request an Avatar upload URL',
+      description:
+        'Mints a presigned `PUT` URL that writes one object for the signed-in AIHUB User Account, with the declared content type and `Cache-Control: public, max-age=3600` bound into the signature. `Content-Length` reports the declared size but is not signed because browser Fetch controls it; send the image as the request body and let the browser manage that header. The bytes go straight to storage, never through AIHUB. Nothing is recorded until completion verifies the stored object, including its actual size and type, within one hour of upload. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.',
+      successDescription:
+        'Upload URL minted. The URL is a write credential for one object and is returned only here.',
+    },
+    method: 'POST',
+    path: '/v1/me/avatar/uploads',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 201,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: CreateAvatarUploadRequestSchema,
+    responseSchema: AvatarUploadResponseSchema,
+    errorStatuses: [400, 401, 413, 500, 503],
+  },
+  // `201` when this call records the Avatar, first or replacement; a repeated
+  // completion of the same asset answers `200` with the same body.
+  'me.avatar.uploads.complete': {
+    openApi: {
+      summary: 'Complete an Avatar upload',
+      description:
+        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing, or that was stored more than an hour ago, answers `404` and an expired one is deleted; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image, including its published `url`.',
+      parameters: [
+        {
+          name: 'asset_id',
+          in: 'path',
+          required: true,
+          description: 'The asset id returned when the upload URL was minted.',
+          schema: { type: 'string', pattern: '^ava_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      successDescription: 'Avatar recorded by this call, first or replacement.',
+    },
+    method: 'POST',
+    timeoutMs: 10_000,
+    path: '/v1/me/avatar/uploads/:assetId/complete',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 201,
+    alternateSuccesses: [
+      {
+        status: 200,
+        description:
+          'This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.',
+        responseSchema: AvatarResponseSchema,
+      },
+    ],
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: AvatarResponseSchema,
+    errorStatuses: [400, 401, 404, 409, 413, 500, 503],
+  },
+  // Always `200`: an account with no Avatar answers `avatar: null`.
+  'me.avatar.read': {
+    openApi: {
+      summary: 'Read the Avatar',
+      description:
+        'Describes the Avatar of the signed-in AIHUB User Account, or answers `avatar: null` when the account has none; that is a normal state, not an error. `url` is the published origin URL of the image: load it with a plain unauthenticated `GET`, which AIHUB does not proxy. Each upload has a new URL, and a removed image may stay in caches for up to an hour.',
+      successDescription: 'The Avatar, or `null` when the account has none.',
+    },
+    method: 'GET',
+    path: '/v1/me/avatar',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: ReadAvatarResponseSchema,
+    errorStatuses: [401, 500, 503],
+  },
+  // Always `204`, including for an account with no Avatar: absence is what
+  // was asked for.
+  'me.avatar.remove': {
+    openApi: {
+      summary: 'Remove the Avatar',
+      description:
+        'Deletes the Avatar image and its record for the signed-in AIHUB User Account. Idempotent: an account with no Avatar also answers `204`. If the image cannot be deleted the account keeps its Avatar and the call answers `503`; retrying finishes the removal. `409 AVATAR_CHANGED` means another request replaced the Avatar meanwhile, and the replacement is kept.',
+      successDescription: 'The account has no Avatar.',
+    },
+    method: 'DELETE',
+    timeoutMs: 10_000,
+    path: '/v1/me/avatar',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: null,
+    errorStatuses: [401, 409, 500, 503],
+  },
   'organizations.create': {
     openApi: {
       summary: 'Create a Self-serve Organization and become its first owner',
@@ -334,6 +664,113 @@ export const PUBLIC_ROUTES = {
     responseSchema: OrganizationMembershipListResponseSchema,
     errorStatuses: [400, 401, 403, 500],
   },
+  'organizations.invitations.list': {
+    openApi: {
+      summary: "List an organization's open invitations",
+      parameters: [
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization whose open invitations are listed.',
+          schema: { $ref: '#/components/schemas/OrganizationId' },
+        },
+      ],
+      successDescription: 'Open organization invitations',
+    },
+    method: 'GET',
+    path: '/v1/organizations/:organizationId/invitations',
+    callerAuth: 'bearer',
+    organizationResolution: 'path',
+    successStatus: 200,
+    publishedIdentityScope: 'organization',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: ListOpenOrganizationInvitationsResponseSchema,
+    errorStatuses: [401, 403, 500],
+  },
+  'organizations.invitations.create': {
+    openApi: {
+      summary: 'Invite a person to an organization',
+      parameters: [
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization the invited person is invited to.',
+          schema: { $ref: '#/components/schemas/OrganizationId' },
+        },
+      ],
+      successDescription:
+        'Pending organization invitation created; the single-use invite credential reaches the invited person by email only',
+      replayHeaderDescription:
+        'Present with value true when the completed invitation result was replayed for this key.',
+    },
+    method: 'POST',
+    path: '/v1/organizations/:organizationId/invitations',
+    callerAuth: 'bearer',
+    organizationResolution: 'path',
+    successStatus: 201,
+    publishedIdentityScope: 'organization',
+    idempotency: 'optional',
+    requestSchema: CreateOrganizationInvitationRequestSchema,
+    responseSchema: CreateOrganizationInvitationResponseSchema,
+    errorStatuses: [400, 401, 403, 409, 429, 500, 503],
+  },
+  'organizations.invitations.revoke': {
+    openApi: {
+      summary: 'Revoke an organization invitation',
+      description:
+        'Closes an open invitation using the durable invitation close signal. An already closed or expired invitation is a retry-safe no-op and still returns bodyless 204.',
+      parameters: [
+        {
+          name: 'organization_id',
+          in: 'path',
+          required: true,
+          description: 'The organization that owns the invitation.',
+          schema: { $ref: '#/components/schemas/OrganizationId' },
+        },
+        {
+          name: 'invitation_id',
+          in: 'path',
+          required: true,
+          description: 'The invitation being revoked.',
+          schema: {
+            type: 'string',
+            pattern: '^oiv_[0-9A-HJKMNP-TV-Z]{26}$',
+          },
+        },
+      ],
+      successDescription:
+        'Invitation closed, or already closed/expired; the response has no body',
+    },
+    method: 'DELETE',
+    path: '/v1/organizations/:organizationId/invitations/:invitationId',
+    callerAuth: 'bearer',
+    organizationResolution: 'path',
+    successStatus: 204,
+    publishedIdentityScope: 'organization',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: null,
+    errorStatuses: [401, 403, 404, 500],
+  },
+  'organizations.invitations.accept': {
+    openApi: {
+      summary: 'Accept an organization invitation',
+      successDescription: 'Organization membership granted or reactivated',
+    },
+    method: 'POST',
+    path: '/v1/organizations/invitations/accept',
+    callerAuth: 'bearer',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'organization',
+    idempotency: 'none',
+    requestSchema: AcceptOrganizationInvitationRequestSchema,
+    responseSchema: AcceptOrganizationInvitationResponseSchema,
+    errorStatuses: [400, 401, 403, 500],
+  },
   'organizations.members.change_role': {
     openApi: {
       summary: 'Change an organization member role',
@@ -430,112 +867,33 @@ export const PUBLIC_ROUTES = {
     responseSchema: OrganizationMembershipMutationResponseSchema,
     errorStatuses: [400, 401, 403, 404, 409, 500],
   },
-  'organizations.invitations.create': {
+  'organizations.apiKeys.list': {
     openApi: {
-      summary: 'Invite a person to an organization',
+      summary: 'List an organization API key inventory',
+      description:
+        'Returns the organization live API keys as metadata only. Revoked keys are absent; `status` is `expired` once a key expiry has passed. `last_used_at` is approximate.',
       parameters: [
         {
           name: 'organization_id',
           in: 'path',
           required: true,
-          description: 'The organization the invited person is invited to.',
+          description: 'The organization whose API keys are listed.',
           schema: { $ref: '#/components/schemas/OrganizationId' },
         },
       ],
       successDescription:
-        'Pending organization invitation created; the single-use invite credential reaches the invited person by email only',
-      replayHeaderDescription:
-        'Present with value true when the completed invitation result was replayed for this key.',
-    },
-    method: 'POST',
-    path: '/v1/organizations/:organizationId/invitations',
-    callerAuth: 'bearer',
-    organizationResolution: 'path',
-    successStatus: 201,
-    publishedIdentityScope: 'organization',
-    idempotency: 'optional',
-    requestSchema: CreateOrganizationInvitationRequestSchema,
-    responseSchema: CreateOrganizationInvitationResponseSchema,
-    errorStatuses: [400, 401, 403, 409, 429, 500, 503],
-  },
-  'organizations.invitations.list': {
-    openApi: {
-      summary: "List an organization's open invitations",
-      parameters: [
-        {
-          name: 'organization_id',
-          in: 'path',
-          required: true,
-          description: 'The organization whose open invitations are listed.',
-          schema: { $ref: '#/components/schemas/OrganizationId' },
-        },
-      ],
-      successDescription: 'Open organization invitations',
+        'Live API key inventory; never a credential hash or raw credential',
     },
     method: 'GET',
-    path: '/v1/organizations/:organizationId/invitations',
+    path: '/v1/organizations/:organizationId/api-keys',
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
-    responseSchema: ListOpenOrganizationInvitationsResponseSchema,
-    errorStatuses: [401, 403, 500],
-  },
-  'organizations.invitations.revoke': {
-    openApi: {
-      summary: 'Revoke an organization invitation',
-      description:
-        'Closes an open invitation using the durable invitation close signal. An already closed or expired invitation is a retry-safe no-op and still returns bodyless 204.',
-      parameters: [
-        {
-          name: 'organization_id',
-          in: 'path',
-          required: true,
-          description: 'The organization that owns the invitation.',
-          schema: { $ref: '#/components/schemas/OrganizationId' },
-        },
-        {
-          name: 'invitation_id',
-          in: 'path',
-          required: true,
-          description: 'The invitation being revoked.',
-          schema: {
-            type: 'string',
-            pattern: '^oiv_[0-9A-HJKMNP-TV-Z]{26}$',
-          },
-        },
-      ],
-      successDescription:
-        'Invitation closed, or already closed/expired; the response has no body',
-    },
-    method: 'DELETE',
-    path: '/v1/organizations/:organizationId/invitations/:invitationId',
-    callerAuth: 'bearer',
-    organizationResolution: 'path',
-    successStatus: 204,
-    publishedIdentityScope: 'organization',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: null,
-    errorStatuses: [401, 403, 404, 500],
-  },
-  'organizations.invitations.accept': {
-    openApi: {
-      summary: 'Accept an organization invitation',
-      successDescription: 'Organization membership granted or reactivated',
-    },
-    method: 'POST',
-    path: '/v1/organizations/invitations/accept',
-    callerAuth: 'bearer',
-    organizationResolution: 'caller',
-    successStatus: 200,
-    publishedIdentityScope: 'organization',
-    idempotency: 'none',
-    requestSchema: AcceptOrganizationInvitationRequestSchema,
-    responseSchema: AcceptOrganizationInvitationResponseSchema,
-    errorStatuses: [400, 401, 403, 500],
+    responseSchema: ListOrganizationApiKeysResponseSchema,
+    errorStatuses: [401, 403, 500, 503],
   },
   'organizations.apiKeys.create': {
     cacheControl: { value: 'no-store' },
@@ -564,33 +922,39 @@ export const PUBLIC_ROUTES = {
     responseSchema: OrganizationApiKeySecretResponseSchema,
     errorStatuses: [400, 401, 403, 500, 503],
   },
-  'organizations.apiKeys.list': {
+  'organizations.apiKeys.revoke': {
     openApi: {
-      summary: 'List an organization API key inventory',
+      summary: 'Revoke an organization API key',
       description:
-        'Returns the organization live API keys as metadata only. Revoked keys are absent; `status` is `expired` once a key expiry has passed. `last_used_at` is approximate.',
+        'Withdraws the key and keeps its durable row, purging the identity cache so the change takes effect inside the existing cache ceiling. State-idempotent: withdrawing an already withdrawn key succeeds and leaves the recorded moment unchanged. This is the only response from which `revoked` is reachable.',
       parameters: [
         {
           name: 'organization_id',
           in: 'path',
           required: true,
-          description: 'The organization whose API keys are listed.',
+          description: 'The organization that owns the API key.',
           schema: { $ref: '#/components/schemas/OrganizationId' },
         },
+        {
+          name: 'api_key_id',
+          in: 'path',
+          required: true,
+          description: 'The API key being withdrawn.',
+          schema: { type: 'string', pattern: '^ak_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
       ],
-      successDescription:
-        'Live API key inventory; never a credential hash or raw credential',
+      successDescription: 'API key withdrawn; its durable row is kept',
     },
-    method: 'GET',
-    path: '/v1/organizations/:organizationId/api-keys',
+    method: 'DELETE',
+    path: '/v1/organizations/:organizationId/api-keys/:apiKeyId',
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     publishedIdentityScope: 'organization',
     idempotency: 'none',
     requestSchema: null,
-    responseSchema: ListOrganizationApiKeysResponseSchema,
-    errorStatuses: [401, 403, 500, 503],
+    responseSchema: RevokeOrganizationApiKeyResponseSchema,
+    errorStatuses: [401, 403, 404, 500, 503],
   },
   'organizations.apiKeys.rotate': {
     cacheControl: { value: 'no-store' },
@@ -628,39 +992,33 @@ export const PUBLIC_ROUTES = {
     responseSchema: OrganizationApiKeySecretResponseSchema,
     errorStatuses: [401, 403, 404, 500, 503],
   },
-  'organizations.apiKeys.revoke': {
+  'organizations.identityConfig.set': {
     openApi: {
-      summary: 'Revoke an organization API key',
+      summary: 'Set an organization identity configuration',
       description:
-        'Withdraws the key and keeps its durable row, purging the identity cache so the change takes effect inside the existing cache ceiling. State-idempotent: withdrawing an already withdrawn key succeeds and leaves the recorded moment unchanged. This is the only response from which `revoked` is reachable.',
+        'Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
       parameters: [
         {
           name: 'organization_id',
           in: 'path',
           required: true,
-          description: 'The organization that owns the API key.',
+          description: 'The organization whose identity configuration is set.',
           schema: { $ref: '#/components/schemas/OrganizationId' },
         },
-        {
-          name: 'api_key_id',
-          in: 'path',
-          required: true,
-          description: 'The API key being withdrawn.',
-          schema: { type: 'string', pattern: '^ak_[0-9A-HJKMNP-TV-Z]{26}$' },
-        },
       ],
-      successDescription: 'API key withdrawn; its durable row is kept',
+      successDescription:
+        'The stored public identity configuration, including its preserved status.',
     },
-    method: 'DELETE',
-    path: '/v1/organizations/:organizationId/api-keys/:apiKeyId',
+    method: 'PUT',
+    path: '/v1/organizations/:organizationId/identity-config',
     callerAuth: 'bearer',
     organizationResolution: 'path',
     successStatus: 200,
     publishedIdentityScope: 'organization',
     idempotency: 'none',
-    requestSchema: null,
-    responseSchema: RevokeOrganizationApiKeyResponseSchema,
-    errorStatuses: [401, 403, 404, 500, 503],
+    requestSchema: SetOrganizationIdentityConfigRequestSchema,
+    responseSchema: ReadOrganizationIdentityConfigResponseSchema,
+    errorStatuses: [400, 401, 403, 409, 500, 503],
   },
   'organizations.identityConfig.read': {
     openApi: {
@@ -689,34 +1047,6 @@ export const PUBLIC_ROUTES = {
     requestSchema: null,
     responseSchema: ReadOrganizationIdentityConfigResponseSchema,
     errorStatuses: [401, 403, 500, 503],
-  },
-  'organizations.identityConfig.set': {
-    openApi: {
-      summary: 'Set an organization identity configuration',
-      description:
-        'Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
-      parameters: [
-        {
-          name: 'organization_id',
-          in: 'path',
-          required: true,
-          description: 'The organization whose identity configuration is set.',
-          schema: { $ref: '#/components/schemas/OrganizationId' },
-        },
-      ],
-      successDescription:
-        'The stored public identity configuration, including its preserved status.',
-    },
-    method: 'PUT',
-    path: '/v1/organizations/:organizationId/identity-config',
-    callerAuth: 'bearer',
-    organizationResolution: 'path',
-    successStatus: 200,
-    publishedIdentityScope: 'organization',
-    idempotency: 'none',
-    requestSchema: SetOrganizationIdentityConfigRequestSchema,
-    responseSchema: ReadOrganizationIdentityConfigResponseSchema,
-    errorStatuses: [400, 401, 403, 409, 500, 503],
   },
   'organizations.auditEvents.list': {
     openApi: {
@@ -1072,334 +1402,6 @@ export const PUBLIC_ROUTES = {
     requestSchema: SandboxDemoKeyValidationRequestSchema,
     responseSchema: SandboxDemoKeyValidationResponseSchema,
     errorStatuses: [400, 401, 403, 429, 500, 503],
-  },
-  'me.avatar.uploads.create': {
-    cacheControl: { value: 'no-store' },
-    openApi: {
-      summary: 'Request an Avatar upload URL',
-      description:
-        'Mints a presigned `PUT` URL that writes one object for the signed-in AIHUB User Account, with the declared content type and `Cache-Control: public, max-age=3600` bound into the signature. `Content-Length` reports the declared size but is not signed because browser Fetch controls it; send the image as the request body and let the browser manage that header. The bytes go straight to storage, never through AIHUB. Nothing is recorded until completion verifies the stored object, including its actual size and type, within one hour of upload. Allowed types are `image/jpeg`, `image/png`, and `image/webp`, up to 2 MiB; the URL expires after 5 minutes. An account that already has an Avatar may request one to replace it.',
-      successDescription:
-        'Upload URL minted. The URL is a write credential for one object and is returned only here.',
-    },
-    method: 'POST',
-    path: '/v1/me/avatar/uploads',
-    callerAuth: 'bearer',
-    organizationResolution: 'none',
-    successStatus: 201,
-    publishedIdentityScope: 'none',
-    idempotency: 'none',
-    requestSchema: CreateAvatarUploadRequestSchema,
-    responseSchema: AvatarUploadResponseSchema,
-    errorStatuses: [400, 401, 413, 500, 503],
-  },
-  // `201` when this call records the Avatar, first or replacement; a repeated
-  // completion of the same asset answers `200` with the same body.
-  'me.avatar.uploads.complete': {
-    openApi: {
-      summary: 'Complete an Avatar upload',
-      description:
-        'Checks the object that actually landed for this asset and records it as the Avatar of the signed-in AIHUB User Account. An object that is missing, or that was stored more than an hour ago, answers `404` and an expired one is deleted; one that is larger than 2 MiB, has an unsupported type, or is empty is refused and deleted. When the account already has a different Avatar, its image is deleted first and the new one replaces it; if that delete fails the account keeps its Avatar and the call answers `503`, and retrying finishes the replacement. `409 AVATAR_CHANGED` means another request changed the Avatar first; re-read before retrying. The response describes the image, including its published `url`.',
-      parameters: [
-        {
-          name: 'asset_id',
-          in: 'path',
-          required: true,
-          description: 'The asset id returned when the upload URL was minted.',
-          schema: { type: 'string', pattern: '^ava_[0-9A-HJKMNP-TV-Z]{26}$' },
-        },
-      ],
-      successDescription: 'Avatar recorded by this call, first or replacement.',
-    },
-    method: 'POST',
-    timeoutMs: 10_000,
-    path: '/v1/me/avatar/uploads/:assetId/complete',
-    callerAuth: 'bearer',
-    organizationResolution: 'none',
-    successStatus: 201,
-    alternateSuccesses: [
-      {
-        status: 200,
-        description:
-          'This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.',
-        responseSchema: AvatarResponseSchema,
-      },
-    ],
-    publishedIdentityScope: 'none',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: AvatarResponseSchema,
-    errorStatuses: [400, 401, 404, 409, 413, 500, 503],
-  },
-  // Always `200`: an account with no Avatar answers `avatar: null`.
-  'me.avatar.read': {
-    openApi: {
-      summary: 'Read the Avatar',
-      description:
-        'Describes the Avatar of the signed-in AIHUB User Account, or answers `avatar: null` when the account has none; that is a normal state, not an error. `url` is the published origin URL of the image: load it with a plain unauthenticated `GET`, which AIHUB does not proxy. Each upload has a new URL, and a removed image may stay in caches for up to an hour.',
-      successDescription: 'The Avatar, or `null` when the account has none.',
-    },
-    method: 'GET',
-    path: '/v1/me/avatar',
-    callerAuth: 'bearer',
-    organizationResolution: 'none',
-    successStatus: 200,
-    publishedIdentityScope: 'none',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: ReadAvatarResponseSchema,
-    errorStatuses: [401, 500, 503],
-  },
-  // Always `204`, including for an account with no Avatar: absence is what
-  // was asked for.
-  'me.avatar.remove': {
-    openApi: {
-      summary: 'Remove the Avatar',
-      description:
-        'Deletes the Avatar image and its record for the signed-in AIHUB User Account. Idempotent: an account with no Avatar also answers `204`. If the image cannot be deleted the account keeps its Avatar and the call answers `503`; retrying finishes the removal. `409 AVATAR_CHANGED` means another request replaced the Avatar meanwhile, and the replacement is kept.',
-      successDescription: 'The account has no Avatar.',
-    },
-    method: 'DELETE',
-    timeoutMs: 10_000,
-    path: '/v1/me/avatar',
-    callerAuth: 'bearer',
-    organizationResolution: 'none',
-    successStatus: 204,
-    publishedIdentityScope: 'none',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: null,
-    errorStatuses: [401, 409, 500, 503],
-  },
-  'speaking.questions': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'This response must not be cached.',
-    },
-    openApi: {
-      summary: 'List Speaking questions',
-      includeCorrelationId: false,
-      parameters: [
-        {
-          name: 'part',
-          in: 'query',
-          required: false,
-          description: 'Filter by Speaking part; omit to list all parts.',
-          schema: SpeakingQuestionsQuerySchema.properties.part,
-        },
-      ],
-      successDescription: 'Speaking questions and signed audio URLs',
-    },
-    method: 'GET',
-    path: '/v1/ielts/speaking/questions',
-    callerAuth: 'none',
-    organizationResolution: 'none',
-    successStatus: 200,
-    publishedIdentityScope: null,
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: SpeakingQuestionsResponseSchema,
-    errorStatuses: [400, 500],
-  },
-  'speaking.audioUploads.create': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'Upload URLs and Audio metadata must not be cached.',
-    },
-    openApi: {
-      summary: 'Create a Speaking Audio upload intent',
-      description: [
-        'Creates a one-hour intent bound to the Organization and exact End-User ID resolved from `X-User-Identity`. The response contains a five-minute presigned `PUT` URL; send the audio directly to that URL with the returned `Content-Type` and `Content-Length` headers.',
-        'The URL is a write credential. Do not log, persist, or expose it. The intent is not an Audio asset until completion verifies the stored object.',
-      ].join('\n\n'),
-      successDescription:
-        'Returns the same server-generated key and signed headers for the upload intent.',
-    },
-    method: 'POST',
-    path: '/v1/speaking/audio/uploads',
-    callerAuth: 'api-key',
-    organizationResolution: 'caller',
-    successStatus: 201,
-    publishedIdentityScope: 'user',
-    idempotency: 'none',
-    requestSchema: CreateSpeakingAudioUploadRequestSchema,
-    responseSchema: SpeakingAudioUploadUrlResponseSchema,
-    errorStatuses: [400, 401, 403, 413, 429, 500, 503],
-  },
-  'speaking.audioUploads.refresh': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'Upload URLs and Audio metadata must not be cached.',
-    },
-    openApi: {
-      summary: 'Refresh a Speaking Audio upload URL',
-      description:
-        'Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.',
-      parameters: [
-        {
-          name: 'assetId',
-          in: 'path',
-          required: true,
-          description:
-            'The asset ID returned when the upload intent was created.',
-          schema: { type: 'string', pattern: '^aud_[0-9A-HJKMNP-TV-Z]{26}$' },
-        },
-      ],
-      successDescription:
-        'Returns the same server-generated key and signed headers for the upload intent.',
-    },
-    method: 'POST',
-    path: '/v1/speaking/audio/uploads/:assetId/refresh',
-    callerAuth: 'api-key',
-    organizationResolution: 'caller',
-    successStatus: 200,
-    publishedIdentityScope: 'user',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: SpeakingAudioUploadUrlResponseSchema,
-    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
-  },
-  'speaking.audioUploads.complete': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'Upload URLs and Audio metadata must not be cached.',
-    },
-    openApi: {
-      summary: 'Complete a Speaking Audio upload',
-      description: [
-        'Verifies the stored object metadata at the exact key recorded by the intent. A valid object creates the Audio asset and sets `retention_expires_at` to 30 days after acceptance; a missing object leaves the intent retryable, while invalid metadata rejects the intent.',
-        'Only the same Organization and End-User ID can complete the intent. Repeating a successful completion returns the same Audio asset.',
-      ].join('\n\n'),
-      parameters: [
-        {
-          name: 'assetId',
-          in: 'path',
-          required: true,
-          description:
-            'The asset ID returned when the upload intent was created.',
-          schema: { type: 'string', pattern: '^aud_[0-9A-HJKMNP-TV-Z]{26}$' },
-        },
-      ],
-      successDescription: 'The verified Audio asset created by this request.',
-    },
-    method: 'POST',
-    timeoutMs: 10_000,
-    path: '/v1/speaking/audio/uploads/:assetId/complete',
-    callerAuth: 'api-key',
-    organizationResolution: 'caller',
-    successStatus: 201,
-    alternateSuccesses: [
-      {
-        status: 200,
-        description:
-          'This intent was already completed; the same Audio asset is returned.',
-        responseSchema: SpeakingAudioAssetResponseSchema,
-      },
-    ],
-    publishedIdentityScope: 'user',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: SpeakingAudioAssetResponseSchema,
-    errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
-  },
-  'writing.chartUploads.create': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'Upload URLs and chart metadata must not be cached.',
-    },
-    openApi: {
-      summary: 'Create a Writing Task 1 chart upload intent',
-      description: [
-        'Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.',
-        'Upload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.',
-      ].join('\n\n'),
-      successDescription:
-        'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
-    },
-    method: 'POST',
-    path: '/v1/ielts/writing/task1/chart-uploads',
-    callerAuth: 'api-key',
-    organizationResolution: 'caller',
-    successStatus: 201,
-    publishedIdentityScope: 'user',
-    idempotency: 'none',
-    requestSchema: CreateWritingChartUploadRequestSchema,
-    responseSchema: WritingChartUploadGrantResponseSchema,
-    errorStatuses: [400, 401, 403, 413, 429, 500, 503],
-  },
-  'writing.chartUploads.refresh': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'Upload URLs and chart metadata must not be cached.',
-    },
-    openApi: {
-      summary: 'Refresh a Writing Task 1 chart upload URL',
-      description:
-        'Refreshes the signed URL for the same private staging object without extending the intent deadline.',
-      parameters: [
-        {
-          name: 'assetId',
-          in: 'path',
-          required: true,
-          description:
-            'The chart asset ID returned when the upload intent was created.',
-          schema: {
-            type: 'string',
-            pattern: '^chart_[0-9A-HJKMNP-TV-Z]{26}$',
-          },
-        },
-      ],
-      successDescription:
-        'A five-minute signed POST policy and form fields for private staging storage, limited to the declared byte size.',
-    },
-    method: 'POST',
-    path: '/v1/ielts/writing/task1/chart-uploads/:assetId/refresh',
-    callerAuth: 'api-key',
-    organizationResolution: 'caller',
-    successStatus: 200,
-    publishedIdentityScope: 'user',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: WritingChartUploadGrantResponseSchema,
-    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
-  },
-  'writing.chartUploads.complete': {
-    cacheControl: {
-      value: 'no-store',
-      description: 'Upload URLs and chart metadata must not be cached.',
-    },
-    openApi: {
-      summary: 'Verify and publish a Writing Task 1 chart',
-      description: [
-        'Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.',
-        'The returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.',
-      ].join('\n\n'),
-      parameters: [
-        {
-          name: 'assetId',
-          in: 'path',
-          required: true,
-          description:
-            'The chart asset ID returned when the upload intent was created.',
-          schema: {
-            type: 'string',
-            pattern: '^chart_[0-9A-HJKMNP-TV-Z]{26}$',
-          },
-        },
-      ],
-      successDescription: 'The public image URL and its fixed expiration time.',
-    },
-    method: 'POST',
-    timeoutMs: 10_000,
-    path: '/v1/ielts/writing/task1/chart-uploads/:assetId/complete',
-    callerAuth: 'api-key',
-    organizationResolution: 'caller',
-    successStatus: 200,
-    publishedIdentityScope: 'user',
-    idempotency: 'none',
-    requestSchema: null,
-    responseSchema: WritingChartAssetResponseSchema,
-    errorStatuses: [400, 401, 403, 404, 413, 429, 500, 503],
   },
 } as const satisfies Record<string, PublicRouteDef>;
 

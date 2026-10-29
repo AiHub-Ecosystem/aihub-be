@@ -94,35 +94,12 @@ export function buildOpenApiDocument(version: string): unknown {
     sandboxAssertionPathItem(groupedErrors);
   paths[routePathOf('sandbox.demo-key.validate')] =
     sandboxDemoKeyValidationPathItem(groupedErrors);
-  addPublicRoute(paths, 'speaking.questions');
-  addPublicRoute(paths, 'speaking.audioUploads.create');
-  addPublicRoute(paths, 'speaking.audioUploads.refresh');
-  addPublicRoute(paths, 'speaking.audioUploads.complete');
-  addPublicRoute(paths, 'writing.chartUploads.create');
-  addPublicRoute(paths, 'writing.chartUploads.refresh');
-  addPublicRoute(paths, 'writing.chartUploads.complete');
-  addPublicRoute(paths, 'me.avatar.uploads.create');
-  addPublicRoute(paths, 'me.avatar.uploads.complete');
-  addPublicRoute(paths, 'me.avatar.read');
-  addPublicRoute(paths, 'me.avatar.remove');
-  addPublicRoute(paths, 'organizations.create');
-  addPublicRoute(paths, 'organizations.rename');
-  addPublicRoute(paths, 'organizations.me.members.list');
-  addPublicRoute(paths, 'organizations.members.list');
-  addPublicRoute(paths, 'organizations.invitations.list');
-  addPublicRoute(paths, 'organizations.invitations.create');
-  addPublicRoute(paths, 'organizations.invitations.revoke');
-  addPublicRoute(paths, 'organizations.invitations.accept');
-  addPublicRoute(paths, 'organizations.members.change_role');
-  addPublicRoute(paths, 'organizations.members.disable');
-  addPublicRoute(paths, 'organizations.members.transfer');
-  addPublicRoute(paths, 'organizations.apiKeys.list');
-  addPublicRoute(paths, 'organizations.apiKeys.create');
-  addPublicRoute(paths, 'organizations.apiKeys.revoke');
-  addPublicRoute(paths, 'organizations.apiKeys.rotate');
-  addPublicRoute(paths, 'organizations.identityConfig.set');
-  addPublicRoute(paths, 'organizations.identityConfig.read');
-  addPublicRoute(paths, 'organizations.auditEvents.list');
+  for (const [routeId, route] of Object.entries(PUBLIC_ROUTES) as [
+    PublicRouteId,
+    PublicRouteDef,
+  ][]) {
+    if (route.openApi !== undefined) addPublicRoute(paths, routeId);
+  }
   Object.assign(paths, localAuthPathItems());
   Object.assign(paths, webSessionPathItems());
   addHeadOperations(paths);
