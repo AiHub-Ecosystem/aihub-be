@@ -180,6 +180,13 @@ and End-User ownership scope upload and completion, not public reads
 [ADR-0101](docs/adr/0101-writing-charts-use-shared-seaweedfs-host.md),
 [ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md)).
 
+**Downstream fault**:
+An AI Service answer that counts against the service's health: every 5xx, and a
+401 or 403 because AIHUB's own credential was rejected rather than the
+customer's input. A circuit breaker counts it, and an idempotency attempt it
+ends is kept as failed. Other 4xx answers blame the request; 408 and 425 are
+retryable but are not a downstream fault.
+
 **Writing chart upload**:
 The short-lived record of one customer chart upload: a private staging object and
 the public object it becomes. It is `open` until completed, `rejected` when

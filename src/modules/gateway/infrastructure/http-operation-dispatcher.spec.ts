@@ -1292,6 +1292,97 @@ describe('HttpOperationDispatcher', () => {
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
   });
 
+  async function dispatchAfterDownstreamStatus(status: number) {
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .reply(status, {});
+    const dispatcher = createHttpOperationDispatcher(
+      new DownstreamHttpClient('https://ai-writing.test', mockAgent),
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
+    );
+    return dispatcher.dispatch('writing.task1.grade', gradeInput, context());
+  }
+
+  async function credentialFailureCount(): Promise<number> {
+    const prefix =
+      'aihub_downstream_credential_failures_total{operation="writing.task1.grade",downstream="ai-writing"} ';
+    const line = (await getMetrics())
+      .split('\n')
+      .find((candidate) => candidate.startsWith(prefix));
+    return Number(line?.slice(prefix.length) ?? 0);
+  }
+
+  // The AI Service rejecting AIHUB's own credential is an AIHUB fault, not the
+  // customer's input (#845). The customer sees the same unavailable answer a
+  // connection failure gives; only the log and the counter say why.
+  it.each([401, 403])(
+    'maps a downstream %i to a retryable unavailable error and records a credential rejection',
+    async (status) => {
+      const before = await credentialFailureCount();
+
+      await expect(dispatchAfterDownstreamStatus(status)).rejects.toMatchObject(
+        {
+          code: 'AI_SERVICE_UNAVAILABLE',
+          httpStatus: 503,
+          retryable: true,
+          downstreamStatus: status,
+        },
+      );
+
+      expectFailureLogLine(readLogLine(loggerError), {
+        event: 'downstream_credential_rejected',
+        request_id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+        operation: 'writing.task1.grade',
+        ai_service: 'ai-writing',
+        private_endpoint: '/task-one',
+        downstream_status: status,
+        downstream_error_code: null,
+        downstream_message: null,
+        error_code: 'AI_SERVICE_UNAVAILABLE',
+        message: `downstream status ${status}`,
+      });
+      expect(await credentialFailureCount()).toBe(before + 1);
+    },
+  );
+
+  it.each([408, 425])(
+    'maps a downstream %i to a retryable error and records no credential rejection',
+    async (status) => {
+      const before = await credentialFailureCount();
+
+      await expect(dispatchAfterDownstreamStatus(status)).rejects.toMatchObject(
+        {
+          code: 'AI_SERVICE_ERROR',
+          httpStatus: 502,
+          retryable: true,
+          downstreamStatus: status,
+        },
+      );
+
+      expect(logPayload(readLogLine(loggerError)).event).toBe(
+        'downstream_failed',
+      );
+      expect(await credentialFailureCount()).toBe(before);
+    },
+  );
+
+  it.each([400, 404, 413, 415, 422])(
+    'keeps a downstream %i a non-retryable error',
+    async (status) => {
+      await expect(dispatchAfterDownstreamStatus(status)).rejects.toMatchObject(
+        {
+          code: 'AI_SERVICE_ERROR',
+          httpStatus: 502,
+          retryable: false,
+          downstreamStatus: status,
+        },
+      );
+    },
+  );
+
   it('logs an aborted downstream request as a timeout without a response status', async () => {
     const originalError = new AppError({
       code: 'AI_SERVICE_TIMEOUT',

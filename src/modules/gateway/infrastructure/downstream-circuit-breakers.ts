@@ -3,6 +3,7 @@ import CircuitBreaker from 'opossum';
 
 import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
+import { isDownstreamFault } from '@/common/errors/downstream-fault';
 import { setDownstreamBreakerState } from '@/common/observability/downstream-breaker-metrics';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
 
@@ -21,7 +22,7 @@ function isCircuitFailure(error: unknown, operation: OperationId): boolean {
     return false;
   }
   if (error.downstreamStatus !== undefined)
-    return error.downstreamStatus >= 500;
+    return isDownstreamFault(error.downstreamStatus);
   return (
     error.code === 'AI_SERVICE_TIMEOUT' ||
     error.code === 'AI_SERVICE_UNAVAILABLE'

@@ -73,7 +73,7 @@ new CircuitBreaker(call, {
 
 **Keyed by `operation`, not by `downstream`.** If `/grading-feedback-task1` is failing while another AI Writing operation is healthy, a service-wide breaker would needlessly take down the healthy grading path. Same amount of code, vastly superior fault isolation.
 
-**Only 5xx / timeouts / transport connection faults count as failures.** `4xx` responses from downstream **never** count — the service is healthy; the client simply submitted invalid parameters. Counting 4xx errors would allow a single client sending invalid payloads to trip the circuit breaker and knock out service for **all other customers**.
+**Only 5xx / timeouts / transport connection faults, and downstream `401` / `403`, count as failures.** Other `4xx` responses from downstream **never** count — the service is healthy; the client simply submitted invalid parameters. Counting those would allow a single client sending invalid payloads to trip the circuit breaker and knock out service for **all other customers**. `401` and `403` are the exception: they mean the service rejected AIHUB's own credential, not the customer's input, so every request fails and the breaker opens (`isDownstreamFault`, #845). `408` and `425` do not count.
 
 Open breaker → `503 AI_SERVICE_UNAVAILABLE`, with `retry_after_ms` indicating time until the next exploratory probe.
 
@@ -94,6 +94,8 @@ if (status >= 400 && status < 500) await idem.delete(key);
 ```
 
 If a client sends an invalid payload, fixes their typo, and retries with the same idempotency key: persisting the 4xx failure would permanently lock them into `409 IDEMPOTENCY_CONFLICT`. **No model costs were incurred for 4xx requests**, so there is nothing financial to protect. Purging allows immediate re-submission.
+
+A downstream `401` or `403` is the exception: it is AIHUB's fault, so it is handled like a `5xx` and the attempt is marked failed, not purged (#845). A downstream `408` or `425` is purged like any other `4xx`.
 
 24-hour retention per D1 §26; nightly cron cleans `DELETE WHERE expires_at < now()`.
 
@@ -225,9 +227,9 @@ drops broken connections and reconnects; no connection stays checked out.
 |         429 | `RATE_LIMITED`                  | Breached AIHUB per-minute rate limit              | Yes                                                  |
 |         429 | `CONCURRENCY_LIMIT`             | Too many simultaneous in-flight requests          | Yes (immediate)                                      |
 |         429 | `QUOTA_EXCEEDED`                | Monthly allocated quota depleted                  | Next month                                           |
-|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx                           | Potentially                                          |
+|         502 | `AI_SERVICE_ERROR`              | Downstream returned 5xx, 408, or 425              | Potentially                                          |
 |         502 | `AI_SERVICE_CONTRACT_VIOLATION` | Downstream returned unparseable shape             | No                                                   |
-|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable or circuit breaker open    | Yes                                                  |
+|         503 | `AI_SERVICE_UNAVAILABLE`        | Downstream unreachable, 401/403, or breaker open  | Yes                                                  |
 |         503 | `AI_SERVICE_THROTTLED`          | Downstream or underlying LLM provider throttled   | Yes                                                  |
 |         503 | `AUTH_ARGON2_CAPACITY`          | Bounded password-hash queue is full or timed out  | Yes                                                  |
 |         503 | `DATABASE_UNAVAILABLE`          | Postgres unreachable, unanswered, or timed out    | Yes                                                  |

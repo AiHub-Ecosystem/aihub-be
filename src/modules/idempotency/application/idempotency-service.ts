@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isDownstreamFault } from '@/common/errors/downstream-fault';
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   type IdempotencyFingerprintInput,
@@ -102,14 +103,15 @@ function malformedReplayError(cause: unknown): AppError {
 }
 
 function isClientError(error: unknown): boolean {
-  const downstreamStatus =
-    error instanceof AppError ? error.downstreamStatus : undefined;
+  if (!(error instanceof AppError)) return false;
+  const downstreamStatus = error.downstreamStatus;
+  if (downstreamStatus !== undefined && isDownstreamFault(downstreamStatus))
+    return false;
   return (
-    error instanceof AppError &&
-    ((error.httpStatus >= 400 && error.httpStatus < 500) ||
-      (downstreamStatus !== undefined &&
-        downstreamStatus >= 400 &&
-        downstreamStatus < 500))
+    (error.httpStatus >= 400 && error.httpStatus < 500) ||
+    (downstreamStatus !== undefined &&
+      downstreamStatus >= 400 &&
+      downstreamStatus < 500)
   );
 }
 

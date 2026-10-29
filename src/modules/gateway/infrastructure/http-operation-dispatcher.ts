@@ -2,8 +2,12 @@ import { Logger } from '@nestjs/common';
 
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
+import { isDownstreamCredentialRejection } from '@/common/errors/downstream-fault';
 import type { ErrorCode } from '@/common/errors/error-code';
-import { recordDownstreamRetryEvent } from '@/common/observability/metrics';
+import {
+  recordDownstreamCredentialRejection,
+  recordDownstreamRetryEvent,
+} from '@/common/observability/metrics';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
@@ -35,10 +39,23 @@ function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
     });
   }
 
+  // The customer sees the answer a connection failure gives; the log and the
+  // credential counter say why (#845).
+  if (isDownstreamCredentialRejection(status)) {
+    return new AppError({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      message: 'AI service is temporarily unavailable',
+      retryable: true,
+      downstreamStatus: status,
+      cause: new Error(`downstream status ${status}`),
+    });
+  }
+
   return new AppError({
     code: 'AI_SERVICE_ERROR',
     message: 'AI service returned an error',
-    retryable: status >= 500,
+    // 408 and 425 ask the sender to repeat the request (RFC 9110 §15.5.9).
+    retryable: status >= 500 || status === 408 || status === 425,
     downstreamStatus: status,
     ...(status === 503 && retryAfterMs !== undefined ? { retryAfterMs } : {}),
     cause: new Error(`downstream status ${status}`),
@@ -478,10 +495,21 @@ export class HttpOperationTransport implements OperationTransportPort {
       return;
     }
     const reason = contractViolationReason(error);
+    const credentialRejected =
+      failure.status !== null &&
+      isDownstreamCredentialRejection(failure.status);
+    if (credentialRejected) {
+      recordDownstreamCredentialRejection(
+        failure.operation,
+        failure.downstream,
+      );
+    }
 
     this.logger.error(
       JSON.stringify({
-        event: 'downstream_failed',
+        event: credentialRejected
+          ? 'downstream_credential_rejected'
+          : 'downstream_failed',
         request_id: failure.requestId,
         operation: failure.operation,
         ai_service: failure.downstream,
@@ -491,7 +519,9 @@ export class HttpOperationTransport implements OperationTransportPort {
         downstream_message: null,
         downstream_ms: Math.max(0, Math.round(failure.elapsedMs)),
         error_code: errorCode,
-        message: downstreamFailureMessage(errorCode, failure.status),
+        message: credentialRejected
+          ? `downstream status ${failure.status}`
+          : downstreamFailureMessage(errorCode, failure.status),
         ...(reason === undefined ? {} : { reason }),
       }),
     );

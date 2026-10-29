@@ -6,6 +6,20 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.1.4] - 2026-10-29
+
+### Changed
+
+- An AI Service answer that rejects AIHUB's own request (HTTP 401 or 403) is
+  returned as `503 AI_SERVICE_UNAVAILABLE` with `retryable: true`. It was
+  `502 AI_SERVICE_ERROR` with `retryable: false`, which read as a problem with
+  your request. An idempotency key used on such a request can be retried once
+  the service recovers.
+- An AI Service answer asking AIHUB to repeat the request (HTTP 408 or 425) is
+  returned as `502 AI_SERVICE_ERROR` with `retryable: true`. It was
+  `retryable: false`. No error code is added. See
+  [#845](https://github.com/AiHub-Ecosystem/aihub-be/issues/845).
+
 ## [1.1.3] - 2026-10-29
 
 ### Changed

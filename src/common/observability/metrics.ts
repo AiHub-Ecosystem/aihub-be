@@ -136,6 +136,15 @@ const downstreamRetryEventsTotal = new Counter({
   registers: [registry],
 });
 
+// `downstream` is the adapter's fixed service name, never request input, so the
+// label set stays at operations x AI Services (#845).
+const downstreamCredentialFailuresTotal = new Counter({
+  name: 'aihub_downstream_credential_failures_total',
+  help: 'Downstream 401 or 403 answers: the AI Service rejected AIHUB credential.',
+  labelNames: ['operation', 'downstream'],
+  registers: [registry],
+});
+
 const tokensTotal = new Counter({
   name: 'aihub_tokens_total',
   help: 'Aggregate tokens reported by the downstream AI service.',
@@ -399,6 +408,13 @@ export function recordDownstreamRetryEvent(
     | 'budget_unavailable',
 ): void {
   downstreamRetryEventsTotal.inc({ operation, reason });
+}
+
+export function recordDownstreamCredentialRejection(
+  operation: OperationId,
+  downstream: string,
+): void {
+  downstreamCredentialFailuresTotal.inc({ operation, downstream });
 }
 
 export function recordEmailOutboxUnrecognisedPayload(

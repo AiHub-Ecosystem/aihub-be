@@ -922,8 +922,10 @@ describe('Speaking grading HTTP flow', () => {
       payload: request.payload,
     });
 
-    expect(response.statusCode).toBe(502);
-    expectError(response, 'AI_SERVICE_ERROR', { retryable: false });
+    // The provider rejecting AIHUB's credential is AIHUB's fault, so the
+    // customer sees the unavailable answer and may retry (#845).
+    expect(response.statusCode).toBe(503);
+    expectError(response, 'AI_SERVICE_UNAVAILABLE', { retryable: true });
     expect(response.payload).not.toContain(
       'private provider credential detail',
     );

@@ -71,6 +71,34 @@ describe('DownstreamCircuitBreakers', () => {
     expect(await breakerState('writing.task2.grade')).toBe('0');
   });
 
+  // A rejected AIHUB credential fails every request, so the breaker opens; a
+  // 408 or 425 says nothing about the service (#845).
+  it.each([
+    [401, 'AI_SERVICE_UNAVAILABLE', '1'],
+    [403, 'AI_SERVICE_UNAVAILABLE', '1'],
+    [408, 'AI_SERVICE_ERROR', '0'],
+    [425, 'AI_SERVICE_ERROR', '0'],
+  ] as const)(
+    'a downstream %i answered as %s leaves the breaker state at %s',
+    async (status, code, state) => {
+      const instance = (breakers = new DownstreamCircuitBreakers());
+      const failure = new AppError({
+        code,
+        message: 'downstream answered',
+        retryable: true,
+        downstreamStatus: status,
+      });
+
+      await Promise.all(
+        Array.from({ length: 20 }, () =>
+          ignoreFailure(instance, 'writing.task1.grade', failure),
+        ),
+      );
+
+      expect(await breakerState('writing.task1.grade')).toBe(state);
+    },
+  );
+
   it('does not open before 20 calls in the rolling window', async () => {
     const instance = (breakers = new DownstreamCircuitBreakers());
     const failure = new AppError({

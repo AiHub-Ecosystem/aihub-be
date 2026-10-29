@@ -541,6 +541,41 @@ describe('IdempotencyService', () => {
     expect(workSignal?.reason).toMatchObject({ name: 'TimeoutError' });
   });
 
+  // A downstream 401 or 403 blames AIHUB's credential, so the attempt is marked
+  // failed like a 5xx. A 408 or 425 processed nothing, so the key is freed for
+  // an immediate retry like any other 4xx (#845).
+  it.each([
+    [401, 'AI_SERVICE_UNAVAILABLE', 503, 'failed'],
+    [403, 'AI_SERVICE_UNAVAILABLE', 503, 'failed'],
+    [408, 'AI_SERVICE_ERROR', 502, 'deleted'],
+    [425, 'AI_SERVICE_ERROR', 502, 'deleted'],
+  ] as const)(
+    'on a downstream %i answered as %s (%i) the attempt is %s',
+    async (downstreamStatus, code, _httpStatus, outcome) => {
+      const repository = new FakeRepository();
+      const service = new IdempotencyService(repository);
+      const error = new AppError({
+        code,
+        message: 'downstream answered',
+        retryable: true,
+        downstreamStatus,
+      });
+
+      await expect(
+        service.execute(
+          input('req_downstream'),
+          async () => {
+            throw error;
+          },
+          () => ({ value: 'unused' }),
+        ),
+      ).rejects.toBe(error);
+
+      expect(repository.failed).toHaveLength(outcome === 'failed' ? 1 : 0);
+      expect(repository.deleted).toHaveLength(outcome === 'deleted' ? 1 : 0);
+    },
+  );
+
   it('deletes the record when delayed downstream work eventually returns a 4xx', async () => {
     const repository = new FakeRepository();
     repository.nextReservations.push({
