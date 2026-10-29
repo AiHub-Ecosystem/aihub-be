@@ -63,7 +63,10 @@ AIHUB introduces a new URI major only for a breaking contract change. A
 compatible release stays on the current major; it does not create a duplicate
 major with the same contract.
 
-\nAIHUB sets a baseline Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, and Referrer-Policy: no-referrer on every response.\n
+AIHUB sets a baseline Content-Security-Policy, X-Frame-Options: DENY,
+X-Content-Type-Options: nosniff, and Referrer-Policy: no-referrer on every
+response.
+
 Every grading request needs an `X-User-Identity` value, but a JWKS is optional.
 Choose the identity mode saved for your Organization:
 
