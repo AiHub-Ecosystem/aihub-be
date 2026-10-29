@@ -1191,7 +1191,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: ConfirmMfaEnrollmentRequestSchema,
     responseSchema: ConfirmMfaEnrollmentResponseSchema,
-    errorStatuses: [400, 401, 429, 500],
+    errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.mfa.remove': {
     cacheControl: { value: 'no-store' },
