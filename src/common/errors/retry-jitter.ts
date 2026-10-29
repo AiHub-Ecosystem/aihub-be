@@ -12,3 +12,23 @@ export function jitteredRetryAfterMs(
 ): number {
   return waitMs + Math.floor(random() * spreadMs);
 }
+
+/**
+ * The base wait of a refusal caused by a dependency outage or a full local
+ * capacity ceiling (#1352): PostgreSQL, Redis, object storage, Argon2, the
+ * Speaking upload ceiling. Its hint lands in `[1000, 2000)` ms.
+ */
+export const OUTAGE_RETRY_AFTER_MS = 1_000;
+
+/**
+ * The hint such a refusal carries. Without a spread every refused caller would
+ * return together, and the first wave after recovery would land on a
+ * dependency whose pools and caches are still cold. `waitMs` is the floor: a
+ * longer remaining cooldown replaces the base, never the other way round.
+ */
+export function outageRetryAfterMs(
+  random: () => number = Math.random,
+  waitMs: number = OUTAGE_RETRY_AFTER_MS,
+): number {
+  return jitteredRetryAfterMs(Math.max(waitMs, 0), random);
+}

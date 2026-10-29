@@ -898,7 +898,8 @@ describe('JwksKeyProvider', () => {
     ).rejects.toMatchObject({
       code: 'IDENTITY_PROVIDER_UNAVAILABLE',
       retryable: true,
-      retryAfterMs: 30_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(30_499.5, -3) as unknown,
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
 

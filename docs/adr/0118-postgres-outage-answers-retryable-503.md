@@ -39,3 +39,11 @@ a fast, retryable 503 with a retry hint, inside a stated bound. A query that
 legitimately runs close to its `statement_timeout` keeps a 1 s margin before
 the client gives up. Revocation during an outage still takes up to the
 API-key cache TTL to apply, which #372 may revisit.
+
+## Update: jittered retry hint (#1352, 2026-10-29)
+
+The fixed `retry_after_ms: 1000` above is now a floor. Every dependency-outage
+refusal, this one included, adds 0–999 ms through `outageRetryAfterMs` in
+`src/common/errors/retry-jitter.ts`, so refused clients that honour the hint
+do not return together on a pool that has just reconnected. `Retry-After`
+still repeats the hint in whole seconds, rounded up.

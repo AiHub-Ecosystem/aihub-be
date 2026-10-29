@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
+import {
+  jitteredRetryAfterMs,
+  outageRetryAfterMs,
+} from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { RETRY_BUDGET_WINDOW_MS } from '@/modules/gateway/application/admit-graded-request';
 import type {
@@ -42,7 +45,6 @@ import { rateLimitKey } from './redis-rate-limiter';
 export const ORGANIZATION_RETRY_SEEN_CAP = 10_000;
 
 const QUOTA_COUNTER_MISSING = 5;
-const UNAVAILABLE_RETRY_AFTER_MS = 1_000;
 
 // Returns {result, rate_count}: the count feeds the RateLimit header fields.
 export const GRADED_ADMISSION_SCRIPT = `
@@ -117,12 +119,15 @@ function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function redisUnavailable(cause?: unknown): AppError {
+function redisUnavailable(
+  cause?: unknown,
+  random: () => number = Math.random,
+): AppError {
   return new AppError({
     code: 'REDIS_UNAVAILABLE',
     message: 'Grading controls are temporarily unavailable',
     retryable: true,
-    retryAfterMs: UNAVAILABLE_RETRY_AFTER_MS,
+    retryAfterMs: outageRetryAfterMs(random),
     diagnostic: 'graded-admission-redis-unavailable',
     ...(cause === undefined ? {} : { cause }),
   });
@@ -145,7 +150,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
     const client = this.client;
     if (client === undefined) {
       this.reportDegraded();
-      throw redisUnavailable();
+      throw redisUnavailable(undefined, this.random);
     }
 
     const now = this.now();
@@ -204,6 +209,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
         this.reportDegraded();
         throw redisUnavailable(
           new Error('Redis graded admission result is invalid'),
+          this.random,
         );
     }
   }
@@ -245,13 +251,14 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
       );
     } catch (cause) {
       this.reportDegraded();
-      throw redisUnavailable(cause);
+      throw redisUnavailable(cause, this.random);
     }
     const [result, rateCount] = reply;
     if (result === undefined || rateCount === undefined) {
       this.reportDegraded();
       throw redisUnavailable(
         new Error('Redis graded admission result is invalid'),
+        this.random,
       );
     }
     return [result, rateCount];

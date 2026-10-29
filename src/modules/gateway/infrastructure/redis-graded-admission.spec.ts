@@ -169,7 +169,8 @@ describe('RedisGradedAdmission', () => {
       code: 'REDIS_UNAVAILABLE',
       httpStatus: 503,
       retryable: true,
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
     });
     expect(redis.calls).toHaveLength(1);
   });
@@ -244,7 +245,8 @@ describe('RedisGradedAdmission', () => {
     ).rejects.toMatchObject({
       code: 'REDIS_UNAVAILABLE',
       httpStatus: 503,
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
     });
     expect(redis.calls).toHaveLength(1);
   });
@@ -302,7 +304,8 @@ describe('RedisGradedAdmission', () => {
 
     await expect(admission.consume(request)).rejects.toMatchObject({
       code: 'REDIS_UNAVAILABLE',
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
     });
   });
 
@@ -312,7 +315,8 @@ describe('RedisGradedAdmission', () => {
     ).rejects.toMatchObject({
       code: 'REDIS_UNAVAILABLE',
       retryable: true,
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as number,
     } satisfies Partial<AppError>);
   });
 });

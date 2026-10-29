@@ -185,7 +185,8 @@ describe('RedisConcurrencyLimiter', () => {
       code: 'REDIS_UNAVAILABLE',
       httpStatus: 503,
       retryable: true,
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as number,
     } satisfies Partial<AppError>);
   });
 
@@ -207,7 +208,8 @@ describe('RedisConcurrencyLimiter', () => {
       code: 'REDIS_UNAVAILABLE',
       httpStatus: 503,
       retryable: true,
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as number,
     } satisfies Partial<AppError>);
     await expect(decision.lease.release()).rejects.toMatchObject({
       code: 'REDIS_UNAVAILABLE',

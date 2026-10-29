@@ -825,7 +825,8 @@ describe('Speaking grading HTTP flow', () => {
       expect(response.statusCode).toBe(429);
       expectError(response, 'CONCURRENCY_LIMIT', {
         retryable: true,
-        retry_after_ms: 1000,
+        // The hint is spread over [1 s, 2 s) (#1352).
+        retry_after_ms: expect.closeTo(1_499.5, -3) as number,
       });
       expect(parse).not.toHaveBeenCalled();
       expect(outboundBody).toBeUndefined();

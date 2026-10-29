@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 
 import { stableOffsetMs } from './stable-offset';
 
@@ -96,6 +97,6 @@ export function quotaUnverifiableError(): AppError {
     code: 'REDIS_UNAVAILABLE',
     message: 'Quota could not be verified',
     retryable: true,
-    retryAfterMs: 1_000,
+    retryAfterMs: outageRetryAfterMs(),
   });
 }

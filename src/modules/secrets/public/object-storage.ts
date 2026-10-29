@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
+import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   type ObjectStorageFailureReason,
   recordObjectStorageFailure,
@@ -74,7 +75,7 @@ export function objectStorageUnavailable(
     code,
     message,
     retryable: true,
-    retryAfterMs: 1_000,
+    retryAfterMs: outageRetryAfterMs(),
     diagnostic: `object_storage:${reason}`,
     ...(cause === undefined ? {} : { cause }),
   });

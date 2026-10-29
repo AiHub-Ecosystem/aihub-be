@@ -17,7 +17,8 @@ describe('InFlightCeiling', () => {
     expect(refusal).toMatchObject({
       code: 'CONCURRENCY_LIMIT',
       retryable: true,
-      retryAfterMs: 1000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
     });
 
     leaveFirst();

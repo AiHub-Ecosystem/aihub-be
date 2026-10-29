@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
@@ -173,7 +174,10 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     );
     if (retryAfterMs > 0) {
       if (cached !== undefined && cached.staleUntil > now) return cached.jwks;
-      throw identityProviderUnavailable(undefined, retryAfterMs);
+      throw identityProviderUnavailable(
+        undefined,
+        outageRetryAfterMs(Math.random, retryAfterMs),
+      );
     }
 
     if (
@@ -279,7 +283,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         error,
         error instanceof JwksCapacityError
           ? undefined
-          : JWKS_COLD_FAILURE_TTL_MS,
+          : outageRetryAfterMs(Math.random, JWKS_COLD_FAILURE_TTL_MS),
       );
     }
   }

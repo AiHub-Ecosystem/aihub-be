@@ -282,7 +282,8 @@ describe('SeaweedFS S3 transport', () => {
       await expect(operation).rejects.toMatchObject({
         httpStatus: 503,
         retryable: true,
-        retryAfterMs: 1_000,
+        // The hint is spread over [1 s, 2 s) (#1352).
+        retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
         diagnostic: 'object_storage:deadline',
       });
     },

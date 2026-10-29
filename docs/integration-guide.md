@@ -1084,14 +1084,20 @@ read it.
 AIHUB adds random jitter to these hints, so clients refused at the same moment
 are not all told to come back at the same instant:
 
-| Refusal                                     | `retry_after_ms`                                                                |
-| ------------------------------------------- | ------------------------------------------------------------------------------- |
-| `RATE_LIMITED` (per-key rate)               | Until your key's window resets, plus 0–999 ms                                   |
-| `RATE_LIMITED` (same-key retry budget)      | 60 s, plus 0–999 ms                                                             |
-| `CONCURRENCY_LIMIT`                         | 500–999 ms                                                                      |
-| `IDEMPOTENCY_CONFLICT` (request in flight)  | 2000–2999 ms                                                                    |
-| `QUOTA_EXCEEDED`                            | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset |
-| `REDIS_UNAVAILABLE`, `DATABASE_UNAVAILABLE` | 1000 ms                                                                         |
+| Refusal                                                                                      | `retry_after_ms`                                                                |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `RATE_LIMITED` (per-key rate)                                                                | Until your key's window resets, plus 0–999 ms                                   |
+| `RATE_LIMITED` (same-key retry budget)                                                       | 60 s, plus 0–999 ms                                                             |
+| `CONCURRENCY_LIMIT`                                                                          | 500–999 ms                                                                      |
+| `IDEMPOTENCY_CONFLICT` (request in flight)                                                   | 2000–2999 ms                                                                    |
+| `QUOTA_EXCEEDED`                                                                             | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset |
+| `REDIS_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `*_STORAGE_UNAVAILABLE`, `AUTH_ARGON2_CAPACITY` | 1000–1999 ms                                                                    |
+| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                                | 1000–1999 ms                                                                    |
+| `IDENTITY_PROVIDER_UNAVAILABLE` (JWKS unreachable)                                           | The remaining cooldown (30 s after a cold failure), plus 0–999 ms               |
+
+Outage refusals carry a spread hint too. Honour it rather than retrying on a
+fixed interval: clients that all retry one second after an outage arrive
+together and can overload a dependency that has just recovered.
 
 The quota offset is fixed per Organization, so Organizations stopped by their
 quota do not all return at 00:00 UTC on the 1st. Other errors,

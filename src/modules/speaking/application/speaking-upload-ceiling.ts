@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 
 /**
  * Multipart Speaking gradings one process runs at once (#270). Each holds one
@@ -10,9 +11,6 @@ import { AppError } from '@/common/errors/app-error';
  * memory limit or the process count changes.
  */
 export const SPEAKING_UPLOADS_IN_FLIGHT_MAX = 8;
-
-/** Retry hint for a refusal; a full-size grading takes seconds, not minutes. */
-const RETRY_AFTER_MS = 1000;
 
 export const SPEAKING_UPLOAD_CEILING = Symbol('SPEAKING_UPLOAD_CEILING');
 
@@ -31,7 +29,8 @@ export class InFlightCeiling {
         code: 'CONCURRENCY_LIMIT',
         message: 'Concurrency limit exceeded',
         retryable: true,
-        retryAfterMs: RETRY_AFTER_MS,
+        // A full-size grading takes seconds, not minutes.
+        retryAfterMs: outageRetryAfterMs(),
       });
     }
 

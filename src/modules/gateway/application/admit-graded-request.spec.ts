@@ -201,7 +201,8 @@ describe('quotaUnverifiableError', () => {
     expect(quotaUnverifiableError()).toMatchObject({
       code: 'REDIS_UNAVAILABLE',
       retryable: true,
-      retryAfterMs: 1_000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
     });
   });
 });

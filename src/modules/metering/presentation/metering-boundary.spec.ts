@@ -107,14 +107,18 @@ describe('metering request boundary', () => {
         await filter.catch(error, context);
 
         expect(status).toHaveBeenCalledWith(503);
-        expect(header).toHaveBeenCalledWith('Retry-After', '1');
+        expect(header).toHaveBeenCalledWith(
+          'Retry-After',
+          expect.stringMatching(/^[12]$/) as unknown,
+        );
         const responseBody: unknown = send.mock.calls[0]?.[0];
         expect(responseBody).toMatchObject({
           error: {
             code: 'DATABASE_UNAVAILABLE',
             message: 'Database temporarily unavailable',
             retryable: true,
-            retry_after_ms: 1_000,
+            // The hint is spread over [1 s, 2 s) (#1352).
+            retry_after_ms: expect.closeTo(1_499.5, -3) as unknown,
           },
         });
         expect(logger).toHaveBeenCalledWith(
@@ -157,13 +161,17 @@ describe('metering request boundary', () => {
       await filter.catch(error, context);
 
       expect(status).toHaveBeenCalledWith(503);
-      expect(header).toHaveBeenCalledWith('Retry-After', '1');
+      expect(header).toHaveBeenCalledWith(
+        'Retry-After',
+        expect.stringMatching(/^[12]$/) as unknown,
+      );
       const responseBody: unknown = send.mock.calls[0]?.[0];
       expect(responseBody).toMatchObject({
         error: {
           code: 'DATABASE_UNAVAILABLE',
           retryable: true,
-          retry_after_ms: 1_000,
+          // The hint is spread over [1 s, 2 s) (#1352).
+          retry_after_ms: expect.closeTo(1_499.5, -3) as unknown,
         },
       });
       expect(logger).toHaveBeenCalledWith(

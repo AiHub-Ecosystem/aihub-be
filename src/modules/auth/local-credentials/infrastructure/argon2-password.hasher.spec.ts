@@ -103,7 +103,8 @@ describe('Argon2PasswordHasher', () => {
       code: 'AUTH_ARGON2_CAPACITY',
       httpStatus: 503,
       retryable: true,
-      retryAfterMs: 1000,
+      // The hint is spread over [base, base + 1 s) (#1352).
+      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
     });
     await jest.advanceTimersByTimeAsync(1001);
     expect(

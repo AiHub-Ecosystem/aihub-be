@@ -1,7 +1,10 @@
 import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
+import {
+  jitteredRetryAfterMs,
+  outageRetryAfterMs,
+} from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   ConcurrencyDecision,
@@ -21,7 +24,6 @@ export const CONCURRENCY_RETRY_AFTER_MS = 500;
 export const CONCURRENCY_STALE_LEASE_MS = 120_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
 const LEASE_REMOVAL_ATTEMPTS = 5;
-const UNAVAILABLE_RETRY_AFTER_MS = 1_000;
 
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
 local server_time = redis.call('TIME')
@@ -217,7 +219,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       code: 'REDIS_UNAVAILABLE',
       message: 'Grading controls are temporarily unavailable',
       retryable: true,
-      retryAfterMs: UNAVAILABLE_RETRY_AFTER_MS,
+      retryAfterMs: outageRetryAfterMs(this.random),
       diagnostic: 'graded-concurrency-redis-unavailable',
       ...(cause === undefined ? {} : { cause }),
     });

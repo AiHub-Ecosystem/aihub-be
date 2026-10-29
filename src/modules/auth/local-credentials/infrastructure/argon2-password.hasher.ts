@@ -1,6 +1,7 @@
 import argon2 from 'argon2';
 
 import { AppError } from '@/common/errors/app-error';
+import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   recordArgon2QueueRefusal,
   recordArgon2QueueWait,
@@ -15,7 +16,6 @@ export const ARGON2ID_OPTIONS = Object.freeze({
 
 const MAX_QUEUED_ARGON2_OPERATIONS = 8;
 const MAX_ARGON2_QUEUE_WAIT_MS = 1000;
-const ARGON2_RETRY_AFTER_MS = 1000;
 
 interface Argon2Waiter {
   readonly resolve: (release: () => void) => void;
@@ -96,7 +96,7 @@ export class Argon2PasswordHasher implements PasswordHasherPort {
       code: 'AUTH_ARGON2_CAPACITY',
       message: 'Authentication capacity is temporarily unavailable',
       retryable: true,
-      retryAfterMs: ARGON2_RETRY_AFTER_MS,
+      retryAfterMs: outageRetryAfterMs(),
     });
   }
 }

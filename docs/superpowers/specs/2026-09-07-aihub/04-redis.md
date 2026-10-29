@@ -110,7 +110,7 @@ Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the
 
 The last line represents an absolute boundary: failing open on rate limiting risks _money_; failing open on authorization risks _customer data_.
 
-> **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE` (`retry_after_ms: 1000`); no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and to local-auth rate limits. A post-result quota increment failure still marks usage `quota_unverified`. The fault-injection tests in `test/db/tenant-isolation/fault-injection/` (#328) cover every row of this table as amended.
+> **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE`, whose `retry_after_ms` is 1000–1999 ms (`outageRetryAfterMs`, #1352) so refused callers do not return in one wave; no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and to local-auth rate limits. A post-result quota increment failure still marks usage `quota_unverified`. The fault-injection tests in `test/db/tenant-isolation/fault-injection/` (#328) cover every row of this table as amended.
 
 ### Why Non-Graded Quotas Fail Open
 
