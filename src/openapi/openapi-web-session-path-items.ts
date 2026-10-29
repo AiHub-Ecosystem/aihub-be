@@ -1,8 +1,8 @@
-import { MfaRequiredResponseSchema } from '@/contracts/auth/local-auth';
 import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import { publishedLocalAuthRequestSchema } from './openapi-local-auth-path-items';
 import {
+  routeAlternateSuccessResponsesOf,
   routeCacheControlHeadersOf,
   routeErrorResponsesOf,
   routeIdentityScopeOf,
@@ -62,14 +62,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
         'application/json': { schema: CreateWebSessionResponseSchema },
       },
     },
-    '202': {
-      description:
-        'Password accepted; submit the same email/password and a TOTP or unused recovery code in the next request. Customer Web keeps the password only in transient form memory, never local or session storage.',
-      headers: routeCacheControlHeadersOf('auth.web_sessions.create'),
-      content: {
-        'application/json': { schema: MfaRequiredResponseSchema },
-      },
-    },
+    ...routeAlternateSuccessResponsesOf('auth.web_sessions.create'),
     ...routeErrorResponsesOf('auth.web_sessions.create'),
     // One generic 401 covers a missing or wrong client secret and a wrong,
     // unknown, pending-verification, or disabled credential alike: the route
@@ -131,6 +124,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
               'auth.web_sessions.verification',
             ),
           },
+          ...routeAlternateSuccessResponsesOf('auth.web_sessions.verification'),
           ...routeErrorResponsesOf('auth.web_sessions.verification'),
           '400': errorResponse(
             'Malformed request, invalid verification token, or a registration password that is missing or does not match',
@@ -143,9 +137,6 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
           '401': errorResponse('Client secret missing or wrong', [
             'UNAUTHORIZED',
           ]),
-          // 204 is not an error: the email is verified and no session was
-          // granted, which is the same answer POST /v1/auth/verify-email gives.
-          '204': { description: 'Email verified; no Web Session created.' },
         },
       },
     },

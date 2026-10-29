@@ -9,6 +9,7 @@ import {
   LoginRequestSchema,
   LoginResponseSchema,
   LoginResultResponseSchema,
+  MfaRequiredResponseSchema,
   ReadCurrentUserResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
@@ -146,6 +147,22 @@ export type ErrorStatuses =
   | readonly HttpStatus[]
   | 'all-except-idempotency-conflict';
 
+type SuccessStatus = 200 | 201 | 202 | 204;
+
+/**
+ * A success status a route answers instead of `successStatus` for some
+ * requests. The OpenAPI document publishes each one from this declaration,
+ * with the route's `Cache-Control` header and no other success header, so a
+ * runtime branch that answers a status missing here is one the document
+ * cannot describe.
+ */
+export interface AlternateSuccess {
+  readonly status: SuccessStatus;
+  readonly description: string;
+  /** `null` when this answer has no body. */
+  readonly responseSchema: TSchema | null;
+}
+
 export interface PublicRouteDef {
   readonly openApi?: PublicRouteOpenApiMetadata;
   readonly cacheControl?: CacheControlPolicy;
@@ -156,8 +173,8 @@ export interface PublicRouteDef {
   readonly timeoutMs?: number;
   readonly callerAuth: CallerAuth;
   readonly organizationResolution: OrganizationResolution;
-  readonly successStatus: 200 | 201 | 202 | 204;
-  readonly alternateSuccessStatuses?: readonly (200 | 201 | 202 | 204)[];
+  readonly successStatus: SuccessStatus;
+  readonly alternateSuccesses?: readonly AlternateSuccess[];
   readonly sunset?: {
     readonly deprecationAt: string;
     readonly sunsetAt: string;
@@ -806,7 +823,14 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'none',
     organizationResolution: 'none',
     successStatus: 200,
-    alternateSuccessStatuses: [202],
+    alternateSuccesses: [
+      {
+        status: 202,
+        description:
+          'Password accepted; TOTP or an unused recovery code is required before a Refresh Session is created.',
+        responseSchema: MfaRequiredResponseSchema,
+      },
+    ],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: LoginRequestSchema,
@@ -859,6 +883,14 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'none',
     organizationResolution: 'none',
     successStatus: 200,
+    alternateSuccesses: [
+      {
+        status: 204,
+        description:
+          'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
+        responseSchema: null,
+      },
+    ],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: VerifyEmailRequestSchema,
@@ -948,7 +980,14 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bff-client-secret',
     organizationResolution: 'none',
     successStatus: 201,
-    alternateSuccessStatuses: [202],
+    alternateSuccesses: [
+      {
+        status: 202,
+        description:
+          'Password accepted; submit the same email/password and a TOTP or unused recovery code in the next request. Customer Web keeps the password only in transient form memory, never local or session storage.',
+        responseSchema: MfaRequiredResponseSchema,
+      },
+    ],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: CreateWebSessionRequestSchema,
@@ -962,6 +1001,15 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bff-client-secret',
     organizationResolution: 'none',
     successStatus: 201,
+    // Not an error: the email is verified and no session was granted, the
+    // same answer POST /v1/auth/verify-email gives.
+    alternateSuccesses: [
+      {
+        status: 204,
+        description: 'Email verified; no Web Session created.',
+        responseSchema: null,
+      },
+    ],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: CreateWebSessionFromVerificationRequestSchema,
@@ -1046,8 +1094,7 @@ export const PUBLIC_ROUTES = {
     errorStatuses: [400, 401, 413, 500, 503],
   },
   // `201` when this call records the Avatar, first or replacement; a repeated
-  // completion of the same asset answers `200` with the same body, which the
-  // path item documents.
+  // completion of the same asset answers `200` with the same body.
   'me.avatar.uploads.complete': {
     openApi: {
       summary: 'Complete an Avatar upload',
@@ -1063,13 +1110,6 @@ export const PUBLIC_ROUTES = {
         },
       ],
       successDescription: 'Avatar recorded by this call, first or replacement.',
-      alternateSuccessResponses: [
-        {
-          status: 200,
-          description:
-            'This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.',
-        },
-      ],
     },
     method: 'POST',
     timeoutMs: 10_000,
@@ -1077,6 +1117,14 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'bearer',
     organizationResolution: 'none',
     successStatus: 201,
+    alternateSuccesses: [
+      {
+        status: 200,
+        description:
+          'This asset was already recorded as the Avatar by an earlier completion; the same Avatar is returned.',
+        responseSchema: AvatarResponseSchema,
+      },
+    ],
     publishedIdentityScope: 'none',
     idempotency: 'none',
     requestSchema: null,
@@ -1233,13 +1281,6 @@ export const PUBLIC_ROUTES = {
         },
       ],
       successDescription: 'The verified Audio asset created by this request.',
-      alternateSuccessResponses: [
-        {
-          status: 200,
-          description:
-            'This intent was already completed; the same Audio asset is returned.',
-        },
-      ],
     },
     method: 'POST',
     timeoutMs: 10_000,
@@ -1247,6 +1288,14 @@ export const PUBLIC_ROUTES = {
     callerAuth: 'api-key',
     organizationResolution: 'caller',
     successStatus: 201,
+    alternateSuccesses: [
+      {
+        status: 200,
+        description:
+          'This intent was already completed; the same Audio asset is returned.',
+        responseSchema: SpeakingAudioAssetResponseSchema,
+      },
+    ],
     publishedIdentityScope: 'user',
     idempotency: 'none',
     requestSchema: null,

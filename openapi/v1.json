@@ -9858,7 +9858,15 @@
             }
           },
           "204": {
-            "description": "Email verified; no Web Session created."
+            "description": "Email verified; no Web Session created.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
           },
           "400": {
             "description": "Malformed request, invalid verification token, or a registration password that is missing or does not match",

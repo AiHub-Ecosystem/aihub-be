@@ -4,7 +4,6 @@ import type { PublicRouteId } from '@/catalog/public-routes';
 import {
   ForgotPasswordResponseSchema,
   LoginResponseSchema,
-  MfaRequiredResponseSchema,
   PASSWORD_POLICY_DESCRIPTION,
   RegisterResponseSchema,
 } from '@/contracts/auth/local-auth';
@@ -18,6 +17,7 @@ import {
 } from '@/modules/auth/domain/local-auth';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import {
+  routeAlternateSuccessResponsesOf,
   routeCacheControlHeadersOf,
   routeErrorResponsesOf,
   routeIdentityScopeOf,
@@ -89,12 +89,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
       },
       content: { 'application/json': { schema: LoginResponseSchema } },
     },
-    '202': {
-      description:
-        'Password accepted; TOTP or an unused recovery code is required before a Refresh Session is created.',
-      headers: routeCacheControlHeadersOf('auth.login'),
-      content: { 'application/json': { schema: MfaRequiredResponseSchema } },
-    },
+    ...routeAlternateSuccessResponsesOf('auth.login'),
     ...routeErrorResponsesOf('auth.login'),
   };
   const verifyResponses = {
@@ -110,11 +105,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
       description:
         'Verification Sign-in (ADR-0054): the request carried the Signup Browser Binding of the browser that requested this token, which had not signed in yet. Same session as a login.',
     },
-    '204': {
-      description:
-        'Email verified without signing in: no binding, another browser, or the token already signed in. Re-submitting the same unexpired token that activated the still-active account also succeeds.',
-      headers: routeCacheControlHeadersOf('auth.verify_email'),
-    },
+    ...routeAlternateSuccessResponsesOf('auth.verify_email'),
     ...routeErrorResponsesOf('auth.verify_email'),
     '400': errorResponse(
       'Malformed request, invalid verification token, or (ADR-0123) a registration password that is missing for a token that needs it or does not match',

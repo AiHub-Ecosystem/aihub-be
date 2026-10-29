@@ -148,7 +148,7 @@ describe('buildOpenApiDocument', () => {
       const operation = document.paths[toOpenApiPath(route.path)]?.[method];
       const statuses = [
         route.successStatus,
-        ...(route.alternateSuccessStatuses ?? []),
+        ...(route.alternateSuccesses ?? []).map(({ status }) => status),
       ];
       const expected = route.cacheControl?.value
         ? { type: 'string', enum: [route.cacheControl.value] }

@@ -42,6 +42,30 @@ export function routeSuccessKeyOf(routeId: PublicRouteId): string {
   return String(PUBLIC_ROUTES[routeId].successStatus);
 }
 
+/** The responses for the route's declared alternate success statuses. */
+export function routeAlternateSuccessResponsesOf(
+  routeId: PublicRouteId,
+): Record<string, unknown> {
+  const route: PublicRouteDef = PUBLIC_ROUTES[routeId];
+  const headers = routeCacheControlHeadersOf(routeId);
+  return Object.fromEntries(
+    (route.alternateSuccesses ?? []).map((alternate) => [
+      String(alternate.status),
+      {
+        description: alternate.description,
+        ...(Object.keys(headers).length === 0 ? {} : { headers }),
+        ...(alternate.responseSchema === null
+          ? {}
+          : {
+              content: {
+                'application/json': { schema: alternate.responseSchema },
+              },
+            }),
+      },
+    ]),
+  );
+}
+
 function cacheControlHeadersOf(
   policy: CacheControlPolicy | undefined,
 ): Record<string, unknown> {
@@ -395,19 +419,18 @@ export function publicRouteToPathItem(
       : []),
     ...(metadata.parameters ?? []),
   ];
-  const successResponse = (
-    description: string,
-    includeReplayHeader = false,
-  ): Record<string, unknown> => {
-    const headers = {
-      ...routeCacheControlHeadersOf(routeId),
-      ...(includeReplayHeader && metadata.replayHeaderDescription !== undefined
-        ? routeReplayHeaderOf(routeId, metadata.replayHeaderDescription).headers
-        : {}),
-    };
-    return {
-      description,
-      ...(Object.keys(headers).length === 0 ? {} : { headers }),
+  const successHeaders = {
+    ...routeCacheControlHeadersOf(routeId),
+    ...(metadata.replayHeaderDescription === undefined
+      ? {}
+      : routeReplayHeaderOf(routeId, metadata.replayHeaderDescription).headers),
+  };
+  const responses: Record<string, unknown> = {
+    [routeSuccessKeyOf(routeId)]: {
+      description: metadata.successDescription,
+      ...(Object.keys(successHeaders).length === 0
+        ? {}
+        : { headers: successHeaders }),
       ...(route.responseSchema === null
         ? {}
         : {
@@ -417,20 +440,10 @@ export function publicRouteToPathItem(
               },
             },
           }),
-    };
+    },
+    ...routeAlternateSuccessResponsesOf(routeId),
+    ...routeErrorResponsesOf(routeId),
   };
-  const responses: Record<string, unknown> = {
-    [routeSuccessKeyOf(routeId)]: successResponse(
-      metadata.successDescription,
-      true,
-    ),
-  };
-  for (const alternate of metadata.alternateSuccessResponses ?? []) {
-    responses[String(alternate.status)] = successResponse(
-      alternate.description,
-    );
-  }
-  Object.assign(responses, routeErrorResponsesOf(routeId));
 
   return {
     [route.method.toLowerCase()]: {

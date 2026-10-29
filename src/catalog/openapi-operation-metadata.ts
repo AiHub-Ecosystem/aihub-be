@@ -24,8 +24,4 @@ export interface PublicRouteOpenApiMetadata extends OpenApiOperationMetadata {
   readonly parameters?: readonly OpenApiParameterMetadata[];
   readonly successDescription: string;
   readonly replayHeaderDescription?: string;
-  readonly alternateSuccessResponses?: readonly {
-    readonly status: 200 | 201 | 202 | 204;
-    readonly description: string;
-  }[];
 }
