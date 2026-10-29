@@ -134,6 +134,36 @@ PostgreSQL statement and lock timeout errors map to retryable
 `DATABASE_UNAVAILABLE` responses; the structured log records only the timeout
 kind and never the SQL or its parameters.
 
+### Connections with an unconfirmed transaction (#1285; 2026-10-29)
+
+A client-side `query_timeout` rejects the caller but leaves the server
+transaction open, and `@prisma/adapter-pg` releases the connection as healthy
+whatever its rollback did. A later borrower then ran inside that transaction.
+It could commit a failed request's rows, and it held that request's
+transaction-level advisory locks.
+
+The shared pool factory (`createPostgresPool`) therefore checks every
+connection it lends out when the connection is released. If the last status
+PostgreSQL reported is not idle (`T` in a transaction, `E` in a failed one, or
+unknown), the pool destroys the connection instead of keeping it. Closing the
+socket makes PostgreSQL roll back the transaction and release its locks as
+soon as its running statement ends. The release happens before Prisma rejects
+the caller, so a retryable `DATABASE_UNAVAILABLE` never coexists with a
+reusable open transaction.
+
+- Nothing is retried, and no `ROLLBACK` is re-sent.
+- The pool opens a new connection on demand, so capacity recovers without a
+  restart.
+- Each discard logs `postgres_connection_discarded` with the pool name and the
+  transaction status only.
+- The guard is in the factory, so it covers every connection role, the
+  operator clients, `$transaction` callers, and `runGuardedTransaction` alike.
+
+`test/db/tenant-isolation/fault-injection/transaction-cleanup-fault.spec.ts`
+checks the server side from a separate session: a stalled statement, a
+rollback that times out, and a dropped link, with a confirmed rollback and a
+recoverable query error as controls.
+
 ## Benchmark
 
 Run `pnpm build`, set `DB_LANE_ADMIN_URL` to the disposable PostgreSQL admin
