@@ -6,6 +6,15 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.1.2] - 2026-10-29
+
+### Added
+
+- `POST /v1/auth/mfa/enrollment/confirm` documents the `503` answer
+  (`AUTH_WEB_SESSION_UNAVAILABLE`) it already returned when the Customer Web
+  client secret is not provisioned or the forwarded end-user IP is missing. See
+  [#934](https://github.com/AiHub-Ecosystem/aihub-be/issues/934).
+
 ## [1.1.1] - 2026-10-29
 
 ### Added
