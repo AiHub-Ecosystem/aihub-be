@@ -59,18 +59,56 @@ A failure prints `public_api_major_report_failed` with a fixed `error_code`
 and exits non-zero. A malformed window is a usage error and prints nothing on
 stdout.
 
-## Using it with the sunset policy
+## Retiring a major
 
-ADR-0127 keeps a superseded major available for at least 12 months and
-requires a review of customer traffic before sunset. Counts are not pruned
-automatically; each row is one Organization, major, and day, so the table grows
-slowly and a 12-month review needs no separate archive.
+ADR-0127 keeps a superseded major available for at least 12 months. Its
+"retirement evidence" update (#1376) defines the evidence and sign-off this
+procedure follows. Counts are not pruned automatically; each row is one
+Organization, major, and day, so the table grows slowly and a 12-month review
+needs no separate archive.
 
-1. At the successor release, record `coverage_start_day` for the old major.
-2. Before the sunset date, run the report over the whole support window for
-   each Environment. Contact every Organization listed for the old major, using
-   `last_seen_at` to tell active callers from ones that stopped.
-3. If customers are still migrating, an owner decision may extend support;
-   publish the revised date, then keep reporting until it passes.
-4. After sunset, requests to the retired major are answered with `410 Gone` and
-   no longer counted. The report keeps the history for the final review.
+The report shows that every Active Consumer was found. It does not have to
+prove that traffic stopped. An **Active Consumer** is an Organization with at
+least one authenticated request, successful or failed, to the old major in
+either Environment during the 90 days before sunset.
+
+Run every report once per Environment. Keep the Organization lists and the
+outreach log private with the report output. The public retirement issue
+carries only aggregate figures, because the repository is public.
+
+1. **Successor release.** Publish the sunset date (at least 12 months out) with
+   the release; the `Deprecation` and `Sunset` headers (#1362) carry it to
+   every caller. Open a public retirement issue for the old major. Run the
+   report from `coverage_start_day` and email the active `owner` members of
+   every Organization it lists.
+2. **90 days before sunset.** Run the report over the last 90 days. Email the
+   active `owner` members of every Active Consumer.
+3. **30 days before sunset.** Repeat step 2.
+4. **7 days before sunset.** Run the final report over the last 90 days and
+   decide per Environment whether its evidence is complete:
+   - Bounded loss from a process that exited uncleanly (at most one flush
+     interval each) is acceptable when the report shows it.
+   - Any longer gap makes that Environment's evidence inconclusive: repeated
+     failed writes, a day with no successful write while the major was served,
+     or a failed final write. Treat every Organization that Environment ever
+     recorded for the major as an Active Consumer, and confirm each was
+     contacted.
+   - `coverage_start_day` alone does not prove the history is continuous.
+
+   Explain the unattributed requests by caller kind. Confirm that Customer Web
+   has moved to the successor major, and record the rest in the sign-off. Then
+   post the aggregate figures on the retirement issue for each Environment:
+   Active Consumer count, request totals, unattributed totals by caller kind,
+   and inconclusive days. The Public API owner signs off there.
+
+5. **Extension.** If a contacted Active Consumer says it is still migrating,
+   the owner may extend support by at most 3 months per decision. Publish the
+   revised date in the `Sunset` header and the documentation, then restart from
+   step 2 for the new date. An Active Consumer that does not reply after both
+   reminders is not a reason to extend.
+6. **Sunset.** Requests to the retired major are answered with `410 Gone`
+   (#1367) and are no longer counted. The report keeps the history.
+
+Until #1389 lands, the report cannot show gaps or break unattributed requests
+down by caller kind. Until then, treat every Environment's evidence as
+inconclusive.
