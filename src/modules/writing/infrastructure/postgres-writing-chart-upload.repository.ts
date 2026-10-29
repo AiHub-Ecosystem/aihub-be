@@ -95,6 +95,30 @@ function advisoryKey(
   return `${owner.organizationId}:writing-chart:${action}`;
 }
 
+/**
+ * The lock publication and revocation share (#1206): a revocation requested
+ * under it is seen by every later reservation and every later markPublished.
+ */
+export function writingChartPublicationLockKey(organizationId: string): string {
+  return advisoryKey({ organizationId }, 'publications');
+}
+
+// Prisma's query path cannot deserialize PostgreSQL's void result.
+export const WRITING_CHART_LOCK_SQL =
+  'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+
+/** An operator requested this asset's revocation: it may never publish (#1206). */
+async function isRevoked(
+  client: Prisma.TransactionClient | PrismaClient,
+  assetId: string,
+): Promise<boolean> {
+  const fence = await client.writingChartRevocationAudit.findFirst({
+    where: { assetId, phase: 'requested' },
+    select: { id: true },
+  });
+  return fence !== null;
+}
+
 export class PostgresWritingChartUploadRepository
   implements WritingChartUploadRepositoryPort
 {
@@ -139,6 +163,9 @@ export class PostgresWritingChartUploadRepository
       this.client.writingChartUpload.findFirst({ where: ownerWhere(owner) }),
     );
     if (row === null) return { kind: 'missing' };
+    if (await this.run(() => isRevoked(this.client, row.id))) {
+      return { kind: 'missing' };
+    }
     if (['open', 'rejected', 'publishing'].includes(row.status)) {
       return { kind: 'intent', intent: mapIntent(row) };
     }
@@ -168,14 +195,21 @@ export class PostgresWritingChartUploadRepository
       const row = await client.writingChartUpload.findFirst({
         where: ownerWhere(input.owner),
       });
-      if (row === null) return 'missing';
+      if (row === null || (await isRevoked(client, row.id))) return 'missing';
       if (row.status === 'published') return 'published';
       if (
         !['open', 'publishing'].includes(row.status) ||
         row.expiresAt.getTime() <= input.now.getTime()
       )
         return 'missing';
-      if (row.status === 'publishing') return 'started';
+      if (row.status === 'publishing') {
+        // A retry resumes the publication, and its deadline starts again.
+        await client.writingChartUpload.updateMany({
+          where: { ...ownerWhere(input.owner), status: 'publishing' },
+          data: { publicationStartedAt: input.now },
+        });
+        return 'started';
+      }
 
       const since = new Date(
         input.now.getTime() - WRITING_CHART_RATE_WINDOW_MS,
@@ -200,7 +234,7 @@ export class PostgresWritingChartUploadRepository
       }
       await client.writingChartUpload.updateMany({
         where: { ...ownerWhere(input.owner), status: 'open' },
-        data: { status: 'publishing' },
+        data: { status: 'publishing', publicationStartedAt: input.now },
       });
       return 'started';
     });
@@ -210,11 +244,20 @@ export class PostgresWritingChartUploadRepository
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
     readonly imageUrl: string;
-  }): Promise<WritingChartAsset | undefined> {
+  }): Promise<WritingChartAsset | 'revoked' | undefined> {
     return this.transaction(async (client) => {
+      await this.lock(client, advisoryKey(input.owner, 'publications'));
+      if (await isRevoked(client, input.owner.assetId)) {
+        await client.writingChartUpload.updateMany({
+          where: { ...ownerWhere(input.owner), status: 'publishing' },
+          data: { status: 'rejected', publicationStartedAt: null },
+        });
+        return 'revoked';
+      }
       await client.writingChartUpload.updateMany({
         where: { ...ownerWhere(input.owner), status: 'publishing' },
         data: {
+          publicationStartedAt: null,
           status: 'published',
           publishedAt: input.now,
           retentionExpiresAt: new Date(
@@ -234,7 +277,7 @@ export class PostgresWritingChartUploadRepository
     await this.run(() =>
       this.client.writingChartUpload.updateMany({
         where: { ...ownerWhere(owner), status: 'publishing' },
-        data: { status: 'open' },
+        data: { status: 'open', publicationStartedAt: null },
       }),
     );
   }
@@ -318,11 +361,7 @@ export class PostgresWritingChartUploadRepository
     client: Prisma.TransactionClient,
     key: string,
   ): Promise<void> {
-    // Prisma's query path cannot deserialize PostgreSQL's void result.
-    await client.$executeRawUnsafe(
-      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      key,
-    );
+    await client.$executeRawUnsafe(WRITING_CHART_LOCK_SQL, key);
   }
 
   private async transaction<T>(

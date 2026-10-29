@@ -473,6 +473,18 @@ security gate in #376.
    the object, the result is propagation pending; recheck and escalate if it
    remains public beyond the measured bound. The command must work when the
    15-minute expiry sweep has already removed the database row.
+
+   The request event also fences the upload from publishing again (#1206).
+   From then on, completion, refresh, and lookup answer `NOT_FOUND` for the
+   asset. A publisher that has already written the object removes it itself.
+   `publicationPending: true` means a publication began within the last 30
+   seconds and may still write the object. Rerun the same command after 30
+   seconds and expect `publicationPending: false`. If the edge serves the
+   object again after a run reported `origin: deleted` and
+   `publicationPending: false`, that is a new origin write, not propagation:
+   rerun the command and escalate. A stale edge copy instead shows up as
+   `propagationPending: true` on the run that deleted the origin object.
+
 5. The per-environment internal audit appends a request event before deletion,
    then a completion event with the result. It records asset ID, operator
    account, timestamp, and phase without the report, URL, or image bytes. If

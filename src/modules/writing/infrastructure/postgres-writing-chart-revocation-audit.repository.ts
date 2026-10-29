@@ -5,6 +5,10 @@ import type {
   WritingChartRevocationAuditRecord,
   WritingChartRevocationAuditRepositoryPort,
 } from '@/modules/writing/application/writing-chart-revocation.port';
+import {
+  WRITING_CHART_LOCK_SQL,
+  writingChartPublicationLockKey,
+} from './postgres-writing-chart-upload.repository';
 
 export const WRITING_CHART_REVOCATION_AUDIT_PRUNE_SQL = `
   WITH candidates AS (
@@ -23,6 +27,19 @@ export const WRITING_CHART_REVOCATION_AUDIT_PRUNE_SQL = `
 
 const nextAuditId = prefixedIdGenerator('wra_');
 
+function auditData(record: WritingChartRevocationAuditRecord) {
+  return {
+    id: nextAuditId(record.occurredAt),
+    assetId: record.assetId,
+    actorUserAccountId: record.actorUserAccountId,
+    occurredAt: record.occurredAt,
+    phase: record.phase,
+    originOutcome: record.originOutcome,
+    edgeOutcome: record.edgeOutcome,
+    edgeStatus: record.edgeStatus,
+  };
+}
+
 export class PostgresWritingChartRevocationAuditRepository
   implements WritingChartRevocationAuditRepositoryPort
 {
@@ -38,18 +55,44 @@ export class PostgresWritingChartRevocationAuditRepository
     return account?.id;
   }
 
+  async requestRevocation(
+    record: Extract<WritingChartRevocationAuditRecord, { phase: 'requested' }>,
+    publishingSince: Date,
+  ): Promise<{ readonly publicationPending: boolean }> {
+    return this.client.$transaction(async (transaction) => {
+      const upload = await transaction.writingChartUpload.findUnique({
+        where: { id: record.assetId },
+        select: { organizationId: true },
+      });
+      // A pruned row has no publisher left to fence; #816 deletes by key.
+      if (upload !== null) {
+        await transaction.$executeRawUnsafe(
+          WRITING_CHART_LOCK_SQL,
+          writingChartPublicationLockKey(upload.organizationId),
+        );
+      }
+      await transaction.writingChartRevocationAudit.create({
+        data: auditData(record),
+      });
+      const current =
+        upload === null
+          ? null
+          : await transaction.writingChartUpload.findUnique({
+              where: { id: record.assetId },
+              select: { status: true, publicationStartedAt: true },
+            });
+      return {
+        publicationPending:
+          current?.status === 'publishing' &&
+          current.publicationStartedAt !== null &&
+          current.publicationStartedAt > publishingSince,
+      };
+    });
+  }
+
   async append(record: WritingChartRevocationAuditRecord): Promise<void> {
     await this.client.writingChartRevocationAudit.create({
-      data: {
-        id: nextAuditId(record.occurredAt),
-        assetId: record.assetId,
-        actorUserAccountId: record.actorUserAccountId,
-        occurredAt: record.occurredAt,
-        phase: record.phase,
-        originOutcome: record.originOutcome,
-        edgeOutcome: record.edgeOutcome,
-        edgeStatus: record.edgeStatus,
-      },
+      data: auditData(record),
     });
   }
 

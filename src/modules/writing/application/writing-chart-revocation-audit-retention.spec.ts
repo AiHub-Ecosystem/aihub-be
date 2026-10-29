@@ -11,6 +11,7 @@ describe('WritingChartRevocationAuditRetentionService', () => {
       .mockResolvedValueOnce(0);
     const repository: WritingChartRevocationAuditRepositoryPort = {
       findActiveOperatorAccount: jest.fn(),
+      requestRevocation: jest.fn(),
       append: jest.fn(),
       pruneExpired,
     };
@@ -40,6 +41,7 @@ describe('WritingChartRevocationAuditRetentionService', () => {
   it('clamps leap-day cutoffs to the last day of the target month', async () => {
     const repository: WritingChartRevocationAuditRepositoryPort = {
       findActiveOperatorAccount: jest.fn(),
+      requestRevocation: jest.fn(),
       append: jest.fn(),
       pruneExpired: jest.fn().mockResolvedValue(0),
     };

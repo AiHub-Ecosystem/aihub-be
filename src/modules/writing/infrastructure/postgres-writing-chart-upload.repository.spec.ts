@@ -11,6 +11,9 @@ function fakePrisma(count: jest.Mock) {
   const transaction = {
     $executeRawUnsafe: lock,
     writingChartUpload: { count, create, findFirst, updateMany },
+    writingChartRevocationAudit: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
   } as unknown as Prisma.TransactionClient;
   const runTransaction = jest.fn(
     async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>

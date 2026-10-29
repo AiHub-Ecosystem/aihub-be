@@ -312,6 +312,20 @@ export class WritingChartUploadService
         now: this.now(),
         imageUrl,
       });
+      if (asset === 'revoked') {
+        // An operator revoked the asset while this write was in flight. Without
+        // the request signal: the removal must run even past the deadline. A
+        // failed removal is left for the operator's revoke re-run.
+        try {
+          await this.storage.deletePublishedObject({
+            environment: found.intent.environment,
+            publishedKey: found.intent.publishedKey,
+          });
+        } catch {
+          // The revoke command reports the edge still serving until re-run.
+        }
+        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
+      }
       if (asset === undefined)
         throw storageUnavailable(
           'WRITING_CHART_STORAGE_UNAVAILABLE',

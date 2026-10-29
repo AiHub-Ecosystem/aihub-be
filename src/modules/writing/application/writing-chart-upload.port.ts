@@ -35,11 +35,15 @@ export interface WritingChartUploadRepositoryPort {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
   }): Promise<'started' | 'published' | 'limited' | 'missing'>;
+  /**
+   * `revoked` when an operator revoked the asset after its reservation: the
+   * row is rejected and the caller removes the object it wrote (#1206).
+   */
   markPublished(input: {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
     readonly imageUrl: string;
-  }): Promise<WritingChartAsset | undefined>;
+  }): Promise<WritingChartAsset | 'revoked' | undefined>;
   releasePublication(owner: WritingChartUploadOwner): Promise<void>;
   cleanupCandidates(input: {
     readonly now: Date;

@@ -574,6 +574,8 @@ model WritingChartUpload {
   expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
   publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
   retentionExpiresAt DateTime? @map("retention_expires_at") @db.Timestamptz(6)
+  /// When the current publication began, so a revocation can tell a publisher still inside its deadline (#1206).
+  publicationStartedAt DateTime? @map("publication_started_at") @db.Timestamptz(6)
 
   @@index([organizationId, environment, createdAt], map: "writing_chart_uploads_org_created_idx")
   @@index([organizationId, environment, publishedAt], map: "writing_chart_uploads_org_published_idx", where: raw("(status = 'published'::text)"))
@@ -599,6 +601,7 @@ model WritingChartRevocationAudit {
   actor              UserAccount @relation(fields: [actorUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([actorUserAccountId], map: "writing_chart_revocation_audits_actor_user_account_id_idx")
+  @@index([assetId], map: "writing_chart_revocation_audits_asset_id_idx")
   @@index([occurredAt, id], map: "writing_chart_revocation_audits_retention_idx")
   @@map("writing_chart_revocation_audits")
 }

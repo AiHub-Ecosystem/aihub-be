@@ -208,6 +208,7 @@ describe('runUsagePruneCommand', () => {
     const lines: string[] = [];
     const auditRepository = {
       findActiveOperatorAccount: jest.fn(),
+      requestRevocation: jest.fn(),
       append: jest.fn(),
       pruneExpired: jest
         .fn<Promise<number>, [Date, number]>()

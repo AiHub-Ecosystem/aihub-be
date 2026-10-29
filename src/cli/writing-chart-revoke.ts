@@ -4,6 +4,7 @@ import type {
   WritingChartRevocationStoragePort,
 } from '@/modules/writing/application/writing-chart-revocation.port';
 import {
+  WRITING_CHART_PUBLICATION_LEASE_MS,
   type WritingChartEnvironment,
   isWritingChartAssetId,
 } from '@/modules/writing/public/chart-revocation';
@@ -144,6 +145,7 @@ export async function runWritingChartRevokeCommand(
           readonly status: number | null;
         };
         readonly propagationPending: boolean;
+        readonly publicationPending: boolean;
       }
     | undefined;
 
@@ -169,16 +171,23 @@ export async function runWritingChartRevokeCommand(
       throw new WritingChartRevokeError('DATABASE_FAILURE');
     }
 
+    // From here on the asset can never publish again (#1206). A publication
+    // still inside its deadline may yet write the object; it removes what it
+    // wrote, and the operator re-runs this command once it has settled.
+    let publicationPending: boolean;
     try {
-      await audit.append({
-        assetId: parsed.assetId,
-        actorUserAccountId,
-        occurredAt,
-        phase: 'requested',
-        originOutcome: null,
-        edgeOutcome: null,
-        edgeStatus: null,
-      });
+      ({ publicationPending } = await audit.requestRevocation(
+        {
+          assetId: parsed.assetId,
+          actorUserAccountId,
+          occurredAt,
+          phase: 'requested',
+          originOutcome: null,
+          edgeOutcome: null,
+          edgeStatus: null,
+        },
+        new Date(occurredAt.getTime() - WRITING_CHART_PUBLICATION_LEASE_MS),
+      ));
     } catch {
       throw new WritingChartRevokeError('DATABASE_FAILURE');
     }
@@ -231,6 +240,7 @@ export async function runWritingChartRevokeCommand(
       origin,
       edge,
       propagationPending: origin !== 'failed' && edge.state === 'serving',
+      publicationPending,
     };
   } catch (error) {
     operationError = error;

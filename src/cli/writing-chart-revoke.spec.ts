@@ -22,10 +22,18 @@ function setup(includeProbe = true) {
     },
   );
   const closeAudit = jest.fn().mockResolvedValue(undefined);
+  const publication = { pending: false };
+  const requestRevocation = jest.fn(
+    async (record: WritingChartRevocationAuditRecord, _since: Date) => {
+      records.push(record);
+      return { publicationPending: publication.pending };
+    },
+  );
   const audit: WritingChartRevocationAuditRepositoryPort & {
     close: jest.Mock;
   } = {
     findActiveOperatorAccount,
+    requestRevocation,
     append: appendAuditRecord,
     pruneExpired: jest.fn().mockResolvedValue(0),
     close: closeAudit,
@@ -58,12 +66,35 @@ function setup(includeProbe = true) {
     lines,
     findActiveOperatorAccount,
     appendAuditRecord,
+    requestRevocation,
+    publication,
     closeAudit,
     deletePublishedObjectIfPresent,
   };
 }
 
 describe('runWritingChartRevokeCommand', () => {
+  it('fences publication from the deadline before now and reports a publication still in flight', async () => {
+    const {
+      input,
+      requestRevocation,
+      publication,
+      deletePublishedObjectIfPresent,
+    } = setup();
+    publication.pending = true;
+
+    await expect(runWritingChartRevokeCommand(input)).resolves.toMatchObject({
+      origin: 'deleted',
+      publicationPending: true,
+    });
+
+    expect(requestRevocation).toHaveBeenCalledWith(
+      expect.objectContaining({ assetId: ASSET_ID, phase: 'requested' }),
+      new Date(NOW.getTime() - 30_000),
+    );
+    expect(deletePublishedObjectIfPresent).toHaveBeenCalledTimes(1);
+  });
+
   it('deletes only the selected tier key, probes separately, and stores safe audit metadata', async () => {
     const {
       input,
@@ -236,9 +267,9 @@ describe('runWritingChartRevokeCommand', () => {
   });
 
   it('does not delete when the durable request event cannot be recorded', async () => {
-    const { input, appendAuditRecord, deletePublishedObjectIfPresent } =
+    const { input, requestRevocation, deletePublishedObjectIfPresent } =
       setup();
-    appendAuditRecord.mockRejectedValue(new Error('database unavailable'));
+    requestRevocation.mockRejectedValue(new Error('database unavailable'));
 
     await expect(runWritingChartRevokeCommand(input)).rejects.toMatchObject({
       code: 'DATABASE_FAILURE',

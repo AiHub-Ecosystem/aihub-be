@@ -31,7 +31,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | DispatchAttempt                 | metering    | 7       |
 | SpeakingAudioAsset              | speaking    | 9       |
 | SpeakingAudioUploadIntent       | speaking    | 10      |
-| WritingChartUpload              | writing     | 14      |
+| WritingChartUpload              | writing     | 15      |
 | WritingChartRevocationAudit     | writing     | 9       |
 | UsageRecord                     | metering    | 21      |
 | UserAccount                     | auth        | 18      |
@@ -439,22 +439,23 @@ Owner: `speaking`
 
 Owner: `writing`
 
-| Column             | Type      | Attributes                                                                    |
-| ------------------ | --------- | ----------------------------------------------------------------------------- |
-| id                 | String    | @id                                                                           |
-| organizationId     | String    | @map("organization_id")                                                       |
-| endUserId          | String    | @map("end_user_id")                                                           |
-| environment        | String    |                                                                               |
-| stagingKey         | String    | @unique(map: "writing_chart_uploads_staging_key_key") @map("staging_key")     |
-| publishedKey       | String    | @unique(map: "writing_chart_uploads_published_key_key") @map("published_key") |
-| contentType        | String    | @map("content_type")                                                          |
-| byteSize           | Int       | @map("byte_size")                                                             |
-| status             | String    | @default("open")                                                              |
-| imageUrl           | String?   | @map("image_url")                                                             |
-| createdAt          | DateTime  | @map("created_at") @db.Timestamptz(6)                                         |
-| expiresAt          | DateTime  | @map("expires_at") @db.Timestamptz(6)                                         |
-| publishedAt        | DateTime? | @map("published_at") @db.Timestamptz(6)                                       |
-| retentionExpiresAt | DateTime? | @map("retention_expires_at") @db.Timestamptz(6)                               |
+| Column               | Type      | Attributes                                                                    |
+| -------------------- | --------- | ----------------------------------------------------------------------------- |
+| id                   | String    | @id                                                                           |
+| organizationId       | String    | @map("organization_id")                                                       |
+| endUserId            | String    | @map("end_user_id")                                                           |
+| environment          | String    |                                                                               |
+| stagingKey           | String    | @unique(map: "writing_chart_uploads_staging_key_key") @map("staging_key")     |
+| publishedKey         | String    | @unique(map: "writing_chart_uploads_published_key_key") @map("published_key") |
+| contentType          | String    | @map("content_type")                                                          |
+| byteSize             | Int       | @map("byte_size")                                                             |
+| status               | String    | @default("open")                                                              |
+| imageUrl             | String?   | @map("image_url")                                                             |
+| createdAt            | DateTime  | @map("created_at") @db.Timestamptz(6)                                         |
+| expiresAt            | DateTime  | @map("expires_at") @db.Timestamptz(6)                                         |
+| publishedAt          | DateTime? | @map("published_at") @db.Timestamptz(6)                                       |
+| retentionExpiresAt   | DateTime? | @map("retention_expires_at") @db.Timestamptz(6)                               |
+| publicationStartedAt | DateTime? | @map("publication_started_at") @db.Timestamptz(6)                             |
 
 ## WritingChartRevocationAudit
 

@@ -7,3 +7,7 @@ export const WRITING_CHART_RATE_WINDOW_MS = 60 * 60 * 1000;
 export const WRITING_CHART_ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
 export const WRITING_CHART_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const WRITING_CHART_ORG_HOURLY_LIMIT = 5;
+// Longer than the completion route's 10-second deadline: a publication that
+// began earlier has been aborted and can no longer write the public object, so
+// a revocation need not wait for it (#1206).
+export const WRITING_CHART_PUBLICATION_LEASE_MS = 30 * 1000;
