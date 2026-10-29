@@ -195,6 +195,10 @@ Check `redis_memory_used_bytes`, command latency, and the observed 256 MiB limit
 
 `aihub_breaker_state` is labeled by operation: `0` is closed, `1` is open, and `2` is half-open. `AIHUBDownstreamCircuitBreakerOpen` fires when any Production or Sandbox instance keeps one operation open for two minutes. Check the alert's `job`, `environment`, and `operation` labels, then compare the operation's request errors and latency with the downstream service's health and recent changes. The breaker opens after at least 20 calls in its rolling 10-second window fail at or above the 50% threshold; it uses a 30-second reset timeout and closes after a successful half-open call. Do not edit the gauge or restart an instance just to clear the alert. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy.
 
+### Downstream credential rejections
+
+`aihub_downstream_credential_failures_total` counts AI Service answers of 401 or 403, labeled by `operation` and `downstream` (#845). `AIHUBDownstreamCredentialRejected` fires when one operation in one tier sees at least three in five minutes, sustained for two minutes; a single stray rejection does not fire it. First check the `downstream_credential_rejected` log lines for the alert's `operation`: each carries the request ID, the status, and the private path, and never a token. Then compare the time of the first rejection with the last change to the AI Service credential, the internal token issuer, or the AI Service itself. Customers receive a retryable `503 AI_SERVICE_UNAVAILABLE` meanwhile, and these answers also count toward the circuit breaker, so `AIHUBDownstreamCircuitBreakerOpen` usually follows. Fix the credential; do not restart an instance just to clear the alert. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy.
+
 ### Target health
 
 Inspect `/api/v1/targets` through the loopback Prometheus tunnel and check the affected exporter and SSH forward. A target-down alert can indicate either source unavailability or the monitoring path.

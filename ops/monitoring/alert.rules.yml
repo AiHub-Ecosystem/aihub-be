@@ -120,6 +120,18 @@ groups:
           description: "{{ $labels.operation }} is still open in the {{ $labels.environment }} tier."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-circuit-breakers
 
+      - alert: AIHUBDownstreamCredentialRejected
+        expr: sum by (job, operation, downstream) (increase(aihub_downstream_credential_failures_total{job=~"aihub-(production|sandbox)-app"}[5m])) >= 3
+        for: 2m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "An AI Service keeps rejecting AIHUB's credential"
+          description: "{{ $labels.operation }} in {{ $labels.job }} received repeated 401 or 403 answers from {{ $labels.downstream }} in the last five minutes."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-credential-rejections
+
   - name: aihub-tracing
     rules:
       - alert: AIHUBTraceReceiverNotReceiving
@@ -172,7 +184,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "1665bbef055058a7ea6254cac7654e3780c6ae794434d5fb285d1a9160ddaf2c"
+          rules_sha256: "5d22d6d92edc9684a0ad85874e89abf1dff1fe2ae91897afd6a0e29b348f347b"
 
   - name: aihub-email-outbox
     rules:

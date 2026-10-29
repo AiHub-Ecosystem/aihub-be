@@ -551,6 +551,33 @@ tests:
         alertname: AIHUBDownstreamCircuitBreakerOpen
         exp_alerts: []
 
+  # #1401: a steady stream of downstream 401/403 answers fires for that operation
+  # and AI Service; one stray rejection stays below the threshold.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_downstream_credential_failures_total{job="aihub-production-app",instance="prod",operation="writing.task1.grade",downstream="ai-writing"}'
+        values: "0 1 2 3 4 5 6 7 8 9 10"
+      - series: 'aihub_downstream_credential_failures_total{job="aihub-sandbox-app",instance="sandbox",operation="speaking.grading",downstream="ai-speaking"}'
+        values: "0 0 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AIHUBDownstreamCredentialRejected
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: AIHUBDownstreamCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              operation: writing.task1.grade
+              downstream: ai-writing
+            exp_annotations:
+              summary: "An AI Service keeps rejecting AIHUB's credential"
+              description: "writing.task1.grade in aihub-production-app received repeated 401 or 403 answers from ai-writing in the last five minutes."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-credential-rejections
+
   # #237: Redis failures fire on any request-path protection seam, except the
   # separately owned email send-rate alert; initialized counters catch first failures.
   - interval: 1m
