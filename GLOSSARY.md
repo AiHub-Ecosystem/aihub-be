@@ -180,6 +180,12 @@ and End-User ownership scope upload and completion, not public reads
 [ADR-0101](docs/adr/0101-writing-charts-use-shared-seaweedfs-host.md),
 [ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md)).
 
+**Public route convention**:
+The naming and response rules every new Public API Route follows: a verb for
+actions, a prefix that separates exam content from skill assets, one rule for
+what a delete answers, and a fixed place for `me`. Routes published before it
+stay as they are and are listed with the reason ([ADR-0129](docs/adr/0129-public-route-and-response-convention.md)).
+
 **Downstream fault**:
 An AI Service answer that counts against the service's health: every 5xx, and a
 401 or 403 because AIHUB's own credential was rejected rather than the
