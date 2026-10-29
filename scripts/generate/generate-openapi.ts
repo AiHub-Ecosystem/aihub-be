@@ -1,19 +1,46 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 import {
-  PUBLIC_API_CONTRACT_VERSION,
-  PUBLIC_API_MAJOR_PATH,
-} from '@/openapi/public-api-contract-version';
+  PUBLIC_API_MAJORS,
+  latestPublicApiMajor,
+  supportedPublicApiMajors,
+} from '@/catalog/public-api-majors';
+import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 
-const document = buildOpenApiDocument(PUBLIC_API_CONTRACT_VERSION);
-const serialized = `${JSON.stringify(document, null, 2)}\n`;
+const VERSIONED_SPEC = /^v[1-9][0-9]*\.json$/u;
 const versionedDirectory = join(__dirname, '../../openapi');
-const versionedPath = join(versionedDirectory, `${PUBLIC_API_MAJOR_PATH}.json`);
+
+function serialize(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
 
 mkdirSync(versionedDirectory, { recursive: true });
-writeFileSync(versionedPath, serialized);
-writeFileSync('openapi.json', serialized);
 
-console.log(`Wrote openapi.json and ${versionedPath}`);
+// A retired major's contract leaves with the release that retires it.
+const supportedFiles = new Set(
+  supportedPublicApiMajors().map(({ major }) => `v${major}.json`),
+);
+for (const name of readdirSync(versionedDirectory)) {
+  if (VERSIONED_SPEC.test(name) && !supportedFiles.has(name)) {
+    rmSync(join(versionedDirectory, name));
+  }
+}
+
+for (const major of supportedPublicApiMajors()) {
+  writeFileSync(
+    join(versionedDirectory, `v${major.major}.json`),
+    serialize(buildOpenApiDocument(major)),
+  );
+}
+writeFileSync(
+  'openapi.json',
+  serialize(buildOpenApiDocument(latestPublicApiMajor())),
+);
+// The release gate reads the lifecycle from here; it cannot import TypeScript.
+writeFileSync(
+  join(versionedDirectory, 'majors.json'),
+  serialize(PUBLIC_API_MAJORS),
+);
+
+console.log(`Wrote openapi.json and ${versionedDirectory}`);

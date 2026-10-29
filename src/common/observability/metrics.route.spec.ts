@@ -111,7 +111,7 @@ describe('metrics scrape endpoint', () => {
   });
 
   it('never enters the generated OpenAPI document', () => {
-    const document = buildOpenApiDocument('0.0.0-test') as {
+    const document = buildOpenApiDocument() as {
       readonly paths?: Record<string, unknown>;
     };
 

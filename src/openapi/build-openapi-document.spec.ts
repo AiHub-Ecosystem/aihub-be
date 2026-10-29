@@ -132,7 +132,7 @@ const ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID =
   'organizations.members.transfer';
 
 function build(): OpenApiDocument {
-  return buildOpenApiDocument('0.0.0-test') as OpenApiDocument;
+  return buildOpenApiDocument() as OpenApiDocument;
 }
 
 describe('buildOpenApiDocument', () => {
@@ -1439,9 +1439,16 @@ describe('buildOpenApiDocument', () => {
     }
   });
 
-  it('takes the document version from the caller rather than hardcoding one', () => {
+  it('takes the document version from the major rather than hardcoding one', () => {
     expect(
-      (buildOpenApiDocument('9.9.9') as OpenApiDocument).info.version,
-    ).toBe('9.9.9');
+      (
+        buildOpenApiDocument({
+          major: 1,
+          contractVersion: '1.9.9',
+          status: 'supported',
+          releasedAt: '2026-10-27',
+        }) as OpenApiDocument
+      ).info.version,
+    ).toBe('1.9.9');
   });
 });

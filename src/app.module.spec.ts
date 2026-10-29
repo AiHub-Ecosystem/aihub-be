@@ -180,7 +180,7 @@ describe('AppModule wiring', () => {
   it('documents every registered Public API Route by method and path shape', () => {
     const missing = missingPublicRoutes(
       registeredRoutes,
-      buildOpenApiDocument('test'),
+      buildOpenApiDocument(),
     );
 
     expect(missing).toEqual([]);
@@ -188,7 +188,7 @@ describe('AppModule wiring', () => {
 
   it('fails when the method is missing even though the path remains', () => {
     const openApiDocument = JSON.parse(
-      JSON.stringify(buildOpenApiDocument('test')),
+      JSON.stringify(buildOpenApiDocument()),
     ) as { paths: Record<string, unknown> };
     const speakingPath = openApiDocument.paths[
       '/v1/ielts/speaking/questions'

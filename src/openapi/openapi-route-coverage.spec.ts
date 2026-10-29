@@ -14,7 +14,7 @@ type PublishedPaths = Record<
 >;
 
 const ROUTES = Object.entries(PUBLIC_ROUTES) as [string, PublicRouteDef][];
-const { paths } = buildOpenApiDocument('0.0.0-test') as {
+const { paths } = buildOpenApiDocument() as {
   paths: PublishedPaths;
 };
 

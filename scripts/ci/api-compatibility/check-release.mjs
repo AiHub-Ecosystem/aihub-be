@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
+import { checkMajorLifecycle } from './check-major-lifecycle.mjs';
 import { findBreakingChanges } from './check.mjs';
 
 const VERSIONED_SPEC = /^v([1-9]\d*)\.json$/;
@@ -332,8 +333,13 @@ function requireMigrationNotice(changelog, previous, next, version) {
   }
 }
 
-/** @param {string} baseRoot @param {string} candidateRoot @param {string} changelogPath @returns {void} */
-export function checkRelease(baseRoot, candidateRoot, changelogPath) {
+/** @param {string} baseRoot @param {string} candidateRoot @param {string} changelogPath @param {Date} [today] @returns {void} */
+export function checkRelease(
+  baseRoot,
+  candidateRoot,
+  changelogPath,
+  today = new Date(),
+) {
   const candidateSpecs = listVersionedSpecs(candidateRoot);
   if (candidateSpecs.size === 0) {
     throw new Error('No versioned OpenAPI documents found under openapi/');
@@ -372,8 +378,17 @@ export function checkRelease(baseRoot, candidateRoot, changelogPath) {
     baseSpecs = new Map([[1, readDocument(legacyPath)]]);
   }
 
+  const retiring = checkMajorLifecycle(
+    baseRoot,
+    candidateRoot,
+    candidateSpecs,
+    new Set(baseSpecs.keys()),
+    today,
+  );
+
   for (const [major, baseDocument] of baseSpecs) {
     const candidateDocument = candidateSpecs.get(major);
+    if (!candidateDocument && retiring.has(major)) continue;
     if (!candidateDocument) {
       throw new Error(`Candidate removes supported /v${major} contract`);
     }
@@ -458,7 +473,7 @@ export function checkRelease(baseRoot, candidateRoot, changelogPath) {
       );
     }
     requireMigrationNotice(changelog, previousMajor, nextMajor, nextVersion);
-  } else if (candidateSpecs.size !== baseSpecs.size) {
+  } else if (candidateSpecs.size !== baseSpecs.size - retiring.size) {
     throw new Error(
       'Candidate versioned OpenAPI set does not match its baseline',
     );

@@ -6,6 +6,28 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.1.1] - 2026-10-29
+
+### Added
+
+- `API_VERSION_RETIRED` (`410 Gone`): the answer to every request under a
+  Public API major after the release that retires it. `error.details` names
+  `retired_major`, `successor_major`, and `successor_docs`, and a
+  `Link: <...>; rel="successor-version"` header points at the successor's
+  documentation. No supported major returns it, so no operation in
+  `openapi/v1.json` lists it. See [#1367](https://github.com/AiHub-Ecosystem/aihub-be/issues/1367).
+- When a major has a published sunset, every response from a route under it,
+  AI dispatch routes included, carries the `Deprecation`, `Sunset`, and
+  `Link: rel="successor-version"` headers. A route with its own earlier sunset
+  keeps it.
+
+## [1.1.0] - 2026-10-27
+
+### Added
+
+- Responses that must not be cached document `Cache-Control: no-store` as a
+  response header.
+
 ## [1.0.0] - 2026-10-27 — `/v1` baseline
 
 This baseline records the current customer-facing contract, including behavior

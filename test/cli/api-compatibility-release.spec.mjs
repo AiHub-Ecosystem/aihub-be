@@ -125,8 +125,43 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null;
 }
 
-/** @param {Record<string, OpenApiDocument>} specs @returns {SpecFiles} */
-function versionedFiles(specs) {
+/** @param {number} major */
+function releasedAt(major) {
+  return `${2025 + major}-01-01T00:00:00.000Z`;
+}
+
+/**
+ * A valid lifecycle for these supported majors: each is released a year after
+ * the one before, and each superseded one sunsets 12 months after its successor.
+ * @param {Record<string, OpenApiDocument>} specs
+ * @returns {Record<string, unknown>[]}
+ */
+function supportedMajors(specs) {
+  const majors = Object.keys(specs)
+    .map(Number)
+    .sort((left, right) => left - right);
+  return majors.map((major, index) => {
+    const successor = majors[index + 1];
+    return {
+      major,
+      contractVersion: specs[major]?.info.version,
+      status: 'supported',
+      releasedAt: releasedAt(major),
+      ...(successor === undefined
+        ? {}
+        : {
+            sunset: {
+              successor,
+              deprecationAt: releasedAt(successor),
+              sunsetAt: releasedAt(successor + 1),
+            },
+          }),
+    };
+  });
+}
+
+/** @param {Record<string, OpenApiDocument>} specs @param {Record<string, unknown>[]} [majors] @returns {SpecFiles} */
+function versionedFiles(specs, majors = supportedMajors(specs)) {
   const files = /** @type {SpecFiles} */ ({});
   const latest = Object.entries(specs)
     .sort(([left], [right]) => Number(left) - Number(right))
@@ -136,6 +171,7 @@ function versionedFiles(specs) {
     files[`openapi/v${major}.json`] = spec;
   }
   files['openapi.json'] = latest[1];
+  files['openapi/majors.json'] = majors;
   return files;
 }
 
@@ -350,7 +386,10 @@ void test('rejects an identical new major and a new major that drops the prior c
   const missingV1Roots = setup(
     t,
     versionedFiles({ 1: v1 }),
-    versionedFiles({ 2: breakingV2 }),
+    versionedFiles(
+      { 2: breakingV2 },
+      supportedMajors({ 1: v1, 2: breakingV2 }),
+    ),
     changelog,
   );
 
@@ -361,8 +400,189 @@ void test('rejects an identical new major and a new major that drops the prior c
         missingV1Roots.candidateRoot,
         missingV1Roots.changelogPath,
       ),
-    /removes supported \/v1 contract/,
+    /Supported \/v1 has no openapi\/v1.json/,
   );
+});
+
+/** @param {Record<string, unknown>[]} majors @param {number} major @param {Record<string, unknown>} change */
+function withMajor(majors, major, change) {
+  return majors.map((entry) =>
+    entry.major === major ? { ...entry, ...change } : entry,
+  );
+}
+
+const V2_CHANGELOG = '# AIHUB Public API Changelog\n\n## [2.0.0]\n';
+const V1_SUNSET = releasedAt(3);
+
+void test('retires a major after its sunset and removes its document', (t) => {
+  const specs = { 1: document('1.0.0'), 2: document('2.0.0', 2) };
+  const retired = withMajor(supportedMajors(specs), 1, { status: 'retired' });
+  const roots = setup(
+    t,
+    versionedFiles(specs),
+    versionedFiles({ 2: specs[2] }, retired),
+    V2_CHANGELOG,
+  );
+
+  assert.doesNotThrow(() =>
+    checkRelease(
+      roots.baseRoot,
+      roots.candidateRoot,
+      roots.changelogPath,
+      new Date(V1_SUNSET),
+    ),
+  );
+  assert.throws(
+    () =>
+      checkRelease(
+        roots.baseRoot,
+        roots.candidateRoot,
+        roots.changelogPath,
+        new Date(Date.parse(V1_SUNSET) - 1),
+      ),
+    /cannot be retired before its sunset/,
+  );
+});
+
+void test('keeps a retired major retired and its document gone', (t) => {
+  const specs = { 1: document('1.0.0'), 2: document('2.0.0', 2) };
+  const retired = withMajor(supportedMajors(specs), 1, { status: 'retired' });
+  const revived = setup(
+    t,
+    versionedFiles({ 2: specs[2] }, retired),
+    versionedFiles(specs),
+    V2_CHANGELOG,
+  );
+  assert.throws(
+    () =>
+      checkRelease(
+        revived.baseRoot,
+        revived.candidateRoot,
+        revived.changelogPath,
+      ),
+    /Retired \/v1 cannot be supported again/,
+  );
+
+  const lingering = setup(
+    t,
+    versionedFiles(specs),
+    versionedFiles(specs, retired),
+    V2_CHANGELOG,
+  );
+  assert.throws(
+    () =>
+      checkRelease(
+        lingering.baseRoot,
+        lingering.candidateRoot,
+        lingering.changelogPath,
+      ),
+    /openapi\/v1.json is not a supported major/,
+  );
+});
+
+void test('holds a superseded major for 12 months and never moves its sunset earlier', (t) => {
+  const specs = { 1: document('1.0.0'), 2: document('2.0.0', 2) };
+  const majors = supportedMajors(specs);
+  const sunset = /** @type {{sunset: Record<string, unknown>}} */ (majors[0])
+    .sunset;
+  const early = withMajor(majors, 1, {
+    sunset: { ...sunset, sunsetAt: '2027-12-31T00:00:00.000Z' },
+  });
+
+  const shortRoots = setup(
+    t,
+    versionedFiles(specs),
+    versionedFiles(specs, early),
+    V2_CHANGELOG,
+  );
+  assert.throws(
+    () =>
+      checkRelease(
+        shortRoots.baseRoot,
+        shortRoots.candidateRoot,
+        shortRoots.changelogPath,
+      ),
+    /at least 12 months after \/v2 is released/,
+  );
+
+  const extended = withMajor(majors, 1, {
+    sunset: { ...sunset, sunsetAt: '2028-04-01T00:00:00.000Z' },
+  });
+  const extendRoots = setup(
+    t,
+    versionedFiles(specs),
+    versionedFiles(specs, extended),
+    V2_CHANGELOG,
+  );
+  assert.doesNotThrow(() =>
+    checkRelease(
+      extendRoots.baseRoot,
+      extendRoots.candidateRoot,
+      extendRoots.changelogPath,
+    ),
+  );
+
+  const pulledInRoots = setup(
+    t,
+    versionedFiles(specs, extended),
+    versionedFiles(specs),
+    V2_CHANGELOG,
+  );
+  assert.throws(
+    () =>
+      checkRelease(
+        pulledInRoots.baseRoot,
+        pulledInRoots.candidateRoot,
+        pulledInRoots.changelogPath,
+      ),
+    /sunset can only move later/,
+  );
+});
+
+void test('requires the lifecycle file to describe the documents it ships', (t) => {
+  const specs = { 1: document('1.0.0'), 2: document('2.0.0', 2) };
+  const majors = supportedMajors(specs);
+  /** @type {[string, SpecFiles, RegExp][]} */
+  const cases = [
+    [
+      'no sunset on a superseded major',
+      versionedFiles(specs, withMajor(majors, 1, { sunset: undefined })),
+      /Superseded \/v1 needs a published sunset/,
+    ],
+    [
+      'a sunset on the newest major',
+      versionedFiles(
+        specs,
+        withMajor(majors, 2, {
+          sunset: /** @type {{sunset: unknown}} */ (majors[0]).sunset,
+        }),
+      ),
+      /newest major \/v2 cannot have a sunset/,
+    ],
+    [
+      'a contract version that differs from the document',
+      versionedFiles(specs, withMajor(majors, 2, { contractVersion: '2.1.0' })),
+      /openapi\/v2.json is 2.0.0 but openapi\/majors.json says 2.1.0/,
+    ],
+    [
+      'no lifecycle file',
+      Object.fromEntries(
+        Object.entries(versionedFiles(specs)).filter(
+          ([name]) => name !== 'openapi/majors.json',
+        ),
+      ),
+      /Missing openapi\/majors.json/,
+    ],
+  ];
+  for (const [label, candidate, error] of cases) {
+    const roots = setup(t, versionedFiles(specs), candidate, V2_CHANGELOG);
+    assert.throws(
+      () =>
+        checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath),
+      error,
+      label,
+    );
+  }
 });
 
 void test('rejects response schemas that are closed or request schemas that are open', (t) => {

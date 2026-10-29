@@ -20,6 +20,10 @@ import {
   markRequestAdmission,
   requestDurationMs,
 } from '@/common/http/request-timing.hook';
+import {
+  type RetiredPublicApiMajor,
+  retiredPublicApiMajor,
+} from '@/common/http/retired-public-api-major';
 import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import {
   databaseUnavailableError,
@@ -69,6 +73,10 @@ function fromHttpException(status: number): FrameworkError {
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
+  /** Replaced in specs to stand in a registry with a retired major. */
+  retiredMajor: (url: string) => RetiredPublicApiMajor | undefined =
+    retiredPublicApiMajor;
+
   constructor(
     @Inject(METERING_FINALIZER)
     private readonly metering: MeteringFinalizerPort,
@@ -98,6 +106,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
     ) {
       this.logger.error(JSON.stringify({ event: 'postgres_unavailable' }));
       exception = databaseUnavailableError();
+    } else if (
+      exception instanceof HttpException &&
+      (exception.getStatus() === 404 || exception.getStatus() === 405)
+    ) {
+      const retired = this.retiredMajor(request.url);
+      if (retired !== undefined) {
+        exception = retired.error;
+        response.header('Link', retired.link);
+      }
     }
 
     const { status, envelope } = this.resolve(

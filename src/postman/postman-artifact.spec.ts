@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
-import { PUBLIC_API_CONTRACT_VERSION } from '@/openapi/public-api-contract-version';
+import { latestPublicApiMajor } from '@/catalog/public-api-majors';
 import {
   buildPostmanCollection,
   preservePostmanIds,
@@ -53,7 +53,7 @@ describe('committed aihub.postman_collection.json', () => {
     const committed = committedCollection();
     const generated = await buildPostmanCollection(
       committedOpenApiDocument(),
-      PUBLIC_API_CONTRACT_VERSION,
+      latestPublicApiMajor().contractVersion,
     );
     const fresh = preservePostmanIds(generated, committed);
 
@@ -70,7 +70,7 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = JSON.stringify(
       await buildPostmanCollection(
         committedOpenApiDocument(),
-        PUBLIC_API_CONTRACT_VERSION,
+        latestPublicApiMajor().contractVersion,
       ),
     );
 
@@ -130,7 +130,7 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = JSON.stringify(
       await buildPostmanCollection(
         committedOpenApiDocument(),
-        PUBLIC_API_CONTRACT_VERSION,
+        latestPublicApiMajor().contractVersion,
       ),
     );
 

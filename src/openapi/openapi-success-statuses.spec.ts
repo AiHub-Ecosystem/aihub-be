@@ -23,7 +23,7 @@ type PublishedPaths = Record<
 const ROUTES = Object.entries(PUBLIC_ROUTES) as [string, PublicRouteDef][];
 
 function publishedOperation(route: PublicRouteDef): PublishedOperation {
-  const { paths } = buildOpenApiDocument('0.0.0-test') as {
+  const { paths } = buildOpenApiDocument() as {
     paths: PublishedPaths;
   };
   const operation =

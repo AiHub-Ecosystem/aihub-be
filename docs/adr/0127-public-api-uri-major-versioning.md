@@ -56,3 +56,15 @@ A brownout deliberately fails or degrades requests to a major before its sunset,
 - Runtime retirement and the `410` response stay in #1367.
 
 Approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#1379](https://github.com/AiHub-Ecosystem/aihub-be/issues/1379).
+
+### Update: runtime retirement (#1367, 2026-10-29)
+
+The decision above promises concurrent majors, an immutable document per major, and `410 Gone` after sunset. This update settles how the runtime and the release gate keep those promises.
+
+- `src/catalog/public-api-majors.ts` is the single list of released majors. Each has a contract version, a release date, a status (`supported` or `retired`), and, once superseded, a sunset naming its successor, deprecation date, and sunset date. The list drives `/docs`, `/openapi.json` (the newest supported major), `/openapi/vN.json` (each supported major, built from that major's `/vN/` routes), the major-level headers, and the `410`.
+- A major is retired by a release, not by the clock. The release sets `status: 'retired'` and removes the major's routes and `openapi/vN.json`. A date-driven switch was rejected because it would retire a major whether or not the owner had signed off (#1376), for example while an approved extension waits for its deploy. The cost is that the retiring release ships on or after the sunset date.
+- A major's sunset produces `Deprecation`, `Sunset`, and `Link: rel="successor-version"` on every route under it, AI dispatch routes included. A route with its own sunset keeps the earlier of each date, and the link of whichever sunset is earlier.
+- A request under a retired major, on any path or method, gets `410` with the new error code `API_VERSION_RETIRED`, `details` naming the retired major, the successor, and the successor's documentation, and a successor `Link`. Reusing `NOT_FOUND` was rejected because a client must tell "move to the successor" from "no such resource". No supported major returns the code, so no versioned document lists it; the Integration Guide and `CHANGELOG.md` describe it.
+- "Immutable" means the release gate guards each document, not that its bytes are frozen: documents are still built from the running catalog. `pnpm generate:openapi` writes `openapi/majors.json` from the registry, and the gate checks it against the base. Every supported major has its document at the registered contract version. Every superseded major names a later successor and sunsets at least 12 months after that successor's release. The newest major has no sunset. A published sunset only moves later, and a retired major stays retired. A document may leave only when its major is retired and its sunset has passed.
+
+Approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#1367](https://github.com/AiHub-Ecosystem/aihub-be/issues/1367).

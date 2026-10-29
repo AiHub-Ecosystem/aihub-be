@@ -38,7 +38,7 @@ interface PostmanItem {
 }
 
 async function build(): Promise<Record<string, unknown>> {
-  const openApiDocument = buildOpenApiDocument('0.0.0-test');
+  const openApiDocument = buildOpenApiDocument();
   return (await buildPostmanCollection(
     openApiDocument,
     '0.0.0-test',

@@ -208,6 +208,9 @@ export function errorsByStatus(): ReadonlyMap<
   const grouped = new Map<HttpStatus, ErrorCode[]>();
 
   for (const code of ERROR_CODES) {
+    // Only a retired major answers with it, and a retired major has no
+    // document; the Integration Guide describes it instead.
+    if (code === 'API_VERSION_RETIRED') continue;
     const status = httpStatusForErrorCode(code);
     const codes = grouped.get(status);
     if (codes === undefined) {

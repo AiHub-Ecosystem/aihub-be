@@ -1,5 +1,10 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS } from '@/catalog/operation-id';
+import { publicApiMajorOf } from '@/catalog/public-api-major';
+import {
+  type PublicApiMajorDef,
+  latestPublicApiMajor,
+} from '@/catalog/public-api-majors';
 import {
   PUBLIC_ROUTES,
   type PublicRouteDef,
@@ -78,7 +83,10 @@ function addHeadOperations(paths: Record<string, unknown>): void {
   }
 }
 
-export function buildOpenApiDocument(version: string): unknown {
+/** One major's contract: only its `/vN/...` routes, at its contract version. */
+export function buildOpenApiDocument(
+  major: PublicApiMajorDef = latestPublicApiMajor(),
+): unknown {
   const paths: Record<string, unknown> = {};
   const groupedErrors = errorsByStatus();
 
@@ -118,7 +126,7 @@ export function buildOpenApiDocument(version: string): unknown {
     openapi: OPENAPI_VERSION,
     info: {
       title: 'AIHUB API',
-      version,
+      version: major.contractVersion,
     },
     servers: PUBLIC_API_SERVERS.map(({ hostname, description }) => ({
       url: `https://${hostname}`,
@@ -162,7 +170,11 @@ export function buildOpenApiDocument(version: string): unknown {
       schemas: { OrganizationId: OrganizationIdSchema },
       responses: errorResponses,
     },
-    paths,
+    paths: Object.fromEntries(
+      Object.entries(paths).filter(
+        ([path]) => publicApiMajorOf(path) === major.major,
+      ),
+    ),
   };
 
   extendPublicResponseSchemas(document);

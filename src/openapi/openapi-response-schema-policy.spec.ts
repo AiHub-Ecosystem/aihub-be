@@ -71,7 +71,7 @@ function responseSchemas(document: JsonRecord): unknown[] {
 }
 
 describe('public OpenAPI object schema policy', () => {
-  const document = buildOpenApiDocument('1.0.0') as JsonRecord;
+  const document = buildOpenApiDocument() as JsonRecord;
 
   it('allows additional properties at every response object boundary', () => {
     const objects = responseSchemas(document).flatMap((schema) =>

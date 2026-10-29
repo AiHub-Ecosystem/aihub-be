@@ -144,3 +144,96 @@ describe('registerSecurityHeaders', () => {
     );
   });
 });
+
+describe('registerSecurityHeaders with a sunset Public API major', () => {
+  const DISPATCH_PATH = OPERATION_CATALOG['writing.task1.grade'].path;
+  let app: FastifyInstance;
+
+  async function start(sunsetAt: string): Promise<void> {
+    app = Fastify();
+    registerSecurityHeaders(
+      app,
+      [DEPRECATED_ROUTE],
+      [
+        {
+          major: 1,
+          contractVersion: '1.4.0',
+          status: 'supported',
+          releasedAt: '2026-10-27',
+          sunset: {
+            successor: 2,
+            deprecationAt: '2027-01-01T00:00:00Z',
+            sunsetAt,
+          },
+        },
+        {
+          major: 2,
+          contractVersion: '2.0.0',
+          status: 'supported',
+          releasedAt: '2027-01-01',
+        },
+      ],
+    );
+    app.get('/health', async () => ({ status: 'ok' }));
+    app.get(DEPRECATED_ROUTE.path, async () => ({ ok: true }));
+    app.post(DISPATCH_PATH, async () => ({ ok: true }));
+    app.get('/v2/organizations', async () => ({ ok: true }));
+    await app.ready();
+  }
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('announces the major sunset on a dispatch route', async () => {
+    await start('2028-01-01T00:00:00Z');
+    const response = await app.inject({ method: 'POST', url: DISPATCH_PATH });
+
+    expect(response.headers.deprecation).toBe('@1798761600');
+    expect(response.headers.sunset).toBe('Sat, 01 Jan 2028 00:00:00 GMT');
+    expect(response.headers.link).toBe(
+      '</docs?version=v2>; rel="successor-version"; title="v2"',
+    );
+  });
+
+  it('keeps an earlier route sunset and its successor, with the earlier deprecation', async () => {
+    await start('2028-01-01T00:00:00Z');
+    const response = await app.inject({
+      method: 'GET',
+      url: DEPRECATED_ROUTE.path,
+    });
+
+    expect(response.headers.deprecation).toBe('@1672531200');
+    expect(response.headers.sunset).toBe('Wed, 30 Jun 2027 00:00:00 GMT');
+    expect(response.headers.link).toBe(
+      '</docs#organizations.create>; rel="successor-version"; title="organizations.create"',
+    );
+  });
+
+  it('lets an earlier major sunset win over a later route sunset', async () => {
+    await start('2027-03-01T00:00:00Z');
+    const response = await app.inject({
+      method: 'GET',
+      url: DEPRECATED_ROUTE.path,
+    });
+
+    expect(response.headers.deprecation).toBe('@1672531200');
+    expect(response.headers.sunset).toBe('Mon, 01 Mar 2027 00:00:00 GMT');
+    expect(response.headers.link).toBe(
+      '</docs?version=v2>; rel="successor-version"; title="v2"',
+    );
+  });
+
+  it.each([
+    ['the successor major', 'GET', '/v2/organizations'],
+    ['an unversioned route', 'GET', '/health'],
+    ['an unmatched path under the major', 'GET', '/v1/missing'],
+  ])('adds no sunset headers on %s', async (_kind, method, url) => {
+    await start('2028-01-01T00:00:00Z');
+    const response = await app.inject({ method: method as 'GET', url });
+
+    expect(response.headers.deprecation).toBeUndefined();
+    expect(response.headers.sunset).toBeUndefined();
+    expect(response.headers.link).toBeUndefined();
+  });
+});

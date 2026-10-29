@@ -1,19 +1,65 @@
-import { Controller, Get, Header, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  NotFoundException,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { Type } from '@sinclair/typebox';
 
+import {
+  type PublicApiMajorDef,
+  findPublicApiMajor,
+  latestPublicApiMajor,
+  supportedPublicApiMajors,
+} from '@/catalog/public-api-majors';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
 import { buildOpenApiDocument } from './build-openapi-document';
-import {
-  PUBLIC_API_CONTRACT_VERSION,
-  PUBLIC_API_MAJOR_PATH,
-} from './public-api-contract-version';
+
+const VERSIONED_DOCUMENT = /^v([1-9][0-9]*)\.json$/u;
 
 const DOCS_QUERY_SCHEMA = Type.Object(
-  { version: Type.Optional(Type.Literal(PUBLIC_API_MAJOR_PATH)) },
+  {
+    version: Type.Optional(
+      Type.Union(
+        supportedPublicApiMajors().map(({ major }) =>
+          Type.Literal(`v${major}`),
+        ),
+      ),
+    ),
+  },
   { additionalProperties: false },
 );
 
-function docsPage(version: string): string {
+/** The supported major a `/openapi/vN.json` file name names, if any. */
+export function versionedDocumentMajor(
+  file: string,
+  majors?: readonly PublicApiMajorDef[],
+): PublicApiMajorDef | undefined {
+  const match = VERSIONED_DOCUMENT.exec(file);
+  const major =
+    match?.[1] === undefined
+      ? undefined
+      : findPublicApiMajor(Number(match[1]), majors);
+  return major?.status === 'supported' ? major : undefined;
+}
+
+export function docsPage(
+  version: string,
+  majors?: readonly PublicApiMajorDef[],
+): string {
+  const latest = latestPublicApiMajor(majors).major;
+  const options = supportedPublicApiMajors(majors)
+    .map(({ major }) => major)
+    .sort((left, right) => right - left)
+    .map((major) => {
+      const value = `v${major}`;
+      const selected = value === version ? ' selected' : '';
+      const current = major === latest ? ' (current)' : '';
+      return `      <option value="${value}"${selected}>${value}${current}</option>`;
+    })
+    .join('\n');
   return `<!doctype html>
 <html>
 <head>
@@ -25,7 +71,7 @@ function docsPage(version: string): string {
   <form action="/docs" method="get">
     <label for="api-version">API version</label>
     <select id="api-version" name="version">
-      <option value="${version}" selected>${version} (current)</option>
+${options}
     </select>
     <button type="submit">View</button>
   </form>
@@ -55,19 +101,24 @@ export class OpenApiController {
     // spec to always match the running build with no regeneration step
     // anyone can forget. The committed file exists for git diffing and for
     // `pnpm generate:postman`'s input, not as this endpoint's source.
-    return buildOpenApiDocument(PUBLIC_API_CONTRACT_VERSION);
+    return buildOpenApiDocument(latestPublicApiMajor());
   }
 
-  @Get('openapi/v1.json')
-  getVersionOneSpec(): unknown {
-    return buildOpenApiDocument(PUBLIC_API_CONTRACT_VERSION);
+  /** Each supported major's contract; a retired major's is no longer served. */
+  @Get('openapi/:document')
+  getVersionedSpec(@Param('document') document: string): unknown {
+    const major = versionedDocumentMajor(document);
+    if (major === undefined) {
+      throw new NotFoundException();
+    }
+    return buildOpenApiDocument(major);
   }
 
   @Get('docs')
   @Header('Content-Type', 'text/html; charset=utf-8')
   @Header('Content-Security-Policy', DOCS_CONTENT_SECURITY_POLICY)
   getDocsPage(@Query() rawQuery: unknown): string {
-    const { version = PUBLIC_API_MAJOR_PATH } = parseRequestQuery(
+    const { version = `v${latestPublicApiMajor().major}` } = parseRequestQuery(
       DOCS_QUERY_SCHEMA,
       rawQuery,
     );
