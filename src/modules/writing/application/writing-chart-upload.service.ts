@@ -307,11 +307,23 @@ export class WritingChartUploadService
         throw error;
       }
 
-      const asset = await this.repository.markPublished({
-        owner,
-        now: this.now(),
-        imageUrl,
-      });
+      // A failed mark leaves the object written but the row reserved. Releasing
+      // returns the row to open so a retry can finish it and the Organization's
+      // publication slot is freed; a revocation still fences that retry (#915).
+      let asset: Awaited<
+        ReturnType<WritingChartUploadRepositoryPort['markPublished']>
+      >;
+      try {
+        asset = await this.repository.markPublished({
+          owner,
+          now: this.now(),
+          imageUrl,
+        });
+      } catch (error) {
+        await this.releaseAfterFailedMark(owner);
+        throw error;
+      }
+      if (asset === undefined) await this.releaseAfterFailedMark(owner);
       if (asset === 'revoked') {
         // An operator revoked the asset while this write was in flight. Without
         // the request signal: the removal must run even past the deadline. A
@@ -344,5 +356,15 @@ export class WritingChartUploadService
       }
       return asset;
     });
+  }
+
+  private async releaseAfterFailedMark(
+    owner: WritingChartUploadOwner,
+  ): Promise<void> {
+    try {
+      await this.repository.releasePublication(owner);
+    } catch {
+      // The reservation's lease lapses, so the slot frees without it (#915).
+    }
   }
 }

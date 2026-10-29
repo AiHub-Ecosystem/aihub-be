@@ -98,6 +98,8 @@ async function compressedWebpWithOversizedSanitizedOutput() {
 }
 
 class FakeRepository implements WritingChartUploadRepositoryPort {
+  /** Fails the next markPublished after the object was written. */
+  failNextMark = false;
   readonly rows = new Map<
     string,
     WritingChartUploadIntent | WritingChartAsset
@@ -179,6 +181,10 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
     readonly now: Date;
     readonly imageUrl: string;
   }) {
+    if (this.failNextMark) {
+      this.failNextMark = false;
+      throw new Error('database unavailable');
+    }
     const found = await this.findUpload(input.owner);
     if (found.kind !== 'intent' || found.intent.status !== 'publishing')
       return undefined;
@@ -661,6 +667,36 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
       responses[1] && chartAsset(responses[1]).data,
     );
     expect(storage.published).toEqual([intent.publishedKey]);
+  });
+
+  it('frees the reservation when marking the asset published fails, so a retry completes it', async () => {
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/chart-uploads',
+      headers: headers(),
+      payload: {
+        content_type: 'image/png',
+        byte_size: chartBytes().byteSize,
+      },
+    });
+    const assetId = uploadGrant(create).data.asset_id;
+    const intent = repository.rows.get(assetId) as WritingChartUploadIntent;
+    storage.upload(intent.stagingKey);
+    const complete = () =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/ielts/writing/task1/chart-uploads/${assetId}/complete`,
+        headers: headers(),
+      });
+
+    repository.failNextMark = true;
+    const failed = await complete();
+
+    expect(failed.statusCode).toBeGreaterThanOrEqual(500);
+    expect(repository.rows.get(assetId)?.status).toBe('open');
+    const retried = await complete();
+    expect(retried.statusCode).toBe(200);
+    expect(repository.rows.get(assetId)?.status).toBe('published');
   });
 
   it('allows concurrent storage reads while processing images one at a time', async () => {

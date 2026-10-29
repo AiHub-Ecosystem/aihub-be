@@ -88,8 +88,18 @@ describe('PostgresWritingChartUploadRepository Organization limits', () => {
         publishedAt: { gt: new Date('2026-10-14T11:00:00.000Z') },
       },
     });
+    // Only reservations inside their 30-second lease hold a slot (#915).
     expect(count).toHaveBeenNthCalledWith(2, {
-      where: { organizationId: intent.organizationId, status: 'publishing' },
+      where: {
+        organizationId: intent.organizationId,
+        status: 'publishing',
+        OR: [
+          { publicationStartedAt: null },
+          {
+            publicationStartedAt: { gt: new Date('2026-10-14T11:59:30.000Z') },
+          },
+        ],
+      },
     });
   });
 });

@@ -3,6 +3,7 @@ import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import {
   WRITING_CHART_ORG_HOURLY_LIMIT,
+  WRITING_CHART_PUBLICATION_LEASE_MS,
   WRITING_CHART_RATE_WINDOW_MS,
   WRITING_CHART_RETENTION_MS,
 } from '@/modules/writing/application/writing-chart-upload.policy';
@@ -222,10 +223,23 @@ export class PostgresWritingChartUploadRepository
             publishedAt: { gt: since },
           },
         }),
+        // A reservation past its lease belongs to a publisher that crashed or
+        // gave up; it no longer holds a slot (#915). Rows the release before
+        // 0055 reserved have no start time and still count.
         client.writingChartUpload.count({
           where: {
             organizationId: input.owner.organizationId,
             status: 'publishing',
+            OR: [
+              { publicationStartedAt: null },
+              {
+                publicationStartedAt: {
+                  gt: new Date(
+                    input.now.getTime() - WRITING_CHART_PUBLICATION_LEASE_MS,
+                  ),
+                },
+              },
+            ],
           },
         }),
       ]);
