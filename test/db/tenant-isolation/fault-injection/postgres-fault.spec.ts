@@ -53,8 +53,13 @@ const noFailures: AuthFailureCounterPort = {
 
 const DATABASE_UNAVAILABLE_ANSWER = {
   status: 503,
-  retryAfter: '1',
-  error: { code: 'DATABASE_UNAVAILABLE', retryable: true, retryAfterMs: 1_000 },
+  // The hint is spread over [1 s, 2 s) (#1352), so the header rounds up to 1 or 2.
+  retryAfter: expect.stringMatching(/^[12]$/) as unknown,
+  error: {
+    code: 'DATABASE_UNAVAILABLE',
+    retryable: true,
+    retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
+  },
 };
 
 /** What a client receives for an error: the real exception filter's answer. */

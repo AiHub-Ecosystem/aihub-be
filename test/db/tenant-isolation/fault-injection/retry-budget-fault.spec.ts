@@ -96,7 +96,8 @@ describe('Graded admission through a Redis fault proxy', () => {
           code: 'REDIS_UNAVAILABLE',
           httpStatus: 503,
           retryable: true,
-          retryAfterMs: 1_000,
+          // The hint is spread over [1 s, 2 s) (#1352).
+          retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
         });
       }
       expect(downstream).toHaveBeenCalledTimes(1);
@@ -115,7 +116,8 @@ describe('Graded admission through a Redis fault proxy', () => {
           code: 'REDIS_UNAVAILABLE',
           httpStatus: 503,
           retryable: true,
-          retryAfterMs: 1_000,
+          // The hint is spread over [1 s, 2 s) (#1352).
+          retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
         });
       }
       expect(downstream).toHaveBeenCalledTimes(3);
