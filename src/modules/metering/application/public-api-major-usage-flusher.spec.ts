@@ -9,6 +9,8 @@ class RecordingRepository implements PublicApiMajorUsageRepositoryPort {
   readonly writes: { environment: string; write: PublicApiMajorUsageWrite }[] =
     [];
   fail = false;
+  /** Commits the write, then loses the response, as a dropped connection can. */
+  loseResponse = false;
   /** When set, each write waits for this before it settles. */
   gate: Promise<void> | undefined;
 
@@ -21,6 +23,9 @@ class RecordingRepository implements PublicApiMajorUsageRepositoryPort {
       throw new Error('connection refused to postgres://secret@host');
     }
     this.writes.push({ environment, write });
+    if (this.loseResponse) {
+      throw new Error('connection reset');
+    }
   }
 
   async snapshot(): Promise<never> {
@@ -76,6 +81,7 @@ describe('PublicApiMajorUsageFlusher', () => {
         environment: 'sandbox',
         write: expect.objectContaining({
           collector: COLLECTOR,
+          batch: 1,
           coveredThrough: NOW,
           stoppedCleanly: false,
         }) as unknown,
@@ -97,7 +103,7 @@ describe('PublicApiMajorUsageFlusher', () => {
     });
   });
 
-  it('keeps the counts when a write fails and reports no connection detail', async () => {
+  it('resends a failed write unchanged before newer counts and reports no connection detail', async () => {
     const reports: string[] = [];
     const { buffer, repository, flusher } = setup(reports);
     buffer.record(sample('2026-10-28T10:00:00Z'));
@@ -106,16 +112,57 @@ describe('PublicApiMajorUsageFlusher', () => {
     await flusher.flush();
     repository.fail = false;
     buffer.record(sample('2026-10-28T10:00:05Z'));
+    buffer.record(sample('2026-10-28T10:00:06Z'));
     await flusher.flush();
 
     expect(reports).toEqual(['public API major usage flush failed']);
-    expect(repository.writes[0]?.write.rows[0]).toMatchObject({
-      requestCount: 2,
-    });
-    expect(repository.writes[0]?.write.unattributed[0]).toMatchObject({
-      callerKind: 'api-key',
-      requestCount: 2,
-    });
+    expect(
+      repository.writes.map(({ write }) => [
+        write.batch,
+        write.rows[0]?.requestCount,
+        write.unattributed[0]?.requestCount,
+      ]),
+    ).toEqual([
+      [1, 1, 1],
+      [2, 2, 2],
+    ]);
+  });
+
+  it('resends a write whose commit response was lost under its original number', async () => {
+    const { buffer, repository, flusher } = setup();
+    buffer.record(sample('2026-10-28T10:00:00Z'));
+
+    repository.loseResponse = true;
+    await flusher.flush();
+    repository.loseResponse = false;
+    await flusher.flush();
+
+    const [committed, retried, next] = repository.writes.map(
+      ({ write }) => write,
+    );
+    expect(retried).toBe(committed);
+    expect(next).toMatchObject({ batch: 2, rows: [] });
+  });
+
+  it('on shutdown resends an unconfirmed write before the clean stop', async () => {
+    const { buffer, repository, flusher } = setup();
+    buffer.record(sample('2026-10-28T10:00:00Z'));
+    repository.fail = true;
+    await flusher.flush();
+    repository.fail = false;
+
+    await flusher.finish(1_000);
+
+    expect(
+      repository.writes.map(({ write }) => [
+        write.batch,
+        write.stoppedCleanly,
+        write.rows.length,
+      ]),
+    ).toEqual([
+      [1, false, 1],
+      [2, true, 0],
+    ]);
   });
 
   it('skips a periodic pass while the previous one is still writing', async () => {

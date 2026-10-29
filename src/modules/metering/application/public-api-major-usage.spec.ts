@@ -66,7 +66,7 @@ describe('PublicApiMajorUsageBuffer', () => {
     ]);
   });
 
-  it('empties on drain and merges restored rows back in', () => {
+  it('empties on drain', () => {
     const buffer = new PublicApiMajorUsageBuffer();
     buffer.record({
       major: 1,
@@ -74,27 +74,9 @@ describe('PublicApiMajorUsageBuffer', () => {
       callerKind: 'none',
       at: at('2026-10-28T10:00:00Z'),
     });
-    const drained = buffer.drain();
+
+    expect(buffer.drain().rows).toHaveLength(1);
     expect(buffer.drain()).toEqual({ rows: [], unattributed: [] });
-
-    buffer.record({
-      major: 1,
-      failed: true,
-      callerKind: 'none',
-      at: at('2026-10-28T11:00:00Z'),
-    });
-    buffer.restore(drained);
-
-    expect(buffer.drain().rows).toEqual([
-      {
-        usageDay: '2026-10-28',
-        major: 1,
-        organizationId: null,
-        requestCount: 2,
-        failureCount: 1,
-        lastSeenAt: at('2026-10-28T11:00:00Z'),
-      },
-    ]);
   });
 });
 
@@ -183,6 +165,7 @@ describe('buildPublicApiMajorReport', () => {
   it('groups totals by major and Environment and lists Organizations per major', () => {
     const report = buildPublicApiMajorReport({
       window: WINDOW,
+      environment: 'production',
       asOf: AS_OF,
       coverageStartDay: '2026-10-05',
       totals: [TOTAL],
@@ -244,6 +227,7 @@ describe('buildPublicApiMajorReport', () => {
   it('reports unattributed counts a release without the breakdown wrote as unclassified', () => {
     const report = buildPublicApiMajorReport({
       window: WINDOW,
+      environment: 'production',
       asOf: AS_OF,
       coverageStartDay: undefined,
       totals: [TOTAL],
@@ -271,6 +255,7 @@ describe('buildPublicApiMajorReport', () => {
       window: { fromDay: '2026-10-27', toDay: '2026-10-29' },
       asOf: AS_OF,
       coverageStartDay: undefined,
+      environment: 'sandbox',
       totals: [{ ...TOTAL, environment: 'sandbox' }],
       organizations: [],
       unattributed: [],
@@ -286,5 +271,28 @@ describe('buildPublicApiMajorReport', () => {
       },
     ]);
     expect(report.majors[0]?.organizations).toEqual([]);
+  });
+
+  it('judges the database Environment inconclusive when nothing was recorded', () => {
+    const report = buildPublicApiMajorReport({
+      window: { fromDay: '2026-10-27', toDay: '2026-10-29' },
+      environment: 'production',
+      asOf: AS_OF,
+      coverageStartDay: undefined,
+      totals: [],
+      organizations: [],
+      unattributed: [],
+      collectors: [],
+    });
+
+    expect(report.coverage).toEqual([
+      {
+        environment: 'production',
+        verdict: 'inconclusive',
+        inconclusiveDays: ['2026-10-27', '2026-10-28'],
+        uncleanExitDays: [],
+      },
+    ]);
+    expect(report.majors).toEqual([]);
   });
 });

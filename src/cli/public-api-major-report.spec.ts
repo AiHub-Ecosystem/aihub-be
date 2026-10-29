@@ -54,6 +54,12 @@ class FakeRepository implements PublicApiMajorUsageRepositoryPort {
           coveredThrough: new Date('2026-10-28T12:58:40.000Z'),
           stoppedCleanlyAt: null,
         },
+        {
+          environment: 'sandbox',
+          startedAt: new Date('2026-09-30T08:00:00.000Z'),
+          coveredThrough: new Date('2026-10-28T12:58:40.000Z'),
+          stoppedCleanlyAt: null,
+        },
       ],
     };
   }
@@ -70,6 +76,7 @@ describe('public API major report CLI boundary', () => {
 
     await runPublicApiMajorReportCommand({
       databaseUrl: 'postgres://test',
+      environment: 'production',
       from: '2026-10-01',
       to: '2026-10-29',
       now,
@@ -144,6 +151,15 @@ describe('public API major report CLI boundary', () => {
         unclean_exits: [],
       },
       {
+        event: 'public_api_major_coverage',
+        window_from: '2026-10-01',
+        window_to: '2026-10-29',
+        environment: 'sandbox',
+        verdict: 'complete',
+        inconclusive_days: [],
+        unclean_exits: [],
+      },
+      {
         event: 'public_api_major_window',
         window_from: '2026-10-01',
         window_to: '2026-10-29',
@@ -160,6 +176,7 @@ describe('public API major report CLI boundary', () => {
     await expect(
       runPublicApiMajorReportCommand({
         databaseUrl: 'postgres://test',
+        environment: 'production',
         from: '2026-10-29',
         to: '2026-10-01',
         now,
@@ -184,6 +201,7 @@ describe('public API major report CLI boundary', () => {
     await expect(
       runPublicApiMajorReportCommand({
         databaseUrl: 'postgres://test',
+        environment: 'production',
         from: '2026-10-01',
         to: '2026-10-29',
         now,

@@ -471,6 +471,8 @@ model PublicApiMajorUsageCoverage {
   startedAt        DateTime  @map("started_at") @db.Timestamptz(6)
   coveredThrough   DateTime  @map("covered_through") @db.Timestamptz(6)
   stoppedCleanlyAt DateTime? @map("stopped_cleanly_at") @db.Timestamptz(6)
+  /// The last write this process committed, so a retried one is not counted twice.
+  appliedBatch     BigInt    @default(0) @map("applied_batch")
 
   @@map("public_api_major_usage_coverage")
 }

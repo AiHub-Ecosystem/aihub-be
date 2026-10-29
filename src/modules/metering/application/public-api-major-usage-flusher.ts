@@ -2,15 +2,19 @@ import type {
   PublicApiMajorCollector,
   PublicApiMajorUsageBuffer,
   PublicApiMajorUsageRepositoryPort,
+  PublicApiMajorUsageWrite,
 } from './public-api-major-usage';
 
 /** How long shutdown waits for the last write before giving up on it. */
 export const PUBLIC_API_MAJOR_FINAL_FLUSH_TIMEOUT_MS = 10_000;
 
 /**
- * Moves buffered counts into the database. A failed write puts the counts back
- * so the next pass retries them, and reports only a fixed message: the error
- * can carry connection details that must not reach a log.
+ * Moves buffered counts into the database. A failed write is kept whole, with
+ * its number, and the next pass sends it again before draining newer counts:
+ * the database may have committed it, and only an unchanged retry lets the
+ * repository recognise one it already applied (#1389). A failure reports only
+ * a fixed message: the error can carry connection details that must not reach
+ * a log.
  *
  * Every pass writes, even with nothing buffered, because the write also
  * extends this process's collection record: a process that stops writing is
@@ -18,6 +22,8 @@ export const PUBLIC_API_MAJOR_FINAL_FLUSH_TIMEOUT_MS = 10_000;
  */
 export class PublicApiMajorUsageFlusher {
   private inFlight: Promise<void> | undefined;
+  private unconfirmed: PublicApiMajorUsageWrite | undefined;
+  private batches = 0;
 
   constructor(
     private readonly buffer: PublicApiMajorUsageBuffer,
@@ -65,16 +71,21 @@ export class PublicApiMajorUsageFlusher {
 
   private write(stoppedCleanly: boolean): Promise<void> {
     const pass = (async (): Promise<void> => {
-      const batch = this.buffer.drain();
       try {
-        await this.repository.add(this.environment, {
-          ...batch,
+        if (this.unconfirmed !== undefined) {
+          await this.repository.add(this.environment, this.unconfirmed);
+          this.unconfirmed = undefined;
+        }
+        this.unconfirmed = {
+          ...this.buffer.drain(),
           collector: this.collector,
+          batch: ++this.batches,
           coveredThrough: this.now(),
           stoppedCleanly,
-        });
+        };
+        await this.repository.add(this.environment, this.unconfirmed);
+        this.unconfirmed = undefined;
       } catch {
-        this.buffer.restore(batch);
         this.report('public API major usage flush failed');
       }
     })();

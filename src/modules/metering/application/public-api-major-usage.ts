@@ -68,6 +68,11 @@ export interface PublicApiMajorCollector {
  */
 export interface PublicApiMajorUsageWrite extends PublicApiMajorUsageBatch {
   readonly collector: PublicApiMajorCollector;
+  /**
+   * This process's write number, from 1. A retry keeps its number, so a write
+   * whose commit response was lost is not counted a second time.
+   */
+  readonly batch: number;
   /** When the buffer was drained: every earlier sample is in this write. */
   readonly coveredThrough: Date;
   /** True for the last write of a clean shutdown. */
@@ -135,7 +140,11 @@ export const UNCLASSIFIED_CALLER_KIND = 'unclassified';
 export interface PublicApiMajorReport {
   readonly window: PublicApiMajorWindow;
   readonly asOf: Date;
-  /** One per Environment the snapshot holds counts or collection for. */
+  /**
+   * One for the Environment the database serves, even with no rows, so missing
+   * collection never reads as zero traffic (#1389); one more for any other
+   * Environment the snapshot holds rows for.
+   */
   readonly coverage: readonly PublicApiMajorCoverage[];
   /** The earliest day any row exists for, so a reader sees what was retained. */
   readonly coverageStartDay: string | undefined;
@@ -218,16 +227,6 @@ export class PublicApiMajorUsageBuffer {
     this.rows = new Map();
     this.unattributed = new Map();
     return drained;
-  }
-
-  /** Returns counts a failed flush could not write, merged with newer ones. */
-  restore(batch: PublicApiMajorUsageBatch): void {
-    for (const row of batch.rows) {
-      this.addRow(row);
-    }
-    for (const row of batch.unattributed) {
-      this.addUnattributed(row);
-    }
   }
 
   private addRow(row: PublicApiMajorUsageRow): void {
@@ -332,7 +331,11 @@ function unattributedOf(
 }
 
 export function buildPublicApiMajorReport(
-  input: PublicApiMajorSnapshot & { readonly window: PublicApiMajorWindow },
+  input: PublicApiMajorSnapshot & {
+    readonly window: PublicApiMajorWindow;
+    /** The Environment whose database the snapshot was read from. */
+    readonly environment: string;
+  },
 ): PublicApiMajorReport {
   const majors = [...input.totals]
     .sort(
@@ -363,6 +366,7 @@ export function buildPublicApiMajorReport(
     }));
   const environments = [
     ...new Set([
+      input.environment,
       ...input.totals.map((row) => row.environment),
       ...input.collectors.map((row) => row.environment),
     ]),

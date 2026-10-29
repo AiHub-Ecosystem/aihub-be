@@ -26,7 +26,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | SandboxAllowanceDefault         | gateway     | 2       |
 | SandboxAllowanceOverride        | gateway     | 3       |
 | PublicApiMajorUsage             | metering    | 7       |
-| PublicApiMajorUsageCoverage     | metering    | 5       |
+| PublicApiMajorUsageCoverage     | metering    | 6       |
 | PublicApiMajorUnattributedUsage | metering    | 6       |
 | DispatchAttempt                 | metering    | 7       |
 | SpeakingAudioAsset              | speaking    | 9       |
@@ -373,6 +373,7 @@ Owner: `metering`
 | startedAt        | DateTime  | @map("started_at") @db.Timestamptz(6)         |
 | coveredThrough   | DateTime  | @map("covered_through") @db.Timestamptz(6)    |
 | stoppedCleanlyAt | DateTime? | @map("stopped_cleanly_at") @db.Timestamptz(6) |
+| appliedBatch     | BigInt    | @default(0) @map("applied_batch")             |
 
 ## PublicApiMajorUnattributedUsage
 

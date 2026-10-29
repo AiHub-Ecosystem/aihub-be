@@ -40,14 +40,20 @@ export const PUBLIC_API_MAJOR_UNATTRIBUTED_ADD_SQL = `
     failure_count = public_api_major_unattributed_usage.failure_count + EXCLUDED.failure_count
 `;
 
-// Coverage only moves forward, and a clean stop, once recorded, stays.
+// Coverage only moves forward, and a clean stop, once recorded, stays. A write
+// numbered at or below the process's applied one was committed before: no row
+// comes back, and its counts are not added again.
 export const PUBLIC_API_MAJOR_COVERAGE_ADD_SQL = `
   INSERT INTO public_api_major_usage_coverage
-    (process_id, environment, started_at, covered_through, stopped_cleanly_at)
-  VALUES ($1::uuid, $2, $3, $4, $5)
+    (process_id, environment, started_at, covered_through, stopped_cleanly_at,
+     applied_batch)
+  VALUES ($1::uuid, $2, $3, $4, $5, $6)
   ON CONFLICT (process_id) DO UPDATE SET
     covered_through = GREATEST(public_api_major_usage_coverage.covered_through, EXCLUDED.covered_through),
-    stopped_cleanly_at = COALESCE(public_api_major_usage_coverage.stopped_cleanly_at, EXCLUDED.stopped_cleanly_at)
+    stopped_cleanly_at = COALESCE(public_api_major_usage_coverage.stopped_cleanly_at, EXCLUDED.stopped_cleanly_at),
+    applied_batch = EXCLUDED.applied_batch
+  WHERE public_api_major_usage_coverage.applied_batch < EXCLUDED.applied_batch
+  RETURNING applied_batch
 `;
 
 // Must be the transaction's first statement: every read after it sees one
@@ -198,6 +204,18 @@ export class PostgresPublicApiMajorUsageRepository
   ): Promise<void> {
     const { rows, unattributed, collector } = write;
     await this.client.$transaction(async (transaction) => {
+      const applied = await transaction.$queryRawUnsafe<readonly unknown[]>(
+        PUBLIC_API_MAJOR_COVERAGE_ADD_SQL,
+        collector.processId,
+        environment,
+        collector.startedAt,
+        write.coveredThrough,
+        write.stoppedCleanly ? write.coveredThrough : null,
+        write.batch,
+      );
+      if (applied.length === 0) {
+        return;
+      }
       if (rows.length > 0) {
         await transaction.$executeRawUnsafe(
           PUBLIC_API_MAJOR_ADD_SQL,
@@ -221,14 +239,6 @@ export class PostgresPublicApiMajorUsageRepository
           unattributed.map((row) => row.failureCount),
         );
       }
-      await transaction.$executeRawUnsafe(
-        PUBLIC_API_MAJOR_COVERAGE_ADD_SQL,
-        collector.processId,
-        environment,
-        collector.startedAt,
-        write.coveredThrough,
-        write.stoppedCleanly ? write.coveredThrough : null,
-      );
     });
   }
 

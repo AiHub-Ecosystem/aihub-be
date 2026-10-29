@@ -47,6 +47,12 @@ const row = (
   ...overrides,
 });
 
+// Each write is the process's next one, as the flusher numbers them.
+let batches = 0;
+beforeEach(() => {
+  batches = 0;
+});
+
 const write = (
   rows: readonly PublicApiMajorUsageRow[],
   overrides: Partial<PublicApiMajorUsageWrite> = {},
@@ -54,6 +60,7 @@ const write = (
   rows,
   unattributed: [],
   collector: PROCESS,
+  batch: ++batches,
   coveredThrough: new Date('2026-10-28T10:00:30Z'),
   stoppedCleanly: false,
   ...overrides,
@@ -127,6 +134,32 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
     expect(await coverageRows()).toMatchObject([
       { stopped_cleanly_at: new Date('2026-10-28T10:02:00Z') },
     ]);
+  });
+
+  it('adds a write retried after its commit response was lost only once', async () => {
+    const unattributed = [
+      {
+        usageDay: '2026-10-28',
+        major: 1,
+        callerKind: 'none' as const,
+        requestCount: 2,
+        failureCount: 0,
+      },
+    ];
+    const committed = write([row()], { unattributed });
+    await repository.add('production', committed);
+    await repository.add('production', committed);
+    await repository.add('production', write([row({ requestCount: 1 })]));
+
+    const { rows } = await pool.query(
+      `SELECT
+         (SELECT request_count::int FROM public_api_major_usage) AS requests,
+         (SELECT request_count::int FROM public_api_major_unattributed_usage)
+           AS unattributed,
+         (SELECT applied_batch::int FROM public_api_major_usage_coverage)
+           AS applied_batch`,
+    );
+    expect(rows).toEqual([{ requests: 4, unattributed: 2, applied_batch: 2 }]);
   });
 
   it('writes neither the counts nor the collection when one part is refused', async () => {

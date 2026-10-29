@@ -35,9 +35,13 @@ These counts support a sunset review; they are not billing evidence.
 
 ### How collection gaps show
 
-Each process buffers counts in memory and writes them every 30 seconds. A write
-that fails keeps its counts for the next one, and a pass is skipped while the
-previous one is still writing. Every write also records the process in
+Each process buffers counts in memory and writes them every 30 seconds, and a
+pass is skipped while the previous one is still writing. Each process numbers
+its writes. A write that fails is kept whole and sent again, under its number,
+before newer counts. The database may have committed it before the connection
+dropped, and `applied_batch` on the process row records the last number it
+committed, so a retried write is added only once. Writes keep retrying while
+the database refuses them; the counts wait in memory until one succeeds. Every write also records the process in
 `public_api_major_usage_coverage`, in the same transaction, even when there was
 nothing to count. A process row means that every request the process served
 between `started_at` and `covered_through` is counted.
@@ -61,7 +65,10 @@ same time.
 ## Running the report
 
 Run it where the other Operator CLI commands run (see
-`docs/operations/incident-response.md`), once per Environment:
+`docs/operations/incident-response.md`), once per Environment, with
+`AIHUB_RUNTIME_DATABASE_SCOPE` naming the Environment whose database
+`DATABASE_URL` points to (`production` when unset). That Environment always gets
+a coverage verdict, even when its database holds no row:
 
 ```sh
 node scripts/cli/cli.mjs usage:major-report --from 2026-10-01 --to 2026-10-29

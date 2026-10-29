@@ -1059,6 +1059,9 @@ async function reportPublicApiMajorCommand(options) {
   try {
     await runCliCommand(publicApiMajorReportDescriptor, {
       databaseUrl: process.env.DATABASE_URL ?? '',
+      // Startup already refused a scope that names no Environment.
+      environment:
+        process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production',
       from: requiredOption(options, 'from'),
       to: requiredOption(options, 'to'),
     });

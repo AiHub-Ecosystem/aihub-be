@@ -12,6 +12,8 @@ import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface PublicApiMajorReportCliInput {
   readonly databaseUrl: string;
+  /** The Environment `databaseUrl` serves; it always gets a coverage line. */
+  readonly environment: string;
   /** First UTC day, `YYYY-MM-DD`. */
   readonly from: string;
   /** Exclusive end day, `YYYY-MM-DD`. */
@@ -126,10 +128,11 @@ async function openRepository(
 async function readReport(
   repository: PublicApiMajorUsageRepositoryPort,
   window: PublicApiMajorWindow,
+  environment: string,
 ): Promise<PublicApiMajorReport> {
   try {
     const snapshot = await repository.snapshot(window);
-    return buildPublicApiMajorReport({ window, ...snapshot });
+    return buildPublicApiMajorReport({ window, environment, ...snapshot });
   } catch {
     throw new PublicApiMajorUsageError(
       'PUBLIC_API_MAJOR_REPORT_DATABASE_FAILURE',
@@ -159,7 +162,7 @@ export async function runPublicApiMajorReportCommand(
 
   try {
     repository = await openRepository(input);
-    report = await readReport(repository, window);
+    report = await readReport(repository, window, input.environment);
   } catch (error) {
     failure =
       error instanceof PublicApiMajorUsageError
