@@ -1,3 +1,4 @@
+import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { GradeTask1RequestSchema, GradeTask2RequestSchema } from './grading';
@@ -107,5 +108,44 @@ describe('Writing contracts', () => {
     expect(
       Value.Check(GradeTask1RequestSchema, { ...TASK1_GRADE, language: 'en' }),
     ).toBe(false);
+  });
+});
+
+// #847: a limit counts UTF-16 code units, the unit JavaScript's `length` uses.
+// A character outside the Basic Multilingual Plane is one code point and two
+// units, so it spends two of the limit.
+const GRAPHEME = '😀';
+const TASK2_GRADE = {
+  question: 'Should schools provide more arts education?',
+  topic: 'education',
+  essay: 'A long enough essay.',
+};
+const TEXT_FIELDS = [
+  ['Task 1 question', GradeTask1RequestSchema, TASK1_GRADE, 'question', 2_000],
+  ['Task 1 essay', GradeTask1RequestSchema, TASK1_GRADE, 'essay', 20_000],
+  ['Task 2 question', GradeTask2RequestSchema, TASK2_GRADE, 'question', 2_000],
+  ['Task 2 topic', GradeTask2RequestSchema, TASK2_GRADE, 'topic', 200],
+  ['Task 2 essay', GradeTask2RequestSchema, TASK2_GRADE, 'essay', 20_000],
+] as const;
+
+describe.each(TEXT_FIELDS)('%s length', (_name, schema, base, field, limit) => {
+  it('counts UTF-16 code units, so a text at the limit in units is accepted', () => {
+    const text = 'a'.repeat(limit - GRAPHEME.length) + GRAPHEME;
+
+    expect(Value.Check(schema, { ...base, [field]: text })).toBe(true);
+  });
+
+  it('refuses a text under the limit in code points but over it in units', () => {
+    const text = 'a'.repeat(limit - GRAPHEME.length + 1) + GRAPHEME;
+
+    expect(Array.from(text).length).toBeLessThanOrEqual(limit);
+    expect(text.length).toBeGreaterThan(limit);
+    expect(Value.Check(schema, { ...base, [field]: text })).toBe(false);
+  });
+
+  it('states the unit in the published schema description', () => {
+    const properties: Record<string, TSchema> = schema.properties;
+
+    expect(properties[field]?.description).toMatch(/UTF-16 code units/);
   });
 });

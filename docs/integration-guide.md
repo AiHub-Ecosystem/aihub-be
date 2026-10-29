@@ -762,6 +762,20 @@ the Speaking grading section. The two `/v1/speaking/audio/uploads` routes take
 `language` is optional and currently accepts `vi` only. Feedback is returned
 in Vietnamese.
 
+### Text length limits
+
+| Field      | Operations     | Length         |
+| ---------- | -------------- | -------------- |
+| `question` | Task 1, Task 2 | 1–2,000 units  |
+| `topic`    | Task 2         | 1–200 units    |
+| `essay`    | Task 1, Task 2 | 1–20,000 units |
+
+A unit is a UTF-16 code unit, the unit of JavaScript's `String.length`. A
+character outside the Basic Multilingual Plane, such as most emoji, counts as 2. A JSON Schema validator counts code points by default, so it can accept a
+text that AIHUB refuses with `400 INVALID_REQUEST`. Check these fields with
+`String.length` or the equivalent UTF-16 length in your language, for example
+`len(text.encode("utf-16-le")) // 2` in Python.
+
 ### A worked grading call
 
 Supply the prompt and essay from your own application:

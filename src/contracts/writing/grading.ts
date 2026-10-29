@@ -30,6 +30,15 @@ export const CRITERION_IDS = [
 
 export const TASK1_IMAGE_URL_MAX_LENGTH = 2_000;
 
+/**
+ * TypeBox counts `maxLength` in UTF-16 code units, the unit of JavaScript's
+ * `length`. JSON Schema counts code points, so the published limit says which
+ * one AIHUB applies (#847). Counting units is never looser than counting code
+ * points, so a text AIHUB accepts also fits a provider that counts either way.
+ */
+const LENGTH_UNIT_NOTE =
+  'The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.';
+
 export type CriterionId = (typeof CRITERION_IDS)[number];
 
 const CriterionIdSchema = Type.Union(
@@ -38,9 +47,17 @@ const CriterionIdSchema = Type.Union(
 
 export const GradeTask1RequestSchema = Type.Object(
   {
-    question: Type.String({ minLength: 1, maxLength: 2_000 }),
+    question: Type.String({
+      minLength: 1,
+      maxLength: 2_000,
+      description: LENGTH_UNIT_NOTE,
+    }),
     chart_type: ChartTypeSchema,
-    essay: Type.String({ minLength: 1, maxLength: 20_000 }),
+    essay: Type.String({
+      minLength: 1,
+      maxLength: 20_000,
+      description: LENGTH_UNIT_NOTE,
+    }),
     image_url: Type.String({
       format: 'uri',
       pattern: '^[hH][tT][tT][pP][sS]://',
@@ -57,10 +74,22 @@ export type GradeTask1Request = Static<typeof GradeTask1RequestSchema>;
 
 export const GradeTask2RequestSchema = Type.Object(
   {
-    question: Type.String({ minLength: 1, maxLength: 2_000 }),
+    question: Type.String({
+      minLength: 1,
+      maxLength: 2_000,
+      description: LENGTH_UNIT_NOTE,
+    }),
     // Unlike Task 1, this really is a subject such as `education`.
-    topic: Type.String({ minLength: 1, maxLength: 200 }),
-    essay: Type.String({ minLength: 1, maxLength: 20_000 }),
+    topic: Type.String({
+      minLength: 1,
+      maxLength: 200,
+      description: LENGTH_UNIT_NOTE,
+    }),
+    essay: Type.String({
+      minLength: 1,
+      maxLength: 20_000,
+      description: LENGTH_UNIT_NOTE,
+    }),
     language: Type.Optional(LanguageSchema),
   },
   { additionalProperties: false },

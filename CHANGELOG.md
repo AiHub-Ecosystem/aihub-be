@@ -6,6 +6,17 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.1.3] - 2026-10-29
+
+### Changed
+
+- The Writing grading fields `question`, `topic`, and `essay` state that their
+  `maxLength` counts UTF-16 code units, not code points as a JSON Schema
+  validator does by default. A character outside the Basic Multilingual Plane,
+  such as most emoji, counts as 2. AIHUB's behavior is unchanged. The
+  Integration Guide lists the limits. See
+  [#847](https://github.com/AiHub-Ecosystem/aihub-be/issues/847).
+
 ## [1.1.2] - 2026-10-29
 
 ### Added

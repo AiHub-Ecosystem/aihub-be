@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "1.1.2"
+    "version": "1.1.3"
   },
   "servers": [
     {
@@ -779,6 +779,7 @@
                   "question": {
                     "minLength": 1,
                     "maxLength": 2000,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
                     "type": "string"
                   },
                   "chart_type": {
@@ -816,6 +817,7 @@
                   "essay": {
                     "minLength": 1,
                     "maxLength": 20000,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
                     "type": "string"
                   },
                   "image_url": {
@@ -1140,16 +1142,19 @@
                   "question": {
                     "minLength": 1,
                     "maxLength": 2000,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
                     "type": "string"
                   },
                   "topic": {
                     "minLength": 1,
                     "maxLength": 200,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
                     "type": "string"
                   },
                   "essay": {
                     "minLength": 1,
                     "maxLength": 20000,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
                     "type": "string"
                   },
                   "language": {
