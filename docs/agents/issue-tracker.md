@@ -22,6 +22,8 @@ Bodies go in a file, never in `--body`, and the shell reason why is in the globa
 
 Pull requests always run CI. Pushes to `main` skip Markdown unless a tracked spec reads that file. Keep those input paths in `.github/workflows/ci.yml`; `scripts/ci/ci-push-paths.spec.ts` checks the allowlist against tracked specs.
 
+The Public API release gate (`pnpm check:api-compatibility`) runs on pull requests and on pushes to `main`. A push is compared with the commit before it, so `CHANGELOG.md` stays in the push allowlist. A red gate on `main` skips the deploy (#1398).
+
 ## Naming a surface in an acceptance criterion
 
 The issue body shape is not repeated here: `/to-issues` carries the template, and it is the single source for it. What this repo owns is what its surfaces _are_, because a criterion that names one loosely cannot be verified by reading a file.

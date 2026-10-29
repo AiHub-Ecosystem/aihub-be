@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const WORKFLOW_PATH = '.github/workflows/ci.yml';
 const TEST_FILE_PATTERN = /\.(?:spec|test)\.tsx?$/;
+/** Markdown the Public API release gate reads on every push (#1398). */
+const RELEASE_GATE_MARKDOWN = ['CHANGELOG.md'];
 const MARKDOWN_PATH_PATTERN = /['"`]((?:docs|ops)\/[^'"`\r\n]*\.md)['"`]/g;
 
 function testReadMarkdownPaths(): string[] {
@@ -75,7 +77,9 @@ describe('CI push path filter', () => {
     const configured = pushPathPatterns().filter(
       (pattern) => !pattern.startsWith('!') && pattern.endsWith('.md'),
     );
-    expect(configured.sort()).toEqual(markdownInputs);
+    expect(configured.sort()).toEqual(
+      [...markdownInputs, ...RELEASE_GATE_MARKDOWN].sort(),
+    );
   });
 
   it('skips a docs-only push that tests do not read', () => {
@@ -88,6 +92,10 @@ describe('CI push path filter', () => {
     if (!markdownInput)
       throw new Error('expected at least one test-read Markdown input');
     expect(pushRunsCi([markdownInput])).toBe(true);
+  });
+
+  it('runs CI when a push changes only the changelog the release gate reads', () => {
+    expect(pushRunsCi(RELEASE_GATE_MARKDOWN)).toBe(true);
   });
 
   it('still runs CI for source changes', () => {

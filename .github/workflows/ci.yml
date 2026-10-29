@@ -7,8 +7,9 @@ on:
   pull_request:
     branches: [main]
 
-  # Markdown is skipped unless a tracked spec reads it. The CI path-filter
-  # spec compares this allowlist with Markdown paths found in test sources.
+  # Markdown is skipped unless a tracked spec or the Public API release gate
+  # reads it. The CI path-filter spec compares this allowlist with Markdown
+  # paths found in test sources plus the release gate's CHANGELOG.md.
   push:
     branches: [main]
     paths:
@@ -18,6 +19,7 @@ on:
       - "!.gitignore"
       - "!*.md"
       - "!**/*.md"
+      - "CHANGELOG.md"
       - "docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md"
       - "docs/history/aihub-deliverable-1-historical-contract.md"
       - "docs/integration-guide.md"
@@ -87,8 +89,11 @@ jobs:
       - name: Generate and validate OpenAPI
         run: pnpm generate:openapi && pnpm validate:openapi
 
+      # The release gate runs on pushes to main too (#1398): work lands there
+      # directly, and CD deploys whatever contract a push carries. A push
+      # compares with the commit before it; a new branch has none to compare.
       - name: Install oasdiff
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         shell: bash
         run: |
           curl --fail --silent --show-error --location \
@@ -99,20 +104,20 @@ jobs:
           tar -xzf "$RUNNER_TEMP/oasdiff.tar.gz" -C "$RUNNER_TEMP/oasdiff" oasdiff
           echo "$RUNNER_TEMP/oasdiff" >> "$GITHUB_PATH"
 
-      - name: Check out pull request base contract
-        if: github.event_name == 'pull_request'
+      - name: Check out the base contract
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           path: base-contract
           persist-credentials: false
 
       - name: Test API compatibility checker
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         run: pnpm test:api-compatibility
 
       - name: Check public API compatibility
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         run: pnpm check:api-compatibility -- base-contract . CHANGELOG.md
 
       - name: Install nginx for the edge compression check
