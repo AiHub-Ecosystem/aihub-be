@@ -128,6 +128,92 @@ describe('PublicApiMajorUsageFlusher', () => {
     ]);
   });
 
+  it('retains the bounded samples and loss interval until the database recovers', async () => {
+    const { buffer, repository, flusher } = setup();
+    repository.fail = true;
+
+    await flusher.flush();
+    for (let i = 0; i < 16_385; i += 1) {
+      buffer.record(sample('2026-10-28T10:00:00Z', `org_${i}`));
+    }
+    await flusher.flush();
+    repository.fail = false;
+    await flusher.flush();
+
+    expect(repository.writes.map(({ write }) => write.batch)).toEqual([1, 2]);
+    expect(repository.writes[1]?.write.rows).toHaveLength(16_384);
+    expect(repository.writes[1]?.write.droppedFrom).toEqual(
+      new Date('2026-10-28T10:00:00Z'),
+    );
+    expect(repository.writes[1]?.write.droppedThrough).toEqual(NOW);
+  });
+
+  it('measures heap with one pending batch and a 30-day outage workload', async () => {
+    const repository = new RecordingRepository();
+    const buffer = new PublicApiMajorUsageBuffer();
+    const flusher = new PublicApiMajorUsageFlusher(
+      buffer,
+      repository,
+      'production',
+      COLLECTOR,
+      () => undefined,
+      () => NOW,
+    );
+    const gc = Reflect.get(globalThis, 'gc');
+    if (typeof gc === 'function') Reflect.apply(gc, globalThis, []);
+    const heapBefore = process.memoryUsage().heapUsed;
+    const pendingDay = new Date('2026-09-30T00:00:00Z');
+
+    for (let organization = 0; organization < 16_384; organization += 1) {
+      buffer.record({
+        major: 1,
+        organizationId: `pending_${organization}`,
+        failed: false,
+        callerKind: 'api-key',
+        at: new Date(pendingDay.getTime() + organization),
+      });
+    }
+    repository.fail = true;
+    await flusher.flush();
+
+    const start = Date.parse('2026-10-01T00:00:00Z');
+    const dayMs = 24 * 60 * 60 * 1000;
+    for (let day = 0; day < 30; day += 1) {
+      for (let organization = 0; organization < 4_096; organization += 1) {
+        for (let request = 0; request < 10; request += 1) {
+          const time = start + day * dayMs + organization * 10 + request;
+          const organizationId =
+            (organization * 10 + request) % 1_000 === 0
+              ? undefined
+              : `org_${organization}`;
+          buffer.record({
+            major: 1,
+            ...(organizationId === undefined ? {} : { organizationId }),
+            failed: false,
+            callerKind: organizationId === undefined ? 'bearer' : 'api-key',
+            at: new Date(time),
+          });
+        }
+      }
+    }
+
+    if (typeof gc === 'function') Reflect.apply(gc, globalThis, []);
+    const heapDeltaBytes = process.memoryUsage().heapUsed - heapBefore;
+    expect(heapDeltaBytes).toBeLessThan(
+      // Jest's transient request allocations need headroom without explicit GC.
+      (typeof gc === 'function' ? 16 : 192) * 1024 * 1024,
+    );
+
+    repository.fail = false;
+    await flusher.flush();
+    expect(
+      repository.writes.map(
+        ({ write }) => write.rows.length + write.unattributed.length,
+      ),
+    ).toEqual([16_384, 16_384]);
+    expect(repository.writes[1]?.write.droppedFrom).toBeInstanceOf(Date);
+  });
+
   it('resends a write whose commit response was lost under its original number', async () => {
     const { buffer, repository, flusher } = setup();
     buffer.record(sample('2026-10-28T10:00:00Z'));

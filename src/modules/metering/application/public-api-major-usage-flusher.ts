@@ -76,11 +76,12 @@ export class PublicApiMajorUsageFlusher {
           await this.repository.add(this.environment, this.unconfirmed);
           this.unconfirmed = undefined;
         }
+        const coveredThrough = this.now();
         this.unconfirmed = {
-          ...this.buffer.drain(),
+          ...this.buffer.drain(coveredThrough),
           collector: this.collector,
           batch: ++this.batches,
-          coveredThrough: this.now(),
+          coveredThrough,
           stoppedCleanly,
         };
         await this.repository.add(this.environment, this.unconfirmed);

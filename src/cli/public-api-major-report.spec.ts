@@ -61,6 +61,7 @@ class FakeRepository implements PublicApiMajorUsageRepositoryPort {
           stoppedCleanlyAt: null,
         },
       ],
+      droppedIntervals: [],
     };
   }
 

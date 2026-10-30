@@ -26,7 +26,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await pool.query(
-    'TRUNCATE public_api_major_usage, public_api_major_unattributed_usage, public_api_major_usage_coverage',
+    'TRUNCATE public_api_major_usage, public_api_major_unattributed_usage, public_api_major_usage_coverage, public_api_major_usage_dropped_interval',
   );
 });
 
@@ -63,6 +63,8 @@ const write = (
   batch: ++batches,
   coveredThrough: new Date('2026-10-28T10:00:30Z'),
   stoppedCleanly: false,
+  droppedFrom: null,
+  droppedThrough: null,
   ...overrides,
 });
 
@@ -146,7 +148,11 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
         failureCount: 0,
       },
     ];
-    const committed = write([row()], { unattributed });
+    const committed = write([row()], {
+      unattributed,
+      droppedFrom: new Date('2026-10-28T10:00:10Z'),
+      droppedThrough: new Date('2026-10-28T10:00:30Z'),
+    });
     await repository.add('production', committed);
     await repository.add('production', committed);
     await repository.add('production', write([row({ requestCount: 1 })]));
@@ -157,9 +163,13 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
          (SELECT request_count::int FROM public_api_major_unattributed_usage)
            AS unattributed,
          (SELECT applied_batch::int FROM public_api_major_usage_coverage)
-           AS applied_batch`,
+           AS applied_batch,
+         (SELECT COUNT(*)::int FROM public_api_major_usage_dropped_interval)
+           AS dropped_intervals`,
     );
-    expect(rows).toEqual([{ requests: 4, unattributed: 2, applied_batch: 2 }]);
+    expect(rows).toEqual([
+      { requests: 4, unattributed: 2, applied_batch: 2, dropped_intervals: 1 },
+    ]);
   });
 
   it('writes neither the counts nor the collection when one part is refused', async () => {
@@ -226,6 +236,8 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
               failureCount: 1,
             },
           ],
+          droppedFrom: new Date('2026-10-28T10:00:10Z'),
+          droppedThrough: new Date('2026-10-28T10:00:30Z'),
         },
       ),
     );
@@ -292,6 +304,13 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
     expect(
       snapshot.collectors.map((collector) => collector.environment).sort(),
     ).toEqual(['production', 'sandbox']);
+    expect(snapshot.droppedIntervals).toEqual([
+      {
+        environment: 'production',
+        droppedFrom: new Date('2026-10-28T10:00:10Z'),
+        droppedThrough: new Date('2026-10-28T10:00:30Z'),
+      },
+    ]);
   });
 
   it('leaves out a process whose collection ended before the window', async () => {
@@ -314,6 +333,7 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
       organizations: [],
       unattributed: [],
       collectors: [],
+      droppedIntervals: [],
     });
   });
 });

@@ -2,6 +2,7 @@ import type { CallerAuth } from '@/catalog/public-routes';
 import type {
   PublicApiMajorCollectorRow,
   PublicApiMajorCoverage,
+  PublicApiMajorUsageDroppedInterval,
 } from './public-api-major-coverage';
 import { assessPublicApiMajorCoverage } from './public-api-major-coverage';
 
@@ -54,6 +55,8 @@ export interface PublicApiMajorUnattributedRow {
 export interface PublicApiMajorUsageBatch {
   readonly rows: readonly PublicApiMajorUsageRow[];
   readonly unattributed: readonly PublicApiMajorUnattributedRow[];
+  readonly droppedFrom: Date | null;
+  readonly droppedThrough: Date | null;
 }
 
 /** One running process, identified only for its own collection record. */
@@ -119,6 +122,7 @@ export interface PublicApiMajorSnapshot {
   readonly organizations: readonly PublicApiMajorOrganizationRow[];
   readonly unattributed: readonly PublicApiMajorUnattributedTotalRow[];
   readonly collectors: readonly PublicApiMajorCollectorRow[];
+  readonly droppedIntervals: readonly PublicApiMajorUsageDroppedInterval[];
 }
 
 export interface PublicApiMajorUsageRepositoryPort {
@@ -184,6 +188,14 @@ export class PublicApiMajorUsageError extends Error {
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/u;
 
+/**
+ * In a 768 MiB Node 22.23.2 container, a 30-day outage workload (4,096
+ * Organizations × 10 requests/day) retained one pending and one active batch
+ * of 16,384 keys each: +10.56 MiB heap and 104.23 MiB RSS after 1,228,800
+ * requests. This keeps bounded retention well below the app limit.
+ */
+export const PUBLIC_API_MAJOR_USAGE_MAX_KEYS = 16_384;
+
 function dayOf(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -196,10 +208,30 @@ function dayOf(date: Date): string {
 export class PublicApiMajorUsageBuffer {
   private rows = new Map<string, PublicApiMajorUsageRow>();
   private unattributed = new Map<string, PublicApiMajorUnattributedRow>();
+  private droppedFrom: Date | undefined;
+
+  constructor(private readonly onDrop: () => void = () => undefined) {}
 
   record(sample: PublicApiMajorUsageSample): void {
     const usageDay = dayOf(sample.at);
     const failureCount = sample.failed ? 1 : 0;
+    const rowKey = `${usageDay}|${sample.major}|${sample.organizationId ?? ''}`;
+    const unattributedKey = `${usageDay}|${sample.major}|${sample.callerKind}`;
+    let newKeys = this.rows.has(rowKey) ? 0 : 1;
+    if (
+      sample.organizationId === undefined &&
+      !this.unattributed.has(unattributedKey)
+    ) {
+      newKeys += 1;
+    }
+    if (
+      this.rows.size + this.unattributed.size + newKeys >
+      PUBLIC_API_MAJOR_USAGE_MAX_KEYS
+    ) {
+      this.droppedFrom ??= sample.at;
+      this.onDrop();
+      return;
+    }
     this.addRow({
       usageDay,
       major: sample.major,
@@ -219,13 +251,16 @@ export class PublicApiMajorUsageBuffer {
     }
   }
 
-  drain(): PublicApiMajorUsageBatch {
+  drain(coveredThrough: Date = new Date()): PublicApiMajorUsageBatch {
     const drained = {
       rows: [...this.rows.values()],
       unattributed: [...this.unattributed.values()],
+      droppedFrom: this.droppedFrom ?? null,
+      droppedThrough: this.droppedFrom === undefined ? null : coveredThrough,
     };
     this.rows = new Map();
     this.unattributed = new Map();
+    this.droppedFrom = undefined;
     return drained;
   }
 
@@ -383,6 +418,9 @@ export function buildPublicApiMajorReport(
         asOf: input.asOf,
         collectors: input.collectors.filter(
           (row) => row.environment === environment,
+        ),
+        droppedIntervals: input.droppedIntervals.filter(
+          (interval) => interval.environment === environment,
         ),
       }),
     ),

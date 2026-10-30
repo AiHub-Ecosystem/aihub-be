@@ -76,7 +76,60 @@ describe('PublicApiMajorUsageBuffer', () => {
     });
 
     expect(buffer.drain().rows).toHaveLength(1);
-    expect(buffer.drain()).toEqual({ rows: [], unattributed: [] });
+    expect(buffer.drain()).toEqual({
+      rows: [],
+      unattributed: [],
+      droppedFrom: null,
+      droppedThrough: null,
+    });
+  });
+
+  it('bounds both maps together, keeps retained keys collecting, and records the loss interval', () => {
+    let drops = 0;
+    const buffer = new PublicApiMajorUsageBuffer(() => {
+      drops += 1;
+    });
+    const sample = (organizationId: string, at = '2026-10-28T10:00:00Z') =>
+      buffer.record({
+        major: 1,
+        organizationId,
+        failed: false,
+        callerKind: 'api-key',
+        at: new Date(at),
+      });
+
+    for (let i = 0; i < 16_382; i += 1) {
+      sample(`org_${i}`);
+    }
+    buffer.record({
+      major: 1,
+      failed: false,
+      callerKind: 'bearer',
+      at: at('2026-10-28T10:00:00Z'),
+    });
+    sample('org_0', '2026-10-28T10:01:00Z');
+    sample('org_overflow', '2026-10-28T10:01:00Z');
+    buffer.record({
+      major: 2,
+      failed: false,
+      callerKind: 'bearer',
+      at: at('2026-10-28T10:02:00Z'),
+    });
+
+    const drained = buffer.drain(at('2026-10-28T10:03:00Z'));
+    expect(drained.rows).toHaveLength(16_383);
+    expect(drained.unattributed).toHaveLength(1);
+    expect(drained.rows[0]?.requestCount).toBe(2);
+    expect(drained.droppedFrom).toEqual(at('2026-10-28T10:01:00Z'));
+    expect(drained.droppedThrough).toEqual(at('2026-10-28T10:03:00Z'));
+    expect(drops).toBe(2);
+
+    sample('org_after_drain');
+    expect(buffer.drain()).toMatchObject({
+      rows: [expect.objectContaining({ organizationId: 'org_after_drain' })],
+      droppedFrom: null,
+      droppedThrough: null,
+    });
   });
 });
 
@@ -188,6 +241,7 @@ describe('buildPublicApiMajorReport', () => {
         },
       ],
       collectors: [COLLECTOR],
+      droppedIntervals: [],
     });
 
     expect(report).toEqual({
@@ -242,6 +296,7 @@ describe('buildPublicApiMajorReport', () => {
         },
       ],
       collectors: [COLLECTOR],
+      droppedIntervals: [],
     });
 
     expect(report.majors[0]?.unattributed).toEqual([
@@ -260,6 +315,7 @@ describe('buildPublicApiMajorReport', () => {
       organizations: [],
       unattributed: [],
       collectors: [],
+      droppedIntervals: [],
     });
 
     expect(report.coverage).toEqual([
@@ -283,6 +339,7 @@ describe('buildPublicApiMajorReport', () => {
       organizations: [],
       unattributed: [],
       collectors: [],
+      droppedIntervals: [],
     });
 
     expect(report.coverage).toEqual([

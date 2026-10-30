@@ -1,5 +1,8 @@
 import { isRecord } from '@/common/is-record';
-import type { PublicApiMajorCollectorRow } from '@/modules/metering/application/public-api-major-coverage';
+import type {
+  PublicApiMajorCollectorRow,
+  PublicApiMajorUsageDroppedInterval,
+} from '@/modules/metering/application/public-api-major-coverage';
 import {
   type PublicApiMajorOrganizationRow,
   type PublicApiMajorSnapshot,
@@ -54,6 +57,12 @@ export const PUBLIC_API_MAJOR_COVERAGE_ADD_SQL = `
     applied_batch = EXCLUDED.applied_batch
   WHERE public_api_major_usage_coverage.applied_batch < EXCLUDED.applied_batch
   RETURNING applied_batch
+`;
+
+export const PUBLIC_API_MAJOR_DROPPED_INTERVAL_ADD_SQL = `
+  INSERT INTO public_api_major_usage_dropped_interval
+    (process_id, batch, environment, dropped_from, dropped_through)
+  VALUES ($1::uuid, $2, $3, $4, $5)
 `;
 
 // Must be the transaction's first statement: every read after it sees one
@@ -113,6 +122,12 @@ export const PUBLIC_API_MAJOR_COLLECTORS_SQL = `
   SELECT environment, started_at, covered_through, stopped_cleanly_at
   FROM public_api_major_usage_coverage
   WHERE started_at < $2::date AND covered_through >= $1::date
+`;
+
+export const PUBLIC_API_MAJOR_DROPPED_INTERVALS_SQL = `
+  SELECT environment, dropped_from, dropped_through
+  FROM public_api_major_usage_dropped_interval
+  WHERE dropped_from < $2::date AND dropped_through >= $1::date
 `;
 
 export class PublicApiMajorSnapshotError extends Error {
@@ -193,6 +208,23 @@ function collectorFromRow(row: unknown): PublicApiMajorCollectorRow {
   };
 }
 
+function droppedIntervalFromRow(
+  row: unknown,
+): PublicApiMajorUsageDroppedInterval {
+  if (
+    !isRecord(row) ||
+    !(row.dropped_from instanceof Date) ||
+    !(row.dropped_through instanceof Date)
+  ) {
+    throw new PublicApiMajorSnapshotError();
+  }
+  return {
+    environment: text(row.environment),
+    droppedFrom: row.dropped_from,
+    droppedThrough: row.dropped_through,
+  };
+}
+
 export class PostgresPublicApiMajorUsageRepository
   implements PublicApiMajorUsageRepositoryPort
 {
@@ -215,6 +247,16 @@ export class PostgresPublicApiMajorUsageRepository
       );
       if (applied.length === 0) {
         return;
+      }
+      if (write.droppedFrom !== null && write.droppedThrough !== null) {
+        await transaction.$executeRawUnsafe(
+          PUBLIC_API_MAJOR_DROPPED_INTERVAL_ADD_SQL,
+          collector.processId,
+          write.batch,
+          environment,
+          write.droppedFrom,
+          write.droppedThrough,
+        );
       }
       if (rows.length > 0) {
         await transaction.$executeRawUnsafe(
@@ -273,6 +315,11 @@ export class PostgresPublicApiMajorUsageRepository
         window.fromDay,
         window.toDay,
       );
+      const droppedIntervals = await read(
+        PUBLIC_API_MAJOR_DROPPED_INTERVALS_SQL,
+        window.fromDay,
+        window.toDay,
+      );
       const [start] = await read(PUBLIC_API_MAJOR_COVERAGE_SQL);
       if (!isRecord(asOf) || !(asOf.as_of instanceof Date)) {
         throw new PublicApiMajorSnapshotError();
@@ -287,6 +334,7 @@ export class PostgresPublicApiMajorUsageRepository
         organizations: organizations.map(organizationFromRow),
         unattributed: unattributed.map(unattributedFromRow),
         collectors: collectors.map(collectorFromRow),
+        droppedIntervals: droppedIntervals.map(droppedIntervalFromRow),
       };
     });
   }

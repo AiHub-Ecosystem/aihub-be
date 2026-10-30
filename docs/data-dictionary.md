@@ -4,43 +4,44 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 
 ## Tables
 
-| Table (model)                   | Owner       | Columns |
-| ------------------------------- | ----------- | ------- |
-| ApiKey                          | identity    | 15      |
-| OperatorRedisFailure            | identity    | 2       |
-| NotificationEvent               | identity    | 8       |
-| AuthIdentity                    | auth        | 8       |
-| EmailDeliveryRequest            | auth        | 16      |
-| AuthEmailRecipientRateLimit     | auth        | 5       |
-| EmailDailySendBudget            | auth        | 5       |
-| EmailVerificationToken          | auth        | 12      |
-| IdempotencyRecord               | idempotency | 12      |
-| OrganizationAuditEvent          | identity    | 13      |
-| OrganizationIdentityConfig      | identity    | 12      |
-| OrganizationInvitation          | identity    | 11      |
-| OrganizationMembership          | identity    | 8       |
-| Organization                    | identity    | 20      |
-| PasswordResetToken              | auth        | 7       |
-| RefreshToken                    | auth        | 9       |
-| SandboxDispatchReservation      | gateway     | 6       |
-| SandboxAllowanceDefault         | gateway     | 2       |
-| SandboxAllowanceOverride        | gateway     | 3       |
-| PublicApiMajorUsage             | metering    | 7       |
-| PublicApiMajorUsageCoverage     | metering    | 6       |
-| PublicApiMajorUnattributedUsage | metering    | 6       |
-| DispatchAttempt                 | metering    | 7       |
-| SpeakingAudioAsset              | speaking    | 9       |
-| SpeakingAudioUploadIntent       | speaking    | 10      |
-| WritingChartUpload              | writing     | 15      |
-| WritingChartRevocationAudit     | writing     | 9       |
-| UsageRecord                     | metering    | 21      |
-| UserAccount                     | auth        | 18      |
-| UserAvatar                      | avatar      | 7       |
-| UserMfaFactor                   | auth        | 8       |
-| UserMfaRecoveryCode             | auth        | 5       |
-| WebSession                      | auth        | 8       |
-| BillingAdjustment               | metering    | 10      |
-| BillingMonthClosure             | metering    | 9       |
+| Table (model)                      | Owner       | Columns |
+| ---------------------------------- | ----------- | ------- |
+| ApiKey                             | identity    | 15      |
+| OperatorRedisFailure               | identity    | 2       |
+| NotificationEvent                  | identity    | 8       |
+| AuthIdentity                       | auth        | 8       |
+| EmailDeliveryRequest               | auth        | 16      |
+| AuthEmailRecipientRateLimit        | auth        | 5       |
+| EmailDailySendBudget               | auth        | 5       |
+| EmailVerificationToken             | auth        | 12      |
+| IdempotencyRecord                  | idempotency | 12      |
+| OrganizationAuditEvent             | identity    | 13      |
+| OrganizationIdentityConfig         | identity    | 12      |
+| OrganizationInvitation             | identity    | 11      |
+| OrganizationMembership             | identity    | 8       |
+| Organization                       | identity    | 20      |
+| PasswordResetToken                 | auth        | 7       |
+| RefreshToken                       | auth        | 9       |
+| SandboxDispatchReservation         | gateway     | 6       |
+| SandboxAllowanceDefault            | gateway     | 2       |
+| SandboxAllowanceOverride           | gateway     | 3       |
+| PublicApiMajorUsage                | metering    | 7       |
+| PublicApiMajorUsageCoverage        | metering    | 6       |
+| PublicApiMajorUsageDroppedInterval | metering    | 5       |
+| PublicApiMajorUnattributedUsage    | metering    | 6       |
+| DispatchAttempt                    | metering    | 7       |
+| SpeakingAudioAsset                 | speaking    | 9       |
+| SpeakingAudioUploadIntent          | speaking    | 10      |
+| WritingChartUpload                 | writing     | 15      |
+| WritingChartRevocationAudit        | writing     | 9       |
+| UsageRecord                        | metering    | 21      |
+| UserAccount                        | auth        | 18      |
+| UserAvatar                         | avatar      | 7       |
+| UserMfaFactor                      | auth        | 8       |
+| UserMfaRecoveryCode                | auth        | 5       |
+| WebSession                         | auth        | 8       |
+| BillingAdjustment                  | metering    | 10      |
+| BillingMonthClosure                | metering    | 9       |
 
 ## ApiKey
 
@@ -375,6 +376,18 @@ Owner: `metering`
 | coveredThrough   | DateTime  | @map("covered_through") @db.Timestamptz(6)    |
 | stoppedCleanlyAt | DateTime? | @map("stopped_cleanly_at") @db.Timestamptz(6) |
 | appliedBatch     | BigInt    | @default(0) @map("applied_batch")             |
+
+## PublicApiMajorUsageDroppedInterval
+
+Owner: `metering`
+
+| Column         | Type     | Attributes                                 |
+| -------------- | -------- | ------------------------------------------ |
+| processId      | String   | @map("process_id") @db.Uuid                |
+| batch          | BigInt   |                                            |
+| environment    | String   |                                            |
+| droppedFrom    | DateTime | @map("dropped_from") @db.Timestamptz(6)    |
+| droppedThrough | DateTime | @map("dropped_through") @db.Timestamptz(6) |
 
 ## PublicApiMajorUnattributedUsage
 

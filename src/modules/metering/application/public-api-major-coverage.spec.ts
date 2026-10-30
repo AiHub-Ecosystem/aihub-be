@@ -19,12 +19,18 @@ function collector(
 function assess(
   collectors: ReturnType<typeof collector>[],
   asOf = '2026-10-04T00:00:00Z',
+  droppedIntervals: {
+    environment: string;
+    droppedFrom: Date;
+    droppedThrough: Date;
+  }[] = [],
 ) {
   return assessPublicApiMajorCoverage({
     environment: 'production',
     window: WINDOW,
     asOf: at(asOf),
     collectors,
+    droppedIntervals,
   });
 }
 
@@ -125,5 +131,26 @@ describe('assessPublicApiMajorCoverage', () => {
         collector('2026-09-30T00:00:00Z', '2026-10-04T00:00:00Z'),
       ]),
     ).toMatchObject({ verdict: 'complete', uncleanExitDays: [] });
+  });
+
+  it('marks dropped-sample days inconclusive and reports complete days after recovery', () => {
+    expect(
+      assess(
+        [collector('2026-09-30T00:00:00Z', '2026-10-05T00:00:00Z')],
+        '2026-10-05T00:00:00Z',
+        [
+          {
+            environment: 'production',
+            droppedFrom: at('2026-10-02T23:59:00Z'),
+            droppedThrough: at('2026-10-03T00:01:00Z'),
+          },
+        ],
+      ),
+    ).toEqual({
+      environment: 'production',
+      verdict: 'inconclusive',
+      inconclusiveDays: ['2026-10-02', '2026-10-03'],
+      uncleanExitDays: [],
+    });
   });
 });

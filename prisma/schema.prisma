@@ -480,6 +480,19 @@ model PublicApiMajorUsageCoverage {
   @@map("public_api_major_usage_coverage")
 }
 
+/// A write batch that dropped samples while the in-process buffer was full.
+/// @owner metering
+model PublicApiMajorUsageDroppedInterval {
+  processId     String   @map("process_id") @db.Uuid
+  batch         BigInt
+  environment   String
+  droppedFrom   DateTime @map("dropped_from") @db.Timestamptz(6)
+  droppedThrough DateTime @map("dropped_through") @db.Timestamptz(6)
+
+  @@id([processId, batch])
+  @@map("public_api_major_usage_dropped_interval")
+}
+
 /// Daily unattributed requests per Public API major by how the route
 /// authenticates its caller, so an operator can tell Customer Web traffic from
 /// a failed API key before a sunset (#1376).

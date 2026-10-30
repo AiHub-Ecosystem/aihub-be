@@ -38,6 +38,7 @@ import {
 import { NestMeteringFailureLogger } from './infrastructure/nest-metering-failure.logger';
 import { PostgresPublicApiMajorUsageRepository } from './infrastructure/postgres-public-api-major-usage.repository';
 import { PostgresUsageRepository } from './infrastructure/postgres-usage.repository';
+import { recordPublicApiMajorUsageDrop } from './infrastructure/public-api-major-usage-drop-metric';
 import { PublicApiMajorUsageScheduler } from './infrastructure/public-api-major-usage.scheduler';
 import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
@@ -68,7 +69,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
     {
       provide: PUBLIC_API_MAJOR_USAGE_BUFFER,
       useFactory: (): PublicApiMajorUsageBuffer =>
-        new PublicApiMajorUsageBuffer(),
+        new PublicApiMajorUsageBuffer(recordPublicApiMajorUsageDrop),
     },
     {
       provide: PUBLIC_API_MAJOR_USAGE_REPOSITORY,

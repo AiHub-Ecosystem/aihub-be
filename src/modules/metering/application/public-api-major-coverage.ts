@@ -22,6 +22,12 @@ export interface PublicApiMajorCollectorRow {
   readonly stoppedCleanlyAt: Date | null;
 }
 
+export interface PublicApiMajorUsageDroppedInterval {
+  readonly environment: string;
+  readonly droppedFrom: Date;
+  readonly droppedThrough: Date;
+}
+
 export interface PublicApiMajorCoverage {
   readonly environment: string;
   readonly verdict: 'complete' | 'inconclusive';
@@ -79,6 +85,7 @@ export function assessPublicApiMajorCoverage(input: {
   readonly window: { readonly fromDay: string; readonly toDay: string };
   readonly asOf: Date;
   readonly collectors: readonly PublicApiMajorCollectorRow[];
+  readonly droppedIntervals: readonly PublicApiMajorUsageDroppedInterval[];
 }): PublicApiMajorCoverage {
   const from = startOf(input.window.fromDay);
   const to = Math.min(startOf(input.window.toDay), input.asOf.getTime());
@@ -86,6 +93,19 @@ export function assessPublicApiMajorCoverage(input: {
   for (const gap of uncoveredStretches(input.collectors, from, to)) {
     if (gap.to - gap.from <= PUBLIC_API_MAJOR_COVERAGE_TOLERANCE_MS) continue;
     for (let day = startOf(dayOf(gap.from)); day < gap.to; day += DAY_MS) {
+      days.add(dayOf(day));
+    }
+  }
+  for (const interval of input.droppedIntervals) {
+    if (interval.environment !== input.environment) continue;
+    const lossFrom = Math.max(interval.droppedFrom.getTime(), from);
+    const lossThrough = Math.min(interval.droppedThrough.getTime(), to);
+    if (lossFrom === lossThrough && lossFrom >= from && lossFrom < to) {
+      days.add(dayOf(lossFrom));
+      continue;
+    }
+    if (lossFrom >= lossThrough) continue;
+    for (let day = startOf(dayOf(lossFrom)); day < lossThrough; day += DAY_MS) {
       days.add(dayOf(day));
     }
   }
