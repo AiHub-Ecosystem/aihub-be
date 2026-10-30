@@ -190,8 +190,9 @@ describe('Refresh Token logout and rotation ordering', () => {
           ? [{ kind: 'rotated', userId }, undefined]
           : [undefined, { kind: 'invalid', reason: 'revoked' }],
       );
+      // Only a rotation that wins the lock inserts the successor row.
       expect(await familyState(current.familyId)).toEqual({
-        total: 3,
+        total: firstOperation === 'rotation' ? 3 : 2,
         open: 0,
       });
     },
