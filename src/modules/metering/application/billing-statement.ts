@@ -1,3 +1,4 @@
+import { canonicalJson } from '@/common/serialization/canonical-json';
 import { parseQuotaMonth } from '@/modules/gateway/public/quota-period';
 
 /**
@@ -138,6 +139,11 @@ export interface NewBillingAdjustment {
   readonly actor: string;
 }
 
+export type BillingAdjustmentWriteResult =
+  | { readonly status: 'created'; readonly adjustment: NewBillingAdjustment }
+  | { readonly status: 'existing'; readonly adjustment: NewBillingAdjustment }
+  | { readonly status: 'month_closed' };
+
 export interface BillingStatementRepositoryPort {
   usage(
     month: BillingMonth,
@@ -160,7 +166,7 @@ export interface BillingStatementRepositoryPort {
   /** Refuses a month already closed for the Organization. */
   addAdjustment(
     input: NewBillingAdjustment,
-  ): Promise<'created' | 'month_closed'>;
+  ): Promise<BillingAdjustmentWriteResult>;
   close?(): Promise<void>;
 }
 
@@ -323,8 +329,9 @@ export class BillingStatementService {
     );
   }
 
-  async adjust(input: NewBillingAdjustment): Promise<'created'> {
+  async adjust(input: NewBillingAdjustment): Promise<'created' | 'reused'> {
     if (
+      !/^badj_[0-9A-HJKMNP-TV-Z]{26}$/.test(input.id) ||
       !Number.isInteger(input.requests) ||
       input.requests === 0 ||
       input.reason.trim().length === 0 ||
@@ -338,14 +345,39 @@ export class BillingStatementService {
       );
     }
     const result = await this.repository.addAdjustment(input);
-    if (result === 'month_closed') {
+    if (result.status === 'month_closed') {
       throw new BillingStatementError(
         'BILLING_MONTH_CLOSED',
         'the month is closed; record the correction in an open month',
       );
     }
-    return result;
+    if (
+      result.status === 'existing' &&
+      !sameBillingAdjustment(input, result.adjustment)
+    ) {
+      throw new BillingStatementError(
+        'BILLING_INVALID_ADJUSTMENT',
+        'adjustment id was reused with different values',
+      );
+    }
+    return result.status === 'created' ? 'created' : 'reused';
   }
+}
+
+function sameBillingAdjustment(
+  requested: NewBillingAdjustment,
+  stored: NewBillingAdjustment,
+): boolean {
+  return (
+    requested.id === stored.id &&
+    requested.organizationId === stored.organizationId &&
+    requested.month.label === stored.month.label &&
+    requested.operation === stored.operation &&
+    requested.requests === stored.requests &&
+    requested.reason === stored.reason &&
+    canonicalJson(requested.corrects) === canonicalJson(stored.corrects) &&
+    requested.actor === stored.actor
+  );
 }
 
 function validTarget(target: BillingAdjustmentTarget): boolean {

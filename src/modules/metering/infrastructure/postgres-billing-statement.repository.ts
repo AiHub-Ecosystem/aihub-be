@@ -1,13 +1,15 @@
 import { asDate } from '@/common/postgres/row-readers';
-import type {
-  BillingAdjustmentRecord,
-  BillingAdjustmentTarget,
-  BillingClosureRecord,
-  BillingMonth,
-  BillingStatementLine,
-  BillingStatementRepositoryPort,
-  BillingUsageRow,
-  NewBillingAdjustment,
+import {
+  type BillingAdjustmentRecord,
+  type BillingAdjustmentTarget,
+  type BillingAdjustmentWriteResult,
+  type BillingClosureRecord,
+  type BillingMonth,
+  type BillingStatementLine,
+  type BillingStatementRepositoryPort,
+  type BillingUsageRow,
+  type NewBillingAdjustment,
+  parseBillingMonth,
 } from '@/modules/metering/application/billing-statement';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import { billableRequestSql } from './billable-request-sql';
@@ -237,10 +239,19 @@ export class PostgresBillingStatementRepository
 
   async addAdjustment(
     input: NewBillingAdjustment,
-  ): Promise<'created' | 'month_closed'> {
+  ): Promise<BillingAdjustmentWriteResult> {
     // An adjustment racing a close can land after the close read its totals;
     // the next statement for that month then reports the difference.
     return this.client.$transaction(async (transaction) => {
+      const existing = await transaction.billingAdjustment.findUnique({
+        where: { id: input.id },
+      });
+      if (existing !== null) {
+        return {
+          status: 'existing' as const,
+          adjustment: existingAdjustment(existing),
+        };
+      }
       const closed = await transaction.billingMonthClosure.count({
         where: {
           organizationId: input.organizationId,
@@ -248,25 +259,64 @@ export class PostgresBillingStatementRepository
         },
       });
       if (closed > 0) {
-        return 'month_closed' as const;
+        return { status: 'month_closed' as const };
       }
-      await transaction.billingAdjustment.create({
-        data: {
-          id: input.id,
-          organizationId: input.organizationId,
-          billingMonth: input.month.from,
-          operation: input.operation,
-          requests: input.requests,
-          reason: input.reason,
-          corrects: storedTarget(input.corrects),
-          actor: input.actor,
-        },
+      const created = await transaction.billingAdjustment.createMany({
+        data: [
+          {
+            id: input.id,
+            organizationId: input.organizationId,
+            billingMonth: input.month.from,
+            operation: input.operation,
+            requests: input.requests,
+            reason: input.reason,
+            corrects: storedTarget(input.corrects),
+            actor: input.actor,
+          },
+        ],
+        skipDuplicates: true,
       });
-      return 'created' as const;
+      if (created.count > 0) {
+        return { status: 'created' as const, adjustment: input };
+      }
+      const duplicate = await transaction.billingAdjustment.findUnique({
+        where: { id: input.id },
+      });
+      if (duplicate === null) {
+        throw new Error(
+          'billing adjustment identity conflict could not be read',
+        );
+      }
+      return {
+        status: 'existing' as const,
+        adjustment: existingAdjustment(duplicate),
+      };
     }, CONTROL_PLANE_TRANSACTION_OPTIONS);
   }
 
   async close(): Promise<void> {
     await this.client.close?.();
   }
+}
+
+function existingAdjustment(record: {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly billingMonth: Date;
+  readonly operation: string;
+  readonly requests: number;
+  readonly reason: string;
+  readonly corrects: unknown;
+  readonly actor: string;
+}): NewBillingAdjustment {
+  return {
+    id: record.id,
+    organizationId: record.organizationId,
+    month: parseBillingMonth(record.billingMonth.toISOString().slice(0, 7)),
+    operation: record.operation,
+    requests: record.requests,
+    reason: record.reason,
+    corrects: target(record.corrects),
+    actor: record.actor,
+  };
 }

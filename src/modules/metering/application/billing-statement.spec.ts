@@ -1,6 +1,7 @@
 import {
   type BillingStatementRepositoryPort,
   BillingStatementService,
+  type NewBillingAdjustment,
   buildBillingStatement,
   parseBillingMonth,
 } from './billing-statement';
@@ -92,7 +93,10 @@ describe('buildBillingStatement', () => {
 
 describe('BillingStatementService.adjust', () => {
   const repository = {
-    addAdjustment: jest.fn(async () => 'created' as const),
+    addAdjustment: jest.fn(async (adjustment: NewBillingAdjustment) => ({
+      status: 'created' as const,
+      adjustment,
+    })),
   } as unknown as BillingStatementRepositoryPort;
   const valid = {
     id: 'badj_01J00000000000000000000001',
@@ -106,6 +110,7 @@ describe('BillingStatementService.adjust', () => {
   };
 
   it.each([
+    ['an invalid adjustment id', { id: 'badj_invalid' }],
     ['a zero count', { requests: 0 }],
     ['a fractional count', { requests: 1.5 }],
     ['no reason', { reason: ' ' }],
@@ -118,5 +123,37 @@ describe('BillingStatementService.adjust', () => {
     await expect(
       new BillingStatementService(repository).adjust({ ...valid, ...change }),
     ).rejects.toMatchObject({ code: 'BILLING_INVALID_ADJUSTMENT' });
+  });
+
+  it('returns reused for an identical durable adjustment', async () => {
+    const reusedRepository = {
+      addAdjustment: jest.fn(async (adjustment: NewBillingAdjustment) => ({
+        status: 'existing' as const,
+        adjustment,
+      })),
+    } as unknown as BillingStatementRepositoryPort;
+
+    await expect(
+      new BillingStatementService(reusedRepository).adjust(valid),
+    ).resolves.toBe('reused');
+  });
+
+  it('refuses a different payload under an existing adjustment id', async () => {
+    const reusedRepository = {
+      addAdjustment: jest.fn(async () => ({
+        status: 'existing' as const,
+        adjustment: valid,
+      })),
+    } as unknown as BillingStatementRepositoryPort;
+
+    await expect(
+      new BillingStatementService(reusedRepository).adjust({
+        ...valid,
+        requests: -3,
+      }),
+    ).rejects.toMatchObject({
+      code: 'BILLING_INVALID_ADJUSTMENT',
+      message: 'adjustment id was reused with different values',
+    });
   });
 });

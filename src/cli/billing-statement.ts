@@ -8,7 +8,6 @@ import {
   BillingStatementService,
   parseBillingMonth,
 } from '@/modules/metering/public/billing-statement';
-import { ulid } from 'ulid';
 import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface BillingStatementCliInput {
@@ -24,6 +23,7 @@ export interface BillingStatementCliInput {
 }
 
 export interface BillingAdjustCliInput {
+  readonly id: string;
   readonly databaseUrl: string;
   readonly organizationId: string;
   readonly month: string;
@@ -210,7 +210,7 @@ export async function runBillingAdjustCommand(
   input: BillingAdjustCliInput,
 ): Promise<string> {
   const emit = input.emit ?? console.log;
-  const id = `badj_${ulid()}`;
+  const id = input.id;
   try {
     if (!Object.hasOwn(OPERATION_CATALOG, input.operation)) {
       throw new BillingStatementError(
@@ -223,7 +223,7 @@ export async function runBillingAdjustCommand(
       input.databaseUrl,
       input.repository,
     );
-    await closed(repository, () =>
+    const result = await closed(repository, () =>
       new BillingStatementService(repository).adjust({
         id,
         organizationId: input.organizationId,
@@ -237,7 +237,10 @@ export async function runBillingAdjustCommand(
     );
     emit(
       JSON.stringify({
-        event: 'billing_adjustment_recorded',
+        event:
+          result === 'created'
+            ? 'billing_adjustment_recorded'
+            : 'billing_adjustment_reused',
         id,
         month: month.label,
         organization_id: input.organizationId,

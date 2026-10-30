@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-14
-- Related issues: [#404](https://github.com/AiHub-Ecosystem/aihub-be/issues/404), [#405](https://github.com/AiHub-Ecosystem/aihub-be/issues/405)
+- Related issues: [#404](https://github.com/AiHub-Ecosystem/aihub-be/issues/404), [#405](https://github.com/AiHub-Ecosystem/aihub-be/issues/405), [#911](https://github.com/AiHub-Ecosystem/aihub-be/issues/911)
 - Amends: [ADR-0016](0016-metering-boundary-and-billing-evidence.md) for what a usage record bills and how a month is billed
 - Related: [ADR-0018](0018-monthly-quota-enforcement.md), [ADR-0023](0023-thirteen-month-usage-retention.md), [#393](https://github.com/AiHub-Ecosystem/aihub-be/issues/393)
 
@@ -21,6 +21,8 @@ Separately, a Writing grading that AIHUB finishes in the background after answer
 **Internal traffic is marked per API key.** `api_keys.internal` marks a key AIHUB itself uses. Operators create one with `key:create --internal true`. Its traffic is metered as usual, left off the statement, and shown on its own line.
 
 **Adjustments.** A correction is a row in the append-only `billing_adjustments` table, written only by `billing:adjust`, with the actor, a reason, a signed request count, and either the request ids or the period it corrects. It never modifies `usage_records`. A statement shows each adjustment beside the evidence and adds it to the total.
+
+An adjustment's `badj_<ULID>` primary key is also its retry identity. `billing:adjust` requires the operator to provide it with `--id`; retrying the same ID with the same Organization, month, operation, count, reason, target, and actor returns the existing adjustment. Reusing the ID with any different value is refused, while a new ID records a distinct adjustment. The operator reuses the exact ID when the command's output or acknowledgement is uncertain.
 
 **Closing a month.** `billing:statement --close true --actor <username>` stores the month's per-operation totals in the append-only `billing_month_closures` table, once the month has ended. Running the statement again for a closed month compares the current evidence with what was stored and reports each difference; it never overwrites. A closed month takes no further adjustments: late evidence or a later correction is recorded as an adjustment in the next open month, naming the period it corrects. An adjustment that races a close can land after the close read its totals; the next statement for that month reports it as a difference.
 

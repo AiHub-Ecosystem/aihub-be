@@ -1124,12 +1124,14 @@ async function billingStatementCommand(options) {
   });
 }
 
-// billing:adjust --org <id> --month YYYY-MM --operation <id> --requests <+/-n>
+// billing:adjust --id <badj_ULID> --org <id> --month YYYY-MM --operation <id>
+//   --requests <+/-n>
 //   --reason <text> --actor <username>
 //   (--request-ids <id,id> | --period-from <iso> --period-to <iso>)
 /** @param {CliOptions} options */
 async function billingAdjustCommand(options) {
   const allowed = [
+    'id',
     'org',
     'month',
     'operation',
@@ -1156,6 +1158,7 @@ async function billingAdjustCommand(options) {
   }
   await runBilling(billingAdjustDescriptor, {
     databaseUrl: process.env.DATABASE_URL ?? '',
+    id: requiredOption(options, 'id'),
     organizationId: requiredOption(options, 'org'),
     month: requiredOption(options, 'month'),
     operation: requiredOption(options, 'operation'),

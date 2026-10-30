@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 
+import { runBillingAdjustCommand } from '@/cli/billing-statement';
 import {
   BillingStatementService,
   parseBillingMonth,
@@ -95,6 +96,33 @@ function lineFor(statement: Awaited<ReturnType<typeof service.statement>>) {
   return statement.lines.find((line) => line.organizationId === ORG);
 }
 
+const adjustmentCliInput = {
+  id: 'badj_01J00000000000000000000011',
+  organizationId: ORG,
+  month: '2026-10',
+  operation: 'writing.task2.grade',
+  requests: -1,
+  reason: 'Incident 2026-10-05: correction',
+  corrects: { requestIds: ['req_billing_x'] },
+  actor: 'operator_a',
+};
+
+async function runAdjustmentCli(
+  overrides: Partial<typeof adjustmentCliInput> = {},
+) {
+  const output: string[] = [];
+  const id = await runBillingAdjustCommand({
+    databaseUrl: testDatabaseUrl(),
+    ...adjustmentCliInput,
+    repository: new PostgresBillingStatementRepository(
+      createPostgresMeteringClient(testDatabaseUrl()),
+    ),
+    emit: (line) => output.push(line),
+    ...overrides,
+  });
+  return { id, output };
+}
+
 describe('billing statement', () => {
   it('bills one UTC month of successful, non-replayed Production customer requests', async () => {
     await usage({ at: '2026-09-30T23:59:59Z' }); // the month before
@@ -175,6 +203,88 @@ describe('billing statement', () => {
     await expect(pool.query('DELETE FROM billing_adjustments')).rejects.toThrow(
       'billing_adjustments is append-only',
     );
+  });
+
+  it('reuses the same durable adjustment identity after lost CLI output', async () => {
+    await usage({ at: '2026-10-05T00:00:00Z' });
+
+    const first = await runAdjustmentCli();
+    const retry = await runAdjustmentCli();
+    const statement = await service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      now: AFTER_OCTOBER,
+    });
+
+    expect(first.id).toBe(adjustmentCliInput.id);
+    expect(retry.id).toBe(first.id);
+    expect(retry.output).toContain(
+      JSON.stringify({
+        event: 'billing_adjustment_reused',
+        id: first.id,
+        month: '2026-10',
+        organization_id: ORG,
+        operation: 'writing.task2.grade',
+        requests: -1,
+      }),
+    );
+    expect(statement.adjustments).toHaveLength(1);
+    expect(lineFor(statement)).toMatchObject({
+      adjustmentRequests: -1,
+      totalRequests: 0,
+    });
+  });
+
+  it.each([
+    ['another Organization', { organizationId: OTHER }],
+    ['another month', { month: '2026-11' }],
+    ['a different payload', { requests: -2 }],
+  ])('rejects reuse of one identity for %s', async (_label, override) => {
+    await runAdjustmentCli();
+
+    await expect(runAdjustmentCli(override)).rejects.toMatchObject({
+      code: 'BILLING_INVALID_ADJUSTMENT',
+      message: 'adjustment id was reused with different values',
+    });
+    const count = await pool.query<{ count: number }>(
+      'SELECT count(*)::int AS count FROM billing_adjustments',
+    );
+    expect(count.rows[0]?.count).toBe(1);
+  });
+
+  it('serializes concurrent retries with one identity to one adjustment', async () => {
+    const [first, second] = await Promise.all([
+      runAdjustmentCli(),
+      runAdjustmentCli(),
+    ]);
+    const statement = await service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      now: AFTER_OCTOBER,
+    });
+
+    expect(first.id).toBe(second.id);
+    expect(statement.adjustments).toHaveLength(1);
+    expect(lineFor(statement)).toMatchObject({
+      adjustmentRequests: -1,
+      totalRequests: -1,
+    });
+  });
+
+  it('allows a second intended adjustment with a fresh identity', async () => {
+    await runAdjustmentCli();
+    await runAdjustmentCli({ id: 'badj_01J00000000000000000000012' });
+    const statement = await service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      now: AFTER_OCTOBER,
+    });
+
+    expect(statement.adjustments).toHaveLength(2);
+    expect(lineFor(statement)).toMatchObject({
+      adjustmentRequests: -2,
+      totalRequests: -2,
+    });
   });
 
   it('closes a month once and then reports, never rewrites, a later difference', async () => {
