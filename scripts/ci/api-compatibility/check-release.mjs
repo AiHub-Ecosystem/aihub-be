@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
+import { requireAddedEnumValues, sectionFor } from './check-enum-changelog.mjs';
 import { checkMajorLifecycle } from './check-major-lifecycle.mjs';
 import { findBreakingChanges } from './check.mjs';
 
@@ -285,17 +286,6 @@ function validateVersionBump(previous, candidate, contractChanged) {
   }
 }
 
-/** @param {string} changelog @param {string} version */
-function sectionFor(changelog, version) {
-  const lines = changelog.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
-  if (start < 0) throw new Error(`CHANGELOG.md has no entry for ${version}`);
-  const next = lines.findIndex(
-    (line, index) => index > start && line.startsWith('## '),
-  );
-  return lines.slice(start, next < 0 ? undefined : next).join('\n');
-}
-
 /** @param {string} changelog */
 function latestChangelogVersion(changelog) {
   const match = /^## \[(\d+\.\d+\.\d+)\]/m.exec(changelog);
@@ -422,6 +412,15 @@ export function checkRelease(
         validateVersionBump(baseVersion, candidateVersion, contractChanged);
         sectionFor(changelog, candidateVersion);
       }
+      // A brand-new major has no baseline here: its Migration notice, checked
+      // below, describes that contract as a whole.
+      requireAddedEnumValues(
+        baseDocument,
+        candidateDocument,
+        changelog,
+        major,
+        candidateVersion,
+      );
     } else {
       sectionFor(changelog, candidateVersion);
     }

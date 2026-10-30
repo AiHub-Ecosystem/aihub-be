@@ -15,9 +15,9 @@ import { fileURLToPath } from 'node:url';
 
 import { checkRelease } from '../../scripts/ci/api-compatibility/check-release.mjs';
 
-/** @typedef {{type?: string, enum?: string[], properties?: Record<string, Schema>, required?: string[], additionalProperties?: boolean, $ref?: string}} Schema */
+/** @typedef {{type?: string, enum?: string[], 'x-extensible-enum'?: string[], properties?: Record<string, Schema>, required?: string[], additionalProperties?: boolean, $ref?: string}} Schema */
 /** @typedef {{schema: Schema}} MediaType */
-/** @typedef {{description: string, content?: Record<string, MediaType>}} ApiResponse */
+/** @typedef {{description?: string, content?: Record<string, MediaType>, $ref?: string}} ApiResponse */
 /** @typedef {{responses: Record<string, ApiResponse>, requestBody?: {content: Record<string, MediaType>}}} Operation */
 /** @typedef {{get?: Operation, post?: Operation}} PathItem */
 /** @typedef {{openapi: string, info: {title: string, version: string}, paths: Record<string, PathItem>, components: {responses: Record<string, unknown>, schemas?: Record<string, Schema>}}} OpenApiDocument */
@@ -654,5 +654,255 @@ void test('rejects response schemas that are closed or request schemas that are 
         requestRoots.changelogPath,
       ),
     /open request object schema/,
+  );
+});
+
+/**
+ * Adds an `error.code` enum on a shared 400 response and a `data.kind` enum on
+ * the item response, both marked `x-extensible-enum`.
+ * @param {OpenApiDocument} spec @param {string[]} codes @param {string[]} kinds
+ * @returns {OpenApiDocument}
+ */
+function withOpenEnums(spec, codes, kinds) {
+  spec.components.responses.Error400 = {
+    description: 'Bad request',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', 'x-extensible-enum': codes },
+              },
+              required: ['code'],
+              additionalProperties: true,
+            },
+          },
+          required: ['error'],
+          additionalProperties: true,
+        },
+      },
+    },
+  };
+  const get = spec.paths['/v1/items']?.get;
+  if (!get) throw new Error('Missing /v1 item operation');
+  get.responses['400'] = { $ref: '#/components/responses/Error400' };
+  const properties = responseSchema(spec, 1).properties;
+  if (!properties) throw new Error('Missing response properties');
+  properties.data = {
+    type: 'object',
+    properties: { kind: { type: 'string', 'x-extensible-enum': kinds } },
+    additionalProperties: true,
+  };
+  return spec;
+}
+
+/** @param {import('node:test').TestContext} t @param {OpenApiDocument} base @param {OpenApiDocument} candidate @param {string} changelog */
+function releaseOf(t, base, candidate, changelog) {
+  const roots = setup(
+    t,
+    versionedFiles({ 1: base }),
+    versionedFiles({ 1: candidate }),
+    changelog,
+  );
+  return () =>
+    checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath);
+}
+
+void test('accepts a new error code listed by name under Added in its contract version', (t) => {
+  const base = withOpenEnums(document('1.0.0'), ['INVALID_REQUEST'], ['basic']);
+  const candidate = withOpenEnums(
+    document('1.1.0'),
+    ['INVALID_REQUEST', 'NEW_ERROR'],
+    ['basic'],
+  );
+
+  assert.doesNotThrow(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- `NEW_ERROR` (`400`): a new refusal.\n',
+    ),
+  );
+});
+
+void test('rejects a new error code missing from its changelog entry, naming major, version, enum, and value', (t) => {
+  const base = withOpenEnums(document('1.0.0'), ['INVALID_REQUEST'], ['basic']);
+  const candidate = withOpenEnums(
+    document('1.1.0'),
+    ['INVALID_REQUEST', 'NEW_ERROR'],
+    ['basic'],
+  );
+
+  assert.throws(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- A new refusal.\n',
+    ),
+    (error) =>
+      error instanceof Error &&
+      error.message.includes('/v1 contract 1.1.0') &&
+      error.message.includes('error.code') &&
+      error.message.includes('NEW_ERROR') &&
+      error.message.includes('### Added'),
+  );
+});
+
+void test('requires a new value of any other extensible response enum under Added', (t) => {
+  const base = withOpenEnums(document('1.0.0'), ['INVALID_REQUEST'], ['basic']);
+  const candidate = withOpenEnums(
+    document('1.1.0'),
+    ['INVALID_REQUEST'],
+    ['basic', 'premium'],
+  );
+
+  assert.throws(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- A premium kind.\n',
+    ),
+    /\/v1 contract 1\.1\.0: data\.kind value premium/,
+  );
+  assert.doesNotThrow(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- `data.kind` can be `premium`.\n',
+    ),
+  );
+});
+
+void test('asks nothing for values the baseline already had, even on another response', (t) => {
+  const base = withOpenEnums(document('1.0.0'), ['INVALID_REQUEST'], ['basic']);
+  const candidate = withOpenEnums(
+    document('1.1.0'),
+    ['INVALID_REQUEST'],
+    ['basic'],
+  );
+  const post = candidate.paths['/v1/items']?.post;
+  if (!post) throw new Error('Missing /v1 item creation');
+  post.responses['400'] = { $ref: '#/components/responses/Error400' };
+
+  assert.doesNotThrow(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- Item creation documents its `400` response.\n',
+    ),
+  );
+});
+
+void test('rejects a new value listed only under another contract version or outside Added', (t) => {
+  const base = withOpenEnums(document('1.0.0'), ['INVALID_REQUEST'], ['basic']);
+  const candidate = withOpenEnums(
+    document('1.1.0'),
+    ['INVALID_REQUEST', 'NEW_ERROR'],
+    ['basic'],
+  );
+
+  assert.throws(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- Something else.\n\n## [1.0.0]\n\n### Added\n\n- `NEW_ERROR`.\n',
+    ),
+    /error\.code value NEW_ERROR is missing \(listed under 1\.0\.0 instead\)/,
+  );
+  assert.throws(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Changed\n\n- `NEW_ERROR` replaces nothing.\n',
+    ),
+    /error\.code value NEW_ERROR is missing/,
+  );
+  assert.throws(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- `NEW_ERROR_DETAIL`.\n',
+    ),
+    /error\.code value NEW_ERROR is missing/,
+  );
+});
+
+void test('still rejects a new value in a closed response enum even when the changelog lists it', (t) => {
+  const base = document('1.0.0');
+  const candidate = document('1.1.0');
+  const status = responseSchema(candidate, 1).properties?.status;
+  if (!status?.enum) throw new Error('Missing closed status enum');
+  status.enum.push('waiting');
+
+  assert.throws(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- `waiting`.\n',
+    ),
+    /Breaking changes to supported \/v1 contract/,
+  );
+});
+
+void test('reads every Added block of the entry, whatever follows the heading', (t) => {
+  const base = withOpenEnums(document('1.0.0'), ['INVALID_REQUEST'], ['basic']);
+  const candidate = withOpenEnums(
+    document('1.1.0'),
+    ['INVALID_REQUEST', 'NEW_ERROR'],
+    ['basic', 'premium'],
+  );
+
+  assert.doesNotThrow(
+    releaseOf(
+      t,
+      base,
+      candidate,
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added (error codes)\n\n- `NEW_ERROR`.\n\n### Changed\n\n- Wording.\n\n### Added\n\n- `premium` kind.\n',
+    ),
+  );
+});
+
+void test('finds an extensible enum behind a component schema inside an array', (t) => {
+  /** @param {string} version @param {string[]} actions */
+  const withEvents = (version, actions) => {
+    const spec = document(version);
+    spec.components.schemas = {
+      Event: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', 'x-extensible-enum': actions },
+        },
+        additionalProperties: true,
+      },
+    };
+    const properties = responseSchema(spec, 1).properties;
+    if (!properties) throw new Error('Missing response properties');
+    properties.events = /** @type {Schema} */ ({
+      type: 'array',
+      items: { $ref: '#/components/schemas/Event' },
+    });
+    return spec;
+  };
+
+  assert.throws(
+    releaseOf(
+      t,
+      withEvents('1.0.0', ['member.invited']),
+      withEvents('1.1.0', ['member.invited', 'member.removed']),
+      '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Added\n\n- `member.invited` is documented.\n',
+    ),
+    /\/v1 contract 1\.1\.0: events\[\]\.action value member\.removed is missing/,
   );
 });

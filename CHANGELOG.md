@@ -3,8 +3,10 @@
 This changelog tracks the public API contract version, independently of the
 backend package version. `/v1` is the current supported major.
 Version headings use the date the release shipped. Record each newly added
-public error code and value for an open response enum by name under `Added` in
-the dated entry that introduced it.
+public error code and value for an open response enum by name, as a code span
+such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
+introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
+out.
 
 ## [1.4.0] - 2026-10-30
 
