@@ -99,8 +99,8 @@ export async function verifyApiKeyCacheCompatibility(input: {
         assertion,
         body: {},
       }),
-      400,
-      'N-1 HTTP auth from candidate API-key cache while Postgres is revoked',
+      401,
+      'N-1 grading-scope refusal of a Postgres-revoked key with an active candidate-written cache record',
     );
   } finally {
     await database.query(
@@ -109,7 +109,7 @@ export async function verifyApiKeyCacheCompatibility(input: {
     );
   }
   report.push(
-    `PASS: N-1 ${previousSha} authenticated its HTTP request from the candidate-written API-key cache through its configured Redis endpoint while Postgres temporarily marked the key revoked.`,
+    `PASS: N-1 ${previousSha} read the candidate-written API-key cache record through its configured Redis endpoint, and still refused a grading-scope request once Postgres marked the key revoked (grading scopes read fresh authority, never the cache).`,
   );
 
   const oldReplay = await request(
