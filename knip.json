@@ -66,6 +66,8 @@
     "scripts/checks/prisma-drift/prisma-drift.d.cts",
     // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
     "scripts/ci/ci-boot-config.d.cts",
+    // Hand-written types for scripts/ci/ci-push-filter.cjs — same reason.
+    "scripts/ci/ci-push-filter.d.cts",
     // Hand-written types for scripts/checks/verify-summary.cjs — same reason.
     "scripts/checks/verify-summary.d.cts",
     // Hand-written types for scripts/checks/merged-coverage.cjs — same reason.

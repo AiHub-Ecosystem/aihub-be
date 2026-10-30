@@ -124,18 +124,23 @@ jobs:
           fi
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse refs/remotes/origin/main)"
-          outcome="$(node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" --classify)"
+          reason_file="$(mktemp)"
+          outcome="$(node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" --classify 2>"$reason_file")" || {
+            cat "$reason_file" >&2
+            exit 1
+          }
+          reason="$(cat "$reason_file")"
           case "$outcome" in
             deploy)
               printf 'outcome=deploy\n' >> "$GITHUB_OUTPUT"
-              printf 'Deploy target %s is current main.\n' "$DEPLOY_SHA"
+              printf 'Deploy target %s: %s\n' "$DEPLOY_SHA" "$reason"
               ;;
             superseded)
               printf 'outcome=superseded\n' >> "$GITHUB_OUTPUT"
-              printf 'CI run target `%s` was superseded by current main `%s`.\n' \
-                "$DEPLOY_SHA" "$main_sha" >> "$GITHUB_STEP_SUMMARY"
-              printf 'Target %s was superseded by %s; skipping host contact.\n' \
-                "$DEPLOY_SHA" "$main_sha"
+              printf 'CI run target `%s` was superseded by current main `%s`: %s\n' \
+                "$DEPLOY_SHA" "$main_sha" "$reason" >> "$GITHUB_STEP_SUMMARY"
+              printf 'Target %s was superseded by %s; skipping host contact (%s).\n' \
+                "$DEPLOY_SHA" "$main_sha" "$reason"
               exit 0
               ;;
             *)

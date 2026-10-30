@@ -1443,12 +1443,15 @@ running, not healthy, failing either probe, or on another commit. A non-zero
 include real errors such as a downstream contract violation.
 
 A green CD run does not prove a deploy. CD ships only the newest commit on
-`main`: the run for an older commit finishes `success` after logging
-`Target <sha> was superseded by <sha>; skipping host contact`, and touches
-nothing. CI does not run for a push that changes only Markdown outside its path
-list, so a docs-only commit pushed right after a code commit supersedes the code
-commit and nothing deploys either. Push such documentation before the code, or
-in the same push, and confirm the result with `ops/status.sh`.
+`main` that CI runs on: the run for an older commit finishes `success` after
+logging `Target <sha> was superseded by <sha>; skipping host contact (<reason>)`,
+and touches nothing, because the later push has its own CI and CD run. A later
+commit that changes only files the CI `push` filter skips (Markdown outside its
+path list) does not supersede the target: CI never runs for it, so the target
+deploys and the log says `all skipped by the CI push filter` (#1430). If the
+filter cannot be read at `main`, the target stays superseded. Read the reason in
+the `Reject a stale CI revision` step, and confirm the result with
+`ops/status.sh`.
 
 Use an SSH key for this, not a password: a credential pasted into a chat or a
 ticket stays in its history.

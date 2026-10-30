@@ -1,6 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
+import {
+  pushPathPatterns as sharedPushPathPatterns,
+  pushRunsCi as sharedPushRunsCi,
+} from './ci-push-filter.cjs';
+
 const WORKFLOW_PATH = '.github/workflows/ci.yml';
 const TEST_FILE_PATTERN = /\.(?:spec|test)\.tsx?$/;
 /** Markdown the Public API release gate reads on every push (#1398). */
@@ -28,46 +33,11 @@ function testReadMarkdownPaths(): string[] {
 }
 
 function pushPathPatterns(): string[] {
-  const lines = readFileSync(WORKFLOW_PATH, 'utf8').split(/\r?\n/);
-  const pushIndex = lines.findIndex((line) => line === '  push:');
-  const pathsIndex = lines.findIndex(
-    (line, index) => index > pushIndex && line === '    paths:',
-  );
-  if (pushIndex < 0 || pathsIndex < 0) {
-    throw new Error('CI push path filter is missing');
-  }
-
-  const patterns: string[] = [];
-  for (const line of lines.slice(pathsIndex + 1)) {
-    const match = /^      - "([^"]+)"$/.exec(line);
-    if (match?.[1] === undefined) break;
-    patterns.push(match[1]);
-  }
-  return patterns;
-}
-
-function patternMatches(pattern: string, path: string): boolean {
-  if (pattern === '**') return true;
-  if (pattern === '*.md') return !path.includes('/') && path.endsWith('.md');
-  if (pattern === '**/*.md') return path.endsWith('.md');
-  if (pattern === '.claude/**') return path.startsWith('.claude/');
-  return pattern === path;
-}
-
-function matchesPushFilter(path: string, patterns: string[]): boolean {
-  let included = false;
-  for (const pattern of patterns) {
-    const excluded = pattern.startsWith('!');
-    if (patternMatches(excluded ? pattern.slice(1) : pattern, path)) {
-      included = !excluded;
-    }
-  }
-  return included;
+  return sharedPushPathPatterns(readFileSync(WORKFLOW_PATH, 'utf8'));
 }
 
 function pushRunsCi(changedFiles: string[]): boolean {
-  const patterns = pushPathPatterns();
-  return changedFiles.some((file) => matchesPushFilter(file, patterns));
+  return sharedPushRunsCi(changedFiles, pushPathPatterns());
 }
 
 describe('CI push path filter', () => {

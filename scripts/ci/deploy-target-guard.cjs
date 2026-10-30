@@ -1,6 +1,8 @@
 const { execFileSync, spawnSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 
+const { pushPathPatterns, pushRunsCi } = require('./ci-push-filter.cjs');
+
 /** @param {string} status @returns {string[]} */
 function parseActiveRevisions(status) {
   const revisions = [];
@@ -105,8 +107,57 @@ function validateTestedPredecessor(activeShas, previousShas, targetSha) {
   }
 }
 
-/** @param {{targetSha: string, mainSha: string, cwd: string}} options @returns {'deploy' | 'superseded'} */
-function classifyDeployTarget({ targetSha, mainSha, cwd }) {
+/** @param {string[]} args @param {string} cwd */
+function gitText(args, cwd) {
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+}
+
+/**
+ * A later commit on `main` supersedes the target only if CI will run for it:
+ * that run's own CD deploys it. A commit CI skips (Markdown outside the push
+ * allowlist) never gets a CD run, so superseding by it would leave the target
+ * undeployed with nothing to follow. The filter is the one `main` carries,
+ * because that is the workflow file the later pushes were judged by. Anything
+ * unreadable keeps the old behavior: superseded.
+ * @param {{targetSha: string, mainSha: string, cwd: string}} options
+ * @returns {{outcome: 'deploy' | 'superseded', reason: string}}
+ */
+function describeLaterCommits({ targetSha, mainSha, cwd }) {
+  try {
+    const patterns = pushPathPatterns(
+      gitText(['show', `${mainSha}:.github/workflows/ci.yml`], cwd),
+    );
+    const changed = gitText(
+      ['diff', '--name-only', '-z', targetSha, mainSha],
+      cwd,
+    )
+      .split('\0')
+      .filter(Boolean);
+    const ciFile = changed.find((file) => pushRunsCi([file], patterns));
+    if (ciFile === undefined) {
+      return {
+        outcome: 'deploy',
+        reason: `the ${changed.length} file(s) changed after the target on main are all skipped by the CI push filter, so no later CI or CD run will deploy it`,
+      };
+    }
+    return {
+      outcome: 'superseded',
+      reason: `main ${mainSha} changes ${ciFile}, which CI runs on, so the CD run for that push deploys it`,
+    };
+  } catch {
+    return {
+      outcome: 'superseded',
+      reason: `the CI push filter could not be read at main ${mainSha}`,
+    };
+  }
+}
+
+/** @param {{targetSha: string, mainSha: string, cwd: string}} options @returns {{outcome: 'deploy' | 'superseded', reason: string}} */
+function describeDeployTarget({ targetSha, mainSha, cwd }) {
   if (!isSha(targetSha) || !isSha(mainSha)) {
     throw new Error(
       'deploy target and current main tip must be 40-character commit SHAs',
@@ -124,7 +175,9 @@ function classifyDeployTarget({ targetSha, mainSha, cwd }) {
       );
     }
   }
-  if (targetSha === mainSha) return 'deploy';
+  if (targetSha === mainSha) {
+    return { outcome: 'deploy', reason: 'the target is the current main tip' };
+  }
 
   const result = spawnSync(
     'git',
@@ -136,14 +189,22 @@ function classifyDeployTarget({ targetSha, mainSha, cwd }) {
       `could not compare deploy target ${targetSha} with current main ${mainSha}`,
     );
   }
-  if (result.status === 0) return 'superseded';
+  if (result.status === 0) {
+    return describeLaterCommits({ targetSha, mainSha, cwd });
+  }
   throw new Error(
     `refusing to deploy ${targetSha}: it is not an ancestor of current main (${mainSha})`,
   );
 }
 
+/** @param {{targetSha: string, mainSha: string, cwd: string}} options @returns {'deploy' | 'superseded'} */
+function classifyDeployTarget(options) {
+  return describeDeployTarget(options).outcome;
+}
+
 module.exports = {
   classifyDeployTarget,
+  describeDeployTarget,
   parseActiveRevisions,
   validateTestedPredecessor,
   validateDeployTarget,
@@ -164,9 +225,15 @@ if (require.main === module) {
     }
 
     if (mode === '--classify') {
-      process.stdout.write(
-        `${classifyDeployTarget({ targetSha, mainSha, cwd: process.cwd() })}\n`,
-      );
+      // The outcome goes to stdout for the workflow to branch on; the reason
+      // goes to stderr, which lands in the CD log.
+      const { outcome, reason } = describeDeployTarget({
+        targetSha,
+        mainSha,
+        cwd: process.cwd(),
+      });
+      process.stderr.write(`${outcome}: ${reason}\n`);
+      process.stdout.write(`${outcome}\n`);
     } else {
       const status = readFileSync(0, 'utf8');
       const activeShas = parseActiveRevisions(status);

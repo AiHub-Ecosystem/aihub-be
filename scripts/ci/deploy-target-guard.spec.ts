@@ -1,7 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 type DeployTargetGuard = {
   classifyDeployTarget: (input: {
@@ -9,6 +15,11 @@ type DeployTargetGuard = {
     mainSha: string;
     cwd: string;
   }) => 'deploy' | 'superseded';
+  describeDeployTarget: (input: {
+    targetSha: string;
+    mainSha: string;
+    cwd: string;
+  }) => { outcome: 'deploy' | 'superseded'; reason: string };
   parseActiveRevisions: (status: string) => string[];
   validateTestedPredecessor: (
     activeShas: string[],
@@ -29,6 +40,8 @@ function isDeployTargetGuard(value: unknown): value is DeployTargetGuard {
     value !== null &&
     'classifyDeployTarget' in value &&
     typeof value.classifyDeployTarget === 'function' &&
+    'describeDeployTarget' in value &&
+    typeof value.describeDeployTarget === 'function' &&
     'parseActiveRevisions' in value &&
     typeof value.parseActiveRevisions === 'function' &&
     'validateTestedPredecessor' in value &&
@@ -44,6 +57,7 @@ if (!isDeployTargetGuard(deployTargetGuard)) {
 }
 const {
   classifyDeployTarget,
+  describeDeployTarget,
   parseActiveRevisions,
   validateDeployTarget,
   validateTestedPredecessor,
@@ -255,5 +269,133 @@ describe('CD deployment target guard', () => {
         cwd: repository,
       }),
     ).toThrow(/active revision .* is unavailable/);
+  });
+});
+
+describe('CD deployment target after commits CI skips', () => {
+  const CI_WORKFLOW = [
+    'on:',
+    '  push:',
+    '    branches: [main]',
+    '    paths:',
+    '      - "**"',
+    '      - "!*.md"',
+    '      - "!**/*.md"',
+    '      - "CHANGELOG.md"',
+    '',
+  ].join('\n');
+  let ciRepository: string;
+  let baseSha: string;
+  let targetSha: string;
+
+  function ciGit(...args: string[]): string {
+    return execFileSync('git', args, {
+      cwd: ciRepository,
+      encoding: 'utf8',
+    }).trim();
+  }
+
+  /** Commits the given files on top of the current checkout. */
+  function ciCommit(files: Record<string, string>): string {
+    for (const [path, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(ciRepository, path)), { recursive: true });
+      writeFileSync(join(ciRepository, path), content);
+    }
+    ciGit('add', '-A');
+    ciGit('commit', '--quiet', '-m', Object.keys(files).join(','));
+    return ciGit('rev-parse', 'HEAD');
+  }
+
+  function onTarget(): void {
+    ciGit('checkout', '--quiet', '--detach', targetSha);
+  }
+
+  beforeAll(() => {
+    ciRepository = mkdtempSync(join(tmpdir(), 'aihub-cd-ci-filter-'));
+    execFileSync('git', ['init', '--quiet', '-b', 'main'], {
+      cwd: ciRepository,
+    });
+    ciGit('config', 'user.name', 'CI guard test');
+    ciGit('config', 'user.email', 'ci-guard@example.invalid');
+    baseSha = ciCommit({
+      '.github/workflows/ci.yml': CI_WORKFLOW,
+      'src/a.ts': 'base',
+    });
+    targetSha = ciCommit({ 'src/a.ts': 'target' });
+  });
+
+  afterAll(() => {
+    rmSync(ciRepository, { recursive: true, force: true });
+  });
+
+  it('still deploys a target that only Markdown commits CI skips come after', () => {
+    onTarget();
+    ciCommit({ 'notes/agents/note.md': 'note' });
+    const mainSha = ciCommit({ 'notes/adr/example.md': 'adr' });
+
+    expect(
+      classifyDeployTarget({ targetSha, mainSha, cwd: ciRepository }),
+    ).toBe('deploy');
+    expect(
+      describeDeployTarget({ targetSha, mainSha, cwd: ciRepository }).reason,
+    ).toMatch(/2 file\(s\).*skipped by the CI push filter/);
+    expect(() =>
+      validateDeployTarget({
+        targetSha,
+        mainSha,
+        activeShas: [baseSha],
+        cwd: ciRepository,
+      }),
+    ).not.toThrow();
+  });
+
+  it('lets a later commit CI runs on supersede the target', () => {
+    onTarget();
+    ciCommit({ 'notes/agents/note.md': 'note' });
+    const mainSha = ciCommit({ 'src/b.ts': 'later' });
+
+    expect(
+      classifyDeployTarget({ targetSha, mainSha, cwd: ciRepository }),
+    ).toBe('superseded');
+    expect(
+      describeDeployTarget({ targetSha, mainSha, cwd: ciRepository }).reason,
+    ).toMatch(/changes src\/b\.ts, which CI runs on/);
+    expect(() =>
+      validateDeployTarget({
+        targetSha,
+        mainSha,
+        activeShas: [baseSha],
+        cwd: ciRepository,
+      }),
+    ).toThrow(/not the current main tip/);
+  });
+
+  it('lets the changelog the release gate reads supersede the target', () => {
+    onTarget();
+    const mainSha = ciCommit({ 'CHANGELOG.md': 'entry' });
+
+    expect(
+      classifyDeployTarget({ targetSha, mainSha, cwd: ciRepository }),
+    ).toBe('superseded');
+  });
+
+  it('keeps a target superseded when the CI push filter cannot be read', () => {
+    ciGit('checkout', '--quiet', '--detach', baseSha);
+    ciGit('checkout', '--quiet', '-b', 'no-filter');
+    ciGit('rm', '--quiet', '-f', '.github/workflows/ci.yml');
+    ciGit('commit', '--quiet', '-m', 'drop workflow');
+    const mainSha = ciCommit({ 'notes/agents/note.md': 'note' });
+
+    expect(
+      classifyDeployTarget({ targetSha: baseSha, mainSha, cwd: ciRepository }),
+    ).toBe('superseded');
+  });
+
+  it('deploys only runs whose CI succeeded', () => {
+    const cd = readFileSync(
+      join(__dirname, '../../.github/workflows/cd.yml'),
+      'utf8',
+    );
+    expect(cd).toContain("github.event.workflow_run.conclusion == 'success'");
   });
 });
