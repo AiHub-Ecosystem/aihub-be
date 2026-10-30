@@ -190,7 +190,7 @@ export class PostgresWritingChartUploadRepository
   async beginPublication(input: {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
-  }): Promise<'started' | 'published' | 'limited' | 'missing'> {
+  }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'> {
     return this.transaction(async (client) => {
       await this.lock(client, advisoryKey(input.owner, 'publications'));
       const row = await client.writingChartUpload.findFirst({
@@ -203,13 +203,18 @@ export class PostgresWritingChartUploadRepository
         row.expiresAt.getTime() <= input.now.getTime()
       )
         return 'missing';
+      const publicationLeaseCutoff = new Date(
+        input.now.getTime() - WRITING_CHART_PUBLICATION_LEASE_MS,
+      );
       if (row.status === 'publishing') {
-        // A retry resumes the publication, and its deadline starts again.
-        await client.writingChartUpload.updateMany({
-          where: { ...ownerWhere(input.owner), status: 'publishing' },
-          data: { publicationStartedAt: input.now },
-        });
-        return 'started';
+        // A null timestamp belongs to a pre-fence release; do not steal a
+        // reservation while its publisher could still be writing the object.
+        if (
+          row.publicationStartedAt === null ||
+          row.publicationStartedAt > publicationLeaseCutoff
+        ) {
+          return 'in_progress';
+        }
       }
 
       const since = new Date(
@@ -233,11 +238,7 @@ export class PostgresWritingChartUploadRepository
             OR: [
               { publicationStartedAt: null },
               {
-                publicationStartedAt: {
-                  gt: new Date(
-                    input.now.getTime() - WRITING_CHART_PUBLICATION_LEASE_MS,
-                  ),
-                },
+                publicationStartedAt: { gt: publicationLeaseCutoff },
               },
             ],
           },
@@ -246,17 +247,24 @@ export class PostgresWritingChartUploadRepository
       if (published + publishing >= WRITING_CHART_ORG_HOURLY_LIMIT) {
         return 'limited';
       }
-      await client.writingChartUpload.updateMany({
-        where: { ...ownerWhere(input.owner), status: 'open' },
+      const reservation = await client.writingChartUpload.updateMany({
+        where: {
+          ...ownerWhere(input.owner),
+          status: row.status,
+          ...(row.status === 'publishing'
+            ? { publicationStartedAt: { lte: publicationLeaseCutoff } }
+            : {}),
+        },
         data: { status: 'publishing', publicationStartedAt: input.now },
       });
-      return 'started';
+      return reservation.count === 1 ? 'started' : 'missing';
     });
   }
 
   async markPublished(input: {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
+    readonly publicationStartedAt: Date;
     readonly imageUrl: string;
   }): Promise<WritingChartAsset | 'revoked' | undefined> {
     return this.transaction(async (client) => {
@@ -264,12 +272,19 @@ export class PostgresWritingChartUploadRepository
       if (await isRevoked(client, input.owner.assetId)) {
         await client.writingChartUpload.updateMany({
           where: { ...ownerWhere(input.owner), status: 'publishing' },
-          data: { status: 'rejected', publicationStartedAt: null },
+          data: {
+            status: 'rejected',
+            publicationStartedAt: null,
+          },
         });
         return 'revoked';
       }
-      await client.writingChartUpload.updateMany({
-        where: { ...ownerWhere(input.owner), status: 'publishing' },
+      const marked = await client.writingChartUpload.updateMany({
+        where: {
+          ...ownerWhere(input.owner),
+          status: 'publishing',
+          publicationStartedAt: input.publicationStartedAt,
+        },
         data: {
           publicationStartedAt: null,
           status: 'published',
@@ -280,6 +295,7 @@ export class PostgresWritingChartUploadRepository
           imageUrl: input.imageUrl,
         },
       });
+      if (marked.count !== 1) return undefined;
       const row = await client.writingChartUpload.findFirst({
         where: { ...ownerWhere(input.owner), status: 'published' },
       });
@@ -287,13 +303,24 @@ export class PostgresWritingChartUploadRepository
     });
   }
 
-  async releasePublication(owner: WritingChartUploadOwner): Promise<void> {
-    await this.run(() =>
-      this.client.writingChartUpload.updateMany({
-        where: { ...ownerWhere(owner), status: 'publishing' },
-        data: { status: 'open', publicationStartedAt: null },
-      }),
-    );
+  async releasePublication(
+    owner: WritingChartUploadOwner,
+    publicationStartedAt: Date,
+  ): Promise<void> {
+    await this.transaction(async (client) => {
+      await this.lock(client, advisoryKey(owner, 'publications'));
+      const status = (await isRevoked(client, owner.assetId))
+        ? 'rejected'
+        : 'open';
+      await client.writingChartUpload.updateMany({
+        where: {
+          ...ownerWhere(owner),
+          status: 'publishing',
+          publicationStartedAt,
+        },
+        data: { status, publicationStartedAt: null },
+      });
+    });
   }
 
   async cleanupCandidates(input: {

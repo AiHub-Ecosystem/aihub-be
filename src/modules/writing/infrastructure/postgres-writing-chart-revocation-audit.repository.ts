@@ -81,11 +81,30 @@ export class PostgresWritingChartRevocationAuditRepository
               where: { id: record.assetId },
               select: { status: true, publicationStartedAt: true },
             });
+      const publicationPending =
+        current?.status === 'publishing'
+          ? current.publicationStartedAt === null ||
+            current.publicationStartedAt > publishingSince
+          : current?.status === 'rejected' &&
+            current.publicationStartedAt !== null &&
+            current.publicationStartedAt > publishingSince;
+      if (current?.status === 'open' || current?.status === 'publishing') {
+        await transaction.writingChartUpload.updateMany({
+          where: {
+            id: record.assetId,
+            status: current.status,
+            publicationStartedAt: current.publicationStartedAt,
+          },
+          data: {
+            status: 'rejected',
+            // A legacy publisher has no start time; give its in-flight write
+            // the same bounded settle window before declaring the revoke done.
+            publicationStartedAt: publicationPending ? record.occurredAt : null,
+          },
+        });
+      }
       return {
-        publicationPending:
-          current?.status === 'publishing' &&
-          current.publicationStartedAt !== null &&
-          current.publicationStartedAt > publishingSince,
+        publicationPending,
       };
     });
   }

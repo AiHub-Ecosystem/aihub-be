@@ -34,7 +34,7 @@ export interface WritingChartUploadRepositoryPort {
   beginPublication(input: {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
-  }): Promise<'started' | 'published' | 'limited' | 'missing'>;
+  }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'>;
   /**
    * `revoked` when an operator revoked the asset after its reservation: the
    * row is rejected and the caller removes the object it wrote (#1206).
@@ -42,9 +42,14 @@ export interface WritingChartUploadRepositoryPort {
   markPublished(input: {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
+    /** The timestamp used by the successful begin attempt. */
+    readonly publicationStartedAt: Date;
     readonly imageUrl: string;
   }): Promise<WritingChartAsset | 'revoked' | undefined>;
-  releasePublication(owner: WritingChartUploadOwner): Promise<void>;
+  releasePublication(
+    owner: WritingChartUploadOwner,
+    publicationStartedAt: Date,
+  ): Promise<void>;
   cleanupCandidates(input: {
     readonly now: Date;
     readonly orphanBefore: Date;

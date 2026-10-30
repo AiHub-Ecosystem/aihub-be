@@ -100,6 +100,7 @@ async function compressedWebpWithOversizedSanitizedOutput() {
 class FakeRepository implements WritingChartUploadRepositoryPort {
   /** Fails the next markPublished after the object was written. */
   failNextMark = false;
+  private readonly publicationStartedAt = new Map<string, Date>();
   readonly rows = new Map<
     string,
     WritingChartUploadIntent | WritingChartAsset
@@ -149,7 +150,7 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
       WritingChartUploadRepositoryPort['findUpload']
     >[0];
     readonly now: Date;
-  }): Promise<'started' | 'published' | 'limited' | 'missing'> {
+  }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'> {
     const found = await this.findUpload(input.owner);
     if (found.kind === 'asset') return 'published';
     if (
@@ -158,7 +159,7 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
       found.intent.expiresAt <= input.now
     )
       return 'missing';
-    if (found.intent.status === 'publishing') return 'started';
+    if (found.intent.status === 'publishing') return 'in_progress';
     const recent = [...this.rows.values()].filter(
       (row) =>
         row.organizationId === input.owner.organizationId &&
@@ -171,6 +172,7 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
       ...found.intent,
       status: 'publishing',
     });
+    this.publicationStartedAt.set(found.intent.assetId, input.now);
     return 'started';
   }
 
@@ -179,6 +181,7 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
       WritingChartUploadRepositoryPort['findUpload']
     >[0];
     readonly now: Date;
+    readonly publicationStartedAt: Date;
     readonly imageUrl: string;
   }) {
     if (this.failNextMark) {
@@ -186,7 +189,12 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
       throw new Error('database unavailable');
     }
     const found = await this.findUpload(input.owner);
-    if (found.kind !== 'intent' || found.intent.status !== 'publishing')
+    if (
+      found.kind !== 'intent' ||
+      found.intent.status !== 'publishing' ||
+      this.publicationStartedAt.get(input.owner.assetId)?.getTime() !==
+        input.publicationStartedAt.getTime()
+    )
       return undefined;
     const asset: WritingChartAsset = {
       ...found.intent,
@@ -196,15 +204,23 @@ class FakeRepository implements WritingChartUploadRepositoryPort {
       imageUrl: input.imageUrl,
     };
     this.rows.set(asset.assetId, asset);
+    this.publicationStartedAt.delete(asset.assetId);
     return asset;
   }
 
   async releasePublication(
     owner: Parameters<WritingChartUploadRepositoryPort['findUpload']>[0],
+    publicationStartedAt: Date,
   ) {
     const found = await this.findUpload(owner);
-    if (found.kind === 'intent' && found.intent.status === 'publishing') {
+    if (
+      found.kind === 'intent' &&
+      found.intent.status === 'publishing' &&
+      this.publicationStartedAt.get(owner.assetId)?.getTime() ===
+        publicationStartedAt.getTime()
+    ) {
       this.rows.set(owner.assetId, { ...found.intent, status: 'open' });
+      this.publicationStartedAt.delete(owner.assetId);
     }
   }
 

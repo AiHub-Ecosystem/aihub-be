@@ -102,4 +102,32 @@ describe('PostgresWritingChartUploadRepository Organization limits', () => {
       },
     });
   });
+
+  it('does not replace a publication reservation while its lease is live', async () => {
+    const { client, count, findFirst, updateMany } = fakePrisma(
+      jest.fn().mockResolvedValue(0),
+    );
+    const now = new Date('2026-10-14T12:00:00.000Z');
+    findFirst.mockResolvedValue({
+      ...intent,
+      status: 'publishing',
+      publicationStartedAt: new Date(now.getTime() - 1_000),
+    });
+    const repository = new PostgresWritingChartUploadRepository(client);
+
+    await expect(
+      repository.beginPublication({
+        owner: {
+          assetId: intent.assetId,
+          organizationId: intent.organizationId,
+          endUserId: intent.endUserId,
+          environment: 'production',
+        },
+        now,
+      }),
+    ).resolves.toBe('in_progress');
+
+    expect(count).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
 });

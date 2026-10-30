@@ -4,6 +4,7 @@ import { ulid } from 'ulid';
 import { runWritingChartRevokeCommand } from '@/cli/writing-chart-revoke';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
+import type { WritingChartUploadRepositoryPort } from '@/modules/writing/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/application/writing-chart-upload.service';
 import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/infrastructure/postgres-writing-chart-revocation-audit.repository';
 import { PostgresWritingChartUploadRepository } from '@/modules/writing/infrastructure/postgres-writing-chart-upload.repository';
@@ -39,6 +40,8 @@ afterAll(async () => {
 
 /** The shared bucket, which the revoke command also deletes from. */
 class Bucket extends ChartBucket {
+  failNextRevokeDelete = false;
+
   async revoke(url: string, now = new Date()) {
     return runWritingChartRevokeCommand({
       databaseUrl: testDatabaseUrl(),
@@ -47,8 +50,15 @@ class Bucket extends ChartBucket {
       actorUsername: operator,
       audit: new PostgresWritingChartRevocationAuditRepository(client),
       storage: {
-        deletePublishedObjectIfPresent: async ({ publishedKey }) =>
-          this.published.delete(publishedKey) ? 'deleted' : 'already_absent',
+        deletePublishedObjectIfPresent: async ({ publishedKey }) => {
+          if (this.failNextRevokeDelete) {
+            this.failNextRevokeDelete = false;
+            throw new Error('simulated object-store delete failure');
+          }
+          return this.published.delete(publishedKey)
+            ? 'deleted'
+            : 'already_absent';
+        },
       },
       probe: async () =>
         this.published.size === 0
@@ -197,6 +207,40 @@ describe('Writing chart publication after an operator revocation', () => {
     });
   });
 
+  it('fences a pre-fence publisher and holds the revoke pending for one lease', async () => {
+    const bucket = new Bucket();
+    const { service, assetId, url } = await openUpload(bucket);
+    await pool.query(
+      `UPDATE writing_chart_uploads
+       SET status = 'publishing', publication_started_at = NULL
+       WHERE id = $1`,
+      [assetId],
+    );
+    const revokedAt = new Date();
+
+    await expect(bucket.revoke(url, revokedAt)).resolves.toMatchObject({
+      publicationPending: true,
+    });
+    expect(await uploadStatus(assetId)).toBe('rejected');
+    const oldPublisherMark = await pool.query(
+      `UPDATE writing_chart_uploads
+       SET status = 'published'
+       WHERE id = $1 AND status = 'publishing'`,
+      [assetId],
+    );
+    expect(oldPublisherMark.rowCount).toBe(0);
+    await expect(
+      service.complete({ context: context(), assetId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await expect(
+      bucket.revoke(url, new Date(revokedAt.getTime() + 31_000)),
+    ).resolves.toMatchObject({
+      origin: 'already_absent',
+      publicationPending: false,
+    });
+  });
+
   it('still deletes by key when the upload row is already pruned', async () => {
     const bucket = new Bucket();
     const { publishedKey, url, assetId } = await openUpload(bucket);
@@ -212,5 +256,127 @@ describe('Writing chart publication after an operator revocation', () => {
     await expect(bucket.revoke(url)).resolves.toMatchObject({
       origin: 'already_absent',
     });
+  });
+
+  it('does not let an old release or mark replace a newer publication reservation', async () => {
+    const bucket = new Bucket();
+    const { assetId } = await openUpload(bucket);
+    const owner = {
+      assetId,
+      organizationId: ORGANIZATION_ID,
+      endUserId: 'learner-fence',
+      environment: 'production' as const,
+    };
+    const first = new PostgresWritingChartUploadRepository(client);
+    const second = new PostgresWritingChartUploadRepository(client);
+    const firstStartedAt = new Date();
+    const secondStartedAt = new Date(firstStartedAt.getTime() + 31_000);
+
+    await expect(
+      first.beginPublication({ owner, now: firstStartedAt }),
+    ).resolves.toBe('started');
+    await expect(
+      second.beginPublication({
+        owner,
+        now: new Date(firstStartedAt.getTime() + 1_000),
+      }),
+    ).resolves.toBe('in_progress');
+    await expect(
+      second.beginPublication({ owner, now: secondStartedAt }),
+    ).resolves.toBe('started');
+
+    await first.releasePublication(owner, firstStartedAt);
+    await expect(
+      first.markPublished({
+        owner,
+        now: secondStartedAt,
+        publicationStartedAt: firstStartedAt,
+        imageUrl: 'https://s3.wispace.app/x',
+      }),
+    ).resolves.toBeUndefined();
+    expect(await uploadStatus(assetId)).toBe('publishing');
+
+    await expect(
+      second.markPublished({
+        owner,
+        now: secondStartedAt,
+        publicationStartedAt: secondStartedAt,
+        imageUrl: 'https://s3.wispace.app/x',
+      }),
+    ).resolves.toMatchObject({ status: 'published' });
+  });
+
+  it('keeps a failed mark behind the durable revoke fence and supports a revoke retry', async () => {
+    const bucket = new Bucket();
+    const { assetId, publishedKey, url } = await openUpload(bucket);
+    let markEntered: () => void = () => {};
+    let releaseMark: () => void = () => {};
+    const entered = new Promise<void>((resolve) => {
+      markEntered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      releaseMark = resolve;
+    });
+    class FailedMarkRepository extends PostgresWritingChartUploadRepository {
+      override async markPublished(
+        _input: Parameters<
+          WritingChartUploadRepositoryPort['markPublished']
+        >[0],
+      ): Promise<
+        Awaited<ReturnType<WritingChartUploadRepositoryPort['markPublished']>>
+      > {
+        markEntered();
+        await gate;
+        throw new Error('simulated database failure before mark commit');
+      }
+    }
+    const service = new WritingChartUploadService(
+      new FailedMarkRepository(client),
+      bucket.storage(),
+      (now) => `chart_${ulid(now.getTime())}`,
+    );
+    const completion = service.complete({ context: context(), assetId });
+    await entered;
+
+    await expect(bucket.revoke(url)).resolves.toMatchObject({
+      origin: 'deleted',
+      edge: { state: 'not_serving', status: 404 },
+      publicationPending: true,
+    });
+    releaseMark();
+    await expect(completion).rejects.toMatchObject({
+      code: 'WRITING_CHART_STORAGE_UNAVAILABLE',
+    });
+
+    expect(bucket.published.has(publishedKey)).toBe(false);
+    expect(await uploadStatus(assetId)).toBe('rejected');
+    const restarted = new WritingChartUploadService(
+      new PostgresWritingChartUploadRepository(client),
+      bucket.storage(),
+      (now) => `chart_${ulid(now.getTime())}`,
+    );
+    await expect(
+      restarted.complete({ context: context(), assetId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(bucket.publishes).toBe(1);
+  });
+
+  it('keeps a failed revocation delete fenced and retryable', async () => {
+    const bucket = new Bucket();
+    const { service, assetId, publishedKey, url } = await openUpload(bucket);
+    bucket.published.add(publishedKey);
+    bucket.failNextRevokeDelete = true;
+    await expect(bucket.revoke(url)).resolves.toMatchObject({
+      origin: 'failed',
+      edge: { state: 'serving', status: 200 },
+    });
+    await expect(
+      service.complete({ context: context(), assetId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(bucket.revoke(url)).resolves.toMatchObject({
+      origin: 'deleted',
+      edge: { state: 'not_serving', status: 404 },
+    });
+    expect(bucket.published.has(publishedKey)).toBe(false);
   });
 });

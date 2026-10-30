@@ -102,6 +102,7 @@ describe('Writing chart publication limit during a concurrent publish', () => {
       .markPublished({
         owner: inFlight,
         now: NOW,
+        publicationStartedAt: NOW,
         imageUrl: 'https://s3.wispace.app/x',
       })
       .then((asset) => {
@@ -125,6 +126,7 @@ describe('Writing chart publication limit during a concurrent publish', () => {
     const marking = repository.markPublished({
       owner: inFlight,
       now: NOW,
+      publicationStartedAt: NOW,
       imageUrl: 'https://s3.wispace.app/x',
     });
     const admitting = repository.beginPublication({ owner: sixth, now: NOW });

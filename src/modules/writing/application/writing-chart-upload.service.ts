@@ -278,9 +278,10 @@ export class WritingChartUploadService
         environment: found.intent.environment,
         publishedKey: found.intent.publishedKey,
       });
+      const publicationStartedAt = this.now();
       const reservation = await this.repository.beginPublication({
         owner,
-        now: this.now(),
+        now: publicationStartedAt,
       });
       if (reservation === 'published') {
         const current = await this.repository.findUpload(owner);
@@ -288,6 +289,11 @@ export class WritingChartUploadService
         throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
       }
       if (reservation === 'limited') throw rateLimited();
+      if (reservation === 'in_progress')
+        throw storageUnavailable(
+          'WRITING_CHART_STORAGE_UNAVAILABLE',
+          'Writing chart publication is already in progress',
+        );
       if (reservation !== 'started')
         throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
 
@@ -303,7 +309,7 @@ export class WritingChartUploadService
           input.context.signal,
         );
       } catch (error) {
-        await this.repository.releasePublication(owner);
+        await this.repository.releasePublication(owner, publicationStartedAt);
         throw error;
       }
 
@@ -317,13 +323,15 @@ export class WritingChartUploadService
         asset = await this.repository.markPublished({
           owner,
           now: this.now(),
+          publicationStartedAt,
           imageUrl,
         });
       } catch (error) {
-        await this.releaseAfterFailedMark(owner);
+        await this.releaseAfterFailedMark(owner, publicationStartedAt);
         throw error;
       }
-      if (asset === undefined) await this.releaseAfterFailedMark(owner);
+      if (asset === undefined)
+        await this.releaseAfterFailedMark(owner, publicationStartedAt);
       if (asset === 'revoked') {
         // An operator revoked the asset while this write was in flight. Without
         // the request signal: the removal must run even past the deadline. A
@@ -360,9 +368,10 @@ export class WritingChartUploadService
 
   private async releaseAfterFailedMark(
     owner: WritingChartUploadOwner,
+    publicationStartedAt: Date,
   ): Promise<void> {
     try {
-      await this.repository.releasePublication(owner);
+      await this.repository.releasePublication(owner, publicationStartedAt);
     } catch {
       // The reservation's lease lapses, so the slot frees without it (#915).
     }
