@@ -76,6 +76,8 @@ async function handleWithPermit(
   } finally {
     try {
       await permit.requestFinished();
+    } catch {
+      // The limiter records and retries failed releases; preserve the handler outcome.
     } finally {
       if (permit.isReleased()) markGradedCompletionSettled(request);
     }

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
-import { Subject, firstValueFrom, of } from 'rxjs';
+import { Subject, firstValueFrom, of, throwError } from 'rxjs';
 
 import { getMetrics } from '@/common/observability/metrics';
 import type {
@@ -154,6 +154,53 @@ describe('ConcurrencyPermitInterceptor', () => {
     subject.error(new Error('handler failed'));
     await completion;
 
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a successful handler result when permit release fails', async () => {
+    const release = jest.fn<ReturnType<ConcurrencyLease['release']>, []>(
+      async () => {
+        throw new Error('redis timeout');
+      },
+    );
+    const interceptor = new ConcurrencyPermitInterceptor(
+      allowingLimiter(release),
+    );
+    const request: Record<string, unknown> = {
+      id: 'req_01JCONCURRENCYRELEASEFAIL00000',
+      aihubAuth: authenticated,
+    };
+
+    const observable = await interceptor.intercept(
+      contextFor(request, { raw: new EventEmitter() }),
+      { handle: () => of('graded') },
+    );
+
+    await expect(firstValueFrom(observable)).resolves.toBe('graded');
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the handler error when permit release also fails', async () => {
+    const release = jest.fn<ReturnType<ConcurrencyLease['release']>, []>(
+      async () => {
+        throw new Error('redis timeout');
+      },
+    );
+    const interceptor = new ConcurrencyPermitInterceptor(
+      allowingLimiter(release),
+    );
+    const request: Record<string, unknown> = {
+      id: 'req_01JCONCURRENCYHANDLERRELEASE000',
+      aihubAuth: authenticated,
+    };
+    const handlerError = new Error('handler failed');
+
+    const observable = await interceptor.intercept(
+      contextFor(request, { raw: new EventEmitter() }),
+      { handle: () => throwError(() => handlerError) },
+    );
+
+    await expect(firstValueFrom(observable)).rejects.toBe(handlerError);
     expect(release).toHaveBeenCalledTimes(1);
   });
 });

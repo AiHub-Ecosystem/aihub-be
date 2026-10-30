@@ -565,38 +565,87 @@ describe('request completion log over the HTTP boundary', () => {
     );
   });
 
-  it('surfaces an ambiguous permit release as 503 without recording successful completion', async () => {
+  it('preserves successful grading and metering when permit release fails', async () => {
     permitReleaseUnavailable = true;
     const completionCountBefore = await metricValue(
       app,
       'aihub_graded_completion_duration_seconds_count',
     );
+    const dispatch = jest.spyOn(dispatcher, 'dispatch');
 
-    const response = await app.inject({
-      method: 'POST',
-      url: GRADE_URL,
-      headers: { 'idempotency-key': 'completion-release-outage' },
-      payload: VALID_BODY,
-    });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-release-outage' },
+        payload: VALID_BODY,
+      });
 
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toMatchObject({
-      error: {
-        code: 'REDIS_UNAVAILABLE',
+      expect(response.statusCode).toBe(200);
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(usageRepository.records).toHaveLength(1);
+      expect(usageRepository.records[0]).toMatchObject({
+        outcome: 'success',
+        httpStatus: 200,
+        billableRequests: 1,
+        billingBasis: 'response',
+      });
+      expect(log.only()).toEqual(
+        expect.objectContaining({ http_status: 200, outcome: 'success' }),
+      );
+      expect(log.only()['completion_ms']).toBeUndefined();
+      expect(
+        await metricValue(
+          app,
+          'aihub_graded_completion_duration_seconds_count',
+        ),
+      ).toBe(completionCountBefore);
+    } finally {
+      dispatch.mockRestore();
+    }
+  });
+
+  it('preserves a handler error and its Metering outcome when permit release fails', async () => {
+    dispatcher.failWith(
+      new AppError({
+        code: 'AI_SERVICE_TIMEOUT',
+        message: 'AI service request timed out',
         retryable: true,
-        retry_after_ms: 1_000,
-      },
-    });
-    expect(log.only()).toEqual(
-      expect.objectContaining({
-        http_status: 503,
-        error_code: 'REDIS_UNAVAILABLE',
       }),
     );
-    expect(log.only()['completion_ms']).toBeUndefined();
-    expect(
-      await metricValue(app, 'aihub_graded_completion_duration_seconds_count'),
-    ).toBe(completionCountBefore);
+    permitReleaseUnavailable = true;
+    const dispatch = jest.spyOn(dispatcher, 'dispatch');
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-release-error' },
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json()).toMatchObject({
+        error: { code: 'AI_SERVICE_TIMEOUT' },
+      });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(usageRepository.records).toHaveLength(1);
+      expect(usageRepository.records[0]).toMatchObject({
+        outcome: 'downstream_error',
+        httpStatus: 504,
+        errorCode: 'AI_SERVICE_TIMEOUT',
+        billableRequests: 0,
+      });
+      expect(log.only()).toEqual(
+        expect.objectContaining({
+          http_status: 504,
+          outcome: 'downstream_error',
+          error_code: 'AI_SERVICE_TIMEOUT',
+        }),
+      );
+    } finally {
+      dispatch.mockRestore();
+    }
   });
 
   it('starts admission timing after Writing idempotency work, at dispatch', async () => {
