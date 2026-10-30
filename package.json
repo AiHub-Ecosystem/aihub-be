@@ -19,6 +19,7 @@
     "demo:bootstrap": "node scripts/cli/demo-bootstrap.mjs",
     "check:api-compatibility": "node scripts/ci/api-compatibility/check-release.mjs",
     "test:api-compatibility": "node --test --test-concurrency=1 test/cli/api-compatibility-check.spec.mjs test/cli/api-compatibility-release.spec.mjs",
+    "test:runner-benchmark": "tsx scripts/ops/test-runner-benchmark/benchmark-check.ts",
     "generate:openapi": "tsx scripts/generate/generate-openapi.ts && biome format --write openapi.json openapi",
     "validate:openapi": "node scripts/checks/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate/generate-postman.ts && biome format --write aihub.postman_collection.json",
@@ -33,6 +34,7 @@
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault/vault-smoke.mjs",
     "test": "node scripts/generate/generate-prisma-client.mjs --runtime && jest",
+    "test:vitest:spike": "vitest run --config vitest.config.mts",
     "test:db": "node scripts/checks/db-lane/run-database-lane.cjs db",
     "test:tenant-isolation": "node scripts/checks/db-lane/run-database-lane.cjs tenant-isolation",
     "coverage:unit": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --coverage --coverageReporters=json --coverageDirectory=coverage/unit",
@@ -56,6 +58,7 @@
     "test:doc-drift": "node --test scripts/checks/check-doc-drift.spec.mjs",
     "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
+    "benchmark:test-runners": "tsx scripts/ops/test-runner-benchmark/run-benchmark.ts",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
     "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:batch && pnpm check:nginx-headers && pnpm test && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
     "prepare": "husky",
@@ -125,6 +128,7 @@
     "@types/pg": "^8.23.1",
     "@types/postman-collection": "^3.5.11",
     "@typescript/native": "npm:typescript@7.0.2",
+    "@vitest/coverage-v8": "^5.0.5",
     "ajv": "^8.20.0",
     "dependency-cruiser": "^18.7.0",
     "husky": "^9.1.7",
@@ -141,6 +145,7 @@
     "prisma": "7.10.1",
     "squawk-cli": "2.70.0",
     "tsx": "^4.23.15",
-    "typescript": "npm:@typescript/typescript6@6.0.2"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "^5.0.5"
   }
 }
