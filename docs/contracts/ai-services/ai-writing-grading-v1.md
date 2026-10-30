@@ -245,6 +245,14 @@ provider detail text:
 - AI Writing, AIHUB, and WISPACE must approve fixture and contract changes
   together. Update this document, the machine schema, adapter tests, and
   `test/fixtures/ai-writing/` in the same change.
+- Proposed, pending approval by the AI Writing service owner and WISPACE
+  ([ADR-0131](../../adr/0131-customers-are-told-when-grading-behavior-changes.md)):
+  the service owner tells AIHUB before any change to the model, prompt, or
+  rubric and evaluation that can move the bands returned for the same input,
+  even when the response shape does not change. The notice gives the effective
+  date and the band evidence on a fixed reference set. AIHUB needs at least 14
+  days when the change is expected to move bands past the agreed tolerance. The
+  duty does not bind until it is approved.
 
 ## 9. Proposed work-deadline extension
 

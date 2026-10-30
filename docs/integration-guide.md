@@ -63,6 +63,12 @@ AIHUB introduces a new URI major only for a breaking contract change. A
 compatible release stays on the current major; it does not create a duplicate
 major with the same contract.
 
+A change to how grading behaves is not a contract change. When a model, prompt,
+or rubric behind an operation changes so that the same input can receive a
+different band, the contract, its version, and its changelog stay as they are.
+AIHUB announces the change in the [grading changes log](grading-changes.md);
+see [Grading behavior changes](#grading-behavior-changes).
+
 AIHUB sets a baseline Content-Security-Policy, X-Frame-Options: DENY,
 X-Content-Type-Options: nosniff, and Referrer-Policy: no-referrer on every
 response.
@@ -1342,3 +1348,22 @@ path or method, return `410 Gone` with error code `API_VERSION_RETIRED`, a
 `details` object naming `retired_major`, `successor_major`, and
 `successor_docs`, and a `Link: rel="successor-version"` header. `/docs` and
 `/openapi/vN.json` serve only supported majors.
+
+## Grading behavior changes
+
+The model, prompt, and rubric behind an operation can change while the response
+shape stays the same, and a band can move for the same input. If you keep your
+own validation set, you cannot see this from a response: AIHUB does not expose
+model identity or a grading version.
+
+AIHUB records each such change in the [grading changes log](grading-changes.md).
+It tells you at least 14 days ahead when a planned change is expected to move
+bands noticeably, and no later than the day a smaller or urgent change takes
+effect. For a change announced ahead of time, AIHUB also emails your
+Organization owner contact. When AIHUB detects a shift it was not told about,
+it announces the shift once confirmed, with the evidence.
+
+AIHUB does not promise that scores stay the same, re-grade results already
+returned, roll back for a single customer, or compensate for a shift, and you
+cannot pin a grading behavior. Re-check your validation set against each entry,
+and contact support with a `request_id` if it breaks (see "Getting help").

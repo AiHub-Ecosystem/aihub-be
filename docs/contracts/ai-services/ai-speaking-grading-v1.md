@@ -180,6 +180,14 @@ secret headers or raw audio.
   approved fixture before deployment.
 - The AI Speaking service owner, WISPACE, and AIHUB must approve the fixture and update this file,
   the machine schema, and the integration tests together.
+- Proposed, pending approval by the AI Speaking service owner and WISPACE
+  ([ADR-0131](../../adr/0131-customers-are-told-when-grading-behavior-changes.md)):
+  the service owner tells AIHUB before any change to the model, prompt, or
+  rubric and evaluation that can move the bands returned for the same input,
+  even when the response shape does not change. The notice gives the effective
+  date and the band evidence on a fixed reference set. AIHUB needs at least 14
+  days when the change is expected to move bands past the agreed tolerance. The
+  duty does not bind until it is approved.
 
 ## 9. Drift check
 

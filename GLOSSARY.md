@@ -186,6 +186,14 @@ actions, a prefix that separates exam content from skill assets, one rule for
 what a delete answers, and a fixed place for `me`. Routes published before it
 stay as they are and are listed with the reason ([ADR-0129](docs/adr/0129-public-route-and-response-convention.md)).
 
+**Grading behavior change**:
+A change to the model, prompt, or rubric and evaluation of an AI Service that can
+move the bands it returns for the same input, whether or not the response shape
+changes. It is not a breaking contract change: it neither bumps the Public API
+Contract Version nor starts a new major. Customers are told through the grading
+changes log ([ADR-0131](docs/adr/0131-customers-are-told-when-grading-behavior-changes.md)).
+_Avoid_: model upgrade, contract change
+
 **Downstream fault**:
 An AI Service answer that counts against the service's health: every 5xx, and a
 401 or 403 because AIHUB's own credential was rejected rather than the
