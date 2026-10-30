@@ -615,7 +615,7 @@ curl -sS -X POST 'https://sandbox.aihubproduction.com/v1/ielts/speaking/grading'
 ```
 
 Note the path. Grading operations live under `/v1/ielts/...`, not `/v1/...`;
-`/v1/speaking/grading` is a 404 and is a common first mistake.
+`/v1/speaking/grading` is a 404 and is a common first mistake. A method the route does not accept is a 404 too, with no `Allow` header; check the method against OpenAPI.
 
 ### Shared sandbox allowance
 
@@ -1223,7 +1223,7 @@ separate table below.
 |  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification                                                         | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                             |
 |  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                                                                     | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key                      |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                                                                      | Use the key issued for that environment                                                                            |
-|  404 | `NOT_FOUND`                     | No such route                                                                                                                              | Check path and method                                                                                              |
+|  404 | `NOT_FOUND`                     | No such route, or a method the route does not accept                                                                                       | Check path and method                                                                                              |
 |  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running                                               | Different body: use a new key; in-flight request: wait for `Retry-After`, then retry the same key and body         |
 |  410 | `API_VERSION_RETIRED`           | The URI names a retired Public API major (`retryable: false`); `details.successor_major` and `details.successor_docs` name its replacement | Move to the successor major; retrying is pointless                                                                 |
 |  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                                                                | Reduce the essay or audio size to fit the route limit                                                              |

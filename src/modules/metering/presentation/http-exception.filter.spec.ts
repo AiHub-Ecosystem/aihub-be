@@ -1,4 +1,8 @@
-import { type ArgumentsHost, NotFoundException } from '@nestjs/common';
+import {
+  type ArgumentsHost,
+  HttpException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
@@ -107,6 +111,21 @@ describe('HttpExceptionFilter', () => {
       expect(body).not.toHaveProperty('error.retry_after_ms');
     },
   );
+});
+
+describe('HttpExceptionFilter for a method the route does not accept', () => {
+  it('answers a framework 405 as NOT_FOUND, without an Allow header', async () => {
+    const { status, body, headers } = await catchException(
+      new HttpException('Method Not Allowed', 405),
+      '/v1/organizations/me/members',
+    );
+
+    expect(status).toHaveBeenCalledWith(404);
+    expect(body).toMatchObject({
+      error: { code: 'NOT_FOUND', message: 'Resource not found' },
+    });
+    expect(headers.has('Allow')).toBe(false);
+  });
 });
 
 describe('HttpExceptionFilter for a retired Public API major', () => {

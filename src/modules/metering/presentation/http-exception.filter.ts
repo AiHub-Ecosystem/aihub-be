@@ -51,6 +51,11 @@ interface FrameworkError {
 const FRAMEWORK_ERRORS: ReadonlyMap<number, FrameworkError> = new Map([
   [400, { code: 'INVALID_REQUEST', message: 'Request failed validation' }],
   [404, { code: 'NOT_FOUND', message: 'Resource not found' }],
+  // A method a route does not accept answers like an unknown path (ADR-0135).
+  // The router already answers 404 for it, so nothing raises 405 today; the
+  // entry keeps one that is raised later from becoming a different code. A
+  // route that belongs to another environment has to look absent, and a 405
+  // would show that it exists.
   [405, { code: 'NOT_FOUND', message: 'Resource not found' }],
   [413, { code: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large' }],
   [415, { code: 'INVALID_REQUEST', message: 'Unsupported content type' }],
@@ -180,8 +185,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const { code, message } = fromHttpException(status);
 
+      // The envelope code decides the status, so a 405 reads as the 404 its
+      // code says (ADR-0135) rather than a 405 carrying a NOT_FOUND body.
       return {
-        status: code === 'INTERNAL_ERROR' ? 500 : status,
+        status:
+          code === 'INTERNAL_ERROR' ? 500 : code === 'NOT_FOUND' ? 404 : status,
         envelope: createErrorEnvelope({
           code,
           message,

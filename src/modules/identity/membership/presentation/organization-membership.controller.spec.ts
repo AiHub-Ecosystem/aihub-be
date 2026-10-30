@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import {
@@ -458,6 +459,26 @@ describe('Organization membership HTTP flow', () => {
       });
     });
   });
+
+  it.each<readonly [string, 'PUT' | 'DELETE', string]>([
+    ['a management route', 'PUT', ORGANIZATION_ROSTER_PATH],
+    ['a graded route', 'DELETE', OPERATION_CATALOG['writing.task1.grade'].path],
+  ])(
+    'answers 404 NOT_FOUND, with no Allow header, to a wrong method on %s',
+    async (_kind, method, url) => {
+      const response = await app.inject({
+        method,
+        url,
+        headers: { authorization: 'Bearer valid.token.value' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'NOT_FOUND', message: 'Resource not found' },
+      });
+      expect(response.headers.allow).toBeUndefined();
+    },
+  );
 
   it('requires the User Access JWT and emits the Bearer challenge', async () => {
     const response = await rosterRequest({});
