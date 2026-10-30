@@ -44,8 +44,19 @@ The subset cannot establish full-suite equivalence. Also, `pnpm coverage:merged 
 
 Vitest's [coverage guide](https://vitest.dev/guide/coverage) describes its V8 and Istanbul providers. Both were sampled here; switching to V8 did not make the representative JSON totals match Jest.
 
+## Node built-in runner probe
+
+`pnpm test:node-runner-probe` runs the same two pure Writing domain assertions as `writing-chart-upload.spec.ts`, using Node's built-in `node:test` and TypeScript type stripping. Measured on Node 24.21.0 / Windows x64 after one warm-up per runner, with five alternating samples. Jest ran in-band; RSS is the sampled sum of the process tree working sets at 50 ms intervals.
+
+| Runner           | Total median |       Range | Peak RSS median | Peak RSS range |
+| ---------------- | -----------: | ----------: | --------------: | -------------: |
+| Jest + SWC       |       1.70 s | 1.46-2.04 s |         184 MiB |    182-195 MiB |
+| Node `node:test` |       0.30 s | 0.26-0.32 s |         114 MiB |     99-117 MiB |
+
+This small probe is much faster and uses less memory with Node's runner, but it contains only pure domain code. Node can strip its erasable TypeScript syntax; it cannot load the Nest grading controller in strip-only mode (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` for parameter properties). Running the application suites would still need SWC transformation, and the probe does not test Jest mocks, Nest setup, or coverage. Node also emits a module-type detection warning for the imported `.ts` file because the package remains CommonJS. Treat these numbers as runner overhead for a lightweight suite, not as a full-suite prediction. Node's [TypeScript support](https://nodejs.org/api/typescript.html) describes the transform limits; its [test runner](https://nodejs.org/download/release/v22.23.3/docs/api/test.html) supports bounding process concurrency.
+
 ## Recommendation
 
-If minimizing peak memory matters more than total runtime, Vitest is the preferred migration candidate from this sample: its median peak RSS was 898 MiB versus Jest's 939 MiB, and its highest observed peak was 924 MiB versus Jest's 1,549 MiB. The trade-off was a 9.5% slower median total runtime. This is only three samples on a one-worker Windows run, so confirm the memory difference in the two-worker CI environment.
+For pure domain tests, Node's built-in runner is the strongest low-overhead candidate in this probe. For Nest and Fastify suites, Vitest remains the more realistic migration candidate because it already transforms decorator metadata in the prototype. Vitest's median peak RSS was 898 MiB versus Jest's 939 MiB, with a 9.5% slower median total runtime; this is only three samples on a one-worker Windows run, so confirm it in the two-worker CI environment.
 
-Keep Jest + SWC as the default until coverage equivalence and module-mock/isolation compatibility are resolved. The lower RSS makes Vitest worth pursuing under a memory-first priority, but the current coverage totals differ and top-level `jest.mock` hoisting and `jest.isolateModulesAsync` remain untested. #716 remains the separate decision owner for a database-lane runner change or Testcontainers.
+Keep Jest + SWC as the default until a full-suite candidate resolves coverage equivalence and module-mock/isolation compatibility. Node's runner would also need a reliable SWC integration for Nest tests; the small pure-domain result does not establish that a mixed or full migration would save RAM. #716 remains the separate decision owner for a database-lane runner change or Testcontainers.
