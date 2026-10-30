@@ -600,11 +600,30 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.security).toEqual([{ BearerAuth: [] }]);
     expect(operation?.parameters).toEqual([
       { $ref: '#/components/parameters/CorrelationId' },
+      expect.objectContaining({
+        name: 'limit',
+        in: 'query',
+        required: false,
+        schema: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
+      }),
+      expect.objectContaining({
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        schema: { type: 'string', minLength: 1 },
+      }),
     ]);
     expect(operation?.requestBody).toBeUndefined();
     expect(operation?.responses['200']).toBeDefined();
+    expect(operation?.responses['400']).toBeDefined();
     expect(JSON.stringify(operation?.responses['200'])).toContain(
       '"entitlements":{"type":"array","items":{"minLength":1,"type":"string"}}',
+    );
+    expect(JSON.stringify(operation?.responses['200'])).toContain(
+      'next_cursor',
+    );
+    expect(JSON.stringify(operation?.responses['200'])).toContain(
+      'member_count',
     );
     expect(JSON.stringify(operation?.responses['200'])).not.toContain('email');
   });

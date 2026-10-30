@@ -6,6 +6,24 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.4.0] - 2026-10-30
+
+### Changed
+
+- The Organization roster (`GET /v1/organizations/me/members`) now returns pages
+  of up to 100 Organizations, ordered by `organization_id`, with a required
+  `data.next_cursor` (a string, or `null` on the last page). It accepts optional
+  `limit` (1 to 100, default 100) and `cursor` query parameters. A caller with
+  fewer than 100 Organizations still gets everything in one response. The
+  endpoint now rejects any other query parameter with `400 INVALID_REQUEST`; it
+  ignored them before.
+- Each Organization in the roster lists its first 100 active members by
+  username, as `members`. A new required `member_count` gives the number of
+  active members, so a client can tell when the list is cut. The remaining
+  members are paginated by `GET /v1/organizations/{organization_id}/members`,
+  which owners and admins can read. See
+  [#896](https://github.com/AiHub-Ecosystem/aihub-be/issues/896).
+
 ## [1.3.0] - 2026-10-30
 
 ### Added

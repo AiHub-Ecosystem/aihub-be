@@ -107,8 +107,8 @@ class MembershipPortFake implements OrganizationMembershipPort {
     return this.resolution;
   }
 
-  async listRoster(): Promise<[]> {
-    return [];
+  async listRoster(): Promise<{ organizations: [] }> {
+    return { organizations: [] };
   }
 
   changeRole(

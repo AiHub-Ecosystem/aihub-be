@@ -1,4 +1,5 @@
 import { isRecord } from '@/common/is-record';
+import { ROSTER_MEMBERS_PER_ORGANIZATION } from '@/contracts/organization/pagination';
 import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { ORGANIZATION_READ_ADMISSION } from '@/modules/identity/membership/application/organization-admission';
 import type {
@@ -15,6 +16,7 @@ import type {
   OrganizationMembershipRole,
   OrganizationMembershipStatus,
   OrganizationRosterOrganization,
+  OrganizationRosterPage,
   ResolveMembershipInput,
 } from '@/modules/identity/membership/application/organization-membership.port';
 import {
@@ -46,29 +48,51 @@ export const RESOLVE_MEMBERSHIP_SQL = `
   LIMIT 1
 `;
 
+// One page of the caller's Organizations, then each one's first members. The
+// page is cut over Organizations ($3 = limit + 1, so the extra row says there
+// is more), never over member rows, so an Organization is not split. The
+// caller's active membership is checked on every page. `member_count` counts
+// every active member; only the first $4 are listed (ADR-0133).
 export const LIST_ROSTER_SQL = `
+  WITH page AS (
+    SELECT
+      caller.organization_id,
+      organization.name AS organization_name,
+      organization.status AS organization_status,
+      organization.entitlements AS organization_entitlements,
+      identity_config.status AS identity_config_status,
+      caller.role AS caller_role
+    FROM organization_members AS caller
+    INNER JOIN organizations AS organization
+      ON organization.id = caller.organization_id
+    LEFT JOIN organization_identity_configs AS identity_config
+      ON identity_config.organization_id = caller.organization_id
+    WHERE caller.user_account_id = $1
+      AND caller.status = 'active'
+      AND ($2::text IS NULL OR caller.organization_id > $2)
+    ORDER BY caller.organization_id ASC
+    LIMIT $3
+  )
   SELECT
-    caller.organization_id,
-    organization.name AS organization_name,
-    organization.status AS organization_status,
-    organization.entitlements AS organization_entitlements,
-    identity_config.status AS identity_config_status,
-    caller.role AS caller_role,
-    member_account.username AS member_username,
-    member.role AS member_role
-  FROM organization_members AS caller
-  INNER JOIN organizations AS organization
-    ON organization.id = caller.organization_id
-  LEFT JOIN organization_identity_configs AS identity_config
-    ON identity_config.organization_id = caller.organization_id
-  INNER JOIN organization_members AS member
-    ON member.organization_id = caller.organization_id
-   AND member.status = 'active'
-  INNER JOIN user_accounts AS member_account
-    ON member_account.id = member.user_account_id
-  WHERE caller.user_account_id = $1
-    AND caller.status = 'active'
-  ORDER BY caller.organization_id ASC, member_account.username ASC
+    page.*,
+    roster.member_username,
+    roster.member_role,
+    roster.member_count
+  FROM page
+  CROSS JOIN LATERAL (
+    SELECT
+      member_account.username AS member_username,
+      member.role AS member_role,
+      (count(*) OVER ())::int AS member_count
+    FROM organization_members AS member
+    INNER JOIN user_accounts AS member_account
+      ON member_account.id = member.user_account_id
+    WHERE member.organization_id = page.organization_id
+      AND member.status = 'active'
+    ORDER BY member_account.username ASC
+    LIMIT $4
+  ) AS roster
+  ORDER BY page.organization_id ASC, roster.member_username ASC
 `;
 
 /**
@@ -177,6 +201,7 @@ interface RosterRow {
   readonly organizationEntitlements: readonly string[];
   readonly identityConfigured: boolean;
   readonly callerRole: OrganizationMembershipRole;
+  readonly memberCount: number;
   readonly memberUsername: string;
   readonly memberRole: OrganizationMembershipRole;
 }
@@ -195,6 +220,7 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
   const identityConfigStatus = value.identity_config_status;
   const identityConfigured = identityConfigStatus === 'active';
   const callerRole = membershipRoleValue(value, 'caller_role');
+  const memberCount = value.member_count;
   const memberUsername = stringValue(value, 'member_username');
   const memberRole = membershipRoleValue(value, 'member_role');
 
@@ -211,6 +237,9 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
       identityConfigStatus !== 'active' &&
       identityConfigStatus !== 'disabled') ||
     callerRole === undefined ||
+    typeof memberCount !== 'number' ||
+    !Number.isInteger(memberCount) ||
+    memberCount < 1 ||
     memberUsername === undefined ||
     memberRole === undefined
   ) {
@@ -224,6 +253,7 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     organizationEntitlements,
     identityConfigured,
     callerRole,
+    memberCount,
     memberUsername,
     memberRole,
   };
@@ -241,6 +271,7 @@ function groupRosterRows(
       readonly entitlements: readonly string[];
       readonly identityConfigured: boolean;
       readonly membershipRole: OrganizationMembershipRole;
+      readonly memberCount: number;
       readonly members: OrganizationRosterOrganization['members'][number][];
     }
   >();
@@ -260,6 +291,7 @@ function groupRosterRows(
         entitlements: row.organizationEntitlements,
         identityConfigured: row.identityConfigured,
         membershipRole: row.callerRole,
+        memberCount: row.memberCount,
         members: [{ username: row.memberUsername, role: row.memberRole }],
       });
       continue;
@@ -274,6 +306,7 @@ function groupRosterRows(
           entitlement !== row.organizationEntitlements[index],
       ) ||
       existing.membershipRole !== row.callerRole ||
+      existing.memberCount !== row.memberCount ||
       existing.identityConfigured !== row.identityConfigured
     ) {
       throw identityStoreError('Identity data is invalid');
@@ -401,24 +434,39 @@ export class PostgresOrganizationMembershipReadRepository
       : { kind: 'disabled', membership };
   }
 
-  async listRoster(
-    input: ListRosterInput,
-  ): Promise<readonly OrganizationRosterOrganization[]> {
+  async listRoster(input: ListRosterInput): Promise<OrganizationRosterPage> {
     if (
       input.context.userId !== input.userId ||
-      input.userId.trim().length === 0
+      input.userId.trim().length === 0 ||
+      !Number.isInteger(input.limit) ||
+      input.limit < 1 ||
+      (input.after !== undefined && input.after.trim().length === 0)
     ) {
       throw identityStoreError('Identity user id is invalid');
     }
 
     let rows: readonly unknown[];
     try {
-      rows = await identityRows(this.client, LIST_ROSTER_SQL, [input.userId]);
+      rows = await identityRows(this.client, LIST_ROSTER_SQL, [
+        input.userId,
+        input.after ?? null,
+        input.limit + 1,
+        ROSTER_MEMBERS_PER_ORGANIZATION,
+      ]);
     } catch (error) {
       throw identityStoreUnavailable(error);
     }
 
-    return groupRosterRows(rows);
+    const organizations = groupRosterRows(rows);
+    if (organizations.length <= input.limit) {
+      return { organizations };
+    }
+
+    const page = organizations.slice(0, input.limit);
+    const last = page[page.length - 1];
+    return last === undefined
+      ? { organizations: page }
+      : { organizations: page, next: last.organizationId };
   }
 
   async listOrganizationMembers(

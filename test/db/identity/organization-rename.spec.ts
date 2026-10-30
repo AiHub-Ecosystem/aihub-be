@@ -152,9 +152,9 @@ describe('Organization rename against PostgreSQL', () => {
 
     const roster = await new PostgresOrganizationMembershipRepository(
       client,
-    ).listRoster({ context: input().context, userId: ownerId });
+    ).listRoster({ context: input().context, userId: ownerId, limit: 100 });
 
-    expect(roster).toEqual([
+    expect(roster.organizations).toEqual([
       expect.objectContaining({ organizationId, name: 'Acme Learning' }),
     ]);
   });

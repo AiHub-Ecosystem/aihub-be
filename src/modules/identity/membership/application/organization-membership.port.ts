@@ -42,6 +42,9 @@ export interface ResolveMembershipInput {
 export interface ListRosterInput {
   readonly context: RequestContext;
   readonly userId: string;
+  readonly limit: number;
+  /** The last `organization_id` of the previous page. */
+  readonly after?: string;
 }
 
 export type OrganizationMembershipResolution =
@@ -67,16 +70,22 @@ export interface OrganizationRosterOrganization {
   readonly identityConfigured: boolean;
   readonly entitlements: readonly string[];
   readonly membershipRole: OrganizationMembershipRole;
+  /** Every active member, though `members` lists only the first few. */
+  readonly memberCount: number;
   readonly members: readonly OrganizationRosterMember[];
+}
+
+export interface OrganizationRosterPage {
+  readonly organizations: readonly OrganizationRosterOrganization[];
+  /** The `organization_id` to continue after; absent on the last page. */
+  readonly next?: string;
 }
 
 export interface OrganizationMembershipPort {
   resolveMembership(
     input: ResolveMembershipInput,
   ): Promise<OrganizationMembershipResolution>;
-  listRoster(
-    input: ListRosterInput,
-  ): Promise<readonly OrganizationRosterOrganization[]>;
+  listRoster(input: ListRosterInput): Promise<OrganizationRosterPage>;
   changeRole(
     input: ChangeOrganizationMemberRoleInput,
   ): Promise<OrganizationMembershipMutationResult>;

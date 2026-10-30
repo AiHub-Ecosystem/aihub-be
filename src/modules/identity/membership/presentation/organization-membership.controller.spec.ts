@@ -31,6 +31,7 @@ import {
   type OrganizationRosterOrganization,
 } from '@/modules/identity/membership/application/organization-membership.port';
 import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
+import { rosterCursorScope } from './organization-roster-query';
 
 const ORGANIZATION_ROSTER_PATH =
   PUBLIC_ROUTES['organizations.me.members.list'].path;
@@ -64,6 +65,7 @@ const roster: readonly OrganizationRosterOrganization[] = [
     entitlements: ['writing'],
     identityConfigured: true,
     membershipRole: 'owner',
+    memberCount: 2,
     members: [
       { username: 'alice', role: 'owner' },
       { username: 'bob', role: 'member' },
@@ -76,6 +78,7 @@ const roster: readonly OrganizationRosterOrganization[] = [
     entitlements: ['writing', 'speaking'],
     identityConfigured: false,
     membershipRole: 'member',
+    memberCount: 1,
     members: [{ username: 'alice', role: 'member' }],
   },
 ];
@@ -92,7 +95,9 @@ describe('Organization membership HTTP flow', () => {
   beforeAll(async () => {
     membership = {
       resolveMembership: jest.fn(),
-      listRoster: jest.fn(async (_input: ListRosterInput) => roster),
+      listRoster: jest.fn(async (_input: ListRosterInput) => ({
+        organizations: roster,
+      })),
       listOrganizationMembers: jest.fn(),
       changeRole: jest.fn(),
       disable: jest.fn(),
@@ -155,7 +160,7 @@ describe('Organization membership HTTP flow', () => {
 
   beforeEach(() => {
     accountStatus = 'active';
-    membership.listRoster.mockResolvedValue(roster);
+    membership.listRoster.mockResolvedValue({ organizations: roster });
     membership.listOrganizationMembers.mockResolvedValue({
       kind: 'authorized',
       members: [
@@ -225,6 +230,7 @@ describe('Organization membership HTTP flow', () => {
             entitlements: ['writing'],
             identity_configured: true,
             membership: { role: 'owner' },
+            member_count: 2,
             members: [
               { username: 'alice', role: 'owner' },
               { username: 'bob', role: 'member' },
@@ -237,9 +243,11 @@ describe('Organization membership HTTP flow', () => {
             entitlements: ['writing', 'speaking'],
             identity_configured: false,
             membership: { role: 'member' },
+            member_count: 1,
             members: [{ username: 'alice', role: 'member' }],
           },
         ],
+        next_cursor: null,
       },
       meta: { request_id: 'req_01J00000000000000000000000' },
     });
@@ -251,20 +259,23 @@ describe('Organization membership HTTP flow', () => {
   });
 
   it('allows an admin to read the same redacted roster shape', async () => {
-    membership.listRoster.mockResolvedValue([
-      {
-        organizationId: 'org_admin',
-        name: 'Admin Org',
-        status: 'active',
-        entitlements: ['writing'],
-        identityConfigured: true,
-        membershipRole: 'admin',
-        members: [
-          { username: 'alice', role: 'owner' },
-          { username: 'carol', role: 'admin' },
-        ],
-      },
-    ]);
+    membership.listRoster.mockResolvedValue({
+      organizations: [
+        {
+          organizationId: 'org_admin',
+          name: 'Admin Org',
+          status: 'active',
+          entitlements: ['writing'],
+          identityConfigured: true,
+          membershipRole: 'admin',
+          memberCount: 2,
+          members: [
+            { username: 'alice', role: 'owner' },
+            { username: 'carol', role: 'admin' },
+          ],
+        },
+      ],
+    });
 
     const response = await rosterRequest();
 
@@ -288,13 +299,13 @@ describe('Organization membership HTTP flow', () => {
   });
 
   it('returns an empty roster for an authenticated account without memberships', async () => {
-    membership.listRoster.mockResolvedValue([]);
+    membership.listRoster.mockResolvedValue({ organizations: [] });
 
     const response = await rosterRequest();
 
     expect(response.statusCode).toBe(200);
     expect(rosterBody(response)).toEqual({
-      data: { organizations: [] },
+      data: { organizations: [], next_cursor: null },
       meta: { request_id: 'req_01J00000000000000000000000' },
     });
   });
@@ -477,16 +488,90 @@ describe('Organization membership HTTP flow', () => {
     expect(membership.listRoster.mock.calls).toHaveLength(0);
   });
 
-  it('ignores client-supplied tenant and user selectors', async () => {
+  it('rejects client-supplied tenant and user selectors', async () => {
     const response = await rosterRequest(
       { authorization: 'Bearer valid.token.value' },
       `${ORGANIZATION_ROSTER_PATH}?organization_id=org_other&user_id=usr_other`,
     );
 
-    expect(response.statusCode).toBe(200);
-    expect(membership.listRoster.mock.calls).toContainEqual([
-      expect.objectContaining({ userId: USER_ID }),
-    ]);
+    expect(response.statusCode).toBe(400);
+    expect(membership.listRoster.mock.calls).toHaveLength(0);
+  });
+
+  it('reads the first page at the default size of 100 Organizations', async () => {
+    await rosterRequest();
+
+    const call = membership.listRoster.mock.calls[0]?.[0];
+    expect(call?.limit).toBe(100);
+    expect(call?.after).toBeUndefined();
+  });
+
+  it('turns the next Organization into an opaque cursor that resumes after it', async () => {
+    membership.listRoster.mockResolvedValue({
+      organizations: roster,
+      next: 'org_suspended',
+    });
+
+    const first = rosterBody(await rosterRequest());
+    const cursor = first.data.next_cursor;
+    expect(typeof cursor).toBe('string');
+    expect(cursor).not.toContain('org_suspended');
+
+    membership.listRoster.mockResolvedValue({ organizations: [] });
+    const second = await rosterRequest(
+      { authorization: 'Bearer valid.token.value' },
+      `${ORGANIZATION_ROSTER_PATH}?limit=1&cursor=${String(cursor)}`,
+    );
+
+    expect(second.statusCode).toBe(200);
+    expect(membership.listRoster.mock.calls[1]?.[0]).toMatchObject({
+      limit: 1,
+      after: 'org_suspended',
+    });
+  });
+
+  it.each(['0', '101', '-1', 'ten', '1.5'])(
+    'rejects limit=%s rather than clamping it',
+    async (limit) => {
+      const response = await rosterRequest(
+        { authorization: 'Bearer valid.token.value' },
+        `${ORGANIZATION_ROSTER_PATH}?limit=${limit}`,
+      );
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
+      expect(membership.listRoster.mock.calls).toHaveLength(0);
+    },
+  );
+
+  it.each(['', 'not-a-cursor', '!!!'])(
+    'rejects the malformed cursor %p',
+    async (cursor) => {
+      const response = await rosterRequest(
+        { authorization: 'Bearer valid.token.value' },
+        `${ORGANIZATION_ROSTER_PATH}?cursor=${cursor}`,
+      );
+
+      expect(response.statusCode).toBe(400);
+      expect(membership.listRoster.mock.calls).toHaveLength(0);
+    },
+  );
+
+  it('rejects a cursor minted for another caller', async () => {
+    const foreign = encodeCursor(
+      { organizationId: 'org_acme' },
+      rosterCursorScope('usr_someone_else'),
+    );
+
+    const response = await rosterRequest(
+      { authorization: 'Bearer valid.token.value' },
+      `${ORGANIZATION_ROSTER_PATH}?cursor=${foreign}`,
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(membership.listRoster.mock.calls).toHaveLength(0);
   });
 
   it('fails closed when the membership store is unavailable', async () => {

@@ -1,6 +1,6 @@
 # Organization roster read boundary
 
-Status: accepted
+Status: accepted; the unpaginated clause was amended by [ADR-0133](0133-the-cross-organization-roster-is-paginated-by-organization.md)
 
 The Bearer-authenticated self-roster is a read-only view of the Organizations to which the caller has an active membership. Owners, admins, and members may read it; disabled memberships are excluded, suspended Organizations remain visible read-only, and a valid account with no active memberships receives an empty result. The response groups Organizations and exposes organization identity, configured entitlement names, an `identity_configured` readiness boolean, plus member usernames and roles—never email addresses, auth identities, tokens, commercial limits, User Account IDs, issuers, or JWKS material—using the existing `{ data, meta: { request_id } }` envelope.
 

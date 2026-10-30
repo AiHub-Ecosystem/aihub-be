@@ -24,6 +24,7 @@ const rosterRows = [
     organization_entitlements: ['writing'],
     identity_config_status: 'active',
     caller_role: 'owner',
+    member_count: 2,
     member_username: 'alice',
     member_role: 'owner',
   },
@@ -34,6 +35,7 @@ const rosterRows = [
     organization_entitlements: ['writing'],
     identity_config_status: 'active',
     caller_role: 'owner',
+    member_count: 2,
     member_username: 'bob',
     member_role: 'member',
   },
@@ -44,6 +46,7 @@ const rosterRows = [
     organization_entitlements: ['writing', 'speaking'],
     identity_config_status: 'disabled',
     caller_role: 'member',
+    member_count: 1,
     member_username: 'alice',
     member_role: 'member',
   },
@@ -313,32 +316,42 @@ describe('PostgresOrganizationMembershipRepository', () => {
       ).listRoster({
         context,
         userId: membershipRow.user_account_id,
+        limit: 100,
       }),
-    ).resolves.toEqual([
-      {
-        organizationId: 'org_acme',
-        name: 'Acme',
-        status: 'active',
-        entitlements: ['writing'],
-        identityConfigured: true,
-        membershipRole: 'owner',
-        members: [
-          { username: 'alice', role: 'owner' },
-          { username: 'bob', role: 'member' },
-        ],
-      },
-      {
-        organizationId: 'org_suspended',
-        name: 'Suspended',
-        status: 'suspended',
-        entitlements: ['writing', 'speaking'],
-        identityConfigured: false,
-        membershipRole: 'member',
-        members: [{ username: 'alice', role: 'member' }],
-      },
-    ]);
+    ).resolves.toEqual({
+      organizations: [
+        {
+          organizationId: 'org_acme',
+          name: 'Acme',
+          status: 'active',
+          entitlements: ['writing'],
+          identityConfigured: true,
+          membershipRole: 'owner',
+          memberCount: 2,
+          members: [
+            { username: 'alice', role: 'owner' },
+            { username: 'bob', role: 'member' },
+          ],
+        },
+        {
+          organizationId: 'org_suspended',
+          name: 'Suspended',
+          status: 'suspended',
+          entitlements: ['writing', 'speaking'],
+          identityConfigured: false,
+          membershipRole: 'member',
+          memberCount: 1,
+          members: [{ username: 'alice', role: 'member' }],
+        },
+      ],
+    });
 
-    expect(client.queries[0]?.values).toEqual([membershipRow.user_account_id]);
+    expect(client.queries[0]?.values).toEqual([
+      membershipRow.user_account_id,
+      null,
+      101,
+      100,
+    ]);
     expect(client.queries).toHaveLength(1);
   });
 
@@ -352,8 +365,11 @@ describe('PostgresOrganizationMembershipRepository', () => {
       ).listRoster({
         context,
         userId: membershipRow.user_account_id,
+        limit: 100,
       }),
-    ).resolves.toMatchObject([{ identityConfigured: false }]);
+    ).resolves.toMatchObject({
+      organizations: [{ identityConfigured: false }],
+    });
   });
 
   it('fails the full roster projection for an unknown identity config status', async () => {
@@ -366,6 +382,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
       ).listRoster({
         context,
         userId: membershipRow.user_account_id,
+        limit: 100,
       }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
   });
@@ -380,8 +397,99 @@ describe('PostgresOrganizationMembershipRepository', () => {
       ).listRoster({
         context,
         userId: membershipRow.user_account_id,
+        limit: 100,
       }),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ organizations: [] });
+  });
+
+  it('drops the extra Organization and names the last kept one as next', async () => {
+    const client = new FakePostgres();
+    client.result = rosterRows;
+
+    const page = await new PostgresOrganizationMembershipRepository(
+      prismaFromQueryFake(client),
+    ).listRoster({
+      context,
+      userId: membershipRow.user_account_id,
+      limit: 1,
+      after: 'org_a',
+    });
+
+    expect(page.organizations.map((item) => item.organizationId)).toEqual([
+      'org_acme',
+    ]);
+    expect(page.next).toBe('org_acme');
+    expect(client.queries[0]?.values).toEqual([
+      membershipRow.user_account_id,
+      'org_a',
+      2,
+      100,
+    ]);
+  });
+
+  it('reports no next cursor when the page is exactly full', async () => {
+    const client = new FakePostgres();
+    client.result = rosterRows;
+
+    const page = await new PostgresOrganizationMembershipRepository(
+      prismaFromQueryFake(client),
+    ).listRoster({
+      context,
+      userId: membershipRow.user_account_id,
+      limit: 2,
+    });
+
+    expect(page.organizations).toHaveLength(2);
+    expect(page.next).toBeUndefined();
+  });
+
+  it('reports the total member count beside a capped member list', async () => {
+    const client = new FakePostgres();
+    client.result = [
+      { ...rosterRows[0], member_count: 250 },
+      { ...rosterRows[1], member_count: 250 },
+    ];
+
+    const page = await new PostgresOrganizationMembershipRepository(
+      prismaFromQueryFake(client),
+    ).listRoster({
+      context,
+      userId: membershipRow.user_account_id,
+      limit: 100,
+    });
+
+    expect(page.organizations[0]?.memberCount).toBe(250);
+    expect(page.organizations[0]?.members).toHaveLength(2);
+  });
+
+  it('fails the page when rows of one Organization disagree on its member count', async () => {
+    const client = new FakePostgres();
+    client.result = [rosterRows[0], { ...rosterRows[1], member_count: 3 }];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+        limit: 100,
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+  });
+
+  it.each([0, -1, 1.5])('refuses the page limit %p', async (limit) => {
+    const client = new FakePostgres();
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+        limit,
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(client.queries).toHaveLength(0);
   });
 
   it('fails closed on database errors and malformed projections', async () => {
@@ -391,7 +499,11 @@ describe('PostgresOrganizationMembershipRepository', () => {
     const unavailable = await new PostgresOrganizationMembershipRepository(
       prismaFromQueryFake(client),
     )
-      .listRoster({ context, userId: membershipRow.user_account_id })
+      .listRoster({
+        context,
+        userId: membershipRow.user_account_id,
+        limit: 100,
+      })
       .catch((error: unknown) => error);
 
     expect(unavailable).toBeInstanceOf(AppError);

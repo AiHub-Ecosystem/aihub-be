@@ -89,7 +89,9 @@ describe('Organization API key revocation HTTP flow', () => {
           ? { kind: 'active' as const, membership: record }
           : { kind: 'disabled' as const, membership: record };
       }),
-      listRoster: jest.fn(async (_input: ListRosterInput) => []),
+      listRoster: jest.fn(async (_input: ListRosterInput) => ({
+        organizations: [],
+      })),
       changeRole: jest.fn(),
       disable: jest.fn(),
       transfer: jest.fn(),

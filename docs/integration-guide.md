@@ -1034,6 +1034,21 @@ exist, and `null` on the last page. To fetch all items, continue querying with
 }
 ```
 
+The Organization roster (`GET /v1/organizations/me/members`) follows the same
+`limit` and `cursor` convention with two differences:
+
+- A page holds whole Organizations, ordered by `organization_id`, and `limit` is
+  capped at 100 (default 100). It never splits one Organization across pages.
+- Each Organization lists only its first 100 active members, ordered by username.
+  `member_count` is the total number of active members; when it is larger than
+  the length of `members`, read the rest from
+  `GET /v1/organizations/{organization_id}/members`, which owners and admins can
+  call.
+
+A cursor is bound to the user who received it. A traversal is a live read:
+membership is checked again on every page. The roster rejects query parameters
+other than `limit` and `cursor` with `400 INVALID_REQUEST`.
+
 A cursor represents a position in the collection order and never conveys authorization:
 caller permissions, tenant scope, and Organization active status are re-evaluated on
 every request. The cursor is bound to the Organization ID (and to the `status` filter for

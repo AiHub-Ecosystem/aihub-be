@@ -23,6 +23,7 @@ import {
   type OrganizationMembershipMutationRequest,
   OrganizationMembershipMutationRequestSchema,
   type OrganizationMembershipMutationResponse,
+  OrganizationRosterQuerySchema,
   type OrganizationRosterResponse,
 } from '@/contracts/organization/membership';
 import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
@@ -40,6 +41,10 @@ import { bearerRequestContext } from '@/modules/identity/shared/presentation/bea
 import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 import { parseOrganizationMembershipQuery } from './organization-membership-query';
+import {
+  parseOrganizationRosterQuery,
+  rosterCursorScope,
+} from './organization-roster-query';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)
@@ -101,22 +106,40 @@ export class OrganizationMembershipController {
     @Req() request: FastifyRequest,
   ): Promise<OrganizationRosterResponse> {
     const { context, requestId, userId } = bearerRequestContext(request);
-    const organizations = await this.membership.listRoster({ context, userId });
+    const query = parseRequestQuery(
+      OrganizationRosterQuerySchema,
+      request.query,
+    );
+    const { after, limit } = parseOrganizationRosterQuery(query, userId);
+    const page = await this.membership.listRoster({
+      context,
+      userId,
+      limit,
+      ...(after === undefined ? {} : { after }),
+    });
 
     return {
       data: {
-        organizations: organizations.map((organization) => ({
+        organizations: page.organizations.map((organization) => ({
           organization_id: organization.organizationId,
           name: organization.name,
           status: organization.status,
           identity_configured: organization.identityConfigured,
           entitlements: [...organization.entitlements],
           membership: { role: organization.membershipRole },
+          member_count: organization.memberCount,
           members: organization.members.map((member) => ({
             username: member.username,
             role: member.role,
           })),
         })),
+        next_cursor:
+          page.next === undefined
+            ? null
+            : encodeCursor(
+                { organizationId: page.next },
+                rosterCursorScope(userId),
+              ),
       },
       meta: { request_id: requestId },
     };

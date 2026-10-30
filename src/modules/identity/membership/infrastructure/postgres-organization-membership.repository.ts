@@ -10,7 +10,7 @@ import type {
   OrganizationMembershipMutationResult,
   OrganizationMembershipPort,
   OrganizationMembershipResolution,
-  OrganizationRosterOrganization,
+  OrganizationRosterPage,
   ResolveMembershipInput,
 } from '@/modules/identity/membership/application/organization-membership.port';
 import type { IdentityRepositoryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -43,9 +43,7 @@ export class PostgresOrganizationMembershipRepository
     return this.reads.resolveMembership(input);
   }
 
-  listRoster(
-    input: ListRosterInput,
-  ): Promise<readonly OrganizationRosterOrganization[]> {
+  listRoster(input: ListRosterInput): Promise<OrganizationRosterPage> {
     return this.reads.listRoster(input);
   }
 

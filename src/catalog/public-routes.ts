@@ -76,7 +76,10 @@ import {
 } from '@/contracts/organization/organization';
 import {
   DEFAULT_COLLECTION_PAGE_SIZE,
+  DEFAULT_ROSTER_PAGE_SIZE,
   MAX_COLLECTION_PAGE_SIZE,
+  MAX_ROSTER_PAGE_SIZE,
+  ROSTER_MEMBERS_PER_ORGANIZATION,
 } from '@/contracts/organization/pagination';
 import {
   MintSandboxAssertionRequestSchema,
@@ -616,7 +619,32 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'List the authenticated user organization roster',
       description:
-        'Returns the Organizations where the authenticated user has an active membership, including suspended Organizations. `identity_configured` reports only whether an active identity configuration is saved; the JWKS source is not probed and its URL or key material is not returned.',
+        'Returns the Organizations where the authenticated user has an active membership, including suspended Organizations, ordered by `organization_id` ascending and paginated by limit and an opaque cursor. A page holds whole Organizations and never splits one. Each Organization lists its first ' +
+        String(ROSTER_MEMBERS_PER_ORGANIZATION) +
+        ' active members by username; `member_count` is the number of active members, so a value larger than the length of `members` means the list is cut. The members of a larger Organization are paginated by the Organization members route, which needs an owner or admin role. `identity_configured` reports only whether an active identity configuration is saved; the JWKS source is not probed and its URL or key material is not returned. A traversal is a live read, not a snapshot: membership is checked again on every page, so an Organization the caller left can disappear and one the caller joined behind the cursor appears only after a restart.',
+      parameters: [
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          description:
+            'Organizations per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the collection.',
+          schema: {
+            type: 'integer',
+            minimum: 1,
+            maximum: MAX_ROSTER_PAGE_SIZE,
+            default: DEFAULT_ROSTER_PAGE_SIZE,
+          },
+        },
+        {
+          name: 'cursor',
+          in: 'query',
+          required: false,
+          description:
+            'Opaque position from a previous `next_cursor`. Bound to the authenticated user: replaying it as another user is rejected.',
+          schema: { type: 'string', minLength: 1 },
+        },
+      ],
       successDescription: 'Organization roster',
     },
     method: 'GET',
@@ -628,7 +656,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: OrganizationRosterResponseSchema,
-    errorStatuses: [401, 403, 500],
+    errorStatuses: [400, 401, 403, 500],
   },
   'organizations.members.list': {
     openApi: {

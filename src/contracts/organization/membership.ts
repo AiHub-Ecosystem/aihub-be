@@ -42,6 +42,18 @@ const OrganizationRosterMemberSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const OrganizationRosterQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.String()),
+    cursor: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export type OrganizationRosterQuery = Static<
+  typeof OrganizationRosterQuerySchema
+>;
+
 const OrganizationRosterOrganizationSchema = Type.Object(
   {
     organization_id: Type.String({ minLength: 1 }),
@@ -53,6 +65,7 @@ const OrganizationRosterOrganizationSchema = Type.Object(
       { role: OrganizationMembershipRoleSchema },
       { additionalProperties: false },
     ),
+    member_count: Type.Integer({ minimum: 0 }),
     members: Type.Array(OrganizationRosterMemberSchema),
   },
   { additionalProperties: false },
@@ -61,7 +74,10 @@ const OrganizationRosterOrganizationSchema = Type.Object(
 export const OrganizationRosterResponseSchema = Type.Object(
   {
     data: Type.Object(
-      { organizations: Type.Array(OrganizationRosterOrganizationSchema) },
+      {
+        organizations: Type.Array(OrganizationRosterOrganizationSchema),
+        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      },
       { additionalProperties: false },
     ),
     meta: Type.Object(

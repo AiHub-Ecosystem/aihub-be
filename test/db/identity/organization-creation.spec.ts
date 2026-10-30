@@ -283,23 +283,27 @@ describe('Self-serve Organization creation against PostgreSQL', () => {
       new PostgresOrganizationMembershipRepository(client).listRoster({
         context: input().context,
         userId: creatorId,
+        limit: 100,
       }),
-    ).resolves.toEqual([
-      {
-        organizationId,
-        name: 'Acme Learning',
-        status: 'active',
-        entitlements: ['writing', 'speaking'],
-        identityConfigured: false,
-        membershipRole: 'owner',
-        members: [
-          {
-            username: `user-${creatorId.slice(4, 16).toLowerCase()}`,
-            role: 'owner',
-          },
-        ],
-      },
-    ]);
+    ).resolves.toEqual({
+      organizations: [
+        {
+          organizationId,
+          name: 'Acme Learning',
+          status: 'active',
+          entitlements: ['writing', 'speaking'],
+          identityConfigured: false,
+          membershipRole: 'owner',
+          memberCount: 1,
+          members: [
+            {
+              username: `user-${creatorId.slice(4, 16).toLowerCase()}`,
+              role: 'owner',
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it('gives the creator owner authority to issue a writing key at once', async () => {

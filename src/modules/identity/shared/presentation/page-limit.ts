@@ -4,15 +4,29 @@ import {
   MAX_COLLECTION_PAGE_SIZE,
 } from '@/contracts/organization/pagination';
 
+export interface PageLimitBounds {
+  readonly defaultSize: number;
+  readonly maxSize: number;
+}
+
+const COLLECTION_PAGE_BOUNDS: PageLimitBounds = {
+  defaultSize: DEFAULT_COLLECTION_PAGE_SIZE,
+  maxSize: MAX_COLLECTION_PAGE_SIZE,
+};
+
 /**
- * Reads the `limit` query value of a paginated collection (ADR-0130). An absent
+ * Reads the `limit` query value of a paginated collection (ADR-0130; the
+ * cross-Organization roster passes its own, smaller bounds, ADR-0133). An absent
  * value takes the default; a value outside the range is refused rather than
  * clamped, because a silently shortened page looks like the end of the
  * collection.
  */
-export function parsePageLimit(value: string | undefined): number {
+export function parsePageLimit(
+  value: string | undefined,
+  bounds: PageLimitBounds = COLLECTION_PAGE_BOUNDS,
+): number {
   if (value === undefined) {
-    return DEFAULT_COLLECTION_PAGE_SIZE;
+    return bounds.defaultSize;
   }
   if (!/^\d+$/.test(value)) {
     throw invalidRequest(
@@ -23,10 +37,10 @@ export function parsePageLimit(value: string | undefined): number {
   }
 
   const limit = Number.parseInt(value, 10);
-  if (limit < 1 || limit > MAX_COLLECTION_PAGE_SIZE) {
+  if (limit < 1 || limit > bounds.maxSize) {
     throw invalidRequest(
       undefined,
-      { limit: `Limit must be between 1 and ${MAX_COLLECTION_PAGE_SIZE}` },
+      { limit: `Limit must be between 1 and ${bounds.maxSize}` },
       'Page limit out of bounds',
     );
   }
