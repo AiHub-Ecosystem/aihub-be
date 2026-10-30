@@ -173,9 +173,7 @@ describe('Writing chart publication after an operator revocation', () => {
     });
     const completion = service.complete({ context: context(), assetId });
     // A separate service instance cannot see the first one's in-memory queue.
-    while ((await uploadStatus(assetId)) !== 'publishing') {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await bucket.publishStarted;
 
     await expect(bucket.revoke(url)).resolves.toMatchObject({
       publicationPending: true,
@@ -344,9 +342,9 @@ describe('Writing chart publication after an operator revocation', () => {
       publicationPending: true,
     });
     releaseMark();
-    await expect(completion).rejects.toMatchObject({
-      code: 'WRITING_CHART_STORAGE_UNAVAILABLE',
-    });
+    await expect(completion).rejects.toThrow(
+      'simulated database failure before mark commit',
+    );
 
     expect(bucket.published.has(publishedKey)).toBe(false);
     expect(await uploadStatus(assetId)).toBe('rejected');

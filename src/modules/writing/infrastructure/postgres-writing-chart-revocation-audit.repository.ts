@@ -99,7 +99,10 @@ export class PostgresWritingChartRevocationAuditRepository
             status: 'rejected',
             // A legacy publisher has no start time; give its in-flight write
             // the same bounded settle window before declaring the revoke done.
-            publicationStartedAt: publicationPending ? record.occurredAt : null,
+            // Keep a tracked attempt's time so its completion can clear the fence.
+            publicationStartedAt: publicationPending
+              ? (current.publicationStartedAt ?? record.occurredAt)
+              : null,
           },
         });
       }

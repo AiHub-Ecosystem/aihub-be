@@ -271,7 +271,11 @@ export class PostgresWritingChartUploadRepository
       await this.lock(client, advisoryKey(input.owner, 'publications'));
       if (await isRevoked(client, input.owner.assetId)) {
         await client.writingChartUpload.updateMany({
-          where: { ...ownerWhere(input.owner), status: 'publishing' },
+          where: {
+            ...ownerWhere(input.owner),
+            status: { in: ['publishing', 'rejected'] },
+            publicationStartedAt: input.publicationStartedAt,
+          },
           data: {
             status: 'rejected',
             publicationStartedAt: null,

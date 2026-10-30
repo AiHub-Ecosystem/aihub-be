@@ -16,6 +16,10 @@ export class ChartBucket {
   loseNextAck = false;
   /** Holds the next public write until released. */
   gate: Promise<void> | undefined;
+  private reportPublishStarted: (() => void) | undefined;
+  readonly publishStarted = new Promise<void>((resolve) => {
+    this.reportPublishStarted = resolve;
+  });
 
   storage(): WritingChartUploadStoragePort {
     return {
@@ -30,6 +34,7 @@ export class ChartBucket {
         bytes: new Uint8Array(CHART_PNG),
       }),
       publishObject: async (input) => {
+        this.reportPublishStarted?.();
         await this.gate;
         this.publishes += 1;
         this.published.add(input.publishedKey);
