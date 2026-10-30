@@ -809,6 +809,48 @@ ${result.stderr.toString()}`,
   });
 });
 
+describe('the request-id pattern has one declaration', () => {
+  function runWithContract(source: string): string {
+    const fixtureRoot = mkdtempSync(
+      join(process.cwd(), 'src', 'contracts', '.tmp-request-id-'),
+    );
+
+    try {
+      writeFileSync(join(fixtureRoot, 'probe.ts'), source);
+
+      const result = spawnSync(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['arch-check'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+
+      return `${result.stdout}\n${result.stderr}`;
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }
+
+  it('fails a contract that restates the pattern', () => {
+    const output = runWithContract(
+      `export const probe = { pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' };\n`,
+    );
+
+    expect(output).toContain('restates the request-id pattern');
+  });
+
+  it('accepts a restated pattern that says why', () => {
+    const output = runWithContract(
+      `// arch-check: probe\nexport const probe = { pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' };\n`,
+    );
+
+    expect(output).not.toContain('restates the request-id pattern');
+  });
+});
+
 describe('a session is stored only with the second-factor check', () => {
   it('fails a file that continues a session without it', () => {
     const fixtureRoot = mkdtempSync(

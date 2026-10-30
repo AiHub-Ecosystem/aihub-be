@@ -234,6 +234,39 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   }
 }
 
+// The request-id pattern is stated once, in `src/contracts/response-meta.ts`
+// (#1422). A contract that spells the pattern out again brings back the copy
+// that can drift from the id `generateRequestId` mints, so it imports
+// `RequestIdSchema` or `ResponseMetaSchema` instead.
+const REQUEST_ID_PATTERN_LITERAL = 'req_[0-9A-HJKMNP-TV-Z]{26}';
+const REQUEST_ID_PATTERN_OWNER = join(
+  srcDirectory,
+  'contracts',
+  'response-meta.ts',
+);
+
+for (const file of collectTypeScriptFiles(join(srcDirectory, 'contracts'))) {
+  if (file.endsWith('.spec.ts') || file === REQUEST_ID_PATTERN_OWNER) {
+    continue;
+  }
+
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (!line.includes(REQUEST_ID_PATTERN_LITERAL)) {
+      continue;
+    }
+
+    const markedOn = `${lines[index - 1] ?? ''}\n${line}`;
+    if (markedOn.includes(BODY_VALIDATION_MARKER)) {
+      continue;
+    }
+
+    fail(
+      `${relative(root, file)}:${index + 1} restates the request-id pattern; import RequestIdSchema or ResponseMetaSchema from '@/contracts/response-meta', or mark the line with "${BODY_VALIDATION_MARKER} <reason>"`,
+    );
+  }
+}
+
 const QUERY_VALIDATION_MARKER = 'arch-check:';
 
 /** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */

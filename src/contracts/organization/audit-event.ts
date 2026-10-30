@@ -1,5 +1,9 @@
 import { type Static, Type } from '@sinclair/typebox';
 import '@/contracts/date-time-format';
+import {
+  NextCursorSchema,
+  ResponseMetaSchema,
+} from '@/contracts/response-meta';
 
 /**
  * Mirrors the action constraint the audit table enforces, so the published
@@ -94,7 +98,7 @@ export const OrganizationAuditEventSchema = Type.Object(
     outcome: OrganizationAuditOutcomeSchema,
     target_type: OrganizationAuditTargetTypeSchema,
     /** `null` once Audit redaction has removed the label; the event stands. */
-    target_label: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    target_label: NextCursorSchema,
     /**
      * Populated from the per-action whitelist the write path applies. It stays
      * open here rather than restating that whitelist: the closed draft union
@@ -116,18 +120,11 @@ export const ListOrganizationAuditEventsResponseSchema = Type.Object(
       {
         events: Type.Array(OrganizationAuditEventSchema),
         /** `null` at the end of the trail. */
-        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        next_cursor: NextCursorSchema,
       },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );

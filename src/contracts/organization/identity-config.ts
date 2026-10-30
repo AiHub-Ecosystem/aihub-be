@@ -1,5 +1,6 @@
 import { type Static, Type } from '@sinclair/typebox';
 import '@/contracts/date-time-format';
+import { ResponseMetaSchema } from '@/contracts/response-meta';
 
 const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'];
 
@@ -82,10 +83,7 @@ export const ReadOrganizationIdentityConfigResponseSchema = Type.Object(
       ConfiguredOrganizationIdentityConfigSchema,
       UnconfiguredOrganizationIdentityConfigSchema,
     ]),
-    meta: Type.Object(
-      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );

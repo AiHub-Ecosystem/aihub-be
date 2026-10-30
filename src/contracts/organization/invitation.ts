@@ -1,5 +1,9 @@
 import { type Static, Type } from '@sinclair/typebox';
 import '@/contracts/date-time-format';
+import {
+  NextCursorSchema,
+  ResponseMetaSchema,
+} from '@/contracts/response-meta';
 
 const OrganizationMembershipRoleSchema = Type.Union([
   Type.Literal('owner'),
@@ -41,14 +45,7 @@ export const CreateOrganizationInvitationResponseSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -89,18 +86,11 @@ export const ListOpenOrganizationInvitationsResponseSchema = Type.Object(
             { additionalProperties: false },
           ),
         ),
-        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        next_cursor: NextCursorSchema,
       },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -134,14 +124,7 @@ export const AcceptOrganizationInvitationResponseSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );

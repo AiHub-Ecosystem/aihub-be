@@ -1,6 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 
 import '@/contracts/date-time-format';
+import { ResponseMetaSchema } from '@/contracts/response-meta';
 
 /**
  * The lifecycle the API publishes, which is wider than the durable column:
@@ -89,10 +90,7 @@ export const OrganizationApiKeySecretResponseSchema = Type.Object(
       ],
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -111,10 +109,7 @@ export const ListOrganizationApiKeysResponseSchema = Type.Object(
       { api_keys: Type.Array(OrganizationApiKeySchema) },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -133,10 +128,7 @@ export type ListOrganizationApiKeysResponse = Static<
 export const RevokeOrganizationApiKeyResponseSchema = Type.Object(
   {
     data: OrganizationApiKeySchema,
-    meta: Type.Object(
-      { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );

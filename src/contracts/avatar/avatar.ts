@@ -1,6 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 
 import '@/contracts/date-time-format';
+import { ResponseMetaSchema } from '@/contracts/response-meta';
 
 const AvatarAssetIdSchema = Type.String({
   pattern: '^ava_[0-9A-HJKMNP-TV-Z]{26}$',
@@ -11,11 +12,6 @@ const AvatarContentTypeSchema = Type.Union([
   Type.Literal('image/png'),
   Type.Literal('image/webp'),
 ]);
-
-const MetaSchema = Type.Object(
-  { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
-  { additionalProperties: false },
-);
 
 /**
  * The size has no maximum here on purpose: an oversized declaration is a
@@ -53,7 +49,7 @@ export const AvatarUploadResponseSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    meta: MetaSchema,
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -77,7 +73,7 @@ const AvatarSchema = Type.Object(
 );
 
 export const AvatarResponseSchema = Type.Object(
-  { data: AvatarSchema, meta: MetaSchema },
+  { data: AvatarSchema, meta: ResponseMetaSchema },
   { additionalProperties: false },
 );
 
@@ -90,7 +86,7 @@ export const ReadAvatarResponseSchema = Type.Object(
       { avatar: Type.Union([AvatarSchema, Type.Null()]) },
       { additionalProperties: false },
     ),
-    meta: MetaSchema,
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );

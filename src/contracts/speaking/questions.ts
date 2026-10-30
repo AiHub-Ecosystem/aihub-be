@@ -1,3 +1,4 @@
+import { RequestIdSchema } from '@/contracts/response-meta';
 import { type Static, Type } from '@sinclair/typebox';
 
 export const SpeakingPartSchema = Type.Integer({ minimum: 1, maximum: 3 });
@@ -38,7 +39,7 @@ export const SpeakingQuestionsResponseSchema = Type.Object(
     ),
     meta: Type.Object(
       {
-        request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }),
+        request_id: RequestIdSchema,
         service: Type.Literal('speaking'),
         operation: Type.Literal('speaking.questions'),
       },

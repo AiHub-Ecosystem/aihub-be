@@ -1,3 +1,4 @@
+import { ResponseMetaSchema } from '@/contracts/response-meta';
 import { type Static, Type } from '@sinclair/typebox';
 
 /**
@@ -25,15 +26,6 @@ const OrganizationSchema = Type.Object(
     organization_id: Type.String({ minLength: 1 }),
     name: Type.String({ minLength: 1, maxLength: 100 }),
     status: Type.Literal('active'),
-  },
-  { additionalProperties: false },
-);
-
-const ResponseMetaSchema = Type.Object(
-  {
-    request_id: Type.String({
-      pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-    }),
   },
   { additionalProperties: false },
 );

@@ -1,3 +1,7 @@
+import {
+  NextCursorSchema,
+  ResponseMetaSchema,
+} from '@/contracts/response-meta';
 import { type Static, Type } from '@sinclair/typebox';
 
 const OrganizationMembershipRoleSchema = Type.Union([
@@ -76,18 +80,11 @@ export const OrganizationRosterResponseSchema = Type.Object(
     data: Type.Object(
       {
         organizations: Type.Array(OrganizationRosterOrganizationSchema),
-        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        next_cursor: NextCursorSchema,
       },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -110,18 +107,11 @@ export const OrganizationMembershipListResponseSchema = Type.Object(
     data: Type.Object(
       {
         members: Type.Array(OrganizationMembershipListMemberSchema),
-        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        next_cursor: NextCursorSchema,
       },
       { additionalProperties: false },
     ),
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -159,14 +149,7 @@ const OrganizationMembershipMutationDataSchema = Type.Object(
 export const OrganizationMembershipMutationResponseSchema = Type.Object(
   {
     data: OrganizationMembershipMutationDataSchema,
-    meta: Type.Object(
-      {
-        request_id: Type.String({
-          pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$',
-        }),
-      },
-      { additionalProperties: false },
-    ),
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );

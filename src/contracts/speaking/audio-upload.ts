@@ -1,6 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 import '@/contracts/date-time-format';
 
+import { ResponseMetaSchema } from '@/contracts/response-meta';
 import {
   SPEAKING_AUDIO_CONTENT_TYPES,
   SPEAKING_AUDIO_MAX_BYTES,
@@ -8,11 +9,6 @@ import {
 
 const SpeakingAudioContentTypeSchema = Type.Union(
   SPEAKING_AUDIO_CONTENT_TYPES.map((contentType) => Type.Literal(contentType)),
-);
-
-const MetaSchema = Type.Object(
-  { request_id: Type.String({ pattern: '^req_[0-9A-HJKMNP-TV-Z]{26}$' }) },
-  { additionalProperties: false },
 );
 
 const SpeakingAudioAssetIdSchema = Type.String({
@@ -50,7 +46,7 @@ export const SpeakingAudioUploadUrlResponseSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    meta: MetaSchema,
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
@@ -74,7 +70,7 @@ export const SpeakingAudioAssetResponseSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    meta: MetaSchema,
+    meta: ResponseMetaSchema,
   },
   { additionalProperties: false },
 );
