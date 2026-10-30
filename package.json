@@ -18,7 +18,7 @@
     "dev:assertion": "node scripts/cli/dev-sign-assertion.mjs",
     "demo:bootstrap": "node scripts/cli/demo-bootstrap.mjs",
     "check:api-compatibility": "node scripts/ci/api-compatibility/check-release.mjs",
-    "test:api-compatibility": "node --test test/cli/api-compatibility-check.spec.mjs test/cli/api-compatibility-release.spec.mjs",
+    "test:api-compatibility": "node --test --test-concurrency=1 test/cli/api-compatibility-check.spec.mjs test/cli/api-compatibility-release.spec.mjs",
     "generate:openapi": "tsx scripts/generate/generate-openapi.ts && biome format --write openapi.json openapi",
     "validate:openapi": "node scripts/checks/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate/generate-postman.ts && biome format --write aihub.postman_collection.json",
