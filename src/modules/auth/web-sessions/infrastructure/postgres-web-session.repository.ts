@@ -20,6 +20,7 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
 
   async createWebSession(input: CreateWebSessionInput): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: account, MFA factor, then session writes (ADR-0107).
       const admission = await authorizeMfaSession(
         transaction,
         input.userId,

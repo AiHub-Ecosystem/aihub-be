@@ -1,7 +1,10 @@
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
-import { lockActivePasswordIdentity } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
+import {
+  LOCK_ACCOUNT_SQL,
+  lockActivePasswordIdentity,
+} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,
@@ -41,6 +44,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: account, password identity, then MFA factor (ADR-0107).
       const identity = await lockActivePasswordIdentity(
         transaction,
         input.userId,
@@ -92,11 +96,10 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
-      const accounts = await authQueryRows(
-        transaction,
-        `SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE`,
-        [input.userId],
-      );
+      // Lock order: account, then MFA factor (ADR-0107).
+      const accounts = await authQueryRows(transaction, LOCK_ACCOUNT_SQL, [
+        input.userId,
+      ]);
       if (accounts[0]?.['status'] !== 'active') return false;
       const factors = await authQueryRows(
         transaction,
@@ -139,6 +142,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     readonly now: Date;
   }): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: account, password identity, MFA factor, then sessions (ADR-0107).
       const identity = await lockActivePasswordIdentity(
         transaction,
         input.userId,

@@ -44,6 +44,7 @@ export class PostgresUserAccountRepository
   ): Promise<'queued' | 'suppressed'> {
     try {
       return await authTransaction(this.client, async (transaction) => {
+        // Lock order: account and password identity, then verification tokens (ADR-0107).
         let userId: string;
         const existing = (
           await authQueryRows(transaction, LOCK_PASSWORD_IDENTITY_SQL, [

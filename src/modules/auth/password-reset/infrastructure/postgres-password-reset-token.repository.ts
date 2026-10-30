@@ -103,6 +103,7 @@ export class PostgresPasswordResetTokenRepository
     input: IssuePasswordResetTokenInput,
   ): Promise<PasswordResetTarget | undefined> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: account and password identity, then reset tokens (ADR-0107).
       const row = await lockIssuableIdentity(
         transaction,
         this.emailOutbox,

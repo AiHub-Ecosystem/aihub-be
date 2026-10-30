@@ -165,14 +165,24 @@ describe('PostgresRefreshSessionRepository', () => {
 
   it('revokes a whole family for a known stale token and ignores unknown logout tokens', async () => {
     const script = new ScriptedPrisma();
-    script.inside = [[{ family_id: refreshToken.familyId }]];
+    script.inside = [
+      [{ user_account_id: USER_ID }],
+      [{ status: 'active' }],
+      [{ family_id: refreshToken.familyId }],
+    ];
 
     await repositoryOver(script).revokeRefreshFamilyByTokenHash({
       tokenHash: refreshToken.hash,
       now: input.now,
     });
-    expect(script.statements).toHaveLength(2);
-    expect(script.statements[1]).toMatchObject({
+    expect(script.statements).toHaveLength(4);
+    expect(script.statements.map(({ name }) => name)).toEqual([
+      'SELECT user_account_id FROM refresh_tokens WHERE token_hash = $1',
+      'SELECT status FROM user_accounts WHERE id = $1 FOR UPDATE',
+      expect.stringContaining('FOR UPDATE'),
+      'refreshToken.updateMany',
+    ]);
+    expect(script.statements[3]).toMatchObject({
       name: 'refreshToken.updateMany',
       args: [
         {

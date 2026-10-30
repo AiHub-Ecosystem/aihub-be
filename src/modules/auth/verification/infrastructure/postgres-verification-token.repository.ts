@@ -55,6 +55,7 @@ export class PostgresVerificationTokenRepository
   ): Promise<ResendVerificationTarget | undefined> {
     try {
       return await authTransaction(this.client, async (transaction) => {
+        // Lock order: account and password identity, then verification tokens (ADR-0107).
         const row = await lockIssuableIdentity(
           transaction,
           this.emailOutbox,
@@ -99,6 +100,7 @@ export class PostgresVerificationTokenRepository
     input: ConsumeVerificationTokenInput,
   ): Promise<VerificationOutcome> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: account, then verification token and any issued session (ADR-0107).
       const accounts = await authQueryRows(
         transaction,
         `

@@ -1,6 +1,7 @@
 import {
   LOCK_ACCOUNT_SQL,
   insertRefreshSession,
+  lockOwningAccount,
   passwordHashIsCurrent,
 } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import {
@@ -25,6 +26,8 @@ import { decideRefreshTokenRotation } from '@/modules/auth/web-sessions/applicat
 /** The account a Refresh Token belongs to; the token's account never changes. */
 const REFRESH_TOKEN_ACCOUNT_SQL =
   'SELECT user_account_id FROM refresh_tokens WHERE id = $1 AND token_hash = $2';
+const REFRESH_TOKEN_OWNER_BY_HASH_SQL =
+  'SELECT user_account_id FROM refresh_tokens WHERE token_hash = $1';
 
 /**
  * The refresh token and its account's status, locked for rotation. Only the
@@ -67,6 +70,7 @@ export class PostgresRefreshSessionRepository
     input: CreateRefreshSessionInput,
   ): Promise<boolean> {
     return authTransaction(this.client, async (transaction) => {
+      // Lock order: account, MFA factor, then session writes (ADR-0107).
       const admission = await authorizeMfaSession(
         transaction,
         input.userId,
@@ -162,6 +166,16 @@ export class PostgresRefreshSessionRepository
     readonly now: Date;
   }): Promise<void> {
     await authTransaction(this.client, async (transaction) => {
+      // Lock order: account, then token rows (ADR-0107), matching rotation.
+      if (
+        !(await lockOwningAccount(
+          transaction,
+          REFRESH_TOKEN_OWNER_BY_HASH_SQL,
+          [input.tokenHash],
+        ))
+      ) {
+        return;
+      }
       const rows = await authQueryRows(
         transaction,
         `
