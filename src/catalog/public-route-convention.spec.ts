@@ -6,8 +6,9 @@ import { PUBLIC_ROUTES } from './public-routes';
 
 // The route and response convention of ADR-0129 (#305). The convention binds
 // new routes; each route that predates it is listed in EXCEPTIONS with the
-// reason it stays. An exception that no longer breaks a rule fails here, so the
-// list cannot outlive what it excuses.
+// reason it stays and the rules it is allowed to break. Any other break on an
+// excepted route fails here, and so does a permitted rule the route no longer
+// breaks, so the list cannot outlive what it excuses.
 
 interface RouteFacts {
   readonly id: string;
@@ -29,43 +30,105 @@ const TOP_LEVEL = [
   'speaking',
 ];
 
-const EXCEPTIONS: Readonly<Record<string, string>> = {
-  'speaking.grading':
-    'Published as a noun before the convention; renaming a route is breaking in /v1 (ADR-0127). The Speaking proxy of ADR-0014.',
-  'speaking.grading-json':
-    'Published as a noun before the convention; renaming a route is breaking in /v1 (ADR-0127). The JSON-URL variant of the Speaking proxy (ADR-0015).',
+type RuleId =
+  | 'graded-name'
+  | 'graded-home'
+  | 'top-level'
+  | 'speaking-audio'
+  | 'delete-answer'
+  | 'me-placement';
+
+interface RuleBreak {
+  readonly rule: RuleId;
+  readonly message: string;
+}
+
+interface RouteException {
+  readonly reason: string;
+  /** The rules this route may break. Naming one does not excuse another. */
+  readonly permits: readonly RuleId[];
+}
+
+type RouteExceptions = Readonly<Record<string, RouteException>>;
+
+// The two Speaking grading routes were published as nouns (`.../grading`), and
+// renaming a route is breaking in /v1 (ADR-0127). They may keep that name and
+// nothing else: their home and top-level segment stay checked.
+const LEGACY_SPEAKING_GRADING: readonly RuleId[] = ['graded-name'];
+
+const EXCEPTIONS: RouteExceptions = {
+  'speaking.grading': {
+    reason:
+      'Published as a noun before the convention; renaming a route is breaking in /v1 (ADR-0127). The Speaking proxy of ADR-0014.',
+    permits: LEGACY_SPEAKING_GRADING,
+  },
+  'speaking.grading-json': {
+    reason:
+      'Published as a noun before the convention; renaming a route is breaking in /v1 (ADR-0127). The JSON-URL variant of the Speaking proxy (ADR-0015).',
+    permits: LEGACY_SPEAKING_GRADING,
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** Whether a response envelope's `data` carries the resulting `status`. */
+/** Whether a JSON Schema object lists `name` as a required property. */
+function requires(schema: unknown, name: string): boolean {
+  return (
+    isRecord(schema) &&
+    Array.isArray(schema.required) &&
+    schema.required.includes(name)
+  );
+}
+
+/**
+ * Whether a response envelope always carries the resulting `status` in `data`.
+ * An optional property is still listed under `properties`, so the check reads
+ * `required` at both levels: a response that may omit either does not state
+ * the state the caller is left in.
+ */
 function dataCarriesStatus(schema: TSchema): boolean {
   const plain: unknown = JSON.parse(JSON.stringify(schema));
   if (!isRecord(plain) || !isRecord(plain.properties)) return false;
   const data = plain.properties.data;
   return (
-    isRecord(data) && isRecord(data.properties) && 'status' in data.properties
+    requires(plain, 'data') &&
+    isRecord(data) &&
+    isRecord(data.properties) &&
+    'status' in data.properties &&
+    requires(data, 'status')
   );
 }
 
-function ruleBreaks(route: RouteFacts): string[] {
+function ruleBreaks(route: RouteFacts): RuleBreak[] {
   const segments = route.path.split('/').filter((s) => s !== '');
   const [, top, second] = segments;
-  const breaks: string[] = [];
+  const breaks: RuleBreak[] = [];
 
   if (route.graded && segments.at(-1) !== 'grade') {
-    breaks.push('a graded route ends in /grade');
+    breaks.push({
+      rule: 'graded-name',
+      message: 'a graded route ends in /grade',
+    });
   }
   if (route.graded && top !== 'ielts') {
-    breaks.push('a graded route lives under /v1/ielts');
+    breaks.push({
+      rule: 'graded-home',
+      message: 'a graded route lives under /v1/ielts',
+    });
   }
   if (top === undefined || !TOP_LEVEL.includes(top)) {
-    breaks.push(`the top-level segment "${top}" is not one the ADR lists`);
+    breaks.push({
+      rule: 'top-level',
+      message: `the top-level segment "${top}" is not one the ADR lists`,
+    });
   }
   if (top === 'speaking' && second !== 'audio') {
-    breaks.push('/v1/speaking holds only audio assets');
+    breaks.push({
+      rule: 'speaking-audio',
+      message: '/v1/speaking holds only audio assets',
+    });
   }
   if (route.method === 'DELETE') {
     const gone = route.successStatus === 204 && route.responseSchema === null;
@@ -74,15 +137,20 @@ function ruleBreaks(route: RouteFacts): string[] {
       route.responseSchema !== null &&
       dataCarriesStatus(route.responseSchema);
     if (!gone && !kept) {
-      breaks.push(
-        'a DELETE answers 204 with no body, or 200 with the resulting status',
-      );
+      breaks.push({
+        rule: 'delete-answer',
+        message:
+          'a DELETE answers 204 with no body, or 200 with the resulting status',
+      });
     }
   }
   segments.forEach((segment, index) => {
     const allowed = index === 1 || (top === 'organizations' && index === 2);
     if (segment === 'me' && !allowed) {
-      breaks.push('"me" is only /v1/me or /v1/organizations/me');
+      breaks.push({
+        rule: 'me-placement',
+        message: '"me" is only /v1/me or /v1/organizations/me',
+      });
     }
   });
   return breaks;
@@ -90,16 +158,31 @@ function ruleBreaks(route: RouteFacts): string[] {
 
 function violations(
   routes: readonly RouteFacts[],
-  exceptions: Readonly<Record<string, string>>,
+  exceptions: RouteExceptions,
 ): string[] {
   const found = routes.flatMap((route) => {
     const breaks = ruleBreaks(route);
-    if (route.id in exceptions) {
-      return breaks.length === 0
-        ? [`${route.id}: the exception is stale, the route follows the rules`]
-        : [];
+    const exception = exceptions[route.id];
+    if (exception === undefined) {
+      return breaks.map(({ message }) => `${route.id}: ${message}`);
     }
-    return breaks.map((rule) => `${route.id}: ${rule}`);
+    if (breaks.length === 0) {
+      return [
+        `${route.id}: the exception is stale, the route follows the rules`,
+      ];
+    }
+    const broken = new Set(breaks.map(({ rule }) => rule));
+    return [
+      ...breaks
+        .filter(({ rule }) => !exception.permits.includes(rule))
+        .map(({ message }) => `${route.id}: ${message}`),
+      ...exception.permits
+        .filter((rule) => !broken.has(rule))
+        .map(
+          (rule) =>
+            `${route.id}: the exception permits "${rule}" but the route no longer breaks it`,
+        ),
+    ];
   });
   const known = new Set(routes.map((route) => route.id));
   const missing = Object.keys(exceptions)
@@ -123,6 +206,12 @@ const WITH_STATUS = Type.Object({
   data: Type.Object({ status: Type.String() }),
 });
 const NO_STATUS = Type.Object({ data: Type.Object({ id: Type.String() }) });
+const OPTIONAL_STATUS = Type.Object({
+  data: Type.Object({ status: Type.Optional(Type.String()) }),
+});
+const OPTIONAL_DATA = Type.Object({
+  data: Type.Optional(Type.Object({ status: Type.String() })),
+});
 
 describe('public route convention (ADR-0129)', () => {
   it('names a graded route that does not end in /grade, and accepts an excused one', () => {
@@ -135,7 +224,11 @@ describe('public route convention (ADR-0129)', () => {
     expect(violations([noun], {})).toEqual([
       'x.grading: a graded route ends in /grade',
     ]);
-    expect(violations([noun], { 'x.grading': 'predates it' })).toEqual([]);
+    expect(
+      violations([noun], {
+        'x.grading': { reason: 'predates it', permits: ['graded-name'] },
+      }),
+    ).toEqual([]);
   });
 
   it('names a graded route outside /v1/ielts', () => {
@@ -184,6 +277,31 @@ describe('public route convention (ADR-0129)', () => {
     ).toEqual([]);
   });
 
+  it('names a DELETE whose 200 status is optional or sits in an optional data', () => {
+    const rule =
+      'a DELETE answers 204 with no body, or 200 with the resulting status';
+
+    expect(
+      violations(
+        [
+          route({
+            id: 'a',
+            method: 'DELETE',
+            successStatus: 200,
+            responseSchema: OPTIONAL_STATUS,
+          }),
+          route({
+            id: 'b',
+            method: 'DELETE',
+            successStatus: 200,
+            responseSchema: OPTIONAL_DATA,
+          }),
+        ],
+        {},
+      ),
+    ).toEqual([`a: ${rule}`, `b: ${rule}`]);
+  });
+
   it('names a DELETE that answers 200 without a status, or 204 with a body', () => {
     const rule =
       'a DELETE answers 204 with no body, or 200 with the resulting status';
@@ -225,10 +343,70 @@ describe('public route convention (ADR-0129)', () => {
     ).toEqual([`c: ${rule}`, `d: ${rule}`]);
   });
 
+  it('still names a break an exception does not list', () => {
+    const moved = route({
+      id: 'speaking.grading',
+      path: '/v1/widgets/grading',
+      graded: true,
+    });
+
+    // Only this route's exception, so the other one is not reported as naming
+    // no route.
+    const legacy = Object.fromEntries(
+      Object.entries(EXCEPTIONS).filter(([id]) => id === moved.id),
+    );
+
+    expect(violations([moved], legacy)).toEqual([
+      'speaking.grading: a graded route lives under /v1/ielts',
+      'speaking.grading: the top-level segment "widgets" is not one the ADR lists',
+    ]);
+  });
+
+  it('names a permitted break the route no longer has', () => {
+    const renamed = route({
+      id: 'x.grade',
+      path: '/v1/ielts/x/grade',
+      graded: true,
+    });
+    const stillExcused: RouteExceptions = {
+      'x.grade': { reason: 'predates it', permits: ['graded-name'] },
+    };
+
+    expect(violations([renamed], stillExcused)).toEqual([
+      'x.grade: the exception is stale, the route follows the rules',
+    ]);
+
+    const partlyFixed = route({
+      id: 'x.grading',
+      path: '/v1/speaking/grading',
+      graded: true,
+    });
+    expect(
+      violations([partlyFixed], {
+        'x.grading': {
+          reason: 'predates it',
+          permits: [
+            'graded-name',
+            'graded-home',
+            'speaking-audio',
+            'me-placement',
+          ],
+        },
+      }),
+    ).toEqual([
+      'x.grading: the exception permits "me-placement" but the route no longer breaks it',
+    ]);
+  });
+
   it('names an exception that excuses nothing', () => {
     const fine = route({ id: 'x.fine', path: '/v1/me' });
 
-    expect(violations([fine], { 'x.fine': 'old', 'x.gone': 'old' })).toEqual([
+    expect(
+      violations([fine], {
+        'x.fine': { reason: 'old', permits: ['top-level'] },
+        'x.gone': { reason: 'old', permits: ['top-level'] },
+      }),
+    ).toEqual([
       'x.fine: the exception is stale, the route follows the rules',
       'x.gone: the exception names no route',
     ]);
