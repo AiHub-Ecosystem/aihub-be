@@ -5,6 +5,7 @@ import { ulid } from 'ulid';
 
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';
+import { PostgresAuthMfaRepository } from '@/modules/auth/mfa/infrastructure/postgres-auth-mfa.repository';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
 import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
@@ -287,6 +288,134 @@ describe('a password reset and a Refresh Token rotation', () => {
       await Promise.allSettled([resetting, rotating]);
     }
   });
+});
+
+describe('a password reset request and Password Reset consumption', () => {
+  it.each(['issue', 'consume'] as const)(
+    'serializes reset-link %s with consumption under the account lock',
+    async (firstOperation) => {
+      const { userId, resetHash } = await seedTarget();
+      const nextResetHash = sha256(randomBytes(32).toString('base64url'));
+      const issue = (repository: PostgresPasswordResetTokenRepository) =>
+        repository.issuePasswordResetToken({
+          email: EMAIL,
+          tokenId: `prt_${ulid()}`,
+          tokenHash: nextResetHash,
+          tokenExpiresAt: new Date(RESET_AT.getTime() + DAY),
+          now: RESET_AT,
+        });
+      const asFirst = (pausedClient: PostgresAuthClient) =>
+        firstOperation === 'issue'
+          ? issue(
+              new PostgresPasswordResetTokenRepository(
+                pausedClient,
+                UNUSED_EMAIL_OUTBOX,
+              ),
+            )
+          : reset(
+              new PostgresPasswordResetTokenRepository(
+                pausedClient,
+                UNUSED_EMAIL_OUTBOX,
+              ),
+              resetHash,
+            );
+
+      const results = await racePausedFirst<unknown, unknown>(
+        pool,
+        client,
+        asFirst,
+        () =>
+          firstOperation === 'issue'
+            ? reset(passwordResets, resetHash)
+            : issue(passwordResets),
+      );
+
+      expect(results).toEqual(
+        firstOperation === 'issue'
+          ? [{ email: EMAIL }, { kind: 'invalid', reason: 'consumed' }]
+          : [{ kind: 'reset' }, { email: EMAIL }],
+      );
+      expect(await durableState(userId)).toMatchObject({
+        openRefreshTokens: firstOperation === 'issue' ? 1 : 0,
+        passwordHash:
+          firstOperation === 'issue' ? STORED_PASSWORD_HASH : firstPasswordHash,
+      });
+      const resetTokens = await pool.query<{ open: string }>(
+        `SELECT COUNT(*) FILTER (WHERE consumed_at IS NULL)::text AS open
+         FROM password_reset_tokens WHERE user_account_id = $1`,
+        [userId],
+      );
+      expect(Number(resetTokens.rows[0]?.open ?? 0)).toBe(1);
+    },
+  );
+});
+
+describe('MFA removal and a Refresh Token rotation', () => {
+  it.each(['removal', 'rotation'] as const)(
+    'leaves no open Refresh Token when %s takes the account lock first',
+    async (firstOperation) => {
+      const { userId, refresh } = await seedTarget();
+      const factorId = `mfa_${ulid()}`;
+      await pool.query(
+        `INSERT INTO user_mfa_factors (
+           factor_id, user_account_id, secret_key_id, secret_ciphertext,
+           status, created_at, updated_at
+         ) VALUES ($1, $2, 'test-key', 'test-ciphertext', 'enabled', $3, $3)`,
+        [factorId, userId, NOW],
+      );
+      const successor = { ...newRefreshToken(), familyId: refresh.familyId };
+      const rotate = (repository: PostgresRefreshSessionRepository) =>
+        repository.rotateRefreshToken({
+          tokenId: refresh.id,
+          tokenHash: refresh.hash,
+          successor,
+          now: RESET_AT,
+        });
+      const remove = (repository: PostgresAuthMfaRepository) =>
+        repository.removeFactor({
+          factorId,
+          userId,
+          email: EMAIL,
+          expectedPasswordHash: STORED_PASSWORD_HASH,
+          emailDelivery: undefined,
+          now: RESET_AT,
+        });
+      const asFirst = (pausedClient: PostgresAuthClient) =>
+        firstOperation === 'removal'
+          ? remove(
+              new PostgresAuthMfaRepository(pausedClient, UNUSED_EMAIL_OUTBOX),
+            )
+          : rotate(new PostgresRefreshSessionRepository(pausedClient));
+
+      const results = await racePausedFirst<unknown, unknown>(
+        pool,
+        client,
+        asFirst,
+        () =>
+          firstOperation === 'removal'
+            ? rotate(refreshSessions)
+            : remove(
+                new PostgresAuthMfaRepository(client, UNUSED_EMAIL_OUTBOX),
+              ),
+      );
+
+      expect(results).toEqual(
+        firstOperation === 'removal'
+          ? [true, { kind: 'invalid', reason: 'revoked' }]
+          : [{ kind: 'rotated', userId }, true],
+      );
+      expect(await durableState(userId)).toMatchObject({
+        openRefreshTokens: 0,
+        totalRefreshTokens: firstOperation === 'removal' ? 1 : 2,
+        passwordHash: STORED_PASSWORD_HASH,
+      });
+      const factors = await pool.query<{ factor_id: string }>(
+        'SELECT factor_id FROM user_mfa_factors WHERE user_account_id = $1',
+        [userId],
+      );
+      expect(factors.rows).toHaveLength(0);
+    },
+  );
 });
 
 describe('two resets consuming one Password Reset Token', () => {
