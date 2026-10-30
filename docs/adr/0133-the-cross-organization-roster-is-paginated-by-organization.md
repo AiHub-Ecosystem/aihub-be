@@ -3,7 +3,7 @@
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-30 in [#896](https://github.com/AiHub-Ecosystem/aihub-be/issues/896).
 - Date: 2026-10-30
 - Amends: [ADR-0028](0028-organization-roster-read-boundary.md)
-- Related: [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0130](0130-collection-routes-are-paginated-by-limit-and-cursor.md), [#896](https://github.com/AiHub-Ecosystem/aihub-be/issues/896), [#1374](https://github.com/AiHub-Ecosystem/aihub-be/issues/1374)
+- Related: [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0130](0130-collection-routes-are-paginated-by-limit-and-cursor.md), [#896](https://github.com/AiHub-Ecosystem/aihub-be/issues/896), [#1374](https://github.com/AiHub-Ecosystem/aihub-be/issues/1374)
 
 ## Context
 
@@ -20,7 +20,7 @@ Customer Web reads this route to decide where to send a user after sign-in and t
 - **Cursor.** The cursor is bound to the caller's user, through the shared cursor codec. A cursor from another caller, a malformed one, and a stale one answer `400 INVALID_REQUEST`, with no new error code.
 - **Live reads.** As in ADR-0130, a traversal is a live read. Membership is checked again on every page, so an Organization the caller left between pages disappears, and one the caller joined behind the cursor appears only on a new traversal. Suspended Organizations stay in the roster, as ADR-0028 requires.
 - **Closed query.** The route takes a closed query schema, as the other collection routes do, so a query parameter other than `limit` and `cursor` answers `400 INVALID_REQUEST`. The route ignored every query parameter before. This narrows what a request may carry; the repository accepts it because the route had no documented parameters and Customer Web sends none, and the changelog names it.
-- **Compatibility.** Both optional query parameters and the two new response fields are additive for `/v1` clients that ignore unknown fields. A client with fewer than 100 Organizations that never sends `limit` sees one page. A client that treated `members[]` as complete for an Organization of more than 100 members now sees a cut list; `member_count` is how it learns that. A client that sent an undocumented query parameter now gets `400`.
+- **Compatibility.** Both optional query parameters and the two new response fields are additive for `/v1` clients that ignore unknown fields. A client with fewer than 100 Organizations that never sends `limit` sees one page. A client that treated `members[]` as complete for an Organization of more than 100 members now sees a cut list; `member_count` is how it learns that. A client that sent an undocumented query parameter now gets `400`. [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md) classifies this bounding as breaking in meaning and records why it is accepted once under `/v1`.
 - **Cost.** The response is bounded; the database work per page is bounded by the active members of at most 100 Organizations, because `member_count` needs a count over all of an Organization's active members. The membership key and the page size keep that acceptable; a stored count is the next step if a profile shows otherwise.
 
 ## Consequences

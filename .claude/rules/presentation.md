@@ -14,3 +14,4 @@ paths:
 - Controllers are thin: resolve the operation, validate/decode its transport input, call an application port, and map the result/error to the public envelope.
 - Do not call Postgres, Redis, JWKS, or downstream HTTP clients directly from a controller.
 - Do not expose internal IDs, scopes, raw assertions, internal tokens, or raw downstream responses in public responses.
+- Adding `limit` or `cursor` to a response array that already exists turns the complete collection into one page. That is breaking in meaning even though the OpenAPI diff is additive, so the change summary cites [ADR-0134](../../docs/adr/0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md) and its evidence. A new collection route is paginated from its first release.

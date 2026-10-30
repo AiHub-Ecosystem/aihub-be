@@ -1,7 +1,8 @@
 # ADR-0127: Public API major versions use URI paths
 
-- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-26 in [#1295](https://github.com/AiHub-Ecosystem/aihub-be/issues/1295).
+- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-26 in [#1295](https://github.com/AiHub-Ecosystem/aihub-be/issues/1295); bounding a collection that was returned whole and unknown query parameters were amended by [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md).
 - Date: 2026-10-26
+- Amended by: [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md) for bounding a collection that was returned whole, and for unknown query parameters
 - Related: [ADR-0112](0112-public-api-stays-openapi-trpc-declined.md), [#290](https://github.com/AiHub-Ecosystem/aihub-be/issues/290), [#461](https://github.com/AiHub-Ecosystem/aihub-be/issues/461), [#473](https://github.com/AiHub-Ecosystem/aihub-be/issues/473), [#610](https://github.com/AiHub-Ecosystem/aihub-be/issues/610), [#1259](https://github.com/AiHub-Ecosystem/aihub-be/issues/1259), [#1295](https://github.com/AiHub-Ecosystem/aihub-be/issues/1295)
 
 ## Context

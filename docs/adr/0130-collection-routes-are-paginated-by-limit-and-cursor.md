@@ -2,6 +2,7 @@
 
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#276](https://github.com/AiHub-Ecosystem/aihub-be/issues/276).
 - Date: 2026-10-29
+- Amended by: [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md): bounding a collection that was returned whole is breaking in meaning; "compatible under `/v1`" below holds for a new collection, not for one already returned whole
 - Related: [ADR-0040](0040-organization-audit-read-boundary.md), [ADR-0051](0051-organization-membership-list-read-boundary.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0129](0129-public-route-and-response-convention.md), [#276](https://github.com/AiHub-Ecosystem/aihub-be/issues/276), [#896](https://github.com/AiHub-Ecosystem/aihub-be/issues/896)
 
 ## Context

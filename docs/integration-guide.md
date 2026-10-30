@@ -1049,6 +1049,16 @@ A cursor is bound to the user who received it. A traversal is a live read:
 membership is checked again on every page. The roster rejects query parameters
 other than `limit` and `cursor` with `400 INVALID_REQUEST`.
 
+Rules that hold for every collection route:
+
+- Where a response carries `data.next_cursor`, the array beside it is one page,
+  not the whole collection. Follow `next_cursor` until it is `null`, and treat a
+  response without `next_cursor` as the last page.
+- Send only the query parameters a route documents. A route answers
+  `400 INVALID_REQUEST` to any other, including on routes that once ignored them.
+- `GET /v1/organizations/{organization_id}/api-keys` is not paginated: it lists
+  only active keys, and an Organization holds at most 50 of them.
+
 A cursor represents a position in the collection order and never conveys authorization:
 caller permissions, tenant scope, and Organization active status are re-evaluated on
 every request. The cursor is bound to the Organization ID (and to the `status` filter for
