@@ -6,6 +6,7 @@ import {
   isSafeJwksUrl,
   parsePublicJsonWebKeySet,
 } from '@/modules/identity/domain/organization-identity-config';
+import { identityConfigPreconditionHolds } from '@/modules/identity/organization-identity-configuration/application/identity-config-precondition.policy';
 import type {
   OrganizationIdentityConfig,
   OrganizationIdentityConfigRepositoryPort,
@@ -50,7 +51,8 @@ const ACTIVE_CONFIG_COLUMNS_SQL = `
 `;
 
 const STORED_CONFIG_COLUMNS_SQL = `${ACTIVE_CONFIG_COLUMNS_SQL},
-  updated_at AS "updatedAt"
+  updated_at AS "updatedAt",
+  revision
 `;
 
 // The same columns, selected through the generated client. The upsert below
@@ -70,13 +72,35 @@ const ACTIVE_CONFIG_SELECT = {
 const STORED_CONFIG_SELECT = {
   ...ACTIVE_CONFIG_SELECT,
   updatedAt: true,
+  revision: true,
 } as const;
 
-const INSERT_OR_UPDATE_CONFIG_SQL = `
+const INSERT_CONFIG_SQL = `
   INSERT INTO organization_identity_configs (
     organization_id, issuer, jwks_url, public_keys_jwks,
     allowed_algorithms, max_assertion_ttl_seconds, status
   ) VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, 'active')
+`;
+
+// A create-only write (`If-None-Match: *`) never updates: an existing row,
+// whoever wrote it, leaves nothing returned.
+const INSERT_CONFIG_IF_ABSENT_SQL = `${INSERT_CONFIG_SQL}
+  ON CONFLICT (organization_id) DO NOTHING
+  RETURNING ${STORED_CONFIG_COLUMNS_SQL}
+`;
+
+// Locks the row for the rest of the transaction, so the operator CLI cannot
+// change it between the comparison and the write.
+const SELECT_CONFIG_REVISION_FOR_UPDATE_SQL = `
+  SELECT revision FROM organization_identity_configs
+  WHERE organization_id = $1
+  FOR UPDATE
+`;
+
+// The columns compared below are the ones trigger
+// `organization_identity_configs_bump_revision` (migration 0056) raises the
+// revision for; this one leaves out `status`, which the owner route preserves.
+const INSERT_OR_UPDATE_CONFIG_SQL = `${INSERT_CONFIG_SQL}
   ON CONFLICT (organization_id) DO UPDATE SET
     issuer = EXCLUDED.issuer,
     jwks_url = EXCLUDED.jwks_url,
@@ -101,11 +125,12 @@ const INSERT_OR_UPDATE_CONFIG_SQL = `
 `;
 
 /**
- * The database holds a `bigint`; the application port holds its digits. The
- * conversion happens here so no application code has to know which one it is
- * looking at, and no value is rounded on the way.
+ * The database holds a `bigint` (`jwks_cache_version`, `revision`); the
+ * application port holds its digits. The conversion happens here so no
+ * application code has to know which one it is looking at, and no value is
+ * rounded on the way.
  */
-function jwksCacheVersionValue(value: unknown): string | undefined {
+function bigintDigitsValue(value: unknown): string | undefined {
   if (typeof value === 'bigint' && value > 0n) {
     return value.toString();
   }
@@ -162,7 +187,7 @@ export function identityConfigFromRow(
   }
 
   const organizationId = stringValue(value, 'organizationId');
-  const jwksCacheVersion = jwksCacheVersionValue(value.jwksCacheVersion);
+  const jwksCacheVersion = bigintDigitsValue(value.jwksCacheVersion);
   const issuer = stringValue(value, 'issuer');
   const jwksUrl = nullableStringValue(value, 'jwksUrl');
   const rawPublicKeys = value.publicKeysJwks;
@@ -214,9 +239,10 @@ export function storedIdentityConfigFromRow(
 
   const config = identityConfigFromRow(value);
   const updatedAt = dateValue(value, 'updatedAt');
-  return config === undefined || updatedAt == null
+  const revision = bigintDigitsValue(value.revision);
+  return config === undefined || updatedAt == null || revision === undefined
     ? undefined
-    : { ...config, updatedAt };
+    : { ...config, updatedAt, revision };
 }
 
 export class PostgresOrganizationIdentityConfigRepository
@@ -309,9 +335,29 @@ export class PostgresOrganizationIdentityConfigRepository
           return { kind: 'forbidden' as const };
         }
 
+        const precondition = input.precondition;
+        if (precondition !== undefined) {
+          const current = (
+            (await identityRows(
+              transaction,
+              SELECT_CONFIG_REVISION_FOR_UPDATE_SQL,
+              [input.organizationId],
+            )) as readonly IdentityConfigRow[]
+          )[0];
+          const currentRevision = isRecord(current)
+            ? bigintDigitsValue(current.revision)
+            : undefined;
+          if (!identityConfigPreconditionHolds(precondition, currentRevision)) {
+            return { kind: 'precondition_failed' as const };
+          }
+        }
+
+        const createOnly = precondition?.kind === 'absent';
         const written = (await identityRows(
           transaction,
-          INSERT_OR_UPDATE_CONFIG_SQL,
+          createOnly
+            ? INSERT_CONFIG_IF_ABSENT_SQL
+            : INSERT_OR_UPDATE_CONFIG_SQL,
           [
             input.organizationId,
             input.issuer,
@@ -323,6 +369,9 @@ export class PostgresOrganizationIdentityConfigRepository
             input.maxAssertionTtlSeconds,
           ],
         )) as readonly IdentityConfigRow[];
+        if (createOnly && written.length === 0) {
+          return { kind: 'precondition_failed' as const };
+        }
 
         const changed = written.length > 0;
         const row =

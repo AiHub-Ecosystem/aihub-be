@@ -116,6 +116,18 @@ function carriesRetryAfterHeader(routeId: PublicRouteId): boolean {
   return routeId.startsWith('auth.');
 }
 
+/**
+ * Statuses a derived route never answers: an idempotency conflict needs an
+ * idempotent route, and a failed write precondition needs a conditional write,
+ * which only the identity configuration `PUT` offers (ADR-0132).
+ */
+const WRITE_PRECONDITION_STATUS: HttpStatus = 412;
+
+const STATUSES_OF_NAMED_ROUTES_ONLY: ReadonlySet<HttpStatus> = new Set([
+  409,
+  WRITE_PRECONDITION_STATUS,
+]);
+
 export function routeErrorResponsesOf(
   routeId: PublicRouteId,
   groupedErrors?: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
@@ -132,7 +144,7 @@ export function routeErrorResponsesOf(
       [...groupedErrors]
         .filter(
           ([status, codes]) =>
-            status !== 409 &&
+            !STATUSES_OF_NAMED_ROUTES_ONLY.has(status) &&
             !codes.every((code) => NAMED_DOWNSTREAM_ERRORS.has(code)),
         )
         .map(([status]) => [
@@ -361,6 +373,10 @@ export function operationToPathItem(
     if (status === 409 && operation.idempotency === 'none') {
       continue;
     }
+    // No graded operation takes a write precondition (ADR-0132).
+    if (status === WRITE_PRECONDITION_STATUS) {
+      continue;
+    }
     // A status reached only through another operation's named provider
     // failure is not this operation's to publish.
     if (
@@ -424,6 +440,14 @@ export function publicRouteToPathItem(
   ];
   const successHeaders = {
     ...routeCacheControlHeadersOf(routeId),
+    ...(metadata.etagHeaderDescription === undefined
+      ? {}
+      : {
+          ETag: {
+            description: metadata.etagHeaderDescription,
+            schema: { type: 'string' },
+          },
+        }),
     ...(metadata.replayHeaderDescription === undefined
       ? {}
       : routeReplayHeaderOf(routeId, metadata.replayHeaderDescription).headers),

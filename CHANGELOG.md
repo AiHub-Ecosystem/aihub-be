@@ -6,6 +6,21 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.3.0] - 2026-10-30
+
+### Added
+
+- `PUT /v1/organizations/{organization_id}/identity-config` accepts an optional
+  `If-Match` header, or `If-None-Match: *`, so a write based on an older read
+  is refused instead of replacing a newer configuration. `GET` and `PUT` of
+  the identity configuration return a strong `ETag` response header. A request
+  without either header behaves as before. See the Integration Guide and
+  [#579](https://github.com/AiHub-Ecosystem/aihub-be/issues/579).
+- `PRECONDITION_FAILED` (`412`): the stored identity configuration no longer
+  matches the `If-Match` or `If-None-Match` the write sent. Nothing was changed.
+  It is not retryable; read the configuration again and resend. A malformed
+  precondition header answers `400 INVALID_REQUEST`.
+
 ## [1.2.0] - 2026-10-30
 
 ### Changed

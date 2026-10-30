@@ -16,7 +16,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | EmailVerificationToken          | auth        | 12      |
 | IdempotencyRecord               | idempotency | 12      |
 | OrganizationAuditEvent          | identity    | 13      |
-| OrganizationIdentityConfig      | identity    | 11      |
+| OrganizationIdentityConfig      | identity    | 12      |
 | OrganizationInvitation          | identity    | 11      |
 | OrganizationMembership          | identity    | 8       |
 | Organization                    | identity    | 20      |
@@ -224,6 +224,7 @@ Owner: `identity`
 | createdAt              | DateTime     | @default(now()) @map("created_at") @db.Timestamptz(6)                                         |
 | updatedAt              | DateTime     | @default(now()) @map("updated_at") @db.Timestamptz(6)                                         |
 | jwksCacheVersion       | BigInt       | @default(1) @map("jwks_cache_version")                                                        |
+| revision               | BigInt       | @default(1)                                                                                   |
 | organization           | Organization | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
 
 ## OrganizationInvitation

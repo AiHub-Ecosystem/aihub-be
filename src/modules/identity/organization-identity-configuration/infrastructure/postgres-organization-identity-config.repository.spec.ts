@@ -13,6 +13,7 @@ const row = {
   status: 'active',
   jwksCacheVersion: 1n,
   updatedAt: new Date('2026-09-22T12:34:56.000Z'),
+  revision: 7n,
 };
 
 describe('identityConfigFromRow', () => {
@@ -103,9 +104,24 @@ describe('storedIdentityConfigFromRow', () => {
         maxAssertionTtlSeconds: 300,
         status: 'disabled',
         updatedAt: new Date('2026-09-22T12:34:56.000Z'),
+        revision: '7',
       },
     );
   });
+
+  it('keeps a revision above the safe integer range exact', () => {
+    expect(
+      storedIdentityConfigFromRow({ ...row, revision: 9007199254740993n })
+        ?.revision,
+    ).toBe('9007199254740993');
+  });
+
+  it.each([undefined, null, 0n, -1n, 'x', 1.5])(
+    'refuses a row whose revision is %p',
+    (revision) => {
+      expect(storedIdentityConfigFromRow({ ...row, revision })).toBeUndefined();
+    },
+  );
 
   it('refuses a row with no usable update time', () => {
     expect(

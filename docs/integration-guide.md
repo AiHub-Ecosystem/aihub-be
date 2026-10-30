@@ -371,6 +371,25 @@ lifetime is 300 seconds and can be configured from 1 to 3,600 seconds. See
 private key. This setting is saved once for the Organization; do not send
 issuer or JWKS values as grading headers.
 
+#### Avoid overwriting another owner's change
+
+`PUT` replaces the whole configuration. When several owners may edit it, make
+the write conditional so a change based on an older read is refused instead of
+silently replacing a newer one:
+
+1. `GET .../identity-config` returns an `ETag` header, such as `"7"`. Treat the
+   value as opaque.
+2. `PUT` it back in `If-Match`: `If-Match: "7"`. If the configuration has
+   changed since, AIHUB answers `412 PRECONDITION_FAILED` and changes nothing.
+   Read it again, merge your change, and resend with the new `ETag`.
+3. To create the first configuration only when none exists, send
+   `If-None-Match: *`. A `412` means someone created it first.
+
+A successful `PUT` returns the new `ETag`. The header is optional throughout
+`/v1`, and without it the last write wins, as before; requiring it would be a
+breaking change. Send one `If-Match` with one quoted value, or
+`If-None-Match: *`, not both; any other form answers `400 INVALID_REQUEST`.
+
 ### What AIHUB gives you
 
 - an organization id (`org_...`)
@@ -1205,16 +1224,17 @@ These errors apply when an Organization owner calls
 `PUT /v1/organizations/{organization_id}/identity-config`. Common malformed
 request errors use `INVALID_REQUEST` from the table above.
 
-| HTTP | Code                                    | What happened                                                           | What to do                                                                                                                                           |
-| ---: | --------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-|  400 | `IDENTITY_JWKS_URL_UNSAFE`              | The configured JWKS URL is not an allowed public HTTPS URL              | Use a publicly reachable HTTPS URL; private or local addresses are rejected                                                                          |
-|  400 | `IDENTITY_JWKS_INVALID`                 | The supplied JWKS is malformed or has no usable supported key           | Validate the JWKS and ensure a supported public signing key with a unique `kid` is present                                                           |
-|  401 | `AUTH_USER_ACCESS_TOKEN_REQUIRED`       | The Bearer User Access token is missing                                 | Sign in and send `Authorization: Bearer <AIHUB_USER_ACCESS_TOKEN>`                                                                                   |
-|  401 | `AUTH_USER_ACCESS_TOKEN_INVALID`        | The User Access token is invalid, expired, or the account is not active | Sign in again to obtain a valid token                                                                                                                |
-|  403 | `FORBIDDEN`                             | The caller is not an active Organization owner                          | Ask an active owner to configure identity                                                                                                            |
-|  409 | `ORGANIZATION_IDENTITY_ISSUER_CONFLICT` | Another Organization already uses this issuer                           | Use the issuer uniquely assigned to this Organization                                                                                                |
-|  503 | `IDENTITY_JWKS_SOURCE_UNAVAILABLE`      | AIHUB could not fetch the configured remote JWKS source                 | Check public reachability and TLS, then retry according to `retryable`                                                                               |
-|  503 | `IDENTITY_CONFIG_CACHE_UNAVAILABLE`     | AIHUB could not clear cached identity configuration after saving        | Read the current configuration with `GET /v1/organizations/{organization_id}/identity-config` before retrying; the write may already have been saved |
+| HTTP | Code                                    | What happened                                                              | What to do                                                                                                                                           |
+| ---: | --------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+|  400 | `IDENTITY_JWKS_URL_UNSAFE`              | The configured JWKS URL is not an allowed public HTTPS URL                 | Use a publicly reachable HTTPS URL; private or local addresses are rejected                                                                          |
+|  400 | `IDENTITY_JWKS_INVALID`                 | The supplied JWKS is malformed or has no usable supported key              | Validate the JWKS and ensure a supported public signing key with a unique `kid` is present                                                           |
+|  401 | `AUTH_USER_ACCESS_TOKEN_REQUIRED`       | The Bearer User Access token is missing                                    | Sign in and send `Authorization: Bearer <AIHUB_USER_ACCESS_TOKEN>`                                                                                   |
+|  401 | `AUTH_USER_ACCESS_TOKEN_INVALID`        | The User Access token is invalid, expired, or the account is not active    | Sign in again to obtain a valid token                                                                                                                |
+|  403 | `FORBIDDEN`                             | The caller is not an active Organization owner                             | Ask an active owner to configure identity                                                                                                            |
+|  409 | `ORGANIZATION_IDENTITY_ISSUER_CONFLICT` | Another Organization already uses this issuer                              | Use the issuer uniquely assigned to this Organization                                                                                                |
+|  412 | `PRECONDITION_FAILED`                   | `If-Match` or `If-None-Match` no longer describes the stored configuration | Read the configuration again, merge your change, and resend with the new `ETag`                                                                      |
+|  503 | `IDENTITY_JWKS_SOURCE_UNAVAILABLE`      | AIHUB could not fetch the configured remote JWKS source                    | Check public reachability and TLS, then retry according to `retryable`                                                                               |
+|  503 | `IDENTITY_CONFIG_CACHE_UNAVAILABLE`     | AIHUB could not clear cached identity configuration after saving           | Read the current configuration with `GET /v1/organizations/{organization_id}/identity-config` before retrying; the write may already have been saved |
 
 `IDENTITY_PROVIDER_UNAVAILABLE` on a grading request means AIHUB could not
 read the Organization's identity configuration, or could not use its JWKS

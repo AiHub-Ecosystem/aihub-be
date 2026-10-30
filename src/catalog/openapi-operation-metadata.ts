@@ -24,4 +24,6 @@ export interface PublicRouteOpenApiMetadata extends OpenApiOperationMetadata {
   readonly parameters?: readonly OpenApiParameterMetadata[];
   readonly successDescription: string;
   readonly replayHeaderDescription?: string;
+  /** Documents the strong `ETag` the success response carries. */
+  readonly etagHeaderDescription?: string;
 }

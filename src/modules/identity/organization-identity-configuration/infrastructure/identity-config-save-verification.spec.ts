@@ -89,6 +89,7 @@ describe('identity configuration save and next assertion verification', () => {
       maxAssertionTtlSeconds: 300,
       status: 'active',
       updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+      revision: '1',
     };
     const repository: Pick<
       OrganizationIdentityConfigRepositoryPort,
@@ -106,6 +107,7 @@ describe('identity configuration save and next assertion verification', () => {
           maxAssertionTtlSeconds: input.maxAssertionTtlSeconds,
           status: config.status,
           updatedAt: new Date('2026-09-24T00:00:00.000Z'),
+          revision: '2',
         };
         return { kind: 'saved', config };
       },

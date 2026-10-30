@@ -19,6 +19,7 @@ import type { JwksCachePort } from '@/modules/identity/user-assertions/applicati
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import type {
   IdentityConfigAlgorithm,
+  IdentityConfigPrecondition,
   OrganizationIdentityConfigRepositoryPort,
   StoredOrganizationIdentityConfig,
 } from './organization-identity-config-repository.port';
@@ -36,10 +37,21 @@ export interface SetOrganizationIdentityConfigInput {
   readonly publicKeysJwks?: unknown;
   readonly allowedAlgorithms?: readonly IdentityConfigAlgorithm[];
   readonly maxAssertionTtlSeconds?: number;
+  /** Absent means the write is unconditional. */
+  readonly precondition?: IdentityConfigPrecondition;
 }
 
 export type SetOrganizationIdentityConfigResult =
   StoredOrganizationIdentityConfig;
+
+function preconditionFailed(): AppError {
+  return new AppError({
+    code: 'PRECONDITION_FAILED',
+    message:
+      'The identity configuration changed since it was read. Read it again and resend the change.',
+    retryable: false,
+  });
+}
 
 function cacheUnavailable(): AppError {
   return new AppError({
@@ -137,9 +149,15 @@ export class SetOrganizationIdentityConfig {
       allowedAlgorithms,
       maxAssertionTtlSeconds,
       sourceKind: jwksUrl === null ? 'inline' : 'url',
+      ...(input.precondition === undefined
+        ? {}
+        : { precondition: input.precondition }),
     });
     if (saved.kind === 'forbidden') {
       throw forbidden(IDENTITY_CONFIG_ACCESS_FORBIDDEN);
+    }
+    if (saved.kind === 'precondition_failed') {
+      throw preconditionFailed();
     }
 
     try {

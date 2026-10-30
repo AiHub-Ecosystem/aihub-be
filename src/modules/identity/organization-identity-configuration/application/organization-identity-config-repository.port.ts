@@ -25,7 +25,21 @@ export interface OrganizationIdentityConfig {
 export interface StoredOrganizationIdentityConfig
   extends OrganizationIdentityConfig {
   readonly updatedAt: Date;
+  /**
+   * Digits of the row's revision: it rises by one each time a write changes the
+   * configuration, whoever makes it, so a later write can name the state it was
+   * based on (ADR-0132). The public `ETag` is built from it.
+   */
+  readonly revision: string;
 }
+
+/**
+ * What a write says about the state it replaces. Absent means the write is not
+ * conditional: the last writer wins, as before.
+ */
+export type IdentityConfigPrecondition =
+  | { readonly kind: 'revision'; readonly revision: string }
+  | { readonly kind: 'absent' };
 
 export interface SaveOrganizationIdentityConfigInput {
   readonly context: RequestContext;
@@ -37,6 +51,7 @@ export interface SaveOrganizationIdentityConfigInput {
   readonly allowedAlgorithms: readonly IdentityConfigAlgorithm[];
   readonly maxAssertionTtlSeconds: number;
   readonly sourceKind: 'url' | 'inline';
+  readonly precondition?: IdentityConfigPrecondition;
 }
 
 export type SaveOrganizationIdentityConfigResult =
@@ -44,7 +59,8 @@ export type SaveOrganizationIdentityConfigResult =
       readonly kind: 'saved' | 'unchanged';
       readonly config: StoredOrganizationIdentityConfig;
     }
-  | { readonly kind: 'forbidden' };
+  | { readonly kind: 'forbidden' }
+  | { readonly kind: 'precondition_failed' };
 
 export interface OrganizationIdentityConfigRepositoryPort {
   findActiveByOrganizationId(

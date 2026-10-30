@@ -1044,7 +1044,7 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'Set an organization identity configuration',
       description:
-        'Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge.',
+        'Creates or replaces the public Signed User Assertion identity configuration for an active owner of an active Organization. Submit exactly one JWKS source. URL sources are fetched through the SSRF-protected JWKS path before saving. Existing status is preserved. A retryable cache error may mean the durable save succeeded; retrying the same request safely retries cache purge. The write is conditional only when `If-Match` or `If-None-Match` is sent; without either, the last write wins. A stale precondition answers `412 PRECONDITION_FAILED` and changes nothing.',
       parameters: [
         {
           name: 'organization_id',
@@ -1053,9 +1053,27 @@ export const PUBLIC_ROUTES = {
           description: 'The organization whose identity configuration is set.',
           schema: { $ref: '#/components/schemas/OrganizationId' },
         },
+        {
+          name: 'If-Match',
+          in: 'header',
+          required: false,
+          description:
+            'The `ETag` of the configuration this write replaces, as one quoted value such as `"7"`. A different current revision refuses the write with `412`. Cannot be sent with `If-None-Match`.',
+          schema: { type: 'string', pattern: '^"[1-9][0-9]*"$' },
+        },
+        {
+          name: 'If-None-Match',
+          in: 'header',
+          required: false,
+          description:
+            'Send `*` to create the configuration only when none exists; an existing one refuses the write with `412`. Cannot be sent with `If-Match`.',
+          schema: { type: 'string', enum: ['*'] },
+        },
       ],
       successDescription:
         'The stored public identity configuration, including its preserved status.',
+      etagHeaderDescription:
+        'Strong entity tag of the configuration after this write, such as `"8"`; opaque.',
     },
     method: 'PUT',
     path: '/v1/organizations/:organizationId/identity-config',
@@ -1066,7 +1084,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: SetOrganizationIdentityConfigRequestSchema,
     responseSchema: ReadOrganizationIdentityConfigResponseSchema,
-    errorStatuses: [400, 401, 403, 409, 500, 503],
+    errorStatuses: [400, 401, 403, 409, 412, 500, 503],
   },
   'organizations.identityConfig.read': {
     openApi: {
@@ -1084,6 +1102,8 @@ export const PUBLIC_ROUTES = {
       ],
       successDescription:
         'Stored public identity configuration, or `configured: false` when no row exists.',
+      etagHeaderDescription:
+        'Strong entity tag of the stored configuration, such as `"7"`; opaque. Send it back in `If-Match` on the `PUT` to refuse the write if the configuration has changed since. Absent when `configured` is false.',
     },
     method: 'GET',
     path: '/v1/organizations/:organizationId/identity-config',

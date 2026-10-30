@@ -78,6 +78,7 @@ function config(
     maxAssertionTtlSeconds: 300,
     status: 'active',
     updatedAt: new Date('2026-09-22T12:34:56.000Z'),
+    revision: '3',
     ...overrides,
   };
 }
@@ -89,6 +90,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
   let result: StoredOrganizationIdentityConfig | null = config();
   let auditWrites = 0;
+  let refusePrecondition = false;
   let callerRole: OrganizationMembershipRole = 'owner';
   let callerStatus: OrganizationMembershipStatus = 'active';
   let callerMembershipExists = true;
@@ -102,6 +104,9 @@ describe('Organization identity configuration HTTP flow', () => {
       findByOrganizationId: jest.fn(async (_organizationId: string) => result),
       saveForOwner: jest.fn(
         async (input: SaveOrganizationIdentityConfigInput) => {
+          if (refusePrecondition) {
+            return { kind: 'precondition_failed' as const };
+          }
           const next = config({
             issuer: input.issuer,
             jwksUrl: input.jwksUrl,
@@ -110,6 +115,7 @@ describe('Organization identity configuration HTTP flow', () => {
             maxAssertionTtlSeconds: input.maxAssertionTtlSeconds,
             status: result?.status ?? 'active',
             updatedAt: new Date('2026-09-24T12:34:56.000Z'),
+            revision: '4',
           });
           const unchanged =
             result !== null &&
@@ -214,6 +220,7 @@ describe('Organization identity configuration HTTP flow', () => {
     callerMembershipExists = true;
     organizationStatus = 'active';
     auditWrites = 0;
+    refusePrecondition = false;
     purgeJwks.mockReset().mockResolvedValue(undefined);
     validateRemote.mockReset().mockResolvedValue(undefined);
     jest.clearAllMocks();
@@ -724,4 +731,120 @@ describe('Organization identity configuration HTTP flow', () => {
       ).toBe(false);
     },
   );
+
+  describe('preconditions on the owner write (ADR-0132)', () => {
+    const OWNER_HEADERS = { authorization: 'Bearer valid.token.value' };
+    const BODY = {
+      issuer: 'https://acme.edu',
+      public_keys_jwks: {
+        keys: [
+          { kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1', alg: 'RS256' },
+        ],
+      },
+    };
+
+    function lastSaveInput(): SaveOrganizationIdentityConfigInput {
+      const input = configs.saveForOwner.mock.calls.at(-1)?.[0];
+      if (input === undefined) {
+        throw new Error('saveForOwner was not called');
+      }
+      return input;
+    }
+
+    it('returns the revision as a strong ETag on a read', async () => {
+      const response = await read();
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers.etag).toBe('"3"');
+    });
+
+    it('sends no ETag when nothing is configured', async () => {
+      result = null;
+
+      const response = await read();
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers.etag).toBeUndefined();
+    });
+
+    it('returns the new revision as the ETag of a write', async () => {
+      const response = await set(BODY);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers.etag).toBe('"4"');
+    });
+
+    it('keeps a write without a precondition unconditional', async () => {
+      await set(BODY);
+
+      expect(lastSaveInput()).not.toHaveProperty('precondition');
+    });
+
+    it('passes If-Match to the write as the revision it was based on', async () => {
+      const response = await set(BODY, { ...OWNER_HEADERS, 'if-match': '"3"' });
+
+      expect(response.statusCode).toBe(200);
+      expect(lastSaveInput().precondition).toEqual({
+        kind: 'revision',
+        revision: '3',
+      });
+    });
+
+    it('passes If-None-Match: * to the write as create-only', async () => {
+      await set(BODY, { ...OWNER_HEADERS, 'if-none-match': '*' });
+
+      expect(lastSaveInput().precondition).toEqual({ kind: 'absent' });
+    });
+
+    it('answers 412 PRECONDITION_FAILED for a stale revision and leaves the JWKS cache alone', async () => {
+      refusePrecondition = true;
+
+      const response = await set(BODY, { ...OWNER_HEADERS, 'if-match': '"2"' });
+
+      expect(response.statusCode).toBe(412);
+      expectError(response, {
+        code: 'PRECONDITION_FAILED',
+        retryable: false,
+      });
+      expect(purgeJwks).not.toHaveBeenCalled();
+      expect(response.headers.etag).toBeUndefined();
+    });
+
+    it.each([
+      ['if-match', '3'],
+      ['if-match', 'W/"3"'],
+      ['if-match', '*'],
+      ['if-none-match', '"3"'],
+    ])(
+      'answers 400 INVALID_REQUEST for %s: %s before it writes',
+      async (name, value) => {
+        const response = await set(BODY, { ...OWNER_HEADERS, [name]: value });
+
+        expect(response.statusCode).toBe(400);
+        expectErrorCode(response, 'INVALID_REQUEST');
+        expect(configs.saveForOwner.mock.calls).toHaveLength(0);
+      },
+    );
+
+    it('answers 400 when both preconditions are sent', async () => {
+      const response = await set(BODY, {
+        ...OWNER_HEADERS,
+        'if-match': '"3"',
+        'if-none-match': '*',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(configs.saveForOwner.mock.calls).toHaveLength(0);
+    });
+
+    it('does not let a stale revision tell a non-owner anything', async () => {
+      callerRole = 'admin';
+      refusePrecondition = true;
+
+      const response = await set(BODY, { ...OWNER_HEADERS, 'if-match': '"1"' });
+
+      expect(response.statusCode).toBe(403);
+      expect(configs.saveForOwner.mock.calls).toHaveLength(0);
+    });
+  });
 });

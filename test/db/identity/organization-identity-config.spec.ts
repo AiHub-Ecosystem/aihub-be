@@ -103,11 +103,15 @@ async function auditEvents(): Promise<Record<string, unknown>[]> {
 describe('Organization identity configuration against PostgreSQL', () => {
   it('reads back the settings an owner saved, and stops reporting a disabled one as active', async () => {
     const saved = await repository.saveForOwner(input());
-    if (saved.kind === 'forbidden') {
+    if (saved.kind === 'forbidden' || saved.kind === 'precondition_failed') {
       throw new Error('Owner config saves unexpectedly forbidden');
     }
 
-    const { updatedAt: _updatedAt, ...activeConfig } = saved.config;
+    const {
+      updatedAt: _updatedAt,
+      revision: _revision,
+      ...activeConfig
+    } = saved.config;
 
     await expect(
       repository.findActiveByOrganizationId(organizationId),
@@ -212,8 +216,13 @@ describe('Organization identity configuration against PostgreSQL', () => {
     const retried = await repository.saveForOwner(input());
 
     expect(retried.kind).toBe('unchanged');
-    if (first.kind === 'forbidden' || retried.kind === 'forbidden') {
-      throw new Error('Owner config saves unexpectedly forbidden');
+    if (
+      first.kind === 'forbidden' ||
+      first.kind === 'precondition_failed' ||
+      retried.kind === 'forbidden' ||
+      retried.kind === 'precondition_failed'
+    ) {
+      throw new Error('Owner config saves unexpectedly refused');
     }
     expect(retried.config.jwksCacheVersion).toBe(first.config.jwksCacheVersion);
     expect(retried.config.updatedAt).toEqual(first.config.updatedAt);

@@ -257,7 +257,9 @@ model OrganizationAuditEvent {
 ///
 /// Trigger `organization_identity_configs_set_updated_at` is owned by
 /// migration 0003, which also owns its `CHECK` constraints; migration 0020 adds
-/// `organization_identity_configs_jwks_cache_version_check`.
+/// `organization_identity_configs_jwks_cache_version_check`. Migration 0056 adds
+/// `revision` and trigger `organization_identity_configs_bump_revision`, which
+/// raises it whenever a write changes the configuration.
 /// @owner identity
 model OrganizationIdentityConfig {
   organizationId        String       @id @map("organization_id")
@@ -270,6 +272,7 @@ model OrganizationIdentityConfig {
   createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
   jwksCacheVersion      BigInt       @default(1) @map("jwks_cache_version")
+  revision              BigInt       @default(1)
   organization          Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("organization_identity_configs")

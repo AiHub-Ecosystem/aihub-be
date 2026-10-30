@@ -8,10 +8,11 @@ import {
   Param,
   Put,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { parseRequestBody } from '@/common/http/parse-request-body';
@@ -35,6 +36,10 @@ import { invalidJwks } from '@/modules/identity/shared/application/jwks-errors';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import {
+  identityConfigEtag,
+  parseIdentityConfigPrecondition,
+} from './identity-config-precondition';
 
 type ConfiguredResponse = Extract<
   ReadOrganizationIdentityConfigResponse['data'],
@@ -74,6 +79,7 @@ export class OrganizationIdentityConfigController {
   async read(
     @Req() request: FastifyRequest,
     @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ReadOrganizationIdentityConfigResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -93,6 +99,7 @@ export class OrganizationIdentityConfigController {
     }
 
     const config = result.config;
+    reply.header('ETag', identityConfigEtag(config.revision));
     return {
       data: configuredResponse(config),
       meta: { request_id: requestId },
@@ -105,6 +112,7 @@ export class OrganizationIdentityConfigController {
     @Req() request: FastifyRequest,
     @Param('organizationId', new OrganizationIdPipe()) organizationId: string,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ReadOrganizationIdentityConfigResponse> {
     const { context, requestId, userId } = bearerRequestContext(
       request,
@@ -118,6 +126,7 @@ export class OrganizationIdentityConfigController {
       body,
       request,
     );
+    const precondition = parseIdentityConfigPrecondition(request.headers);
     const config = await this.setIdentityConfig.set({
       context,
       userId,
@@ -131,8 +140,10 @@ export class OrganizationIdentityConfigController {
       ...(requested.max_assertion_ttl_seconds === undefined
         ? {}
         : { maxAssertionTtlSeconds: requested.max_assertion_ttl_seconds }),
+      ...(precondition === undefined ? {} : { precondition }),
     });
 
+    reply.header('ETag', identityConfigEtag(config.revision));
     return {
       data: configuredResponse(config),
       meta: { request_id: requestId },
