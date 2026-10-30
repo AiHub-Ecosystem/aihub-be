@@ -41,6 +41,9 @@ jobs:
     name: Static checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
 
     steps:
       - name: Check out repository
@@ -91,7 +94,11 @@ jobs:
 
       # The release gate runs on pushes to main too (#1398): work lands there
       # directly, and CD deploys whatever contract a push carries. A push
-      # compares with the commit before it; a new branch has none to compare.
+      # compares with the last revision CD deployed, not the commit before it:
+      # a red push never deploys, so the next push still owes the whole change
+      # since production and a per-push base would call its bump the wrong size.
+      # A repository CD has never succeeded in falls back to the commit before
+      # the push; a new branch has none to compare.
       - name: Install oasdiff
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         shell: bash
@@ -104,11 +111,29 @@ jobs:
           tar -xzf "$RUNNER_TEMP/oasdiff.tar.gz" -C "$RUNNER_TEMP/oasdiff" oasdiff
           echo "$RUNNER_TEMP/oasdiff" >> "$GITHUB_PATH"
 
+      - name: Resolve the base contract revision
+        id: base
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            sha="$PULL_REQUEST_BASE"
+          else
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/cd.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty')"
+            sha="${sha:-$PUSH_BEFORE}"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Check out the base contract
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          ref: ${{ steps.base.outputs.sha }}
           path: base-contract
           persist-credentials: false
 

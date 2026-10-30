@@ -259,12 +259,12 @@ void test('allows extending the generated Audit action response enum', (t) => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-void test('runs the versioned release checker against the pull request base or the commit before a push', () => {
+void test('runs the versioned release checker against the pull request base or the last deployed revision', () => {
+  assert.ok(WORKFLOW.includes('ref: ${{ steps.base.outputs.sha }}'));
   assert.ok(
-    WORKFLOW.includes(
-      "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
-    ),
+    WORKFLOW.includes('workflows/cd.yml/runs?branch=main&status=success'),
   );
+  assert.ok(WORKFLOW.includes('sha="${sha:-$PUSH_BEFORE}"'));
   assert.ok(
     WORKFLOW.includes(
       "if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')",
