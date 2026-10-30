@@ -46,4 +46,6 @@ Vitest's [coverage guide](https://vitest.dev/guide/coverage) describes its V8 an
 
 ## Recommendation
 
-Keep Jest + SWC as the default. The measured Vitest run was slower overall, coverage totals differ, and module-mock/isolation compatibility remains untested. The lower startup latency and slightly lower median RSS are not enough to justify a repository-wide swap. Reopen the decision only with fresh full-lane coverage evidence and measurements on the two-worker CI environment; #716 remains the separate decision owner for a database-lane runner change or Testcontainers.
+If minimizing peak memory matters more than total runtime, Vitest is the preferred migration candidate from this sample: its median peak RSS was 898 MiB versus Jest's 939 MiB, and its highest observed peak was 924 MiB versus Jest's 1,549 MiB. The trade-off was a 9.5% slower median total runtime. This is only three samples on a one-worker Windows run, so confirm the memory difference in the two-worker CI environment.
+
+Keep Jest + SWC as the default until coverage equivalence and module-mock/isolation compatibility are resolved. The lower RSS makes Vitest worth pursuing under a memory-first priority, but the current coverage totals differ and top-level `jest.mock` hoisting and `jest.isolateModulesAsync` remain untested. #716 remains the separate decision owner for a database-lane runner change or Testcontainers.
