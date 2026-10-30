@@ -8,6 +8,19 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [1.5.0] - 2026-10-30
+
+### Changed
+
+- The three Speaking audio upload routes (`POST /v1/speaking/audio/uploads` and
+  its `refresh` and `complete` steps) now enforce the `speaking.grade` API-key
+  scope, and the three Writing chart upload routes
+  (`POST /v1/ielts/writing/task1/chart-uploads` and its `refresh` and `complete`
+  steps) enforce `writing.grade`. A key without the scope now gets
+  `403 FORBIDDEN` on these routes; they accepted any key before. The
+  OpenAPI document marks each route with `x-required-scope`, as it does for the
+  grading routes.
+
 ## [1.4.0] - 2026-10-30
 
 ### Changed

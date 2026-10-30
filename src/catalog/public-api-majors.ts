@@ -39,7 +39,7 @@ export type PublicApiMajorDef =
 export const PUBLIC_API_MAJORS: readonly PublicApiMajorDef[] = [
   {
     major: 1,
-    contractVersion: '1.4.0',
+    contractVersion: '1.5.0',
     status: 'supported',
     releasedAt: '2026-10-27',
   },
