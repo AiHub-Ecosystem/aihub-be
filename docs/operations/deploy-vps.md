@@ -1606,6 +1606,16 @@ AIHUB_USER_IDENTITY_FILE="$HOME/speaking-user-identity" \
   "$HOME/aihub-speaking-contract-probe.wav"
 ```
 
+CI compares the helper's request with the OpenAPI contract built from source
+(`test/ops/speaking-gateway-smoke-contract.spec.ts`): method, path, request
+headers, multipart fields and their requiredness in both directions, and the
+audio file extension the route accepts. The contract publishes no content type
+for a part, so none is compared. When
+the Speaking grading request changes, change the helper, this section, and the
+Integration Guide in the same pull request; CI fails if the helper falls
+behind. The identity-escaping and temporary-file checks stay in
+`test/ops/speaking-gateway-smoke.spec.sh`.
+
 For an Organization with active identity verification, put a short-lived
 assertion signed by that Organization in the identity file instead of the
 declared ID. If using `generate-speaking-assertion.sh`, provide that

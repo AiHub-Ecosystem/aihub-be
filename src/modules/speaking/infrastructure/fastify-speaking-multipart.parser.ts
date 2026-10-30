@@ -27,7 +27,7 @@ const MULTIPART_LIMITS = {
   parts: 8,
 } as const;
 
-const ALLOWED_EXTENSIONS = new Set(['wav', 'mp3', 'm4a', 'webm', 'ogg']);
+export const ALLOWED_EXTENSIONS = new Set(['wav', 'mp3', 'm4a', 'webm', 'ogg']);
 const ALLOWED_FIELDS = new Set([
   'part',
   'question_id',

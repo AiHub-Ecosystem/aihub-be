@@ -33,6 +33,9 @@ while (($#)); do
   esac
 done
 
+# Which headers and fields the contract accepts is checked against the OpenAPI
+# document in speaking-gateway-smoke-contract.spec.ts; this stub keeps the
+# escaping and cleanup checks.
 grep -Fqx -- 'header = "X-API-Key: test-api-key"' "$config"
 grep -Fqx -- 'header = "X-User-Identity: user\"\\id"' "$config"
 if grep -Fq -- 'X-User-Assertion:' "$config"; then
