@@ -1,6 +1,6 @@
 # ADR-0136: Bound Public API major usage collection
 
-- Status: Proposed — awaiting AIHUB owner approval in [#1406](https://github.com/AiHub-Ecosystem/aihub-be/issues/1406). It amends the accepted ADR-0127; until approved, ADR-0127's original claim stands.
+- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-30 in [#1406](https://github.com/AiHub-Ecosystem/aihub-be/issues/1406).
 - Date: 2026-10-30
 - Amends: [ADR-0127](0127-public-api-uri-major-versioning.md), specifically its claim that a process loses usage counts only when it dies before writing them
 - Related: [ADR-0125](0125-bounded-protection-metrics.md), [#1406](https://github.com/AiHub-Ecosystem/aihub-be/issues/1406)
