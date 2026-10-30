@@ -1,5 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import {
+  beginShutdown,
+  waitForBackgroundWork,
+} from '@/common/http/background-work-drain';
+import {
   type RedisConcurrencyClient,
   RedisConcurrencyLimiter,
 } from './redis-concurrency-limiter';
@@ -188,6 +192,7 @@ describe('RedisConcurrencyLimiter', () => {
       // The hint is spread over [base, base + 1 s) (#1352).
       retryAfterMs: expect.closeTo(1_499.5, -3) as number,
     } satisfies Partial<AppError>);
+    await limiter.onModuleDestroy();
   });
 
   it('returns retryable unavailable when releasing a permit has an ambiguous result', async () => {
@@ -215,6 +220,73 @@ describe('RedisConcurrencyLimiter', () => {
       code: 'REDIS_UNAVAILABLE',
     });
     expect(zrem).toHaveBeenCalledTimes(1);
+    await limiter.onModuleDestroy();
+  });
+
+  it('keeps release recovery in the shutdown drain until Redis returns', async () => {
+    jest.useFakeTimers();
+    let available = false;
+    const redis = new FakeRedis();
+    const zrem = jest.fn(async () => {
+      if (!available) throw new Error('redis down');
+      return 1;
+    });
+    redis.zrem = zrem;
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      const decision = await limiter.acquire({
+        organizationId: 'org_recovery',
+        maxConcurrent: 1,
+        requestId: 'req_recovery',
+      });
+      if (!decision.allowed) throw new Error('expected a concurrency lease');
+
+      await expect(decision.lease.release()).rejects.toMatchObject({
+        code: 'REDIS_UNAVAILABLE',
+      });
+      let drained = false;
+      const drain = waitForBackgroundWork().then(() => (drained = true));
+      await Promise.resolve();
+      expect(drained).toBe(false);
+
+      available = true;
+      await jest.advanceTimersByTimeAsync(1_000);
+      await expect(drain).resolves.toBe(true);
+      expect(zrem).toHaveBeenCalledTimes(2);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
+  });
+
+  it('cancels delayed release retries before closing its Redis client', async () => {
+    jest.useFakeTimers();
+    const redis = new FakeRedis();
+    const zrem = jest.fn(() => Promise.reject(new Error('redis down')));
+    redis.zrem = zrem;
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      const decision = await limiter.acquire({
+        organizationId: 'org_drain',
+        maxConcurrent: 1,
+        requestId: 'req_drain',
+      });
+      if (!decision.allowed) throw new Error('expected a concurrency lease');
+
+      await expect(decision.lease.release()).rejects.toMatchObject({
+        code: 'REDIS_UNAVAILABLE',
+      });
+      const drain = waitForBackgroundWork();
+      await limiter.onModuleDestroy();
+      await expect(drain).resolves.toBeUndefined();
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(zrem).toHaveBeenCalledTimes(1);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
   });
 
   it('logs one outage and one recovery without exposing request identifiers', async () => {
@@ -260,5 +332,38 @@ describe('RedisConcurrencyLimiter', () => {
       requestId: 'req_secret_3',
     });
     expect(logger.logs).toHaveLength(1);
+    await limiter.onModuleDestroy();
+  });
+
+  it('bounds release recovery to the graceful shutdown budget', async () => {
+    jest.useFakeTimers();
+    const redis = new FakeRedis();
+    const zrem = jest.fn(() => Promise.reject(new Error('redis down')));
+    redis.zrem = zrem;
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      const decision = await limiter.acquire({
+        organizationId: 'org_shutdown_budget',
+        maxConcurrent: 1,
+        requestId: 'req_shutdown_budget',
+      });
+      if (!decision.allowed) throw new Error('expected a concurrency lease');
+
+      await expect(decision.lease.release()).rejects.toMatchObject({
+        code: 'REDIS_UNAVAILABLE',
+      });
+      const drain = waitForBackgroundWork();
+      beginShutdown();
+
+      await jest.advanceTimersByTimeAsync(61_000);
+      await expect(drain).resolves.toBeUndefined();
+      const attemptsAtDrain = zrem.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(10_000);
+      expect(zrem).toHaveBeenCalledTimes(attemptsAtDrain);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
   });
 });

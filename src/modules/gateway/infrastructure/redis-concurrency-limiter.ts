@@ -5,6 +5,11 @@ import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
+import {
+  backgroundWorkSettled,
+  backgroundWorkStarted,
+  isShuttingDown,
+} from '@/common/http/background-work-drain';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   ConcurrencyDecision,
@@ -26,6 +31,8 @@ export type RedisConcurrencyClient = Pick<
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 export const CONCURRENCY_STALE_LEASE_MS = 120_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
+// Keep 15 seconds of the 75-second graceful drain for event-loop delay.
+const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS = 60_000;
 const LEASE_REMOVAL_ATTEMPTS = Math.floor(
   (CONCURRENCY_STALE_LEASE_MS - LEASE_REMOVAL_RETRY_MS) /
     (LEASE_REMOVAL_RETRY_MS + REDIS_COMMAND_TIMEOUT_MS),
@@ -74,6 +81,12 @@ interface LoggerLike {
 
 export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
   private redisIsDegraded = false;
+  private stopping = false;
+  private readonly pendingRemovals = new Set<() => void>();
+  private readonly removalTimers = new Map<
+    () => void,
+    ReturnType<typeof setTimeout>
+  >();
 
   constructor(
     private readonly client: RedisConcurrencyClient | undefined,
@@ -138,6 +151,8 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.stopping = true;
+    for (const settle of this.pendingRemovals) settle();
     await this.client?.quit().catch(() => undefined);
   }
 
@@ -165,25 +180,73 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     };
   }
 
-  // Retries are budgeted against the stale window, including command timeouts.
-  // shortcut: process exit ends retries; a later acquire prunes expired leases.
+  // A retry-exhausted permit is pruned on the next acquire after its stale window.
   private removeLater(
     client: RedisConcurrencyClient,
     keys: readonly string[],
     requestId: string,
     attempt = 1,
+    settle?: () => void,
+    shutdownStartedAt?: number,
   ): void {
+    if (settle === undefined) {
+      backgroundWorkStarted();
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        const timer = this.removalTimers.get(finish);
+        if (timer !== undefined) clearTimeout(timer);
+        this.removalTimers.delete(finish);
+        this.pendingRemovals.delete(finish);
+        backgroundWorkSettled();
+      };
+      this.pendingRemovals.add(finish);
+      this.removeLater(client, keys, requestId, attempt, finish);
+      return;
+    }
+    const shutdownStartedAtForRetry = isShuttingDown()
+      ? (shutdownStartedAt ?? Date.now())
+      : undefined;
+    if (
+      this.stopping ||
+      (shutdownStartedAtForRetry !== undefined &&
+        Date.now() - shutdownStartedAtForRetry >=
+          LEASE_REMOVAL_SHUTDOWN_BUDGET_MS)
+    ) {
+      settle();
+      return;
+    }
+
     const timer = setTimeout(() => {
-      void Promise.all(keys.map((key) => client.zrem(key, requestId))).then(
-        () => this.reportRecovered(),
-        () => {
-          recordRedisUnavailable('concurrency');
-          if (attempt < LEASE_REMOVAL_ATTEMPTS) {
-            this.removeLater(client, keys, requestId, attempt + 1);
-          }
-        },
-      );
+      this.removalTimers.delete(settle);
+      void Promise.resolve()
+        .then(() => Promise.all(keys.map((key) => client.zrem(key, requestId))))
+        .then(
+          () => {
+            this.reportRecovered();
+            settle();
+            return true;
+          },
+          () => {
+            recordRedisUnavailable('concurrency');
+            if (attempt < LEASE_REMOVAL_ATTEMPTS && !this.stopping) {
+              this.removeLater(
+                client,
+                keys,
+                requestId,
+                attempt + 1,
+                settle,
+                shutdownStartedAtForRetry,
+              );
+            } else {
+              settle();
+            }
+            return false;
+          },
+        );
     }, LEASE_REMOVAL_RETRY_MS);
+    this.removalTimers.set(settle, timer);
     timer.unref();
   }
 
