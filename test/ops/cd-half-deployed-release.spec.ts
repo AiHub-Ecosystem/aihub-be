@@ -10,6 +10,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { bashExecutable } from '../support/bash';
+
 // A re-run of a half-deployed release must finish it, and a failed attempt must
 // not leave the scheduled host jobs suspended (#1381, #1382). The remote script
 // of the host-jobs step is run against stand-ins for the deploy helper and the
@@ -74,7 +76,7 @@ function runHostJobsStep(
         'Report active tier revisions',
       ),
     );
-    const result = spawnSync('bash', ['-se'], {
+    const result = spawnSync(bashExecutable(), ['-se'], {
       input: script,
       encoding: 'utf8',
       env: {

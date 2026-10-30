@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import {
-  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -8,11 +7,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
 
 import { isRecord } from '@/common/is-record';
 import { ALLOWED_EXTENSIONS } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
+
+import { bashExecutable } from '../support/bash';
 
 import {
   type DeliberateOptionals,
@@ -40,21 +41,21 @@ const helper = join(
   'speaking-gateway-smoke.sh',
 );
 
-const STUB_CURL = `#!/usr/bin/env bash
-set -euo pipefail
-config=''
-response=''
-while (($#)); do
-  case "$1" in
-    --config) config=$2; shift 2 ;;
-    --output) response=$2; shift 2 ;;
-    --write-out) shift 2 ;;
-    *) shift ;;
-  esac
-done
-cp -- "$config" "$AIHUB_SMOKE_CAPTURE_FILE"
-: >"$response"
-printf '200'
+const STUB_CURL = `curl() {
+  local config=''
+  local response=''
+  while (($#)); do
+    case "$1" in
+      --config) config=$2; shift 2 ;;
+      --output) response=$2; shift 2 ;;
+      --write-out) shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  cp -- "$config" "$AIHUB_SMOKE_CAPTURE_FILE"
+  : >"$response"
+  printf '200'
+}
 `;
 
 /** Runs the real helper against a stub curl and returns the config it wrote. */
@@ -64,25 +65,31 @@ function runHelper(): string {
     const bin = join(root, 'bin');
     mkdirSync(bin);
     writeFileSync(join(bin, 'curl'), STUB_CURL);
-    chmodSync(join(bin, 'curl'), 0o755);
     writeFileSync(join(root, 'api-key'), 'test-api-key\n');
     writeFileSync(join(root, 'identity'), 'smoke-user\n');
     writeFileSync(join(root, 'audio.wav'), '');
     const capture = join(root, 'captured-config');
-    const pathKey =
-      Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ??
-      'PATH';
-    const result = spawnSync('bash', [helper, join(root, 'audio.wav')], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`,
-        TMPDIR: root,
-        AIHUB_API_KEY_FILE: join(root, 'api-key'),
-        AIHUB_USER_IDENTITY_FILE: join(root, 'identity'),
-        AIHUB_SMOKE_CAPTURE_FILE: capture,
+    const result = spawnSync(
+      bashExecutable(),
+      [
+        '-c',
+        'source "$1/curl"; source "$2" "$3"',
+        'bash',
+        bin,
+        helper,
+        join(root, 'audio.wav'),
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          TMPDIR: root,
+          AIHUB_API_KEY_FILE: join(root, 'api-key'),
+          AIHUB_USER_IDENTITY_FILE: join(root, 'identity'),
+          AIHUB_SMOKE_CAPTURE_FILE: capture,
+        },
       },
-    });
+    );
     if (result.status !== 0) {
       throw new Error(`helper failed: ${result.stderr}`);
     }
