@@ -12,7 +12,10 @@ import type {
   ConcurrencyLimiterPort,
   ConcurrencyRequest,
 } from '@/modules/gateway/application/concurrency-limiter.port';
-import type { RedisGatewayClient } from './redis-gateway.client';
+import {
+  REDIS_COMMAND_TIMEOUT_MS,
+  type RedisGatewayClient,
+} from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<
   RedisGatewayClient,
@@ -23,7 +26,10 @@ export type RedisConcurrencyClient = Pick<
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 export const CONCURRENCY_STALE_LEASE_MS = 120_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
-const LEASE_REMOVAL_ATTEMPTS = 5;
+const LEASE_REMOVAL_ATTEMPTS = Math.floor(
+  (CONCURRENCY_STALE_LEASE_MS - LEASE_REMOVAL_RETRY_MS) /
+    (LEASE_REMOVAL_RETRY_MS + REDIS_COMMAND_TIMEOUT_MS),
+);
 
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
 local server_time = redis.call('TIME')
@@ -159,8 +165,8 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     };
   }
 
-  // ponytail: a few timed retries, not a durable queue. A lease they miss
-  // still expires through the stale-lease prune after CONCURRENCY_STALE_LEASE_MS.
+  // Retries are budgeted against the stale window, including command timeouts.
+  // shortcut: process exit ends retries; a later acquire prunes expired leases.
   private removeLater(
     client: RedisConcurrencyClient,
     keys: readonly string[],

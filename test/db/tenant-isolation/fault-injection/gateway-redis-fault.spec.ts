@@ -192,13 +192,17 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
 
 // Only a refused connection loses the release: a slow or held ZREM still
 // reaches Redis once the link recovers, so it would pass without the fix.
-it('frees a permit whose release was lost to a refused connection once Redis returns', async () => {
+it('frees a permit after Redis returns beyond the bounded retry attempts', async () => {
   const limiter = new RedisConcurrencyLimiter(client, NOOP_LOGGER);
   const organization = organizationId();
   await redisAnswers(client);
-  const decision = await limiter.acquire(concurrencyRequest(organization));
+  const decision = await limiter.acquire({
+    ...concurrencyRequest(organization),
+    maxConcurrent: 1,
+  });
   if (!decision.allowed) throw new Error('lease was not granted');
   expect(await inflight(raw, organization)).toBe(1);
+  const failuresBefore = await redisUnavailableCount('concurrency');
 
   await proxy.setMode('refuse');
   const release = await timed(() => decision.lease.release());
@@ -207,10 +211,26 @@ it('frees a permit whose release was lost to a refused connection once Redis ret
   expect(release.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
   expect(await inflight(raw, organization)).toBe(1);
 
+  // One initial release failure plus six failed retries proves that cleanup
+  // continues past the previous five-attempt limit.
+  await eventually(
+    async () =>
+      (await redisUnavailableCount('concurrency')) > failuresBefore + 6,
+    LEASE_REMOVAL_RETRY_MS * 12,
+  );
+
   await proxy.setMode('normal');
   await redisAnswers(client);
   await eventually(
     async () => (await inflight(raw, organization)) === 0,
     LEASE_REMOVAL_RETRY_MS * 3,
   );
-});
+
+  const recovered = await limiter.acquire({
+    ...concurrencyRequest(organization),
+    maxConcurrent: 1,
+  });
+  expect(recovered.allowed).toBe(true);
+  if (recovered.allowed) await recovered.lease.release();
+  expect(await inflight(raw, organization)).toBe(0);
+}, 20_000);
