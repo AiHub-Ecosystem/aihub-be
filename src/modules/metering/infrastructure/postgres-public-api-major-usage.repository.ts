@@ -248,14 +248,14 @@ export class PostgresPublicApiMajorUsageRepository
       if (applied.length === 0) {
         return;
       }
-      if (write.droppedFrom !== null && write.droppedThrough !== null) {
+      if (write.dropped !== null) {
         await transaction.$executeRawUnsafe(
           PUBLIC_API_MAJOR_DROPPED_INTERVAL_ADD_SQL,
           collector.processId,
           write.batch,
           environment,
-          write.droppedFrom,
-          write.droppedThrough,
+          write.dropped.from,
+          write.dropped.through,
         );
       }
       if (rows.length > 0) {

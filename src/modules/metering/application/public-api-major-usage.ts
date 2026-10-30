@@ -55,8 +55,7 @@ export interface PublicApiMajorUnattributedRow {
 export interface PublicApiMajorUsageBatch {
   readonly rows: readonly PublicApiMajorUsageRow[];
   readonly unattributed: readonly PublicApiMajorUnattributedRow[];
-  readonly droppedFrom: Date | null;
-  readonly droppedThrough: Date | null;
+  readonly dropped: { readonly from: Date; readonly through: Date } | null;
 }
 
 /** One running process, identified only for its own collection record. */
@@ -189,10 +188,11 @@ export class PublicApiMajorUsageError extends Error {
 const DAY = /^\d{4}-\d{2}-\d{2}$/u;
 
 /**
- * In a 768 MiB Node 22.23.2 container, a 30-day outage workload (4,096
- * Organizations × 10 requests/day) retained one pending and one active batch
- * of 16,384 keys each: +10.56 MiB heap and 104.23 MiB RSS after 1,228,800
- * requests. This keeps bounded retention well below the app limit.
+ * Docker 768 MiB run measured ~259 uncapped bytes/key (median, 8,192–16,384)
+ * and 4.07 MiB heap at 16,384 keys. During 1,228,800 outage requests, a process
+ * retained up to 2 × 16,384 keys (one pending batch and one live buffer):
+ * +9.01 MiB heap, 80.52 MiB RSS, and 1,065,040 drops. Reproduce with
+ * scripts/ops/measure-public-api-major-usage-buffer.mjs.
  */
 export const PUBLIC_API_MAJOR_USAGE_MAX_KEYS = 16_384;
 
@@ -202,8 +202,8 @@ function dayOf(date: Date): string {
 
 /**
  * In-process counts waiting for the next flush. A request is one `Map`
- * increment, so recording never waits on the database. A crash loses at most
- * one flush interval of adoption counts; nothing here is billing evidence.
+ * increment, so recording never waits on the database. Saturation drops are
+ * reported when the batch is durably written; this is adoption evidence only.
  */
 export class PublicApiMajorUsageBuffer {
   private rows = new Map<string, PublicApiMajorUsageRow>();
@@ -251,12 +251,14 @@ export class PublicApiMajorUsageBuffer {
     }
   }
 
-  drain(coveredThrough: Date = new Date()): PublicApiMajorUsageBatch {
+  drain(coveredThrough: Date): PublicApiMajorUsageBatch {
     const drained = {
       rows: [...this.rows.values()],
       unattributed: [...this.unattributed.values()],
-      droppedFrom: this.droppedFrom ?? null,
-      droppedThrough: this.droppedFrom === undefined ? null : coveredThrough,
+      dropped:
+        this.droppedFrom === undefined
+          ? null
+          : { from: this.droppedFrom, through: coveredThrough },
     };
     this.rows = new Map();
     this.unattributed = new Map();
@@ -419,9 +421,7 @@ export function buildPublicApiMajorReport(
         collectors: input.collectors.filter(
           (row) => row.environment === environment,
         ),
-        droppedIntervals: input.droppedIntervals.filter(
-          (interval) => interval.environment === environment,
-        ),
+        droppedIntervals: input.droppedIntervals,
       }),
     ),
     majors,

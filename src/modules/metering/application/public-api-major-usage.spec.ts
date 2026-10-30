@@ -38,7 +38,7 @@ describe('PublicApiMajorUsageBuffer', () => {
       at: at('2026-10-28T12:00:00Z'),
     });
 
-    expect(buffer.drain().rows).toEqual([
+    expect(buffer.drain(at('2026-10-29T00:00:00Z')).rows).toEqual([
       {
         usageDay: '2026-10-28',
         major: 1,
@@ -75,12 +75,11 @@ describe('PublicApiMajorUsageBuffer', () => {
       at: at('2026-10-28T10:00:00Z'),
     });
 
-    expect(buffer.drain().rows).toHaveLength(1);
-    expect(buffer.drain()).toEqual({
+    expect(buffer.drain(at('2026-10-28T10:01:00Z')).rows).toHaveLength(1);
+    expect(buffer.drain(at('2026-10-28T10:02:00Z'))).toEqual({
       rows: [],
       unattributed: [],
-      droppedFrom: null,
-      droppedThrough: null,
+      dropped: null,
     });
   });
 
@@ -120,15 +119,16 @@ describe('PublicApiMajorUsageBuffer', () => {
     expect(drained.rows).toHaveLength(16_383);
     expect(drained.unattributed).toHaveLength(1);
     expect(drained.rows[0]?.requestCount).toBe(2);
-    expect(drained.droppedFrom).toEqual(at('2026-10-28T10:01:00Z'));
-    expect(drained.droppedThrough).toEqual(at('2026-10-28T10:03:00Z'));
+    expect(drained.dropped).toEqual({
+      from: at('2026-10-28T10:01:00Z'),
+      through: at('2026-10-28T10:03:00Z'),
+    });
     expect(drops).toBe(2);
 
     sample('org_after_drain');
-    expect(buffer.drain()).toMatchObject({
+    expect(buffer.drain(at('2026-10-28T10:04:00Z'))).toMatchObject({
       rows: [expect.objectContaining({ organizationId: 'org_after_drain' })],
-      droppedFrom: null,
-      droppedThrough: null,
+      dropped: null,
     });
   });
 });
@@ -178,7 +178,7 @@ describe('PublicApiMajorUsageBuffer unattributed breakdown', () => {
       at: at('2026-10-28T10:00:00Z'),
     });
 
-    expect(buffer.drain().unattributed).toEqual([
+    expect(buffer.drain(at('2026-10-28T10:01:00Z')).unattributed).toEqual([
       {
         usageDay: '2026-10-28',
         major: 1,

@@ -41,16 +41,30 @@ its writes. A write that fails is kept whole and sent again, under its number,
 before newer counts. The database may have committed it before the connection
 dropped, and `applied_batch` on the process row records the last number it
 committed, so a retried write is added only once. Writes keep retrying while
-the database refuses them; the counts wait in memory until one succeeds. Every write also records the process in
-`public_api_major_usage_coverage`, in the same transaction, even when there was
-nothing to count. A process row means that every request the process served
-between `started_at` and `covered_through` is counted.
+the database refuses them. Each process has one live buffer capped at 16,384
+distinct keys across attributed and unattributed samples; the flusher can also
+hold one pending batch, so a process can retain up to 2 × 16,384 keys. At the
+cap, samples that need a new key are dropped and counted by
+`aihub_public_api_major_usage_samples_dropped_total`; samples for existing keys
+continue to aggregate. The response hook only updates the in-process buffer;
+database I/O stays in the scheduled flusher.
+
+When a batch containing drops is successfully written, its dropped interval is
+stored with the counts and collection record in the same transaction. Retries
+use the same write number, so an interval is written only once. The report
+marks every UTC day touched by a stored dropped interval inconclusive. Every
+successful write also advances the process row in
+`public_api_major_usage_coverage`, including writes with no counts.
 
 On shutdown the process waits for a write in flight, then writes the rest and
 records `stopped_cleanly_at`, giving up after 10 seconds. A process that dies,
-or whose last write fails or times out, keeps `stopped_cleanly_at` empty. It
-loses only what it had not yet written: at most one interval while writes were
-succeeding, more if the database had been refusing them.
+or whose last write fails or times out, keeps `stopped_cleanly_at` empty.
+
+There is a known limit: if the process dies after dropping samples but before
+its next successful write persists the dropped interval, that interval is
+lost. Coverage then relies on the existing 5-minute gap rule, so a burst above
+the cap within one 30-second flush followed by a crash within 5 minutes can
+still produce a `complete` verdict.
 
 The report joins the process rows of an Environment. A stretch that no process
 covers, longer than 5 minutes, makes every UTC day it touches inconclusive.

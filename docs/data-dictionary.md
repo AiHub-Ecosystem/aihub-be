@@ -26,8 +26,8 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:d
 | SandboxAllowanceDefault            | gateway     | 2       |
 | SandboxAllowanceOverride           | gateway     | 3       |
 | PublicApiMajorUsage                | metering    | 7       |
-| PublicApiMajorUsageCoverage        | metering    | 6       |
-| PublicApiMajorUsageDroppedInterval | metering    | 5       |
+| PublicApiMajorUsageCoverage        | metering    | 7       |
+| PublicApiMajorUsageDroppedInterval | metering    | 6       |
 | PublicApiMajorUnattributedUsage    | metering    | 6       |
 | DispatchAttempt                    | metering    | 7       |
 | SpeakingAudioAsset                 | speaking    | 9       |
@@ -368,26 +368,28 @@ Owner: `metering`
 
 Owner: `metering`
 
-| Column           | Type      | Attributes                                    |
-| ---------------- | --------- | --------------------------------------------- |
-| processId        | String    | @id @map("process_id") @db.Uuid               |
-| environment      | String    |                                               |
-| startedAt        | DateTime  | @map("started_at") @db.Timestamptz(6)         |
-| coveredThrough   | DateTime  | @map("covered_through") @db.Timestamptz(6)    |
-| stoppedCleanlyAt | DateTime? | @map("stopped_cleanly_at") @db.Timestamptz(6) |
-| appliedBatch     | BigInt    | @default(0) @map("applied_batch")             |
+| Column           | Type                                 | Attributes                                    |
+| ---------------- | ------------------------------------ | --------------------------------------------- |
+| processId        | String                               | @id @map("process_id") @db.Uuid               |
+| environment      | String                               |                                               |
+| startedAt        | DateTime                             | @map("started_at") @db.Timestamptz(6)         |
+| coveredThrough   | DateTime                             | @map("covered_through") @db.Timestamptz(6)    |
+| stoppedCleanlyAt | DateTime?                            | @map("stopped_cleanly_at") @db.Timestamptz(6) |
+| appliedBatch     | BigInt                               | @default(0) @map("applied_batch")             |
+| droppedIntervals | PublicApiMajorUsageDroppedInterval[] |                                               |
 
 ## PublicApiMajorUsageDroppedInterval
 
 Owner: `metering`
 
-| Column         | Type     | Attributes                                 |
-| -------------- | -------- | ------------------------------------------ |
-| processId      | String   | @map("process_id") @db.Uuid                |
-| batch          | BigInt   |                                            |
-| environment    | String   |                                            |
-| droppedFrom    | DateTime | @map("dropped_from") @db.Timestamptz(6)    |
-| droppedThrough | DateTime | @map("dropped_through") @db.Timestamptz(6) |
+| Column         | Type                        | Attributes                                                                                                                                                |
+| -------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| processId      | String                      | @map("process_id") @db.Uuid                                                                                                                               |
+| batch          | BigInt                      |                                                                                                                                                           |
+| environment    | String                      |                                                                                                                                                           |
+| droppedFrom    | DateTime                    | @map("dropped_from") @db.Timestamptz(6)                                                                                                                   |
+| droppedThrough | DateTime                    | @map("dropped_through") @db.Timestamptz(6)                                                                                                                |
+| coverage       | PublicApiMajorUsageCoverage | @relation(fields: [processId], references: [processId], onDelete: Cascade, onUpdate: NoAction, map: "public_api_major_usage_dropped_interval_process_fk") |
 
 ## PublicApiMajorUnattributedUsage
 

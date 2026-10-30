@@ -29,6 +29,7 @@
     "test:monitoring-config": "node --test scripts/ops/monitoring/check-monitoring-config.spec.cjs scripts/ops/monitoring/update-alert-rules-fingerprint.spec.mjs",
     "check:monitoring-config": "node scripts/ops/monitoring/check-monitoring-config.cjs",
     "benchmark:control-plane": "node scripts/ops/capacity-benchmark/benchmark-control-plane.mjs",
+    "measure:public-api-major-usage-buffer": "node --expose-gc scripts/ops/measure-public-api-major-usage-buffer.mjs",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault/vault-smoke.mjs",
     "test": "node scripts/generate/generate-prisma-client.mjs --runtime && jest",

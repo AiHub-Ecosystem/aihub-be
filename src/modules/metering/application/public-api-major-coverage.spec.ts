@@ -153,4 +153,23 @@ describe('assessPublicApiMajorCoverage', () => {
       uncleanExitDays: [],
     });
   });
+
+  it('marks the day of a point loss interval inconclusive', () => {
+    expect(
+      assess(
+        [collector('2026-09-30T00:00:00Z', '2026-10-04T00:00:00Z')],
+        '2026-10-04T00:00:00Z',
+        [
+          {
+            environment: 'production',
+            droppedFrom: at('2026-10-02T12:00:00Z'),
+            droppedThrough: at('2026-10-02T12:00:00Z'),
+          },
+        ],
+      ),
+    ).toMatchObject({
+      verdict: 'inconclusive',
+      inconclusiveDays: ['2026-10-02'],
+    });
+  });
 });

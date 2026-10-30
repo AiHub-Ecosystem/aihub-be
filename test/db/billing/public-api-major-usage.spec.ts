@@ -63,8 +63,7 @@ const write = (
   batch: ++batches,
   coveredThrough: new Date('2026-10-28T10:00:30Z'),
   stoppedCleanly: false,
-  droppedFrom: null,
-  droppedThrough: null,
+  dropped: null,
   ...overrides,
 });
 
@@ -150,8 +149,10 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
     ];
     const committed = write([row()], {
       unattributed,
-      droppedFrom: new Date('2026-10-28T10:00:10Z'),
-      droppedThrough: new Date('2026-10-28T10:00:30Z'),
+      dropped: {
+        from: new Date('2026-10-28T10:00:10Z'),
+        through: new Date('2026-10-28T10:00:30Z'),
+      },
     });
     await repository.add('production', committed);
     await repository.add('production', committed);
@@ -236,8 +237,10 @@ describe('PostgresPublicApiMajorUsageRepository', () => {
               failureCount: 1,
             },
           ],
-          droppedFrom: new Date('2026-10-28T10:00:10Z'),
-          droppedThrough: new Date('2026-10-28T10:00:30Z'),
+          dropped: {
+            from: new Date('2026-10-28T10:00:10Z'),
+            through: new Date('2026-10-28T10:00:30Z'),
+          },
         },
       ),
     );

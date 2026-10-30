@@ -177,6 +177,7 @@ aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-op
 aihub_rejected_total{reason}                         counter
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total{seam}                   counter
+aihub_public_api_major_usage_samples_dropped_total     counter
 aihub_process_resident_memory_bytes
 aihub_process_heap_used_bytes
 aihub_event_loop_lag_seconds

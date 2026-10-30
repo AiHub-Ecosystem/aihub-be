@@ -1,18 +1,15 @@
 /**
  * The longest stretch with no collecting process that still counts as
- * complete. A process that dies loses only what it had not yet written, at most
- * one flush interval, and a replacement starts within this tolerance; a longer
- * stretch cannot be told apart from lost counts (ADR-0127, #1376).
+ * complete. Persisted dropped-sample intervals are inconclusive on their own;
+ * an unpersisted interval falls back to this gap rule (ADR-0136).
  */
 export const PUBLIC_API_MAJOR_COVERAGE_TOLERANCE_MS = 5 * 60 * 1000;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * One process's collection: every request it served between `startedAt` and
- * `coveredThrough` is durably counted. A failed write keeps its counts for the
- * next one, so a process's coverage never has a hole; only its death can lose
- * counts, which is why a process is one stretch and not many.
+ * One process's collection window. Dropped samples are separately recorded by
+ * interval; coverage alone does not prove those samples were counted.
  */
 export interface PublicApiMajorCollectorRow {
   readonly environment: string;
@@ -48,6 +45,20 @@ function dayOf(time: number): string {
 
 function startOf(day: string): number {
   return Date.parse(`${day}T00:00:00Z`);
+}
+
+function addInconclusiveDays(
+  days: Set<string>,
+  from: number,
+  through: number,
+): void {
+  if (from === through) {
+    days.add(dayOf(from));
+    return;
+  }
+  for (let day = startOf(dayOf(from)); day < through; day += DAY_MS) {
+    days.add(dayOf(day));
+  }
 }
 
 function uncoveredStretches(
@@ -92,22 +103,14 @@ export function assessPublicApiMajorCoverage(input: {
   const days = new Set<string>();
   for (const gap of uncoveredStretches(input.collectors, from, to)) {
     if (gap.to - gap.from <= PUBLIC_API_MAJOR_COVERAGE_TOLERANCE_MS) continue;
-    for (let day = startOf(dayOf(gap.from)); day < gap.to; day += DAY_MS) {
-      days.add(dayOf(day));
-    }
+    addInconclusiveDays(days, gap.from, gap.to);
   }
   for (const interval of input.droppedIntervals) {
     if (interval.environment !== input.environment) continue;
     const lossFrom = Math.max(interval.droppedFrom.getTime(), from);
     const lossThrough = Math.min(interval.droppedThrough.getTime(), to);
-    if (lossFrom === lossThrough && lossFrom >= from && lossFrom < to) {
-      days.add(dayOf(lossFrom));
-      continue;
-    }
-    if (lossFrom >= lossThrough) continue;
-    for (let day = startOf(dayOf(lossFrom)); day < lossThrough; day += DAY_MS) {
-      days.add(dayOf(day));
-    }
+    if (lossFrom > lossThrough || lossFrom >= to) continue;
+    addInconclusiveDays(days, lossFrom, lossThrough);
   }
 
   const staleBefore =

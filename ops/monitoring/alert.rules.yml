@@ -59,6 +59,18 @@ groups:
           description: "{{ $labels.job }} instance {{ $labels.instance }} used at least 1.2 CPU for five minutes."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#process-cpu
 
+      - alert: AIHUBPublicApiMajorUsageSamplesDropped
+        expr: sum by (job) (increase(aihub_public_api_major_usage_samples_dropped_total{job=~"aihub-(production|sandbox)-app"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "Public API major usage samples were dropped"
+          description: "{{ $labels.job }} dropped {{ $value }} adoption samples in the last five minutes; review the buffer saturation and adoption report."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/public-api-major-adoption.md#how-collection-gaps-show
+
   - name: aihub-postgres-and-redis
     rules:
       - alert: AIHUBPostgresConnectionsAboveBudget
@@ -184,7 +196,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "5d22d6d92edc9684a0ad85874e89abf1dff1fe2ae91897afd6a0e29b348f347b"
+          rules_sha256: "7457005c8c6635e7a46c58ada714b0f0d4940c1b8ad28bda9423f6d545fa1d82"
 
   - name: aihub-email-outbox
     rules:

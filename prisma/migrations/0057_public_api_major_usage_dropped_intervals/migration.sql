@@ -18,4 +18,4 @@ CREATE TABLE public_api_major_usage_dropped_interval (
 );
 
 CREATE INDEX public_api_major_usage_dropped_interval_window_idx
-  ON public_api_major_usage_dropped_interval (environment, dropped_from);
+  ON public_api_major_usage_dropped_interval (dropped_from);

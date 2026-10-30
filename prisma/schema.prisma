@@ -476,20 +476,24 @@ model PublicApiMajorUsageCoverage {
   stoppedCleanlyAt DateTime? @map("stopped_cleanly_at") @db.Timestamptz(6)
   /// The last write this process committed, so a retried one is not counted twice.
   appliedBatch     BigInt    @default(0) @map("applied_batch")
+  droppedIntervals PublicApiMajorUsageDroppedInterval[]
 
   @@map("public_api_major_usage_coverage")
 }
 
 /// A write batch that dropped samples while the in-process buffer was full.
+/// The batch, environment, and interval-order CHECK constraints are owned by migration 0057.
 /// @owner metering
 model PublicApiMajorUsageDroppedInterval {
-  processId     String   @map("process_id") @db.Uuid
-  batch         BigInt
-  environment   String
-  droppedFrom   DateTime @map("dropped_from") @db.Timestamptz(6)
+  processId      String                         @map("process_id") @db.Uuid
+  batch          BigInt
+  environment    String
+  droppedFrom    DateTime                       @map("dropped_from") @db.Timestamptz(6)
   droppedThrough DateTime @map("dropped_through") @db.Timestamptz(6)
+  coverage       PublicApiMajorUsageCoverage    @relation(fields: [processId], references: [processId], onDelete: Cascade, onUpdate: NoAction, map: "public_api_major_usage_dropped_interval_process_fk")
 
   @@id([processId, batch])
+  @@index([droppedFrom], map: "public_api_major_usage_dropped_interval_window_idx")
   @@map("public_api_major_usage_dropped_interval")
 }
 
