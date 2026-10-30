@@ -431,8 +431,18 @@ deployment.
 ### Storing the API key
 
 It is shown once and stored only as a SHA-256 hash. AIHUB cannot recover it.
-Keep it in your secret manager, never in source control. If it leaks, ask for
-a revoke and a replacement; revocation takes effect immediately.
+Keep it in your secret manager, never in source control. If it leaks, an active
+Organization owner or admin can replace it without contacting AIHUB:
+
+- `POST /v1/organizations/{organization_id}/api-keys/{api_key_id}/rotate`
+  creates a replacement with the same name, scopes, and expiry and revokes the
+  leaked key in one step, so there is no window in which both work. The new key
+  is shown once in that response.
+- `DELETE /v1/organizations/{organization_id}/api-keys/{api_key_id}` revokes the
+  key and issues no replacement; create one with
+  `POST /v1/organizations/{organization_id}/api-keys`.
+
+Prefer rotation: it leaves no gap for the clients that use the key.
 
 ---
 
@@ -650,8 +660,10 @@ Organization keys cannot call `POST /v1/sandbox/assertions`; that route remains
 restricted to the dedicated demo Organization. Use section 4 and `GET /docs`
 for the Writing request and response schemas.
 
-Sandbox dispatches are limited to 5 per Customer Organization per UTC calendar
-month by default and 500 across the entire Sandbox Environment per month. The
+Sandbox dispatches are limited per Customer Organization per UTC calendar month
+and to 500 across the entire Sandbox Environment per month. The default
+per-Organization allowance is 25 in October 2026, the month the allowance
+policy was deployed, and 5 in every month after it. The
 per-Organization allowance is shared by every key and both skills of that
 Organization, and an operator may replace it for a specific month; the global
 ceiling includes the demo Organization, so it may be exhausted before a
@@ -1186,29 +1198,50 @@ response that carries it also carries a `Retry-After` header with the same wait
 in whole seconds, rounded up, so a standard HTTP client or retry library can
 read it.
 
-AIHUB adds random jitter to these hints, so clients refused at the same moment
-are not all told to come back at the same instant:
+These are all the refusals that can carry a hint. A code outside the table never
+does: `AI_SERVICE_TIMEOUT` and `AI_SERVICE_THROTTLED` carry none, so use your
+own backoff there. A row marked "when" carries the hint only in that case, so
+read the field when present and fall back to your own backoff when it is
+missing. A hint that AIHUB spreads with random jitter arrives with a different
+value for each client, so clients refused at the same moment are not all told to
+come back at the same instant:
 
-| Refusal                                                                                      | `retry_after_ms`                                                                |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `RATE_LIMITED` (per-key rate)                                                                | Until your key's window resets, plus 0–999 ms                                   |
-| `RATE_LIMITED` (same-key retry budget)                                                       | 60 s, plus 0–999 ms                                                             |
-| `CONCURRENCY_LIMIT`                                                                          | 500–999 ms                                                                      |
-| `IDEMPOTENCY_CONFLICT` (request in flight)                                                   | 2000–2999 ms                                                                    |
-| `QUOTA_EXCEEDED`                                                                             | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset |
-| `REDIS_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `*_STORAGE_UNAVAILABLE`, `AUTH_ARGON2_CAPACITY` | 1000–1999 ms                                                                    |
-| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                                | 1000–1999 ms                                                                    |
-| `IDENTITY_PROVIDER_UNAVAILABLE` (JWKS unreachable)                                           | The remaining cooldown (30 s after a cold failure), plus 0–999 ms               |
+| Refusal                                                                            | `retry_after_ms`                                                                                                                       |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `RATE_LIMITED` (per-key rate)                                                      | Until your key's window resets, plus 0–999 ms                                                                                          |
+| `RATE_LIMITED` (same-key retry budget)                                             | 60 s, plus 0–999 ms                                                                                                                    |
+| `RATE_LIMITED` (API key authentication failures)                                   | 5 minutes: the window of 20 failures                                                                                                   |
+| `RATE_LIMITED` (account sign-in, verification, password recovery)                  | Until the longest exhausted window resets; when AIHUB knows no wait, neither the field nor `Retry-After` is sent                       |
+| `RATE_LIMITED` (Organization invitations)                                          | Until the exhausted window resets (15 minutes or 24 hours); absent when AIHUB knows no wait                                            |
+| `RATE_LIMITED` (Writing chart uploads)                                             | 1 hour, the whole rolling window                                                                                                       |
+| `CONCURRENCY_LIMIT`                                                                | 500–999 ms                                                                                                                             |
+| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                      | 1000–1999 ms                                                                                                                           |
+| `IDEMPOTENCY_CONFLICT` (request in flight)                                         | 2000–2999 ms                                                                                                                           |
+| `QUOTA_EXCEEDED`                                                                   | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset                                                        |
+| `REDIS_UNAVAILABLE`                                                                | 1000–1999 ms                                                                                                                           |
+| `DATABASE_UNAVAILABLE`                                                             | 1000–1999 ms                                                                                                                           |
+| `AVATAR_STORAGE_UNAVAILABLE`                                                       | 1000–1999 ms                                                                                                                           |
+| `SPEAKING_AUDIO_STORAGE_UNAVAILABLE`                                               | 1000–1999 ms                                                                                                                           |
+| `WRITING_CHART_STORAGE_UNAVAILABLE`                                                | 1000–1999 ms                                                                                                                           |
+| `AUTH_ARGON2_CAPACITY`                                                             | 1000–1999 ms                                                                                                                           |
+| `EMAIL_DELIVERY_BACKLOGGED`                                                        | The time the oldest waiting email has left before its link expires, between 30 seconds and 15 minutes, plus 0–999 ms                   |
+| `IDENTITY_PROVIDER_UNAVAILABLE` (when the JWKS source is in a cooldown)            | The remaining cooldown (30 s after a cold failure), plus 0–999 ms; absent when the identity configuration store is the cause           |
+| `AI_SERVICE_UNAVAILABLE` (when AIHUB has stopped sending to the AI service)        | The time left before AIHUB tries the AI service again, at most 30 s; absent when the AI service itself refused or could not be reached |
+| `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`) | That wait, read from the AI service's `Retry-After`; absent for any other status                                                       |
+
+Every row with a hint also sends `Retry-After`. The header and the field never
+disagree: the header is the field rounded up to whole seconds.
 
 Outage refusals carry a spread hint too. Honour it rather than retrying on a
 fixed interval: clients that all retry one second after an outage arrive
 together and can overload a dependency that has just recovered.
 
 The quota offset is fixed per Organization, so Organizations stopped by their
-quota do not all return at 00:00 UTC on the 1st. Other errors,
-`AI_SERVICE_TIMEOUT` included, carry no hint; use your own backoff. A quota
-refusal is `retryable`, but only after that wait, so do not spend retry attempts
-on it.
+quota do not all return at 00:00 UTC on the 1st. A quota refusal is `retryable`,
+but only after that wait, so do not spend retry attempts on it.
+
+`RETRY_BUDGET_UNAVAILABLE` is not in the table because AIHUB no longer returns
+it; a Redis failure while checking graded admission is `REDIS_UNAVAILABLE`.
 
 The table below covers the customer-facing AI grading operations. It does not
 try to list every error from account, Organization, or other control-plane
