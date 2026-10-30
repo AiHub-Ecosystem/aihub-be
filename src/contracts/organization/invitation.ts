@@ -57,6 +57,18 @@ export type CreateOrganizationInvitationResponse = Static<
   typeof CreateOrganizationInvitationResponseSchema
 >;
 
+export const ListOpenOrganizationInvitationsQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.String()),
+    cursor: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export type ListOpenOrganizationInvitationsQuery = Static<
+  typeof ListOpenOrganizationInvitationsQuerySchema
+>;
+
 export const ListOpenOrganizationInvitationsResponseSchema = Type.Object(
   {
     data: Type.Object(
@@ -77,6 +89,7 @@ export const ListOpenOrganizationInvitationsResponseSchema = Type.Object(
             { additionalProperties: false },
           ),
         ),
+        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
       },
       { additionalProperties: false },
     ),

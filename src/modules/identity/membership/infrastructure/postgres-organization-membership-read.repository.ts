@@ -98,9 +98,9 @@ const MEMBERSHIP_LIST_ADMISSION = ORGANIZATION_READ_ADMISSION.membership_list;
 export const LIST_ORGANIZATION_MEMBERS_SQL = `
   SELECT
     authority.allowed AS authorized,
-    member_account.username AS member_username,
-    membership.role AS member_role,
-    membership.status AS member_status
+    page.member_username,
+    page.member_role,
+    page.member_status
   FROM (
     SELECT EXISTS (
       SELECT 1
@@ -118,13 +118,22 @@ export const LIST_ORGANIZATION_MEMBERS_SQL = `
         }
     ) AS allowed
   ) AS authority
-  LEFT JOIN organization_members AS membership
-    ON authority.allowed
-   AND membership.organization_id = $1
-   AND membership.status = $4
-  LEFT JOIN user_accounts AS member_account
-    ON member_account.id = membership.user_account_id
-  ORDER BY member_account.username ASC
+  LEFT JOIN LATERAL (
+    SELECT
+      member_account.username AS member_username,
+      membership.role AS member_role,
+      membership.status AS member_status
+    FROM organization_members AS membership
+    INNER JOIN user_accounts AS member_account
+      ON member_account.id = membership.user_account_id
+    WHERE authority.allowed
+      AND membership.organization_id = $1
+      AND membership.status = $4
+      AND ($5::text IS NULL OR member_account.username > $5)
+    ORDER BY member_account.username ASC
+    LIMIT $6
+  ) AS page ON true
+  ORDER BY page.member_username ASC NULLS LAST
 `;
 function mapMembershipRecord(
   value: unknown,
@@ -423,7 +432,11 @@ export class PostgresOrganizationMembershipReadRepository
       }) ||
       input.userId.trim().length === 0 ||
       input.organizationId.trim().length === 0 ||
-      (input.status !== 'active' && input.status !== 'disabled')
+      (input.status !== 'active' && input.status !== 'disabled') ||
+      !Number.isInteger(input.limit) ||
+      input.limit < 1 ||
+      (input.after !== undefined &&
+        (typeof input.after !== 'string' || input.after.trim().length === 0))
     ) {
       throw identityStoreError(
         'Identity organization membership input is invalid',
@@ -437,6 +450,8 @@ export class PostgresOrganizationMembershipReadRepository
         input.userId,
         admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
         input.status,
+        input.after ?? null,
+        input.limit,
       ]);
     } catch (error) {
       throw identityStoreUnavailable(error);

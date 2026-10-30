@@ -64,6 +64,7 @@ const requiredMethods = [
         userId: 'usr_actor',
         organizationId: 'org_acme',
         now,
+        limit: 100,
       }),
   },
   {

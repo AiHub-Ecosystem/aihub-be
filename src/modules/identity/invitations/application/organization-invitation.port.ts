@@ -47,6 +47,11 @@ export interface ListOpenOrganizationInvitationsInput {
   readonly userId: string;
   readonly organizationId: string;
   readonly now: Date;
+  readonly after?: {
+    readonly createdAt: Date;
+    readonly id: string;
+  };
+  readonly limit: number;
 }
 
 export interface RevokeOrganizationInvitationInput {

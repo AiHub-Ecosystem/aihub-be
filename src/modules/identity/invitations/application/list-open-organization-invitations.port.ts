@@ -1,12 +1,12 @@
 import type {
   ListOpenOrganizationInvitationsCommand,
-  ListedOrganizationInvitation,
+  OpenOrganizationInvitationPage,
 } from './list-open-organization-invitations';
 
 export interface ListOpenOrganizationInvitationsPort {
   list(
     input: ListOpenOrganizationInvitationsCommand,
-  ): Promise<readonly ListedOrganizationInvitation[]>;
+  ): Promise<OpenOrganizationInvitationPage>;
 }
 
 export const LIST_OPEN_ORGANIZATION_INVITATIONS = Symbol(

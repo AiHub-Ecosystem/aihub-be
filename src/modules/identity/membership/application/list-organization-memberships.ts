@@ -13,6 +13,13 @@ export interface ListOrganizationMembershipsCommand {
   readonly userId: string;
   readonly organizationId: string;
   readonly status: OrganizationMembershipStatus;
+  readonly after?: string;
+  readonly limit: number;
+}
+
+export interface OrganizationMembershipPage {
+  readonly members: readonly ListedOrganizationMember[];
+  readonly next?: string;
 }
 
 export class ListOrganizationMemberships {
@@ -20,11 +27,26 @@ export class ListOrganizationMemberships {
 
   async list(
     input: ListOrganizationMembershipsCommand,
-  ): Promise<readonly ListedOrganizationMember[]> {
-    const result = await this.membership.listOrganizationMembers(input);
+  ): Promise<OrganizationMembershipPage> {
+    const result = await this.membership.listOrganizationMembers({
+      context: input.context,
+      userId: input.userId,
+      organizationId: input.organizationId,
+      status: input.status,
+      ...(input.after === undefined ? {} : { after: input.after }),
+      limit: input.limit + 1,
+    });
     if (result.kind === 'denied') {
       throw forbidden(ORGANIZATION_READ_ADMISSION.membership_list.refusal);
     }
-    return result.members;
+    if (result.members.length <= input.limit) {
+      return { members: result.members };
+    }
+    const members = result.members.slice(0, input.limit);
+    const last = members[members.length - 1];
+    return {
+      members,
+      ...(last === undefined ? {} : { next: last.username }),
+    };
   }
 }

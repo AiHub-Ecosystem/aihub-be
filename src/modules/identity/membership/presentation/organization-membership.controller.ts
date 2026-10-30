@@ -18,7 +18,6 @@ import { parseRequestBody } from '@/common/http/parse-request-body';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
-  type OrganizationMembershipListQuery,
   OrganizationMembershipListQuerySchema,
   type OrganizationMembershipListResponse,
   type OrganizationMembershipMutationRequest,
@@ -38,7 +37,9 @@ import {
 } from '@/modules/identity/membership/application/organization-membership.port';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import { parseOrganizationMembershipQuery } from './organization-membership-query';
 
 @Controller()
 @UseGuards(UserAccessJwtGuard)
@@ -61,24 +62,34 @@ export class OrganizationMembershipController {
       request,
       organizationId,
     );
-    const query: OrganizationMembershipListQuery = parseRequestQuery(
+    const query = parseRequestQuery(
       OrganizationMembershipListQuerySchema,
       request.query,
     );
-    const members = await this.membershipList.list({
+    const { status, after, limit } = parseOrganizationMembershipQuery(
+      query,
+      organizationId,
+    );
+    const page = await this.membershipList.list({
       context,
       userId,
       organizationId,
-      status: query.status ?? 'active',
+      status,
+      ...(after === undefined ? {} : { after }),
+      limit,
     });
 
     return {
       data: {
-        members: members.map((member) => ({
+        members: page.members.map((member) => ({
           username: member.username,
           role: member.role,
           status: member.status,
         })),
+        next_cursor:
+          page.next === undefined
+            ? null
+            : encodeCursor({ username: page.next }, { organizationId, status }),
       },
       meta: { request_id: requestId },
     };

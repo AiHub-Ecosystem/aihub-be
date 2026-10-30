@@ -200,6 +200,7 @@ const requiredOrganizationContextEntryPoints: readonly RequiredOrganizationConte
           userId: membershipRow.user_account_id,
           organizationId: 'org_acme',
           status: 'active',
+          limit: 10,
         }),
     },
   ];

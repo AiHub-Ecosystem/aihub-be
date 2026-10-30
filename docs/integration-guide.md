@@ -982,6 +982,44 @@ Send `X-Correlation-Id` with your own trace id to stitch your logs to ours.
 Unknown fields in a request body are rejected rather than ignored, so a typo
 fails loudly instead of being silently dropped.
 
+### Collection pagination
+
+The Organization membership list (`GET /v1/organizations/{organization_id}/members`)
+and open invitation list (`GET /v1/organizations/{organization_id}/invitations`)
+are paginated using `limit` and `cursor` query parameters:
+
+- `limit` (optional integer): maximum items per page, from 1 to 500, default 100.
+  Values outside this range are rejected with `400 INVALID_REQUEST` rather than clamped.
+- `cursor` (optional string): an opaque continuation token returned as `data.next_cursor`
+  from a previous page.
+
+Both responses return `data.next_cursor`: a non-empty string when more rows
+exist, and `null` on the last page. To fetch all items, continue querying with
+`cursor=<next_cursor>` until `data.next_cursor` is `null`.
+
+```json
+{
+  "data": {
+    "invitations": [],
+    "next_cursor": "eyJ2IjoxLC..."
+  },
+  "meta": {
+    "request_id": "req_01J00000000000000000000000"
+  }
+}
+```
+
+A cursor represents a position in the collection order and never conveys authorization:
+caller permissions, tenant scope, and Organization active status are re-evaluated on
+every request. The cursor is bound to the Organization ID (and to the `status` filter for
+memberships); supplying a cursor issued for another Organization or different filter
+refuses the request with `400 INVALID_REQUEST`.
+
+Collection traversals are live reads, not point-in-time snapshots. Rows inserted before
+the current cursor position appear only after restarting the traversal from the beginning,
+and rows deleted, expired, or modified between requests may disappear from subsequent
+pages. Any row that remains unchanged throughout traversal is returned exactly once.
+
 ---
 
 ## 6. Idempotency

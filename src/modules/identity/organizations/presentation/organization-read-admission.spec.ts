@@ -437,6 +437,7 @@ describe('Organization read admission through the public route', () => {
             status: 'pending',
           },
         ],
+        next_cursor: null,
       },
       meta: { request_id: REQUEST_ID },
     });

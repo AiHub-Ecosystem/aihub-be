@@ -19,6 +19,8 @@ const OrganizationMembershipStatusSchema = Type.Union([
 export const OrganizationMembershipListQuerySchema = Type.Object(
   {
     status: Type.Optional(OrganizationMembershipStatusSchema),
+    limit: Type.Optional(Type.String()),
+    cursor: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -90,7 +92,10 @@ const OrganizationMembershipListMemberSchema = Type.Object(
 export const OrganizationMembershipListResponseSchema = Type.Object(
   {
     data: Type.Object(
-      { members: Type.Array(OrganizationMembershipListMemberSchema) },
+      {
+        members: Type.Array(OrganizationMembershipListMemberSchema),
+        next_cursor: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      },
       { additionalProperties: false },
     ),
     meta: Type.Object(

@@ -6,6 +6,16 @@ Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name under `Added` in
 the dated entry that introduced it.
 
+## [1.2.0] - 2026-10-30
+
+### Changed
+
+- The Organization membership list (`GET /v1/organizations/{organization_id}/members`)
+  and open invitation list (`GET /v1/organizations/{organization_id}/invitations`)
+  now return pages of up to 100 rows by default (maximum 500) with
+  `data.next_cursor`. Both endpoints accept optional `limit` and `cursor` query
+  parameters. See [#276](https://github.com/AiHub-Ecosystem/aihub-be/issues/276).
+
 ## [1.1.4] - 2026-10-29
 
 ### Changed

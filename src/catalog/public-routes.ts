@@ -75,6 +75,10 @@ import {
   RenameOrganizationResponseSchema,
 } from '@/contracts/organization/organization';
 import {
+  DEFAULT_COLLECTION_PAGE_SIZE,
+  MAX_COLLECTION_PAGE_SIZE,
+} from '@/contracts/organization/pagination';
+import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
 } from '@/contracts/sandbox/assertion';
@@ -630,7 +634,7 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: "List an organization's memberships",
       description:
-        'Active owners and admins may list active or disabled memberships for one active Organization. The filter defaults to active membership and does not depend on the member account status. Results are ordered by immutable username and omit account IDs and email addresses.',
+        'Active owners and admins may list active or disabled memberships for one active Organization, paginated by limit and an opaque cursor. The filter defaults to active membership and does not depend on the member account status. Results are ordered by immutable username ascending and omit account IDs and email addresses. A traversal is a live read, not a snapshot: rows added before the cursor appear after a restart, and rows that are removed or change status can disappear.',
       parameters: [
         {
           name: 'organization_id',
@@ -650,6 +654,27 @@ export const PUBLIC_ROUTES = {
             default: 'active',
           },
         },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          description:
+            'Members per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the collection.',
+          schema: {
+            type: 'integer',
+            minimum: 1,
+            maximum: MAX_COLLECTION_PAGE_SIZE,
+            default: DEFAULT_COLLECTION_PAGE_SIZE,
+          },
+        },
+        {
+          name: 'cursor',
+          in: 'query',
+          required: false,
+          description:
+            'Opaque position from a previous `next_cursor`. Bound to the organization and status filter it was issued under: replaying it under a different scope is rejected.',
+          schema: { type: 'string', minLength: 1 },
+        },
       ],
       successDescription: 'Organization memberships',
     },
@@ -667,6 +692,8 @@ export const PUBLIC_ROUTES = {
   'organizations.invitations.list': {
     openApi: {
       summary: "List an organization's open invitations",
+      description:
+        'Active owners and admins may list open, unexpired invitations for one active Organization, paginated by limit and an opaque cursor. Results are ordered by creation timestamp descending, tie-broken by invitation ID ascending. A traversal is a live read, not a snapshot: rows added before the cursor appear after a restart, and rows that are accepted, revoked, superseded, or expired can disappear.',
       parameters: [
         {
           name: 'organization_id',
@@ -674,6 +701,27 @@ export const PUBLIC_ROUTES = {
           required: true,
           description: 'The organization whose open invitations are listed.',
           schema: { $ref: '#/components/schemas/OrganizationId' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          description:
+            'Invitations per page. A value outside the range is rejected rather than clamped, because a silently shortened page is indistinguishable from the end of the collection.',
+          schema: {
+            type: 'integer',
+            minimum: 1,
+            maximum: MAX_COLLECTION_PAGE_SIZE,
+            default: DEFAULT_COLLECTION_PAGE_SIZE,
+          },
+        },
+        {
+          name: 'cursor',
+          in: 'query',
+          required: false,
+          description:
+            'Opaque position from a previous `next_cursor`. Bound to the organization it was issued under: replaying it under a different organization is rejected.',
+          schema: { type: 'string', minLength: 1 },
         },
       ],
       successDescription: 'Open organization invitations',
@@ -687,7 +735,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ListOpenOrganizationInvitationsResponseSchema,
-    errorStatuses: [401, 403, 500],
+    errorStatuses: [400, 401, 403, 500],
   },
   'organizations.invitations.create': {
     openApi: {

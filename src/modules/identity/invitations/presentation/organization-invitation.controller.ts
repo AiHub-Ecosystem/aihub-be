@@ -17,6 +17,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { parseRequestBody } from '@/common/http/parse-request-body';
+import { parseRequestQuery } from '@/common/http/parse-request-query';
 import {
   type AcceptOrganizationInvitationRequest,
   AcceptOrganizationInvitationRequestSchema,
@@ -24,6 +25,7 @@ import {
   type CreateOrganizationInvitationRequest,
   CreateOrganizationInvitationRequestSchema,
   type CreateOrganizationInvitationResponse,
+  ListOpenOrganizationInvitationsQuerySchema,
   type ListOpenOrganizationInvitationsResponse,
 } from '@/contracts/organization/invitation';
 import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
@@ -51,9 +53,10 @@ import {
   REVOKE_ORGANIZATION_INVITATION,
   type RevokeOrganizationInvitationPort,
 } from '@/modules/identity/invitations/application/revoke-organization-invitation.port';
-
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
+import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import { parseOrganizationInvitationQuery } from './organization-invitation-query';
 
 /**
  * ADR-0038 keeps a completed record replayable for its whole 24-hour
@@ -244,16 +247,26 @@ export class OrganizationInvitationController {
       request,
       organizationId,
     );
-    const invitations = await this.listOpenInvitations.list({
+    const query = parseRequestQuery(
+      ListOpenOrganizationInvitationsQuerySchema,
+      request.query,
+    );
+    const { after, limit } = parseOrganizationInvitationQuery(
+      query,
+      organizationId,
+    );
+    const page = await this.listOpenInvitations.list({
       context,
       userId,
       organizationId,
       now: context.receivedAt,
+      ...(after === undefined ? {} : { after }),
+      limit,
     });
 
     return {
       data: {
-        invitations: invitations.map((invitation) => ({
+        invitations: page.invitations.map((invitation) => ({
           invitation_id: invitation.invitationId,
           email: invitation.email,
           role: invitation.role,
@@ -262,6 +275,10 @@ export class OrganizationInvitationController {
           expires_at: invitation.expiresAt.toISOString(),
           status: invitation.status,
         })),
+        next_cursor:
+          page.next === undefined
+            ? null
+            : encodeCursor(page.next, { organizationId }),
       },
       meta: { request_id: requestId },
     };

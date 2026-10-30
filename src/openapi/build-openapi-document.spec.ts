@@ -568,12 +568,26 @@ describe('buildOpenApiDocument', () => {
         in: 'path',
         required: true,
       }),
+      expect.objectContaining({
+        name: 'limit',
+        in: 'query',
+        required: false,
+      }),
+      expect.objectContaining({
+        name: 'cursor',
+        in: 'query',
+        required: false,
+      }),
     ]);
     expect(operation?.requestBody).toBeUndefined();
     expect(operation?.responses['200']).toBeDefined();
+    expect(operation?.responses['400']).toBeDefined();
     expect(operation?.responses['401']).toBeDefined();
     expect(operation?.responses['403']).toBeDefined();
     expect(operation?.responses['500']).toBeDefined();
+    expect(JSON.stringify(operation?.responses['200'])).toContain(
+      'next_cursor',
+    );
     expect(JSON.stringify(operation?.responses['200'])).not.toContain(
       'token_hash',
     );
@@ -617,6 +631,26 @@ describe('buildOpenApiDocument', () => {
           type: 'string',
           enum: ['active', 'disabled'],
           default: 'active',
+        },
+      }),
+      expect.objectContaining({
+        name: 'limit',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 500,
+          default: 100,
+        },
+      }),
+      expect.objectContaining({
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'string',
+          minLength: 1,
         },
       }),
     ]);

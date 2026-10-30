@@ -10,6 +10,8 @@ export interface ListOrganizationMembersInput {
   readonly userId: string;
   readonly organizationId: string;
   readonly status: OrganizationMembershipStatus;
+  readonly after?: string;
+  readonly limit: number;
 }
 
 export interface ListedOrganizationMember {

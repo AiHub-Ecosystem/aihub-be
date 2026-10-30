@@ -12,6 +12,21 @@ export interface ListOpenOrganizationInvitationsCommand {
   readonly userId: string;
   readonly organizationId: string;
   readonly now: Date;
+  readonly after?: {
+    readonly createdAt: Date;
+    readonly id: string;
+  };
+  readonly limit: number;
+}
+
+export interface OpenOrganizationInvitationCursorPosition {
+  readonly createdAt: string;
+  readonly id: string;
+}
+
+export interface OpenOrganizationInvitationPage {
+  readonly invitations: readonly ListedOrganizationInvitation[];
+  readonly next?: OpenOrganizationInvitationCursorPosition;
 }
 
 export type ListedOrganizationInvitation = OpenOrganizationInvitationRecord & {
@@ -37,7 +52,7 @@ export class ListOpenOrganizationInvitations {
 
   async list(
     input: ListOpenOrganizationInvitationsCommand,
-  ): Promise<readonly ListedOrganizationInvitation[]> {
+  ): Promise<OpenOrganizationInvitationPage> {
     const admission = await admitOrganizationRead(this.membership, {
       surface: 'open_invitations',
       context: input.context,
@@ -53,8 +68,32 @@ export class ListOpenOrganizationInvitations {
       userId: input.userId,
       organizationId: input.organizationId,
       now: input.now,
+      ...(input.after === undefined ? {} : { after: input.after }),
+      limit: input.limit + 1,
     });
 
-    return records.map((record) => ({ ...record, status: 'pending' }));
+    const hasNext = records.length > input.limit;
+    const pageRecords = hasNext ? records.slice(0, input.limit) : records;
+    const invitations = pageRecords.map((record) => ({
+      ...record,
+      status: 'pending' as const,
+    }));
+
+    if (!hasNext) {
+      return { invitations };
+    }
+
+    const last = pageRecords[pageRecords.length - 1];
+    return {
+      invitations,
+      ...(last === undefined
+        ? {}
+        : {
+            next: {
+              createdAt: last.createdAt.toISOString(),
+              id: last.invitationId,
+            },
+          }),
+    };
   }
 }

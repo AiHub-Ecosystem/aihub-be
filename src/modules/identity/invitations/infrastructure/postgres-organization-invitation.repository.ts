@@ -271,7 +271,15 @@ export class PostgresOrganizationInvitationRepository
       input.userId.trim().length === 0 ||
       input.organizationId.trim().length === 0 ||
       !(input.now instanceof Date) ||
-      Number.isNaN(input.now.getTime())
+      Number.isNaN(input.now.getTime()) ||
+      typeof input.limit !== 'number' ||
+      !Number.isInteger(input.limit) ||
+      input.limit <= 0 ||
+      (input.after !== undefined &&
+        (!(input.after.createdAt instanceof Date) ||
+          Number.isNaN(input.after.createdAt.getTime()) ||
+          typeof input.after.id !== 'string' ||
+          input.after.id.trim().length === 0))
     ) {
       throw identityStoreError(
         'Identity organization invitation input is invalid',
@@ -282,15 +290,26 @@ export class PostgresOrganizationInvitationRepository
     // fails the whole list rather than silently dropping an actionable
     // invitation. `consumedAt` is the durable close signal for consumed,
     // superseded, and revoked invitations; expiry is evaluated against the
-    // application clock.
-    let rows: readonly unknown[];
+    // application clock. Keyset pagination orders by createdAt desc, id asc.
     try {
       const open = await this.client.organizationInvitation.findMany({
         where: {
           organizationId: input.organizationId,
           consumedAt: null,
           expiresAt: { gt: input.now },
+          ...(input.after !== undefined
+            ? {
+                OR: [
+                  { createdAt: { lt: input.after.createdAt } },
+                  {
+                    createdAt: input.after.createdAt,
+                    id: { gt: input.after.id },
+                  },
+                ],
+              }
+            : {}),
         },
+        take: input.limit,
         select: {
           id: true,
           email: true,
@@ -301,24 +320,20 @@ export class PostgresOrganizationInvitationRepository
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       });
-      rows = open.map(({ invitedByUser, ...invitation }) => ({
-        ...invitation,
-        invitedByUsername: invitedByUser.username,
-      }));
+      return open.map(({ invitedByUser, ...invitation }) => {
+        const item = mapOpenOrganizationInvitation({
+          ...invitation,
+          invitedByUsername: invitedByUser.username,
+        });
+        if (item === undefined) {
+          throw identityStoreError('Identity data is invalid');
+        }
+        return item;
+      });
     } catch (error) {
+      if (error instanceof AppError) throw error;
       throw identityStoreUnavailable(error);
     }
-
-    const invitations: OpenOrganizationInvitationRecord[] = [];
-    for (const row of rows) {
-      const invitation = mapOpenOrganizationInvitation(row);
-      if (invitation === undefined) {
-        throw identityStoreError('Identity data is invalid');
-      }
-      invitations.push(invitation);
-    }
-
-    return invitations;
   }
 
   async revokeInvitation(

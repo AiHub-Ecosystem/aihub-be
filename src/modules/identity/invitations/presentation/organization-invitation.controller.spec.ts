@@ -49,6 +49,7 @@ import {
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
@@ -600,6 +601,7 @@ describe('Organization invitation HTTP flow', () => {
             status: 'pending',
           },
         ],
+        next_cursor: null,
       },
       meta: { request_id: REQUEST_ID },
     });
@@ -629,7 +631,9 @@ describe('Organization invitation HTTP flow', () => {
     const response = await list();
 
     expect(response.statusCode).toBe(200);
-    const invitation = invitationListBody(response).data.invitations[0];
+    const body = invitationListBody(response);
+    expect(body.data.next_cursor).toBeNull();
+    const invitation = body.data.invitations[0];
     if (invitation === undefined) throw new Error('expected an invitation');
     expect(invitation).toMatchObject({
       role: 'member',
@@ -642,9 +646,113 @@ describe('Organization invitation HTTP flow', () => {
 
     expect(response.statusCode).toBe(200);
     expect(invitationListBody(response)).toEqual({
-      data: { invitations: [] },
+      data: { invitations: [], next_cursor: null },
       meta: { request_id: REQUEST_ID },
     });
+  });
+
+  it('accepts limit and cursor and returns next_cursor when another page exists', async () => {
+    const d1 = new Date('2026-09-21T12:00:00.000Z');
+    const d2 = new Date('2026-09-21T11:00:00.000Z');
+    const d3 = new Date('2026-09-21T10:00:00.000Z');
+
+    invitations.listOpenInvitations.mockResolvedValue([
+      {
+        invitationId: 'oiv_01J00000000000000000000001',
+        email: 'invitee1@example.com',
+        role: 'member',
+        invitedByUsername: 'owner',
+        createdAt: d1,
+        expiresAt: new Date(d1.getTime() + 86400000),
+      },
+      {
+        invitationId: 'oiv_01J00000000000000000000002',
+        email: 'invitee2@example.com',
+        role: 'member',
+        invitedByUsername: 'owner',
+        createdAt: d2,
+        expiresAt: new Date(d2.getTime() + 86400000),
+      },
+      {
+        invitationId: 'oiv_01J00000000000000000000003',
+        email: 'invitee3@example.com',
+        role: 'member',
+        invitedByUsername: 'owner',
+        createdAt: d3,
+        expiresAt: new Date(d3.getTime() + 86400000),
+      },
+    ]);
+
+    const cursor = encodeCursor(
+      {
+        createdAt: '2026-09-21T13:00:00.000Z',
+        id: 'oiv_01J00000000000000000000000',
+      },
+      { organizationId: ORGANIZATION_ID },
+    );
+
+    const response = await list(
+      { authorization: 'Bearer valid.token.value' },
+      `${INVITE_URL}?limit=2&cursor=${cursor}`,
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = invitationListBody(response);
+    expect(body.data.invitations).toHaveLength(2);
+    expect(body.data.next_cursor).toBe(
+      encodeCursor(
+        {
+          createdAt: d2.toISOString(),
+          id: 'oiv_01J00000000000000000000002',
+        },
+        { organizationId: ORGANIZATION_ID },
+      ),
+    );
+
+    const listInput = invitations.listOpenInvitations.mock.calls[0]?.[0];
+    expect(listInput?.limit).toBe(3);
+    expect(listInput?.after).toEqual({
+      createdAt: new Date('2026-09-21T13:00:00.000Z'),
+      id: 'oiv_01J00000000000000000000000',
+    });
+  });
+
+  it('rejects an invalid limit with 400 INVALID_REQUEST', async () => {
+    const response = await list(
+      { authorization: 'Bearer valid.token.value' },
+      `${INVITE_URL}?limit=0`,
+    );
+
+    expect(response.statusCode).toBe(400);
+    expectErrorCode(response, 'INVALID_REQUEST');
+  });
+
+  it('rejects an invalid cursor with 400 INVALID_REQUEST', async () => {
+    const response = await list(
+      { authorization: 'Bearer valid.token.value' },
+      `${INVITE_URL}?cursor=invalid-cursor`,
+    );
+
+    expect(response.statusCode).toBe(400);
+    expectErrorCode(response, 'INVALID_REQUEST');
+  });
+
+  it('rejects a cursor from another organization with 400 INVALID_REQUEST', async () => {
+    const cursor = encodeCursor(
+      {
+        createdAt: '2026-09-21T12:00:00.000Z',
+        id: 'oiv_01J00000000000000000000001',
+      },
+      { organizationId: 'org_other' },
+    );
+
+    const response = await list(
+      { authorization: 'Bearer valid.token.value' },
+      `${INVITE_URL}?cursor=${cursor}`,
+    );
+
+    expect(response.statusCode).toBe(400);
+    expectErrorCode(response, 'INVALID_REQUEST');
   });
 
   it('returns bodyless 204 when an owner revokes an invitation', async () => {

@@ -9,6 +9,7 @@ import { AppModule } from '@/app.module';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import {
+  OrganizationMembershipListResponseSchema,
   OrganizationMembershipMutationResponseSchema,
   OrganizationRosterResponseSchema,
 } from '@/contracts/organization/membership';
@@ -18,6 +19,7 @@ import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
+import type { OrganizationMembershipListPort } from '@/modules/identity/membership/application/organization-membership-list.port';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
   type OrganizationMembershipMutationPort,
@@ -28,6 +30,7 @@ import {
   type OrganizationMembershipPort,
   type OrganizationRosterOrganization,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 
 const ORGANIZATION_ROSTER_PATH =
   PUBLIC_ROUTES['organizations.me.members.list'].path;
@@ -40,6 +43,10 @@ const MUTATION_URL = `/v1/organizations/${ORGANIZATION_ID}/members/bob`;
 
 function rosterBody(response: { json(): unknown }) {
   return Value.Parse(OrganizationRosterResponseSchema, response.json());
+}
+
+function membersBody(response: { json(): unknown }) {
+  return Value.Parse(OrganizationMembershipListResponseSchema, response.json());
 }
 
 function mutationBody(response: { json(): unknown }) {
@@ -75,7 +82,9 @@ const roster: readonly OrganizationRosterOrganization[] = [
 
 describe('Organization membership HTTP flow', () => {
   let app: NestFastifyApplication;
-  let membership: jest.Mocked<OrganizationMembershipPort>;
+  let membership: jest.Mocked<
+    OrganizationMembershipPort & OrganizationMembershipListPort
+  >;
   let mutation: jest.Mocked<OrganizationMembershipMutationPort>;
   let accountStatus: 'active' | 'disabled' = 'active';
   let verifier: UserAccessTokenVerifierPort;
@@ -84,6 +93,7 @@ describe('Organization membership HTTP flow', () => {
     membership = {
       resolveMembership: jest.fn(),
       listRoster: jest.fn(async (_input: ListRosterInput) => roster),
+      listOrganizationMembers: jest.fn(),
       changeRole: jest.fn(),
       disable: jest.fn(),
       transfer: jest.fn(),
@@ -146,6 +156,13 @@ describe('Organization membership HTTP flow', () => {
   beforeEach(() => {
     accountStatus = 'active';
     membership.listRoster.mockResolvedValue(roster);
+    membership.listOrganizationMembers.mockResolvedValue({
+      kind: 'authorized',
+      members: [
+        { username: 'alice', role: 'owner', status: 'active' },
+        { username: 'bob', role: 'member', status: 'active' },
+      ],
+    });
     mutation.changeRole.mockClear();
     mutation.disable.mockClear();
     mutation.transfer.mockClear();
@@ -157,6 +174,19 @@ describe('Organization membership HTTP flow', () => {
       authorization: 'Bearer valid.token.value',
     },
     url: string = ORGANIZATION_ROSTER_PATH,
+  ) {
+    return app.inject({
+      method: 'GET',
+      url,
+      headers,
+    });
+  }
+
+  function membersRequest(
+    url = ORGANIZATION_MEMBERS_PATH,
+    headers: Record<string, string> = {
+      authorization: 'Bearer valid.token.value',
+    },
   ) {
     return app.inject({
       method: 'GET',
@@ -283,6 +313,138 @@ describe('Organization membership HTTP flow', () => {
         message: 'Request failed validation',
         retryable: false,
       },
+    });
+  });
+
+  describe('GET /v1/organizations/:organizationId/members pagination', () => {
+    it('returns the members list with next_cursor null on the last page', async () => {
+      membership.listOrganizationMembers.mockResolvedValue({
+        kind: 'authorized',
+        members: [
+          { username: 'alice', role: 'owner', status: 'active' },
+          { username: 'bob', role: 'member', status: 'active' },
+        ],
+      });
+
+      const response = await membersRequest();
+
+      expect(response.statusCode).toBe(200);
+      const body = membersBody(response);
+      expect(body.data.members).toEqual([
+        { username: 'alice', role: 'owner', status: 'active' },
+        { username: 'bob', role: 'member', status: 'active' },
+      ]);
+      expect(body.data.next_cursor).toBeNull();
+      const call = membership.listOrganizationMembers.mock.calls[0]?.[0];
+      expect(call).toMatchObject({
+        organizationId: ORGANIZATION_ID,
+        userId: USER_ID,
+        status: 'active',
+        limit: 101,
+      });
+    });
+
+    it('returns next_cursor when more rows exist beyond limit', async () => {
+      membership.listOrganizationMembers.mockResolvedValue({
+        kind: 'authorized',
+        members: [
+          { username: 'alice', role: 'owner', status: 'active' },
+          { username: 'bob', role: 'member', status: 'active' },
+          { username: 'carol', role: 'member', status: 'active' },
+        ],
+      });
+
+      const response = await membersRequest(
+        `${ORGANIZATION_MEMBERS_PATH}?limit=2`,
+      );
+
+      expect(response.statusCode).toBe(200);
+      const body = membersBody(response);
+      expect(body.data.members).toHaveLength(2);
+      expect(body.data.members.map((m) => m.username)).toEqual([
+        'alice',
+        'bob',
+      ]);
+      expect(typeof body.data.next_cursor).toBe('string');
+      expect(body.data.next_cursor).toBeTruthy();
+    });
+
+    it('resumes from next_cursor on subsequent request', async () => {
+      membership.listOrganizationMembers.mockResolvedValue({
+        kind: 'authorized',
+        members: [
+          { username: 'alice', role: 'owner', status: 'active' },
+          { username: 'bob', role: 'member', status: 'active' },
+          { username: 'carol', role: 'member', status: 'active' },
+        ],
+      });
+
+      const firstResponse = await membersRequest(
+        `${ORGANIZATION_MEMBERS_PATH}?limit=2`,
+      );
+      const cursor = membersBody(firstResponse).data.next_cursor;
+      expect(cursor).toBeTruthy();
+
+      membership.listOrganizationMembers.mockResolvedValue({
+        kind: 'authorized',
+        members: [{ username: 'carol', role: 'member', status: 'active' }],
+      });
+
+      const secondResponse = await membersRequest(
+        `${ORGANIZATION_MEMBERS_PATH}?limit=2&cursor=${encodeURIComponent(cursor as string)}`,
+      );
+
+      expect(secondResponse.statusCode).toBe(200);
+      const lastCall =
+        membership.listOrganizationMembers.mock.calls[
+          membership.listOrganizationMembers.mock.calls.length - 1
+        ]?.[0];
+      expect(lastCall).toMatchObject({
+        organizationId: ORGANIZATION_ID,
+        userId: USER_ID,
+        status: 'active',
+        after: 'bob',
+        limit: 3,
+      });
+    });
+
+    it.each([
+      ['zero limit', `${ORGANIZATION_MEMBERS_PATH}?limit=0`],
+      ['negative limit', `${ORGANIZATION_MEMBERS_PATH}?limit=-5`],
+      ['limit above 500', `${ORGANIZATION_MEMBERS_PATH}?limit=501`],
+      ['non-numeric limit', `${ORGANIZATION_MEMBERS_PATH}?limit=fifty`],
+      [
+        'malformed cursor',
+        `${ORGANIZATION_MEMBERS_PATH}?cursor=invalid!cursor`,
+      ],
+      [
+        'mismatched status cursor',
+        `${ORGANIZATION_MEMBERS_PATH}?status=disabled&cursor=${encodeURIComponent(
+          encodeCursor(
+            { username: 'bob' },
+            { organizationId: ORGANIZATION_ID, status: 'active' },
+          ),
+        )}`,
+      ],
+      [
+        'mismatched organization cursor',
+        `${ORGANIZATION_MEMBERS_PATH}?cursor=${encodeURIComponent(
+          encodeCursor(
+            { username: 'bob' },
+            { organizationId: 'org_other', status: 'active' },
+          ),
+        )}`,
+      ],
+    ])('refuses %s with 400 INVALID_REQUEST', async (_label, url) => {
+      const response = await membersRequest(url);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json<unknown>()).toMatchObject({
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Request failed validation',
+        },
+      });
     });
   });
 
