@@ -1,4 +1,5 @@
 import type { ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 
 import { getMetrics } from '@/common/observability/metrics';
 import type {
@@ -6,6 +7,7 @@ import type {
   AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
+import { REQUIRED_API_KEY_SCOPE_METADATA } from '@/modules/identity/shared/presentation/require-api-key-scope.decorator';
 import type {
   ResolvedUserIdentity,
   UserIdentityInput,
@@ -55,9 +57,14 @@ function request(headers: Record<string, unknown> = {}) {
   };
 }
 
-function context(value: Record<string, unknown>): ExecutionContext {
+function context(
+  value: Record<string, unknown>,
+  handler: () => void = () => undefined,
+): ExecutionContext {
   return {
     switchToHttp: () => ({ getRequest: () => value }),
+    getHandler: () => handler,
+    getClass: () => Object,
   } as unknown as ExecutionContext;
 }
 
@@ -68,6 +75,7 @@ function guard(
   } = {},
 ) {
   return new ApiKeyUserIdentityGuard(
+    new Reflector(),
     options.authenticator ?? { authenticate: async () => authenticated },
     options.resolver ?? { resolve: async () => resolved },
     {
@@ -82,6 +90,36 @@ function guard(
 }
 
 describe('ApiKeyUserIdentityGuard', () => {
+  it('refuses a missing required scope before resolving user identity', async () => {
+    const handler = () => undefined;
+    Reflect.defineMetadata(
+      REQUIRED_API_KEY_SCOPE_METADATA,
+      'speaking.grade',
+      handler,
+    );
+    let forceFresh: boolean | undefined;
+    const value = request();
+
+    await expect(
+      guard({
+        authenticator: {
+          authenticate: async (credentials) => {
+            forceFresh = credentials.forceFresh;
+            return { ...authenticated, scopes: ['writing.grade'] };
+          },
+        },
+        resolver: {
+          resolve: async () => {
+            throw new Error('scope must be checked before identity resolution');
+          },
+        },
+      }).canActivate(context(value, handler)),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(forceFresh).toBe(true);
+    expect(value).not.toHaveProperty('aihubIdentity');
+  });
+
   it('attaches the resolved End-User ID to the authenticated request', async () => {
     const value = request();
 

@@ -31,6 +31,41 @@ describe('PUBLIC_ROUTES', () => {
     expect(mismatches).toEqual({});
   });
 
+  it('matches Writing chart upload scopes to the grading operation', () => {
+    for (const routeId of [
+      'writing.chartUploads.create',
+      'writing.chartUploads.refresh',
+      'writing.chartUploads.complete',
+    ] as const) {
+      expect(PUBLIC_ROUTES[routeId].requiredScope).toBe(
+        OPERATION_CATALOG['writing.task1.grade'].requiredScope,
+      );
+    }
+  });
+
+  it('declares an API-key scope on every fixed-scope route', () => {
+    const exceptions = {
+      'sandbox.assertions.mint':
+        'Only the dedicated Sandbox Organization may mint demo assertions.',
+    };
+    const missingScope = Object.entries(PUBLIC_ROUTES)
+      .filter(
+        ([routeId, route]) =>
+          route.callerAuth === 'api-key' &&
+          !('requiredScope' in route) &&
+          !Object.hasOwn(exceptions, routeId),
+      )
+      .map(([routeId]) => routeId);
+    const staleExceptions = Object.keys(exceptions).filter((routeId) => {
+      if (!Object.hasOwn(PUBLIC_ROUTES, routeId)) return true;
+      const route = PUBLIC_ROUTES[routeId as keyof typeof PUBLIC_ROUTES];
+      return route.callerAuth !== 'api-key' || 'requiredScope' in route;
+    });
+
+    expect(missingScope).toEqual([]);
+    expect(staleExceptions).toEqual([]);
+  });
+
   it('never reuses a dispatch operation path', () => {
     const dispatchPaths = new Set<string>(
       Object.values(OPERATION_CATALOG).map((operation) => operation.path),

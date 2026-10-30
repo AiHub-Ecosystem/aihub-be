@@ -480,6 +480,9 @@ export function publicRouteToPathItem(
         ? {}
         : { description: metadata.description }),
       ...routeIdentityScopeOf(routeId),
+      ...(route.requiredScope === undefined
+        ? {}
+        : { 'x-required-scope': route.requiredScope }),
       ...routeIdempotencyExtensionsOf(routeId),
       ...routeSecurityOf(routeId),
       parameters,

@@ -179,6 +179,8 @@ export interface PublicRouteDef {
   /** Ingress-to-response deadline for non-grading work; shared by every outbound call. */
   readonly timeoutMs?: number;
   readonly callerAuth: CallerAuth;
+  /** The API-key scope enforced by this route, when the key has a fixed scope. */
+  readonly requiredScope?: string;
   readonly organizationResolution: OrganizationResolution;
   readonly successStatus: SuccessStatus;
   readonly alternateSuccesses?: readonly AlternateSuccess[];
@@ -223,8 +225,8 @@ export interface PublicRouteDef {
  * Every Public API Route that does not dispatch to an AI Service.
  *
  * This is not the Operation Catalog and must not become one. These routes have
- * no downstream service, no downstream path, no downstream contract, and no
- * API-key scope; `OperationId` is the dispatch vocabulary, and widening it with
+ * no downstream service, no downstream path, or downstream contract; a route
+ * may still declare an API-key scope. `OperationId` is the dispatch vocabulary, and widening it with
  * non-dispatch ids would force a `dispatch()` overload per route here
  * (ADR-0059). The two registries partition the Public API Routes rather than
  * duplicating them. Two tests hold that partition from opposite sides:
@@ -286,6 +288,7 @@ export const PUBLIC_ROUTES = {
     method: 'POST',
     path: '/v1/speaking/audio/uploads',
     callerAuth: 'api-key',
+    requiredScope: 'speaking.grade',
     organizationResolution: 'caller',
     successStatus: 201,
     publishedIdentityScope: 'user',
@@ -319,6 +322,7 @@ export const PUBLIC_ROUTES = {
     method: 'POST',
     path: '/v1/speaking/audio/uploads/:assetId/refresh',
     callerAuth: 'api-key',
+    requiredScope: 'speaking.grade',
     organizationResolution: 'caller',
     successStatus: 200,
     publishedIdentityScope: 'user',
@@ -354,6 +358,7 @@ export const PUBLIC_ROUTES = {
     timeoutMs: 10_000,
     path: '/v1/speaking/audio/uploads/:assetId/complete',
     callerAuth: 'api-key',
+    requiredScope: 'speaking.grade',
     organizationResolution: 'caller',
     successStatus: 201,
     alternateSuccesses: [
@@ -387,6 +392,7 @@ export const PUBLIC_ROUTES = {
     method: 'POST',
     path: '/v1/ielts/writing/task1/chart-uploads',
     callerAuth: 'api-key',
+    requiredScope: 'writing.grade',
     organizationResolution: 'caller',
     successStatus: 201,
     publishedIdentityScope: 'user',
@@ -423,6 +429,7 @@ export const PUBLIC_ROUTES = {
     method: 'POST',
     path: '/v1/ielts/writing/task1/chart-uploads/:assetId/refresh',
     callerAuth: 'api-key',
+    requiredScope: 'writing.grade',
     organizationResolution: 'caller',
     successStatus: 200,
     publishedIdentityScope: 'user',
@@ -461,6 +468,7 @@ export const PUBLIC_ROUTES = {
     timeoutMs: 10_000,
     path: '/v1/ielts/writing/task1/chart-uploads/:assetId/complete',
     callerAuth: 'api-key',
+    requiredScope: 'writing.grade',
     organizationResolution: 'caller',
     successStatus: 200,
     publishedIdentityScope: 'user',

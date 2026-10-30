@@ -1445,6 +1445,7 @@ describe('buildOpenApiDocument', () => {
       operationId: 'speaking.audioUploads.create',
       security: [{ ApiKeyAuth: [] }],
       'x-identity-scope': 'user',
+      'x-required-scope': 'speaking.grade',
     });
     expect(create?.parameters).toContainEqual({
       $ref: '#/components/parameters/UserIdentity',
@@ -1456,6 +1457,7 @@ describe('buildOpenApiDocument', () => {
     expect(refresh).toMatchObject({
       operationId: 'speaking.audioUploads.refresh',
       security: [{ ApiKeyAuth: [] }],
+      'x-required-scope': 'speaking.grade',
     });
     expect(refresh?.parameters).toContainEqual(
       expect.objectContaining({ name: 'assetId', in: 'path', required: true }),
@@ -1466,6 +1468,7 @@ describe('buildOpenApiDocument', () => {
     expect(complete).toMatchObject({
       operationId: 'speaking.audioUploads.complete',
       security: [{ ApiKeyAuth: [] }],
+      'x-required-scope': 'speaking.grade',
     });
     expect(complete?.responses['201']).toBeDefined();
     expect(complete?.responses['200']).toBeDefined();

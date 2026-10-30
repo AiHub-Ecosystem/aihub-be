@@ -265,18 +265,44 @@ describe('Speaking Audio upload HTTP flow', () => {
   beforeAll(async () => {
     process.env.AIHUB_SANDBOX_HOST = 'sandbox.test';
     const apiKeys: ApiKeyAuthenticatorPort = {
-      authenticate: async ({ environment, value }) => ({
-        organizationId:
-          value === 'aihub_sk_other' ? 'org_other_audio' : 'org_audio_upload',
-        apiKeyId: 'ak_audio_upload',
-        environment,
-        scopes: ['speaking.grade'],
-        rateLimitRpm: 600,
-        maxConcurrent: 20,
-        monthlyRequestQuota: null,
-        hardStopOnQuota: false,
-        allowedEnvironments: ['production'],
-      }),
+      authenticate: async ({ environment, value }) => {
+        if (value === 'aihub_sk_revoked') {
+          throw new AppError({
+            code: 'UNAUTHORIZED',
+            message: 'Authentication is required',
+            retryable: false,
+          });
+        }
+        if (value === 'aihub_sk_suspended_org') {
+          throw new AppError({
+            code: 'FORBIDDEN',
+            message: 'Organization is not active',
+            retryable: false,
+          });
+        }
+        return {
+          organizationId:
+            value === 'aihub_sk_other'
+              ? 'org_other_audio'
+              : value === 'aihub_sk_no_entitlement'
+                ? 'org_audio_no_speaking_entitlement'
+                : 'org_audio_upload',
+          apiKeyId: 'ak_audio_upload',
+          environment,
+          scopes:
+            value === 'aihub_sk_writing_only'
+              ? ['writing.grade']
+              : value === 'aihub_sk_no_scope' ||
+                  value === 'aihub_sk_no_entitlement'
+                ? []
+                : ['speaking.grade'],
+          rateLimitRpm: 600,
+          maxConcurrent: 20,
+          monthlyRequestQuota: null,
+          hardStopOnQuota: false,
+          allowedEnvironments: ['production'],
+        };
+      },
     };
     const identities: UserIdentityResolverPort = {
       resolve: async ({ organizationId, value }) => ({
@@ -338,6 +364,76 @@ describe('Speaking Audio upload HTTP flow', () => {
     storage.deleteFails = false;
     storage.unavailable = false;
   });
+
+  it.each([
+    ['no grading scope', 'aihub_sk_no_scope', 403, 'FORBIDDEN'],
+    ['Writing-only scope', 'aihub_sk_writing_only', 403, 'FORBIDDEN'],
+    [
+      'empty effective scopes after Speaking entitlement removal',
+      'aihub_sk_no_entitlement',
+      403,
+      'FORBIDDEN',
+    ],
+    ['revoked API key', 'aihub_sk_revoked', 401, 'UNAUTHORIZED'],
+    ['suspended Organization', 'aihub_sk_suspended_org', 403, 'FORBIDDEN'],
+  ])(
+    'denies %s before any upload side effect on all routes',
+    async (_, apiKey, expectedStatus, expectedCode) => {
+      const create = await app.inject({
+        method: 'POST',
+        url: '/v1/speaking/audio/uploads',
+        headers: {
+          host: 'sandbox.test',
+          'x-api-key': 'aihub_sk_audio_upload_test',
+          'x-user-identity': 'student-123',
+        },
+        payload: { content_type: 'audio/wav', byte_size: 1_024 },
+      });
+      const assetId = uploadUrlBody(create).data.asset_id;
+      const intent = repository.intents.get(assetId);
+      if (intent === undefined)
+        throw new Error('upload intent was not persisted');
+      storage.objects.set(intent.objectKey, {
+        contentType: 'audio/wav',
+        byteSize: 1_024,
+      });
+
+      for (const endpoint of [
+        {
+          path: '/v1/speaking/audio/uploads',
+          payload: { content_type: 'audio/wav', byte_size: 1_024 },
+        },
+        { path: `/v1/speaking/audio/uploads/${assetId}/refresh` },
+        { path: `/v1/speaking/audio/uploads/${assetId}/complete` },
+      ]) {
+        const before = {
+          intents: repository.intents.size,
+          assets: repository.assets.size,
+          signed: storage.signed.length,
+          described: storage.described.length,
+        };
+        const response = await app.inject({
+          method: 'POST',
+          url: endpoint.path,
+          headers: {
+            host: 'sandbox.test',
+            'x-api-key': apiKey,
+            'x-user-identity': 'student-123',
+          },
+          ...(endpoint.payload === undefined
+            ? {}
+            : { payload: endpoint.payload }),
+        });
+
+        expect(response.statusCode).toBe(expectedStatus);
+        expectErrorCode(response, expectedCode);
+        expect(repository.intents.size).toBe(before.intents);
+        expect(repository.assets.size).toBe(before.assets);
+        expect(storage.signed).toHaveLength(before.signed);
+        expect(storage.described).toHaveLength(before.described);
+      }
+    },
+  );
 
   it.each(['audio/mp3', 'audio/x-wav', 'audio/x-m4a', 'application/ogg'])(
     'rejects unsupported MIME value %s before creating an upload intent',

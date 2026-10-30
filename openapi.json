@@ -3368,6 +3368,7 @@
         "summary": "Create a Speaking Audio upload intent",
         "description": "Creates a one-hour intent bound to the Organization and exact End-User ID resolved from `X-User-Identity`. The response contains a five-minute presigned `PUT` URL; send the audio directly to that URL with the returned `Content-Type` and `Content-Length` headers.\n\nThe URL is a write credential. Do not log, persist, or expose it. The intent is not an Audio asset until completion verifies the stored object.",
         "x-identity-scope": "user",
+        "x-required-scope": "speaking.grade",
         "security": [
           {
             "ApiKeyAuth": []
@@ -3557,6 +3558,7 @@
         "summary": "Refresh a Speaking Audio upload URL",
         "description": "Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.",
         "x-identity-scope": "user",
+        "x-required-scope": "speaking.grade",
         "security": [
           {
             "ApiKeyAuth": []
@@ -3714,6 +3716,7 @@
         "summary": "Complete a Speaking Audio upload",
         "description": "Verifies the stored object metadata at the exact key recorded by the intent. A valid object creates the Audio asset and sets `retention_expires_at` to 30 days after acceptance; a missing object leaves the intent retryable, while invalid metadata rejects the intent.\n\nOnly the same Organization and End-User ID can complete the intent. Repeating a successful completion returns the same Audio asset.",
         "x-identity-scope": "user",
+        "x-required-scope": "speaking.grade",
         "security": [
           {
             "ApiKeyAuth": []
@@ -3947,6 +3950,7 @@
         "summary": "Create a Writing Task 1 chart upload intent",
         "description": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
         "x-identity-scope": "user",
+        "x-required-scope": "writing.grade",
         "security": [
           {
             "ApiKeyAuth": []
@@ -4101,6 +4105,7 @@
         "summary": "Refresh a Writing Task 1 chart upload URL",
         "description": "Refreshes the signed URL for the same private staging object without extending the intent deadline.",
         "x-identity-scope": "user",
+        "x-required-scope": "writing.grade",
         "security": [
           {
             "ApiKeyAuth": []
@@ -4231,6 +4236,7 @@
         "summary": "Verify and publish a Writing Task 1 chart",
         "description": "Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
         "x-identity-scope": "user",
+        "x-required-scope": "writing.grade",
         "security": [
           {
             "ApiKeyAuth": []

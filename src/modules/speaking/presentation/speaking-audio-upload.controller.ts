@@ -28,6 +28,7 @@ import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
+import { RequireApiKeyScope } from '@/modules/identity/shared/presentation/require-api-key-scope.decorator';
 import {
   SPEAKING_AUDIO_UPLOAD_SERVICE,
   type SpeakingAudioUploadGrant,
@@ -101,6 +102,9 @@ export class SpeakingAudioUploadController {
   ) {}
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.create'].path)
+  @RequireApiKeyScope(
+    PUBLIC_ROUTES['speaking.audioUploads.create'].requiredScope!,
+  )
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.create'].successStatus)
   async requestUpload(
     @Req() request: AuthenticatedRequest,
@@ -121,6 +125,9 @@ export class SpeakingAudioUploadController {
   }
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.refresh'].path)
+  @RequireApiKeyScope(
+    PUBLIC_ROUTES['speaking.audioUploads.refresh'].requiredScope!,
+  )
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.refresh'].successStatus)
   async refreshUpload(
     @Req() request: AuthenticatedRequest,
@@ -134,6 +141,9 @@ export class SpeakingAudioUploadController {
   }
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.complete'].path)
+  @RequireApiKeyScope(
+    PUBLIC_ROUTES['speaking.audioUploads.complete'].requiredScope!,
+  )
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.complete'].successStatus)
   async completeUpload(
     @Req() request: AuthenticatedRequest,

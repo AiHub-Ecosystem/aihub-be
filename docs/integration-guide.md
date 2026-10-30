@@ -780,18 +780,20 @@ JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 These routes are not grading operations and appear here only so the list is
 complete:
 
-| Path                                    | `X-User-Identity`                              | `Idempotency-Key` | Notes                                                         |
-| --------------------------------------- | ---------------------------------------------- | ----------------- | ------------------------------------------------------------- |
-| `/v1/sandbox/assertions`                | Not used                                       | None              | Dedicated demo Organization only; see section 3a              |
-| `/v1/ielts/speaking/questions`          | Not used                                       | None              | Public question catalog; no API key needed                    |
-| `/v1/speaking/audio/uploads`            | Required; plain ID or JWT by Organization mode | None              | Recording upload intent; see "Retaining a Speaking recording" |
-| `/v1/ielts/writing/task1/chart-uploads` | Required; plain ID or JWT by Organization mode | None              | Chart upload intent; see section 3d                           |
+| Path                                    | `X-User-Identity`                              | `Idempotency-Key` | Notes                                                                      |
+| --------------------------------------- | ---------------------------------------------- | ----------------- | -------------------------------------------------------------------------- |
+| `/v1/sandbox/assertions`                | Not used                                       | None              | Dedicated demo Organization only; see section 3a                           |
+| `/v1/ielts/speaking/questions`          | Not used                                       | None              | Public question catalog; no API key needed                                 |
+| `/v1/speaking/audio/uploads`            | Required; plain ID or JWT by Organization mode | None              | Requires `speaking.grade`; create, refresh, and complete recording uploads |
+| `/v1/ielts/writing/task1/chart-uploads` | Required; plain ID or JWT by Organization mode | None              | Chart upload intent; see section 3d                                        |
 
 `/v1/sandbox/assertions` takes an API key and a `user_id` in its body; it does
 not take `X-User-Identity` because issuing that value is what the route does.
 `/v1/ielts/speaking/questions` takes neither credential and is described in
-the Speaking grading section. The two `/v1/speaking/audio/uploads` routes take
-`X-User-Identity` because the recording is attributed to that exact End-User ID.
+the Speaking grading section. The create, refresh, and complete
+`/v1/speaking/audio/uploads` routes require an API key with `speaking.grade`
+and take `X-User-Identity` because the recording is attributed to that exact
+End-User ID.
 
 ### Enumerated values
 
@@ -919,7 +921,8 @@ retrieval and does not follow redirects.
 
 The grading route above forwards bytes to the AI Speaking service and keeps
 nothing. To store a recording as a durable AIHUB asset, upload it directly to
-object storage instead. Audio bytes never pass through AIHUB.
+object storage instead. Audio bytes never pass through AIHUB. The create,
+refresh, and complete routes all require an API key with `speaking.grade`.
 
 1. `POST /v1/speaking/audio/uploads` with
    `{ "content_type": "audio/wav", "byte_size": 204800 }`. It answers `201`
