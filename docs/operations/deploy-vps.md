@@ -1442,6 +1442,14 @@ running, not healthy, failing either probe, or on another commit. A non-zero
 `errors=` count is not a failure by itself: read those lines, because they
 include real errors such as a downstream contract violation.
 
+A green CD run does not prove a deploy. CD ships only the newest commit on
+`main`: the run for an older commit finishes `success` after logging
+`Target <sha> was superseded by <sha>; skipping host contact`, and touches
+nothing. CI does not run for a push that changes only Markdown outside its path
+list, so a docs-only commit pushed right after a code commit supersedes the code
+commit and nothing deploys either. Push such documentation before the code, or
+in the same push, and confirm the result with `ops/status.sh`.
+
 Use an SSH key for this, not a password: a credential pasted into a chat or a
 ticket stays in its history.
 
