@@ -442,7 +442,10 @@ Organization owner or admin can replace it without contacting AIHUB:
   key and issues no replacement; create one with
   `POST /v1/organizations/{organization_id}/api-keys`.
 
-Prefer rotation: it leaves no gap for the clients that use the key.
+Both routes take the signed-in user's Bearer User Access token, not an API key.
+Prefer rotation: it replaces the key in one step, with no moment when the leaked
+key still works and no replacement missing. Deploy the new key to your clients
+right away; clients still sending the old key are refused.
 
 ---
 
@@ -1206,28 +1209,29 @@ missing. A hint that AIHUB spreads with random jitter arrives with a different
 value for each client, so clients refused at the same moment are not all told to
 come back at the same instant:
 
-| Refusal                                                                            | `retry_after_ms`                                                                                                                       |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `RATE_LIMITED` (per-key rate)                                                      | Until your key's window resets, plus 0–999 ms                                                                                          |
-| `RATE_LIMITED` (same-key retry budget)                                             | 60 s, plus 0–999 ms                                                                                                                    |
-| `RATE_LIMITED` (API key authentication failures)                                   | 5 minutes: the window of 20 failures                                                                                                   |
-| `RATE_LIMITED` (account sign-in, verification, password recovery)                  | Until the longest exhausted window resets; when AIHUB knows no wait, neither the field nor `Retry-After` is sent                       |
-| `RATE_LIMITED` (Organization invitations)                                          | Until the exhausted window resets (15 minutes or 24 hours); absent when AIHUB knows no wait                                            |
-| `RATE_LIMITED` (Writing chart uploads)                                             | 1 hour, the whole rolling window                                                                                                       |
-| `CONCURRENCY_LIMIT`                                                                | 500–999 ms                                                                                                                             |
-| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                      | 1000–1999 ms                                                                                                                           |
-| `IDEMPOTENCY_CONFLICT` (request in flight)                                         | 2000–2999 ms                                                                                                                           |
-| `QUOTA_EXCEEDED`                                                                   | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset                                                        |
-| `REDIS_UNAVAILABLE`                                                                | 1000–1999 ms                                                                                                                           |
-| `DATABASE_UNAVAILABLE`                                                             | 1000–1999 ms                                                                                                                           |
-| `AVATAR_STORAGE_UNAVAILABLE`                                                       | 1000–1999 ms                                                                                                                           |
-| `SPEAKING_AUDIO_STORAGE_UNAVAILABLE`                                               | 1000–1999 ms                                                                                                                           |
-| `WRITING_CHART_STORAGE_UNAVAILABLE`                                                | 1000–1999 ms                                                                                                                           |
-| `AUTH_ARGON2_CAPACITY`                                                             | 1000–1999 ms                                                                                                                           |
-| `EMAIL_DELIVERY_BACKLOGGED`                                                        | The time the oldest waiting email has left before its link expires, between 30 seconds and 15 minutes, plus 0–999 ms                   |
-| `IDENTITY_PROVIDER_UNAVAILABLE` (when the JWKS source is in a cooldown)            | The remaining cooldown (30 s after a cold failure), plus 0–999 ms; absent when the identity configuration store is the cause           |
-| `AI_SERVICE_UNAVAILABLE` (when AIHUB has stopped sending to the AI service)        | The time left before AIHUB tries the AI service again, at most 30 s; absent when the AI service itself refused or could not be reached |
-| `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`) | That wait, read from the AI service's `Retry-After`; absent for any other status                                                       |
+| Refusal                                                                                  | `retry_after_ms`                                                                                                                        |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `RATE_LIMITED` (per-key rate)                                                            | Until your key's window resets, plus 0–999 ms                                                                                           |
+| `RATE_LIMITED` (same-key retry budget)                                                   | 60 s, plus 0–999 ms                                                                                                                     |
+| `RATE_LIMITED` (API key authentication failures)                                         | 5 minutes: the window of 20 failures                                                                                                    |
+| `RATE_LIMITED` (when account sign-in, verification, or password recovery knows the wait) | Until the longest exhausted window resets; without a known wait, neither the field nor `Retry-After` is sent                            |
+| `RATE_LIMITED` (when an Organization invitation knows the wait)                          | Until the exhausted window resets (15 minutes or 24 hours); without a known wait the field is absent                                    |
+| `RATE_LIMITED` (Writing chart uploads)                                                   | 1 hour, the whole rolling window                                                                                                        |
+| `CONCURRENCY_LIMIT`                                                                      | 500–999 ms                                                                                                                              |
+| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                            | 1000–1999 ms                                                                                                                            |
+| `IDEMPOTENCY_CONFLICT` (request in flight)                                               | 2000–2999 ms                                                                                                                            |
+| `QUOTA_EXCEEDED`                                                                         | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset                                                         |
+| `REDIS_UNAVAILABLE`                                                                      | 1000–1999 ms                                                                                                                            |
+| `DATABASE_UNAVAILABLE`                                                                   | 1000–1999 ms                                                                                                                            |
+| `AVATAR_STORAGE_UNAVAILABLE`                                                             | 1000–1999 ms                                                                                                                            |
+| `SPEAKING_AUDIO_STORAGE_UNAVAILABLE`                                                     | 1000–1999 ms                                                                                                                            |
+| `WRITING_CHART_STORAGE_UNAVAILABLE`                                                      | 1000–1999 ms                                                                                                                            |
+| `AUTH_ARGON2_CAPACITY`                                                                   | 1000–1999 ms                                                                                                                            |
+| `EMAIL_DELIVERY_BACKLOGGED`                                                              | The time the oldest waiting email has left before its link expires, between 30 seconds and 15 minutes, plus 0–999 ms                    |
+| `IDENTITY_PROVIDER_UNAVAILABLE` (when the JWKS source failed or is in a cooldown)        | The remaining cooldown (30 s after a cold failure), plus 0–999 ms; absent for any other cause, such as the identity configuration store |
+| `AI_SERVICE_UNAVAILABLE` (when AIHUB has stopped sending to the AI service)              | The time left before AIHUB tries the AI service again, at most 30 s; absent when the AI service itself refused or could not be reached  |
+| `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`)       | That wait, read from the AI service's `Retry-After`; absent for any other status                                                        |
+| `AUDIO_UNREADABLE` (when the AI service answered `503` with its own `Retry-After`)       | The same wait. The refusal stays `retryable: false`: send a new recording, not the same file again                                      |
 
 Every row with a hint also sends `Retry-After`. The header and the field never
 disagree: the header is the field rounded up to whole seconds.

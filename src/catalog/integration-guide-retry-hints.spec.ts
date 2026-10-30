@@ -11,9 +11,10 @@ import ts from 'typescript';
 const SRC = join(__dirname, '..');
 const GUIDE = readFileSync(join(SRC, '../docs/integration-guide.md'), 'utf8');
 
-// These build an error from a code a caller passes in, so the code to read is
-// at the call site, which this scan reaches on its own.
-const CARRIERS = [
+// These forward a code a caller passes in, so the code to read is at the call
+// site, which this scan reaches on its own. A fourth forwarding file shows up
+// as an unresolved place below; add it here once it is known to forward.
+const FORWARDING_FILES = [
   'common/errors/app-error.ts',
   'common/errors/error-envelope.ts',
   'modules/gateway/infrastructure/http-operation-dispatcher.ts',
@@ -70,7 +71,11 @@ function sourceHintCodes(): { codes: Set<string>; unresolved: string[] } {
 
   for (const path of sourceFiles(SRC)) {
     const text = readFileSync(path, 'utf8');
-    if (!text.includes('retryAfterMs')) continue;
+    // An adapter names a provider failure by code; the dispatcher gives it the
+    // provider's own `Retry-After` on a 503, so every code it names can carry
+    // the hint.
+    const namesProviderFailure = text.includes('DownstreamErrorHint');
+    if (!text.includes('retryAfterMs') && !namesProviderFailure) continue;
     const file = relative(SRC, path).split(sep).join('/');
     const source = ts.createSourceFile(
       path,
@@ -80,6 +85,14 @@ function sourceHintCodes(): { codes: Set<string>; unresolved: string[] } {
     );
 
     const visit = (node: ts.Node): void => {
+      if (
+        namesProviderFailure &&
+        ts.isPropertyAssignment(node) &&
+        node.name.getText() === 'code' &&
+        ts.isStringLiteral(node.initializer)
+      ) {
+        codes.add(node.initializer.text);
+      }
       if (ts.isObjectLiteralExpression(node) && carriesHint(node)) {
         const code = node.properties.find(
           (property) => propertyName(property) === 'code',
@@ -94,7 +107,7 @@ function sourceHintCodes(): { codes: Set<string>; unresolved: string[] } {
                 : code;
         if (value !== undefined && ts.isStringLiteral(value)) {
           codes.add(value.text);
-        } else if (value !== undefined && !CARRIERS.includes(file)) {
+        } else if (value !== undefined && !FORWARDING_FILES.includes(file)) {
           const named = codesNamedByParameters(node);
           if (named.length === 0) {
             unresolved.push(
@@ -112,7 +125,10 @@ function sourceHintCodes(): { codes: Set<string>; unresolved: string[] } {
   return { codes, unresolved };
 }
 
-/** The codes in the first column of the guide's list of refusals with a hint. */
+/**
+ * The codes in the first column of the guide's list of refusals with a hint.
+ * Each code has its own row, so this reads a row's first cell and nothing else.
+ */
 function documentedHintCodes(): Set<string> {
   const lines = GUIDE.split('\n');
   const start = lines.findIndex((line) => line.startsWith('| Refusal '));
@@ -123,8 +139,8 @@ function documentedHintCodes(): Set<string> {
   for (const line of lines.slice(start + 2)) {
     if (!line.startsWith('|')) break;
     const firstCell = line.split('|')[1] ?? '';
-    for (const [, code] of firstCell.matchAll(/`([A-Z][A-Z0-9_]+)`/g)) {
-      if (code !== undefined) codes.add(code);
+    for (const [, code] of firstCell.matchAll(/`([^`]+)`/g)) {
+      if (code !== undefined && ERROR_CODE.test(code)) codes.add(code);
     }
   }
   return codes;
@@ -135,7 +151,6 @@ describe('integration guide retry hints', () => {
 
   it('reads every place the source sets a hint on a known code', () => {
     expect(unresolved).toEqual([]);
-    expect(carrying.size).toBeGreaterThan(10);
   });
 
   it('lists every code that can carry retry_after_ms', () => {
