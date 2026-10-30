@@ -6,7 +6,9 @@ import { Counter, Gauge, Trend } from 'k6/metrics';
 import {
   K6_GRACEFUL_STOP_SECONDS,
   authAndGradingWorkload,
+  gradingRouteDeadlinesMs,
   hasOneUserPerVu,
+  isGradingRouteName,
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
 
@@ -40,6 +42,8 @@ const routeResponseCounts = {};
 const routeErrorCounts = {};
 /** @type {Record<RouteName, import('k6/metrics').Counter>} */
 const routeTransportErrorCounts = {};
+/** @type {Record<GradingRouteName, import('k6/metrics').Counter>} */
+const routeGoodputCounts = {};
 for (const name of allRoutes) {
   routeResponseCounts[name] = new Counter(`benchmark_api_responses_${name}`);
   routeErrorCounts[name] = new Counter(`benchmark_api_errors_${name}`);
@@ -47,6 +51,18 @@ for (const name of allRoutes) {
     `benchmark_api_transport_errors_${name}`,
   );
 }
+for (const name of gradingRoutes) {
+  routeGoodputCounts[name] = new Counter(`benchmark_api_goodput_${name}`);
+}
+const goodputBySecond = new Counter('benchmark_goodput_by_second');
+const probeLatencies = {
+  health: new Trend('benchmark_probe_latency_health', true),
+  readiness: new Trend('benchmark_probe_latency_readiness', true),
+};
+const probeFailures = {
+  health: new Counter('benchmark_probe_failures_health'),
+  readiness: new Counter('benchmark_probe_failures_readiness'),
+};
 /** @template {string} T @param {T[]} names @param {string} prefix @param {boolean} isTime @returns {Record<T, import('k6/metrics').Trend>} */
 function trends(names, prefix, isTime) {
   /** @type {Record<string, import('k6/metrics').Trend>} */
@@ -105,6 +121,8 @@ const workload =
   );
 const rate = Number(__ENV.RATE || 4);
 const duration = __ENV.DURATION || '15s';
+const durationSeconds = Number.parseInt(duration, 10);
+const isRecovery = __ENV.IS_RECOVERY === 'true';
 const maxVUs = Number(__ENV.MAX_VUS || 256);
 const metricsScenarioVUs = 1;
 
@@ -131,6 +149,28 @@ export const options = {
       maxVUs: metricsScenarioVUs,
       gracefulStop: '5s',
       exec: 'scrapeMetrics',
+    },
+    health: {
+      executor: 'constant-arrival-rate',
+      startTime: '0s',
+      rate: 1,
+      timeUnit: '1s',
+      duration,
+      preAllocatedVUs: 1,
+      maxVUs: 1,
+      gracefulStop: '5s',
+      exec: 'probeHealth',
+    },
+    readiness: {
+      executor: 'constant-arrival-rate',
+      startTime: '0s',
+      rate: 1,
+      timeUnit: '1s',
+      duration,
+      preAllocatedVUs: 1,
+      maxVUs: 1,
+      gracefulStop: '5s',
+      exec: 'probeReadiness',
     },
   },
   thresholds: {},
@@ -211,6 +251,14 @@ export function scrapeMetrics() {
     if (name === 'aihub_postgres_pool_waiting') postgresWaiting.add(value);
     if (name === 'aihub_downstream_pool_queued') downstreamQueued.add(value);
   }
+}
+
+export function probeHealth() {
+  recordProbe('health', '/health');
+}
+
+export function probeReadiness() {
+  recordProbe('readiness', '/ready');
 }
 
 export function teardown() {
@@ -348,6 +396,36 @@ function recordResponse(name, response) {
   apiLatency[name].add(response.timings.duration);
   if (response.status >= 200 && response.status < 300) {
     acceptedLatency[name].add(response.timings.duration);
+    if (
+      isGradingRouteName(name) &&
+      response.timings.duration <= gradingRouteDeadlinesMs[name]
+    ) {
+      const elapsedSecond = Math.floor(
+        (Date.now() - exec.scenario.startTime) / 1000,
+      );
+      if (elapsedSecond >= 0 && elapsedSecond < durationSeconds) {
+        routeGoodputCounts[name].add(1);
+        if (isRecovery) {
+          goodputBySecond.add(1, {
+            route: name,
+            second: String(elapsedSecond),
+          });
+        }
+      }
+    }
+  }
+}
+
+/** @param {'health' | 'readiness'} name @param {'/health' | '/ready'} path */
+function recordProbe(name, path) {
+  const response = http.get(`${baseUrl}${path}`, {
+    timeout: '5s',
+    headers: { Host: host },
+    tags: { name: `probe_${name}` },
+  });
+  probeLatencies[name].add(response.timings.duration);
+  if (response.status < 200 || response.status >= 300 || response.error) {
+    probeFailures[name].add(1);
   }
 }
 

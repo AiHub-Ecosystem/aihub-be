@@ -1,6 +1,6 @@
 declare module 'k6/execution' {
   const execution: {
-    scenario: { iterationInTest: number };
+    scenario: { iterationInTest: number; startTime: number };
     vu: { idInTest: number };
   };
   export default execution;

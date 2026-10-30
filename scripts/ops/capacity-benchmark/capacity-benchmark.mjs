@@ -10,10 +10,13 @@ import { lastLines, runProcess } from './capacity-benchmark-process.mjs';
 import {
   appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
+  goodputCountsBySecond,
   gradedPathSampleAdequacy,
+  gradingRouteDeadlinesMs,
   hasCompleteLoadDelivery,
   hasMinimumRouteSamples,
   highestPassingRate,
+  isGradingRouteName,
   jsonAfterPrefix,
   k6ProcessTimeoutMs,
   metricValue,
@@ -31,8 +34,10 @@ import {
 /** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
 /** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
 /** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
-/** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
-/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, sampleAdequacy?: {routes?: Record<string, {count: number, status: string}>, paths?: Record<string, Record<string, {count: number, status: string}>>}}} BenchmarkRun */
+/** @typedef {{count: number, requestsPerSecond: number, deadlineMs: number}} RouteGoodput */
+/** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: Percentiles}} ProbeResult */
+/** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
+/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {routes?: Record<string, {count: number, status: string}>, paths?: Record<string, Record<string, {count: number, status: string}>>}}} BenchmarkRun */
 /** @typedef {Record<string, {values?: Record<string, unknown>}>} MetricSet */
 /** @typedef {{totalMs: number[], admissionMs: number[], completionMs: number[], paths: Record<string, {admissionMs: number[], completionMs: number[]}>, errorsByCode: Record<string, number>}} RequestTiming */
 /** @typedef {BenchmarkRoute & {path: string, errorsByCode: Record<string, number>, transportErrorCount: number, correctedTotalMs: PathPercentiles, admissionMs: PathPercentiles, completionMs: PathPercentiles, timingsByPath: Record<string, PathTimings>, downstreamMs: Percentiles, gatewayTotalMs: Percentiles, responseShare?: number | null}} RouteResult */
@@ -376,12 +381,7 @@ try {
   runs.push(argon2Burst);
 
   /** @type {Record<GradingRouteName, number>} */
-  const deadlines = {
-    writing_task1: 60_000,
-    writing_task2: 60_000,
-    speaking_multipart: 60_000,
-    speaking_json: 30_000,
-  };
+  const deadlines = gradingRouteDeadlinesMs;
   const mixedRuns = runs.filter((run) => run.workload === 'mixed_grading');
   const mixedSafeRate = highestPassingRate(
     mixedRuns,
@@ -1070,6 +1070,8 @@ async function runK6({
       `DURATION=${runDuration}`,
       '-e',
       `MAX_VUS=${maxVUs}`,
+      '-e',
+      `IS_RECOVERY=${isRecovery}`,
       'k6',
       'run',
       '/scripts/capacity-benchmark-k6.js',
@@ -1098,7 +1100,13 @@ async function runK6({
   const routeResults = Object.fromEntries(
     routeNames.map((name) => [
       name,
-      routeSummary(summary.metrics, name, logs[name]),
+      routeSummary(
+        summary.metrics,
+        name,
+        logs[name],
+        Number.parseInt(runDuration, 10),
+        isRecovery,
+      ),
     ]),
   );
   const requestCount = Object.values(routeResults).reduce(
@@ -1148,6 +1156,18 @@ async function runK6({
     droppedIterations:
       metricValue(summary.metrics, 'dropped_iterations', 'count') ?? 0,
     routes: routeResults,
+    probes: {
+      health: probeSummary(
+        summary.metrics,
+        'health',
+        Number.parseInt(runDuration, 10),
+      ),
+      readiness: probeSummary(
+        summary.metrics,
+        'readiness',
+        Number.parseInt(runDuration, 10),
+      ),
+    },
     sampleAdequacy: {
       minimumSamples: minimumGradingSamples,
       status: routeNames.some((name) => gradingRouteNames.includes(name))
@@ -1218,8 +1238,8 @@ async function runK6({
   };
 }
 
-/** @param {MetricSet} metrics @param {BenchmarkRouteName} name @param {RequestTiming} [logTiming] @returns {RouteResult} */
-function routeSummary(metrics, name, logTiming) {
+/** @param {MetricSet} metrics @param {BenchmarkRouteName} name @param {RequestTiming} [logTiming] @param {number} durationSeconds @param {boolean} isRecovery @returns {RouteResult} */
+function routeSummary(metrics, name, logTiming, durationSeconds, isRecovery) {
   const latency = metrics[`benchmark_latency_${name}`]?.values ?? {};
   const routePaths = {
     writing_task1: '/v1/ielts/writing/task1/grade',
@@ -1241,7 +1261,8 @@ function routeSummary(metrics, name, logTiming) {
     paths: {},
     errorsByCode: {},
   };
-  return {
+  /** @type {RouteResult} */
+  const result = {
     path: pathName,
     count:
       metricValue(metrics, `benchmark_api_responses_${name}`, 'count') ?? 0,
@@ -1278,6 +1299,40 @@ function routeSummary(metrics, name, logTiming) {
       p99: finite(
         metrics[`benchmark_gateway_total_${name}`]?.values?.['p(99)'],
       ),
+    },
+  };
+  if (isGradingRouteName(name)) {
+    const goodputCount =
+      metricValue(metrics, `benchmark_api_goodput_${name}`, 'count') ?? 0;
+    result.goodput = {
+      count: goodputCount,
+      requestsPerSecond: round(goodputCount / durationSeconds, 2),
+      deadlineMs: gradingRouteDeadlinesMs[name],
+    };
+    if (isRecovery) {
+      result.goodputBySecond = goodputCountsBySecond(
+        metrics,
+        name,
+        durationSeconds,
+      );
+    }
+  }
+  return result;
+}
+
+/** @param {MetricSet} metrics @param {'health' | 'readiness'} name @param {number} expectedSamples @returns {ProbeResult} */
+function probeSummary(metrics, name, expectedSamples) {
+  const prefix = `benchmark_probe_latency_${name}`;
+  const count = metricValue(metrics, prefix, 'count') ?? 0;
+  return {
+    count,
+    failures:
+      metricValue(metrics, `benchmark_probe_failures_${name}`, 'count') ?? 0,
+    missedSamples: Math.max(0, expectedSamples - count),
+    latencyMs: {
+      p50: finite(metrics[prefix]?.values?.med),
+      p95: finite(metrics[prefix]?.values?.['p(95)']),
+      p99: finite(metrics[prefix]?.values?.['p(99)']),
     },
   };
 }

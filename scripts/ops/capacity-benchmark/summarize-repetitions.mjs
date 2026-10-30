@@ -4,8 +4,10 @@ import process from 'node:process';
 
 import { summarizeRepetitions } from './capacity-benchmark-utils.mjs';
 
-/** @typedef {{count: number, errorCount: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, acceptedLatencyMs: {p50: number | null, p95: number | null, p99: number | null}, timingsByPath?: Record<string, {admissionMs: {count: number, p50: number | null, p95: number | null, p99: number | null}, completionMs: {count: number, p50: number | null, p95: number | null, p99: number | null}}>} BenchmarkRoute */
-/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, sampleAdequacy?: {routes?: Record<string, {count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}>, paths?: Record<string, Record<string, {count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}>>}}} BenchmarkRun */
+/** @typedef {{count: number, requestsPerSecond: number, deadlineMs: number}} RouteGoodput */
+/** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: {p50: number | null, p95: number | null, p99: number | null}}} ProbeResult */
+/** @typedef {{count: number, errorCount: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, acceptedLatencyMs: {p50: number | null, p95: number | null, p99: number | null}, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, {admissionMs: {count: number, p50: number | null, p95: number | null, p99: number | null}, completionMs: {count: number, p50: number | null, p95: number | null, p99: number | null}}>} BenchmarkRoute */
+/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {routes?: Record<string, {count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}>, paths?: Record<string, Record<string, {count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}>>}}} BenchmarkRun */
 /** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {operatingSystem: string, logicalCpuCount: number, cpuModel: string | null, totalMemoryBytes: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
 /** @typedef {NonNullable<ReturnType<typeof summarizeRepetitions>>} RepetitionSummary */
 
@@ -57,13 +59,21 @@ function renderMarkdown(result) {
     `- Minimum grading samples per route: ${result.minimumGradingSamples}`,
     `- Repetitions: ${result.repetitionCount}`,
     '',
-    '| Stage | Route | Completed samples by repetition | Errors by repetition | p99 min / median / max (ms) | Accepted p99 min / median / max (ms) | Sample verdict |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
+    '| Stage | Offered RPS | Route | Goodput RPS min / median / max | Overload vs passing baseline (%) | Recovery to baseline (s) | Health p95 / failed / missing | Ready p95 / failed / missing | Completed samples by repetition | Errors by repetition | p99 min / median / max (ms) | Accepted p99 min / median / max (ms) | Sample verdict |',
+    '| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
 
   /** @param {{min: number | null, median: number | null, max: number | null} | null} value */
   const spread = (value) =>
     value ? `${value.min} / ${value.median} / ${value.max}` : 'unavailable';
+  /** @param {{samples: Array<{repetition: number, p95Ms: number | null, failures: number, missedSamples: number}>}} probe */
+  const probeCell = (probe) =>
+    probe.samples
+      .map(
+        ({ repetition, p95Ms, failures, missedSamples }) =>
+          `R${repetition}: ${p95Ms === null ? 'n/a' : `${p95Ms}ms`} / ${failures} / ${missedSamples}`,
+      )
+      .join('<br>');
   for (const stage of result.stages) {
     for (const [routeName, route] of Object.entries(stage.routes)) {
       const counts = route.samples
@@ -73,14 +83,14 @@ function renderMarkdown(result) {
         .map(({ repetition, errorCount }) => `R${repetition}: ${errorCount}`)
         .join(', ');
       lines.push(
-        `| ${stage.label} | ${routeName} | ${counts} | ${errors} | ${spread(route.p99Ms)} | ${spread(route.acceptedP99Ms)} | ${route.sampleVerdict} |`,
+        `| ${stage.label} | ${stage.offeredRateRps} | ${routeName} | ${spread(route.goodputRps)} | ${spread(route.overloadChangePercent)} | ${spread(route.timeToBaselineSeconds)} | ${probeCell(stage.probes.health)} | ${probeCell(stage.probes.readiness)} | ${counts} | ${errors} | ${spread(route.p99Ms)} | ${spread(route.acceptedP99Ms)} | ${route.sampleVerdict} |`,
       );
     }
   }
 
   lines.push(
     '',
-    'Each stage verdict is inconclusive if it is missing a repetition or any grading route has fewer than the configured minimum samples. The sample verdict counts every response, so read it with the error column: a route that answers only with errors has enough samples but no capacity. Accepted p99 covers 2xx responses only.',
+    'Goodput counts 2xx grading responses completed within the configured route deadline; its rate is divided by the stage hold duration. Overload change compares each route with the highest passing mixed-grading stage. Recovery is the first observed one-second bucket meeting or exceeding that baseline, so it does not establish sustained recovery. Probe cells show p95 latency, failed requests, and missed scheduled samples per repetition. Each stage verdict is inconclusive if it is missing a repetition or any grading route has fewer than the configured minimum samples. The sample verdict counts every response, so read it with the error column; a route that answers only with errors has enough samples but no capacity. Accepted p99 covers 2xx responses only.',
     '',
   );
   return lines.join('\n');
@@ -144,7 +154,12 @@ function isBenchmarkRun(value) {
     typeof value.holdDuration !== 'string' ||
     typeof value.completedRequests !== 'number' ||
     !isRecord(value.routes) ||
-    !Object.values(value.routes).every(isBenchmarkRoute)
+    !Object.values(value.routes).every(isBenchmarkRoute) ||
+    !isRecord(value.probes) ||
+    !isProbeResult(value.probes.health) ||
+    !isProbeResult(value.probes.readiness) ||
+    typeof value.isOverload !== 'boolean' ||
+    typeof value.isRecovery !== 'boolean'
   ) {
     return false;
   }
@@ -178,8 +193,35 @@ function isBenchmarkRoute(value) {
     return false;
   }
   return (
-    value.timingsByPath === undefined ||
-    isPathTimingsRecord(value.timingsByPath)
+    (value.timingsByPath === undefined ||
+      isPathTimingsRecord(value.timingsByPath)) &&
+    (value.goodput === undefined || isGoodput(value.goodput)) &&
+    (value.goodputBySecond === undefined ||
+      isNumberArray(value.goodputBySecond))
+  );
+}
+
+/** @param {unknown} value @returns {value is RouteGoodput} */
+function isGoodput(value) {
+  return (
+    isRecord(value) &&
+    typeof value.count === 'number' &&
+    typeof value.requestsPerSecond === 'number' &&
+    typeof value.deadlineMs === 'number'
+  );
+}
+
+/** @param {unknown} value @returns {value is ProbeResult} */
+function isProbeResult(value) {
+  return (
+    isRecord(value) &&
+    typeof value.count === 'number' &&
+    typeof value.failures === 'number' &&
+    typeof value.missedSamples === 'number' &&
+    isRecord(value.latencyMs) &&
+    isNullableNumber(value.latencyMs.p50) &&
+    isNullableNumber(value.latencyMs.p95) &&
+    isNullableNumber(value.latencyMs.p99)
   );
 }
 

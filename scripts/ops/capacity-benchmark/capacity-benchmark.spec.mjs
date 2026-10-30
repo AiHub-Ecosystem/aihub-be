@@ -14,6 +14,8 @@ import {
   appendStreamingMarkerChunk,
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
+  firstGoodputBaselineSecond,
+  goodputCountsBySecond,
   gradedPathSampleAdequacy,
   hasCompleteLoadDelivery,
   hasMinimumRouteSamples,
@@ -33,9 +35,10 @@ import {
 } from './capacity-benchmark-utils.mjs';
 
 /** @typedef {{min: number | null, median: number | null, max: number | null}} Spread */
-/** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: Spread, p50Ms: Spread, p95Ms: Spread, p99Ms: Spread, sampleVerdict: string}} RouteSummary */
+/** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: Spread | null, goodputRps: Spread | null, overloadChangePercent: Spread | null, timeToBaselineSeconds: Spread | null, p50Ms: Spread | null, p95Ms: Spread | null, p99Ms: Spread, sampleVerdict: string}} RouteSummary */
 /** @typedef {{completionP99Ms: Spread, samples: Array<{status: string, count: number}>}} PathSummary */
-/** @typedef {{verdict: string, routes: Record<string, RouteSummary>, paths: Record<string, Record<string, PathSummary>>}} StageSummary */
+/** @typedef {{p95Ms: Spread | null, samples: Array<{failures: number, missedSamples: number}>}} ProbeSummary */
+/** @typedef {{label: string, verdict: string, offeredRateRps: number, probes: {health: ProbeSummary, readiness: ProbeSummary}, routes: Record<string, RouteSummary>, paths: Record<string, Record<string, PathSummary>>}} StageSummary */
 /** @typedef {{stages: StageSummary[]}} RepetitionSummary */
 
 await test('reads Argon2 queue counters from Prometheus exposition', () => {
@@ -247,6 +250,24 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
         label: 'mixed_grading at 32 offered requests/s',
         workload: 'mixed_grading',
         offeredRateRps: 32,
+        holdDuration: '100s',
+        completedRequests: 3200,
+        isOverload: false,
+        isRecovery: false,
+        probes: {
+          health: {
+            count: 100,
+            failures: 1,
+            missedSamples: 0,
+            latencyMs: { p50: 1, p95: p99Ms + 1, p99: p99Ms + 2 },
+          },
+          readiness: {
+            count: 100,
+            failures: 0,
+            missedSamples: 0,
+            latencyMs: { p50: 2, p95: p99Ms + 2, p99: p99Ms + 3 },
+          },
+        },
         routes: {
           writing_task1: {
             count: status === 'sufficient' ? 1000 : 999,
@@ -261,6 +282,11 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
             },
             acceptedLatencyMs: { p50: 9, p95: 14, p99: p99Ms - 1 },
             errorCount: repetition,
+            goodput: {
+              count: 1000,
+              requestsPerSecond: p99Ms,
+              deadlineMs: 60_000,
+            },
           },
         },
         sampleAdequacy: {
@@ -300,6 +326,17 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
     median: 14,
     max: 19,
   });
+  assert.deepEqual(summary.stages[0].routes.writing_task1.goodputRps, {
+    min: 10,
+    median: 15,
+    max: 20,
+  });
+  assert.deepEqual(summary.stages[0].probes.health.p95Ms, {
+    min: 11,
+    median: 16,
+    max: 21,
+  });
+  assert.equal(summary.stages[0].probes.health.samples[0].failures, 1);
   assert.deepEqual(
     summary.stages[0].routes.writing_task1.samples.map(
       ({ errorCount }) => errorCount,
@@ -353,6 +390,66 @@ await test('summarizes p99 spread and marks missing or under-sampled repetitions
     ].samples[0].status,
     'inconclusive',
   );
+
+  const measured = report(1, 10, 'sufficient');
+  const [baseline] = measured.runs;
+  assert.ok(baseline);
+  const overload = structuredClone(baseline);
+  overload.label = 'mixed_grading overload at 48 offered requests/s';
+  overload.offeredRateRps = 48;
+  overload.isOverload = true;
+  overload.routes.writing_task1.goodput.requestsPerSecond = 4;
+  const recovery = structuredClone(baseline);
+  recovery.label = 'post-overload recovery at 32 requests/s';
+  recovery.isRecovery = true;
+  recovery.routes.writing_task1.goodputBySecond = [0, 7, 10, 11];
+  measured.runs.push(overload, recovery);
+  const recoverySummary = /** @type {RepetitionSummary} */ (
+    summarizeRepetitions([measured], 1)
+  );
+  const overloadSummary = recoverySummary.stages.find(
+    (stage) => stage.label === overload.label,
+  );
+  const recoveryStageSummary = recoverySummary.stages.find(
+    (stage) => stage.label === recovery.label,
+  );
+  assert.ok(overloadSummary);
+  assert.ok(recoveryStageSummary);
+  assert.ok(overloadSummary.routes.writing_task1.overloadChangePercent);
+  assert.ok(recoveryStageSummary.routes.writing_task1.timeToBaselineSeconds);
+  assert.equal(
+    overloadSummary.routes.writing_task1.overloadChangePercent.median,
+    -60,
+  );
+  assert.equal(
+    recoveryStageSummary.routes.writing_task1.timeToBaselineSeconds.median,
+    3,
+  );
+});
+
+await test('summarizes per-second goodput samples and first baseline crossing', () => {
+  assert.deepEqual(
+    goodputCountsBySecond(
+      {
+        'benchmark_goodput_by_second{route:writing_task1,second:0}': {
+          values: { count: 1 },
+        },
+        'benchmark_goodput_by_second{route:writing_task1,second:2}': {
+          values: { count: 3 },
+        },
+        'benchmark_goodput_by_second{route:speaking_json,second:1}': {
+          values: { count: 8 },
+        },
+      },
+      'writing_task1',
+      3,
+    ),
+    [1, 0, 3],
+  );
+  assert.equal(firstGoodputBaselineSecond(1, [0, 1, 3]), 2);
+  assert.equal(firstGoodputBaselineSecond(2, [0, 1, 0]), null);
+  assert.equal(firstGoodputBaselineSecond(0, [0, 1, 3]), null);
+  assert.throws(() => goodputCountsBySecond({}, 'writing_task1', 0));
 });
 
 await test('places the controlled overload stage above the highest passing stage', () => {

@@ -4,12 +4,21 @@ export const K6_GRACEFUL_STOP_SECONDS = 65;
 /** @typedef {'login' | 'refresh' | 'web_session_exchange'} AuthRouteName */
 /** @typedef {GradingRouteName | AuthRouteName} BenchmarkRouteName */
 /** @typedef {BenchmarkRouteName | 'mixed_grading' | 'auth_and_grading'} BenchmarkWorkload */
+/** @type {Record<GradingRouteName, number>} */
+export const gradingRouteDeadlinesMs = {
+  writing_task1: 60_000,
+  writing_task2: 60_000,
+  speaking_multipart: 60_000,
+  speaking_json: 30_000,
+};
 /** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
 /** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
 /** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
 /** @typedef {{count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}} SampleAdequacy */
-/** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
-/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, sampleAdequacy?: {routes?: Record<string, SampleAdequacy>, paths?: Record<string, Record<string, SampleAdequacy>>}}} BenchmarkRun */
+/** @typedef {{count: number, requestsPerSecond: number, deadlineMs: number}} RouteGoodput */
+/** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: Percentiles}} ProbeResult */
+/** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
+/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {routes?: Record<string, SampleAdequacy>, paths?: Record<string, Record<string, SampleAdequacy>>}}} BenchmarkRun */
 /** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {logicalCpuCount: number, totalMemoryBytes: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
 /** @typedef {{min: number | null, median: number | null, max: number | null}} NumericSpread */
 /** @typedef {{samples: Array<{repetition: number, count: number, status: string, admissionP50Ms: number | null, admissionP99Ms: number | null, completionP50Ms: number | null, completionP99Ms: number | null}>, admissionP50Ms: NumericSpread | null, admissionP99Ms: NumericSpread | null, completionP50Ms: NumericSpread | null, completionP99Ms: NumericSpread | null, sampleVerdict: 'sufficient' | 'inconclusive'}} RepetitionPathSummary */
@@ -239,6 +248,53 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
     }
   }
 
+  /** @type {Map<BenchmarkRun, Record<string, {overloadChangePercent?: number, timeToBaselineSeconds?: number | null}>>} */
+  const recoveryComparisons = new Map();
+  for (const report of sortedReports) {
+    const recovery = report.runs.find((run) => run.isRecovery);
+    if (recovery === undefined) continue;
+    const baseline = report.runs.find(
+      (run) =>
+        run.workload === recovery.workload &&
+        !run.isOverload &&
+        !run.isRecovery &&
+        run.offeredRateRps === recovery.offeredRateRps,
+    );
+    const overload = report.runs.find((run) => run.isOverload);
+    if (baseline === undefined) continue;
+    for (const name of Object.keys(baseline.routes)) {
+      const baselineRps = baseline.routes[name]?.goodput?.requestsPerSecond;
+      const overloadRps = overload?.routes[name]?.goodput?.requestsPerSecond;
+      if (
+        overload !== undefined &&
+        baselineRps !== undefined &&
+        baselineRps > 0 &&
+        overloadRps !== undefined
+      ) {
+        const values = recoveryComparisons.get(overload) ?? {};
+        values[name] = {
+          ...values[name],
+          overloadChangePercent:
+            Math.round(((overloadRps - baselineRps) / baselineRps) * 10_000) /
+            100,
+        };
+        recoveryComparisons.set(overload, values);
+      }
+      const recoveryRoute = recovery.routes[name];
+      if (recoveryRoute?.goodputBySecond !== undefined) {
+        const recoveryValues = recoveryComparisons.get(recovery) ?? {};
+        recoveryValues[name] = {
+          ...recoveryValues[name],
+          timeToBaselineSeconds: firstGoodputBaselineSecond(
+            baselineRps ?? null,
+            recoveryRoute.goodputBySecond,
+          ),
+        };
+        recoveryComparisons.set(recovery, recoveryValues);
+      }
+    }
+  }
+
   return {
     runtimeCommit: firstReport.benchmark.runtimeCommit,
     repetitionCount: expectedRepetitions,
@@ -257,6 +313,7 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
             .filter(({ run }) => run.routes[name] !== undefined)
             .map(({ repetition, run }) => ({
               repetition,
+              run,
               route: run.routes[name],
               adequacy: run.sampleAdequacy?.routes?.[name],
             }));
@@ -278,7 +335,28 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
                 repetition,
                 count: route.count,
                 errorCount: route.errorCount,
+                goodputCount: route.goodput?.count ?? null,
+                goodputRps: route.goodput?.requestsPerSecond ?? null,
               })),
+              goodputRps: numericSpread(
+                routeSamples.map(
+                  ({ route }) => route.goodput?.requestsPerSecond ?? null,
+                ),
+              ),
+              overloadChangePercent: numericSpread(
+                routeSamples.map(
+                  ({ run }) =>
+                    recoveryComparisons.get(run)?.[name]
+                      ?.overloadChangePercent ?? null,
+                ),
+              ),
+              timeToBaselineSeconds: numericSpread(
+                routeSamples.map(
+                  ({ run }) =>
+                    recoveryComparisons.get(run)?.[name]
+                      ?.timeToBaselineSeconds ?? null,
+                ),
+              ),
               acceptedP99Ms: numericSpread(
                 routeSamples.map(({ route }) => route.acceptedLatencyMs?.p99),
               ),
@@ -372,6 +450,26 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
         offeredRateRps: firstSample.run.offeredRateRps,
         repetitionCount: samples.length,
         verdict: complete && sampleAdequate ? 'sufficient' : 'inconclusive',
+        probes: Object.fromEntries(
+          /** @type {const} */ (['health', 'readiness']).map((name) => {
+            const probeSamples = samples.map(({ repetition, run }) => ({
+              repetition,
+              count: run.probes[name].count,
+              failures: run.probes[name].failures,
+              missedSamples: run.probes[name].missedSamples,
+              p95Ms: run.probes[name].latencyMs.p95,
+            }));
+            return [
+              name,
+              {
+                samples: probeSamples,
+                p95Ms: numericSpread(
+                  probeSamples.map((sample) => sample.p95Ms),
+                ),
+              },
+            ];
+          }),
+        ),
         routes,
         paths,
       };
@@ -397,7 +495,7 @@ function numericSpread(values) {
 }
 
 /** @param {string} name @returns {name is GradingRouteName} */
-function isGradingRouteName(name) {
+export function isGradingRouteName(name) {
   return Object.hasOwn(gradedPathPairs, name);
 }
 
@@ -532,6 +630,51 @@ export function taggedMetricValues(metrics, prefix) {
       ),
       values: metric.values ?? {},
     }));
+}
+
+/** @param {Record<string, {values?: Record<string, unknown>} | undefined>} metrics @param {GradingRouteName} route @param {number} durationSeconds */
+export function goodputCountsBySecond(metrics, route, durationSeconds) {
+  if (!Number.isSafeInteger(durationSeconds) || durationSeconds < 1) {
+    throw new Error('invalid goodput sample duration');
+  }
+  const counts = Array.from({ length: durationSeconds }, () => 0);
+  for (const sample of taggedMetricValues(
+    metrics,
+    'benchmark_goodput_by_second',
+  )) {
+    const second = Number(sample.labels.second);
+    const count = sample.values.count;
+    if (
+      sample.labels.route === route &&
+      Number.isSafeInteger(second) &&
+      second >= 0 &&
+      second < durationSeconds &&
+      typeof count === 'number' &&
+      Number.isSafeInteger(count) &&
+      count > 0
+    ) {
+      counts[second] += count;
+    }
+  }
+  return counts;
+}
+
+/** @param {number | null} baselineRequestsPerSecond @param {number[]} recoveryCountsBySecond */
+export function firstGoodputBaselineSecond(
+  baselineRequestsPerSecond,
+  recoveryCountsBySecond,
+) {
+  if (
+    baselineRequestsPerSecond === null ||
+    !Number.isFinite(baselineRequestsPerSecond) ||
+    baselineRequestsPerSecond <= 0
+  ) {
+    return null;
+  }
+  const second = recoveryCountsBySecond.findIndex(
+    (count) => count >= baselineRequestsPerSecond,
+  );
+  return second < 0 ? null : second + 1;
 }
 
 /** @param {string} line @returns {{cpuPercent: number, memoryBytes: number | null}} */
