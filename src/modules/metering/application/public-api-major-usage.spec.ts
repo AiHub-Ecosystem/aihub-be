@@ -305,6 +305,41 @@ describe('buildPublicApiMajorReport', () => {
     ]);
   });
 
+  it('marks only the Environment and days of a dropped interval inconclusive', () => {
+    const report = buildPublicApiMajorReport({
+      window: WINDOW,
+      environment: 'production',
+      asOf: AS_OF,
+      coverageStartDay: undefined,
+      totals: [TOTAL, { ...TOTAL, environment: 'sandbox' }],
+      organizations: [],
+      unattributed: [],
+      collectors: [COLLECTOR, { ...COLLECTOR, environment: 'sandbox' }],
+      droppedIntervals: [
+        {
+          environment: 'production',
+          droppedFrom: at('2026-10-10T23:59:50Z'),
+          droppedThrough: at('2026-10-11T00:00:10Z'),
+        },
+      ],
+    });
+
+    expect(report.coverage).toEqual([
+      {
+        environment: 'production',
+        verdict: 'inconclusive',
+        inconclusiveDays: ['2026-10-10', '2026-10-11'],
+        uncleanExitDays: [],
+      },
+      {
+        environment: 'sandbox',
+        verdict: 'complete',
+        inconclusiveDays: [],
+        uncleanExitDays: [],
+      },
+    ]);
+  });
+
   it('judges an Environment with counts but no collection record inconclusive', () => {
     const report = buildPublicApiMajorReport({
       window: { fromDay: '2026-10-27', toDay: '2026-10-29' },

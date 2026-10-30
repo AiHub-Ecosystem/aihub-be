@@ -1,6 +1,6 @@
 # ADR-0136: Bound Public API major usage collection
 
-- Status: Accepted under [#1406](https://github.com/AiHub-Ecosystem/aihub-be/issues/1406).
+- Status: Proposed — awaiting AIHUB owner approval in [#1406](https://github.com/AiHub-Ecosystem/aihub-be/issues/1406). It amends the accepted ADR-0127; until approved, ADR-0127's original claim stands.
 - Date: 2026-10-30
 - Amends: [ADR-0127](0127-public-api-uri-major-versioning.md), specifically its claim that a process loses usage counts only when it dies before writing them
 - Related: [ADR-0125](0125-bounded-protection-metrics.md), [#1406](https://github.com/AiHub-Ecosystem/aihub-be/issues/1406)
@@ -15,6 +15,7 @@ Public API major usage is adoption evidence, not billing evidence. Its in-proces
 - When a new key would exceed the active-buffer cap, that sample is dropped and the label-free `aihub_public_api_major_usage_samples_dropped_total` counter increments. Existing keys continue aggregating. The response hook remains synchronous and does no database I/O.
 - The next successful write persists the dropped interval with that write's counts and collection record. The batch number makes a retry write the interval only once. Every UTC day touched by a persisted interval is inconclusive in adoption coverage.
 - The record beside `PUBLIC_API_MAJOR_USAGE_MAX_KEYS` contains the measured uncapped per-key growth and the retained heap and RSS figures from a 768 MiB container run under the measured outage workload. The 16,384-key bound is per buffer; one process can retain up to 2 × 16,384 keys.
+- The cap is not derived from today's load. Production held 6 Organizations and 5 usage rows on 2026-10-30. Two buffers cost about 9 MiB, 1.2% of the 768 MiB container limit, and one buffer holds four outage days for 4,096 Organizations. The cap exists to stop an unbounded outage or a key flood, not to limit normal traffic.
 - A crash after samples were dropped but before a successful write persists their interval loses that interval. The existing 5-minute no-process gap rule then applies; a burst above the cap within one 30-second flush followed by a crash within 5 minutes can still yield a `complete` verdict. This known limit is accepted for adoption evidence and does not change the retirement sign-off rule.
 
 ## Consequences

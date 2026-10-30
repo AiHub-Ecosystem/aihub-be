@@ -489,11 +489,11 @@ model PublicApiMajorUsageDroppedInterval {
   batch          BigInt
   environment    String
   droppedFrom    DateTime                       @map("dropped_from") @db.Timestamptz(6)
-  droppedThrough DateTime @map("dropped_through") @db.Timestamptz(6)
+  droppedThrough DateTime                       @map("dropped_through") @db.Timestamptz(6)
   coverage       PublicApiMajorUsageCoverage    @relation(fields: [processId], references: [processId], onDelete: Cascade, onUpdate: NoAction, map: "public_api_major_usage_dropped_interval_process_fk")
 
   @@id([processId, batch])
-  @@index([droppedFrom], map: "public_api_major_usage_dropped_interval_window_idx")
+  @@index([droppedThrough], map: "public_api_major_usage_dropped_interval_window_idx")
   @@map("public_api_major_usage_dropped_interval")
 }
 

@@ -98,7 +98,7 @@ let droppedSamples = 0;
 let databaseUnavailable = false;
 /** @type {PublicApiMajorUsageWrite[]} */
 const writes = [];
-/** @type {PublicApiMajorUsageRepositoryPort & {writes: PublicApiMajorUsageWrite[]}} */
+/** @type {PublicApiMajorUsageRepositoryPort} */
 const repository = {
   /** @param {string} _environment @param {PublicApiMajorUsageWrite} write */
   async add(_environment, write) {
@@ -201,7 +201,6 @@ assert.equal(activeKeys, PUBLIC_API_MAJOR_USAGE_MAX_KEYS);
 assert.equal(pendingKeys, PUBLIC_API_MAJOR_USAGE_MAX_KEYS);
 assert.ok(memory.rss < maxMemoryBytes, 'RSS stayed below 768 MiB');
 
-/** @param {string} name @returns {number | undefined} */
 const result = {
   node: process.version,
   memoryLimitMiB: 768,

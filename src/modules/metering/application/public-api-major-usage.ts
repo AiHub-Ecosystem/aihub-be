@@ -193,11 +193,33 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/u;
  * retained up to 2 × 16,384 keys (one pending batch and one live buffer):
  * +9.01 MiB heap, 80.52 MiB RSS, and 1,065,040 drops. Reproduce with
  * scripts/ops/measure-public-api-major-usage-buffer.mjs.
+ *
+ * Why 16,384: two buffers cost about 9 MiB, 1.2% of the 768 MiB limit, and a
+ * key is one UTC day of one major for one Organization, so a buffer holds four
+ * outage days for 4,096 Organizations. Production had 6 Organizations and 5
+ * usage rows on 2026-10-30, so the cap sits orders of magnitude above real
+ * cardinality; it only stops an unbounded outage or a key flood.
  */
 export const PUBLIC_API_MAJOR_USAGE_MAX_KEYS = 16_384;
 
 function dayOf(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+function usageRowKey(
+  usageDay: string,
+  major: number,
+  organizationId: string | null | undefined,
+): string {
+  return `${usageDay}|${major}|${organizationId ?? ''}`;
+}
+
+function unattributedRowKey(
+  usageDay: string,
+  major: number,
+  callerKind: PublicApiCallerKind,
+): string {
+  return `${usageDay}|${major}|${callerKind}`;
 }
 
 /**
@@ -215,8 +237,12 @@ export class PublicApiMajorUsageBuffer {
   record(sample: PublicApiMajorUsageSample): void {
     const usageDay = dayOf(sample.at);
     const failureCount = sample.failed ? 1 : 0;
-    const rowKey = `${usageDay}|${sample.major}|${sample.organizationId ?? ''}`;
-    const unattributedKey = `${usageDay}|${sample.major}|${sample.callerKind}`;
+    const rowKey = usageRowKey(usageDay, sample.major, sample.organizationId);
+    const unattributedKey = unattributedRowKey(
+      usageDay,
+      sample.major,
+      sample.callerKind,
+    );
     let newKeys = this.rows.has(rowKey) ? 0 : 1;
     if (
       sample.organizationId === undefined &&
@@ -267,7 +293,7 @@ export class PublicApiMajorUsageBuffer {
   }
 
   private addRow(row: PublicApiMajorUsageRow): void {
-    const key = `${row.usageDay}|${row.major}|${row.organizationId ?? ''}`;
+    const key = usageRowKey(row.usageDay, row.major, row.organizationId);
     const held = this.rows.get(key);
     this.rows.set(
       key,
@@ -286,7 +312,7 @@ export class PublicApiMajorUsageBuffer {
   }
 
   private addUnattributed(row: PublicApiMajorUnattributedRow): void {
-    const key = `${row.usageDay}|${row.major}|${row.callerKind}`;
+    const key = unattributedRowKey(row.usageDay, row.major, row.callerKind);
     const held = this.unattributed.get(key);
     this.unattributed.set(
       key,
