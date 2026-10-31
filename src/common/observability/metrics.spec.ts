@@ -2,6 +2,7 @@ import {
   METRICS_ROUTE_PATH,
   getMetrics,
   registerEmailDeliveryMetrics,
+  registry,
 } from './metrics';
 import {
   observeDispatchDeadlineMsRemaining,
@@ -266,18 +267,15 @@ describe('email delivery failure series before any failure', () => {
   ])(
     'exposes %s at zero, so its first failure is an increase',
     async (kind) => {
-      // A fresh module, so the failures other specs record in the shared registry do not count.
-      await jest.isolateModulesAsync(async () => {
-        const fresh = await import('./metrics');
-        fresh.registerEmailDeliveryMetrics(
-          EMAIL_DELIVERY_KINDS,
-          EMAIL_BACKPRESSURE_KINDS,
-        );
+      registry.resetMetrics();
+      registerEmailDeliveryMetrics(
+        EMAIL_DELIVERY_KINDS,
+        EMAIL_BACKPRESSURE_KINDS,
+      );
 
-        expect(await fresh.getMetrics()).toContain(
-          `aihub_email_delivery_failed_total{kind="${kind}"} 0`,
-        );
-      });
+      expect(await getMetrics()).toContain(
+        `aihub_email_delivery_failed_total{kind="${kind}"} 0`,
+      );
     },
   );
 });
@@ -326,17 +324,15 @@ describe('email outbox backpressure metric', () => {
   ])(
     'exposes %s at zero, so its first refusal is an increase',
     async (kind) => {
-      await jest.isolateModulesAsync(async () => {
-        const fresh = await import('./metrics');
-        fresh.registerEmailDeliveryMetrics(
-          EMAIL_DELIVERY_KINDS,
-          EMAIL_BACKPRESSURE_KINDS,
-        );
+      registry.resetMetrics();
+      registerEmailDeliveryMetrics(
+        EMAIL_DELIVERY_KINDS,
+        EMAIL_BACKPRESSURE_KINDS,
+      );
 
-        expect(await fresh.getMetrics()).toContain(
-          `aihub_email_outbox_backpressure_refusals_total{kind="${kind}"} 0`,
-        );
-      });
+      expect(await getMetrics()).toContain(
+        `aihub_email_outbox_backpressure_refusals_total{kind="${kind}"} 0`,
+      );
     },
   );
 

@@ -17,7 +17,9 @@ export type { EmailDeliveryPayload } from './email-kind-handler.registry';
 
 export const EMAIL_NOTICE_RESOLVERS = Symbol('EMAIL_NOTICE_RESOLVERS');
 
-export declare const emailDeliveryTransactionBrand: unique symbol;
+export const emailDeliveryTransactionBrand: unique symbol = Symbol(
+  'EMAIL_DELIVERY_TRANSACTION',
+);
 
 /** Opaque capability for the caller-owned PostgreSQL transaction. */
 export interface EmailDeliveryTransaction {

@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadEnvFile } from 'node:process';
 
 // Deployed images declare these modes explicitly (Dockerfile and the
 // production compose set NODE_ENV). A .env reaching such a process would
@@ -28,7 +27,7 @@ export function loadLocalEnvironment(
     );
     return;
   }
-  loadEnvFile(envFile);
+  process.loadEnvFile(envFile);
 }
 
 // This entrypoint import runs before telemetry and application modules read

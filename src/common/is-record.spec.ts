@@ -5,10 +5,16 @@ describe('isRecord', () => {
     expect(isRecord(value)).toBe(true);
   });
 
-  it.each([null, undefined, [], [1], 'text', 1, true, () => ({})])(
-    'refuses %p',
-    (value) => {
-      expect(isRecord(value)).toBe(false);
-    },
-  );
+  it.each([
+    { value: null },
+    { value: undefined },
+    { value: [] },
+    { value: [1] },
+    { value: 'text' },
+    { value: 1 },
+    { value: true },
+    { value: () => ({}) },
+  ])('refuses $value', ({ value }) => {
+    expect(isRecord(value)).toBe(false);
+  });
 });

@@ -9,7 +9,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
-import { MockAgent, FormData as UndiciFormData } from 'undici';
+import { MockAgent, FormData as UndiciFormData } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
@@ -893,12 +893,14 @@ describe('Speaking grading HTTP flow', () => {
         Buffer.alloc(200, 1),
       );
       await expect(
-        app.inject({
-          method: 'POST',
-          url: '/v1/ielts/speaking/grading',
-          headers: { 'content-type': request.contentType },
-          payload: request.payload,
-        }),
+        Promise.resolve(
+          app.inject({
+            method: 'POST',
+            url: '/v1/ielts/speaking/grading',
+            headers: { 'content-type': request.contentType },
+            payload: request.payload,
+          }),
+        ),
       ).rejects.toThrow('response destroyed before completion');
     } finally {
       parser.parse = originalParse;

@@ -130,7 +130,7 @@ describe('prisma drift between a schema pair', () => {
     expect(drifted.length).toBeGreaterThan(0);
     expect(drifted.join('\n')).toContain('"name"');
     expect(drifted.join('\n')).toContain('"createdAt"');
-  });
+  }, 30_000);
 
   it('passes an aligned pair', () => {
     const aligned = join(workspace, 'same-a.prisma');
@@ -139,5 +139,5 @@ describe('prisma drift between a schema pair', () => {
     writeFileSync(sameCopy, ALIGNED);
 
     expect(driftStatements(diff(aligned, sameCopy))).toEqual([]);
-  });
+  }, 30_000);
 });

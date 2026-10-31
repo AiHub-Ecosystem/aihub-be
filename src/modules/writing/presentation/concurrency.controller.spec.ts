@@ -285,7 +285,7 @@ describe('Writing concurrency HTTP flow', () => {
     expect(limiter.active).toBe(0);
 
     dispatcher.fail = false;
-    const next = app.inject(requestOptions());
+    const next = Promise.resolve(app.inject(requestOptions()));
     for (let attempt = 0; attempt < 5 && dispatcher.calls < 4; attempt += 1) {
       await flush();
     }

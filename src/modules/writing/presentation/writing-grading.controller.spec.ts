@@ -8,7 +8,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { type Static, type TSchema, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
-import { MockAgent } from 'undici';
+import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';

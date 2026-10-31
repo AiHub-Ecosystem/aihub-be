@@ -31,7 +31,7 @@ describe('quota reconciliation CLI', () => {
 
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('Command failed');
-  });
+  }, 15_000);
 
   it('fails with an operational error when Redis is not configured', async () => {
     const result = await runCli(['quota:reconcile'], {

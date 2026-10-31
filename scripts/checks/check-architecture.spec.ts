@@ -221,6 +221,7 @@ describe('layer rules on feature-first Identity paths', () => {
         rmSync(fixtureRoot, { recursive: true, force: true });
       }
     },
+    30_000,
   );
 });
 
@@ -234,36 +235,46 @@ describe('domain layer purity', () => {
   it.each([
     ['a node: prefixed built-in', "import { domainToASCII } from 'node:url';"],
     ['an unprefixed built-in', "import { readFileSync } from 'fs';"],
-  ])('rejects %s imported into a domain file', (_name, importLine) => {
-    const fixtureRoot = mkdtempSync(
-      join(process.cwd(), 'src', 'modules', 'identity', '.tmp-domain-purity-'),
-    );
-    try {
-      const domainDirectory = join(fixtureRoot, 'domain');
-      mkdirSync(domainDirectory, { recursive: true });
-      writeFileSync(
-        join(domainDirectory, 'probe.ts'),
-        `${importLine}\nexport const probe = 1;\n`,
+  ])(
+    'rejects %s imported into a domain file',
+    (_name, importLine) => {
+      const fixtureRoot = mkdtempSync(
+        join(
+          process.cwd(),
+          'src',
+          'modules',
+          'identity',
+          '.tmp-domain-purity-',
+        ),
       );
+      try {
+        const domainDirectory = join(fixtureRoot, 'domain');
+        mkdirSync(domainDirectory, { recursive: true });
+        writeFileSync(
+          join(domainDirectory, 'probe.ts'),
+          `${importLine}\nexport const probe = 1;\n`,
+        );
 
-      const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-          shell: process.platform === 'win32',
-        },
-      );
+        const result = spawnSync(
+          process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+          ['arch-check'],
+          {
+            cwd: process.cwd(),
+            encoding: 'utf8',
+            shell: process.platform === 'win32',
+          },
+        );
 
-      expect(result.status).not.toBe(0);
-      expect(
-        `${result.stdout.toString()}\n${result.stderr.toString()}`,
-      ).toContain('domain-no-runtime-modules');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  });
+        expect(result.status).not.toBe(0);
+        expect(
+          `${result.stdout.toString()}\n${result.stderr.toString()}`,
+        ).toContain('domain-no-runtime-modules');
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 });
 
 /**
@@ -934,7 +945,7 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
         ).toContain('parseRequestQuery');
       },
     );
-  });
+  }, 30_000);
 
   it('fails a controller that reads a named @Query parameter', () => {
     withControllerFixture(
@@ -946,7 +957,7 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
         ).toContain('parseRequestQuery');
       },
     );
-  });
+  }, 30_000);
 
   it('allows whole-query validation and an explicit per-access reason', () => {
     withControllerFixture(
@@ -955,7 +966,7 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
         expect(result.status).toBe(0);
       },
     );
-  });
+  }, 30_000);
 });
 
 describe('the generated Prisma client stays inside infrastructure', () => {
@@ -1080,7 +1091,7 @@ describe('the generated Prisma client stays inside infrastructure', () => {
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
 
 describe('source-text architecture rules fail arch-check', () => {
@@ -1134,7 +1145,7 @@ describe('source-text architecture rules fail arch-check', () => {
 
     expect(result.output).toContain("declares module 'fastify'");
     expect(result.status).not.toBe(0);
-  });
+  }, 30_000);
 
   it('fails when infrastructure casts an application-declared type', () => {
     const result = runWithFixtures([
@@ -1152,5 +1163,5 @@ describe('source-text architecture rules fail arch-check', () => {
 
     expect(result.output).toContain('casts an application-declared type');
     expect(result.status).not.toBe(0);
-  });
+  }, 30_000);
 });

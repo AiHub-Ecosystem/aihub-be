@@ -1,6 +1,6 @@
 import { type ServerResponse, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { MockAgent } from 'undici';
+import { MockAgent } from 'undici/index.js';
 
 import type { AppError } from '@/common/errors/app-error';
 import { getMetrics } from '@/common/observability/metrics';

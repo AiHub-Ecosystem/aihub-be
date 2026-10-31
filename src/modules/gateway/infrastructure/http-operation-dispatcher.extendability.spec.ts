@@ -1,4 +1,4 @@
-import { MockAgent } from 'undici';
+import { MockAgent } from 'undici/index.js';
 
 import type { OperationId } from '@/catalog/operation-id';
 import { createRequestContext } from '@/common/request-context/request-context.factory';

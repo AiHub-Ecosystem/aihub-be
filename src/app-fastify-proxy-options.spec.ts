@@ -61,16 +61,21 @@ describe('Fastify proxy trust configuration', () => {
   });
 });
 
-describe('Fastify proxy trust over a Unix socket', () => {
+describe('Fastify proxy trust over a local listener', () => {
   const socketPath =
     process.platform === 'win32'
       ? `\\\\.\\pipe\\aihub-proxy-trust-${process.pid}`
       : join(tmpdir(), `aihub-proxy-trust-${process.pid}.sock`);
+  const bunOnWindows =
+    process.platform === 'win32' && process.versions.bun !== undefined;
+  let target: { socketPath: string } | { host: string; port: number } = {
+    socketPath,
+  };
 
   function request(headers: Record<string, string>) {
     return new Promise<{ ip: string | null; ips: (string | null)[] }>(
       (resolve, reject) => {
-        get({ socketPath, path: '/caller-ip', headers }, (response) => {
+        get({ ...target, path: '/caller-ip', headers }, (response) => {
           let body = '';
           response.on('data', (chunk: Buffer) => {
             body += chunk.toString();
@@ -94,7 +99,13 @@ describe('Fastify proxy trust over a Unix socket', () => {
       ip: incoming.ip ?? null,
       ips: incoming.ips ?? [],
     }));
-    await app.listen({ path: socketPath });
+    if (bunOnWindows) {
+      // shortcut: Bun on Windows cannot listen on named pipes; use loopback TCP until it can.
+      const address = await app.listen({ host: '127.0.0.1', port: 0 });
+      target = { host: '127.0.0.1', port: Number(new URL(address).port) };
+    } else {
+      await app.listen({ path: socketPath });
+    }
 
     try {
       // nginx appends the address it saw to whatever the client sent.
@@ -106,8 +117,8 @@ describe('Fastify proxy trust over a Unix socket', () => {
 
       expect(forged.ip).toBe('198.51.100.7');
       expect(single.ip).toBe('198.51.100.7');
-      // The peer has no address, so without a header there is no caller IP.
-      expect(absent.ip).toBeNull();
+      // Unix peers have no address; the Bun TCP fallback resolves to loopback.
+      expect(absent.ip).toBe(bunOnWindows ? '127.0.0.1' : null);
     } finally {
       await app.close();
     }

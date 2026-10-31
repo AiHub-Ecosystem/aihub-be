@@ -2,7 +2,7 @@ import { Blob } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
-import { Response } from 'undici';
+import { Response } from 'undici/index.js';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { DownstreamRequest } from '@/downstream/downstream.types';

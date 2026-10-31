@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { MockAgent } from 'undici';
+import { MockAgent } from 'undici/index.js';
 
 import type {
   GradeResponse,
