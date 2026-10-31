@@ -2,10 +2,10 @@
   "status": "success",
   "error": null,
   "usage": {
-    "input_tokens": 12285,
-    "output_tokens": 1061,
-    "total_tokens": 13346,
-    "cost": 0.020008
+    "input_tokens": 13616,
+    "output_tokens": 1697,
+    "total_tokens": 15313,
+    "cost": 0.036654
   },
   "data": {
     "meta": {
@@ -13,12 +13,12 @@
       "result_type": "question_result",
       "codebook": "[redacted]",
       "test_id": "[redacted]",
-      "test_type": "practice",
+      "test_type": "full_test",
       "user_id": "[redacted]",
       "part_result_id": "[redacted]",
       "response_id": "[redacted]",
       "part": 1,
-      "question_id": "p1_hometown",
+      "question_id": "[redacted]",
       "prompt_text": "[redacted]",
       "question_count": null,
       "total_speaking_seconds": null,
@@ -28,139 +28,467 @@
     "transcript": {
       "text": "[redacted]",
       "stats": {
-        "word_count": 16,
-        "speaking_seconds": 4.41
+        "word_count": 56,
+        "speaking_seconds": 23.25
       },
       "asr": {
-        "disagreement_rate": 0,
+        "disagreement_rate": 0.0526,
         "uncertain_ranges": []
       },
       "tokens": [
         {
           "index": 0,
           "text": "[redacted]",
-          "start_ms": 110,
-          "end_ms": 260,
+          "start_ms": 1270,
+          "end_ms": 1870,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 1,
           "text": "[redacted]",
-          "start_ms": 260,
-          "end_ms": 650,
+          "start_ms": 1870,
+          "end_ms": 2290,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 2,
           "text": "[redacted]",
-          "start_ms": 650,
-          "end_ms": 920,
+          "start_ms": 2710,
+          "end_ms": 3040,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 3,
           "text": "[redacted]",
-          "start_ms": 920,
-          "end_ms": 1070,
+          "start_ms": 3040,
+          "end_ms": 3280,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 4,
           "text": "[redacted]",
-          "start_ms": 1070,
-          "end_ms": 1220,
+          "start_ms": 3280,
+          "end_ms": 3400,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 5,
           "text": "[redacted]",
-          "start_ms": 1220,
-          "end_ms": 1790,
+          "start_ms": 3410,
+          "end_ms": 3510,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 6,
           "text": "[redacted]",
-          "start_ms": 1790,
-          "end_ms": 2270,
+          "start_ms": 3510,
+          "end_ms": 3640,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 7,
           "text": "[redacted]",
-          "start_ms": 2270,
-          "end_ms": 2360,
+          "start_ms": 3640,
+          "end_ms": 4150,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 8,
           "text": "[redacted]",
-          "start_ms": 2360,
-          "end_ms": 2750,
+          "start_ms": 4150,
+          "end_ms": 4300,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 9,
           "text": "[redacted]",
-          "start_ms": 2750,
-          "end_ms": 2870,
+          "start_ms": 4300,
+          "end_ms": 4630,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 10,
           "text": "[redacted]",
-          "start_ms": 2870,
-          "end_ms": 3260,
+          "start_ms": 4630,
+          "end_ms": 5050,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 11,
           "text": "[redacted]",
-          "start_ms": 3260,
-          "end_ms": 3380,
+          "start_ms": 5050,
+          "end_ms": 5410,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 12,
           "text": "[redacted]",
-          "start_ms": 3380,
-          "end_ms": 3470,
+          "start_ms": 5410,
+          "end_ms": 5510,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 13,
           "text": "[redacted]",
-          "start_ms": 3470,
-          "end_ms": 3830,
+          "start_ms": 5510,
+          "end_ms": 5800,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 14,
           "text": "[redacted]",
-          "start_ms": 3830,
-          "end_ms": 3980,
+          "start_ms": 5800,
+          "end_ms": 6300,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         },
         {
           "index": 15,
           "text": "[redacted]",
-          "start_ms": 3980,
-          "end_ms": 4520,
+          "start_ms": 6940,
+          "end_ms": 7120,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 16,
+          "text": "[redacted]",
+          "start_ms": 7120,
+          "end_ms": 7370,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 17,
+          "text": "[redacted]",
+          "start_ms": 7370,
+          "end_ms": 7570,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 18,
+          "text": "[redacted]",
+          "start_ms": 7570,
+          "end_ms": 7900,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 19,
+          "text": "[redacted]",
+          "start_ms": 7900,
+          "end_ms": 8040,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 20,
+          "text": "[redacted]",
+          "start_ms": 8040,
+          "end_ms": 8380,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 21,
+          "text": "[redacted]",
+          "start_ms": 8890,
+          "end_ms": 8980,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 22,
+          "text": "[redacted]",
+          "start_ms": 8980,
+          "end_ms": 9160,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 23,
+          "text": "[redacted]",
+          "start_ms": 9160,
+          "end_ms": 9520,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 24,
+          "text": "[redacted]",
+          "start_ms": 9520,
+          "end_ms": 9970,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 25,
+          "text": "[redacted]",
+          "start_ms": 10480,
+          "end_ms": 10810,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 26,
+          "text": "[redacted]",
+          "start_ms": 10810,
+          "end_ms": 11230,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 27,
+          "text": "[redacted]",
+          "start_ms": 11260,
+          "end_ms": 11680,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 28,
+          "text": "[redacted]",
+          "start_ms": 11680,
+          "end_ms": 12340,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 29,
+          "text": "[redacted]",
+          "start_ms": 12430,
+          "end_ms": 13000,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 30,
+          "text": "[redacted]",
+          "start_ms": 13000,
+          "end_ms": 13480,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 31,
+          "text": "[redacted]",
+          "start_ms": 13840,
+          "end_ms": 14140,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 32,
+          "text": "[redacted]",
+          "start_ms": 14140,
+          "end_ms": 14540,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 33,
+          "text": "[redacted]",
+          "start_ms": 14540,
+          "end_ms": 14650,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 34,
+          "text": "[redacted]",
+          "start_ms": 14650,
+          "end_ms": 14980,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 35,
+          "text": "[redacted]",
+          "start_ms": 14980,
+          "end_ms": 15190,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 36,
+          "text": "[redacted]",
+          "start_ms": 15190,
+          "end_ms": 15940,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 37,
+          "text": "[redacted]",
+          "start_ms": 15940,
+          "end_ms": 16360,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 38,
+          "text": "[redacted]",
+          "start_ms": 16360,
+          "end_ms": 16640,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 39,
+          "text": "[redacted]",
+          "start_ms": 16640,
+          "end_ms": 16720,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 40,
+          "text": "[redacted]",
+          "start_ms": 17440,
+          "end_ms": 17710,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 41,
+          "text": "[redacted]",
+          "start_ms": 17710,
+          "end_ms": 18550,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 42,
+          "text": "[redacted]",
+          "start_ms": 18550,
+          "end_ms": 18700,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 43,
+          "text": "[redacted]",
+          "start_ms": 18700,
+          "end_ms": 18850,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 44,
+          "text": "[redacted]",
+          "start_ms": 18850,
+          "end_ms": 19440,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 45,
+          "text": "[redacted]",
+          "start_ms": 19440,
+          "end_ms": 20080,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 46,
+          "text": "[redacted]",
+          "start_ms": 20590,
+          "end_ms": 20740,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 47,
+          "text": "[redacted]",
+          "start_ms": 20740,
+          "end_ms": 20830,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 48,
+          "text": "[redacted]",
+          "start_ms": 20830,
+          "end_ms": 21520,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 49,
+          "text": "[redacted]",
+          "start_ms": 21520,
+          "end_ms": 21790,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 50,
+          "text": "[redacted]",
+          "start_ms": 21790,
+          "end_ms": 22180,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 51,
+          "text": "[redacted]",
+          "start_ms": 22390,
+          "end_ms": 22720,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 52,
+          "text": "[redacted]",
+          "start_ms": null,
+          "end_ms": null,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 53,
+          "text": "[redacted]",
+          "start_ms": 22720,
+          "end_ms": 23230,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 54,
+          "text": "[redacted]",
+          "start_ms": 23920,
+          "end_ms": 24070,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 55,
+          "text": "[redacted]",
+          "start_ms": 24070,
+          "end_ms": 24340,
+          "type": "[redacted]",
+          "asr_agreement": "[redacted]"
+        },
+        {
+          "index": 56,
+          "text": "[redacted]",
+          "start_ms": 24340,
+          "end_ms": 24520,
           "type": "[redacted]",
           "asr_agreement": "[redacted]"
         }
@@ -183,11 +511,11 @@
       "relevance_flags": null
     },
     "scores": {
-      "overall": 6,
+      "overall": 6.5,
       "fluency_coherence": 7,
-      "lexical_resource": 4,
-      "grammatical_range_accuracy": 6,
-      "pronunciation": 7,
+      "lexical_resource": 6,
+      "grammatical_range_accuracy": 7,
+      "pronunciation": 6,
       "is_provisional": true
     },
     "trajectory": null,
@@ -218,9 +546,11 @@
           "reason_for_band_vi": "[redacted]",
           "strengths_vi": [
             "[redacted]",
+            "[redacted]",
             "[redacted]"
           ],
           "areas_for_improvement_vi": [
+            "[redacted]",
             "[redacted]"
           ]
         },
@@ -229,12 +559,12 @@
         "test_level_errors": null,
         "evidence": {
           "fluency": {
-            "speech_rate_wpm": 217.7,
-            "mean_length_run_words": 16,
+            "speech_rate_wpm": 144.5,
+            "mean_length_run_words": 6.2,
             "pauses": {
               "over_2s": 0,
               "over_3s": 0,
-              "longest_seconds": 0,
+              "longest_seconds": 0.72,
               "items": []
             },
             "fillers": {
@@ -243,9 +573,22 @@
               "items": []
             },
             "repetitions": {
-              "count": 0,
-              "top": [],
-              "items": []
+              "count": 1,
+              "top": [
+                {
+                  "text": "[redacted]",
+                  "count": 1
+                }
+              ],
+              "items": [
+                {
+                  "token_range": [
+                    53,
+                    53
+                  ],
+                  "text": "[redacted]"
+                }
+              ]
             },
             "self_corrections": {
               "count": 0,
@@ -263,6 +606,14 @@
               {
                 "text": "[redacted]",
                 "count": 1
+              },
+              {
+                "text": "[redacted]",
+                "count": 1
+              },
+              {
+                "text": "[redacted]",
+                "count": 1
               }
             ]
           }
@@ -272,21 +623,58 @@
         "summary": {
           "reason_for_band_vi": "[redacted]",
           "strengths_vi": [
-            "[redacted]",
             "[redacted]"
           ],
           "areas_for_improvement_vi": [
-            "[redacted]",
             "[redacted]"
           ]
         },
-        "diagnostics": [],
+        "diagnostics": [
+          {
+            "reference": {
+              "token_range": [
+                45,
+                45
+              ],
+              "text": "[redacted]",
+              "start_ms": 19440,
+              "end_ms": 20080
+            },
+            "kind": "[redacted]",
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement": "[redacted]",
+            "improvement_vi": "[redacted]",
+            "glossary": []
+          }
+        ],
         "recurring_patterns": null,
         "test_level_errors": null,
         "evidence": {
           "repetitions": {
-            "count": 0,
-            "top": []
+            "count": 1,
+            "top": [
+              {
+                "text": "[redacted]",
+                "forms": [
+                  "[redacted]",
+                  "[redacted]"
+                ],
+                "count": 2,
+                "alternatives": [
+                  {
+                    "text": "[redacted]",
+                    "meaning_vi": "[redacted]",
+                    "cefr_level": "[redacted]"
+                  },
+                  {
+                    "text": "[redacted]",
+                    "meaning_vi": "[redacted]",
+                    "cefr_level": "[redacted]"
+                  }
+                ]
+              }
+            ]
           }
         }
       },
@@ -298,30 +686,115 @@
             "[redacted]"
           ],
           "areas_for_improvement_vi": [
+            "[redacted]",
             "[redacted]"
           ]
         },
-        "diagnostics": [],
+        "diagnostics": [
+          {
+            "reference": {
+              "token_range": [
+                27,
+                30
+              ],
+              "text": "[redacted]",
+              "start_ms": 11260,
+              "end_ms": 13480
+            },
+            "kind": "[redacted]",
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement": "[redacted]",
+            "improvement_vi": "[redacted]",
+            "glossary": []
+          },
+          {
+            "reference": {
+              "token_range": [
+                45,
+                45
+              ],
+              "text": "[redacted]",
+              "start_ms": 19440,
+              "end_ms": 20080
+            },
+            "kind": "[redacted]",
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement": "[redacted]",
+            "improvement_vi": "[redacted]",
+            "glossary": []
+          },
+          {
+            "reference": {
+              "token_range": [
+                47,
+                55
+              ],
+              "text": "[redacted]",
+              "start_ms": 20740,
+              "end_ms": 24340
+            },
+            "kind": "[redacted]",
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement": "[redacted]",
+            "improvement_vi": "[redacted]",
+            "glossary": []
+          }
+        ],
         "recurring_patterns": null,
         "test_level_errors": null,
         "evidence": {
           "complex_sentence_status": "[redacted]",
           "structures_detected": [
             {
-              "question_id": "p1_hometown",
+              "question_id": "[redacted]",
               "sentence_type": "[redacted]",
               "structure": "[redacted]",
               "marker": "[redacted]",
               "reference": {
                 "token_range": [
-                  0,
-                  15
+                  2,
+                  14
                 ],
                 "text": "[redacted]",
-                "start_ms": 110,
-                "end_ms": 4520
+                "start_ms": 2710,
+                "end_ms": 6300
               },
               "accurate": true
+            },
+            {
+              "question_id": "[redacted]",
+              "sentence_type": "[redacted]",
+              "structure": "[redacted]",
+              "marker": "[redacted]",
+              "reference": {
+                "token_range": [
+                  15,
+                  38
+                ],
+                "text": "[redacted]",
+                "start_ms": 6940,
+                "end_ms": 16640
+              },
+              "accurate": true
+            },
+            {
+              "question_id": "[redacted]",
+              "sentence_type": "[redacted]",
+              "structure": "[redacted]",
+              "marker": "[redacted]",
+              "reference": {
+                "token_range": [
+                  39,
+                  56
+                ],
+                "text": "[redacted]",
+                "start_ms": 16640,
+                "end_ms": 24520
+              },
+              "accurate": false
             }
           ],
           "structures_missing": null
@@ -332,19 +805,123 @@
           "reason_for_band_vi": "[redacted]",
           "strengths_vi": [
             "[redacted]",
+            "[redacted]",
             "[redacted]"
           ],
           "areas_for_improvement_vi": [
+            "[redacted]",
             "[redacted]"
           ]
         },
-        "diagnostics": [],
+        "diagnostics": [
+          {
+            "reference": {
+              "token_range": [
+                45,
+                45
+              ],
+              "text": "[redacted]",
+              "start_ms": 19440,
+              "end_ms": 20080
+            },
+            "kind": "[redacted]",
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement": "[redacted]",
+            "improvement_vi": "[redacted]",
+            "glossary": []
+          }
+        ],
         "recurring_patterns": null,
         "test_level_errors": null,
         "evidence": {
           "sound_patterns": {
-            "count": 0,
-            "top": []
+            "count": 9,
+            "top": [
+              {
+                "pattern": "[redacted]",
+                "phoneme_ipa": "[redacted]",
+                "count": 2,
+                "items": [
+                  {
+                    "token_index": 8,
+                    "text": "[redacted]",
+                    "start_ms": 4150,
+                    "end_ms": 4300
+                  },
+                  {
+                    "token_index": 56,
+                    "text": "[redacted]",
+                    "start_ms": 24340,
+                    "end_ms": 24520
+                  }
+                ]
+              },
+              {
+                "pattern": "[redacted]",
+                "phoneme_ipa": "[redacted]",
+                "count": 2,
+                "items": [
+                  {
+                    "token_index": 24,
+                    "text": "[redacted]",
+                    "start_ms": 9520,
+                    "end_ms": 9970
+                  },
+                  {
+                    "token_index": 41,
+                    "text": "[redacted]",
+                    "start_ms": 17710,
+                    "end_ms": 18550
+                  }
+                ]
+              },
+              {
+                "pattern": "[redacted]",
+                "phoneme_ipa": "[redacted]",
+                "count": 2,
+                "items": [
+                  {
+                    "token_index": 44,
+                    "text": "[redacted]",
+                    "start_ms": 18850,
+                    "end_ms": 19440
+                  },
+                  {
+                    "token_index": 48,
+                    "text": "[redacted]",
+                    "start_ms": 20830,
+                    "end_ms": 21520
+                  }
+                ]
+              },
+              {
+                "pattern": "[redacted]",
+                "phoneme_ipa": "[redacted]",
+                "count": 1,
+                "items": [
+                  {
+                    "token_index": 5,
+                    "text": "[redacted]",
+                    "start_ms": 3410,
+                    "end_ms": 3510
+                  }
+                ]
+              },
+              {
+                "pattern": "[redacted]",
+                "phoneme_ipa": "[redacted]",
+                "count": 1,
+                "items": [
+                  {
+                    "token_index": 14,
+                    "text": "[redacted]",
+                    "start_ms": 5800,
+                    "end_ms": 6300
+                  }
+                ]
+              }
+            ]
           },
           "prosody": {
             "intonation": null,
@@ -353,28 +930,92 @@
         }
       }
     },
-    "error_summary": [],
+    "error_summary": [
+      {
+        "error_codes": "[redacted]",
+        "criterion": "[redacted]",
+        "level": "[redacted]",
+        "count": 1,
+        "question_ids": [
+          "[redacted]"
+        ]
+      },
+      {
+        "error_codes": "[redacted]",
+        "criterion": "[redacted]",
+        "level": "[redacted]",
+        "count": 2,
+        "question_ids": [
+          "[redacted]"
+        ]
+      },
+      {
+        "error_codes": "[redacted]",
+        "criterion": "[redacted]",
+        "level": "[redacted]",
+        "count": 1,
+        "question_ids": [
+          "[redacted]"
+        ]
+      },
+      {
+        "error_codes": "[redacted]",
+        "criterion": "[redacted]",
+        "level": "[redacted]",
+        "count": 1,
+        "question_ids": [
+          "[redacted]"
+        ]
+      }
+    ],
     "pronunciation_detail": {
       "summary": {
-        "good_count": 16,
-        "fair_count": 0,
-        "poor_count": 0
+        "good_count": 36,
+        "fair_count": 14,
+        "poor_count": 4
       },
       "words": [
         {
           "token_index": 0,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 98.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 98.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 1,
-              "start_ms": 110,
-              "end_ms": 260
+              "start_ms": 1270,
+              "end_ms": 1480
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 100.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 1480,
+              "end_ms": 1540
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 97.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 1540,
+              "end_ms": 1690
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 1690,
+              "end_ms": 1870
             }
           ],
           "phonemes": [
@@ -382,36 +1023,99 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 94.7,
               "char_index": 0,
-              "start_ms": 110,
-              "end_ms": 260
+              "start_ms": 1270,
+              "end_ms": 1360
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 1,
+              "start_ms": 1360,
+              "end_ms": 1420
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 2,
+              "start_ms": 1420,
+              "end_ms": 1480
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 3,
+              "start_ms": 1480,
+              "end_ms": 1540
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 94.0,
+              "char_index": 4,
+              "start_ms": 1540,
+              "end_ms": 1570
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.0,
+              "char_index": 5,
+              "start_ms": 1570,
+              "end_ms": 1580
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 6,
+              "start_ms": 1580,
+              "end_ms": 1690
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 8,
+              "start_ms": 1690,
+              "end_ms": 1750
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.5,
+              "char_index": 9,
+              "start_ms": 1750,
+              "end_ms": 1870
             }
           ]
         },
         {
           "token_index": 1,
           "text": "[redacted]",
-          "quality_score": 96,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 93,
-              "stress_score": 100,
-              "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 260,
-              "end_ms": 410
-            },
-            {
-              "letters": "[redacted]",
-              "quality_score": 99,
-              "stress_score": 100,
+              "quality_score": 100.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 1,
-              "start_ms": 410,
-              "end_ms": 650
+              "start_ms": 1870,
+              "end_ms": 2290
             }
           ],
           "phonemes": [
@@ -419,63 +1123,54 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 86,
+              "quality_score": 99.0,
               "char_index": 0,
-              "start_ms": 260,
-              "end_ms": 320
+              "start_ms": 1870,
+              "end_ms": 1990
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 100.0,
               "char_index": 1,
-              "start_ms": 320,
-              "end_ms": 410
+              "start_ms": 1990,
+              "end_ms": 2080
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 98.7,
+              "quality_score": 100.0,
               "char_index": 2,
-              "start_ms": 410,
-              "end_ms": 500
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99.8,
-              "char_index": 3,
-              "start_ms": 500,
-              "end_ms": 650
+              "start_ms": 2080,
+              "end_ms": 2290
             }
           ]
         },
         {
           "token_index": 2,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 100.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 100.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 1,
-              "start_ms": 650,
-              "end_ms": 830
+              "start_ms": 2710,
+              "end_ms": 2950
             },
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 100.0,
+              "stress_score": 100.0,
               "expected_stress": 0,
               "actual_stress": 0,
-              "start_ms": 830,
-              "end_ms": 920
+              "start_ms": 2950,
+              "end_ms": 3040
             }
           ],
           "phonemes": [
@@ -483,63 +1178,63 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 99.5,
+              "quality_score": 100.0,
               "char_index": 0,
-              "start_ms": 650,
-              "end_ms": 710
+              "start_ms": 2710,
+              "end_ms": 2830
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 100.0,
               "char_index": 1,
-              "start_ms": 710,
-              "end_ms": 770
+              "start_ms": 2830,
+              "end_ms": 2860
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 99.7,
               "char_index": 2,
-              "start_ms": 770,
-              "end_ms": 830
+              "start_ms": 2860,
+              "end_ms": 2950
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 100.0,
               "char_index": 3,
-              "start_ms": 830,
-              "end_ms": 860
+              "start_ms": 2950,
+              "end_ms": 2980
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 99.0,
               "char_index": 4,
-              "start_ms": 860,
-              "end_ms": 920
+              "start_ms": 2980,
+              "end_ms": 3040
             }
           ]
         },
         {
           "token_index": 3,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 94.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 94.0,
+              "stress_score": 100.0,
               "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 920,
-              "end_ms": 1070
+              "actual_stress": 1,
+              "start_ms": 3040,
+              "end_ms": 3280
             }
           ],
           "phonemes": [
@@ -547,36 +1242,36 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 92.0,
               "char_index": 0,
-              "start_ms": 920,
-              "end_ms": 980
+              "start_ms": 3040,
+              "end_ms": 3250
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 96.0,
               "char_index": 1,
-              "start_ms": 980,
-              "end_ms": 1070
+              "start_ms": 3250,
+              "end_ms": 3280
             }
           ]
         },
         {
           "token_index": 4,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 76.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 76.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
-              "actual_stress": 2,
-              "start_ms": 1070,
-              "end_ms": 1220
+              "actual_stress": 0,
+              "start_ms": 3280,
+              "end_ms": 3400
             }
           ],
           "phonemes": [
@@ -584,45 +1279,36 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 99,
+              "quality_score": 95.0,
               "char_index": 0,
-              "start_ms": 1070,
-              "end_ms": 1130
+              "start_ms": 3280,
+              "end_ms": 3340
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
+              "actual_ipa": "[redacted]",
+              "quality_score": 57.0,
               "char_index": 1,
-              "start_ms": 1130,
-              "end_ms": 1220
+              "start_ms": 3340,
+              "end_ms": 3400
             }
           ]
         },
         {
           "token_index": 5,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 41.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 41.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
-              "actual_stress": 1,
-              "start_ms": 1220,
-              "end_ms": 1490
-            },
-            {
-              "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
-              "expected_stress": 2,
-              "actual_stress": 1,
-              "start_ms": 1490,
-              "end_ms": 1790
+              "actual_stress": 0,
+              "start_ms": 3410,
+              "end_ms": 3510
             }
           ],
           "phonemes": [
@@ -630,81 +1316,36 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 82.7,
               "char_index": 0,
-              "start_ms": 1220,
-              "end_ms": 1310
+              "start_ms": 3410,
+              "end_ms": 3510
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99.7,
-              "char_index": 1,
-              "start_ms": 1310,
-              "end_ms": 1400
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
               "char_index": 2,
-              "start_ms": 1400,
-              "end_ms": 1490
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 4,
-              "start_ms": 1490,
-              "end_ms": 1610
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99.7,
-              "char_index": 5,
-              "start_ms": 1610,
-              "end_ms": 1700
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99.7,
-              "char_index": 7,
-              "start_ms": 1700,
-              "end_ms": 1790
+              "start_ms": 3510,
+              "end_ms": 3510
             }
           ]
         },
         {
           "token_index": 6,
           "text": "[redacted]",
-          "quality_score": 99,
+          "quality_score": 94.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
-              "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 1790,
-              "end_ms": 1910
-            },
-            {
-              "letters": "[redacted]",
-              "quality_score": 98,
-              "stress_score": 100,
+              "quality_score": 94.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 1,
-              "start_ms": 1910,
-              "end_ms": 2270
+              "start_ms": 3510,
+              "end_ms": 3640
             }
           ],
           "phonemes": [
@@ -712,63 +1353,54 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 99.7,
+              "quality_score": 89.5,
               "char_index": 0,
-              "start_ms": 1790,
-              "end_ms": 1880
+              "start_ms": 3510,
+              "end_ms": 3550
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 94.0,
               "char_index": 1,
-              "start_ms": 1880,
-              "end_ms": 1910
+              "start_ms": 3550,
+              "end_ms": 3610
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 99.0,
               "char_index": 2,
-              "start_ms": 1910,
-              "end_ms": 2060
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99,
-              "char_index": 3,
-              "start_ms": 2060,
-              "end_ms": 2180
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 96.3,
-              "char_index": 5,
-              "start_ms": 2180,
-              "end_ms": 2270
+              "start_ms": 3610,
+              "end_ms": 3640
             }
           ]
         },
         {
           "token_index": 7,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 93.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 96.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 3640,
+              "end_ms": 3940
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 83.0,
+              "stress_score": 0.0,
               "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 2270,
-              "end_ms": 2360
+              "actual_stress": 1,
+              "start_ms": 3940,
+              "end_ms": 4150
             }
           ],
           "phonemes": [
@@ -776,100 +1408,91 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 98.6,
               "char_index": 0,
-              "start_ms": 2270,
-              "end_ms": 2330
+              "start_ms": 3640,
+              "end_ms": 3790
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 94.7,
+              "char_index": 1,
+              "start_ms": 3790,
+              "end_ms": 3880
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 95.0,
               "char_index": 2,
-              "start_ms": 2330,
-              "end_ms": 2360
+              "start_ms": 3880,
+              "end_ms": 3940
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 83.1,
+              "char_index": 3,
+              "start_ms": 3940,
+              "end_ms": 4150
             }
           ]
         },
         {
           "token_index": 8,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 50.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 50.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
-              "actual_stress": 1,
-              "start_ms": 2360,
-              "end_ms": 2750
+              "actual_stress": 0,
+              "start_ms": 4150,
+              "end_ms": 4300
             }
           ],
           "phonemes": [
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99.8,
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
               "char_index": 0,
-              "start_ms": 2360,
-              "end_ms": 2480
+              "start_ms": 4150,
+              "end_ms": 4150
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 100.0,
               "char_index": 1,
-              "start_ms": 2480,
-              "end_ms": 2570
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 2,
-              "start_ms": 2570,
-              "end_ms": 2600
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99.5,
-              "char_index": 3,
-              "start_ms": 2600,
-              "end_ms": 2660
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 99,
-              "char_index": 4,
-              "start_ms": 2660,
-              "end_ms": 2750
+              "start_ms": 4150,
+              "end_ms": 4300
             }
           ]
         },
         {
           "token_index": 9,
           "text": "[redacted]",
-          "quality_score": 96,
+          "quality_score": 69.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 96,
-              "stress_score": 100,
-              "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 2750,
-              "end_ms": 2870
+              "quality_score": 61.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 4300,
+              "end_ms": 4630
             }
           ],
           "phonemes": [
@@ -877,36 +1500,54 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 95.5,
+              "quality_score": 100.0,
               "char_index": 0,
-              "start_ms": 2750,
-              "end_ms": 2870
+              "start_ms": 4300,
+              "end_ms": 4330
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.0,
+              "char_index": 1,
+              "start_ms": 4330,
+              "end_ms": 4450
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 11.2,
+              "char_index": 3,
+              "start_ms": 4450,
+              "end_ms": 4630
             }
           ]
         },
         {
           "token_index": 10,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 87.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
-              "expected_stress": 1,
-              "actual_stress": 2,
-              "start_ms": 2870,
-              "end_ms": 3140
+              "quality_score": 100.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 4630,
+              "end_ms": 4720
             },
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
-              "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 3140,
-              "end_ms": 3260
+              "quality_score": 78.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 4720,
+              "end_ms": 5050
             }
           ],
           "phonemes": [
@@ -914,63 +1555,81 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 99.0,
               "char_index": 0,
-              "start_ms": 2870,
-              "end_ms": 2960
+              "start_ms": 4630,
+              "end_ms": 4690
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 100.0,
               "char_index": 1,
-              "start_ms": 2960,
-              "end_ms": 3020
+              "start_ms": 4690,
+              "end_ms": 4720
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 99.5,
+              "quality_score": 99.7,
               "char_index": 2,
-              "start_ms": 3020,
-              "end_ms": 3140
+              "start_ms": 4720,
+              "end_ms": 4810
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
+              "actual_ipa": "[redacted]",
+              "quality_score": 46.5,
               "char_index": 3,
-              "start_ms": 3140,
-              "end_ms": 3170
+              "start_ms": 4810,
+              "end_ms": 4930
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 4,
-              "start_ms": 3170,
-              "end_ms": 3260
+              "quality_score": 87.5,
+              "char_index": 5,
+              "start_ms": 4930,
+              "end_ms": 5050
             }
           ]
         },
         {
           "token_index": 11,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 80.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 96.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 5050,
+              "end_ms": 5150
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 50.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
               "actual_stress": 0,
-              "start_ms": 3260,
-              "end_ms": 3380
+              "start_ms": 5150,
+              "end_ms": 5230
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 89.0,
+              "stress_score": 50.0,
+              "expected_stress": 2,
+              "actual_stress": 0,
+              "start_ms": 5230,
+              "end_ms": 5410
             }
           ],
           "phonemes": [
@@ -978,45 +1637,81 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 96.0,
               "char_index": 0,
-              "start_ms": 3260,
-              "end_ms": 3320
+              "start_ms": 5050,
+              "end_ms": 5140
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 96.0,
               "char_index": 1,
-              "start_ms": 3320,
-              "end_ms": 3350
+              "start_ms": 5140,
+              "end_ms": 5150
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 2,
-              "start_ms": 3350,
-              "end_ms": 3380
+              "quality_score": 100.0,
+              "char_index": 3,
+              "start_ms": 5150,
+              "end_ms": 5230
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 0.0,
+              "char_index": 4,
+              "start_ms": 5230,
+              "end_ms": 5230
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 5,
+              "start_ms": 5230,
+              "end_ms": 5290
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 7,
+              "start_ms": 5290,
+              "end_ms": 5350
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 67.5,
+              "char_index": 8,
+              "start_ms": 5350,
+              "end_ms": 5410
             }
           ]
         },
         {
           "token_index": 12,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 90.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
-              "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 3380,
-              "end_ms": 3470
+              "quality_score": 90.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 5410,
+              "end_ms": 5510
             }
           ],
           "phonemes": [
@@ -1024,45 +1719,36 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 93.0,
               "char_index": 0,
-              "start_ms": 3380,
-              "end_ms": 3440
+              "start_ms": 5410,
+              "end_ms": 5500
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 2,
-              "start_ms": 3440,
-              "end_ms": 3470
+              "quality_score": 87.0,
+              "char_index": 1,
+              "start_ms": 5500,
+              "end_ms": 5510
             }
           ]
         },
         {
           "token_index": 13,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 98.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 98.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 1,
-              "start_ms": 3470,
-              "end_ms": 3650
-            },
-            {
-              "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
-              "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 3650,
-              "end_ms": 3830
+              "start_ms": 5510,
+              "end_ms": 5800
             }
           ],
           "phonemes": [
@@ -1070,63 +1756,458 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 98.8,
               "char_index": 0,
-              "start_ms": 3470,
-              "end_ms": 3590
+              "start_ms": 5510,
+              "end_ms": 5650
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 99.5,
+              "quality_score": 97.0,
               "char_index": 1,
-              "start_ms": 3590,
-              "end_ms": 3650
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 3,
-              "start_ms": 3650,
-              "end_ms": 3710
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 4,
-              "start_ms": 3710,
-              "end_ms": 3770
-            },
-            {
-              "ipa": "[redacted]",
-              "arpabet": "[redacted]",
-              "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 4,
-              "start_ms": 3770,
-              "end_ms": 3830
+              "start_ms": 5650,
+              "end_ms": 5800
             }
           ]
         },
         {
           "token_index": 14,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 87.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 96.0,
+              "stress_score": 0.0,
+              "expected_stress": 0,
+              "actual_stress": 1,
+              "start_ms": 5800,
+              "end_ms": 6040
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 6040,
+              "end_ms": 6190
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 71.0,
+              "stress_score": 0.0,
+              "expected_stress": 0,
+              "actual_stress": 1,
+              "start_ms": 6190,
+              "end_ms": 6300
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.3,
+              "char_index": 0,
+              "start_ms": 5800,
+              "end_ms": 5890
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 90.0,
+              "char_index": 1,
+              "start_ms": 5890,
+              "end_ms": 5950
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.0,
+              "char_index": 2,
+              "start_ms": 5950,
+              "end_ms": 6040
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 3,
+              "start_ms": 6040,
+              "end_ms": 6070
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.7,
+              "char_index": 4,
+              "start_ms": 6070,
+              "end_ms": 6160
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 5,
+              "start_ms": 6160,
+              "end_ms": 6190
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 6,
+              "start_ms": 6190,
+              "end_ms": 6220
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 88.0,
+              "char_index": 7,
+              "start_ms": 6220,
+              "end_ms": 6250
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.0,
+              "char_index": 8,
+              "start_ms": 6250,
+              "end_ms": 6280
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 1.7,
+              "char_index": 9,
+              "start_ms": 6280,
+              "end_ms": 6300
+            }
+          ]
+        },
+        {
+          "token_index": 15,
+          "text": "[redacted]",
+          "quality_score": 100.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 100.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 6940,
+              "end_ms": 7120
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 6940,
+              "end_ms": 7060
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 1,
+              "start_ms": 7060,
+              "end_ms": 7120
+            }
+          ]
+        },
+        {
+          "token_index": 16,
+          "text": "[redacted]",
+          "quality_score": 95.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 98.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 7120,
+              "end_ms": 7330
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 92.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 7330,
+              "end_ms": 7370
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.3,
+              "char_index": 0,
+              "start_ms": 7120,
+              "end_ms": 7210
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.0,
+              "char_index": 1,
+              "start_ms": 7210,
+              "end_ms": 7330
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 3,
+              "start_ms": 7330,
+              "end_ms": 7360
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 85.0,
+              "char_index": 4,
+              "start_ms": 7360,
+              "end_ms": 7370
+            }
+          ]
+        },
+        {
+          "token_index": 17,
+          "text": "[redacted]",
+          "quality_score": 99.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 7370,
+              "end_ms": 7570
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.5,
+              "char_index": 0,
+              "start_ms": 7370,
+              "end_ms": 7450
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.5,
+              "char_index": 2,
+              "start_ms": 7450,
+              "end_ms": 7510
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.0,
+              "char_index": 3,
+              "start_ms": 7510,
+              "end_ms": 7570
+            }
+          ]
+        },
+        {
+          "token_index": 18,
+          "text": "[redacted]",
+          "quality_score": 95.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 95.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 7570,
+              "end_ms": 7900
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.0,
+              "char_index": 0,
+              "start_ms": 7570,
+              "end_ms": 7690
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 89.8,
+              "char_index": 1,
+              "start_ms": 7690,
+              "end_ms": 7840
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 2,
+              "start_ms": 7840,
+              "end_ms": 7900
+            }
+          ]
+        },
+        {
+          "token_index": 19,
+          "text": "[redacted]",
+          "quality_score": 66.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 66.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 0,
-              "start_ms": 3830,
-              "end_ms": 3980
+              "start_ms": 7900,
+              "end_ms": 8040
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 89.7,
+              "char_index": 0,
+              "start_ms": 7900,
+              "end_ms": 7990
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 41.7,
+              "char_index": 1,
+              "start_ms": 7990,
+              "end_ms": 8040
+            }
+          ]
+        },
+        {
+          "token_index": 20,
+          "text": "[redacted]",
+          "quality_score": 52.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 52.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 8040,
+              "end_ms": 8380
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 41.7,
+              "char_index": 0,
+              "start_ms": 8040,
+              "end_ms": 8050
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 63.3,
+              "char_index": 1,
+              "start_ms": 8050,
+              "end_ms": 8380
+            }
+          ]
+        },
+        {
+          "token_index": 21,
+          "text": "[redacted]",
+          "quality_score": 97.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 97.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 8890,
+              "end_ms": 8980
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.7,
+              "char_index": 0,
+              "start_ms": 8890,
+              "end_ms": 8980
+            }
+          ]
+        },
+        {
+          "token_index": 22,
+          "text": "[redacted]",
+          "quality_score": 98.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 98.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 8980,
+              "end_ms": 9160
             }
           ],
           "phonemes": [
@@ -1136,43 +2217,61 @@
               "actual_ipa": null,
               "quality_score": 99.7,
               "char_index": 0,
-              "start_ms": 3830,
-              "end_ms": 3920
+              "start_ms": 8980,
+              "end_ms": 9070
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 96.0,
               "char_index": 1,
-              "start_ms": 3920,
-              "end_ms": 3980
+              "start_ms": 9070,
+              "end_ms": 9100
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 2,
+              "start_ms": 9100,
+              "end_ms": 9160
             }
           ]
         },
         {
-          "token_index": 15,
+          "token_index": 23,
           "text": "[redacted]",
-          "quality_score": 100,
+          "quality_score": 80.0,
           "quality_class": "[redacted]",
           "syllables": [
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 95.0,
+              "stress_score": 100.0,
               "expected_stress": 1,
               "actual_stress": 1,
-              "start_ms": 3980,
-              "end_ms": 4280
+              "start_ms": 9160,
+              "end_ms": 9370
             },
             {
               "letters": "[redacted]",
-              "quality_score": 100,
-              "stress_score": 100,
+              "quality_score": 80.0,
+              "stress_score": 0.0,
               "expected_stress": 0,
-              "actual_stress": 0,
-              "start_ms": 4280,
-              "end_ms": 4520
+              "actual_stress": 1,
+              "start_ms": 9370,
+              "end_ms": 9400
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 65.0,
+              "stress_score": 0.0,
+              "expected_stress": 0,
+              "actual_stress": 1,
+              "start_ms": 9400,
+              "end_ms": 9520
             }
           ],
           "phonemes": [
@@ -1180,64 +2279,1714 @@
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 96.5,
               "char_index": 0,
-              "start_ms": 3980,
-              "end_ms": 4100
+              "start_ms": 9160,
+              "end_ms": 9280
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
-              "char_index": 1,
-              "start_ms": 4100,
-              "end_ms": 4130
+              "quality_score": 92.7,
+              "char_index": 2,
+              "start_ms": 9280,
+              "end_ms": 9370
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 80.0,
               "char_index": 3,
-              "start_ms": 4130,
-              "end_ms": 4190
+              "start_ms": 9370,
+              "end_ms": 9400
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 35.0,
               "char_index": 4,
-              "start_ms": 4190,
-              "end_ms": 4250
+              "start_ms": 9400,
+              "end_ms": 9410
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 94.4,
               "char_index": 5,
-              "start_ms": 4250,
-              "end_ms": 4280
+              "start_ms": 9410,
+              "end_ms": 9520
+            }
+          ]
+        },
+        {
+          "token_index": 24,
+          "text": "[redacted]",
+          "quality_score": 67.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 67.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 9520,
+              "end_ms": 9970
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.2,
+              "char_index": 0,
+              "start_ms": 9520,
+              "end_ms": 9700
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 99.4,
+              "char_index": 1,
+              "start_ms": 9700,
+              "end_ms": 9910
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 35.0,
+              "char_index": 2,
+              "start_ms": 9910,
+              "end_ms": 9930
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 35.0,
+              "char_index": 3,
+              "start_ms": 9930,
+              "end_ms": 9970
+            }
+          ]
+        },
+        {
+          "token_index": 25,
+          "text": "[redacted]",
+          "quality_score": 87.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 87.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 10480,
+              "end_ms": 10810
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 10480,
+              "end_ms": 10570
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 65.2,
+              "char_index": 1,
+              "start_ms": 10570,
+              "end_ms": 10690
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 94.8,
+              "char_index": 3,
+              "start_ms": 10690,
+              "end_ms": 10810
+            }
+          ]
+        },
+        {
+          "token_index": 26,
+          "text": "[redacted]",
+          "quality_score": 96.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 96.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 10810,
+              "end_ms": 11230
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 10810,
+              "end_ms": 10900
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 89.3,
+              "char_index": 1,
+              "start_ms": 10900,
+              "end_ms": 11110
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 3,
+              "start_ms": 11110,
+              "end_ms": 11230
+            }
+          ]
+        },
+        {
+          "token_index": 27,
+          "text": "[redacted]",
+          "quality_score": 96.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 96.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 11260,
+              "end_ms": 11500
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 95.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 11500,
+              "end_ms": 11680
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 11260,
+              "end_ms": 11410
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 91.7,
+              "char_index": 1,
+              "start_ms": 11410,
+              "end_ms": 11500
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.2,
+              "char_index": 3,
+              "start_ms": 11500,
+              "end_ms": 11620
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 93.5,
+              "char_index": 4,
+              "start_ms": 11620,
+              "end_ms": 11680
+            }
+          ]
+        },
+        {
+          "token_index": 28,
+          "text": "[redacted]",
+          "quality_score": 95.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 95.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 11680,
+              "end_ms": 12340
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.6,
+              "char_index": 0,
+              "start_ms": 11680,
+              "end_ms": 11830
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.5,
+              "char_index": 2,
+              "start_ms": 11830,
+              "end_ms": 12070
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 88.2,
+              "char_index": 3,
+              "start_ms": 12070,
+              "end_ms": 12340
+            }
+          ]
+        },
+        {
+          "token_index": 29,
+          "text": "[redacted]",
+          "quality_score": 99.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 0.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 12430,
+              "end_ms": 12730
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 12730,
+              "end_ms": 13000
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 12430,
+              "end_ms": 12610
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.2,
+              "char_index": 2,
+              "start_ms": 12610,
+              "end_ms": 12730
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.7,
+              "char_index": 4,
+              "start_ms": 12730,
+              "end_ms": 12820
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 5,
+              "start_ms": 12820,
+              "end_ms": 12910
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.0,
               "char_index": 6,
-              "start_ms": 4280,
-              "end_ms": 4370
+              "start_ms": 12910,
+              "end_ms": 13000
+            }
+          ]
+        },
+        {
+          "token_index": 30,
+          "text": "[redacted]",
+          "quality_score": 73.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 73.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 13000,
+              "end_ms": 13480
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 0,
+              "start_ms": 13000,
+              "end_ms": 13090
             },
             {
               "ipa": "[redacted]",
               "arpabet": "[redacted]",
               "actual_ipa": null,
-              "quality_score": 100,
+              "quality_score": 98.5,
+              "char_index": 1,
+              "start_ms": 13090,
+              "end_ms": 13270
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 20.8,
+              "char_index": 3,
+              "start_ms": 13270,
+              "end_ms": 13480
+            }
+          ]
+        },
+        {
+          "token_index": 31,
+          "text": "[redacted]",
+          "quality_score": 66.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 66.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 13840,
+              "end_ms": 14140
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.7,
+              "char_index": 0,
+              "start_ms": 13840,
+              "end_ms": 14110
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 35.0,
+              "char_index": 1,
+              "start_ms": 14110,
+              "end_ms": 14140
+            }
+          ]
+        },
+        {
+          "token_index": 32,
+          "text": "[redacted]",
+          "quality_score": 96.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 98.0,
+              "stress_score": 50.0,
+              "expected_stress": 2,
+              "actual_stress": 0,
+              "start_ms": 14140,
+              "end_ms": 14320
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 100.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 14320,
+              "end_ms": 14530
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 82.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 14530,
+              "end_ms": 14540
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 92.0,
+              "char_index": 0,
+              "start_ms": 14140,
+              "end_ms": 14150
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 14150,
+              "end_ms": 14230
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 2,
+              "start_ms": 14230,
+              "end_ms": 14260
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.0,
+              "char_index": 3,
+              "start_ms": 14260,
+              "end_ms": 14320
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 4,
+              "start_ms": 14320,
+              "end_ms": 14440
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 5,
+              "start_ms": 14440,
+              "end_ms": 14530
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 82.0,
+              "char_index": 6,
+              "start_ms": 14530,
+              "end_ms": 14540
+            }
+          ]
+        },
+        {
+          "token_index": 33,
+          "text": "[redacted]",
+          "quality_score": 99.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 14540,
+              "end_ms": 14650
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.9,
+              "char_index": 0,
+              "start_ms": 14540,
+              "end_ms": 14650
+            }
+          ]
+        },
+        {
+          "token_index": 34,
+          "text": "[redacted]",
+          "quality_score": 82.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 55.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 14650,
+              "end_ms": 14980
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.2,
+              "char_index": 0,
+              "start_ms": 14650,
+              "end_ms": 14770
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 67.7,
+              "char_index": 1,
+              "start_ms": 14770,
+              "end_ms": 14980
+            }
+          ]
+        },
+        {
+          "token_index": 35,
+          "text": "[redacted]",
+          "quality_score": 96.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 96.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 14980,
+              "end_ms": 15190
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.7,
+              "char_index": 0,
+              "start_ms": 14980,
+              "end_ms": 15070
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 95.0,
+              "char_index": 1,
+              "start_ms": 15070,
+              "end_ms": 15160
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 94.0,
+              "char_index": 2,
+              "start_ms": 15160,
+              "end_ms": 15190
+            }
+          ]
+        },
+        {
+          "token_index": 37,
+          "text": "[redacted]",
+          "quality_score": 83.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 84.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 15940,
+              "end_ms": 16150
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 82.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 16150,
+              "end_ms": 16360
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 74.0,
+              "char_index": 0,
+              "start_ms": 15940,
+              "end_ms": 16090
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 94.0,
+              "char_index": 1,
+              "start_ms": 16090,
+              "end_ms": 16150
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 83.5,
+              "char_index": 3,
+              "start_ms": 16150,
+              "end_ms": 16270
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 93.0,
+              "char_index": 4,
+              "start_ms": 16270,
+              "end_ms": 16300
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 70.3,
+              "char_index": 5,
+              "start_ms": 16300,
+              "end_ms": 16360
+            }
+          ]
+        },
+        {
+          "token_index": 38,
+          "text": "[redacted]",
+          "quality_score": 68.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 98.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 16360,
+              "end_ms": 16600
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 46.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 16600,
+              "end_ms": 16640
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.7,
+              "char_index": 0,
+              "start_ms": 16360,
+              "end_ms": 16450
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.0,
+              "char_index": 1,
+              "start_ms": 16450,
+              "end_ms": 16510
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.0,
+              "char_index": 2,
+              "start_ms": 16510,
+              "end_ms": 16600
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 95.0,
+              "char_index": 3,
+              "start_ms": 16600,
+              "end_ms": 16630
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
+              "char_index": 4,
+              "start_ms": 16630,
+              "end_ms": 16630
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 87.0,
+              "char_index": 5,
+              "start_ms": 16630,
+              "end_ms": 16640
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
+              "char_index": 6,
+              "start_ms": 16640,
+              "end_ms": 16640
+            }
+          ]
+        },
+        {
+          "token_index": 39,
+          "text": "[redacted]",
+          "quality_score": 93.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 93.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 16640,
+              "end_ms": 16720
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 92.8,
+              "char_index": 0,
+              "start_ms": 16640,
+              "end_ms": 16690
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 93.0,
+              "char_index": 2,
+              "start_ms": 16690,
+              "end_ms": 16720
+            }
+          ]
+        },
+        {
+          "token_index": 40,
+          "text": "[redacted]",
+          "quality_score": 63.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 81.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 17440,
+              "end_ms": 17680
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 46.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 17680,
+              "end_ms": 17710
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 79.0,
+              "char_index": 0,
+              "start_ms": 17440,
+              "end_ms": 17560
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 82.8,
+              "char_index": 1,
+              "start_ms": 17560,
+              "end_ms": 17680
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
+              "char_index": 2,
+              "start_ms": 17680,
+              "end_ms": 17680
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 91.0,
+              "char_index": 3,
+              "start_ms": 17680,
+              "end_ms": 17710
+            }
+          ]
+        },
+        {
+          "token_index": 41,
+          "text": "[redacted]",
+          "quality_score": 66.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 66.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 17710,
+              "end_ms": 18080
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 66.0,
+              "stress_score": 100.0,
+              "expected_stress": 2,
+              "actual_stress": 1,
+              "start_ms": 18080,
+              "end_ms": 18550
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 66.8,
+              "char_index": 0,
+              "start_ms": 17710,
+              "end_ms": 17890
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.2,
+              "char_index": 1,
+              "start_ms": 17890,
+              "end_ms": 18070
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 35.0,
+              "char_index": 3,
+              "start_ms": 18070,
+              "end_ms": 18080
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 4,
+              "start_ms": 18080,
+              "end_ms": 18280
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 5,
+              "start_ms": 18280,
+              "end_ms": 18550
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
+              "char_index": 6,
+              "start_ms": 18550,
+              "end_ms": 18550
+            }
+          ]
+        },
+        {
+          "token_index": 42,
+          "text": "[redacted]",
+          "quality_score": 98.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 98.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 18550,
+              "end_ms": 18700
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 95.0,
+              "char_index": 0,
+              "start_ms": 18550,
+              "end_ms": 18610
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 1,
+              "start_ms": 18610,
+              "end_ms": 18700
+            }
+          ]
+        },
+        {
+          "token_index": 43,
+          "text": "[redacted]",
+          "quality_score": 96.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 96.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 18700,
+              "end_ms": 18850
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 92.7,
+              "char_index": 0,
+              "start_ms": 18700,
+              "end_ms": 18790
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.5,
+              "char_index": 2,
+              "start_ms": 18790,
+              "end_ms": 18850
+            }
+          ]
+        },
+        {
+          "token_index": 44,
+          "text": "[redacted]",
+          "quality_score": 74.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 78.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 18850,
+              "end_ms": 19090
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 71.0,
+              "stress_score": 0.0,
+              "expected_stress": 0,
+              "actual_stress": 1,
+              "start_ms": 19090,
+              "end_ms": 19440
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 50.3,
+              "char_index": 0,
+              "start_ms": 18850,
+              "end_ms": 18940
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 92.0,
+              "char_index": 1,
+              "start_ms": 18940,
+              "end_ms": 19000
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 90.7,
+              "char_index": 2,
+              "start_ms": 19000,
+              "end_ms": 19090
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 4,
+              "start_ms": 19090,
+              "end_ms": 19180
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 95.0,
+              "char_index": 5,
+              "start_ms": 19180,
+              "end_ms": 19270
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 18.0,
+              "char_index": 6,
+              "start_ms": 19270,
+              "end_ms": 19440
+            }
+          ]
+        },
+        {
+          "token_index": 46,
+          "text": "[redacted]",
+          "quality_score": 99.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 97.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 20590,
+              "end_ms": 20740
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.7,
+              "char_index": 0,
+              "start_ms": 20590,
+              "end_ms": 20680
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 1,
+              "start_ms": 20680,
+              "end_ms": 20740
+            }
+          ]
+        },
+        {
+          "token_index": 47,
+          "text": "[redacted]",
+          "quality_score": 95.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 95.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 20740,
+              "end_ms": 20830
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 89.5,
+              "char_index": 0,
+              "start_ms": 20740,
+              "end_ms": 20800
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 2,
+              "start_ms": 20800,
+              "end_ms": 20830
+            }
+          ]
+        },
+        {
+          "token_index": 48,
+          "text": "[redacted]",
+          "quality_score": 66.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 82.0,
+              "stress_score": 50.0,
+              "expected_stress": 2,
+              "actual_stress": 0,
+              "start_ms": 20830,
+              "end_ms": 21040
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 35.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 21040,
+              "end_ms": 21070
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 78.0,
+              "stress_score": 0.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 21070,
+              "end_ms": 21340
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 48.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 21340,
+              "end_ms": 21520
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.0,
+              "char_index": 0,
+              "start_ms": 20830,
+              "end_ms": 20890
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 68.0,
+              "char_index": 1,
+              "start_ms": 20890,
+              "end_ms": 21040
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 35.0,
+              "char_index": 2,
+              "start_ms": 21040,
+              "end_ms": 21070
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 75.0,
+              "char_index": 4,
+              "start_ms": 21070,
+              "end_ms": 21160
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 88.7,
+              "char_index": 5,
+              "start_ms": 21160,
+              "end_ms": 21250
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 71.3,
+              "char_index": 6,
+              "start_ms": 21250,
+              "end_ms": 21340
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 60.9,
               "char_index": 7,
-              "start_ms": 4370,
-              "end_ms": 4520
+              "start_ms": 21340,
+              "end_ms": 21460
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 35.0,
+              "char_index": 8,
+              "start_ms": 21460,
+              "end_ms": 21520
+            }
+          ]
+        },
+        {
+          "token_index": 49,
+          "text": "[redacted]",
+          "quality_score": 66.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 66.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 21520,
+              "end_ms": 21790
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 21520,
+              "end_ms": 21610
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.8,
+              "char_index": 1,
+              "start_ms": 21610,
+              "end_ms": 21790
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
+              "char_index": 2,
+              "start_ms": 21790,
+              "end_ms": 21790
+            }
+          ]
+        },
+        {
+          "token_index": 50,
+          "text": "[redacted]",
+          "quality_score": 68.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 68.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 0,
+              "start_ms": 21790,
+              "end_ms": 22180
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 93.0,
+              "char_index": 0,
+              "start_ms": 21790,
+              "end_ms": 21910
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 55.7,
+              "char_index": 1,
+              "start_ms": 21910,
+              "end_ms": 22090
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 56.7,
+              "char_index": 2,
+              "start_ms": 22090,
+              "end_ms": 22180
+            }
+          ]
+        },
+        {
+          "token_index": 51,
+          "text": "[redacted]",
+          "quality_score": 78.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 96.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 22390,
+              "end_ms": 22630
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 43.0,
+              "stress_score": 100.0,
+              "expected_stress": 0,
+              "actual_stress": 0,
+              "start_ms": 22630,
+              "end_ms": 22640
+            },
+            {
+              "letters": "[redacted]",
+              "quality_score": 96.0,
+              "stress_score": 0.0,
+              "expected_stress": 0,
+              "actual_stress": 1,
+              "start_ms": 22640,
+              "end_ms": 22720
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 0,
+              "start_ms": 22390,
+              "end_ms": 22510
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 92.5,
+              "char_index": 1,
+              "start_ms": 22510,
+              "end_ms": 22630
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 86.0,
+              "char_index": 2,
+              "start_ms": 22630,
+              "end_ms": 22640
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 0.0,
+              "char_index": 3,
+              "start_ms": 22640,
+              "end_ms": 22640
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 5,
+              "start_ms": 22640,
+              "end_ms": 22660
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 92.5,
+              "char_index": 6,
+              "start_ms": 22660,
+              "end_ms": 22720
+            }
+          ]
+        },
+        {
+          "token_index": 53,
+          "text": "[redacted]",
+          "quality_score": 98.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 98.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 22720,
+              "end_ms": 23230
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 96.1,
+              "char_index": 0,
+              "start_ms": 22720,
+              "end_ms": 22960
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.2,
+              "char_index": 1,
+              "start_ms": 22960,
+              "end_ms": 23140
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 100.0,
+              "char_index": 2,
+              "start_ms": 23140,
+              "end_ms": 23230
+            }
+          ]
+        },
+        {
+          "token_index": 54,
+          "text": "[redacted]",
+          "quality_score": 99.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 99.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 23920,
+              "end_ms": 24070
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.0,
+              "char_index": 0,
+              "start_ms": 23920,
+              "end_ms": 23980
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 99.7,
+              "char_index": 1,
+              "start_ms": 23980,
+              "end_ms": 24070
+            }
+          ]
+        },
+        {
+          "token_index": 55,
+          "text": "[redacted]",
+          "quality_score": 85.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 85.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 24070,
+              "end_ms": 24340
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 97.5,
+              "char_index": 0,
+              "start_ms": 24070,
+              "end_ms": 24250
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 62.5,
+              "char_index": 1,
+              "start_ms": 24250,
+              "end_ms": 24310
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 94.0,
+              "char_index": 2,
+              "start_ms": 24310,
+              "end_ms": 24340
+            }
+          ]
+        },
+        {
+          "token_index": 56,
+          "text": "[redacted]",
+          "quality_score": 55.0,
+          "quality_class": "[redacted]",
+          "syllables": [
+            {
+              "letters": "[redacted]",
+              "quality_score": 55.0,
+              "stress_score": 100.0,
+              "expected_stress": 1,
+              "actual_stress": 1,
+              "start_ms": 24340,
+              "end_ms": 24520
+            }
+          ],
+          "phonemes": [
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": "[redacted]",
+              "quality_score": 12.6,
+              "char_index": 0,
+              "start_ms": 24340,
+              "end_ms": 24460
+            },
+            {
+              "ipa": "[redacted]",
+              "arpabet": "[redacted]",
+              "actual_ipa": null,
+              "quality_score": 98.0,
+              "char_index": 1,
+              "start_ms": 24460,
+              "end_ms": 24520
             }
           ]
         }
@@ -1253,10 +4002,10 @@
         "scorer": "[redacted]"
       },
       "timing": {
-        "total_seconds": 5.86,
-        "stt_seconds": 1.52,
-        "acoustic_seconds": 1.56,
-        "language_seconds": 4.19
+        "total_seconds": 9.19,
+        "stt_seconds": 2.32,
+        "acoustic_seconds": 3.84,
+        "language_seconds": 5.33
       },
       "prompt_version": "[redacted]",
       "codebook_version": "[redacted]",
