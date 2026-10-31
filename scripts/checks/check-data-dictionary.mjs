@@ -8,13 +8,14 @@ const committed = join(root, 'docs', 'data-dictionary.md');
 const tmp = join(root, 'docs', '.data-dictionary.generated.md');
 
 const result = spawnSync(
-  process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+  process.execPath,
   [
+    '--import',
     'tsx',
     'scripts/generate/generate-data-dictionary.ts',
     'docs/.data-dictionary.generated.md',
   ],
-  { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' },
+  { cwd: root, stdio: 'inherit' },
 );
 
 if (result.status !== 0) {

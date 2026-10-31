@@ -464,7 +464,6 @@ if (process.exitCode !== undefined) {
   process.exit(process.exitCode);
 }
 
-const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 // ADR-0066 / #674: an inner layer must not augment the web framework's
 // request type. dependency-cruiser cannot see `declare module`, so check the
 // source text directly.
@@ -525,16 +524,10 @@ const dependencyCruiserCachePath = cacheHelpers.dependencyCruiserCacheDirectory(
     readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'),
   ],
 );
-// `--cache` is an absolute path and may contain spaces on Windows.
-const windows = process.platform === 'win32';
-const quote = (/** @type {string} */ arg) =>
-  /[\s"&|<>^]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg;
-
 const result = spawnSync(
-  command,
+  process.execPath,
   [
-    'exec',
-    'depcruise',
+    join(root, 'node_modules/dependency-cruiser/bin/dependency-cruiser.mjs'),
     '--cache',
     dependencyCruiserCachePath,
     '--cache-strategy',
@@ -544,8 +537,8 @@ const result = spawnSync(
     '--output-type',
     'err-long',
     'src',
-  ].map((arg) => (windows ? quote(arg) : arg)),
-  { cwd: root, shell: windows, stdio: 'inherit' },
+  ],
+  { cwd: root, stdio: 'inherit' },
 );
 
 if (result.error) {

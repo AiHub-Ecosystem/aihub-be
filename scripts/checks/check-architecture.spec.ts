@@ -212,15 +212,10 @@ describe('dependency-cruiser cache policy', () => {
       );
 
       const runArchCheck = () =>
-        spawnSync(
-          process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-          ['arch-check'],
-          {
-            cwd: projectRoot,
-            encoding: 'utf8',
-            shell: process.platform === 'win32',
-          },
-        );
+        spawnSync(process.execPath, ['scripts/checks/check-architecture.mjs'], {
+          cwd: projectRoot,
+          encoding: 'utf8',
+        });
 
       expect(runArchCheck().status).toBe(0);
       writeFileSync(configPath, changedConfig);
@@ -283,12 +278,11 @@ describe('layer rules on feature-first Identity paths', () => {
         );
 
         const result = spawnSync(
-          process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-          ['arch-check'],
+          process.execPath,
+          ['scripts/checks/check-architecture.mjs'],
           {
             cwd: process.cwd(),
             encoding: 'utf8',
-            shell: process.platform === 'win32',
           },
         );
 
@@ -335,12 +329,11 @@ describe('domain layer purity', () => {
         );
 
         const result = spawnSync(
-          process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-          ['arch-check'],
+          process.execPath,
+          ['scripts/checks/check-architecture.mjs'],
           {
             cwd: process.cwd(),
             encoding: 'utf8',
-            shell: process.platform === 'win32',
           },
         );
 
@@ -369,10 +362,14 @@ describe('cross-module import rule over the real tree', () => {
 
   beforeAll(() => {
     const result = spawnSync(
-      process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+      process.execPath,
       [
-        'exec',
-        'depcruise',
+        join(
+          __dirname,
+          '..',
+          '..',
+          'node_modules/dependency-cruiser/bin/dependency-cruiser.mjs',
+        ),
         '--config',
         '.dependency-cruiser.cjs',
         '--output-type',
@@ -382,7 +379,6 @@ describe('cross-module import rule over the real tree', () => {
       {
         cwd: join(__dirname, '..', '..'),
         encoding: 'utf8',
-        shell: true,
         // The JSON report for this tree is larger than spawnSync's 1 MiB
         // default, and a truncated report fails to parse rather than assert.
         maxBuffer: 64 * 1024 * 1024,
@@ -838,12 +834,11 @@ describe('request bodies reach their contract through parseRequestBody', () => {
       );
 
       const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
+        process.execPath,
+        ['scripts/checks/check-architecture.mjs'],
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          shell: process.platform === 'win32',
         },
       );
 
@@ -879,12 +874,11 @@ export const probe = isRecord({});
       );
 
       const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
+        process.execPath,
+        ['scripts/checks/check-architecture.mjs'],
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          shell: process.platform === 'win32',
         },
       );
 
@@ -909,12 +903,11 @@ describe('the request-id pattern has one declaration', () => {
       writeFileSync(join(fixtureRoot, 'probe.ts'), source);
 
       const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
+        process.execPath,
+        ['scripts/checks/check-architecture.mjs'],
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          shell: process.platform === 'win32',
         },
       );
 
@@ -959,12 +952,11 @@ describe('a session is stored only with the second-factor check', () => {
       );
 
       const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
+        process.execPath,
+        ['scripts/checks/check-architecture.mjs'],
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          shell: process.platform === 'win32',
         },
       );
 
@@ -999,12 +991,11 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
       );
 
       const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
+        process.execPath,
+        ['scripts/checks/check-architecture.mjs'],
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          shell: process.platform === 'win32',
         },
       );
 
@@ -1053,12 +1044,11 @@ describe('the generated Prisma client stays inside infrastructure', () => {
 
   function runArchCheck(): { status: number | null; output: string } {
     const result = spawnSync(
-      process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-      ['arch-check'],
+      process.execPath,
+      ['scripts/checks/check-architecture.mjs'],
       {
         cwd: process.cwd(),
         encoding: 'utf8',
-        shell: process.platform === 'win32',
       },
     );
 
@@ -1196,12 +1186,11 @@ describe('source-text architecture rules fail arch-check', () => {
       );
 
       const result = spawnSync(
-        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        ['arch-check'],
+        process.execPath,
+        ['scripts/checks/check-architecture.mjs'],
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          shell: process.platform === 'win32',
         },
       );
 
