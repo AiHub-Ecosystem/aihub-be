@@ -1,3 +1,4 @@
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type {
   GradeResponse,
   GradeTask2Request,
@@ -18,7 +19,7 @@ export const task2GradeAdapter: DownstreamAdapter<
 
     return {
       method: 'POST',
-      path: '/grading-feedback-task2',
+      path: OPERATION_CATALOG['writing.task2.grade'].downstreamPath,
       body: {
         question: input.question,
         topic: input.topic,

@@ -1,3 +1,4 @@
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type {
   GradeResponse,
   GradeTask1Request,
@@ -18,7 +19,7 @@ export const task1GradeAdapter: DownstreamAdapter<
 
     return {
       method: 'POST',
-      path: '/grading-feedback-task1',
+      path: OPERATION_CATALOG['writing.task1.grade'].downstreamPath,
       body: {
         question: input.question,
         // Downstream calls the chart type `topic` and the image `url`.

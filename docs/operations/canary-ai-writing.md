@@ -33,10 +33,10 @@ tsx scripts/ops/canary/canary-ai-writing.ts
 
 Each run probes both grading endpoints in sequence:
 
-| Operation             | Endpoint                       |
-| --------------------- | ------------------------------ |
-| `writing.task1.grade` | `POST /grading-feedback-task1` |
-| `writing.task2.grade` | `POST /grading-feedback-task2` |
+| Operation             | Endpoint                          |
+| --------------------- | --------------------------------- |
+| `writing.task1.grade` | `POST /v1/grading-feedback-task1` |
+| `writing.task2.grade` | `POST /v1/grading-feedback-task2` |
 
 Both are run even if one fails. Fixed known-good inputs from
 `test/fixtures/ai-writing/` are used.

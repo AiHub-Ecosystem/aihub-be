@@ -554,7 +554,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     pool
       .intercept({
         method: 'POST',
-        path: '/grading-feedback-task1',
+        path: '/v1/grading-feedback-task1',
         body: JSON.stringify({
           question: task1.question,
           topic: task1.topic,

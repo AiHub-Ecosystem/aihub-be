@@ -17,10 +17,10 @@
 
 The active Writing integration consists of **2 grading operations**.
 
-| Public Endpoint                      | Operation ID          | Scope           | Identity | Idempotency | Downstream Path           |
-| ------------------------------------ | --------------------- | --------------- | -------- | ----------- | ------------------------- |
-| `POST /v1/ielts/writing/task1/grade` | `writing.task1.grade` | `writing.grade` | **user** | required    | `/grading-feedback-task1` |
-| `POST /v1/ielts/writing/task2/grade` | `writing.task2.grade` | `writing.grade` | **user** | required    | `/grading-feedback-task2` |
+| Public Endpoint                      | Operation ID          | Scope           | Identity | Idempotency | Downstream Path              |
+| ------------------------------------ | --------------------- | --------------- | -------- | ----------- | ---------------------------- |
+| `POST /v1/ielts/writing/task1/grade` | `writing.task1.grade` | `writing.grade` | **user** | required    | `/v1/grading-feedback-task1` |
+| `POST /v1/ielts/writing/task2/grade` | `writing.task2.grade` | `writing.grade` | **user** | required    | `/v1/grading-feedback-task2` |
 
 ```ts
 export const OPERATIONS = {
@@ -35,12 +35,12 @@ export const OPERATIONS = {
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
     downstream: "ai-writing",
-    downstreamPath: "/grading-feedback-task1",
+    downstreamPath: "/v1/grading-feedback-task1",
     requestSchema: GradeTask1Request,
     responseSchema: GradeResponse,
   },
   "writing.task2.grade": {
-    /* identical structure, downstreamPath: '/grading-feedback-task2' */
+    /* identical structure, downstreamPath: '/v1/grading-feedback-task2' */
   },
 } as const satisfies Record<OperationId, OperationDef>;
 ```

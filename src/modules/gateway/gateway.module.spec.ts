@@ -165,7 +165,7 @@ describe('Gateway runtime-secret wiring', () => {
     expect(requests).toHaveLength(2);
 
     const writingRequest = requests.find(
-      (request) => request.path === '/grading-feedback-task1',
+      (request) => request.path === '/v1/grading-feedback-task1',
     );
     const speakingRequest = requests.find(
       (request) => request.path === '/api/v1/speaking/grading',

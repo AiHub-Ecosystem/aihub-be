@@ -1,0 +1,292 @@
+{
+  "status": "success",
+  "error": null,
+  "usage": {
+    "input_tokens": 4124,
+    "output_tokens": 863,
+    "total_tokens": 4987,
+    "cost": 0.00856
+  },
+  "data": {
+    "meta": {
+      "schema_version": "2.4",
+      "result_type": "test_result",
+      "codebook": "[redacted]",
+      "test_id": "[redacted]",
+      "test_type": "practice",
+      "user_id": "[redacted]",
+      "part_result_id": null,
+      "response_id": null,
+      "part": null,
+      "question_id": null,
+      "prompt_text": null,
+      "question_count": 1,
+      "total_speaking_seconds": 4.4,
+      "parts_completed": [
+        1
+      ],
+      "graded_at": "[redacted]"
+    },
+    "transcript": null,
+    "gate": {
+      "reliability": {
+        "evidence_level": "[redacted]",
+        "reasons": [
+          "[redacted]",
+          "[redacted]",
+          "[redacted]",
+          "[redacted]"
+        ],
+        "message_vi": "[redacted]"
+      },
+      "relevance": null,
+      "relevance_flags": []
+    },
+    "scores": {
+      "overall": 5.5,
+      "fluency_coherence": 7,
+      "lexical_resource": 4,
+      "grammatical_range_accuracy": 4,
+      "pronunciation": 7,
+      "is_provisional": true
+    },
+    "trajectory": [
+      {
+        "part": 1,
+        "scores": {
+          "overall": 5.5,
+          "fluency_coherence": 7,
+          "lexical_resource": 4,
+          "grammatical_range_accuracy": 4,
+          "pronunciation": 7
+        },
+        "changes": null,
+        "note_vi": "[redacted]"
+      }
+    ],
+    "overall_feedback": {
+      "overview_vi": "[redacted]",
+      "details": [
+        {
+          "criterion": "[redacted]",
+          "comment_vi": "[redacted]"
+        },
+        {
+          "criterion": "[redacted]",
+          "comment_vi": "[redacted]"
+        },
+        {
+          "criterion": "[redacted]",
+          "comment_vi": "[redacted]"
+        },
+        {
+          "criterion": "[redacted]",
+          "comment_vi": "[redacted]"
+        }
+      ]
+    },
+    "criteria": {
+      "fluency_coherence": {
+        "summary": {
+          "reason_for_band_vi": "[redacted]",
+          "strengths_vi": [
+            "[redacted]"
+          ],
+          "areas_for_improvement_vi": [
+            "[redacted]"
+          ]
+        },
+        "diagnostics": null,
+        "recurring_patterns": [],
+        "test_level_errors": [],
+        "evidence": {
+          "fluency": {
+            "speech_rate_wpm": 217.7,
+            "mean_length_run_words": 16,
+            "pauses": {
+              "over_2s": 0,
+              "over_3s": 0,
+              "longest_seconds": 0,
+              "items": null
+            },
+            "fillers": {
+              "count": 0,
+              "top": [],
+              "items": null
+            },
+            "repetitions": {
+              "count": 0,
+              "top": [],
+              "items": null
+            },
+            "self_corrections": {
+              "count": 0,
+              "top": [],
+              "items": null
+            }
+          },
+          "coherence": {
+            "linking_pattern": "[redacted]",
+            "devices_used": [
+              {
+                "text": "[redacted]",
+                "count": 1
+              },
+              {
+                "text": "[redacted]",
+                "count": 1
+              }
+            ]
+          }
+        }
+      },
+      "lexical_resource": {
+        "summary": {
+          "reason_for_band_vi": "[redacted]",
+          "strengths_vi": [
+            "[redacted]"
+          ],
+          "areas_for_improvement_vi": [
+            "[redacted]"
+          ]
+        },
+        "diagnostics": null,
+        "recurring_patterns": [],
+        "test_level_errors": [
+          {
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement_vi": "[redacted]"
+          }
+        ],
+        "evidence": {
+          "repetitions": {
+            "count": 0,
+            "top": []
+          }
+        }
+      },
+      "grammatical_range_accuracy": {
+        "summary": {
+          "reason_for_band_vi": "[redacted]",
+          "strengths_vi": [
+            "[redacted]"
+          ],
+          "areas_for_improvement_vi": [
+            "[redacted]"
+          ]
+        },
+        "diagnostics": null,
+        "recurring_patterns": [],
+        "test_level_errors": [
+          {
+            "error_codes": "[redacted]",
+            "explain_vi": "[redacted]",
+            "improvement_vi": "[redacted]"
+          }
+        ],
+        "evidence": {
+          "complex_sentence_status": "[redacted]",
+          "structures_detected": [
+            {
+              "question_id": "p1_hometown",
+              "sentence_type": "[redacted]",
+              "structure": "[redacted]",
+              "marker": "[redacted]",
+              "reference": {
+                "token_range": [
+                  0,
+                  15
+                ],
+                "text": "[redacted]",
+                "start_ms": 110,
+                "end_ms": 4520
+              },
+              "accurate": true
+            }
+          ],
+          "structures_missing": [
+            "[redacted]",
+            "[redacted]",
+            "[redacted]",
+            "[redacted]",
+            "[redacted]"
+          ]
+        }
+      },
+      "pronunciation": {
+        "summary": {
+          "reason_for_band_vi": "[redacted]",
+          "strengths_vi": [
+            "[redacted]"
+          ],
+          "areas_for_improvement_vi": [
+            "[redacted]"
+          ]
+        },
+        "diagnostics": null,
+        "recurring_patterns": [],
+        "test_level_errors": [],
+        "evidence": {
+          "sound_patterns": {
+            "count": 0,
+            "top": []
+          },
+          "prosody": {
+            "intonation": null,
+            "chunking": null
+          }
+        }
+      }
+    },
+    "error_summary": [
+      {
+        "error_codes": "[redacted]",
+        "criterion": "[redacted]",
+        "level": "[redacted]",
+        "count": 1,
+        "question_ids": []
+      },
+      {
+        "error_codes": "[redacted]",
+        "criterion": "[redacted]",
+        "level": "[redacted]",
+        "count": 1,
+        "question_ids": []
+      }
+    ],
+    "pronunciation_detail": null,
+    "parts": [
+      {
+        "part": 1,
+        "part_result_id": "[redacted]",
+        "href": "[redacted]"
+      }
+    ],
+    "questions": [
+      {
+        "question_id": "p1_hometown",
+        "part": 1,
+        "response_id": "[redacted]",
+        "href": "[redacted]"
+      }
+    ],
+    "system": {
+      "engine": {
+        "version": "[redacted]",
+        "llm_model": "[redacted]",
+        "stt_model": "[redacted]",
+        "scorer": "[redacted]"
+      },
+      "timing": {
+        "total_seconds": 6.42,
+        "stt_seconds": null,
+        "acoustic_seconds": null,
+        "language_seconds": 6.3
+      },
+      "prompt_version": "[redacted]",
+      "codebook_version": "[redacted]",
+      "scorer_params_version": "[redacted]"
+    }
+  }
+}

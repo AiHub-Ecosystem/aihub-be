@@ -1,5 +1,29 @@
 # AI Speaking fixtures
 
+## v2 candidate captures
+
+These fixtures were captured from controlled synthetic Production probes on
+2026-10-31. The success captures cover all six v2 operations in a one-question
+Practice Part/Test flow; the final capture records the provider's HTTP 400
+validation response for an invalid `part` value.
+
+| File                                  | Operation                                      | HTTP |
+| ------------------------------------- | ---------------------------------------------- | ---: |
+| `grading-v2-question-post.200.json`   | `POST /api/v2/speaking/questions/grading`      |  200 |
+| `grading-v2-question-get.200.json`    | `GET /api/v2/speaking/responses/{response_id}` |  200 |
+| `grading-v2-part-post.200.json`       | `POST /api/v2/speaking/parts/grading`          |  200 |
+| `grading-v2-part-get.200.json`        | `GET /api/v2/speaking/parts/{part_result_id}`  |  200 |
+| `grading-v2-test-post.200.json`       | `POST /api/v2/speaking/tests/grading`          |  200 |
+| `grading-v2-test-get.200.json`        | `GET /api/v2/speaking/tests/{test_id}`         |  200 |
+| `grading-v2-validation-post.400.json` | Invalid `part` on question grading             |  400 |
+
+Every non-allowlisted string value, including transcripts, feedback, and
+generated identifiers, was replaced with `[redacted]`; response keys, types,
+and numeric values were retained. These are candidate provider captures, not
+an approved v2 contract baseline. Per section 8 of the provider contract, the
+AI Speaking owner, WISPACE, and AIHUB must approve them before the contract,
+machine schema, or integration baseline is updated.
+
 `grading.response.json` is a scrubbed successful grading. The failure
 captures below come from #247. Each file name ends with the HTTP status the
 provider returned.
