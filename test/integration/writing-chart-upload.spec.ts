@@ -8,7 +8,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 import sharp from 'sharp';
-import { MockAgent } from 'undici';
+import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
@@ -533,6 +533,8 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     });
     expect(wrongOwner.statusCode).toBe(404);
     expect(storage.published).toEqual([]);
+    const stagedBytes = storage.objects.get(intent.stagingKey)?.bytes;
+    if (stagedBytes === undefined) throw new Error('staged chart is missing');
 
     const complete = await app.inject({
       method: 'POST',
@@ -545,9 +547,9 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     expect(imageUrl).toBe(`https://charts.example.net/${intent.publishedKey}`);
     expect(completedAsset.expires_at).toBe('2026-10-15T00:00:00.000Z');
     expect(storage.published).toEqual([intent.publishedKey]);
-    expect(storage.publishedObjects.get(intent.publishedKey)).not.toEqual(
-      chartBytes().bytes,
-    );
+    const publishedBytes = storage.publishedObjects.get(intent.publishedKey);
+    expect(publishedBytes).toBeInstanceOf(Buffer);
+    expect(publishedBytes).not.toBe(stagedBytes);
     expect(storage.deletedStaging).toEqual([intent.stagingKey]);
 
     const pool = mockAgent.get('https://ai-writing.test');

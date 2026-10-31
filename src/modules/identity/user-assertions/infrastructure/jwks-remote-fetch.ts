@@ -1,4 +1,4 @@
-import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
+import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
 import {

@@ -1,6 +1,10 @@
 import { File } from 'node:buffer';
 
-import { type Dispatcher, Pool, FormData as UndiciFormData } from 'undici';
+import {
+  type Dispatcher,
+  Pool,
+  FormData as UndiciFormData,
+} from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
 import {

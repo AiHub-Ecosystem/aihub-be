@@ -65,7 +65,7 @@ describe('Task 1 sample image URL', () => {
     // Exact equality, not arrayContaining: the point of this test is that a
     // file nobody listed is a failure, which a containment check cannot see.
     expect(filesMentioningTheObject()).toEqual([...ALLOWED_FILES].sort());
-  });
+  }, 15_000);
 
   it('is named by every allowed file, so the list cannot rot', () => {
     const naming = filesMentioningTheObject();

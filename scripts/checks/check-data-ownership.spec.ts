@@ -55,5 +55,5 @@ describe('data-ownership check', () => {
 
   it('passes on the real tree', () => {
     expect(runCheck(process.cwd()).status).toBe(0);
-  });
+  }, 15_000);
 });

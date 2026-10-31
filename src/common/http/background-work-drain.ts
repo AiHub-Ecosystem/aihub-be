@@ -9,7 +9,7 @@ const drainWaiters = new Set<() => void>();
  * running hands back what it has not started. It is set before the server
  * closes, so the drain below waits for work that is ending, not for work that
  * keeps being started. It is one-way and process-wide: a spec that needs it
- * clear loads a fresh copy of this module (`jest.isolateModulesAsync`).
+ * clear loads a fresh copy of this module in a fresh test module registry.
  */
 export function beginShutdown(): void {
   shuttingDown = true;
