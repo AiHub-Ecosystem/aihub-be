@@ -18,7 +18,7 @@ From PowerShell:
 ```powershell
 docker compose up -d --wait postgres
 $env:AIHUB_POSTGRES_BASELINE = '1'
-pnpm benchmark:postgres-plans
+bun run benchmark:postgres-plans
 Remove-Item Env:AIHUB_POSTGRES_BASELINE
 ```
 

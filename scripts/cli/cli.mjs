@@ -15,7 +15,7 @@ const apiKeyModule = new URL(
 async function loadApiKeyGenerator() {
   if (!existsSync(apiKeyModule)) {
     throw new Error(
-      'The API key generator is unavailable. Run "pnpm build" before "key:create".',
+      'The API key generator is unavailable. Run "bun run build" before "key:create".',
     );
   }
 
@@ -774,7 +774,7 @@ async function cleanupIdempotency() {
     !existsSync(idempotencyRepositoryModule)
   ) {
     throw new Error(
-      'Idempotency cleanup is unavailable. Run "pnpm build" before "idempotency:cleanup".',
+      'Idempotency cleanup is unavailable. Run "bun run build" before "idempotency:cleanup".',
     );
   }
 

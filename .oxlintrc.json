@@ -5,8 +5,8 @@
   // https://github.com/AiHub-Ecosystem/aihub-be/issues/106#issuecomment-5770026510
   //
   // Severity lives here rather than in a `--deny-warnings` flag: oxlint exits
-  // 0 on warnings, so `pnpm lint` would report findings and still pass. Keeping
-  // it in the config stops `pnpm lint` and `.husky/pre-commit` from drifting.
+  // 0 on warnings, so `bun run lint` would report findings and still pass. Keeping
+  // it in the config stops `bun run lint` and `.husky/pre-commit` from drifting.
   "options": {
     "typeAware": true
   },
@@ -55,7 +55,7 @@
     // Type-aware rules for #110 — gateway defect class. `no-floating-promises`,
     // `no-misused-promises`, and `await-thenable` are the direct gateway failure
     // modes. They are `error` with 0 findings. Runtime measured at 2.6s (<8s),
-    // so this set stays in `pnpm verify`.
+    // so this set stays in `bun run verify`.
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/await-thenable": "error",

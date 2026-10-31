@@ -18,7 +18,7 @@ flow. There is no customer app or customer backend in this repository. The
 ## What you need
 
 - Node.js 22.22.3 or newer (the NestJS 12 build tooling needs it; see ADR-0047)
-- pnpm 11 (the repository pins `pnpm@11.20.0`)
+- Bun 1.4 as the package manager (the repository pins `bun@1.4.4`); Node.js stays the runtime
 - Docker Desktop or another Docker Compose implementation
 - A valid AI Writing bearer token from the AI Writing team (for Writing calls)
 - AI Speaking Dev URL and server-side `x-client-id`/`x-secret-key` values (for
@@ -66,7 +66,7 @@ AI Writing. It also does not test API-key or user-assertion verification.
 From the repository root:
 
 ```bash
-pnpm install
+bun install
 ```
 
 Create the local environment file.
@@ -164,7 +164,7 @@ docker compose ps
 Both containers should show a healthy state. Apply the control-plane schema:
 
 ```bash
-pnpm migrate
+bun run migrate
 ```
 
 Changing the schema itself — editing `prisma/schema.prisma` and generating the
@@ -188,7 +188,7 @@ when it is missing.
 
 ```bash
 export DEMO_OPERATOR_USERNAME=<your-username>
-pnpm demo:bootstrap "Acme Edu"
+bun run demo:bootstrap "Acme Edu"
 ```
 
 The script performs all of the following:
@@ -217,7 +217,7 @@ credentials, or follow the reset procedure in [Cleanup](#cleanup).
 Start the application in a separate terminal:
 
 ```bash
-pnpm dev
+bun run dev
 ```
 
 The application loads `.env` at startup. Restart it after changing any
@@ -250,7 +250,7 @@ $env:AIHUB_API_KEY = '<paste DEMO_API_KEY here>'
 Generate a fresh assertion immediately before a grading request:
 
 ```powershell
-pnpm dev:assertion student_456
+bun run dev:assertion student_456
 $env:AIHUB_ASSERTION = '<paste the JWT printed to stdout here>'
 ```
 
@@ -259,7 +259,7 @@ macOS/Linux:
 ```bash
 export AIHUB_BASE_URL=http://localhost:3000
 export AIHUB_API_KEY='<paste DEMO_API_KEY here>'
-export AIHUB_ASSERTION="$(pnpm dev:assertion student_456)"
+export AIHUB_ASSERTION="$(bun run dev:assertion student_456)"
 ```
 
 Assertions are valid for five minutes by default. Each assertion contains a
@@ -478,11 +478,11 @@ AIHUB does not silently ignore a broken assertion.
 Import [`aihub.postman_collection.json`](../aihub.postman_collection.json) into
 Postman and set these collection variables:
 
-| Variable        | Value                                               |
-| --------------- | --------------------------------------------------- |
-| `baseUrl`       | `http://localhost:3000`                             |
-| `apiKey`        | The `DEMO_API_KEY` created by `demo:bootstrap`      |
-| `userAssertion` | A fresh token from `pnpm dev:assertion student_456` |
+| Variable        | Value                                                  |
+| --------------- | ------------------------------------------------------ |
+| `baseUrl`       | `http://localhost:3000`                                |
+| `apiKey`        | The `DEMO_API_KEY` created by `demo:bootstrap`         |
+| `userAssertion` | A fresh token from `bun run dev:assertion student_456` |
 
 Start with the two valid grading requests (`1a` and `1b`), then run the
 missing-assertion and idempotency scenarios. The collection also contains
@@ -493,8 +493,8 @@ exists. Those cases are not expected to pass against the default local setup.
 If the collection needs regeneration after an API contract change:
 
 ```bash
-pnpm generate:openapi
-pnpm generate:postman
+bun run generate:openapi
+bun run generate:postman
 ```
 
 ## 10. What the demo proves
@@ -532,7 +532,7 @@ Check the container and connection settings:
 ```bash
 docker compose ps
 docker compose logs postgres
-pnpm migrate
+bun run migrate
 ```
 
 Confirm that `DATABASE_URL` in `.env` matches the Compose configuration.
@@ -543,7 +543,7 @@ The most common cause is missing runtime-secret configuration. For local
 development, set `AIHUB_RUNTIME_SECRET_SOURCE=env` plus
 `DOWNSTREAM_AI_WRITING_TOKEN`, `DOWNSTREAM_AI_SPEAKING_CLIENT_ID`,
 `DOWNSTREAM_AI_SPEAKING_SECRET_KEY`, `EMAIL_OUTBOX_CURRENT_KEY_ID`, and
-`EMAIL_OUTBOX_KEYS` in `.env`, then restart `pnpm dev`. For a
+`EMAIL_OUTBOX_KEYS` in `.env`, then restart `bun run dev`. For a
 Vault Agent deployment, check the rendered file path and required bundle keys;
 the process fails closed when the file is absent or malformed.
 

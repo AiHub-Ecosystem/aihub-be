@@ -32,13 +32,13 @@ modes, onboarding, request formats, retries, and error codes.
 
 ## Local Development
 
-Use Node.js 22.22.3 or newer and pnpm 11. The full local setup, environment
+Use Node.js 22.22.3 or newer and Bun 1.4. The full local setup, environment
 configuration, and demo requests are in the [local demo guide](docs/local-demo.md).
 
 ```bash
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```
 
 The local health check is `GET http://localhost:3000/health`. Run the repository
-verification suite with `pnpm verify`.
+verification suite with `bun run verify`.

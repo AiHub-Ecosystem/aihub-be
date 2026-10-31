@@ -12,6 +12,6 @@
 
 **Not allowed:** feature implementation in source layers or weakening an architecture/security rule to make a test pass.
 
-**Required checks:** focused test first, then `pnpm test`, `pnpm type-check`, `pnpm arch-check`, and `pnpm verify` before handoff.
+**Required checks:** focused test first, then `bun run test`, `bun run type-check`, `bun run arch-check`, and `bun run verify` before handoff.
 
 **Conventions:** behavior assertions over call-order mocks; no real external services in unit tests; every known blocker gets an explicit test or documented stop condition.

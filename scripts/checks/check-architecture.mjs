@@ -460,6 +460,28 @@ for (const file of sourceFiles) {
   }
 }
 
+// ADR-0138: the package manager is Bun, and a child process that runs pnpm
+// against a Bun-installed `node_modules` breaks concurrent readers of it. Run
+// Node, `tsx` or dependency-cruiser through `process.execPath`, or a package
+// script through `bun run`.
+const retiredPackageManagerCall = /['"`]pnpm(?:\.cmd)?['"`]/;
+for (const directory of ['scripts', 'src', 'test']) {
+  const files = readdirSync(join(root, directory), {
+    recursive: true,
+    withFileTypes: true,
+  }).filter((entry) => entry.isFile() && /\.(?:[cm]?js|ts)$/.test(entry.name));
+  for (const entry of files) {
+    const file = join(entry.parentPath, entry.name);
+    // This file holds the pattern above, which is itself such a literal.
+    if (entry.name === 'check-architecture.mjs') continue;
+    if (retiredPackageManagerCall.test(readFileSync(file, 'utf8'))) {
+      fail(
+        `${relative(root, file).replace(/\\/g, '/')} spawns pnpm; use process.execPath or 'bun run' (ADR-0138)`,
+      );
+    }
+  }
+}
+
 if (process.exitCode !== undefined) {
   process.exit(process.exitCode);
 }
@@ -521,7 +543,7 @@ const dependencyCruiserCachePath = cacheHelpers.dependencyCruiserCacheDirectory(
     readFileSync(dependencyCruiserConfigPath, 'utf8'),
     readFileSync(join(root, 'tsconfig.json'), 'utf8'),
     readFileSync(join(root, 'package.json'), 'utf8'),
-    readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'),
+    readFileSync(join(root, 'bun.lock'), 'utf8'),
   ],
 );
 const result = spawnSync(

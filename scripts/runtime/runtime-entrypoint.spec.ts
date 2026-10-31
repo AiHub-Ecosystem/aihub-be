@@ -76,7 +76,7 @@ describe('runtime entrypoint failure reporting', () => {
 });
 
 // The entrypoint loads the built runtime-connection module, so this runs only
-// where a build exists, such as a local `pnpm verify` after `pnpm build`, and
+// where a build exists, such as a local `bun run verify` after `bun run build`, and
 // is skipped otherwise. The check that matters is running an operator command
 // in a deployed container.
 const withBuild = existsSync(RUNTIME_CONNECTION_LOADER)

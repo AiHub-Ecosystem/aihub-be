@@ -4,19 +4,21 @@
 FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS dependencies
 
 WORKDIR /app
-ENV COREPACK_HOME=/tmp/corepack
 
-RUN corepack enable \
-  && corepack install --global pnpm@11.20.0
+# Bun installs the dependencies; Node stays the runtime. Installed with npm
+# because the base image ships Node and npm, not Bun.
+RUN npm install --global bun@1.4.4
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs ./
-RUN HUSKY=0 pnpm install --frozen-lockfile
+COPY package.json bun.lock ./
+RUN HUSKY=0 bun install --frozen-lockfile
 
 FROM dependencies AS build
 
 COPY . .
-RUN pnpm build
-RUN pnpm prune --prod --ignore-scripts
+RUN bun run build
+# A production reinstall, not a prune: Bun has no prune, and the reinstall keeps the
+# `prisma` CLI out of the image because it is a devDependency (ADR-0088).
+RUN rm -rf node_modules && HUSKY=0 bun install --frozen-lockfile --production --ignore-scripts
 
 FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
 

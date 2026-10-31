@@ -59,7 +59,7 @@ describe('a session insert', () => {
     expect(webCreate).not.toHaveBeenCalled();
   });
 
-  // These checks run in `pnpm type-check`: each marked line must fail to
+  // These checks run in `bun run type-check`: each marked line must fail to
   // compile, so a new path that stores a session cannot skip the second-factor
   // check that mints a SessionAdmission. The attempts are never called.
   it('does not compile without the admission the second-factor check mints', () => {

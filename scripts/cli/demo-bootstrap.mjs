@@ -5,9 +5,9 @@ import { loadEnvFile } from 'node:process';
 /**
  * One-shot demo setup: creates an organization, registers the demo signing
  * key, issues an API key, and appends both credentials to `.env` so
- * `pnpm dev:assertion` and a curl call work immediately afterwards.
+ * `bun run dev:assertion` and a curl call work immediately afterwards.
  *
- *   pnpm demo:bootstrap "Acme Edu"
+ *   bun run demo:bootstrap "Acme Edu"
  *
  * Wraps `scripts/cli/cli.mjs` rather than talking to Postgres itself, so the
  * onboarding logic stays in one place. Needs DATABASE_URL reachable.
@@ -41,7 +41,7 @@ function run(args) {
     // The child already printed why. A Node stack trace on top of that only
     // buries it, and the usual cause is simply that Postgres is not running.
     console.error(
-      `\n${args[0]} failed. Is PostgreSQL up and DATABASE_URL set? Try: docker compose up -d && pnpm migrate`,
+      `\n${args[0]} failed. Is PostgreSQL up and DATABASE_URL set? Try: docker compose up -d && bun run migrate`,
     );
     process.exit(1);
   }
@@ -118,4 +118,4 @@ console.error(
 );
 console.error(`X-API-Key:        ${apiKey}`);
 console.error(`X-User-Identity: ${assertion}`);
-console.error('\nNew assertions later: pnpm dev:assertion');
+console.error('\nNew assertions later: bun run dev:assertion');

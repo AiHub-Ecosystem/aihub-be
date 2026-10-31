@@ -8,6 +8,6 @@ Review the diff against the canonical spec, then check:
 - distinct Task1/Task2 contracts;
 - tests for every new behavior and boundary;
 - a change to an enforcement mechanism (a check script, lint configuration, or CI gate) updates the Enforcement section or status note of the ADR that the mechanism implements;
-- `pnpm type-check`, `pnpm arch-check`, and `pnpm verify` evidence.
+- `bun run type-check`, `bun run arch-check`, and `bun run verify` evidence.
 
 Report blockers with the exact file and rule. Do not rewrite the entire specification into the review.

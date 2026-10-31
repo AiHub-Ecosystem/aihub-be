@@ -44,7 +44,8 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/test/db/'],
   // NestJS 12 and @nestjs/config ship ESM packages. Node loads them through
   // own module loader does not, so SWC compiles it to CommonJS here. The two
-  // alternatives cover pnpm's store path and the linked path (ADR-0047).
+  // alternatives cover the `.pnpm` store path and the linked path (ADR-0047);
+  // Bun's flat `node_modules` matches the plain package names.
   transformIgnorePatterns: [
     '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|@nestjs/|@fastify/|jose/|.pnpm/cookie|cookie/)',
   ],

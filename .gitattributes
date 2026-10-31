@@ -1,6 +1,6 @@
 # Every tracked blob in this repository is stored with LF, and `biome.json`
 # pins `lineEnding: "lf"`. Without this, a Windows checkout rewrites anything
-# not listed here with CRLF, and `pnpm lint` then fails on files nobody
+# not listed here with CRLF, and `bun run lint` then fails on files nobody
 # touched — `biome check` reports a format diff for the line endings git just
 # introduced. It surfaces after any operation that rewrites the working tree:
 # a rebase, a stash pop, a branch switch.

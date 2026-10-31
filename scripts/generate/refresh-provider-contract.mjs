@@ -3,8 +3,8 @@
  * Re-fetches an AI service's published OpenAPI document into the snapshot the
  * contract drift check reads (test/provider-contract-drift.spec.ts).
  *
- *   pnpm provider:refresh            every service listed below
- *   pnpm provider:refresh speaking   one of them
+ *   bun run provider:refresh            every service listed below
+ *   bun run provider:refresh speaking   one of them
  *
  * The snapshot is written with sorted keys, so a refresh changes it only when
  * the provider's contract changed; the weekly workflow relies on that. After a

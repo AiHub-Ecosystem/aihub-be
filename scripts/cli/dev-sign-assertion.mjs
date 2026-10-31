@@ -17,8 +17,8 @@ import {
  * one of its end users. AIHUB never runs this — the whole point of the
  * asymmetric design is that the gateway cannot sign these itself.
  *
- *   pnpm dev:assertion              # prints one token for DEMO_USER_ID
- *   pnpm dev:assertion student_789  # or override the user id inline
+ *   bun run dev:assertion              # prints one token for DEMO_USER_ID
+ *   bun run dev:assertion student_789  # or override the user id inline
  *
  * The first run also writes the key pair and prints the identity:set command
  * that registers its public half.
@@ -56,7 +56,7 @@ const userId = process.argv[2] ?? process.env.DEMO_USER_ID;
 
 if (userId === undefined || userId.trim().length === 0) {
   console.error(
-    'No user id. Set DEMO_USER_ID in .env, or pass one: pnpm dev:assertion student_456',
+    'No user id. Set DEMO_USER_ID in .env, or pass one: bun run dev:assertion student_456',
   );
   process.exit(2);
 }
@@ -83,7 +83,7 @@ async function loadOrCreatePrivateKey() {
     `Created ${PRIVATE_KEY_FILE} and ${JWKS_FILE}. Register it once:`,
   );
   console.error(
-    `  pnpm cli identity:set --org org_... --issuer ${issuer} --public-keys-file ./${JWKS_FILE}\n`,
+    `  bun run cli identity:set --org org_... --issuer ${issuer} --public-keys-file ./${JWKS_FILE}\n`,
   );
 
   return privateKey;
@@ -99,7 +99,7 @@ const assertion = await new SignJWT({})
   .setExpirationTime(`${TTL_SECONDS}s`)
   .sign(await loadOrCreatePrivateKey());
 
-// Token on stdout so `$(pnpm dev:assertion)` captures it cleanly; every
+// Token on stdout so `$(bun run dev:assertion)` captures it cleanly; every
 // other line goes to stderr.
 console.error(`${userId} · valid ${TTL_SECONDS}s · issuer ${issuer}`);
 console.log(assertion);

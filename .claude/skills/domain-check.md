@@ -6,4 +6,4 @@ Use before approving a domain or application change.
 - Application exposes ports and explicit organization context.
 - No raw headers, environment reads, concrete SDKs, or persistence models cross inward.
 - Expected errors use the shared error taxonomy.
-- `pnpm arch-check` and the focused tests pass.
+- `bun run arch-check` and the focused tests pass.

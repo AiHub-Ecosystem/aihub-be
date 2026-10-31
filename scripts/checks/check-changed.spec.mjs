@@ -285,12 +285,12 @@ await test('the entry-point comparison holds on both path shapes', () => {
   );
 });
 
-await test('all gates in pnpm verify have commands and a tested path mapping', () => {
+await test('all gates in bun run verify have commands and a tested path mapping', () => {
   const packageJson = /** @type {{scripts: Record<string, string>}} */ (
     JSON.parse(readFileSync('package.json', 'utf8'))
   );
   const invoked = [
-    ...packageJson.scripts.verify.matchAll(/\bpnpm\s+([\w:-]+)/g),
+    ...packageJson.scripts.verify.matchAll(/\bbun run\s+([\w:-]+)/g),
   ].map((match) => match[1] ?? '');
   // `check:batch` is one step that runs several gates. The guarantee is about
   // the gates, so expand the step into its declared members rather than letting

@@ -48,7 +48,7 @@ If an older architecture draft conflicts with an implementation spec, record the
 - Hand-written source files are capped at 500 code lines (ADR-0110); composition roots, single-schema configuration, and catalogues are exempt with stated reasons. The existing oversized files are grandfathered behind an allowlist and carry a `ponytail:` header comment until refactored.
 - Keep scripts under `scripts/{cli,ops,generate,checks,ci,runtime}/` by purpose. Group CLI specs under `test/cli/` and integration specs under `test/integration/`; shared setup and cross-cutting specs may stay at `test/` root. Keep each root at 15 direct entries or fewer.
 - Cross-module TypeScript APIs live under the owning module's `public/` facades unless they use an established seam: application ports, shared Fastify request primitives, Nest decorators, module composition roots, or Nest-exported providers. Consumers use the matching seam instead of other implementation paths.
-- A controller validates a request body with `parseRequestBody` from `src/common/http`, never `Value.Check` or `Value.Parse` directly. The schema's `default` values apply because that helper parses, and checking before parsing is what rejects a body whose field has the wrong type. `pnpm arch-check` enforces it; a call that is not body validation keeps only by marking its own line with `arch-check: <reason>`.
+- A controller validates a request body with `parseRequestBody` from `src/common/http`, never `Value.Check` or `Value.Parse` directly. The schema's `default` values apply because that helper parses, and checking before parsing is what rejects a body whose field has the wrong type. `bun run arch-check` enforces it; a call that is not body validation keeps only by marking its own line with `arch-check: <reason>`.
 - `domain` has no framework, transport, environment, database, cache, or downstream imports.
 - `src/common` contains only genuinely cross-cutting primitives. `src/catalog` owns operation metadata; `src/contracts` owns boundary schemas; `src/downstream` owns pure mappers and dispatch seams.
 - Keep constants and configuration beside the application use case or layer that owns them; group related values by policy, and extract them only when independently reused. Avoid generic `constants` files and never move business policy into `src/common` or `domain`.
@@ -82,12 +82,12 @@ A reviewer reads `AGENTS.md`, the `.claude/rules/` files whose `paths` match the
 
 ### Required verification
 
-After each batch of edits run `pnpm check:changed`: it reads the changed files from git and runs the gates they can break (`oxlint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, and `prettier` for docs). Run `pnpm verify` once, at the end, before handoff. `pnpm test -- ./path/to/focused-file.spec.ts` runs one spec.
+After each batch of edits run `bun run check:changed`: it reads the changed files from git and runs the gates they can break (`oxlint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, and `prettier` for docs). Run `bun run verify` once, at the end, before handoff. `bun run test -- ./path/to/focused-file.spec.ts` runs one spec.
 
-`pnpm build` is a pure SWC transform; type ownership lives in `type-check` (via `pnpm verify`).
+`bun run build` is a pure SWC transform; type ownership lives in `type-check` (via `bun run verify`).
 
-`pnpm verify:summary` runs the same loop and prints only the result, the first failing step, and the path of a log file of its own; use it when the output is read into context.
+`bun run verify:summary` runs the same loop and prints only the result, the first failing step, and the path of a log file of its own; use it when the output is read into context.
 
-Before running `pnpm coverage:unit`, and whenever a run dies with a worker or heap error, read `docs/agents/verification.md` for the Jest coverage lane's memory budget. Low free RAM alone is not a reason to defer verification or ask for confirmation: Jest's automatic worker cap uses one worker below 4 GiB free and two otherwise, unless explicitly overridden.
+Before running `bun run coverage:unit`, and whenever a run dies with a worker or heap error, read `docs/agents/verification.md` for the Jest coverage lane's memory budget. Low free RAM alone is not a reason to defer verification or ask for confirmation: Jest's automatic worker cap uses one worker below 4 GiB free and two otherwise, unless explicitly overridden.
 
 A worker or heap death is not a test result. Read the error line, then re-run the named suite alone: a suite that passes alone did not fail, and the rest of that run is not evidence about the change. Do not reach green by skipping a suite, lowering a `coverageThreshold`, or editing an assertion — record what was observed and why the run is inconclusive.

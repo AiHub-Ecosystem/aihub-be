@@ -124,5 +124,5 @@ confirms unrelated paths and metadata are denied without printing values:
 $env:AIHUB_VAULT_SMOKE_ALLOW = 'true'
 $env:AIHUB_VAULT_SMOKE_AUTH_METHOD = 'approle'
 $env:AIHUB_VAULT_ENVIRONMENT = 'production'
-pnpm vault:smoke
+bun run vault:smoke
 ```

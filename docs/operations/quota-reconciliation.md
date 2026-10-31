@@ -148,5 +148,5 @@ Redis/Postgres errors.
 Run the focused CLI/reconciliation tests while iterating, then run:
 
 ```sh
-pnpm verify
+bun run verify
 ```

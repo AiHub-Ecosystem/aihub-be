@@ -51,46 +51,50 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Check unused exports
-        run: pnpm knip
+        run: bun run knip
 
       - name: Lint source
-        run: pnpm lint
+        run: bun run lint
 
       - name: Check formatting
-        run: pnpm format:check
+        run: bun run format:check
 
       - name: Type-check
-        run: pnpm type-check
+        run: bun run type-check
 
       - name: Check migrations
-        run: pnpm check:migrations
+        run: bun run check:migrations
 
       - name: Check deprecation descriptors
-        run: pnpm check:deprecation
+        run: bun run check:deprecation
 
       - name: Check architecture
-        run: pnpm arch-check
+        run: bun run arch-check
 
       - name: Check import style
-        run: pnpm check:imports
+        run: bun run check:imports
 
       - name: Generate and validate OpenAPI
-        run: pnpm generate:openapi && pnpm validate:openapi
+        run: bun run generate:openapi && bun run validate:openapi
 
       # The release gate runs on pushes to main too (#1398): work lands there
       # directly, and CD deploys whatever contract a push carries. A push
@@ -139,11 +143,11 @@ jobs:
 
       - name: Test API compatibility checker
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
-        run: pnpm test:api-compatibility
+        run: bun run test:api-compatibility
 
       - name: Check public API compatibility
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
-        run: pnpm check:api-compatibility -- base-contract . CHANGELOG.md
+        run: bun run check:api-compatibility -- base-contract . CHANGELOG.md
 
       - name: Install nginx for the edge compression check
         run: sudo apt-get update && sudo apt-get install --yes nginx logrotate
@@ -162,32 +166,31 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
-      # Installed with npm: the repository allows only GitHub-owned actions and
-      # a short list of Docker and pnpm ones, so `oven-sh/setup-bun` never starts.
       - name: Set up Bun
         run: npm install --global bun@1.4.4
 
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # Bun owns assertions; Jest/SWC still emits the branch coverage report
       # consumed by the merged-coverage gate.
       - name: Run unit tests with Bun
-        run: pnpm test
+        run: bun run test
 
       - name: Generate the unit coverage report with Jest
-        run: pnpm coverage:unit
+        run: bun run coverage:unit
 
       - name: Upload the unit lane coverage report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -199,10 +202,10 @@ jobs:
           retention-days: 1
 
       - name: Test monitoring config checker
-        run: pnpm test:monitoring-config
+        run: bun run test:monitoring-config
 
       - name: Test the changed-file gate map
-        run: pnpm test:check-changed
+        run: bun run test:check-changed
 
       - name: Exercise scheduled host job wrappers with stubs
         run: bash scripts/ops/host-jobs/host-scheduled-job.spec.sh
@@ -257,25 +260,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build application
-        run: pnpm build
+        run: bun run build
 
       - name: Check build output imports
-        run: pnpm check:imports:dist
+        run: bun run check:imports:dist
 
   customer-web-contract:
     name: Customer Web contract
@@ -384,22 +391,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level=high
+        run: bun audit --prod --audit-level=high
 
   database:
     name: Database lane
@@ -438,26 +449,30 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # The operator CLI smoke test spawns `scripts/cli/cli.mjs`, which loads its
       # API-key generator and command runners from the build.
       - name: Build application
-        run: pnpm build
+        run: bun run build
 
-      # Runs apart from `pnpm verify`: the default lane must keep passing with
+      # Runs apart from `bun run verify`: the default lane must keep passing with
       # no database present, and this one proves the SQL those tests can only
       # describe.
       # No DB_LANE_ADMIN_URL: the service credentials above deliberately match
@@ -473,7 +488,7 @@ jobs:
       # `coverage:db` is this same lane plus a coverage report, not a second
       # run: the assertions and the advisory lock are identical.
       - name: Run the database-backed lane
-        run: pnpm coverage:db
+        run: bun run coverage:db
 
       - name: Upload the database lane coverage report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -488,7 +503,7 @@ jobs:
       # Prisma would change anything to reach the schema, so the two cannot
       # drift apart silently.
       - name: Check the Prisma schema against the migration history
-        run: pnpm check:prisma-drift
+        run: bun run check:prisma-drift
 
   tenant-isolation:
     name: Tenant isolation
@@ -529,22 +544,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Run the cross-tenant isolation lane
-        run: pnpm test:tenant-isolation
+        run: bun run test:tenant-isolation
 
   # One coverage figure per pull request, merged across the lanes that test
   # `src`, and a failure when it falls past the agreed margin. Reading a single
@@ -565,19 +584,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Download the unit lane coverage report
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -598,7 +621,7 @@ jobs:
       - name: Report merged coverage and fail on a drop past the agreed margin
         run: |
           set -o pipefail
-          pnpm coverage:merged -- --check | tee -a "$GITHUB_STEP_SUMMARY"
+          bun run coverage:merged -- --check | tee -a "$GITHUB_STEP_SUMMARY"
 
   # The only job that runs the artifact CD deploys. The build lane builds `dist` with
   # the host's Node and the unit and database lanes each assemble a slice of
@@ -740,19 +763,23 @@ jobs:
 
       # Only for the boot configuration script, which needs Node's built-ins
       # and no dependencies.
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11.20.0
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies for the release compatibility gate
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -804,6 +831,13 @@ jobs:
       - name: Check scheduled job paths in the shipped image
         run: node scripts/ci/host-job-image-check.cjs aihub:image-boot
 
+      # ADR-0088: the generated client is Rust-free and the `prisma` CLI is a
+      # devDependency, so neither it nor its engines may reach the runtime image.
+      - name: Check the Prisma CLI is not in the shipped image
+        run: >-
+          docker run --rm --entrypoint sh aihub:image-boot -c
+          'test ! -e node_modules/prisma && test ! -e node_modules/.bin/prisma'
+
       - name: Boot the image and wait for its health check
         run: bash scripts/ci/image-boot-check.sh aihub:image-boot
 
@@ -814,7 +848,7 @@ jobs:
           ACTIVE_PRODUCTION_SHA: ${{ needs.resolve-active-release.outputs.production_sha }}
           ACTIVE_SANDBOX_SHA: ${{ needs.resolve-active-release.outputs.sandbox_sha }}
           ACTIVE_SANDBOX_DISABLED: ${{ needs.resolve-active-release.outputs.sandbox_disabled }}
-        run: pnpm exec tsx scripts/ci/n-minus-one/previous-deployed-release.ts
+        run: node --import tsx scripts/ci/n-minus-one/previous-deployed-release.ts
 
       - name: Recover active-tier image digests
         id: previous_digests
@@ -884,11 +918,11 @@ jobs:
           PREVIOUS_DIGEST: ${{ steps.previous_digests.outputs.production_digest }}
           PREVIOUS_TIER: Production
           AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD: ${{ vars.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD || 'false' }}
-        run: pnpm ci:check-n-minus-one
+        run: bun run ci:check-n-minus-one
 
       - name: Reset isolated N-1 fixtures before the Sandbox predecessor check
         if: ${{ steps.previous_release.outputs.sandbox_sha != '' && (steps.previous_release.outputs.sandbox_sha != steps.previous_release.outputs.previous_sha || steps.previous_digests.outputs.sandbox_digest != steps.previous_digests.outputs.production_digest) }}
-        run: pnpm exec tsx scripts/ci/n-minus-one/reset-n-minus-one-state.ts
+        run: node --import tsx scripts/ci/n-minus-one/reset-n-minus-one-state.ts
 
       - name: Verify N-1 reads candidate writes against the active Sandbox image
         if: ${{ steps.previous_release.outputs.sandbox_sha != '' && (steps.previous_release.outputs.sandbox_sha != steps.previous_release.outputs.previous_sha || steps.previous_digests.outputs.sandbox_digest != steps.previous_digests.outputs.production_digest) }}
@@ -900,7 +934,7 @@ jobs:
           PREVIOUS_DIGEST: ${{ steps.previous_digests.outputs.sandbox_digest }}
           PREVIOUS_TIER: Sandbox
           AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD: ${{ vars.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD || 'false' }}
-        run: pnpm ci:check-n-minus-one
+        run: bun run ci:check-n-minus-one
 
       - name: Record the tested predecessor
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

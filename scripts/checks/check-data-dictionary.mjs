@@ -31,7 +31,7 @@ try {
 
 if (a !== b) {
   console.error(
-    'data-dictionary.md is out of date. Run `pnpm generate:data-dictionary`.',
+    'data-dictionary.md is out of date. Run `bun run generate:data-dictionary`.',
   );
   process.exitCode = 1;
 } else {

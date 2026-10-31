@@ -2,7 +2,7 @@
  * The Public API majors AIHUB has released (ADR-0127). This list is the one
  * source for which majors are served, their OpenAPI documents and `/docs`
  * selector, the major-level `Deprecation`/`Sunset` headers, and the `410` a
- * retired major answers with. `pnpm generate:openapi` copies it to
+ * retired major answers with. `bun run generate:openapi` copies it to
  * `openapi/majors.json`, where the release gate checks its lifecycle rules.
  *
  * A major is retired by a release, never by the clock: that release sets

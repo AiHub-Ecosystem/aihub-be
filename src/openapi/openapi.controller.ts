@@ -100,7 +100,7 @@ export class OpenApiController {
     // the committed `openapi.json` off disk — the AC requires the served
     // spec to always match the running build with no regeneration step
     // anyone can forget. The committed file exists for git diffing and for
-    // `pnpm generate:postman`'s input, not as this endpoint's source.
+    // `bun run generate:postman`'s input, not as this endpoint's source.
     return buildOpenApiDocument(latestPublicApiMajor());
   }
 

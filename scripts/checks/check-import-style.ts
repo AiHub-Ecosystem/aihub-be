@@ -8,7 +8,7 @@
  * and a comment that quotes a path are both correct as written and must not be
  * rewritten or reported.
  *
- * Run `pnpm check:imports` for the source form, `pnpm check:imports:dist` for
+ * Run `bun run check:imports` for the source form, `bun run check:imports:dist` for
  * the emitted output. They are separate commands because the two are separate
  * jobs in CI: the build and the architecture check do not share a job, so the
  * output assertion cannot be skipped silently inside the source check.

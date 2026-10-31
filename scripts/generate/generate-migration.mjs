@@ -4,10 +4,10 @@
  *
  * `prisma/schema.prisma` is the shape; `prisma/migrations/` is what builds a
  * database. This prints the statements that carry one to the other into the
- * standard Prisma migration directory for the existing runner (`pnpm migrate`).
+ * standard Prisma migration directory for the existing runner (`bun run migrate`).
  *
  * The comparison needs a database already at the current migration state,
- * because that is what "before" means. Run `pnpm migrate` first.
+ * because that is what "before" means. Run `bun run migrate` first.
  *
  * Usage:
  *   DATABASE_URL=postgres://... node scripts/generate/generate-migration.mjs add_slug
@@ -47,7 +47,7 @@ if (!slug || !/^[a-z0-9_]+$/.test(slug)) {
 
 if (!process.env.DATABASE_URL) {
   console.error(
-    'DATABASE_URL must name a database already built from the current migrations; run `pnpm migrate` first.',
+    'DATABASE_URL must name a database already built from the current migrations; run `bun run migrate` first.',
   );
   process.exit(1);
 }
@@ -102,5 +102,5 @@ mkdirSync(targetDirectory);
 const target = join(targetDirectory, 'migration.sql');
 writeFileSync(target, `${sql}\n`);
 console.log(
-  `Wrote ${target}. Review it, hand-edit it, then run \`pnpm migrate\`.`,
+  `Wrote ${target}. Review it, hand-edit it, then run \`bun run migrate\`.`,
 );

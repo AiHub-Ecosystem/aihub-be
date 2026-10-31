@@ -13,7 +13,7 @@ catches that within the run interval instead of reactively from a customer.
 ## Script
 
 ```sh
-pnpm canary:ai-writing
+bun run canary:ai-writing
 # or directly:
 tsx scripts/ops/canary/canary-ai-writing.ts
 ```
@@ -134,7 +134,7 @@ is Phase 4 `webhook_endpoints` territory.
 ## Testing
 
 ```sh
-pnpm test -- scripts/ops/canary/canary-ai-writing.spec.ts
+bun run test -- scripts/ops/canary/canary-ai-writing.spec.ts
 ```
 
 The spec uses MockAgent (undici) to replay both fixture responses without

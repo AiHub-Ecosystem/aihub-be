@@ -108,8 +108,8 @@ Before the tunnel starts, update the restricted key's `permitopen` entries and t
 Run the repository config checks before rollout:
 
 ```sh
-pnpm test:monitoring-config
-pnpm check:monitoring-config
+bun run test:monitoring-config
+bun run check:monitoring-config
 ```
 
 On each host, also render the exact `.env` and profiles with `docker compose ... config`. On the monitoring host, run `promtool check config` and `promtool check rules` using `prom/prometheus:v3.13.4`; check the blackbox config with its pinned image. Do not touch the separate monitoring worktree.

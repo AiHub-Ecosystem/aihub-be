@@ -13,7 +13,7 @@ import { schemaDrift } from './support/schema-drift';
 // customer. This holds every such place in view: a new one fails the test, and
 // an entry that no longer applies fails it too, so the list cannot rot.
 //
-// Refresh the snapshot with `pnpm provider:refresh`; a weekly workflow does it
+// Refresh the snapshot with `bun run provider:refresh`; a weekly workflow does it
 // and fails when the provider's contract has moved.
 
 type Json = Record<string, unknown>;

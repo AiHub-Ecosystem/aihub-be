@@ -125,10 +125,10 @@ describe('check batch', () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(outcome.failed).toEqual(['early-fail', 'late-fail']);
-    // verify:summary scans back from ELIFECYCLE to the last `$ ` line, so exactly
+    // verify:summary scans back from the failure line to the last `$ ` line, so exactly
     // one marker may exist and it must name the gate, not this batch.
     const markers = sink.lines.filter((line) => line.startsWith('$ '));
-    expect(markers).toEqual(['$ pnpm early-fail']);
+    expect(markers).toEqual(['$ bun run early-fail']);
     expect(sink.lines).toContain('the real gate output');
     expect(sink.lines).toContain('check:batch: also failed late-fail');
   });
@@ -172,11 +172,11 @@ describe('check batch', () => {
       expect(scripts[gate]).toBeTruthy();
     }
     expect(scripts['check:batch']).toContain('check-batch.cjs');
-    // Compare tokens, not substrings: `pnpm check:imports:dist` still in verify
+    // Compare tokens, not substrings: `bun run check:imports:dist` still in verify
     // would otherwise read as if the `check:imports` member ran twice.
-    const verifyGates = [...scripts.verify.matchAll(/\bpnpm\s+([\w:-]+)/g)].map(
-      (match) => match[1],
-    );
+    const verifyGates = [
+      ...scripts.verify.matchAll(/\bbun run\s+([\w:-]+)/g),
+    ].map((match) => match[1]);
     expect(verifyGates).toContain('check:batch');
     for (const gate of BATCHED_GATES) {
       expect(verifyGates).not.toContain(gate);

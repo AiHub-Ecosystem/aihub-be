@@ -2,24 +2,24 @@
 
 The control-plane schema is described twice, on purpose: `prisma/schema.prisma`
 is the shape, and `prisma/migrations/<name>/migration.sql` builds a database.
-They are two copies of one thing, so `pnpm check:prisma-drift` proves they still
+They are two copies of one thing, so `bun run check:prisma-drift` proves they still
 agree, and a renamed column becomes a compile error in the repository that uses
 it rather than a surprise at runtime. See
 [ADR-0088](adr/0088-prisma-for-control-plane-persistence.md).
 
 The migration files use Prisma's standard directory layout and are configured
-in `prisma.config.ts`. `pnpm migrate` still applies them through the existing
+in `prisma.config.ts`. `bun run migrate` still applies them through the existing
 runner and `schema_migrations` table; each directory name maps to the existing
 `<name>.sql` history key. This keeps Production and Sandbox history intact and
 needs no baseline. Do not use `prisma migrate deploy`: it would use a separate
 `_prisma_migrations` history. The Prisma CLI remains outside the runtime image
-and migration container. `@prisma/client` lists the CLI as an optional peer, so
-`.pnpmfile.cjs` drops that peer; `pnpm why prisma --prod` prints nothing, and a
-dependency bump that changes the answer shows up in `pnpm-lock.yaml`.
+and migration container. `@prisma/client` lists the CLI as an optional peer;
+the CLI is a devDependency, so the production reinstall in the `Dockerfile` leaves
+it out, and the `Image boot` job fails if `node_modules/prisma` is in the image.
 
 ## Database test lane ownership
 
-`pnpm test:db` and `pnpm test:tenant-isolation` use the local services from
+`bun run test:db` and `bun run test:tenant-isolation` use the local services from
 `docker-compose.yml` by default: PostgreSQL at
 `postgres://aihub:change-me@localhost:5432/aihub`, Redis database 14 at
 `redis://127.0.0.1:6379/14`, and Redis database 15 at
@@ -48,17 +48,17 @@ matching `dispatch_attempts`, with timestamps spread across 210 days so a
 30-day retention cutoff has expired rows to examine. It runs `ANALYZE` on both
 tables afterwards. The command requires `AIHUB_BENCHMARK_SEED=1` and only accepts
 the local `aihub` or `aihub_benchmark` database. It replaces only rows whose
-request IDs start with `aihub-benchmark-retention-`. Run `pnpm migrate` first
+request IDs start with `aihub-benchmark-retention-`. Run `bun run migrate` first
 so the local schema matches the checked-in migration history.
 
 ```bash
 AIHUB_BENCHMARK_SEED=1 \
 DATABASE_URL=postgres://aihub:change-me@localhost:5432/aihub \
-pnpm db:seed
+bun run db:seed
 ```
 
-The Prisma CLI runs this seed only when `pnpm db:seed` is invoked explicitly;
-it is not part of `pnpm migrate`, `prisma migrate dev`, or application startup.
+The Prisma CLI runs this seed only when `bun run db:seed` is invoked explicitly;
+it is not part of `bun run migrate`, `prisma migrate dev`, or application startup.
 
 For the synthetic execution-plan baseline across the hot control-plane query
 set, use the isolated runner in
@@ -73,9 +73,9 @@ set, use the isolated runner in
 2. Bring a database to the current migration state and generate the SQL:
 
    ```bash
-   pnpm migrate
+   bun run migrate
    DATABASE_URL=postgres://aihub:change-me@localhost:5432/aihub \
-     pnpm generate:migration add_your_change
+     bun run generate:migration add_your_change
    ```
 
    The command writes
@@ -92,13 +92,13 @@ set, use the isolated runner in
 4. Apply and verify:
 
    ```bash
-   pnpm migrate
-   pnpm check:migrations      # Squawk migration policy
-   pnpm check:prisma-drift    # the schema and the history still agree
+   bun run migrate
+   bun run check:migrations      # Squawk migration policy
+   bun run check:prisma-drift    # the schema and the history still agree
    ```
 
-`pnpm check:migrations` remains the contributor-facing command and is part of
-`pnpm verify`. It invokes the pinned Squawk linter; the custom three-pattern
+`bun run check:migrations` remains the contributor-facing command and is part of
+`bun run verify`. It invokes the pinned Squawk linter; the custom three-pattern
 checker has been removed. A migration that drops or renames a column, or adds a
 required column without a default, must still fail. Use a rule-specific
 `squawk-ignore` only for a reviewed exception, with its reason and approving
@@ -108,7 +108,7 @@ The runner records migration keys as `<directory name>.sql` to preserve the
 existing `schema_migrations` rows. Keep a migration directory's name stable
 after it has been applied.
 
-`pnpm check:prisma-drift` uses Prisma's `--from-migrations` diff against a
+`bun run check:prisma-drift` uses Prisma's `--from-migrations` diff against a
 throwaway shadow database. It reads `AIHUB_DRIFT_CHECK_DATABASE_URL` and
 `AIHUB_DRIFT_CHECK_SHADOW_DATABASE_URL` only for that check; client generation
 and the application build need no database.
@@ -117,7 +117,7 @@ and the application build need no database.
 
 The runner applies `prisma/migrations/<name>/migration.sql` in directory-name
 order. During rolling deploys, two application versions can use the same
-schema, so #693 keeps this contract in `pnpm verify` and CI, with Squawk as the
+schema, so #693 keeps this contract in `bun run verify` and CI, with Squawk as the
 guard:
 
 ```text
@@ -190,19 +190,19 @@ not cover, including views, triggers, extensions, and `SET NOT NULL`, separately
 ## Regenerating the client
 
 `prisma generate` writes the client to `dist/generated/prisma`, outside `src/`
-and outside version control. `pnpm type-check`, `pnpm test`, and `pnpm build`
+and outside version control. `bun run type-check`, `bun run test`, and `bun run build`
 run it themselves, so a fresh clone and CI never compile against a missing or
 stale client. To run it by hand:
 
 ```bash
-pnpm generate:prisma-client
+bun run generate:prisma-client
 ```
 
 Only infrastructure code may import it, under the `@prisma-client/*` alias.
-`pnpm arch-check` reports an import from anywhere else, because Prisma types
+`bun run arch-check` reports an import from anywhere else, because Prisma types
 never reach application or domain code.
 
 The client lives in `dist/`, so `nest-cli.json` sets `deleteOutDir: false`:
-Nest would otherwise empty `dist/` on `pnpm dev` and remove the client it was
-about to need. `pnpm build` clears `dist/` itself before it compiles and
+Nest would otherwise empty `dist/` on `bun run dev` and remove the client it was
+about to need. `bun run build` clears `dist/` itself before it compiles and
 generates the client afterwards, so a stale build never survives it.

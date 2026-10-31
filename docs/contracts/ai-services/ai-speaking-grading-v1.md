@@ -222,7 +222,7 @@ listed, each with its reason, in `provider-drift.allowed.json`; a new one fails
 the spec, and so does an entry that no longer applies.
 
 Once a week a workflow re-fetches the live document and fails when it differs
-from the snapshot. Then run `pnpm provider:refresh`, read the diff, and run the
+from the snapshot. Then run `bun run provider:refresh`, read the diff, and run the
 drift spec: either change the schema, which section 8 says needs a versioned
 review and an approved fixture, or record the difference with its reason. AI
 Writing is not covered, because its document declares no response schema for

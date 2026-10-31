@@ -1,6 +1,6 @@
 # ADR-0088: Prisma is the control-plane persistence standard
 
-- Status: Accepted
+- Status: Accepted; the Prisma CLI's absence from the runtime image, kept by `.pnpmfile.cjs` here, is amended by [ADR-0138](0138-bun-is-the-package-manager-node-stays-the-runtime.md)
 - Date: 2026-10-10
 - Supersedes: [ADR-0071](0071-drizzle-for-control-plane-persistence.md)
 - Amends: [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md) (the lifetime guard now also covers the Auth transaction runner)

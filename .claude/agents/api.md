@@ -13,6 +13,6 @@
 
 **Not allowed:** edits to domain policies, infrastructure implementations, database/cache clients, or downstream HTTP code.
 
-**Required checks:** `pnpm type-check`, focused Jest tests, and `pnpm arch-check`.
+**Required checks:** `bun run type-check`, focused Jest tests, and `bun run arch-check`.
 
 **Conventions:** use the operation catalog and TypeBox schemas; keep controllers thin; map errors through the shared envelope; never expose internal credentials or raw downstream bodies.

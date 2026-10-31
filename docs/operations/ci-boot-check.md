@@ -93,7 +93,7 @@ environment secret source, so the files are required, exactly as on the VPS.
 real runtime secret provider and connection loader, and checks that
 `boot.env` sets exactly the variables `docker-compose.production.yml` sets for
 the app. So a newly required secret, or a variable added to production, fails
-`pnpm verify` before the Docker job does. A new _validation rule_ on an
+`bun run verify` before the Docker job does. A new _validation rule_ on an
 existing non-secret value is caught only by the boot itself.
 
 ## What the boot check proves

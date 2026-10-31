@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Run `pnpm build`, then measure the compiled collector under the production
+ * Run `bun run build`, then measure the compiled collector under the production
  * memory limit with:
  * docker run --rm --memory 768m --memory-swap 768m --cpus 1.5 --mount "type=bind,source=$(pwd),target=/repo" --workdir /repo node:22.23.2-bookworm-slim node --expose-gc scripts/ops/measure-public-api-major-usage-buffer.mjs
  */

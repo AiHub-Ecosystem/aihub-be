@@ -12,7 +12,7 @@
  * Runs beside the database lane because it needs PostgreSQL. It creates and
  * drops its own scratch databases and never touches a developer's working one.
  *
- * Usage: `pnpm check:prisma-drift`
+ * Usage: `bun run check:prisma-drift`
  */
 import { createRequire } from 'node:module';
 

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * `pnpm verify:summary`: the same loop as `pnpm verify`, reported in a few
+ * `bun run verify:summary`: the same loop as `bun run verify`, reported in a few
  * lines. The full output goes to a log file of its own, so reading the result
  * costs a handful of lines instead of the 20 to 60 KB the loop prints, and two
  * runs can never write into one file.
@@ -27,7 +27,9 @@ const MAX_TAIL_LINES = 6;
 // Node's V8 abort (exit 134 on POSIX, 3221226505 on Windows) and the message it
 // prints before it.
 const OUT_OF_MEMORY =
-  /heap out of memory|Allocation failed|exit code (?:134|3221226505)\b/i;
+  /heap out of memory|Allocation failed|exit(?:ed with)? code (?:134|3221226505)\b/i;
+// What `bun run` prints once a script exits non-zero.
+const FAILURE_LINE = /^error: script "/;
 
 /** @param {readonly string[]} lines @param {RegExp} pattern @returns {string | undefined} */
 function lastMatch(lines, pattern) {
@@ -39,10 +41,10 @@ function lastMatch(lines, pattern) {
   return undefined;
 }
 
-/** The lines the failing step printed: from its `$ command` line to ELIFECYCLE. */
+/** The lines the failing step printed: from its `$ command` line to the failure line. */
 /** @param {readonly string[]} lines @returns {{command: string, output: string[]} | undefined} */
 function failingStep(lines) {
-  const end = lines.findIndex((line) => line.includes('ELIFECYCLE'));
+  const end = lines.findIndex((line) => FAILURE_LINE.test(line));
   const stop = end === -1 ? lines.length : end;
   let start = -1;
   for (let index = stop - 1; index >= 0; index -= 1) {
@@ -81,7 +83,7 @@ function jestFailures(lines) {
 }
 
 /**
- * @param {string} rawLog the full output of `pnpm verify`
+ * @param {string} rawLog the full output of `bun run verify`
  * @param {number} exitCode
  * @param {string} logPath where the full output was written
  */
@@ -147,10 +149,8 @@ function run() {
   mkdirSync(directory, { recursive: true });
   const logPath = path.join(directory, logFileName(new Date()));
 
-  const windows = process.platform === 'win32';
-  const child = spawn(windows ? 'pnpm.cmd' : 'pnpm', ['verify'], {
+  const child = spawn('bun', ['run', 'verify'], {
     cwd: path.join(__dirname, '..', '..'),
-    shell: windows,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -159,7 +159,7 @@ function run() {
   child.stdout.on('data', (/** @type {Buffer} */ chunk) => chunks.push(chunk));
   child.stderr.on('data', (/** @type {Buffer} */ chunk) => chunks.push(chunk));
   child.on('error', (error) => {
-    console.error(`verify:summary could not start pnpm: ${error.message}`);
+    console.error(`verify:summary could not start bun: ${error.message}`);
     process.exit(1);
   });
   child.on('close', (code) => {

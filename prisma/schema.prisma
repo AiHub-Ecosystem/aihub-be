@@ -4,7 +4,7 @@
 //
 // Migrations remain what builds a database; this file describes the same
 // schema so that a renamed column becomes a compile error instead of a runtime
-// surprise, and so `pnpm check:prisma-drift` can prove the two still agree.
+// surprise, and so `bun run check:prisma-drift` can prove the two still agree.
 //
 // Every `///` comment below that names a migration marks an object this schema
 // language cannot declare. Those objects live only in SQL, and the migration is

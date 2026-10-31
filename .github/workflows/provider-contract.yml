@@ -5,7 +5,7 @@ name: Provider contract
 # (test/provider-contract-drift.spec.ts). A snapshot only helps while it is
 # current, so once a week this re-fetches the live document and fails when it
 # differs from the committed one. Failing is the signal: read the diff, run
-# `pnpm provider:refresh`, then the drift spec, and either change the schema or
+# `bun run provider:refresh`, then the drift spec, and either change the schema or
 # record the difference with its reason.
 #
 # Separate from CI on purpose: CD triggers on CI completing, and a provider
@@ -41,7 +41,7 @@ jobs:
       - name: Fail when the provider's contract has moved
         run: |
           if ! git diff --exit-code --stat -- test/fixtures; then
-            echo "::error::A provider's published OpenAPI document differs from the committed snapshot. Run 'pnpm provider:refresh', read the diff, then run test/provider-contract-drift.spec.ts."
+            echo "::error::A provider's published OpenAPI document differs from the committed snapshot. Run 'bun run provider:refresh', read the diff, then run test/provider-contract-drift.spec.ts."
             git diff -- test/fixtures | head -200
             exit 1
           fi

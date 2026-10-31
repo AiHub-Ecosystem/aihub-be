@@ -11,8 +11,8 @@ retention surfaces over those records.
 **Not allowed:** edits to public controller schemas, identity or quota
 admission policy, downstream adapters, or another module's infrastructure.
 
-**Required checks:** focused metering tests, `pnpm type-check`, `pnpm
-arch-check`, and `pnpm verify` before handoff.
+**Required checks:** focused metering tests, `bun run type-check`, `bun run
+arch-check`, and `bun run verify` before handoff.
 
 **Conventions:** one module assembles the record and offers one completion
 path (ADR-0061); the record's required shape is validated where the record is

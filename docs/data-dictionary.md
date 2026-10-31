@@ -1,6 +1,6 @@
 # Data dictionary
 
-Generated from `prisma/schema.prisma`. Do not edit by hand; run `pnpm generate:data-dictionary`.
+Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generate:data-dictionary`.
 
 ## Tables
 

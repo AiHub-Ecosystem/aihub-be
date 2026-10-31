@@ -3,7 +3,7 @@
 Run the repeatable gateway capacity benchmark from a local checkout:
 
 ```sh
-pnpm capacity:benchmark
+bun run capacity:benchmark
 ```
 
 The runner requires a clean Git checkout so the Docker image matches the commit

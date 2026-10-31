@@ -333,11 +333,11 @@ function renderReport(
     '',
     '## Downstream pool observation',
     '',
-    'The gateway creates one Undici Pool per origin with 10 connections, HTTP/2 enabled, a 300,000 ms keep-alive timeout, and a 600,000 ms maximum. `pnpm capacity:benchmark` records `downstreamQueuedPeak` from `aihub_downstream_pool_queued`; that is queue depth, not a socket-reuse or handshake counter. This database run does not make provider requests, so runtime connection reuse remains unmeasured.',
+    'The gateway creates one Undici Pool per origin with 10 connections, HTTP/2 enabled, a 300,000 ms keep-alive timeout, and a 600,000 ms maximum. `bun run capacity:benchmark` records `downstreamQueuedPeak` from `aihub_downstream_pool_queued`; that is queue depth, not a socket-reuse or handshake counter. This database run does not make provider requests, so runtime connection reuse remains unmeasured.',
     '',
     'Production `pg_stat_statements` status is recorded in [the observability runbook](aihub-observability.md#statement-statistics-and-privacy-gate): as of 2026-10-16, version 1.10 was available but not installed in any connectable AIHUB database. #299 tracks queryable slow-statement evidence; this baseline did not change the shared cluster configuration.',
     '',
-    'Recreate the baseline with `AIHUB_POSTGRES_BASELINE=1 pnpm benchmark:postgres-plans` from PowerShell. The command requires the local `aihub` test-lane marker, takes the database-lane advisory lock, creates a uniquely named disposable database, applies checked-in migrations, seeds synthetic rows, writes this report, and drops only the database it created.',
+    'Recreate the baseline with `AIHUB_POSTGRES_BASELINE=1 bun run benchmark:postgres-plans` from PowerShell. The command requires the local `aihub` test-lane marker, takes the database-lane advisory lock, creates a uniquely named disposable database, applies checked-in migrations, seeds synthetic rows, writes this report, and drops only the database it created.',
     '',
   );
   return `${lines.join('\n')}\n`;

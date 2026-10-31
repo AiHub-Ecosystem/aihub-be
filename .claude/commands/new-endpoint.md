@@ -11,4 +11,4 @@ Before creating a controller or route:
 6. Write focused boundary, mapper, and error tests before implementation.
 7. If the downstream response shape is unknown, stop at `responseContract: 'unresolved'` and record the blocker; never invent a parser.
 
-Finish with `pnpm type-check`, `pnpm arch-check`, and the focused Jest command.
+Finish with `bun run type-check`, `bun run arch-check`, and the focused Jest command.

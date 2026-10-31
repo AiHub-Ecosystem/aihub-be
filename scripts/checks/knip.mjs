@@ -2,7 +2,7 @@
 // ArrayBuffer, which fails to allocate on typical Windows dev boxes and is
 // near the ceiling on GitHub runners. Knip honors KNIP_DISABLE_RAW_TRANSFER=1;
 // package scripts cannot set env vars in both cmd and sh without a dependency,
-// so the env lives here and `pnpm knip` stays one word on every OS.
+// so the env lives here and `bun run knip` stays one word on every OS.
 process.env.KNIP_DISABLE_RAW_TRANSFER = '1';
 
 const { spawnSync } = await import('node:child_process');

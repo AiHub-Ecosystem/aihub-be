@@ -1,7 +1,7 @@
 # Coding Standards
 
 This file records review criteria that need engineering judgment. Deterministic
-rules belong in automated checks; see `pnpm check:changed` and `pnpm verify`
+rules belong in automated checks; see `bun run check:changed` and `bun run verify`
 rather than copying their rules here.
 
 ## Review criteria

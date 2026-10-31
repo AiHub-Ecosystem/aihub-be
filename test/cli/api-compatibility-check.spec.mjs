@@ -309,8 +309,8 @@ void test('runs the versioned release checker against the pull request base or t
   assert.ok(WORKFLOW.includes('path: base-contract'));
   assert.ok(
     WORKFLOW.includes(
-      'pnpm check:api-compatibility -- base-contract . CHANGELOG.md',
+      'bun run check:api-compatibility -- base-contract . CHANGELOG.md',
     ),
   );
-  assert.ok(WORKFLOW.includes('run: pnpm test:api-compatibility'));
+  assert.ok(WORKFLOW.includes('run: bun run test:api-compatibility'));
 });

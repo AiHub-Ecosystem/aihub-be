@@ -144,5 +144,5 @@ Postgres, Redis, downstream services, cron hosts, or production endpoints.
 Before handoff, run:
 
 ```sh
-pnpm verify
+bun run verify
 ```

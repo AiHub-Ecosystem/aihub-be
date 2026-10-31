@@ -3,7 +3,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 /**
- * #813: `pnpm check:changed` runs the gates the changed files can break.
+ * #813: `bun run check:changed` runs the gates the changed files can break.
  *
  * The full loop costs about 200s and its unit lane alone costs 115s across 327
  * spec files, of which a one-file edit needs a handful. This reads the changed
@@ -13,9 +13,9 @@ import { pathToFileURL } from 'node:url';
  * Two rules keep the result worth trusting:
  *
  * - It never reports success having decided nothing. An unresolvable git state
- *   or a path no rule classifies runs the full `pnpm verify` loop, because a
+ *   or a path no rule classifies runs the full `bun run verify` loop, because a
  *   fast green that is really a skipped gate is worse than a slow one.
- * - Every gate in `pnpm verify` has a command here and a tested path mapping,
+ * - Every gate in `bun run verify` has a command here and a tested path mapping,
  *   asserted by `check-changed.spec.mjs`. Adding a gate to `verify` without
  *   classifying it fails that spec, so the map cannot rot into a silent skip.
  */
@@ -291,27 +291,14 @@ export function runCheckChanged({ resolveFiles, runGate, runFullVerify }) {
 }
 
 /**
- * Run a package script.
- *
- * Windows needs `shell: true`: Node refuses to spawn a `.cmd` without it
- * (`EINVAL`), and a failed spawn is indistinguishable from a failed gate unless
- * the status is checked. Going through a shell means the arguments are no
- * longer escaped for us, and the changed-file arguments can hold a space, so
- * they are quoted here rather than assumed.
+ * Run a package script. `bun` is a real executable on every platform, so no
+ * shell is involved and the changed-file arguments need no quoting.
  */
 /** @param {string} script @param {string[]} args @returns {number} */
-function runPnpm(script, args) {
-  const windows = process.platform === 'win32';
-  const quote = (/** @type {string} */ arg) =>
-    /[\s"&|<>^]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg;
-  const result = spawnSync(
-    windows ? 'pnpm.cmd' : 'pnpm',
-    [script, ...args].map((arg) => (windows ? quote(arg) : arg)),
-    {
-      stdio: 'inherit',
-      shell: windows,
-    },
-  );
+function runScript(script, args) {
+  const result = spawnSync('bun', ['run', script, ...args], {
+    stdio: 'inherit',
+  });
   return result.status ?? 1;
 }
 
@@ -327,18 +314,18 @@ function main() {
     },
     runGate: (gate) => {
       const script = GATE_COMMANDS[gate];
-      console.log(`[check:changed] pnpm ${script}`);
-      return runPnpm(script, []);
+      console.log(`[check:changed] bun run ${script}`);
+      return runScript(script, []);
     },
     runFullVerify: () => {
-      fullVerifyStatus = runPnpm('verify', []);
+      fullVerifyStatus = runScript('verify', []);
     },
   });
 
   if (outcome === 'full-verify') {
     console.log(
       fullVerifyStatus === 0
-        ? '[check:changed] PASS (full verify ran; no separate pnpm verify needed)'
+        ? '[check:changed] PASS (full verify ran; no separate bun run verify needed)'
         : '[check:changed] FAIL (full verify)',
     );
     return fullVerifyStatus;

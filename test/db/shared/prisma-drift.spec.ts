@@ -8,7 +8,7 @@ import { adminDatabaseUrl } from './database';
 const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
 const SCHEMA_PATH = join(__dirname, '../../../prisma/schema.prisma');
 
-// Its own scratch name, so it never races `pnpm check:prisma-drift`.
+// Its own scratch name, so it never races `bun run check:prisma-drift`.
 const SCRATCH_NAME = 'aihub_prisma_drift_spec';
 
 describe('schema.prisma against the real migration history', () => {

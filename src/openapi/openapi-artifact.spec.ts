@@ -142,7 +142,7 @@ describe('committed openapi.json', () => {
   });
 
   // OpenAPI 3.1 validity itself is checked by `scripts/checks/validate-openapi.mjs`
-  // (wired into `pnpm verify`), not here: the validator package is ESM-only
+  // (wired into `bun run verify`), not here: the validator package is ESM-only
   // and Jest's CommonJS transform pipeline cannot load it, even via a
   // dynamic import — the failure surfaces one module down, inside the
   // package's own `import` statements, which Jest still has to parse.

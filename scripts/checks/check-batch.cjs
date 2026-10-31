@@ -1,11 +1,11 @@
 'use strict';
 /**
  * Runs the gates that touch nothing but the repository side by side, so
- * `pnpm verify` pays one process start where it used to pay eleven.
+ * `bun run verify` pays one process start where it used to pay eleven.
  *
  * Measured 2026-10-21 on a 12-core developer machine: each member costs
  * 1,1-2,6 s sequentially, and a gate whose real work is a repo-wide scan still
- * takes 1,1 s, which is essentially pnpm plus Node starting up. The set is
+ * takes 1,1 s, which is essentially the package manager plus Node starting up. The set is
  * 20,6 s run one after another.
  *
  * The ceiling is derived from free memory and never exceeds three because every
@@ -14,9 +14,9 @@
  * zero children, so a machine reporting nothing usable still finishes.
  *
  * Output is buffered per member and printed in declared order, never
- * interleaved. A failure is reported under a single `$ pnpm <gate>` marker for
+ * interleaved. A failure is reported under a single `$ bun run <gate>` marker for
  * the first gate that failed, because that is the line `verify:summary` scans
- * backwards from `ELIFECYCLE` to name the failing step; without the marker the
+ * backwards from the `error: script` line to name the failing step; without the marker the
  * summary would blame this batch instead of the gate inside it.
  */
 
@@ -78,14 +78,9 @@ function runGate(gate) {
     });
   }
   return new Promise((resolve) => {
-    // One command string and no argument array: pnpm is a .cmd on Windows, which
-    // Node refuses to spawn without a shell, and passing args alongside a shell is
-    // the unescaped-argument hazard (DEP0190) this shape avoids. What reaches the
-    // shell is a name checked above and taken from BATCHED_GATES or the caller.
-    const child = spawn(`pnpm run ${gate}`, {
-      cwd: process.cwd(),
-      shell: true,
-    });
+    // `bun` is a real executable on every platform, so no shell is involved and
+    // the gate name, checked above, is a plain argument.
+    const child = spawn('bun', ['run', gate], { cwd: process.cwd() });
     let output = '';
     child.stdout.on('data', (/** @type {Buffer | string} */ chunk) => {
       output += typeof chunk === 'string' ? chunk : chunk.toString();
@@ -171,7 +166,7 @@ async function runBatch({
 
   // One marker only, and it names the first gate that failed in declared order.
   const [first, ...rest] = failures;
-  error(`$ pnpm ${first.gate}`);
+  error(`$ bun run ${first.gate}`);
   for (const line of first.output.replace(/\r?\n$/, '').split(/\r?\n/))
     error(line);
   for (const failure of rest) error(`check:batch: also failed ${failure.gate}`);

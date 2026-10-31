@@ -151,7 +151,7 @@ unaffected.
 
 Provision Organization, API-key, and identity-configuration records through
 the production control plane. Set `CONTROL_PLANE_DATABASE_URL` to the
-production database for the `pnpm cli org:create`, `identity:set`,
+production database for the `bun run cli org:create`, `identity:set`,
 `key:create`, and `key:revoke` commands below. Usage and quota tools continue
 to use `DATABASE_URL`, which should point to `aihub_sandbox` for sandbox usage.
 The CLI can run from a workstation through the SSH tunnel described in
@@ -198,7 +198,7 @@ import("jose").then(async ({ generateKeyPair, exportJWK, exportPKCS8 }) => {
 ## 2. Create the organization
 
 ```bash
-pnpm cli org:create \
+bun run cli org:create \
   --name "AIHUB Sandbox" \
   --entitlements writing,speaking \
   --rate-limit-rpm 60 \
@@ -223,7 +223,7 @@ Quota, rate limit, and concurrency live on the **organization**, not on individu
 ## 3. Register the public key
 
 ```bash
-pnpm cli identity:set \
+bun run cli identity:set \
   --org org_... \
   --issuer https://sandbox.aihubproduction.com \
   --public-keys-file ./sandbox-jwks.json \
@@ -279,7 +279,7 @@ curl -sS -X POST https://<sandbox host>/v1/sandbox/assertions \
 ## 5. Issue a key per person
 
 ```bash
-pnpm cli key:create \
+bun run cli key:create \
   --org org_... \
   --actor <your-username> \
   --name "Minh — manual testing" \
@@ -304,7 +304,7 @@ issued before ADR-0095 keep the shared `aihub_sk_` prefix.
 To revoke:
 
 ```bash
-pnpm cli key:revoke --key ak_... --actor <your-username>
+bun run cli key:revoke --key ak_... --actor <your-username>
 ```
 
 Revocation is recorded in the Organization Audit Trail the same way, and repeating it records nothing more. This also purges the Redis cache entry, so revocation is immediate rather than waiting out the 60-second identity cache.

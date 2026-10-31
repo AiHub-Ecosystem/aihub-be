@@ -187,7 +187,7 @@ sunset date, never the clock, so the owner's sign-off in step 4 comes first.
 2. **Extension.** Move `sunsetAt` later. The release gate refuses a sunset that
    moves earlier.
 3. **Retiring release.** After sign-off, set the major's `status` to `retired`,
-   remove its routes, and run `pnpm generate:openapi`, which deletes
+   remove its routes, and run `bun run generate:openapi`, which deletes
    `openapi/vN.json`. The gate refuses the removal before `sunsetAt`. From that
    deploy on, every request under the major gets `410 API_VERSION_RETIRED`.
    Those requests match no route, so adoption counting stops; the report keeps

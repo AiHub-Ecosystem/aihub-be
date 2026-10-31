@@ -16,4 +16,4 @@
 - Keep this file concise; add only Claude-specific guidance here.
 - Apply path-scoped rules from `.claude/rules/` and role ownership from `.claude/agents/` before editing source.
 - Do not copy the existing specs into `CONTEXT.md` or ADRs; keep those files as short indexes or records of new decisions.
-- Run `pnpm verify` before claiming a scaffold or feature is complete.
+- Run `bun run verify` before claiming a scaffold or feature is complete.

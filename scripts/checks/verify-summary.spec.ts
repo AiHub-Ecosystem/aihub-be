@@ -3,7 +3,7 @@ import { logFileName, summarize } from './verify-summary.cjs';
 const ESC = String.fromCharCode(27);
 
 const PASSING = [
-  '$ pnpm knip && pnpm lint && pnpm test',
+  '$ bun run knip && bun run lint && bun run test',
   '$ node scripts/checks/knip.mjs',
   '$ jest',
   `${ESC}[32mPASS${ESC}[39m src/a.spec.ts`,
@@ -39,12 +39,12 @@ describe('summarize', () => {
 
   it('names the step that failed and quotes what it printed', () => {
     const log = [
-      '$ pnpm knip && pnpm lint',
+      '$ bun run knip && bun run lint',
       '$ node scripts/checks/knip.mjs',
       '$ oxlint . && biome check .',
       `src/a.spec.ts:25:5: ${ESC}[31merror${ESC}[39m jest(no-conditional-expect): Unexpected conditional expect`,
-      '[ELIFECYCLE] Command failed with exit code 1.',
-      '[ELIFECYCLE] Command failed with exit code 1.',
+      'error: script "lint" exited with code 1',
+      'error: script "verify" exited with code 1',
     ].join('\n');
 
     const text = summarize(log, 1, '/tmp/v.log');
@@ -55,7 +55,7 @@ describe('summarize', () => {
       'src/a.spec.ts:25:5: error jest(no-conditional-expect)',
     );
     expect(text).not.toContain(ESC);
-    expect(text).not.toContain('ELIFECYCLE');
+    expect(text).not.toContain('error: script');
   });
 
   it('lists failing Jest files and tests instead of the whole step', () => {
@@ -68,7 +68,7 @@ describe('summarize', () => {
       '  ● cli loader › loads a built runner',
       'Test Suites: 2 failed, 170 passed, 172 total',
       'Tests:       13 failed, 1644 passed, 1657 total',
-      '[ELIFECYCLE] Command failed with exit code 1.',
+      'error: script "lint" exited with code 1',
     ].join('\n');
 
     const text = summarize(log, 1, '/tmp/v.log');
@@ -83,7 +83,11 @@ describe('summarize', () => {
 
   it('caps what it quotes from a failing step', () => {
     const noisy = Array.from({ length: 200 }, (_, index) => `line ${index}`);
-    const log = ['$ tsc --noEmit', ...noisy, '[ELIFECYCLE] failed'].join('\n');
+    const log = [
+      '$ tsc --noEmit',
+      ...noisy,
+      'error: script "type-check" exited with code 1',
+    ].join('\n');
 
     const text = summarize(log, 1, '/tmp/v.log');
 
@@ -113,7 +117,7 @@ describe('summarize', () => {
     const log = [
       '$ jest',
       'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory',
-      '[ELIFECYCLE] Command failed with exit code 134.',
+      'error: script "build" exited with code 134',
     ].join('\n');
 
     const text = summarize(log, 134, '/tmp/v.log');
@@ -124,7 +128,7 @@ describe('summarize', () => {
   it('does not blame memory for an ordinary failure', () => {
     const log = [
       '$ oxlint .',
-      '[ELIFECYCLE] Command failed with exit code 1.',
+      'error: script "verify" exited with code 1',
     ].join('\n');
 
     expect(summarize(log, 1, '/tmp/v.log')).not.toContain('out of memory');

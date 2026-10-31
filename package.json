@@ -2,7 +2,7 @@
   "name": "aihub-be",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.20.0",
+  "packageManager": "bun@1.4.4",
   "engines": {
     "node": ">=22.22.3"
   },
@@ -13,7 +13,7 @@
     "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && nest start --watch",
     "start": "node dist/main.js",
     "migrate": "node scripts/cli/migrate.mjs",
-    "db:seed": "pnpm generate:prisma-client && prisma db seed",
+    "db:seed": "bun run generate:prisma-client && prisma db seed",
     "cli": "node scripts/cli/cli.mjs",
     "dev:assertion": "node scripts/cli/dev-sign-assertion.mjs",
     "demo:bootstrap": "node scripts/cli/demo-bootstrap.mjs",
@@ -42,7 +42,7 @@
     "coverage:db": "node scripts/checks/db-lane/run-database-lane.cjs db --coverage --coverageReporters=json --coverageDirectory=coverage/db",
     "coverage:tenant-isolation": "node scripts/checks/db-lane/run-database-lane.cjs tenant-isolation --coverage --coverageReporters=json --coverageDirectory=coverage/tenant-isolation",
     "coverage:merged": "node scripts/checks/merged-coverage.cjs",
-    "test:watch": "pnpm test -- --watch",
+    "test:watch": "bun run test -- --watch",
     "type-check": "node scripts/generate/generate-prisma-client.mjs && tsc --noEmit",
     "format": "biome format --write .",
     "lint": "node scripts/generate/generate-prisma-client.mjs && oxlint . && biome check .",
@@ -57,11 +57,11 @@
     "test:lint-staged": "node --test scripts/checks/lint-staged-config.spec.mjs",
     "check:doc-drift": "node scripts/checks/check-doc-drift.mjs",
     "test:doc-drift": "node --test scripts/checks/check-doc-drift.spec.mjs",
-    "knip": "pnpm generate:prisma-client && node scripts/checks/knip.mjs",
+    "knip": "bun run generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "benchmark:test-runners": "tsx scripts/ops/test-runner-benchmark/run-benchmark.ts",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "pnpm knip && pnpm lint && pnpm format:check && pnpm type-check && pnpm arch-check && pnpm check:batch && pnpm check:nginx-headers && pnpm test && pnpm test:monitoring-config && pnpm build && pnpm check:imports:dist",
+    "verify": "bun run knip && bun run lint && bun run format:check && bun run type-check && bun run arch-check && bun run check:batch && bun run check:nginx-headers && bun run test && bun run test:monitoring-config && bun run build && bun run check:imports:dist",
     "prepare": "husky",
     "generate:data-dictionary": "tsx scripts/generate/generate-data-dictionary.ts",
     "check:data-dictionary": "node scripts/checks/check-data-dictionary.mjs",
@@ -73,7 +73,7 @@
     "ci:check-n-minus-one": "tsx scripts/ci/n-minus-one/n-minus-one-compatibility.ts",
     "ci:n-minus-one-stubs": "node scripts/ci/n-minus-one/n-minus-one-stubs.mjs",
     "check:domain-globals": "node scripts/checks/check-domain-globals.mjs",
-    "test:related": "pnpm test -- --changed=origin/main",
+    "test:related": "bun run test -- --changed=origin/main",
     "check:changed": "node scripts/checks/check-changed.mjs",
     "check:batch": "node scripts/checks/check-batch.cjs",
     "test:check-changed": "node --test scripts/checks/check-changed.spec.mjs"
@@ -149,5 +149,19 @@
     "tsx": "^4.23.15",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "^5.0.5"
-  }
+  },
+  "overrides": {
+    "js-yaml@>=4.0.0 <4.3.2": "^4.3.2",
+    "yaml@>=1.0.0 <1.10.3": "^1.10.3",
+    "uuid@<11.1.1": "^11.1.1",
+    "brace-expansion@<1.1.21": "^1.1.21"
+  },
+  "trustedDependencies": [
+    "@biomejs/biome",
+    "@prisma/engines",
+    "@swc/core",
+    "argon2",
+    "esbuild",
+    "prisma"
+  ]
 }

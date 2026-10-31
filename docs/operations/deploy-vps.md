@@ -462,7 +462,7 @@ security gate in #376.
    buckets to the responsible party; AIHUB cannot revoke those objects. Once
    the report is substantiated and the chart is in scope, initiate revocation
    promptly.
-3. Run `pnpm cli writing:chart-revoke --url <public-url> --actor <active-operator-username>`
+3. Run `bun run cli writing:chart-revoke --url <public-url> --actor <active-operator-username>`
    from that environment's operator host with its operator credentials.
    The credentials authorize execution; `--actor` identifies the active AIHUB
    account for audit and grants no privilege by itself.
@@ -911,7 +911,7 @@ AIHUB_VAULT_AGENT_CIDR=172.16.2.1/32 \
 The helper saves the role ID as `vault-role-id` in that private directory.
 Install it at `VAULT_SANDBOX_ROLE_ID_FILE` with owner `10001:10001` and mode
 `0600`; create `AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR` with the same owner and
-mode `0700`. Run `pnpm vault:smoke` as the Sandbox AppRole; it checks every
+mode `0700`. Run `bun run vault:smoke` as the Sandbox AppRole; it checks every
 Production secret path is denied without printing secret contents. Provision
 the Production directory with only Production `database.json` and `redis.json`
 fields; the Production policy has no access to the Sandbox assertion path.

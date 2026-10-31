@@ -10,7 +10,7 @@
 
 **Not allowed:** edits to public controller schemas, downstream adapters, database migrations owned by infrastructure, or another module's infrastructure.
 
-**Required checks:** focused identity/context tests, `pnpm type-check`, and `pnpm arch-check`.
+**Required checks:** focused identity/context tests, `bun run type-check`, and `bun run arch-check`.
 
 **Conventions:** accept validated values at application ports; keep raw headers in presentation/auth adapters; enforce TTL, algorithm allowlists, organization binding, and secret redaction.
 

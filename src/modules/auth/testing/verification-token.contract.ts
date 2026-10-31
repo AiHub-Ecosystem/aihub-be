@@ -8,7 +8,7 @@ import { ulid } from 'ulid';
  *
  * Pattern (for other auth fakes): write the scenarios once in a function that
  * takes a harness (repo factory + seeding helpers). Run it in the unit lane
- * against the in-memory adapter and in `pnpm test:db` against the Postgres
+ * against the in-memory adapter and in `bun run test:db` against the Postgres
  * repository, so the two implementations cannot drift.
  */
 export interface VerificationTokenContractHarness {

@@ -295,7 +295,7 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
 
   if (present.length === 0) {
     console.error(
-      'No lane coverage report found. Produce them with pnpm coverage:unit, pnpm coverage:db and pnpm coverage:tenant-isolation.',
+      'No lane coverage report found. Produce them with bun run coverage:unit, bun run coverage:db and bun run coverage:tenant-isolation.',
     );
     return 1;
   }
@@ -379,7 +379,7 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
     const baseline = readBaseline(root);
     if (baseline === undefined) {
       console.error(
-        `No baseline at ${BASELINE_PATH}. Run pnpm coverage:merged -- --write-baseline and commit it.`,
+        `No baseline at ${BASELINE_PATH}. Run bun run coverage:merged -- --write-baseline and commit it.`,
       );
       return 1;
     }

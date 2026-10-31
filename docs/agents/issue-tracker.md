@@ -22,7 +22,7 @@ Bodies go in a file, never in `--body`, and the shell reason why is in the globa
 
 Pull requests always run CI. Pushes to `main` skip Markdown unless a tracked spec reads that file. Keep those input paths in `.github/workflows/ci.yml`; `scripts/ci/ci-push-paths.spec.ts` checks the allowlist against tracked specs.
 
-The Public API release gate (`pnpm check:api-compatibility`) runs on pull requests and on pushes to `main`. A push is compared with the last revision CD deployed (the commit before it when CD has never succeeded), so `CHANGELOG.md` stays in the push allowlist. A red gate on `main` skips the deploy (#1398).
+The Public API release gate (`bun run check:api-compatibility`) runs on pull requests and on pushes to `main`. A push is compared with the last revision CD deployed (the commit before it when CD has never succeeded), so `CHANGELOG.md` stays in the push allowlist. A red gate on `main` skips the deploy (#1398).
 
 ## Naming a surface in an acceptance criterion
 
@@ -30,8 +30,8 @@ The issue body shape is not repeated here: `/to-issues` carries the template, an
 
 An acceptance criterion names a surface by the path an operator or the build actually touches. "Gone from the CLI dispatcher" was not checkable in #337: `scripts/cli/cli.mjs` never dispatched those two commands. The CLI has two distinct surfaces, and a criterion should say which one it means.
 
-- **`scripts/cli/cli.mjs`** — the `pnpm cli` dispatcher. It maps a command word to a `src/cli/*.ts` runner through `cliRunnerDescriptor` and `loadCliRunner`. Every `pnpm cli <command>` subcommand has a case here.
-- **`scripts/cli/<tool>.cjs`** — a standalone entry script for a tool that is not a `pnpm cli` subcommand, loaded from `dist/cli/*.js` or the `.ts` source. Such a tool needs both its `.cjs` wrapper and a `package.json` script, and appears in neither `scripts/cli/cli.mjs` nor `knip.json` entry evidence unless something else reaches it.
+- **`scripts/cli/cli.mjs`** — the `bun run cli` dispatcher. It maps a command word to a `src/cli/*.ts` runner through `cliRunnerDescriptor` and `loadCliRunner`. Every `bun run cli <command>` subcommand has a case here.
+- **`scripts/cli/<tool>.cjs`** — a standalone entry script for a tool that is not a `bun run cli` subcommand, loaded from `dist/cli/*.js` or the `.ts` source. Such a tool needs both its `.cjs` wrapper and a `package.json` script, and appears in neither `scripts/cli/cli.mjs` nor `knip.json` entry evidence unless something else reaches it.
 
 Say which one: "gone from `scripts/cli/cli.mjs`" or "its `scripts/cli/<tool>.cjs` entry script is removed". When a criterion cannot be verified by reading one file, name the file.
 

@@ -57,7 +57,7 @@ $env:AIHUB_VAULT_PROVISION_ALLOW = 'true'
 $env:AIHUB_VAULT_ENVIRONMENT = 'staging'
 $env:AIHUB_VAULT_CREDENTIALS_DIR = 'C:\secure\aihub-vault\staging'
 $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
-pnpm vault:provision
+bun run vault:provision
 ```
 
 `web-session.json` is required by the helper for the selected environment. It
@@ -175,7 +175,7 @@ application logs, images, backups, or source control.
 
 ## Safe verification
 
-Use the repository's opt-in `pnpm vault:smoke` command only with a dedicated,
+Use the repository's opt-in `bun run vault:smoke` command only with a dedicated,
 non-root AppRole identity. It reports path access and policy failures without
 printing Vault responses or secret values. It is not part of CI or the default
 verification loop. Set `AIHUB_VAULT_SMOKE_AUTH_METHOD=approle` as proof that

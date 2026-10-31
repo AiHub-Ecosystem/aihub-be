@@ -16,7 +16,7 @@
  * Fast path: when the inputs (schema, pinned prisma/@prisma/client versions,
  * and the --runtime mode) are unchanged and the expected outputs exist, skip
  * regeneration. The stamp lives inside the generated directory so that a
- * `pnpm build` (which deletes `dist/`) naturally invalidates it.
+ * `bun run build` (which deletes `dist/`) naturally invalidates it.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -27,6 +27,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
@@ -44,10 +45,7 @@ function isRecord(value) {
 /** @param {string} command @param {string[]} args @param {string} phase */
 function run(command, args, phase) {
   const startedAt = performance.now();
-  const result = spawnSync(command, args, {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  });
+  const result = spawnSync(command, args, { stdio: 'inherit' });
   if (reportTimings) {
     console.info(
       `[db-lane] ${phase}: ${((performance.now() - startedAt) / 1_000).toFixed(2)}s`,
@@ -102,15 +100,29 @@ if (
   process.exit(0);
 }
 
-const prisma = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+// Both CLIs run through their entry points: a package manager lays out `.bin`
+// differently (Bun writes `swc.exe`, which `npx` does not resolve on Windows),
+// and a shell would split a repository path at a space.
+const require = createRequire(import.meta.url);
 rmSync(GENERATED, { force: true, recursive: true });
-run(prisma, ['prisma', 'generate'], 'Prisma client generation');
+run(
+  process.execPath,
+  [require.resolve('prisma/build/index.js'), 'generate'],
+  'Prisma client generation',
+);
 
 if (runtime) {
   rmSync(STAGING, { force: true, recursive: true });
   run(
-    prisma,
-    ['swc', GENERATED, '--out-dir', STAGING, '-C', 'module.type=commonjs'],
+    process.execPath,
+    [
+      require.resolve('@swc/cli/bin/swc.js'),
+      GENERATED,
+      '--out-dir',
+      STAGING,
+      '-C',
+      'module.type=commonjs',
+    ],
     'Prisma runtime compilation',
   );
 
