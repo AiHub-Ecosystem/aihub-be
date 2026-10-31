@@ -222,6 +222,13 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
       () => new Date('2026-10-03T04:10:00.000Z'),
     );
 
+    // The control: the same call succeeds for the Organization that owns it.
+    await expect(
+      service.refreshUpload({
+        context: context(organizationId),
+        assetId: upload.assetId,
+      }),
+    ).resolves.toBeDefined();
     await expect(
       service.refreshUpload({
         context: context(otherOrganizationId),

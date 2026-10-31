@@ -272,6 +272,8 @@ describe('Speaking user identity HTTP flow', () => {
       'x-aihub-organization-id': 'org_spoofed',
       'x-aihub-user-id': 'spoofed-user',
       'x-aihub-user-identity-mode': 'signed_assertion',
+      'x-organization-id': 'org_spoofed',
+      'x-user-id': 'spoofed-user',
     };
     const multipart = multipartPayload({ part: '1', question_id: 'q1' });
     const multipartResponse = await app.inject({
@@ -308,7 +310,11 @@ describe('Speaking user identity HTTP flow', () => {
         'x-aihub-user-id': 'same_end_user',
         'x-aihub-user-identity-mode': 'declared_id',
       });
-      expect(outbound.headers).not.toMatchObject(spoofedHeaders);
+      // Per header: a whole-object `not.toMatchObject` passes when only one
+      // of several spoofed values differs.
+      for (const [name, spoofed] of Object.entries(spoofedHeaders)) {
+        expect(outbound.headers[name]).not.toBe(spoofed);
+      }
     }
     expect(
       outboundRequests.map(({ body }) =>

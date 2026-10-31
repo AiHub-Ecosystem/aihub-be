@@ -168,6 +168,10 @@ describe('Writing chart publication after an operator revocation', () => {
     const bucket = new Bucket();
     const { service, assetId } = await openUpload(bucket);
 
+    // The control: the same call succeeds for the Organization that owns it.
+    await expect(
+      service.refresh({ context: context(), assetId }),
+    ).resolves.toBeDefined();
     await expect(
       service.refresh({
         context: context('org_chart_other'),

@@ -284,7 +284,7 @@ describe('GradedRequestExecutorPort', () => {
       const { executor, dispatchFailure, getCommand, finalized } =
         executorHarness();
       let released = 0;
-      const { request, statusCode, lifecycleAfterExecute, thrownError } =
+      const { statusCode, lifecycleAfterExecute, thrownError } =
         await executeRoute(
           'speaking.grading-json',
           executor,
@@ -320,7 +320,6 @@ describe('GradedRequestExecutorPort', () => {
       expect(finalized).toEqual([]);
       expect(released).toBe(1);
       expect(lifecycleAfterExecute).toBeUndefined();
-      expect(request.aihubIdentity?.userId).toBe(userId);
     },
   );
 

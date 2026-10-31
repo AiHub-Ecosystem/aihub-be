@@ -53,19 +53,27 @@ const jsonInput: SpeakingGradeJsonInput = {
   transcript: 'A short synthetic transcript.',
 };
 
-function requestContext(
-  organizationId: string | null,
-  userId: string | null,
-  identityMode: UserIdentityMode | null,
+interface ContextParts {
+  readonly organizationId?: string;
+  readonly userId?: string;
+  readonly identityMode?: UserIdentityMode;
+  readonly environment?: string;
+}
+
+/** A part left out is a part the context lacks; `'  '` is present but blank. */
+function requestContext({
+  organizationId,
+  userId,
+  identityMode,
   environment = 'test',
-): RequestContext {
+}: ContextParts): RequestContext {
   return createRequestContext({
     requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
     receivedAt: new Date(),
     deadlineMs: 5_000,
-    ...(organizationId === null ? {} : { organizationId }),
-    ...(userId === null ? {} : { userId }),
-    ...(identityMode === null ? {} : { identityMode }),
+    ...(organizationId === undefined ? {} : { organizationId }),
+    ...(userId === undefined ? {} : { userId }),
+    ...(identityMode === undefined ? {} : { identityMode }),
     environment,
     scopes: [],
   });
@@ -87,7 +95,7 @@ function attemptsFake() {
     },
   );
   const recorder: DispatchAttemptRecordPort = { beginAttempt, recordOutcome };
-  return { recorder, starts, outcomes, beginAttempt, recordOutcome };
+  return { recorder, starts, outcomes };
 }
 
 function sandboxBudgetFake() {
@@ -116,6 +124,28 @@ function jsonBody(body: unknown): Record<string, unknown> {
     throw new Error('Expected a JSON Speaking request body');
   }
   return parsed;
+}
+
+function speakingDispatcher(
+  mockAgent: MockAgent,
+  attempts: DispatchAttemptRecordPort,
+  sandboxBudget?: SandboxDispatchBudgetPort,
+) {
+  const httpClient = new DownstreamHttpClient(
+    { 'ai-speaking': SPEAKING_URL },
+    mockAgent,
+    {
+      'ai-speaking': { 'x-client-id': CLIENT_ID, 'x-secret-key': SECRET_KEY },
+    },
+  );
+  const dispatcher = createHttpOperationDispatcher(
+    httpClient,
+    { mint: async () => 'unused' },
+    [speakingGradingAdapter, speakingGradingJsonAdapter],
+    attempts,
+    sandboxBudget,
+  );
+  return { dispatcher, httpClient };
 }
 
 async function dispatchSpeaking(
@@ -201,32 +231,13 @@ describe('Speaking tenant identity through the HTTP dispatcher', () => {
       }
     }
 
-    const httpClient = new DownstreamHttpClient(
-      { 'ai-speaking': SPEAKING_URL },
+    const { dispatcher } = speakingDispatcher(
       mockAgent,
-      {
-        'ai-speaking': {
-          'x-client-id': CLIENT_ID,
-          'x-secret-key': SECRET_KEY,
-        },
-      },
-    );
-    const dispatcher = createHttpOperationDispatcher(
-      httpClient,
-      { mint: async () => 'unused' },
-      [speakingGradingAdapter, speakingGradingJsonAdapter],
-      {
-        beginAttempt: async () => 'attempt-test',
-        recordOutcome: async () => undefined,
-      },
+      attemptsFake().recorder,
     );
 
     for (const tenant of tenants) {
-      const context = requestContext(
-        tenant.organizationId,
-        tenant.userId,
-        tenant.identityMode,
-      );
+      const context = requestContext(tenant);
       for (const operation of [
         'speaking.grading',
         'speaking.grading-json',
@@ -280,73 +291,107 @@ describe('Speaking tenant identity through the HTTP dispatcher', () => {
     );
   });
 
-  it('rejects incomplete identity during preparation before admission, attempts, or HTTP', async () => {
-    const invalidContexts = [
-      [
-        'missing Organization',
-        requestContext(null, 'same_end_user', 'declared_id', 'sandbox'),
-        'INTERNAL_ERROR',
-      ],
-      [
-        'blank Organization',
-        requestContext('  ', 'same_end_user', 'declared_id', 'sandbox'),
-        'INTERNAL_ERROR',
-      ],
-      [
-        'missing End-User ID',
-        requestContext('org_test', null, 'declared_id', 'sandbox'),
-        'USER_IDENTITY_REQUIRED',
-      ],
-      [
-        'blank End-User ID',
-        requestContext('org_test', '  ', 'declared_id', 'sandbox'),
-        'USER_IDENTITY_REQUIRED',
-      ],
-      [
-        'missing identity mode',
-        requestContext('org_test', 'same_end_user', null, 'sandbox'),
-        'INTERNAL_ERROR',
-      ],
-    ] as const;
+  // The control for the refusals below: the same Sandbox dispatch with a
+  // complete context does reserve and record, so "never reserved" means
+  // preparation refused it and not that the fakes cannot be reached.
+  it('reserves and records a complete Sandbox dispatch', async () => {
+    mockAgent
+      .get(SPEAKING_URL)
+      .intercept({
+        method: 'POST',
+        path: OPERATION_CATALOG['speaking.grading-json'].downstreamPath,
+      })
+      .reply(200, providerResponse);
+    const attempts = attemptsFake();
+    const sandbox = sandboxBudgetFake();
+    const { dispatcher } = speakingDispatcher(
+      mockAgent,
+      attempts.recorder,
+      sandbox.budget,
+    );
 
-    for (const [, context, code] of invalidContexts) {
+    await dispatchSpeaking(
+      dispatcher,
+      'speaking.grading-json',
+      requestContext({
+        organizationId: 'org_test',
+        userId: 'same_end_user',
+        identityMode: 'declared_id',
+        environment: 'sandbox',
+      }),
+    );
+
+    expect(sandbox.reserve).toHaveBeenCalledTimes(1);
+    expect(attempts.starts).toHaveLength(1);
+  });
+
+  // Preparation runs before Sandbox admission and before the attempt record,
+  // so a refused context leaves nothing reserved to release and nothing
+  // recorded as sent.
+  it.each([
+    [
+      'a missing Organization',
+      { userId: 'same_end_user', identityMode: 'declared_id' },
+      'INTERNAL_ERROR',
+    ],
+    [
+      'a blank Organization',
+      {
+        organizationId: '  ',
+        userId: 'same_end_user',
+        identityMode: 'declared_id',
+      },
+      'INTERNAL_ERROR',
+    ],
+    [
+      'a missing End-User ID',
+      { organizationId: 'org_test', identityMode: 'declared_id' },
+      'USER_IDENTITY_REQUIRED',
+    ],
+    [
+      'a blank End-User ID',
+      {
+        organizationId: 'org_test',
+        userId: '  ',
+        identityMode: 'declared_id',
+      },
+      'USER_IDENTITY_REQUIRED',
+    ],
+    [
+      'a missing identity mode',
+      { organizationId: 'org_test', userId: 'same_end_user' },
+      'INTERNAL_ERROR',
+    ],
+  ] as const)(
+    'refuses %s on both Speaking operations before admission, attempts, or HTTP',
+    async (_name, parts, code) => {
       for (const operation of [
         'speaking.grading',
         'speaking.grading-json',
       ] as const) {
         const attempts = attemptsFake();
         const sandbox = sandboxBudgetFake();
-        const httpClient = new DownstreamHttpClient(
-          { 'ai-speaking': SPEAKING_URL },
+        const { dispatcher, httpClient } = speakingDispatcher(
           mockAgent,
-          {
-            'ai-speaking': {
-              'x-client-id': CLIENT_ID,
-              'x-secret-key': SECRET_KEY,
-            },
-          },
-        );
-        const request = jest.spyOn(httpClient, 'request');
-        const dispatcher = createHttpOperationDispatcher(
-          httpClient,
-          { mint: async () => 'unused' },
-          [speakingGradingAdapter, speakingGradingJsonAdapter],
           attempts.recorder,
           sandbox.budget,
         );
+        const request = jest.spyOn(httpClient, 'request');
 
         await expect(
-          dispatchSpeaking(dispatcher, operation, context),
+          dispatchSpeaking(
+            dispatcher,
+            operation,
+            requestContext({ ...parts, environment: 'sandbox' }),
+          ),
         ).rejects.toMatchObject({ code });
 
         expect(request).not.toHaveBeenCalled();
-        expect(attempts.beginAttempt).not.toHaveBeenCalled();
-        expect(attempts.recordOutcome).not.toHaveBeenCalled();
         expect(attempts.starts).toEqual([]);
         expect(attempts.outcomes).toEqual([]);
         expect(sandbox.reserve).not.toHaveBeenCalled();
         expect(sandbox.release).not.toHaveBeenCalled();
       }
-    }
-  });
+    },
+  );
 });
