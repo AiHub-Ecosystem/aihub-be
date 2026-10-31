@@ -55,8 +55,12 @@ Vitest's [coverage guide](https://vitest.dev/guide/coverage) describes its V8 an
 
 This small probe is much faster and uses less memory with Node's runner, but it contains only pure domain code. Node can strip its erasable TypeScript syntax; it cannot load the Nest grading controller in strip-only mode (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` for parameter properties). Running the application suites would still need SWC transformation, and the probe does not test Jest mocks, Nest setup, or coverage. Node also emits a module-type detection warning for the imported `.ts` file because the package remains CommonJS. Treat these numbers as runner overhead for a lightweight suite, not as a full-suite prediction. Node's [TypeScript support](https://nodejs.org/api/typescript.html) describes the transform limits; its [test runner](https://nodejs.org/download/release/v22.23.3/docs/api/test.html) supports bounding process concurrency.
 
-## Recommendation
+## Historical recommendation
 
 For pure domain tests, Node's built-in runner is the strongest low-overhead candidate in this probe. For Nest and Fastify suites, Vitest remains the more realistic migration candidate because it already transforms decorator metadata in the prototype. Vitest's median peak RSS was 898 MiB versus Jest's 939 MiB, with a 9.5% slower median total runtime; this is only three samples on a one-worker Windows run, so confirm it in the two-worker CI environment.
 
-Keep Jest + SWC as the default until a full-suite candidate resolves coverage equivalence and module-mock/isolation compatibility. Node's runner would also need a reliable SWC integration for Nest tests; the small pure-domain result does not establish that a mixed or full migration would save RAM. #716 remains the separate decision owner for a database-lane runner change or Testcontainers.
+At the time of this evaluation, keep Jest + SWC as the default until a full-suite candidate resolves coverage equivalence and module-mock/isolation compatibility. Node's runner would also need a reliable SWC integration for Nest tests; the small pure-domain result does not establish that a mixed or full migration would save RAM. #716 remains the separate decision owner for a database-lane runner change or Testcontainers.
+
+## Current runner
+
+As of 2026-10-31, `pnpm test` and the test step in `pnpm verify` use Bun 1.4.4. The full suite passes across 424 files. An earlier one-worker Windows timing sample took about 186 seconds for Bun versus about 399 seconds for Jest + SWC. Treat the timing as one machine's sample; it did not measure peak RSS, so it does not establish that Bun uses less RAM. `coverage:unit` remains on Jest + SWC because Bun's LCOV output did not emit branch records in the coverage probe; the branch baseline and gate are unchanged.

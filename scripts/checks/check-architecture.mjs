@@ -525,6 +525,10 @@ const dependencyCruiserCachePath = cacheHelpers.dependencyCruiserCacheDirectory(
     readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'),
   ],
 );
+// `--cache` is an absolute path and may contain spaces on Windows.
+const windows = process.platform === 'win32';
+const quote = (/** @type {string} */ arg) =>
+  /[\s"&|<>^]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg;
 
 const result = spawnSync(
   command,
@@ -540,8 +544,8 @@ const result = spawnSync(
     '--output-type',
     'err-long',
     'src',
-  ],
-  { cwd: root, shell: process.platform === 'win32', stdio: 'inherit' },
+  ].map((arg) => (windows ? quote(arg) : arg)),
+  { cwd: root, shell: windows, stdio: 'inherit' },
 );
 
 if (result.error) {

@@ -34,11 +34,14 @@ const TS_GATES = [
   'type-check',
 ];
 
-/** Gate -> the command that runs it. `test:related` reads the changed files. */
+/**
+ * Gate -> the command that runs it. `test:related` uses Bun's changed-file graph.
+ */
 /** @type {Readonly<Record<string, string>>} */
 export const GATE_COMMANDS = {
   'arch-check': 'arch-check',
   build: 'build',
+  'coverage:unit': 'coverage:unit',
   'check:data-dictionary': 'check:data-dictionary',
   'check:deprecation': 'check:deprecation',
   'check:domain-globals': 'check:domain-globals',
@@ -89,7 +92,7 @@ function classifyPathGates(p) {
   }
 
   if (/(^|\/)jest\.config[^/]*\.(?:cjs|js|ts)$/.test(path)) {
-    return ['lint', 'test'];
+    return ['coverage:unit', 'lint'];
   }
 
   // Contract schemas also define the published surface, so a change there needs
@@ -138,6 +141,9 @@ function classifyPathGates(p) {
   }
 
   if (path.includes('check-changed')) {
+    return ['lint', 'test:check-changed'];
+  }
+  if (path.includes('run-bun-test')) {
     return ['lint', 'test:check-changed'];
   }
   if (path.includes('issue-triage')) {
@@ -321,14 +327,8 @@ function main() {
     },
     runGate: (gate) => {
       const script = GATE_COMMANDS[gate];
-      const args =
-        gate === 'test:related'
-          ? files.filter((file) => CODE_FILE.test(file))
-          : [];
-      console.log(
-        `[check:changed] pnpm ${script}${args.length ? ` (${args.length} file(s))` : ''}`,
-      );
-      return runPnpm(script, args);
+      console.log(`[check:changed] pnpm ${script}`);
+      return runPnpm(script, []);
     },
     runFullVerify: () => {
       fullVerifyStatus = runPnpm('verify', []);

@@ -16,7 +16,7 @@ specifications and work tracking.
 
 - Keep changes focused and describe behavior changes in the linked issue.
 - Run `pnpm check:changed` after each batch of code edits and `pnpm verify`
-  before handoff. Use `pnpm test -- <spec-file>` for a focused spec.
+  before handoff. Use `pnpm test -- ./path/to/spec-file.spec.ts` for a focused spec.
 - Use Conventional Commit headers and write commits, issues, pull requests, and
   comments in English, as described in [AGENTS.md](AGENTS.md).
 
