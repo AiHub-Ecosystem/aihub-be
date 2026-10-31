@@ -460,7 +460,7 @@ for (const file of sourceFiles) {
   }
 }
 
-// ADR-0138: the package manager is Bun, and a child process that runs pnpm
+// ADR-0139: the package manager is Bun, and a child process that runs pnpm
 // against a Bun-installed `node_modules` breaks concurrent readers of it. Run
 // Node, `tsx` or dependency-cruiser through `process.execPath`, or a package
 // script through `bun run`.
@@ -476,7 +476,7 @@ for (const directory of ['scripts', 'src', 'test']) {
     if (entry.name === 'check-architecture.mjs') continue;
     if (retiredPackageManagerCall.test(readFileSync(file, 'utf8'))) {
       fail(
-        `${relative(root, file).replace(/\\/g, '/')} spawns pnpm; use process.execPath or 'bun run' (ADR-0138)`,
+        `${relative(root, file).replace(/\\/g, '/')} spawns pnpm; use process.execPath or 'bun run' (ADR-0139)`,
       );
     }
   }

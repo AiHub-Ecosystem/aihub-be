@@ -1,4 +1,4 @@
-# ADR-0138: Bun is the package manager; Node.js stays the runtime
+# ADR-0139: Bun is the package manager; Node.js stays the runtime
 
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-31 in [#342](https://github.com/AiHub-Ecosystem/aihub-be/issues/342).
 - Date: 2026-10-31
