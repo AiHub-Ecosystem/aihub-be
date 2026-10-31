@@ -173,10 +173,10 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Installed with npm: the repository allows only GitHub-owned actions and
+      # a short list of Docker and pnpm ones, so `oven-sh/setup-bun` never starts.
       - name: Set up Bun
-        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979 # v2.1.0
-        with:
-          bun-version: 1.4.4
+        run: npm install --global bun@1.4.4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
