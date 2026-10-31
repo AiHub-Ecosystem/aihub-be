@@ -38,3 +38,4 @@ bash.exe.stackdump
 # scripts). The folder is created on demand and emptied when the task ends; see
 # AGENTS.md "Working files" for the rule.
 temp/
+.serena/
