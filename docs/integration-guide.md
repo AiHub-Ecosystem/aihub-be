@@ -461,6 +461,11 @@ An assertion is a short-lived JWT your backend signs immediately before
 calling AIHUB. It is not a session token: do not cache it for long, and never
 send it to a browser or mobile client.
 
+A user id is only meaningful together with your Organization: two
+Organizations may use the same `sub` for different people, and AIHUB keeps them
+apart (see
+[ADR-0140](adr/0140-tenant-identity-is-the-organization-and-end-user-id-pair.md)).
+
 ### Required claims
 
 | Claim | Value                  | Notes                                       |
