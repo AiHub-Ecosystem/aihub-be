@@ -41,8 +41,10 @@ contract and is not part of this document.
 - AIHUB sends `X-AIHUB-Organization-Id`, `X-AIHUB-User-Id`, and
   `X-AIHUB-User-Identity-Mode` from its authenticated Organization and resolved
   User Identity. These trusted service headers supplement the v1 `user_id`
-  body field; provider v1 keeps that field for compatibility. A customer cannot
-  supply or override the downstream identity headers.
+  body field; provider v1 keeps that field for compatibility. The provider
+  trusts these values only on requests authenticated with AIHUB's provider
+  credentials. A customer cannot supply or override the downstream identity
+  headers.
 - `user_id` is required by the AI Speaking service, but AIHUB derives it from the
   End-User ID in `X-User-Identity`. It is signature-verified only for
   Organizations with an active identity configuration; otherwise it is a
