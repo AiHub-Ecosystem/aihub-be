@@ -80,6 +80,7 @@ export class GradedRequestExecutor implements GradedRequestExecutorPort {
       prepared = await prepareInput(lifecycle.signal);
       const authenticated = getAuthenticatedApiKey(request);
       const userId = request.aihubIdentity?.userId;
+      const identityMode = request.aihubIdentity?.mode;
       if (userId === undefined || userId.trim().length === 0) {
         throw userIdentityRequired();
       }
@@ -94,6 +95,7 @@ export class GradedRequestExecutor implements GradedRequestExecutorPort {
         apiKeyId: authenticated.apiKeyId,
         environment: authenticated.environment,
         userId,
+        ...(identityMode === undefined ? {} : { identityMode }),
         scopes: authenticated.scopes,
       };
       const idempotency = OPERATION_CATALOG[operation].idempotency;

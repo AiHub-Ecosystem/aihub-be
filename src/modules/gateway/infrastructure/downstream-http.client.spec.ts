@@ -57,6 +57,52 @@ describe('DownstreamHttpClient', () => {
     expect(response.body).toEqual(responseBody);
   });
 
+  it('forwards trusted identity headers and lets them override configured values', async () => {
+    const responseBody = { ok: true };
+    mockAgent
+      .get('https://ai-speaking.test')
+      .intercept({
+        method: 'POST',
+        path: '/api/v1/speaking/grading-json',
+        body: JSON.stringify({ user_id: 'student-1' }),
+        headers: {
+          'x-aihub-organization-id': 'org_from_context',
+          'x-aihub-user-id': 'student-1',
+          'x-aihub-user-identity-mode': 'declared_id',
+          'x-request-id': 'req_speaking_identity',
+          'x-request-deadline': '5000',
+        },
+      })
+      .reply(200, responseBody);
+
+    const client = new DownstreamHttpClient(
+      { 'ai-speaking': 'https://ai-speaking.test' },
+      mockAgent,
+      { 'ai-speaking': { 'x-aihub-organization-id': 'org_stale' } },
+    );
+    const response = await client.request(
+      {
+        method: 'POST',
+        path: '/api/v1/speaking/grading-json',
+        headers: {
+          'x-aihub-organization-id': 'org_from_context',
+          'x-aihub-user-id': 'student-1',
+          'x-aihub-user-identity-mode': 'declared_id',
+        },
+        body: { user_id: 'student-1' },
+      },
+      {
+        downstream: 'ai-speaking',
+        requestId: 'req_speaking_identity',
+        deadlineMs: 5000,
+        signal: AbortSignal.timeout(1000),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(responseBody);
+  });
+
   it('rejects an absolute or protocol-relative adapter path', async () => {
     const client = new DownstreamHttpClient(
       'https://ai-writing.test',

@@ -13,6 +13,12 @@ reports that all captured traffic used synthetic test data. There is no
 staging environment. Credentials, audio, transcripts, feedback text, and raw
 response strings are not stored in the fixtures.
 
+On 2026-10-31, AI Speaking deployed commit `148f126` to accept AIHUB's opaque
+`org_...` Organization IDs while retaining legacy UUID support. A controlled
+Production question-grade request using a synthetic `org_...` ID returned
+`question_result`; retrieving that result with the same identity headers also
+returned `200`.
+
 ## 1. Operations
 
 | Provider operation                             | Request               | Result                   |
@@ -37,11 +43,11 @@ invalid credentials produce `401 unauthorized`.
 
 All six v2.4 operations also require these headers:
 
-| Header                       | Provider validation                                                           |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `X-AIHUB-Organization-Id`    | UUID string of 36 characters; case-insensitive on input and stored lowercase. |
-| `X-AIHUB-User-Id`            | 1–256 visible ASCII characters (`!` through `~`), with no spaces or Unicode.  |
-| `X-AIHUB-User-Identity-Mode` | `signed_assertion` or `declared_id`.                                          |
+| Header                       | Provider validation                                                                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-AIHUB-Organization-Id`    | AIHUB ID: `org_` plus 1–60 ASCII letters, digits, `_`, or `-`; exact and case-sensitive. Legacy 36-character UUIDs remain accepted and normalized to lowercase. |
+| `X-AIHUB-User-Id`            | 1–256 visible ASCII characters (`!` through `~`), with no spaces or Unicode.                                                                                    |
+| `X-AIHUB-User-Identity-Mode` | `signed_assertion` or `declared_id`.                                                                                                                            |
 
 After successful credential validation, a missing or malformed identity
 header produces `400 invalid_request` and names the offending header.
@@ -50,12 +56,11 @@ parameters. If supplied for compatibility, the provider ignores it. The
 response `data.meta.user_id` is still present and echoes the value from
 `X-AIHUB-User-Id`.
 
-These are service-to-service headers. AIHUB must derive them from the
-authenticated Organization and server-resolved End-User identity; it must not
-forward identically named headers supplied by a customer. In AIHUB, the
-resolved identity includes the mode, but the current `RequestContext` carries
-only Organization and User IDs. A future adapter must propagate the resolved
-mode through trusted context.
+These are service-to-service headers. AIHUB derives the Organization ID from
+the authenticated API key and the End-User ID and mode from the server-resolved
+User Identity; it never forwards identically named headers supplied by a
+customer. `RequestContext` carries all three trusted values to both Speaking
+grading adapters.
 
 ## 3. Request bodies
 
@@ -108,21 +113,19 @@ IDs.
 
 The provider reports that v1 accepts the three new identity headers without
 rejecting requests and continues to require the legacy `user_id` body field.
-When a valid Organization UUID header is present, v1 uses it for new records;
-without a valid header, v1 retains its previous default Organization value.
-Existing v1 records are not migrated and v2.4 cannot read them.
+When a valid Organization header is present, v1 uses its `org_...` or UUID
+value for new records; an absent or malformed optional identity-header set
+retains the previous default Organization. Existing v1 records are not
+migrated and v2.4 cannot read them.
 
-## 6. AIHUB integration blocker
+## 6. AIHUB integration status
 
-AIHUB's Integration Guide documents customer Organization IDs as `org_...`,
-and the persisted ID is an opaque string. That is incompatible with the
-provider's UUID-only Organization header. AIHUB has no approved stable mapping
-to a UUID. Do not send the opaque ID directly, invent an ephemeral UUID, or
-partially forward the remaining headers as a substitute for tenant isolation.
-Before dispatching v2.4, AIHUB and the provider must agree on a durable
-Organization-ID mapping or change the provider to accept AIHUB's stable opaque
-ID. Existing v1 runtime behavior remains unchanged until that decision is
-implemented and verified.
+AIHUB's Integration Guide documents customer Organization IDs as opaque
+`org_...` strings. AI Speaking commit `148f126` now accepts those IDs directly
+and retains legacy UUID support, so AIHUB does not need a derived mapping. The
+Production POST and GET smoke above verifies one synthetic Organization/User
+pair only; cross-Organization isolation remains owned by #70 and still needs
+its own evidence. Existing v1 records are not migrated.
 
 The captures demonstrate two question results in one Part 1 flow, Part/Test
 aggregation, reads, header/auth failures, unreadable audio, and a cross-User 404. They do not constitute AIHUB approval of the public `/v2` response schema

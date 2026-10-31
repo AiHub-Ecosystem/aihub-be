@@ -114,6 +114,9 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
       apiKeyId: command.apiKeyId,
       environment: command.environment,
       userId: command.userId,
+      ...(command.identityMode === undefined
+        ? {}
+        : { identityMode: command.identityMode }),
       scopes: command.scopes,
       signal: command.signal,
     });

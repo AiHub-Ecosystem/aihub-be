@@ -1,4 +1,5 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
@@ -8,10 +9,13 @@ import type {
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type {
   DownstreamErrorHint,
+  DownstreamIdentityHeaders,
   DownstreamMultipartBody,
   DownstreamRequest,
 } from '@/downstream/downstream.types';
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
+
+const SPEAKING_IDENTITY_CONTEXT_ERROR_CODE = 'INTERNAL_ERROR';
 
 export function requiredSpeakingUserId(context: RequestContext): string {
   const userId = context.userId;
@@ -19,6 +23,34 @@ export function requiredSpeakingUserId(context: RequestContext): string {
     throw userIdentityRequired();
   }
   return userId;
+}
+
+export function requiredSpeakingIdentityHeaders(
+  context: RequestContext,
+): DownstreamIdentityHeaders {
+  const organizationId = context.organizationId;
+  if (organizationId === undefined || organizationId.trim().length === 0) {
+    throw new AppError({
+      code: SPEAKING_IDENTITY_CONTEXT_ERROR_CODE,
+      message: 'Speaking identity context is incomplete',
+      retryable: false,
+    });
+  }
+
+  const identityMode = context.identityMode;
+  if (identityMode !== 'declared_id' && identityMode !== 'signed_assertion') {
+    throw new AppError({
+      code: SPEAKING_IDENTITY_CONTEXT_ERROR_CODE,
+      message: 'Speaking identity context is incomplete',
+      retryable: false,
+    });
+  }
+
+  return {
+    'x-aihub-organization-id': organizationId,
+    'x-aihub-user-id': requiredSpeakingUserId(context),
+    'x-aihub-user-identity-mode': identityMode,
+  };
 }
 
 /**
@@ -97,6 +129,7 @@ export const speakingGradingAdapter: DownstreamAdapter<
     return {
       method: 'POST',
       path: OPERATION_CATALOG['speaking.grading'].downstreamPath,
+      headers: requiredSpeakingIdentityHeaders(context),
       body,
     };
   },

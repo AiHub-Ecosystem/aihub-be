@@ -1,6 +1,6 @@
 # ADR-0138: Batch AI-service breaking changes into Public API v2
 
-- Status: Proposed — pending AIHUB and WISPACE approval, the Organization-ID mapping decision, and the evidence below.
+- Status: Proposed — pending AIHUB and WISPACE approval and the evidence below.
 - Date: 2026-10-31
 - Related: [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0131](0131-customers-are-told-when-grading-behavior-changes.md), [#72](https://github.com/AiHub-Ecosystem/aihub-be/issues/72), [#1374](https://github.com/AiHub-Ecosystem/aihub-be/issues/1374)
 
@@ -22,12 +22,12 @@ provider reports v2.4 is deployed; there is no staging environment. The
 sanitized responses are recorded in
 `test/fixtures/ai-speaking/grading-v2-*.json`.
 
-The confirmed provider header contract introduces an integration blocker:
-Speaking requires `X-AIHUB-Organization-Id` to be a UUID, while AIHUB's
-customer-facing Organization IDs use the opaque `org_...` format. AIHUB has no
-approved mapping to the provider's UUID. Forwarding the AIHUB ID directly
-would be rejected, and inventing a derived identifier without a durable,
-approved mapping would break tenant ownership and deletion.
+The provider initially documented a UUID-only `X-AIHUB-Organization-Id`, while
+AIHUB uses opaque `org_...` IDs. AI Speaking deployed commit `148f126` on
+2026-10-31 to accept the existing opaque IDs directly while retaining UUID
+compatibility. A controlled Production question-grade POST and result GET with
+a synthetic `org_...` ID both returned `200`, resolving the mapping blocker.
+Cross-Organization isolation still needs independent evidence under #70.
 
 ## Proposal
 
@@ -51,9 +51,9 @@ approved mapping would break tenant ownership and deletion.
    authenticated API key and resolved user identity. The provider has confirmed
    that v2.4 requires `X-AIHUB-Organization-Id`, `X-AIHUB-User-Id`, and
    `X-AIHUB-User-Identity-Mode`, and that its v1 endpoints accept those headers
-   while retaining the v1 `user_id` request field. Resolve the UUID mapping
-   before sending the organization header. Never accept provider identity
-   headers directly from an AIHUB customer request.
+   while retaining the v1 `user_id` request field. Forward the authenticated
+   opaque Organization ID unchanged. Never accept provider identity headers
+   directly from an AIHUB customer request.
 
 ## Alternatives
 
@@ -64,9 +64,9 @@ approved mapping would break tenant ownership and deletion.
   provider-only fields and identifiers part of AIHUB's customer contract.
 - **Release one major per service:** rejected because ADR-0127 versions the
   whole Public API and would force customers through multiple migrations.
-- **Pass AIHUB's `org_...` identifier as the provider UUID:** rejected because
-  it violates the provider's validation contract and would silently lose the
-  intended tenant partitioning on v1.
+- **Invent provider UUIDs from AIHUB IDs:** rejected because the provider now
+  accepts the stable opaque ID directly, so a derived mapping would add
+  lifecycle and deletion state without benefit.
 
 ## Required evidence before acceptance and release
 
@@ -77,9 +77,8 @@ approved mapping would break tenant ownership and deletion.
 - WISPACE and AIHUB review and approve the Speaking v2.4 contract and sanitized
   captures recorded in
   [the Speaking provider contract](../contracts/ai-services/ai-speaking-grading-v2.4.md).
-- Resolve a durable mapping between AIHUB Organization IDs and provider UUIDs,
-  or obtain provider support for the existing opaque ID format. Verify both
-  organization and user isolation before production integration.
+- Verify cross-Organization and cross-User isolation for the provider's
+  accepted opaque IDs under issue #70.
 - AIHUB serves the complete `/v2` route set and publishes the OpenAPI, customer
   changelog, and Integration Guide migration instructions required by
   ADR-0127.
@@ -90,7 +89,7 @@ This proposal does not change runtime behavior or publish `/v2`. The new
 Production captures establish more provider behavior than the earlier
 one-question probe, but they do not approve the AIHUB public contract, represent
 a complete three-Part test, or include a captured `429` response. Until this
-ADR is accepted and the UUID mapping and remaining evidence exist, the
+ADR is accepted and the remaining evidence and approvals exist, the
 released-major registry stays at `/v1`, and issue #1374 stays open. The AIHUB
 `/v1` Writing path pin and sanitized Speaking captures are preparation only;
 they do not establish customer contract approval or release readiness.

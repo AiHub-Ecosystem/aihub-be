@@ -1,4 +1,5 @@
 import type { OperationId } from '@/catalog/operation-id';
+import type { UserIdentityMode } from '@/common/request-context/request-context';
 import type { IdempotencyBackgroundLifecycle } from '@/modules/idempotency/application/idempotency-service.port';
 import type { CompletedIdempotencyReplay } from '@/modules/idempotency/public/idempotency-operation';
 import {
@@ -19,6 +20,7 @@ export interface GradingRequestMetadata {
   readonly apiKeyId: string;
   readonly environment: string;
   readonly userId: string;
+  readonly identityMode?: UserIdentityMode;
   readonly scopes: readonly string[];
 }
 

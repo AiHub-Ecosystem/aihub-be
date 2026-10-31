@@ -131,6 +131,7 @@ describe('Gateway runtime-secret wiring', () => {
       deadlineMs: 10_000,
       organizationId: 'org_gateway_test',
       userId: 'snapshot-user',
+      identityMode: 'declared_id',
       scopes: [],
     });
     const writingInput: GradeTask1Request = {
