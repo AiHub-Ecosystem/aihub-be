@@ -5,22 +5,11 @@ import { freemem } from 'node:os';
 import { relative, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-
-import type {
-  CoverageMap,
-  CoverageMapData,
-  CoverageSummaryData,
-} from 'istanbul-lib-coverage';
-
 import { resolveUnitLaneWorkers } from '../../checks/jest-worker-cap.cjs';
 import { TEST_RUNNER_TARGETS } from './targets.mjs';
 
 const root = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const require = createRequire(import.meta.url);
-const coverageModule = require('istanbul-lib-coverage') as {
-  createCoverageMap: (data: CoverageMapData) => CoverageMap;
-};
-const { createCoverageMap } = coverageModule;
 const freeMemoryBytesAtStart = freemem();
 const maxWorkers = resolveUnitLaneWorkers().maxWorkers;
 const readyMarker = '__AIHUB_RUNNER_READY__';
@@ -45,6 +34,23 @@ type CoverageTotals = Record<
   'lines' | 'statements' | 'branches' | 'functions',
   CoverageCounts
 >;
+interface CoverageSummaryJson {
+  lines: CoverageCounts;
+  statements: CoverageCounts;
+  branches: CoverageCounts;
+  functions: CoverageCounts;
+}
+interface CoverageMapObject {
+  files(): string[];
+  fileCoverageFor(file: string): {
+    toSummary(): { toJSON(): CoverageSummaryJson };
+  };
+  getCoverageSummary(): { toJSON(): CoverageSummaryJson };
+}
+const coverageModule = require('istanbul-lib-coverage') as {
+  createCoverageMap: (data: unknown) => CoverageMapObject;
+};
+const { createCoverageMap } = coverageModule;
 interface CoverageShape {
   files: Record<string, CoverageTotals>;
   total: CoverageTotals;
@@ -262,11 +268,9 @@ function summarize(samples: readonly RunnerSample[]) {
 }
 
 function coverageShape(reportPath: string): CoverageShape {
-  const report = JSON.parse(
-    readFileSync(reportPath, 'utf8'),
-  ) as CoverageMapData;
+  const report: unknown = JSON.parse(readFileSync(reportPath, 'utf8'));
   const map = createCoverageMap(report);
-  const summarizeCoverage = (summary: CoverageSummaryData): CoverageTotals =>
+  const summarizeCoverage = (summary: CoverageSummaryJson): CoverageTotals =>
     Object.fromEntries(
       (['lines', 'statements', 'branches', 'functions'] as const).map(
         (metric) => [
@@ -286,7 +290,10 @@ function coverageShape(reportPath: string): CoverageShape {
         relative(root, file).replaceAll('\\', '/'),
         summarizeCoverage(map.fileCoverageFor(file).toSummary().toJSON()),
       ])
-      .sort(([left], [right]) => left.localeCompare(right)),
+      .sort(([left], [right]) => left.localeCompare(right)) as [
+      string,
+      CoverageTotals,
+    ][],
   );
   return { files, total: summarizeCoverage(map.getCoverageSummary().toJSON()) };
 }
