@@ -69,6 +69,43 @@ export function normalizeLegacyTuples(value, path = '$') {
   }
 }
 
+/** @param {string} value @returns {string} */
+function toSnakeCase(value) {
+  return value.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+
+/**
+ * Aligns path parameter declarations with their URL template variable names.
+ * OpenAPI 3.1 §4.8.12 requires template parameter names to match path parameter
+ * declarations case-sensitively. Older releases published camelCase parameter
+ * names (e.g. `assetId`) alongside snake_case templates (`{asset_id}`).
+ *
+ * @param {unknown} document
+ */
+export function normalizePathParameters(document) {
+  if (!isRecord(document) || !isRecord(document.paths)) return;
+  for (const [pathKey, pathItem] of Object.entries(document.paths)) {
+    if (!isRecord(pathItem)) continue;
+    const templateNames = new Set(
+      [...pathKey.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]),
+    );
+    if (templateNames.size === 0) continue;
+    for (const operation of Object.values(pathItem)) {
+      if (!isRecord(operation) || !Array.isArray(operation.parameters))
+        continue;
+      for (const parameter of operation.parameters) {
+        if (!isRecord(parameter) || parameter.in !== 'path') continue;
+        const name = typeof parameter.name === 'string' ? parameter.name : '';
+        if (templateNames.has(name)) continue;
+        const snake = toSnakeCase(name);
+        if (templateNames.has(snake)) {
+          parameter.name = snake;
+        }
+      }
+    }
+  }
+}
+
 /** @param {string} path @returns {unknown} */
 function readOpenApi(path) {
   const document = /** @type {unknown} */ (
@@ -100,6 +137,8 @@ export function parseChanges(stdout) {
 export function findBreakingChanges(base, revision) {
   normalizeLegacyTuples(base);
   normalizeLegacyTuples(revision);
+  normalizePathParameters(base);
+  normalizePathParameters(revision);
   mkdirSync(TEMP_ROOT, { recursive: true });
   const scratch = mkdtempSync(join(TEMP_ROOT, 'api-compatibility-'));
 

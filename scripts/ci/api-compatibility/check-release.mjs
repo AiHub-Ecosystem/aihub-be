@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { requireAddedEnumValues, sectionFor } from './check-enum-changelog.mjs';
 import { checkMajorLifecycle } from './check-major-lifecycle.mjs';
-import { findBreakingChanges } from './check.mjs';
+import { findBreakingChanges, normalizePathParameters } from './check.mjs';
 
 const VERSIONED_SPEC = /^v([1-9]\d*)\.json$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -389,6 +389,8 @@ export function checkRelease(
     const baseVersion = isRecord(baseDocument.info)
       ? baseDocument.info.version
       : undefined;
+    normalizePathParameters(baseDocument);
+    normalizePathParameters(candidateDocument);
     const breaks = findBreakingChanges(
       withExtensibleResponseSchemas(baseDocument),
       withExtensibleResponseSchemas(candidateDocument),

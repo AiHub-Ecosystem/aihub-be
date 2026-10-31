@@ -259,6 +259,42 @@ void test('allows extending the generated Audit action response enum', (t) => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+void test('allows aligning a path parameter name with its URL template placeholder', (t) => {
+  const base = fixture((document) => {
+    document.paths['/v1/items/{item_id}'] = {
+      get: {
+        parameters: [
+          {
+            in: 'path',
+            name: 'itemId',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: document.paths['/v1/items'].get.responses,
+      },
+    };
+  });
+  const candidate = fixture((document) => {
+    document.paths['/v1/items/{item_id}'] = {
+      get: {
+        parameters: [
+          {
+            in: 'path',
+            name: 'item_id',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: document.paths['/v1/items'].get.responses,
+      },
+    };
+  });
+
+  const result = runChecker(t, candidate, '', base);
+  assert.equal(result.status, 0, result.stderr);
+});
+
 void test('runs the versioned release checker against the pull request base or the last deployed revision', () => {
   assert.ok(WORKFLOW.includes('ref: ${{ steps.base.outputs.sha }}'));
   assert.ok(
