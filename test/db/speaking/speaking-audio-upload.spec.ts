@@ -1,6 +1,9 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
+import { SpeakingAudioUploadService } from '@/modules/speaking/application/speaking-audio-upload.service';
 import type {
   SpeakingAudioAsset,
   SpeakingAudioUploadIntent,
@@ -24,6 +27,16 @@ let sandboxRepository: PostgresSpeakingAudioUploadRepository;
 let closeRepository: () => Promise<void>;
 let closeSandboxRepository: () => Promise<void>;
 let organizationId: string;
+let otherOrganizationId: string;
+
+const storage: SpeakingAudioAssetStoragePort = {
+  createUploadUrl: async () => ({
+    url: 'https://example.test/upload',
+    expiresAt: new Date('2026-10-03T04:30:00.000Z'),
+  }),
+  describeObject: async () => undefined,
+  deleteObject: async () => undefined,
+};
 
 beforeAll(() => {
   pool = createTestPool();
@@ -57,7 +70,25 @@ beforeEach(async () => {
      VALUES ($1, $2, 'active')`,
     [organizationId, `Speaking audio ${organizationId}`],
   );
+  otherOrganizationId = `org_${ulid()}`;
+  await pool.query(
+    `INSERT INTO organizations (id, name, status)
+     VALUES ($1, $2, 'active')`,
+    [otherOrganizationId, `Speaking audio ${otherOrganizationId}`],
+  );
 });
+
+function context(ownerOrganizationId: string) {
+  return createRequestContext({
+    requestId: `req_${ulid()}`,
+    receivedAt: new Date('2026-10-03T04:10:00.000Z'),
+    deadlineMs: 10_000,
+    organizationId: ownerOrganizationId,
+    environment: 'production',
+    userId: 'student-123',
+    scopes: ['speaking:grade'],
+  });
+}
 
 function intent(
   assetId = `aud_${ulid()}`,
@@ -179,6 +210,43 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
       [upload.assetId],
     );
     expect(rows.rows[0]).toEqual({ intents: 1, assets: 1 });
+  });
+
+  it('answers not-found for another Organization using the same End-User ID', async () => {
+    const upload = intent();
+    await repository.createIntent(upload);
+    const service = new SpeakingAudioUploadService(
+      repository,
+      storage,
+      () => `aud_${ulid()}`,
+      () => new Date('2026-10-03T04:10:00.000Z'),
+    );
+
+    await expect(
+      service.refreshUpload({
+        context: context(otherOrganizationId),
+        assetId: upload.assetId,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await expect(
+      repository.completeIntent({
+        owner: {
+          assetId: upload.assetId,
+          organizationId: upload.organizationId,
+          endUserId: upload.endUserId,
+          environment: upload.environment,
+        },
+        now: new Date('2026-10-03T04:05:00.000Z'),
+        asset: asset(upload),
+      }),
+    ).resolves.toBe('created');
+    await expect(
+      service.completeUpload({
+        context: context(otherOrganizationId),
+        assetId: upload.assetId,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('stores Sandbox uploads when the Organization exists only in the control plane', async () => {

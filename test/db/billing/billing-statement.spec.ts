@@ -6,6 +6,7 @@ import {
   parseBillingMonth,
 } from '@/modules/metering/application/billing-statement';
 import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
+import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/postgres-monthly-billable-usage';
 import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/prisma-metering.client';
 import {
@@ -21,14 +22,16 @@ const AFTER_OCTOBER = new Date('2026-11-02T00:00:00Z');
 
 let pool: Pool;
 let client: PrismaMeteringClient;
+let repository: PostgresBillingStatementRepository;
 let service: BillingStatementService;
+let monthlyUsage: PostgresMonthlyBillableUsage;
 
 beforeAll(() => {
   pool = createTestPool();
   client = createPostgresMeteringClient(testDatabaseUrl());
-  service = new BillingStatementService(
-    new PostgresBillingStatementRepository(client),
-  );
+  repository = new PostgresBillingStatementRepository(client);
+  service = new BillingStatementService(repository);
+  monthlyUsage = new PostgresMonthlyBillableUsage(client);
 });
 
 afterAll(async () => {
@@ -64,6 +67,7 @@ async function usage(row: {
   readonly at: string;
   readonly organizationId?: string;
   readonly apiKeyId?: string;
+  readonly actorId?: string;
   readonly outcome?: string;
   readonly billable?: 0 | 1;
   readonly environment?: string;
@@ -73,14 +77,15 @@ async function usage(row: {
   sequence += 1;
   await pool.query(
     `INSERT INTO usage_records (
-       request_id, organization_id, api_key_id, service, operation, environment,
+       request_id, organization_id, api_key_id, actor_id, service, operation, environment,
        outcome, http_status, billable_requests, metering_status, total_ms,
        billing_basis, created_at)
-     VALUES ($1, $2, $3, 'writing', 'writing.task2.grade', $4, $5, $6, $7, $8, 10, $9, $10)`,
+     VALUES ($1, $2, $3, $4, 'writing', 'writing.task2.grade', $5, $6, $7, $8, $9, 10, $10, $11)`,
     [
       `req_billing_${sequence}`,
       row.organizationId ?? ORG,
       row.apiKeyId ?? 'ak_customer',
+      row.actorId ?? null,
       row.environment ?? 'production',
       row.outcome ?? 'success',
       (row.outcome ?? 'success') === 'success' ? 200 : 504,
@@ -165,6 +170,33 @@ describe('billing statement', () => {
         excludedNonProduction: 1,
       },
     ]);
+  });
+
+  it('scopes usage reads by Organization when both Organizations share an actor id', async () => {
+    await usage({
+      at: '2026-10-05T00:00:00Z',
+      organizationId: ORG,
+      actorId: 'student-shared',
+    });
+    await usage({
+      at: '2026-10-05T00:00:00Z',
+      organizationId: OTHER,
+      apiKeyId: 'ak_other',
+      actorId: 'student-shared',
+    });
+
+    await expect(repository.usage(OCTOBER, ORG)).resolves.toEqual([
+      expect.objectContaining({ organizationId: ORG }),
+    ]);
+    await expect(repository.usage(OCTOBER, OTHER)).resolves.toEqual([
+      expect.objectContaining({ organizationId: OTHER }),
+    ]);
+    await expect(
+      monthlyUsage.billableCount(ORG, OCTOBER.from, OCTOBER.to),
+    ).resolves.toBe(1);
+    await expect(
+      monthlyUsage.billableCount(OTHER, OCTOBER.from, OCTOBER.to),
+    ).resolves.toBe(1);
   });
 
   it('adds adjustments beside the evidence without editing it', async () => {

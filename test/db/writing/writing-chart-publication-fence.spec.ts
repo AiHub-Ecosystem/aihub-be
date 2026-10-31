@@ -70,12 +70,12 @@ class Bucket extends ChartBucket {
   }
 }
 
-function context() {
+function context(organizationId = ORGANIZATION_ID) {
   return createRequestContext({
     requestId: `req_${ulid()}`,
     receivedAt: new Date(),
     deadlineMs: 10_000,
-    organizationId: ORGANIZATION_ID,
+    organizationId,
     environment: 'production',
     userId: 'learner-fence',
     scopes: ['writing:grade'],
@@ -162,6 +162,18 @@ describe('Writing chart publication after an operator revocation', () => {
       code: 'NOT_FOUND',
     });
     expect(bucket.published.size).toBe(0);
+  });
+
+  it('answers not-found for the same End-User ID under another Organization', async () => {
+    const bucket = new Bucket();
+    const { service, assetId } = await openUpload(bucket);
+
+    await expect(
+      service.refresh({
+        context: context('org_chart_other'),
+        assetId,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('makes a publisher already past its reservation remove what it wrote, and reports the revocation pending until then', async () => {

@@ -21,6 +21,12 @@ describe('idempotency fingerprint', () => {
     expect(
       createIdempotencyFingerprint({
         ...base,
+        organizationId: 'org_other',
+      }),
+    ).not.toBe(createIdempotencyFingerprint(base));
+    expect(
+      createIdempotencyFingerprint({
+        ...base,
         requestBody: { answer: 'hello', metadata: { level: 3 } },
       }),
     ).not.toBe(createIdempotencyFingerprint(base));

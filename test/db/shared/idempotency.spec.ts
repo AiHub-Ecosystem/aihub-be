@@ -134,6 +134,55 @@ describe('Postgres idempotency management scope', () => {
     });
   });
 
+  it('does not find a completed graded request for the same actor and key in another Organization', async () => {
+    const organizationIdempotencyKey = 'graded-request-1';
+    const gradedOperation = 'writing.task1.grade' as const;
+    const otherOrganizationInput: ReserveIdempotencyInput = {
+      organizationId: OTHER_ORGANIZATION_ID,
+      operation: gradedOperation,
+      actorScope: '',
+      idempotencyKey: organizationIdempotencyKey,
+      fingerprintHex: FINGERPRINT,
+      requestId: 'req_graded_other_org',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    };
+
+    await expect(repository.reserve(otherOrganizationInput)).resolves.toEqual({
+      kind: 'claimed',
+      requestId: otherOrganizationInput.requestId,
+    });
+    await repository.complete({
+      organizationId: OTHER_ORGANIZATION_ID,
+      operation: gradedOperation,
+      actorScope: '',
+      idempotencyKey: organizationIdempotencyKey,
+      requestId: otherOrganizationInput.requestId,
+      responseStatus: 200,
+      responseBody: { marker: 'other-organization-response' },
+    });
+
+    const sameRequestInCallerOrganization = {
+      ...otherOrganizationInput,
+      organizationId: ORGANIZATION_ID,
+      requestId: 'req_graded_caller_org',
+    };
+    await expect(
+      repository.reserve(sameRequestInCallerOrganization),
+    ).resolves.toEqual({
+      kind: 'claimed',
+      requestId: sameRequestInCallerOrganization.requestId,
+    });
+    await expect(
+      repository.findCompletedMatch({
+        organizationId: ORGANIZATION_ID,
+        operation: gradedOperation,
+        actorScope: '',
+        idempotencyKey: organizationIdempotencyKey,
+        fingerprintHex: FINGERPRINT,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it('allows one concurrent claim for one scoped key', async () => {
     const results = await Promise.all([
       repository.reserve(reserveInput('usr_owner', 'req_1')),
