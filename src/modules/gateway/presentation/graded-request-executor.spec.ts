@@ -74,12 +74,14 @@ async function executeRoute<K extends OperationId>(
   request: AuthenticatedRequest;
   statusCode: number;
   lifecycleAfterExecute: ReturnType<typeof getRequestLifecycle>;
+  thrownError: unknown;
 }> {
   const app = Fastify();
   registerRequestLifecycle(app);
   registerRequestTiming(app);
   let request: AuthenticatedRequest | undefined;
   let lifecycleAfterExecute: ReturnType<typeof getRequestLifecycle>;
+  let thrownError: unknown;
 
   app.post(OPERATION_CATALOG[operation].path, async (receivedRequest) => {
     request = receivedRequest;
@@ -116,6 +118,7 @@ async function executeRoute<K extends OperationId>(
     try {
       await executor.execute(receivedRequest, operation, prepareInput);
     } catch (error) {
+      thrownError = error;
       lifecycleAfterExecute = getRequestLifecycle(receivedRequest.raw);
       if (error !== dispatchFailure) {
         throw error;
@@ -139,6 +142,7 @@ async function executeRoute<K extends OperationId>(
       request,
       statusCode: response.statusCode,
       lifecycleAfterExecute,
+      thrownError,
     };
   } finally {
     await app.close();
@@ -269,6 +273,56 @@ describe('GradedRequestExecutorPort', () => {
     ]);
     expect(lifecycleAfterExecute).toBeUndefined();
   });
+
+  it.each([
+    ['missing', undefined],
+    ['blank', ''],
+    ['whitespace', '   '],
+  ] as const)(
+    'rejects a %s End-User ID before orchestration and disposes resources',
+    async (_name, userId) => {
+      const { executor, dispatchFailure, getCommand, finalized } =
+        executorHarness();
+      let released = 0;
+      const { request, statusCode, lifecycleAfterExecute, thrownError } =
+        await executeRoute(
+          'speaking.grading-json',
+          executor,
+          dispatchFailure,
+          () => ({
+            input: {
+              audioUrl: 'https://s3.wispace.app/audio/sample.mp3',
+              part: 1,
+              questionId: 'p1_hometown',
+              testType: 'Practice',
+            },
+            release: () => {
+              released += 1;
+            },
+          }),
+          (testRequest) => {
+            if (userId === undefined) {
+              delete testRequest.aihubIdentity;
+            } else {
+              testRequest.aihubIdentity = {
+                userId,
+                organizationId: 'org_test',
+                scopes: [],
+                mode: 'declared_id',
+              };
+            }
+          },
+        );
+
+      expect(statusCode).toBe(500);
+      expect(thrownError).toMatchObject({ code: 'USER_IDENTITY_REQUIRED' });
+      expect(getCommand()).toBeUndefined();
+      expect(finalized).toEqual([]);
+      expect(released).toBe(1);
+      expect(lifecycleAfterExecute).toBeUndefined();
+      expect(request.aihubIdentity?.userId).toBe(userId);
+    },
+  );
 
   it('disposes the request lifecycle when input preparation fails', async () => {
     const { executor, dispatchFailure } = executorHarness();
