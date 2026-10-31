@@ -10,6 +10,7 @@ import {
 import { join, relative, sep } from 'node:path';
 
 import architectureConfig from '../../.dependency-cruiser.cjs';
+import cacheHelpers from './dependency-cruiser-cache.cjs';
 
 type DependencyCruiserConfig = typeof architectureConfig;
 
@@ -72,6 +73,30 @@ function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
   return patterns.some((entry) => new RegExp(entry).test(path));
 }
+
+describe('dependency-cruiser cache inputs', () => {
+  it('changes the cache directory when a policy or resolver input changes', () => {
+    const root = process.cwd();
+    const inputs = [
+      'dependency-cruiser rules',
+      'TypeScript path aliases',
+      'package manifest',
+      'dependency lockfile',
+    ];
+    const cacheDirectory = cacheHelpers.dependencyCruiserCacheDirectory(
+      root,
+      inputs,
+    );
+
+    for (const index of inputs.keys()) {
+      const changedInputs = [...inputs];
+      changedInputs[index] = `${changedInputs[index]} changed`;
+      expect(
+        cacheHelpers.dependencyCruiserCacheDirectory(root, changedInputs),
+      ).not.toBe(cacheDirectory);
+    }
+  });
+});
 
 /**
  * The rule matches any module on the `to` side and exempts the seam through
@@ -154,6 +179,60 @@ describe('cross-module import rules', () => {
 
   it('excludes spec files from the importing side', () => {
     expect(crossModuleRule?.from.pathNot).toBe('[.]spec[.]ts$');
+  });
+});
+
+describe('dependency-cruiser cache policy', () => {
+  it('rechecks imports when the rules file changes', () => {
+    const projectRoot = process.cwd();
+    const configPath = join(projectRoot, '.dependency-cruiser.cjs');
+    const fixtureRoot = mkdtempSync(
+      join(projectRoot, 'src', 'modules', 'identity', '.tmp-policy-cache-'),
+    );
+    const originalConfig = readFileSync(configPath, 'utf8');
+    const changedConfig = originalConfig.replace(
+      '  forbidden: [',
+      () => `  forbidden: [
+    {
+      name: 'temporary-policy-cache-check',
+      severity: 'error',
+      comment: 'temporary policy cache regression fixture',
+      from: { path: '^src/modules/identity/[.]tmp-policy-cache-[^/]+/application/probe[.]ts$' },
+      to: { path: '^src/modules/identity/domain/organization-name[.]ts$' },
+    },`,
+    );
+
+    expect(changedConfig).not.toBe(originalConfig);
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        join(fixtureRoot, 'application', 'probe.ts'),
+        "import { organizationName } from '@/modules/identity/domain/organization-name';\nexport const probe = organizationName('probe');\n",
+      );
+
+      const runArchCheck = () =>
+        spawnSync(
+          process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+          ['arch-check'],
+          {
+            cwd: projectRoot,
+            encoding: 'utf8',
+            shell: process.platform === 'win32',
+          },
+        );
+
+      expect(runArchCheck().status).toBe(0);
+      writeFileSync(configPath, changedConfig);
+      const result = runArchCheck();
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        'temporary-policy-cache-check',
+      );
+    } finally {
+      writeFileSync(configPath, originalConfig);
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 });
 
@@ -1099,9 +1178,10 @@ describe('source-text architecture rules fail arch-check', () => {
 
   function runWithFixtures(
     fixtures: Array<{ layer: string; name: string; source: string }>,
+    fixtureDirectory = join(srcRoot, 'modules', 'identity'),
   ): { status: number | null; output: string } {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'identity', '.tmp-source-text-'),
+      join(fixtureDirectory, '.tmp-source-text-'),
     );
 
     try {
@@ -1133,6 +1213,73 @@ describe('source-text architecture rules fail arch-check', () => {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
   }
+
+  it('rejects host literals in downstream source files', () => {
+    const result = runWithFixtures(
+      [
+        {
+          layer: '.',
+          name: 'probe.ts',
+          source: "export const endpoint = 'https://api.example.test';\n",
+        },
+      ],
+      join(srcRoot, 'downstream'),
+    );
+
+    expect(result.output).toContain('contains a host literal');
+    expect(result.status).not.toBe(0);
+  });
+
+  it('rejects process, PostgreSQL pool, and Vault access outside their boundaries', () => {
+    const result = runWithFixtures([
+      {
+        layer: 'infrastructure',
+        name: 'environment.ts',
+        source: 'export const environment = process.env.NODE_ENV;\n',
+      },
+      {
+        layer: 'infrastructure',
+        name: 'pool.ts',
+        source: "import { Pool } from 'pg';\nexport const pool = new Pool();\n",
+      },
+      {
+        layer: 'infrastructure',
+        name: 'vault.ts',
+        source: "export const provider = 'vault';\n",
+      },
+    ]);
+
+    expect(result.output).toContain('outside the configuration boundary');
+    expect(result.output).toContain('constructs a PostgreSQL pool directly');
+    expect(result.output).toContain('Vault-specific infrastructure');
+    expect(result.status).not.toBe(0);
+  });
+
+  it('allows environment reads and Vault references in their boundary folders', () => {
+    const configuration = runWithFixtures(
+      [
+        {
+          layer: '.',
+          name: 'probe.ts',
+          source: 'export const environment = process.env.NODE_ENV;\n',
+        },
+      ],
+      join(srcRoot, 'config'),
+    );
+    const secrets = runWithFixtures(
+      [
+        {
+          layer: '.',
+          name: 'probe.ts',
+          source: "export const provider = 'vault';\n",
+        },
+      ],
+      join(srcRoot, 'modules', 'secrets', 'infrastructure'),
+    );
+
+    expect(configuration.status).toBe(0);
+    expect(secrets.status).toBe(0);
+  });
 
   it("fails when an application file declares module 'fastify'", () => {
     const result = runWithFixtures([

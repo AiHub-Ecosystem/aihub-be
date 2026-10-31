@@ -3,9 +3,24 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import process from 'node:process';
 import tsModule from 'typescript';
+import cacheHelpers from './dependency-cruiser-cache.cjs';
 
 const root = process.cwd();
 const ts = /** @type {typeof import('typescript')} */ (tsModule);
+const srcDirectory = join(root, 'src');
+const sourceFiles = collectTypeScriptFiles(srcDirectory);
+/** @type {Map<string, string>} */
+const sourceTextByPath = new Map();
+
+/** @param {string} file @returns {string} */
+function sourceText(file) {
+  let source = sourceTextByPath.get(file);
+  if (source === undefined) {
+    source = readFileSync(file, 'utf8');
+    sourceTextByPath.set(file, source);
+  }
+  return source;
+}
 
 /** @param {string} message */
 function fail(message) {
@@ -15,23 +30,13 @@ function fail(message) {
 
 /** @param {string} directory @returns {string[]} */
 function collectTypeScriptFiles(directory) {
-  const files = [];
-
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...collectTypeScriptFiles(path));
-    } else if (entry.isFile() && path.endsWith('.ts')) {
-      files.push(path);
-    }
-  }
-
-  return files;
+  return readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+    .map((entry) => join(entry.parentPath, entry.name));
 }
 
 const catalogPath = join(root, 'src', 'catalog', 'operation-catalog.ts');
-const catalog = readFileSync(catalogPath, 'utf8');
+const catalog = sourceText(catalogPath);
 const expectedPaths = [
   '/v1/ielts/writing/task1/grade',
   '/v1/ielts/writing/task2/grade',
@@ -50,12 +55,14 @@ if ((catalog.match(/timeoutMs:\s*\d/g) ?? []).length !== expectedPaths.length) {
 }
 
 const downstreamDirectory = join(root, 'src', 'downstream');
-for (const file of collectTypeScriptFiles(downstreamDirectory)) {
+for (const file of sourceFiles.filter((file) =>
+  file.startsWith(`${downstreamDirectory}${sep}`),
+)) {
   if (file.endsWith('.spec.ts')) {
     continue;
   }
 
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   if (/https?:\/\//i.test(source)) {
     fail(
       `${relative(root, file)} contains a host literal; use trusted downstream configuration`,
@@ -63,7 +70,6 @@ for (const file of collectTypeScriptFiles(downstreamDirectory)) {
   }
 }
 
-const srcDirectory = join(root, 'src');
 const configurationDirectory = join(srcDirectory, 'config');
 const cliDirectory = join(srcDirectory, 'cli');
 const postgresPoolFactoryPath = join(
@@ -72,7 +78,7 @@ const postgresPoolFactoryPath = join(
   'postgres',
   'postgres-pool.ts',
 );
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (
     file.endsWith('.spec.ts') ||
     file.startsWith(configurationDirectory) ||
@@ -81,7 +87,7 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
     continue;
   }
 
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   if (/\bprocess\.env\b/.test(source)) {
     fail(
       `${relative(root, file)} reads process.env outside the configuration boundary; inject validated configuration instead`,
@@ -89,12 +95,12 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   }
 }
 
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (file.endsWith('.spec.ts') || file === postgresPoolFactoryPath) {
     continue;
   }
 
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   const importsPgPool =
     /\bimport\s*\{[^}]*\bPool\b(?:\s+as\s+\w+)?[^}]*\}\s*from\s*['"]pg['"]/.test(
       source,
@@ -123,13 +129,13 @@ const PRISMA_CLIENT_SPECIFIER =
 // A `testing/` folder holds test doubles, which production code cannot import
 // (`no-test-helpers-in-production-code`), so naming the client's type there
 // does not carry Prisma into a layer.
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   const segments = file.split(sep);
   if (segments.includes('infrastructure') || segments.includes('testing')) {
     continue;
   }
 
-  if (PRISMA_CLIENT_SPECIFIER.test(readFileSync(file, 'utf8'))) {
+  if (PRISMA_CLIENT_SPECIFIER.test(sourceText(file))) {
     fail(
       `${relative(root, file)} imports the generated Prisma client; only infrastructure may, because Prisma types stay inside the persistence layer (ADR-0088)`,
     );
@@ -148,7 +154,7 @@ const secretsModulePath = join(
   'secrets',
   'secrets.module.ts',
 );
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (
     file.endsWith('.spec.ts') ||
     file.startsWith(secretsInfrastructureDirectory) ||
@@ -159,7 +165,7 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
     continue;
   }
 
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   if (/\bvault\b|AIHUB_RUNTIME_SECRETS_FILE/i.test(source)) {
     fail(
       `${relative(root, file)} contains Vault-specific infrastructure; keep it behind the runtime-secret provider`,
@@ -181,12 +187,12 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
 // the formatter moves a trailing comment down onto its own line.
 const BODY_VALIDATION_MARKER = 'arch-check:';
 
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (file.endsWith('.spec.ts') || !file.includes(`${sep}presentation${sep}`)) {
     continue;
   }
 
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const lines = sourceText(file).split(/\r?\n/);
   for (const [index, line] of lines.entries()) {
     if (!/\bValue\.(?:Check|Parse)\s*\(/.test(line)) {
       continue;
@@ -212,12 +218,12 @@ const IS_RECORD_DECLARATION =
   /\b(?:function\s+isRecord\b|(?:const|let)\s+isRecord\s*[=:])/;
 const IS_RECORD_OWNER = join(srcDirectory, 'common', 'is-record.ts');
 
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (file.endsWith('.spec.ts') || file === IS_RECORD_OWNER) {
     continue;
   }
 
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const lines = sourceText(file).split(/\r?\n/);
   for (const [index, line] of lines.entries()) {
     if (!IS_RECORD_DECLARATION.test(line)) {
       continue;
@@ -245,12 +251,15 @@ const REQUEST_ID_PATTERN_OWNER = join(
   'response-meta.ts',
 );
 
-for (const file of collectTypeScriptFiles(join(srcDirectory, 'contracts'))) {
+const contractsDirectory = join(srcDirectory, 'contracts');
+for (const file of sourceFiles.filter((file) =>
+  file.startsWith(`${contractsDirectory}${sep}`),
+)) {
   if (file.endsWith('.spec.ts') || file === REQUEST_ID_PATTERN_OWNER) {
     continue;
   }
 
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const lines = sourceText(file).split(/\r?\n/);
   for (const [index, line] of lines.entries()) {
     if (!line.includes(REQUEST_ID_PATTERN_LITERAL)) {
       continue;
@@ -373,12 +382,12 @@ function queryParameterIsValidated(parameter) {
   return isValidated;
 }
 
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (file.endsWith('.spec.ts') || !file.endsWith('.controller.ts')) {
     continue;
   }
 
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   const sourceFile = ts.createSourceFile(
     file,
     source,
@@ -440,11 +449,11 @@ const SESSION_CONTINUATION_USERS = new Set([
   'src/modules/auth/mfa/infrastructure/auth-mfa-session.guard.ts',
   'src/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository.ts',
 ]);
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   if (file.endsWith('.spec.ts')) continue;
   const relativePath = relative(root, file).replace(/\\/g, '/');
   if (SESSION_CONTINUATION_USERS.has(relativePath)) continue;
-  if (/\badmitSessionContinuation\b/.test(readFileSync(file, 'utf8'))) {
+  if (/\badmitSessionContinuation\b/.test(sourceText(file))) {
     fail(
       `${relativePath} names admitSessionContinuation, which stores a session without the second-factor check; only the Refresh Token rotation may continue a session this way (ADR-0054)`,
     );
@@ -460,11 +469,11 @@ const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 // request type. dependency-cruiser cannot see `declare module`, so check the
 // source text directly.
 for (const layer of ['application', 'domain']) {
-  for (const file of collectTypeScriptFiles(srcDirectory)) {
+  for (const file of sourceFiles) {
     if (file.endsWith('.spec.ts')) continue;
     const relativePath = relative(root, file).replace(/\\/g, '/');
     if (!relativePath.includes(`/${layer}/`)) continue;
-    const source = readFileSync(file, 'utf8');
+    const source = sourceText(file);
     if (/declare\s+module\s+['"]fastify['"]/.test(source)) {
       fail(
         `${relativePath} declares module 'fastify' from the ${layer} layer; move the augmentation to presentation/`,
@@ -481,20 +490,20 @@ for (const layer of ['application', 'domain']) {
 const CAST_ALLOWLIST = new Set([]);
 
 const applicationTypeNames = new Set();
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   const relativePath = relative(root, file).replace(/\\/g, '/');
   if (!relativePath.includes('/application/')) continue;
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   for (const match of source.matchAll(/export\s+(?:type|interface)\s+(\w+)/g)) {
     applicationTypeNames.add(match[1]);
   }
 }
 
-for (const file of collectTypeScriptFiles(srcDirectory)) {
+for (const file of sourceFiles) {
   const relativePath = relative(root, file).replace(/\\/g, '/');
   if (!relativePath.includes('/infrastructure/')) continue;
   if (file.endsWith('.spec.ts')) continue;
-  const source = readFileSync(file, 'utf8');
+  const source = sourceText(file);
   for (const match of source.matchAll(/as\s+unknown\s+as\s+(\w+)/g)) {
     const typeName = match[1];
     if (!applicationTypeNames.has(typeName)) continue;
@@ -505,11 +514,27 @@ for (const file of collectTypeScriptFiles(srcDirectory)) {
   }
 }
 
+const dependencyCruiserConfigPath = join(root, '.dependency-cruiser.cjs');
+// shortcut: leaves one ignored cache folder per policy/resolver revision; prune if these inputs change often.
+const dependencyCruiserCachePath = cacheHelpers.dependencyCruiserCacheDirectory(
+  root,
+  [
+    readFileSync(dependencyCruiserConfigPath, 'utf8'),
+    readFileSync(join(root, 'tsconfig.json'), 'utf8'),
+    readFileSync(join(root, 'package.json'), 'utf8'),
+    readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'),
+  ],
+);
+
 const result = spawnSync(
   command,
   [
     'exec',
     'depcruise',
+    '--cache',
+    dependencyCruiserCachePath,
+    '--cache-strategy',
+    'content',
     '--config',
     '.dependency-cruiser.cjs',
     '--output-type',
