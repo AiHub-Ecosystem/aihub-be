@@ -23,12 +23,16 @@ export function buildBunTestArgs(args) {
   const forwarded = args[0] === '--' ? args.slice(1) : args;
   const filters = forwarded.filter((arg) => TEST_FILE.test(arg));
   const options = forwarded.filter((arg) => !TEST_FILE.test(arg));
+  const hasPositionalFilter = forwarded.some(
+    (arg, index) => !arg.startsWith('-') && forwarded[index - 1] !== '-t',
+  );
 
   return [
     'test',
     ...BASE_ARGS,
     ...options,
-    ...(filters.length ? filters : ['.spec.ts']),
+    ...(!hasPositionalFilter ? ['.spec.ts'] : []),
+    ...filters,
   ];
 }
 

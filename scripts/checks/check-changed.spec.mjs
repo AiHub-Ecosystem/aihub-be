@@ -163,6 +163,21 @@ await test('the Bun runner accepts a focused spec path', () => {
   );
 });
 
+await test('the Bun runner preserves substring and directory filters', () => {
+  for (const filter of ['writing-chart-upload', 'src/modules/writing/domain']) {
+    const args = buildBunTestArgs(['--', filter]);
+    assert.ok(args.includes(filter));
+    assert.notEqual(args.at(-1), '.spec.ts');
+  }
+});
+
+await test('the Bun runner keeps the default when -t has a separate value', () => {
+  assert.equal(
+    buildBunTestArgs(['--', '-t', 'writing chart upload']).at(-1),
+    '.spec.ts',
+  );
+});
+
 await test('the Bun runner forwards changed and watch options with default specs', () => {
   const args = buildBunTestArgs(['--', '--changed=origin/main', '--watch']);
   assert.ok(args.includes('--changed=origin/main'));
