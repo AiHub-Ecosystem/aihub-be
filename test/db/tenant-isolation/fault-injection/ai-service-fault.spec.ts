@@ -66,7 +66,7 @@ const adapter: DownstreamAdapter<GradeTask2Request, unknown> = {
   downstream: 'ai-writing',
   buildRequest: (input) => ({
     method: 'POST',
-    path: '/grading-feedback-task2',
+    path: '/v1/grading-feedback-task2',
     body: input,
   }),
   parseResponse: (response) => response.body,

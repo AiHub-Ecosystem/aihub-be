@@ -138,7 +138,7 @@ describe('graded request chain', () => {
     pool
       .intercept({
         method: 'POST',
-        path: '/grading-feedback-task1',
+        path: '/v1/grading-feedback-task1',
         body: JSON.stringify({
           question: task1Request.question,
           topic: task1Request.topic,

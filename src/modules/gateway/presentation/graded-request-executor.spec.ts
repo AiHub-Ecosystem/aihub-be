@@ -69,6 +69,7 @@ async function executeRoute<K extends OperationId>(
     | PreparedGradedInput<RequestFor<K>>
     | Promise<PreparedGradedInput<RequestFor<K>>>,
   configureRequest: (request: AuthenticatedRequest) => void = () => undefined,
+  inboundHeaders: Record<string, string> = {},
 ): Promise<{
   request: AuthenticatedRequest;
   statusCode: number;
@@ -129,6 +130,7 @@ async function executeRoute<K extends OperationId>(
     const response = await app.inject({
       method: 'POST',
       url: OPERATION_CATALOG[operation].path,
+      headers: inboundHeaders,
     });
     if (request === undefined) {
       throw new Error('graded route did not receive a request');
@@ -181,6 +183,11 @@ describe('GradedRequestExecutorPort', () => {
           },
         });
       },
+      {
+        'x-aihub-organization-id': 'org_spoofed',
+        'x-aihub-user-id': 'spoofed-user',
+        'x-aihub-user-identity-mode': 'signed_assertion',
+      },
     );
 
     const command = getCommand();
@@ -193,6 +200,7 @@ describe('GradedRequestExecutorPort', () => {
       apiKeyId: 'key_test',
       environment: 'test',
       userId: 'user_test',
+      identityMode: 'declared_id',
       scopes: ['writing.grade', 'speaking.grade'],
     });
     expect(typeof command?.onDispatchStart).toBe('function');

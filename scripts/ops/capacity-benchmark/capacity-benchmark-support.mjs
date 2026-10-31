@@ -26,11 +26,11 @@ if (
 /** @type {Map<string, Buffer>} */
 const fixtures = new Map([
   [
-    '/grading-feedback-task1',
+    '/v1/grading-feedback-task1',
     await readFile(`${fixtureRoot}/ai-writing/grade-task1.response.json`),
   ],
   [
-    '/grading-feedback-task2',
+    '/v1/grading-feedback-task2',
     await readFile(`${fixtureRoot}/ai-writing/grade-task2.response.json`),
   ],
   [

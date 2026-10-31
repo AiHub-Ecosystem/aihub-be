@@ -7,7 +7,10 @@ import type {
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
-import { requiredSpeakingUserId } from './speaking-grading.adapter';
+import {
+  requiredSpeakingIdentityHeaders,
+  requiredSpeakingUserId,
+} from './speaking-grading.adapter';
 
 function appendOptional(
   body: Record<string, unknown>,
@@ -44,6 +47,7 @@ export const speakingGradingJsonAdapter: DownstreamAdapter<
     return {
       method: 'POST',
       path: OPERATION_CATALOG['speaking.grading-json'].downstreamPath,
+      headers: requiredSpeakingIdentityHeaders(context),
       body,
     };
   },

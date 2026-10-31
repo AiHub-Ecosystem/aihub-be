@@ -17,10 +17,10 @@ captures are in `test/fixtures/ai-writing/grade-task1.telemetry.capture.json`
 
 The current AIHUB gateway exposes the two grading operations below:
 
-| Public AIHUB operation               | Provider operation             | Request |
-| ------------------------------------ | ------------------------------ | ------- |
-| `POST /v1/ielts/writing/task1/grade` | `POST /grading-feedback-task1` | JSON    |
-| `POST /v1/ielts/writing/task2/grade` | `POST /grading-feedback-task2` | JSON    |
+| Public AIHUB operation               | Provider operation                | Request |
+| ------------------------------------ | --------------------------------- | ------- |
+| `POST /v1/ielts/writing/task1/grade` | `POST /v1/grading-feedback-task1` | JSON    |
+| `POST /v1/ielts/writing/task2/grade` | `POST /v1/grading-feedback-task2` | JSON    |
 
 Writing question-generation routes are not part of the current gateway scope.
 They must not be reintroduced through this grading contract without a separate

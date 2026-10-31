@@ -35,7 +35,7 @@ describe('task1GradeAdapter', () => {
 
     expect(result).toEqual({
       method: 'POST',
-      path: '/grading-feedback-task1',
+      path: '/v1/grading-feedback-task1',
       body: {
         question: 'Describe the chart',
         url: 'https://example.com/chart.png',

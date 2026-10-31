@@ -200,6 +200,7 @@ export class DownstreamHttpClient {
         method: request.method,
         headers: {
           ...this.configuredHeaders[downstream],
+          ...request.headers,
           ...(options.authorization === undefined
             ? {}
             : { authorization: options.authorization }),

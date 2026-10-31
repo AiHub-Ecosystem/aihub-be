@@ -42,6 +42,7 @@ const context = createRequestContext({
   deadlineMs: 5000,
   organizationId: 'org_contract',
   userId: 'server-derived-user',
+  identityMode: 'declared_id',
   scopes: [],
 });
 
@@ -50,10 +51,12 @@ async function onWire(request: DownstreamRequest): Promise<{
   contentType: string;
   response: unknown;
   file: { name: string; type: string; text: string } | undefined;
+  identityHeaders: Record<string, string>;
 }> {
   let body: Json = {};
   let contentType = '';
   let file: { name: string; type: string; text: string } | undefined;
+  let identityHeaders: Record<string, string> = {};
   const server = createServer((incoming, outgoing) => {
     void (async () => {
       const chunks: Buffer[] = [];
@@ -64,6 +67,11 @@ async function onWire(request: DownstreamRequest): Promise<{
       }
       const bytes = Buffer.concat(chunks);
       contentType = incoming.headers['content-type'] ?? '';
+      identityHeaders = {
+        organization: String(incoming.headers['x-aihub-organization-id'] ?? ''),
+        user: String(incoming.headers['x-aihub-user-id'] ?? ''),
+        mode: String(incoming.headers['x-aihub-user-identity-mode'] ?? ''),
+      };
       if (contentType.startsWith('multipart/form-data')) {
         const form = await new Response(bytes, {
           headers: { 'content-type': contentType },
@@ -102,7 +110,13 @@ async function onWire(request: DownstreamRequest): Promise<{
       deadlineMs: 5000,
       signal: AbortSignal.timeout(5000),
     });
-    return { body, contentType, response: response.body, file };
+    return {
+      body,
+      contentType,
+      response: response.body,
+      file,
+      identityHeaders,
+    };
   } finally {
     await client.close();
     await new Promise<void>((resolve, reject) =>
@@ -193,6 +207,11 @@ describe.each(cases)(
       for (const request of requests) {
         const wire = await onWire(request);
         expect(wire.contentType).toMatch(new RegExp(`^${media}`));
+        expect(wire.identityHeaders).toEqual({
+          organization: 'org_contract',
+          user: 'server-derived-user',
+          mode: 'declared_id',
+        });
         expect(wire.file).toEqual(file);
         expect(wire.body.user_id).toBe('server-derived-user');
         expect(

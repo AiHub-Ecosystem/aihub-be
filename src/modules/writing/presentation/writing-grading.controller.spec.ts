@@ -118,7 +118,7 @@ describe('Writing grading HTTP flow', () => {
     pool
       .intercept({
         method: 'POST',
-        path: '/grading-feedback-task1',
+        path: '/v1/grading-feedback-task1',
         body: JSON.stringify({
           question: task1Request.question,
           topic: task1Request.topic,
@@ -135,7 +135,7 @@ describe('Writing grading HTTP flow', () => {
     pool
       .intercept({
         method: 'POST',
-        path: '/grading-feedback-task2',
+        path: '/v1/grading-feedback-task2',
         body: JSON.stringify({
           question: task2Request.question,
           topic: task2Request.topic,
@@ -299,7 +299,7 @@ describe('Writing grading HTTP flow', () => {
       .get('https://ai-writing.test')
       .intercept({
         method: 'POST',
-        path: '/grading-feedback-task1',
+        path: '/v1/grading-feedback-task1',
         body: JSON.stringify({
           question: task1Request.question,
           topic: task1Request.topic,

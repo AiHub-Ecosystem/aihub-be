@@ -5,12 +5,14 @@ import { AppError } from '@/common/errors/app-error';
 import { createInternalErrorEnvelope } from '@/common/errors/error-envelope';
 import { getMetrics } from '@/common/observability/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import type { SpeakingGradeJsonInput } from '@/contracts/speaking/grading';
 import type {
   GradeResponse,
   GradeTask1Request,
 } from '@/contracts/writing/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
+import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
 import type {
   DownstreamRetryBudgetDecision,
   DownstreamRetryBudgetPort,
@@ -410,6 +412,83 @@ describe('HttpOperationDispatcher', () => {
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'response_received' },
     ]);
+    mockAgent.assertNoPendingInterceptors();
+  });
+
+  it('reuses the same Speaking identity headers on a safe connection retry', async () => {
+    const attempts = fakeDispatchAttempts();
+    const refused = Object.assign(new Error('connection refused'), {
+      code: 'ECONNREFUSED',
+    });
+    const identityHeaders = {
+      'x-aihub-organization-id': 'org_context',
+      'x-aihub-user-id': 'student-1',
+      'x-aihub-user-identity-mode': 'declared_id',
+    };
+    const pool = mockAgent.get('https://ai-speaking.test');
+    pool
+      .intercept({
+        method: 'POST',
+        path: '/api/v1/speaking/grading-json',
+        headers: identityHeaders,
+      })
+      .replyWithError(refused);
+    pool
+      .intercept({
+        method: 'POST',
+        path: '/api/v1/speaking/grading-json',
+        headers: identityHeaders,
+      })
+      .reply(200, { ok: true });
+
+    const httpClient = new DownstreamHttpClient(
+      { 'ai-speaking': 'https://ai-speaking.test' },
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const retryBudget = fakeDownstreamRetryBudget();
+    const adapter: DownstreamAdapter<SpeakingGradeJsonInput, unknown> = {
+      operation: 'speaking.grading-json',
+      downstream: 'ai-speaking',
+      buildRequest: (input, context) =>
+        speakingGradingJsonAdapter.buildRequest(input, context),
+      parseResponse: () => ({ ok: true }),
+    };
+    const dispatcher = createHttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [adapter],
+      attempts.recorder,
+      undefined,
+      retryBudget.port,
+      () => 1,
+    );
+    const context = createRequestContext({
+      requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      receivedAt: new Date(),
+      deadlineMs: 5000,
+      organizationId: 'org_context',
+      userId: 'student-1',
+      identityMode: 'declared_id',
+      scopes: [],
+    });
+
+    await expect(
+      dispatcher.dispatch(
+        'speaking.grading-json',
+        {
+          audioUrl: 'https://s3.wispace.app/audio.wav',
+          part: 1,
+          questionId: 'q1',
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ data: { ok: true } });
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]?.[0].headers).toEqual(identityHeaders);
+    expect(request.mock.calls[1]?.[0].headers).toEqual(identityHeaders);
+    expect(request.mock.calls[1]?.[0]).toBe(request.mock.calls[0]?.[0]);
     mockAgent.assertNoPendingInterceptors();
   });
 

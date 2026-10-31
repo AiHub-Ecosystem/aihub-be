@@ -8,11 +8,13 @@ describe('createRequestContext', () => {
       receivedAt,
       deadlineMs: 5_000,
       organizationId: 'org-123',
+      identityMode: 'signed_assertion',
       scopes: ['writing:grade'],
     });
 
     expect(context.requestId).toBe('req-123');
     expect(context.organizationId).toBe('org-123');
+    expect(context.identityMode).toBe('signed_assertion');
     expect(context.operationTimeoutMs).toBe(5_000);
     expect(context.deadlineAt).toEqual(new Date('2026-09-07T00:00:05.000Z'));
     expect(context.scopes).toEqual(['writing:grade']);

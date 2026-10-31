@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "error": {
+    "code": "audio_unreadable",
+    "message": "[redacted]"
+  },
+  "usage": null,
+  "data": null
+}

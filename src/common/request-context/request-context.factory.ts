@@ -1,4 +1,4 @@
-import type { RequestContext } from './request-context';
+import type { RequestContext, UserIdentityMode } from './request-context';
 
 const MAX_DEADLINE_MS = 120_000;
 
@@ -10,6 +10,7 @@ export interface RequestContextInput {
   readonly apiKeyId?: string;
   readonly environment?: string;
   readonly userId?: string;
+  readonly identityMode?: UserIdentityMode;
   readonly scopes: readonly string[];
   readonly signal?: AbortSignal;
 }
@@ -53,5 +54,8 @@ export function createRequestContext(
       ? {}
       : { environment: input.environment }),
     ...(input.userId === undefined ? {} : { userId: input.userId }),
+    ...(input.identityMode === undefined
+      ? {}
+      : { identityMode: input.identityMode }),
   };
 }

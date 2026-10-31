@@ -34,7 +34,7 @@ describe('task2GradeAdapter', () => {
 
     expect(result).toEqual({
       method: 'POST',
-      path: '/grading-feedback-task2',
+      path: '/v1/grading-feedback-task2',
       body: {
         question: 'Discuss remote work',
         topic: 'education',

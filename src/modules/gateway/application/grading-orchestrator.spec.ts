@@ -97,6 +97,7 @@ function metadata(signal: AbortSignal): GradingRequestMetadata {
     apiKeyId: 'key-183',
     environment: 'production',
     userId: 'user-183',
+    identityMode: 'declared_id',
     scopes: ['writing.grade', 'speaking.grade'],
   };
 }
@@ -507,6 +508,7 @@ describe('GradingOrchestratorPort', () => {
       expect(call.context).toMatchObject({
         organizationId: 'org-183',
         userId: 'user-183',
+        identityMode: 'declared_id',
         receivedAt,
         deadlineAt: new Date(
           receivedAt.getTime() + OPERATION_CATALOG[call.operation].timeoutMs,

@@ -43,11 +43,11 @@ function buildMockAgent(): MockAgent {
 function registerAll(agent: MockAgent): void {
   agent
     .get(BASE_URL)
-    .intercept({ method: 'POST', path: '/grading-feedback-task1' })
+    .intercept({ method: 'POST', path: '/v1/grading-feedback-task1' })
     .reply(200, G1_RESPONSE);
   agent
     .get(BASE_URL)
-    .intercept({ method: 'POST', path: '/grading-feedback-task2' })
+    .intercept({ method: 'POST', path: '/v1/grading-feedback-task2' })
     .reply(200, G2_RESPONSE);
 }
 
@@ -107,11 +107,11 @@ describe('runCanary', () => {
     // Deliberately broken: strip `data.overall_band` so parseGradeResponse throws.
     mockAgent
       .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/grading-feedback-task1' })
+      .intercept({ method: 'POST', path: '/v1/grading-feedback-task1' })
       .reply(200, { success: true, data: { evaluation: {} } });
     mockAgent
       .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/grading-feedback-task2' })
+      .intercept({ method: 'POST', path: '/v1/grading-feedback-task2' })
       .reply(200, G2_RESPONSE);
 
     const capturedPayloads: WebhookPayload[] = [];
@@ -158,11 +158,11 @@ describe('runCanary', () => {
     // 503 on the task1 grade endpoint.
     mockAgent
       .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/grading-feedback-task1' })
+      .intercept({ method: 'POST', path: '/v1/grading-feedback-task1' })
       .reply(503, {});
     mockAgent
       .get(BASE_URL)
-      .intercept({ method: 'POST', path: '/grading-feedback-task2' })
+      .intercept({ method: 'POST', path: '/v1/grading-feedback-task2' })
       .reply(200, G2_RESPONSE);
 
     const webhookSink = jest.fn<Promise<void>, [WebhookPayload]>();

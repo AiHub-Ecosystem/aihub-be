@@ -1,6 +1,7 @@
 import type { Blob } from 'node:buffer';
 
 import type { ErrorCode } from '@/common/errors/error-code';
+import type { UserIdentityMode } from '@/common/request-context/request-context';
 
 export type DownstreamId = 'ai-writing' | 'ai-speaking';
 
@@ -15,9 +16,16 @@ export interface DownstreamMultipartBody {
   };
 }
 
+export interface DownstreamIdentityHeaders {
+  readonly 'x-aihub-organization-id': string;
+  readonly 'x-aihub-user-id': string;
+  readonly 'x-aihub-user-identity-mode': UserIdentityMode;
+}
+
 export interface DownstreamRequest {
   readonly method: 'GET' | 'POST';
   readonly path: string;
+  readonly headers?: DownstreamIdentityHeaders;
   readonly body?: unknown;
   readonly contentType?: string;
 }
