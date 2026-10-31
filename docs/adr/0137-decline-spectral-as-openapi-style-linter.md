@@ -49,7 +49,7 @@ Decline adopting Spectral as an OpenAPI style linter.
 
 - No new dependencies (`@stoplight/spectral-cli` or ruleset packages) are added to `package.json`.
 - `scripts/checks/validate-openapi.mjs` remains focused on OpenAPI 3.1 structural schema validation.
-- The parameter naming inconsistency discovered on the 4 upload routes (`assetId` vs `asset_id`) and the accompanying Jest path-parameter validation rule are tracked in a follow-up issue rather than bundled into this evaluation spike.
+- The parameter naming inconsistency on the 4 upload routes (`assetId` vs `asset_id`) is fixed directly in `src/catalog/public-routes.ts`, and enforced permanently by a Jest path-parameter template matching rule in `src/openapi/build-openapi-document.spec.ts`.
 
 ## Confirmation
 

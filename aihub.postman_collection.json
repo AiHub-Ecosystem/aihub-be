@@ -625,7 +625,7 @@
               "disabled": false,
               "type": "any",
               "value": "<string>",
-              "key": "assetId",
+              "key": "asset_id",
               "description": "(Required) The asset ID returned when the upload intent was created."
             }
           ]
@@ -697,7 +697,7 @@
               "disabled": false,
               "type": "any",
               "value": "<string>",
-              "key": "assetId",
+              "key": "asset_id",
               "description": "(Required) The asset ID returned when the upload intent was created."
             }
           ]
@@ -840,7 +840,7 @@
               "disabled": false,
               "type": "any",
               "value": "<string>",
-              "key": "assetId",
+              "key": "asset_id",
               "description": "(Required) The chart asset ID returned when the upload intent was created."
             }
           ]
@@ -913,7 +913,7 @@
               "disabled": false,
               "type": "any",
               "value": "<string>",
-              "key": "assetId",
+              "key": "asset_id",
               "description": "(Required) The chart asset ID returned when the upload intent was created."
             }
           ]

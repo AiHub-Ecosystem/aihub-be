@@ -308,7 +308,7 @@ export const PUBLIC_ROUTES = {
         'Issues another five-minute URL for the same open intent, key, content type, and byte size. It does not extend the original one-hour intent expiry.',
       parameters: [
         {
-          name: 'assetId',
+          name: 'asset_id',
           in: 'path',
           required: true,
           description:
@@ -344,7 +344,7 @@ export const PUBLIC_ROUTES = {
       ].join('\n\n'),
       parameters: [
         {
-          name: 'assetId',
+          name: 'asset_id',
           in: 'path',
           required: true,
           description:
@@ -412,7 +412,7 @@ export const PUBLIC_ROUTES = {
         'Refreshes the signed URL for the same private staging object without extending the intent deadline.',
       parameters: [
         {
-          name: 'assetId',
+          name: 'asset_id',
           in: 'path',
           required: true,
           description:
@@ -451,7 +451,7 @@ export const PUBLIC_ROUTES = {
       ].join('\n\n'),
       parameters: [
         {
-          name: 'assetId',
+          name: 'asset_id',
           in: 'path',
           required: true,
           description:

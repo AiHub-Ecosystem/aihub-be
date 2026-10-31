@@ -1460,7 +1460,7 @@ describe('buildOpenApiDocument', () => {
       'x-required-scope': 'speaking.grade',
     });
     expect(refresh?.parameters).toContainEqual(
-      expect.objectContaining({ name: 'assetId', in: 'path', required: true }),
+      expect.objectContaining({ name: 'asset_id', in: 'path', required: true }),
     );
     expect(refresh?.responses['200']).toBeDefined();
     expect(refresh?.responses['404']).toBeDefined();
@@ -1506,5 +1506,37 @@ describe('buildOpenApiDocument', () => {
         }) as OpenApiDocument
       ).info.version,
     ).toBe('1.9.9');
+  });
+  it('matches path template placeholders to declared path parameters case-sensitively', () => {
+    const doc = build();
+    const methods: readonly (keyof OpenApiPathItem)[] = [
+      'get',
+      'head',
+      'put',
+      'post',
+      'patch',
+      'delete',
+    ];
+
+    for (const [pathKey, pathItem] of Object.entries(doc.paths)) {
+      const templateParams = [...pathKey.matchAll(/\{([^}]+)\}/g)].map(
+        (m) => m[1] ?? '',
+      );
+
+      for (const method of methods) {
+        const operation = pathItem[method];
+        if (operation === undefined) continue;
+        const pathParams = operation.parameters
+          .filter(
+            (param) =>
+              param['in'] === 'path' && typeof param['name'] === 'string',
+          )
+          .map((param) => String(param['name']));
+
+        expect([...pathParams].sort((a, b) => a.localeCompare(b))).toEqual(
+          [...templateParams].sort((a, b) => a.localeCompare(b)),
+        );
+      }
+    }
   });
 });

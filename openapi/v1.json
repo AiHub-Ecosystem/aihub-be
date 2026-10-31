@@ -3572,7 +3572,7 @@
             "$ref": "#/components/parameters/UserIdentity"
           },
           {
-            "name": "assetId",
+            "name": "asset_id",
             "in": "path",
             "required": true,
             "description": "The asset ID returned when the upload intent was created.",
@@ -3730,7 +3730,7 @@
             "$ref": "#/components/parameters/UserIdentity"
           },
           {
-            "name": "assetId",
+            "name": "asset_id",
             "in": "path",
             "required": true,
             "description": "The asset ID returned when the upload intent was created.",
@@ -4119,7 +4119,7 @@
             "$ref": "#/components/parameters/UserIdentity"
           },
           {
-            "name": "assetId",
+            "name": "asset_id",
             "in": "path",
             "required": true,
             "description": "The chart asset ID returned when the upload intent was created.",
@@ -4250,7 +4250,7 @@
             "$ref": "#/components/parameters/UserIdentity"
           },
           {
-            "name": "assetId",
+            "name": "asset_id",
             "in": "path",
             "required": true,
             "description": "The chart asset ID returned when the upload intent was created.",
