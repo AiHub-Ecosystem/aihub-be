@@ -173,14 +173,20 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979 # v2.1.0
+        with:
+          bun-version: 1.4.4
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The unit lane reports coverage as well as asserting: it is the only job
-      # that runs where no Redis or Postgres answers, which is what the lane's
-      # contract is, and the `coverage` job merges this report with the database
-      # lane's to judge one figure.
-      - name: Run unit tests
+      # Bun owns assertions; Jest/SWC still emits the branch coverage report
+      # consumed by the merged-coverage gate.
+      - name: Run unit tests with Bun
+        run: pnpm test
+
+      - name: Generate the unit coverage report with Jest
         run: pnpm coverage:unit
 
       - name: Upload the unit lane coverage report

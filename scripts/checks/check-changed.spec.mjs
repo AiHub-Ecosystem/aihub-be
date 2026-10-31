@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { test } from 'node:test';
 
+import { buildBunTestArgs } from '../cli/run-bun-test.mjs';
 import { BATCHED_GATES } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
@@ -121,7 +122,11 @@ const pathCases = [
     ],
   },
   { path: 'openapi.json', gates: ['lint', 'validate:openapi'] },
-  { path: 'jest.config.cjs', gates: ['lint', 'test'] },
+  { path: 'jest.config.cjs', gates: ['coverage:unit', 'lint'] },
+  {
+    path: 'scripts/cli/run-bun-test.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:check-changed'],
+  },
 ];
 
 for (const { path, gates } of pathCases) {
@@ -145,6 +150,39 @@ await test('changed source paths keep the documentation path check selected', ()
       'check:doc-drift',
     ),
   );
+});
+
+await test('the Bun runner defaults to TypeScript unit specs', () => {
+  assert.equal(buildBunTestArgs([]).at(-1), '.spec.ts');
+});
+
+await test('the Bun runner accepts a focused spec path', () => {
+  assert.equal(
+    buildBunTestArgs(['--', 'test/example.spec.ts']).at(-1),
+    'test/example.spec.ts',
+  );
+});
+
+await test('the Bun runner preserves substring and directory filters', () => {
+  for (const filter of ['writing-chart-upload', 'src/modules/writing/domain']) {
+    const args = buildBunTestArgs(['--', filter]);
+    assert.ok(args.includes(filter));
+    assert.notEqual(args.at(-1), '.spec.ts');
+  }
+});
+
+await test('the Bun runner keeps the default when -t has a separate value', () => {
+  assert.equal(
+    buildBunTestArgs(['--', '-t', 'writing chart upload']).at(-1),
+    '.spec.ts',
+  );
+});
+
+await test('the Bun runner forwards changed and watch options with default specs', () => {
+  const args = buildBunTestArgs(['--', '--changed=origin/main', '--watch']);
+  assert.ok(args.includes('--changed=origin/main'));
+  assert.ok(args.includes('--watch'));
+  assert.equal(args.at(-1), '.spec.ts');
 });
 
 await test('unknown paths force full verification, including mixed changes', () => {
