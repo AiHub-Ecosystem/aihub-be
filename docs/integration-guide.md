@@ -955,6 +955,12 @@ another owner. Results graded before this ownership check shipped have no
 AIHUB ownership record, so their `/v2` GETs and aggregation references now
 return `NOT_FOUND`; grade them again to create owned results.
 
+If AIHUB cannot record ownership after the provider has graded a request, the
+call answers `503 DATABASE_UNAVAILABLE` (retryable) and is not metered. The
+graded result is not returned and no ownership is recorded. The `/v2` Speaking
+routes keep no replay, so a retry sends the request to the provider again and is
+graded and metered as a new call.
+
 For a Part or Test, grade questions first, aggregate the question results into
 a Part, then aggregate Part results into a Test. The question response returns
 `response_id` and `part_result_id`; the Part request uses `part_result_id` and

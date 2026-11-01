@@ -154,6 +154,7 @@ describe('Speaking v2 HTTP flow', () => {
   let outboundForm: UndiciFormData | undefined;
   let outboundJson: Record<string, unknown> | undefined;
   let outboundHeaders: unknown;
+  let providerCalls = 0;
   let ownership: FakeResultOwnership;
   const meteringFinalized: unknown[] = [];
   const originalEnv = {
@@ -174,6 +175,7 @@ describe('Speaking v2 HTTP flow', () => {
       .get(PROVIDER)
       .intercept({ method, path, headers: PROVIDER_AUTH })
       .reply((options) => {
+        providerCalls += 1;
         outboundHeaders = options.headers;
         if (options.body instanceof UndiciFormData) {
           outboundForm = options.body;
@@ -286,6 +288,7 @@ describe('Speaking v2 HTTP flow', () => {
     outboundForm = undefined;
     outboundJson = undefined;
     outboundHeaders = undefined;
+    providerCalls = 0;
     ownership.rows.clear();
     ownership.failWrites = false;
     meteringFinalized.length = 0;
@@ -452,6 +455,28 @@ describe('Speaking v2 HTTP flow', () => {
     expect(aggregation.statusCode).toBe(404);
     expect(outboundHeaders).toBeUndefined();
     expect(outboundJson).toBeUndefined();
+  });
+
+  it('grades again on a retry after a failed record: AIHUB keeps no replay for Speaking /v2', async () => {
+    const send = () =>
+      app.inject({
+        method: 'POST',
+        url: '/v2/ielts/speaking/parts/grade',
+        headers: { 'content-type': 'application/json' },
+        payload: { part_result_id: 'part-retry', response_ids: ['resp-1'] },
+      });
+
+    ownership.failWrites = true;
+    expect((await send()).statusCode).toBe(503);
+    expect(providerCalls).toBe(1);
+    expect(meteringFinalized).toEqual([]);
+    expect(ownership.holds('part', 'part-retry')).toBe(false);
+
+    ownership.failWrites = false;
+    expect((await send()).statusCode).toBe(200);
+    expect(providerCalls).toBe(2);
+    expect(ownership.holds('part', 'part-retry')).toBe(true);
+    expect(meteringFinalized).toHaveLength(1);
   });
 
   it.each([

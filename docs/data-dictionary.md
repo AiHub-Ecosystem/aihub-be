@@ -19,7 +19,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | OrganizationIdentityConfig         | identity    | 12      |
 | OrganizationInvitation             | identity    | 11      |
 | OrganizationMembership             | identity    | 8       |
-| Organization                       | identity    | 20      |
+| Organization                       | identity    | 21      |
 | PasswordResetToken                 | auth        | 7       |
 | RefreshToken                       | auth        | 9       |
 | SandboxDispatchReservation         | gateway     | 6       |
@@ -31,7 +31,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | PublicApiMajorUnattributedUsage    | metering    | 6       |
 | DispatchAttempt                    | metering    | 7       |
 | SpeakingAudioAsset                 | speaking    | 9       |
-| SpeakingV2ResultOwnership          | speaking    | 6       |
+| SpeakingV2ResultOwnership          | speaking    | 7       |
 | SpeakingAudioUploadIntent          | speaking    | 10      |
 | WritingChartUpload                 | writing     | 15      |
 | WritingChartRevocationAudit        | writing     | 9       |
@@ -266,28 +266,29 @@ Owner: `identity`
 
 Owner: `identity`
 
-| Column                 | Type                        | Attributes                                                                                                                       |
-| ---------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| id                     | String                      | @id                                                                                                                              |
-| name                   | String                      |                                                                                                                                  |
-| status                 | String                      | @default("active")                                                                                                               |
-| entitlements           | String[]                    | @default([])                                                                                                                     |
-| rateLimitRpm           | Int                         | @default(600) @map("rate_limit_rpm")                                                                                             |
-| maxConcurrent          | Int                         | @default(20) @map("max_concurrent")                                                                                              |
-| monthlyRequestQuota    | Int?                        | @map("monthly_request_quota")                                                                                                    |
-| hardStopOnQuota        | Boolean                     | @default(false) @map("hard_stop_on_quota")                                                                                       |
-| createdAt              | DateTime                    | @default(now()) @map("created_at") @db.Timestamptz(6)                                                                            |
-| updatedAt              | DateTime                    | @default(now()) @map("updated_at") @db.Timestamptz(6)                                                                            |
-| createdByUserAccountId | String?                     | @map("created_by_user_account_id")                                                                                               |
-| apiKeys                | ApiKey[]                    |                                                                                                                                  |
-| auditEvents            | OrganizationAuditEvent[]    |                                                                                                                                  |
-| billingAdjustments     | BillingAdjustment[]         |                                                                                                                                  |
-| billingMonthClosures   | BillingMonthClosure[]       |                                                                                                                                  |
-| identityConfig         | OrganizationIdentityConfig? |                                                                                                                                  |
-| invitations            | OrganizationInvitation[]    |                                                                                                                                  |
-| memberships            | OrganizationMembership[]    |                                                                                                                                  |
-| notificationEvents     | NotificationEvent[]         |                                                                                                                                  |
-| createdByUserAccount   | UserAccount?                | @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
+| Column                     | Type                        | Attributes                                                                                                                       |
+| -------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| id                         | String                      | @id                                                                                                                              |
+| name                       | String                      |                                                                                                                                  |
+| status                     | String                      | @default("active")                                                                                                               |
+| entitlements               | String[]                    | @default([])                                                                                                                     |
+| rateLimitRpm               | Int                         | @default(600) @map("rate_limit_rpm")                                                                                             |
+| maxConcurrent              | Int                         | @default(20) @map("max_concurrent")                                                                                              |
+| monthlyRequestQuota        | Int?                        | @map("monthly_request_quota")                                                                                                    |
+| hardStopOnQuota            | Boolean                     | @default(false) @map("hard_stop_on_quota")                                                                                       |
+| createdAt                  | DateTime                    | @default(now()) @map("created_at") @db.Timestamptz(6)                                                                            |
+| updatedAt                  | DateTime                    | @default(now()) @map("updated_at") @db.Timestamptz(6)                                                                            |
+| createdByUserAccountId     | String?                     | @map("created_by_user_account_id")                                                                                               |
+| apiKeys                    | ApiKey[]                    |                                                                                                                                  |
+| auditEvents                | OrganizationAuditEvent[]    |                                                                                                                                  |
+| billingAdjustments         | BillingAdjustment[]         |                                                                                                                                  |
+| billingMonthClosures       | BillingMonthClosure[]       |                                                                                                                                  |
+| identityConfig             | OrganizationIdentityConfig? |                                                                                                                                  |
+| invitations                | OrganizationInvitation[]    |                                                                                                                                  |
+| memberships                | OrganizationMembership[]    |                                                                                                                                  |
+| notificationEvents         | NotificationEvent[]         |                                                                                                                                  |
+| speakingV2ResultOwnerships | SpeakingV2ResultOwnership[] |                                                                                                                                  |
+| createdByUserAccount       | UserAccount?                | @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
 
 ## PasswordResetToken
 
@@ -439,14 +440,15 @@ Owner: `speaking`
 
 Owner: `speaking`
 
-| Column         | Type     | Attributes                                             |
-| -------------- | -------- | ------------------------------------------------------ |
-| organizationId | String   | @map("organization_id")                                |
-| environment    | String   |                                                        |
-| endUserId      | String   | @map("end_user_id")                                    |
-| kind           | String   |                                                        |
-| id             | String   |                                                        |
-| recordedAt     | DateTime | @default(now()) @map("recorded_at") @db.Timestamptz(6) |
+| Column         | Type         | Attributes                                                                                    |
+| -------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| organizationId | String       | @map("organization_id")                                                                       |
+| environment    | String       |                                                                                               |
+| endUserId      | String       | @map("end_user_id")                                                                           |
+| kind           | String       |                                                                                               |
+| id             | String       |                                                                                               |
+| recordedAt     | DateTime     | @default(now()) @map("recorded_at") @db.Timestamptz(6)                                        |
+| organization   | Organization | @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
 
 ## SpeakingAudioUploadIntent
 
