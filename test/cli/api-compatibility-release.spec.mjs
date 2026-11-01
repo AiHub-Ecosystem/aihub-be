@@ -906,3 +906,139 @@ void test('finds an extensible enum behind a component schema inside an array', 
     /\/v1 contract 1\.1\.0: events\[\]\.action value member\.removed is missing/,
   );
 });
+
+/** @param {string} candidateRoot @param {unknown} entries @param {boolean} [withDecision] */
+function writeAcceptedBreaks(candidateRoot, entries, withDecision = true) {
+  mkdirSync(join(candidateRoot, 'scripts/ci/api-compatibility'), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(
+      candidateRoot,
+      'scripts/ci/api-compatibility/accepted-breaking-changes.json',
+    ),
+    JSON.stringify(entries),
+  );
+  if (withDecision) {
+    mkdirSync(join(candidateRoot, 'docs/adr'), { recursive: true });
+    writeFileSync(join(candidateRoot, 'docs/adr/0001-accepted.md'), '# ADR\n');
+  }
+}
+
+/** @param {import('node:test').TestContext} t */
+function removedIdRelease(t) {
+  const base = document('1.0.0');
+  const candidate = document('1.1.0');
+  const schema = responseSchema(candidate, 1);
+  if (!schema.properties) throw new Error('Missing response properties');
+  delete schema.properties.id;
+  delete schema.properties.status;
+  schema.required = [];
+  const roots = setup(
+    t,
+    versionedFiles({ 1: base }),
+    versionedFiles({ 1: candidate }),
+    '# AIHUB Public API Changelog\n\n## [1.1.0]\n\n### Changed\n- Removed id.\n',
+  );
+  const run = () =>
+    checkRelease(roots.baseRoot, roots.candidateRoot, roots.changelogPath);
+  let message = '';
+  try {
+    run();
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  const changes = [
+    ...new Set(
+      message
+        .split('\n')
+        .filter((line) => line.startsWith('- '))
+        .map((line) => line.slice(2)),
+    ),
+  ];
+  return { roots, run, changes };
+}
+
+void test('accepts a breaking change the owner listed for exactly this version pair', (t) => {
+  const { roots, run, changes } = removedIdRelease(t);
+  assert.ok(changes.length > 1);
+  writeAcceptedBreaks(roots.candidateRoot, [
+    {
+      major: 1,
+      baseVersion: '1.0.0',
+      candidateVersion: '1.1.0',
+      decision: 'docs/adr/0001-accepted.md',
+      changes,
+    },
+  ]);
+
+  assert.doesNotThrow(run);
+});
+
+void test('still rejects a breaking change that is not on the accepted list', (t) => {
+  const { roots, run, changes } = removedIdRelease(t);
+  assert.ok(changes.length > 1);
+  writeAcceptedBreaks(roots.candidateRoot, [
+    {
+      major: 1,
+      baseVersion: '1.0.0',
+      candidateVersion: '1.1.0',
+      decision: 'docs/adr/0001-accepted.md',
+      changes: changes.slice(0, 1),
+    },
+  ]);
+
+  assert.throws(run, /Breaking changes to supported \/v1 contract/);
+});
+
+void test('ignores an accepted entry written for another version pair', (t) => {
+  const { roots, run, changes } = removedIdRelease(t);
+  writeAcceptedBreaks(roots.candidateRoot, [
+    {
+      major: 1,
+      baseVersion: '1.0.0',
+      candidateVersion: '1.2.0',
+      decision: 'docs/adr/0001-accepted.md',
+      changes,
+    },
+  ]);
+
+  assert.throws(run, /Breaking changes to supported \/v1 contract/);
+});
+
+void test('rejects an accepted change the gate no longer finds', (t) => {
+  const { roots, run, changes } = removedIdRelease(t);
+  writeAcceptedBreaks(roots.candidateRoot, [
+    {
+      major: 1,
+      baseVersion: '1.0.0',
+      candidateVersion: '1.1.0',
+      decision: 'docs/adr/0001-accepted.md',
+      changes: [...changes, 'a change that was reverted'],
+    },
+  ]);
+
+  assert.throws(
+    run,
+    /no longer occurs in \/v1 1\.1\.0: a change that was reverted/,
+  );
+});
+
+void test('rejects an accepted entry whose decision record is missing', (t) => {
+  const { roots, run, changes } = removedIdRelease(t);
+  writeAcceptedBreaks(
+    roots.candidateRoot,
+    [
+      {
+        major: 1,
+        baseVersion: '1.0.0',
+        candidateVersion: '1.1.0',
+        decision: 'docs/adr/0001-accepted.md',
+        changes,
+      },
+    ],
+    false,
+  );
+
+  assert.throws(run, /must name an existing decision record/);
+});

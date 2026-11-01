@@ -94,8 +94,11 @@ export const SpeakingV2TranscriptSchema = Type.Object(
     text: Type.String(),
     stats: Type.Object(
       {
-        word_count: Type.Integer({ minimum: 0 }),
-        speaking_seconds: Type.Number({ minimum: 0 }),
+        word_count: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+        speaking_seconds: Type.Union([
+          Type.Number({ minimum: 0 }),
+          Type.Null(),
+        ]),
       },
       { additionalProperties: false },
     ),

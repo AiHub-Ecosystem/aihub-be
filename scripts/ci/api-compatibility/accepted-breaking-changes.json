@@ -1,0 +1,17 @@
+[
+  {
+    "major": 2,
+    "baseVersion": "2.0.0",
+    "candidateVersion": "2.1.0",
+    "decision": "docs/adr/0142-a-released-contract-defect-is-corrected-through-an-accepted-change-entry.md",
+    "changes": [
+      "response property `data/meta/test_id` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/meta/part_result_id` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/transcript/stats/speaking_seconds` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/transcript/stats/word_count` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "the `data/meta/part_result_id` response property's minLength was unset from `1` for the response status `200`",
+      "the `data/transcript/stats/speaking_seconds` response property's min was unset from `0.00` for the response status `200`",
+      "the `data/transcript/stats/word_count` response property's min was unset from `0.00` for the response status `200`"
+    ]
+  }
+]

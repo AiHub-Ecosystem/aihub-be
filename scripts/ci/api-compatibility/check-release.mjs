@@ -3,6 +3,10 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
+import {
+  loadAcceptedBreakingChanges,
+  withoutAcceptedBreaks,
+} from './accepted-breaking-changes.mjs';
 import { requireAddedEnumValues, sectionFor } from './check-enum-changelog.mjs';
 import { checkMajorLifecycle } from './check-major-lifecycle.mjs';
 import { findBreakingChanges, normalizePathParameters } from './check.mjs';
@@ -376,6 +380,7 @@ export function checkRelease(
     today,
   );
 
+  const acceptedBreaks = loadAcceptedBreakingChanges(candidateRoot);
   for (const [major, baseDocument] of baseSpecs) {
     const candidateDocument = candidateSpecs.get(major);
     if (!candidateDocument && retiring.has(major)) continue;
@@ -391,10 +396,17 @@ export function checkRelease(
       : undefined;
     normalizePathParameters(baseDocument);
     normalizePathParameters(candidateDocument);
-    const breaks = findBreakingChanges(
-      withExtensibleResponseSchemas(baseDocument),
-      withExtensibleResponseSchemas(candidateDocument),
-    );
+    const breaks = withoutAcceptedBreaks({
+      accepted: acceptedBreaks,
+      candidateRoot,
+      major,
+      baseVersion,
+      candidateVersion,
+      breaks: findBreakingChanges(
+        withExtensibleResponseSchemas(baseDocument),
+        withExtensibleResponseSchemas(candidateDocument),
+      ),
+    });
     if (breaks.length > 0) {
       throw new Error(
         `Breaking changes to supported /v${major} contract:\n${breaks.map((change) => `- ${change.text}`).join('\n')}`,

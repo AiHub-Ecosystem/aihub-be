@@ -1,8 +1,8 @@
 # ADR-0127: Public API major versions use URI paths
 
-- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-26 in [#1295](https://github.com/AiHub-Ecosystem/aihub-be/issues/1295); collection semantics were amended by [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md), and bounded usage-buffer loss by [ADR-0136](0136-bounded-public-api-major-usage-buffer.md).
+- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-26 in [#1295](https://github.com/AiHub-Ecosystem/aihub-be/issues/1295); collection semantics were amended by [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md), bounded usage-buffer loss by [ADR-0136](0136-bounded-public-api-major-usage-buffer.md), and the correction of a released contract defect by [ADR-0142](0142-a-released-contract-defect-is-corrected-through-an-accepted-change-entry.md).
 - Date: 2026-10-26
-- Amended by: [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md) for collection semantics, and [ADR-0136](0136-bounded-public-api-major-usage-buffer.md) for bounded usage-buffer loss
+- Amended by: [ADR-0134](0134-bounding-an-existing-collection-is-a-breaking-change-accepted-once-under-v1.md) for collection semantics, [ADR-0136](0136-bounded-public-api-major-usage-buffer.md) for bounded usage-buffer loss, and [ADR-0142](0142-a-released-contract-defect-is-corrected-through-an-accepted-change-entry.md) for correcting a released contract defect
 - Related: [ADR-0112](0112-public-api-stays-openapi-trpc-declined.md), [#290](https://github.com/AiHub-Ecosystem/aihub-be/issues/290), [#461](https://github.com/AiHub-Ecosystem/aihub-be/issues/461), [#473](https://github.com/AiHub-Ecosystem/aihub-be/issues/473), [#610](https://github.com/AiHub-Ecosystem/aihub-be/issues/610), [#1259](https://github.com/AiHub-Ecosystem/aihub-be/issues/1259), [#1295](https://github.com/AiHub-Ecosystem/aihub-be/issues/1295)
 
 ## Context

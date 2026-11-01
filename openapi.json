@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "servers": [
     {
@@ -913,7 +913,14 @@
                               "type": "string"
                             },
                             "test_id": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "test_type": {
                               "anyOf": [
@@ -941,8 +948,15 @@
                               "type": "string"
                             },
                             "part_result_id": {
-                              "minLength": 1,
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "graded_at": {
                               "type": "string"
@@ -963,12 +977,26 @@
                               "required": ["word_count", "speaking_seconds"],
                               "properties": {
                                 "word_count": {
-                                  "minimum": 0,
-                                  "type": "integer"
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 },
                                 "speaking_seconds": {
-                                  "minimum": 0,
-                                  "type": "number"
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -1795,7 +1823,14 @@
                               "type": "string"
                             },
                             "test_id": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "test_type": {
                               "anyOf": [
@@ -2639,7 +2674,14 @@
                               "type": "string"
                             },
                             "test_id": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "test_type": {
                               "anyOf": [
@@ -3408,7 +3450,14 @@
                               "type": "string"
                             },
                             "test_id": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "test_type": {
                               "anyOf": [
@@ -3436,8 +3485,15 @@
                               "type": "string"
                             },
                             "part_result_id": {
-                              "minLength": 1,
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "graded_at": {
                               "type": "string"
@@ -3458,12 +3514,26 @@
                               "required": ["word_count", "speaking_seconds"],
                               "properties": {
                                 "word_count": {
-                                  "minimum": 0,
-                                  "type": "integer"
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 },
                                 "speaking_seconds": {
-                                  "minimum": 0,
-                                  "type": "number"
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -4330,7 +4400,14 @@
                               "type": "string"
                             },
                             "test_id": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "test_type": {
                               "anyOf": [
@@ -5182,7 +5259,14 @@
                               "type": "string"
                             },
                             "test_id": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "test_type": {
                               "anyOf": [

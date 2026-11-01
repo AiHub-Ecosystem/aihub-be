@@ -9,6 +9,20 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.1.0] - 2026-11-01
+
+### Changed
+
+- `/v2` Speaking results now allow `null` where the AI service has no value.
+  `data.meta.test_id` is `null` when the request did not name a test, and on a
+  question result `data.meta.part_result_id` is `null` when it did not name a
+  Part. On a question result, `data.transcript.stats.word_count` and
+  `speaking_seconds` are `null` for a recording without speech. The 2.0.0
+  contract required a value and answered `502 AI_SERVICE_CONTRACT_VIOLATION`
+  for these requests, so no response was ever returned for them. This widens
+  the 2.0.0 response types as a defect fix, accepted by the owner in ADR-0142
+  because 2.0.0 was live for under a day with no known consumer.
+
 ## [2.0.0] - 2026-11-01
 
 ### Added

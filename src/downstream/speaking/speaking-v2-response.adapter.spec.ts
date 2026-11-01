@@ -101,6 +101,27 @@ describe('Speaking v2 response adapters', () => {
     expect(() => parseSpeakingV2QuestionResult(noTranscript)).toThrow(AppError);
   });
 
+  it('accepts the nulls the provider returns for ids the caller did not send and for audio with no speech', () => {
+    // A real call with no test_id, no part_result_id and a recording without
+    // speech returned null for all three; the captured fixtures supplied them.
+    const body = fixture('grading-v2-question-post.200.json') as {
+      data: {
+        meta: Record<string, unknown>;
+        transcript: { stats: Record<string, unknown> };
+      };
+    };
+    body.data.meta.test_id = null;
+    body.data.meta.part_result_id = null;
+    body.data.transcript.stats.speaking_seconds = null;
+    body.data.transcript.stats.word_count = null;
+
+    const result = parseSpeakingV2QuestionResult(body);
+
+    expect(result.meta.test_id).toBeNull();
+    expect(result.meta.part_result_id).toBeNull();
+    expect(result.transcript.stats.speaking_seconds).toBeNull();
+  });
+
   it('fails closed when a required score is missing or mistyped', () => {
     const missing = fixture('grading-v2-question-post.200.json') as {
       data: { scores: Record<string, unknown> };

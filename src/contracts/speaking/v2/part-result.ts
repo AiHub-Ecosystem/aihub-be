@@ -13,7 +13,7 @@ export const SpeakingV2PartResultSchema = Type.Object(
       {
         schema_version: Type.Literal('2.4'),
         result_type: Type.Literal('part_result'),
-        test_id: Type.String(),
+        test_id: Type.Union([Type.String(), Type.Null()]),
         test_type: SpeakingV2TestTypeSchema,
         part_result_id: Type.String({ minLength: 1 }),
         part: Type.Integer({ minimum: 1, maximum: 3 }),

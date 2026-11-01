@@ -14,12 +14,15 @@ export const SpeakingV2QuestionResultSchema = Type.Object(
       {
         schema_version: Type.Literal('2.4'),
         result_type: Type.Literal('question_result'),
-        test_id: Type.String(),
+        test_id: Type.Union([Type.String(), Type.Null()]),
         test_type: SpeakingV2TestTypeSchema,
         part: Type.Integer({ minimum: 1, maximum: 3 }),
         question_id: Type.String({ minLength: 1 }),
         response_id: Type.String({ minLength: 1 }),
-        part_result_id: Type.String({ minLength: 1 }),
+        part_result_id: Type.Union([
+          Type.String({ minLength: 1 }),
+          Type.Null(),
+        ]),
         graded_at: Type.String(),
       },
       { additionalProperties: false },
