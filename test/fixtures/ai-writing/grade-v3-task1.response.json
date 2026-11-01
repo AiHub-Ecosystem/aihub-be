@@ -1,0 +1,186 @@
+{
+  "success": true,
+  "data_micro": {
+    "lexical_resource": {
+      "LR07": {
+        "prompt": "The chart below shows the number of men and women in further education in Britain in three periods and whether they were studying full-time or part-time.",
+        "question_type": "bar_chart",
+        "comments": [
+          {
+            "quote": "entire period",
+            "explanation": "Cụm từ \"throughout the entire period\" lặp ý (both \"throughout\" và \"entire\" đều nhấn tính liên tục). Trong văn học thuật ngắn gọn, một từ là đủ để truyền đạt ý liên tục; rút gọn giúp câu tự nhiên và chính xác hơn."
+          }
+        ]
+      },
+      "LR03": {
+        "prompt": "The chart below shows the number of men and women in further education in Britain in three periods and whether they were studying full-time or part-time.",
+        "question_type": "bar_chart",
+        "comments": [
+          {
+            "quote": "1,000 thousand",
+            "explanation": "Cụm \"1,000 thousand\" là diễn đạt bất thường/không tự nhiên để chỉ số lượng trong tiếng Anh học thuật; người đọc thường viết \"1 million\" hoặc \"1,000,000\". Việc viết như hiện tại có thể gây nhầm về quy mô và làm giảm độ chính xác từ vựng."
+          }
+        ]
+      },
+      "LR06": {
+        "prompt": "The chart below shows the number of men and women in further education in Britain in three periods and whether they were studying full-time or part-time.",
+        "question_type": "bar_chart",
+        "comments": [
+          {
+            "quote": "thousand",
+            "explanation": "Bài lặp nhiều lần từ chỉ lượng theo cùng một mẫu ('thousand', 'approximately/roughly/around'). Điều này cho thấy vốn ngữ liệu hạn chế; giám khảo có thể coi đây là hạn chế về đa dạng từ vựng. Thay đổi cách biểu đạt (ví dụ 'about 850,000' hoặc '0.85 million') sẽ tạo ấn tượng linh hoạt hơn."
+          }
+        ]
+      }
+    }
+  },
+  "data": {
+    "task": "IELTS_WRITING_TASK_1_GRADING",
+    "coT": {
+      "layer1_errors": "Verified 3 error findings across 4 traits.",
+      "layer2_matching": "Descriptors matched to bands: TA=4, CC=6, LR=6, GRA=8.",
+      "layer3_calibration": "Final overall band calibrated to 6.0 via official arithmetic."
+    },
+    "overall_band": 6,
+    "evaluation": {
+      "1_task_achievement": {
+        "band_score": 4,
+        "errors": [],
+        "suggestions": [],
+        "feedback_detail": [
+          "None specified"
+        ],
+        "strengths": [
+          "Đáp ứng được các yêu cầu trọng tâm của đề bài."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "Attempts task but does not cover key features. Limited data, may misrepresent. Overview absent or unclear. Mostly irrelevant or repetitive information.\nLý do theo bằng chứng đã kiểm tra: Bài nêu đúng đề và overview, nhưng chỉ phát triển một phần dữ liệu nên đáp ứng nhiệm vụ còn hạn chế."
+      },
+      "2_coherence_cohesion": {
+        "band_score": 6,
+        "errors": [],
+        "suggestions": [
+          {
+            "quote": "In terms of part-time education, approximately 1,000 thousand males were in education in 1970/71. This figure fluctuated slightly, dropping to roughly 850 thousand in 1980/81 before rising again to around 900 thousand by 1990/91. By contrast, the number of female part-time students began at only around 700 thousand in 1970/71, but grew substantially over the two decades, exceeding 1,100 thousand in 1990/91 and surpassing male numbers.",
+            "explanation": "Đoạn thân chỉ mô tả xu hướng học bán thời gian mà không nêu dữ liệu hoặc xu hướng cho học toàn thời gian; trong bài báo dạng Task 1, người đọc mong chờ cả hai nhóm (full‑time và part‑time). Thêm một hoặc hai câu tóm tắt về học toàn thời gian sẽ cân bằng bài và giúp so sánh hai chế độ học rõ ràng hơn.",
+            "improved_version": "Full-time education figures were considerably lower for both men and women and changed only slightly across the three periods, remaining notably below part-time levels."
+          }
+        ],
+        "feedback_detail": [
+          "'In terms of part-time education, approximately 1,000 thousand males were in education in 1970/71. This figure fluctuated slightly, dropping to roughly 850 thousand in 1980/81 before rising again to around 900 thousand by 1990/91. By contrast, the number of female part-time students began at only around 700 thousand in 1970/71, but grew substantially over the two decades, exceeding 1,100 thousand in 1990/91 and surpassing male numbers.' -> Gợi ý nâng chất lượng (không phải lỗi): Đoạn thân chỉ mô tả xu hướng học bán thời gian mà không nêu dữ liệu hoặc xu hướng cho học toàn thời gian; trong bài báo dạng Task 1, người đọc mong chờ cả hai nhóm (full‑time và part‑time). Thêm một hoặc hai câu tóm tắt về học toàn thời gian sẽ cân bằng bài và giúp so sánh hai chế độ học rõ ràng hơn. -> Ví dụ cải thiện -> 'Full-time education figures were considerably lower for both men and women and changed only slightly across the three periods, remaining notably below part-time levels.'"
+        ],
+        "strengths": [
+          "Bố cục rõ ràng với mở bài và tổng quan tốt; trình bày số liệu có thứ tự và dễ theo dõi.",
+          "Mở bài nêu rõ nội dung báo cáo và tóm tắt tổng quan (overall) ngay đầu.",
+          "Đoạn thân trình bày số liệu bán thời gian theo chuỗi thời gian một cách có thứ tự và dễ theo dõi."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "Coherent with clear progression. Cohesive devices effective but may be faulty/mechanical. Referencing may be unclear.\nLý do theo bằng chứng đã kiểm tra: Bố cục rõ và liên kết mạch lạc, nhưng thiếu mô tả full-time nên tiến triển so sánh chưa đầy đủ."
+      },
+      "3_lexical_resource": {
+        "band_score": 6,
+        "errors": [
+          {
+            "quote": "entire period",
+            "error_codes": "LR07",
+            "error_name": "Redundancy and Wordiness",
+            "explanation": "Cụm từ \"throughout the entire period\" lặp ý (both \"throughout\" và \"entire\" đều nhấn tính liên tục). Trong văn học thuật ngắn gọn, một từ là đủ để truyền đạt ý liên tục; rút gọn giúp câu tự nhiên và chính xác hơn.",
+            "improved_version": "period"
+          },
+          {
+            "quote": "1,000 thousand",
+            "error_codes": "LR03",
+            "error_name": "Word Choice (Semantic and Contextual Inaccuracy)",
+            "explanation": "Cụm \"1,000 thousand\" là diễn đạt bất thường/không tự nhiên để chỉ số lượng trong tiếng Anh học thuật; người đọc thường viết \"1 million\" hoặc \"1,000,000\". Việc viết như hiện tại có thể gây nhầm về quy mô và làm giảm độ chính xác từ vựng.",
+            "improved_version": "1 million"
+          },
+          {
+            "quote": "thousand",
+            "error_codes": "LR06",
+            "error_name": "Repetition and Limited Lexical Range",
+            "explanation": "Bài lặp nhiều lần từ chỉ lượng theo cùng một mẫu ('thousand', 'approximately/roughly/around'). Điều này cho thấy vốn ngữ liệu hạn chế; giám khảo có thể coi đây là hạn chế về đa dạng từ vựng. Thay đổi cách biểu đạt (ví dụ 'about 850,000' hoặc '0.85 million') sẽ tạo ấn tượng linh hoạt hơn.",
+            "improved_version": "use numeric forms or 'million' for some figures (e.g. 'about 850,000', '0.9 million')"
+          }
+        ],
+        "suggestions": [
+          {
+            "quote": "approximately 1,000 thousand males were in",
+            "explanation": "Cách viết số liệu nên thống nhất: dùng dấu phẩy và/hoặc từ 'million' giúp câu ngắn gọn và chuyên nghiệp hơn. Việc thay đổi cũng làm cho các so sánh dễ đọc hơn.",
+            "improved_version": "about 1 million males were enrolled in part-time"
+          },
+          {
+            "quote": "only around 700 thousand",
+            "explanation": "Cụm 'only around' đôi khi mâu thuẫn: 'only' giảm giá trị, 'around' làm dịu. Dùng một từ thể hiện đúng sắc thái (ví dụ 'about' hoặc 'only') làm câu rõ hơn.",
+            "improved_version": "about 700,000"
+          }
+        ],
+        "feedback_detail": [
+          "'entire period' -> Cụm từ \"throughout the entire period\" lặp ý (both \"throughout\" và \"entire\" đều nhấn tính liên tục). Trong văn học thuật ngắn gọn, một từ là đủ để truyền đạt ý liên tục; rút gọn giúp câu tự nhiên và chính xác hơn. -> Ví dụ cải thiện -> 'period'",
+          "'1,000 thousand' -> Cụm \"1,000 thousand\" là diễn đạt bất thường/không tự nhiên để chỉ số lượng trong tiếng Anh học thuật; người đọc thường viết \"1 million\" hoặc \"1,000,000\". Việc viết như hiện tại có thể gây nhầm về quy mô và làm giảm độ chính xác từ vựng. -> Ví dụ cải thiện -> '1 million'",
+          "'thousand' -> Bài lặp nhiều lần từ chỉ lượng theo cùng một mẫu ('thousand', 'approximately/roughly/around'). Điều này cho thấy vốn ngữ liệu hạn chế; giám khảo có thể coi đây là hạn chế về đa dạng từ vựng. Thay đổi cách biểu đạt (ví dụ 'about 850,000' hoặc '0.85 million') sẽ tạo ấn tượng linh hoạt hơn. -> Ví dụ cải thiện -> 'use numeric forms or 'million' for some figures (e.g. 'about 850,000', '0.9 million')'",
+          "'approximately 1,000 thousand males were in' -> Gợi ý nâng chất lượng (không phải lỗi): Cách viết số liệu nên thống nhất: dùng dấu phẩy và/hoặc từ 'million' giúp câu ngắn gọn và chuyên nghiệp hơn. Việc thay đổi cũng làm cho các so sánh dễ đọc hơn. -> Ví dụ cải thiện -> 'about 1 million males were enrolled in part-time'",
+          "'only around 700 thousand' -> Gợi ý nâng chất lượng (không phải lỗi): Cụm 'only around' đôi khi mâu thuẫn: 'only' giảm giá trị, 'around' làm dịu. Dùng một từ thể hiện đúng sắc thái (ví dụ 'about' hoặc 'only') làm câu rõ hơn. -> Ví dụ cải thiện -> 'about 700,000'"
+        ],
+        "strengths": [
+          "Sử dụng các collocation học thuật như 'fluctuated slightly', 'grew substantially', và 'by contrast' một cách tự nhiên.",
+          "Câu chủ đề và ý chính được nêu rõ ràng, giúp tổ chức thông tin tốt.",
+          "Có sử dụng các collocation học thuật phù hợp với Task 1 như 'fluctuated slightly', 'grew substantially' và 'by contrast'.",
+          "Câu chủ đề và ý chính (overall trend) được nêu rõ ràng, giúp tổ chức thông tin tốt."
+        ],
+        "areas_for_improvement": [
+          "Redundancy and Wordiness (Tham chiếu: 'entire period')",
+          "Word Choice (Semantic and Contextual Inaccuracy) (Tham chiếu: '1,000 thousand')",
+          "Repetition and Limited Lexical Range (Tham chiếu: 'thousand')"
+        ],
+        "band_reason": "Adequate range. Attempts less common vocabulary with some inaccuracy. Some errors, no communication impediment.\nLý do theo bằng chứng đã kiểm tra: Từ vựng nhìn chung đủ dùng với vài cụm học thuật, nhưng có lựa chọn từ không tự nhiên và lặp ý."
+      },
+      "4_grammatical_range_accuracy": {
+        "band_score": 8,
+        "errors": [],
+        "suggestions": [
+          {
+            "quote": "1,000 thousand",
+            "explanation": "Cách ghi \"1,000 thousand\" là không chính xác hoặc gây nhầm lẫn (vừa có dấu phẩy vừa có từ 'thousand'). Nên viết thống nhất theo đơn vị được dùng trong bài (ví dụ chỉ là 1,000 nếu đơn vị là nghìn, hoặc 1,000,000 nếu viết theo đơn vị đầy đủ).",
+            "improved_version": "1,000"
+          }
+        ],
+        "feedback_detail": [
+          "'1,000 thousand' -> Gợi ý nâng chất lượng (không phải lỗi): Cách ghi \"1,000 thousand\" là không chính xác hoặc gây nhầm lẫn (vừa có dấu phẩy vừa có từ 'thousand'). Nên viết thống nhất theo đơn vị được dùng trong bài (ví dụ chỉ là 1,000 nếu đơn vị là nghìn, hoặc 1,000,000 nếu viết theo đơn vị đầy đủ). -> Ví dụ cải thiện -> '1,000'"
+        ],
+        "strengths": [
+          "Tổng quan rõ ràng, nêu xu hướng chung ngay ở đầu.",
+          "Các câu diễn tả biến động dùng mệnh đề phụ và trình tự thời gian chính xác, giúp thông tin số liệu dễ theo dõi."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "Wide range. Majority error-free. Occasional non-systematic errors.\nLý do theo bằng chứng đã kiểm tra: Câu phức được kiểm soát tốt và hầu như không có lỗi ngữ pháp, thể hiện độ chính xác cao."
+      }
+    },
+    "Overall Assessment": {
+      "Summary": {
+        "Overall": "- Bài có mở bài và overview rõ, ngữ pháp tốt; điểm yếu chính là phát triển chưa đủ ở phần thân bài về full-time.",
+        "Detail": [
+          "- TA/TR: Bài xác định đúng dạng và có nêu xu hướng chung, nhưng chỉ khai thác một phần dữ liệu nên mức đáp ứng chưa đầy đủ.",
+          "- CC: Mạch trình bày rõ ràng, câu nối tự nhiên; tuy nhiên thiếu thông tin full-time làm so sánh chưa trọn vẹn.",
+          "- LR: Có vài collocation học thuật tốt, nhưng lựa chọn từ về số lượng và lặp biểu đạt làm giảm độ tự nhiên."
+        ],
+        "CTA": "- Luyện viết lại phần mô tả số liệu để bao quát cả hai nhóm và dùng cách diễn đạt số liệu đa dạng hơn."
+      },
+      "Progress": {
+        "status": "STABLE",
+        "error_recur": [],
+        "error_impro": [],
+        "error_new": [
+          "Redundancy and Wordiness",
+          "Word Choice (Semantic and Contextual Inaccuracy)",
+          "Repetition and Limited Lexical Range"
+        ]
+      }
+    }
+  }
+}

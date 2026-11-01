@@ -1,0 +1,11 @@
+{
+  "usage": {
+    "input_tokens": 57602,
+    "output_tokens": 8288,
+    "total_tokens": 65890,
+    "cost": 0.031308
+  },
+  "metrics": {
+    "ai_processing_ms": 32970
+  }
+}

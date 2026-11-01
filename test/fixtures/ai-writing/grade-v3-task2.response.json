@@ -1,0 +1,185 @@
+{
+  "success": true,
+  "data_micro": {
+    "task_response": {
+      "TR05": {
+        "prompt": "Some people think that universities should provide graduates with the knowledge and skills needed in the workplace. Others think that the true function of a university should be to give access to knowledge for its own sake. Discuss both views and give your opinion.",
+        "question_type": "education",
+        "comments": [
+          {
+            "quote": "Toàn bài viết",
+            "explanation": "Các luận điểm cho cả hai quan điểm được nêu nhưng phát triển sơ lược; thiếu ví dụ cụ thể, dữ kiện hoặc minh hoạ để làm cho lập luận thuyết phục hơn. Điều này khiến phần thảo luận có vẻ chung chung và chưa đủ sức nặng để so sánh hai phía."
+          }
+        ]
+      }
+    }
+  },
+  "data": {
+    "task": "IELTS_WRITING_TASK_2_GRADING",
+    "coT": {
+      "layer1_errors": "Verified 1 error findings across 4 traits.",
+      "layer2_matching": "Descriptors matched to bands: TA=6, CC=8, LR=9, GRA=8.",
+      "layer3_calibration": "Final overall band calibrated to 8.0 via official arithmetic."
+    },
+    "overall_band": 8,
+    "evaluation": {
+      "1_task_response": {
+        "band_score": 6,
+        "errors": [
+          {
+            "quote": "Toàn bài viết",
+            "error_codes": "TR05",
+            "error_name": "Weak Development and Support",
+            "explanation": "Các luận điểm cho cả hai quan điểm được nêu nhưng phát triển sơ lược; thiếu ví dụ cụ thể, dữ kiện hoặc minh hoạ để làm cho lập luận thuyết phục hơn. Điều này khiến phần thảo luận có vẻ chung chung và chưa đủ sức nặng để so sánh hai phía.",
+            "improved_version": "Add one concrete example or brief evidence to each side, for instance: \"For example, vocational courses such as nursing lead directly to employment, while abstract research in mathematics has later enabled breakthroughs in cryptography.\""
+          }
+        ],
+        "suggestions": [
+          {
+            "quote": "If graduates cannot secure well-paying jobs, such education becomes inefficient for both individuals and national economies.",
+            "explanation": "Đoạn này nêu vấn đề hiệu quả kinh tế nhưng chưa có ví dụ thực tế hoặc con số minh hoạ. Thêm một ví dụ ngắn hoặc ngành nghề cụ thể sẽ làm luận điểm rõ ràng hơn và thuyết phục người đọc.",
+            "improved_version": "For example, many vocational programs in healthcare guarantee rapid employment, so students often expect a return on their investment soon after graduation."
+          },
+          {
+            "quote": "Pure mathematics and philosophy frequently lay the conceptual groundwork for subsequent technological revolutions.",
+            "explanation": "Câu này đúng nhưng hơi chung chung. Thêm một ví dụ lịch sử ngắn (không cần số liệu) sẽ minh hoạ mối liên hệ giữa nghiên cứu thuần túy và đổi mới công nghệ hiệu quả hơn.",
+            "improved_version": "For instance, abstract research in number theory later contributed to advances in computer security and encryption."
+          },
+          {
+            "quote": "firmly believe universities should balance intellectual exploration with practical competence.",
+            "explanation": "Lập trường rõ ràng nhưng có thể mạnh hơn nếu liên hệ trực tiếp đến cân bằng trong chương trình học (ví dụ: mô-đun nghề nghiệp, thực tập). Một đề xuất cụ thể giúp kết luận thực tế hơn.",
+            "improved_version": "therefore believe universities should combine core theoretical courses with practical modules and work placements to prepare graduates both intellectually and professionally."
+          }
+        ],
+        "feedback_detail": [
+          "'Toàn bài viết' -> Các luận điểm cho cả hai quan điểm được nêu nhưng phát triển sơ lược; thiếu ví dụ cụ thể, dữ kiện hoặc minh hoạ để làm cho lập luận thuyết phục hơn. Điều này khiến phần thảo luận có vẻ chung chung và chưa đủ sức nặng để so sánh hai phía. -> Ví dụ cải thiện -> 'Add one concrete example or brief evidence to each side, for instance: \"For example, vocational courses such as nursing lead directly to employment, while abstract research in mathematics has later enabled breakthroughs in cryptography.\"'",
+          "'If graduates cannot secure well-paying jobs, such education becomes inefficient for both individuals and national economies.' -> Gợi ý nâng chất lượng (không phải lỗi): Đoạn này nêu vấn đề hiệu quả kinh tế nhưng chưa có ví dụ thực tế hoặc con số minh hoạ. Thêm một ví dụ ngắn hoặc ngành nghề cụ thể sẽ làm luận điểm rõ ràng hơn và thuyết phục người đọc. -> Ví dụ cải thiện -> 'For example, many vocational programs in healthcare guarantee rapid employment, so students often expect a return on their investment soon after graduation.'",
+          "'Pure mathematics and philosophy frequently lay the conceptual groundwork for subsequent technological revolutions.' -> Gợi ý nâng chất lượng (không phải lỗi): Câu này đúng nhưng hơi chung chung. Thêm một ví dụ lịch sử ngắn (không cần số liệu) sẽ minh hoạ mối liên hệ giữa nghiên cứu thuần túy và đổi mới công nghệ hiệu quả hơn. -> Ví dụ cải thiện -> 'For instance, abstract research in number theory later contributed to advances in computer security and encryption.'",
+          "'firmly believe universities should balance intellectual exploration with practical competence.' -> Gợi ý nâng chất lượng (không phải lỗi): Lập trường rõ ràng nhưng có thể mạnh hơn nếu liên hệ trực tiếp đến cân bằng trong chương trình học (ví dụ: mô-đun nghề nghiệp, thực tập). Một đề xuất cụ thể giúp kết luận thực tế hơn. -> Ví dụ cải thiện -> 'therefore believe universities should combine core theoretical courses with practical modules and work placements to prepare graduates both intellectually and professionally.'"
+        ],
+        "strengths": [
+          "Bài viết có cấu trúc rõ ràng, với mở bài nêu vấn đề và quan điểm, thân bài tách biệt hai phía, và kết luận khẳng định ý kiến.",
+          "Lập trường của người viết rõ ràng và nhất quán, ủng hộ sự cân bằng giữa tri thức thuần túy và kỹ năng nghề nghiệp.",
+          "Bài có cấu trúc rõ ràng: mở bài nêu vấn đề và quan điểm, thân bài tách hai phía, kết luận trả lại ý kiến."
+        ],
+        "areas_for_improvement": [
+          "Weak Development and Support (Tham chiếu: 'Toàn bài viết')"
+        ],
+        "band_reason": "Addresses all parts though some less fully covered. Relevant position but conclusions may become unclear. Main ideas present but some lack development or specific examples. Arguments may be repetitive.\nLý do theo bằng chứng đã kiểm tra: Bài đáp ứng đề nhưng phát triển ý còn sơ lược, thiếu minh hoạ đủ sâu cho lập trường."
+      },
+      "2_coherence_cohesion": {
+        "band_score": 8,
+        "errors": [],
+        "suggestions": [
+          {
+            "quote": "Therefore, universities should retain theoretical inquiry while incorporating essential workforce skills.",
+            "explanation": "Đoạn kết hiện đã nêu quan điểm và dẫn ví dụ, nhưng câu kết có thể mạnh hơn bằng cách tóm tắt rõ ràng cân bằng mong muốn giữa nghiên cứu lý thuyết và kỹ năng thực hành; điều này giúp liên kết tốt hơn với luận đề mở bài và làm rõ quan điểm cuối cùng.",
+            "improved_version": "In my view, universities should balance theoretical inquiry with practical skills to promote both intellectual advancement and employability."
+          }
+        ],
+        "feedback_detail": [
+          "'Therefore, universities should retain theoretical inquiry while incorporating essential workforce skills.' -> Gợi ý nâng chất lượng (không phải lỗi): Đoạn kết hiện đã nêu quan điểm và dẫn ví dụ, nhưng câu kết có thể mạnh hơn bằng cách tóm tắt rõ ràng cân bằng mong muốn giữa nghiên cứu lý thuyết và kỹ năng thực hành; điều này giúp liên kết tốt hơn với luận đề mở bài và làm rõ quan điểm cuối cùng. -> Ví dụ cải thiện -> 'In my view, universities should balance theoretical inquiry with practical skills to promote both intellectual advancement and employability.'"
+        ],
+        "strengths": [
+          "Bố cục đoạn rõ ràng và hợp lý; các câu chủ đề khái quát tốt nội dung đoạn.",
+          "Sử dụng từ nối hợp lý, giúp người đọc dễ dàng theo dõi mạch lập luận.",
+          "Bố cục đoạn rõ ràng: mở bài nêu quan điểm, thân bài trình bày hai quan điểm đối lập, kết luận trả lời yêu cầu đề.",
+          "Sử dụng từ nối đối lập (On the one hand / On the other hand / Therefore) hợp lý để báo hiệu quan hệ giữa các ý."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "Sequences logically. Manages all cohesion well. Appropriate paragraphing.\nLý do theo bằng chứng đã kiểm tra: Bố cục và liên kết mạch lạc, các quan hệ ý được triển khai rõ ràng xuyên suốt."
+      },
+      "3_lexical_resource": {
+        "band_score": 9,
+        "errors": [],
+        "suggestions": [
+          {
+            "quote": "tertiary",
+            "explanation": "Trong bài viết học thuật, cụm 'tertiary institutions' đúng nghĩa nhưng 'higher education institutions' nghe tự nhiên và chính thức hơn khi nói về vai trò đại học. Thay thế này giúp từ ngữ nhất quán với phong cách học thuật.",
+            "improved_version": "higher education"
+          },
+          {
+            "quote": "job-focused",
+            "explanation": "Cụm 'job-focused education' đúng nhưng hơi chung và lặp ý với 'vocational skills' ở câu trước. 'Vocationally oriented education' là lựa chọn thay thế tự nhiên và chính thức hơn trong ngữ cảnh học thuật.",
+            "improved_version": "vocationally oriented"
+          },
+          {
+            "quote": "well-paying jobs",
+            "explanation": "Cụm 'well-paying jobs' chính xác nhưng 'well-paid employment' thường được dùng trong văn viết học thuật và giúp câu gọn hơn.",
+            "improved_version": "well-paid employment"
+          },
+          {
+            "quote": "skills",
+            "explanation": "Đoạn kết đã cân bằng lý thuyết và thực hành; để tăng thuyết phục, bạn có thể thêm một biểu hiện ngắn giải thích cách kết hợp (ví dụ: bằng chương trình học thực hành hoặc liên kết với ngành công nghiệp). Cách này làm ý cụ thể và có thể hành động hơn.",
+            "improved_version": "skills, for example through practical modules and industry partnerships"
+          }
+        ],
+        "feedback_detail": [
+          "'tertiary' -> Gợi ý nâng chất lượng (không phải lỗi): Trong bài viết học thuật, cụm 'tertiary institutions' đúng nghĩa nhưng 'higher education institutions' nghe tự nhiên và chính thức hơn khi nói về vai trò đại học. Thay thế này giúp từ ngữ nhất quán với phong cách học thuật. -> Ví dụ cải thiện -> 'higher education'",
+          "'job-focused' -> Gợi ý nâng chất lượng (không phải lỗi): Cụm 'job-focused education' đúng nhưng hơi chung và lặp ý với 'vocational skills' ở câu trước. 'Vocationally oriented education' là lựa chọn thay thế tự nhiên và chính thức hơn trong ngữ cảnh học thuật. -> Ví dụ cải thiện -> 'vocationally oriented'",
+          "'well-paying jobs' -> Gợi ý nâng chất lượng (không phải lỗi): Cụm 'well-paying jobs' chính xác nhưng 'well-paid employment' thường được dùng trong văn viết học thuật và giúp câu gọn hơn. -> Ví dụ cải thiện -> 'well-paid employment'",
+          "'skills' -> Gợi ý nâng chất lượng (không phải lỗi): Đoạn kết đã cân bằng lý thuyết và thực hành; để tăng thuyết phục, bạn có thể thêm một biểu hiện ngắn giải thích cách kết hợp (ví dụ: bằng chương trình học thực hành hoặc liên kết với ngành công nghiệp). Cách này làm ý cụ thể và có thể hành động hơn. -> Ví dụ cải thiện -> 'skills, for example through practical modules and industry partnerships'"
+        ],
+        "strengths": [
+          "Sử dụng vốn từ chuyên ngành và cụm học thuật phù hợp (ví dụ: 'pursuing knowledge for its own sake', 'conceptual groundwork').",
+          "Cụm từ biểu đạt quan điểm rõ ràng và gọn gàng; lập luận cân bằng giữa hai quan điểm.",
+          "Từ vựng đa dạng và chính xác ở mức cao (ví dụ: 'vocational skills', 'employability', 'subsequent technological revolutions')."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "Wide range. Natural, sophisticated control. Rare slips only.\nLý do theo bằng chứng đã kiểm tra: Từ vựng học thuật phong phú, tự nhiên và chính xác trên toàn bài."
+      },
+      "4_grammatical_range_accuracy": {
+        "band_score": 8,
+        "errors": [],
+        "suggestions": [
+          {
+            "quote": "competence",
+            "explanation": "Cụm từ \"practical competence\" chính xác nhưng hơi trừu tượng; thay bằng \"practical skills\" làm câu trực tiếp và phù hợp hơn với ý về kỹ năng nghề nghiệp.",
+            "improved_version": "skills"
+          },
+          {
+            "quote": "incorporating essential workforce skills.",
+            "explanation": "Đoạn kết hiện rõ quan điểm nhưng có thể mạnh hơn bằng cách tóm tắt ngắn lợi ích thiết thực và lợi ích tri thức trước khi nêu đề xuất cân bằng; câu cuối nên làm rõ cách thức kết hợp (ví dụ: chương trình có module nghề/nghiên cứu).",
+            "improved_version": "also embedding practical, workforce-oriented modules within degree programmes."
+          }
+        ],
+        "feedback_detail": [
+          "'competence' -> Gợi ý nâng chất lượng (không phải lỗi): Cụm từ \"practical competence\" chính xác nhưng hơi trừu tượng; thay bằng \"practical skills\" làm câu trực tiếp và phù hợp hơn với ý về kỹ năng nghề nghiệp. -> Ví dụ cải thiện -> 'skills'",
+          "'incorporating essential workforce skills.' -> Gợi ý nâng chất lượng (không phải lỗi): Đoạn kết hiện rõ quan điểm nhưng có thể mạnh hơn bằng cách tóm tắt ngắn lợi ích thiết thực và lợi ích tri thức trước khi nêu đề xuất cân bằng; câu cuối nên làm rõ cách thức kết hợp (ví dụ: chương trình có module nghề/nghiên cứu). -> Ví dụ cải thiện -> 'also embedding practical, workforce-oriented modules within degree programmes.'"
+        ],
+        "strengths": [
+          "Cấu trúc luận điểm rõ ràng: đối lập quan điểm và kết luận cân bằng.",
+          "Sử dụng mệnh đề phụ hợp lệ (While, If, On the other hand) để liên kết ý.",
+          "Lập luận có ví dụ cụ thể (pure mathematics, philosophy) để minh họa giá trị lâu dài của nghiên cứu cơ bản."
+        ],
+        "areas_for_improvement": [
+          "None specified"
+        ],
+        "band_reason": "Wide range. Majority error-free. Occasional non-systematic errors.\nLý do theo bằng chứng đã kiểm tra: Cấu trúc câu đa dạng và kiểm soát ngữ pháp rất tốt, không có lỗi đáng kể."
+      }
+    },
+    "Overall Assessment": {
+      "Summary": {
+        "Overall": "- Bài viết có bố cục rõ, liên kết tốt và vốn từ mạnh; điểm yếu chính nằm ở phát triển ý Task Response còn ngắn.",
+        "Detail": [
+          "- TA/TR: Trả lời đủ hai quan điểm và nêu lập trường rõ, nhưng các luận điểm còn khái quát, thiếu minh hoạ thuyết phục.",
+          "- CC: Đoạn văn và từ nối được dùng hợp lý, mạch lập luận rõ ràng từ mở bài đến kết luận.",
+          "- LR: Từ vựng học thuật đa dạng, chính xác và phù hợp ngữ cảnh học thuật cao."
+        ],
+        "CTA": "- Trong Lộ trình của tôi, luyện mở rộng mỗi luận điểm bằng ví dụ hoặc hệ quả cụ thể."
+      },
+      "Progress": {
+        "status": "STABLE",
+        "error_recur": [],
+        "error_impro": [],
+        "error_new": [
+          "Weak Development and Support"
+        ]
+      }
+    }
+  }
+}
