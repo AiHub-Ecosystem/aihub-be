@@ -1,6 +1,7 @@
 import {
   type IdempotencyMode,
   OPERATION_CATALOG,
+  type OperationDef,
 } from '@/catalog/operation-catalog';
 import { type OperationId, isOperationId } from '@/catalog/operation-id';
 
@@ -15,10 +16,19 @@ export type IdempotencyOperation =
   | typeof ORGANIZATION_CREATE_OPERATION;
 
 export function idempotencyMode(
-  operation: IdempotencyOperation,
+  operation: string,
+  catalog: Readonly<
+    Record<string, Pick<OperationDef, 'idempotency'>>
+  > = OPERATION_CATALOG,
 ): IdempotencyMode {
+  const injected = catalog[operation];
+  if (injected !== undefined) return injected.idempotency;
+
   if (isOperationId(operation)) {
-    return OPERATION_CATALOG[operation].idempotency;
+    return (
+      catalog[operation]?.idempotency ??
+      OPERATION_CATALOG[operation].idempotency
+    );
   }
 
   if (

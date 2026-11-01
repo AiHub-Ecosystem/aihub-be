@@ -38,15 +38,14 @@ type ResponseContract = TSchema | 'unresolved';
 export const TASK1_SAMPLE_IMAGE_URL =
   'https://s3.wispace.app/ielts-task1/ca95bd4ab522946d';
 
-export interface OperationDef {
+interface OperationDefBase {
   readonly openApi: OpenApiOperationMetadata;
   readonly cacheControl?: CacheControlPolicy;
-  readonly method: 'POST';
+  readonly method: 'GET' | 'POST';
   readonly path: string;
   readonly requiredScope: string;
   readonly identityScope: IdentityScope;
   readonly execution: 'sync';
-  readonly contentType: 'application/json' | 'multipart/form-data';
   readonly idempotency: IdempotencyMode;
   readonly family: 'writing' | 'speaking';
   readonly meteringMode: MeteringMode;
@@ -54,7 +53,6 @@ export interface OperationDef {
   readonly timeoutMs: number;
   readonly downstream: DownstreamId;
   readonly downstreamPath: string;
-  readonly requestSchema: TSchema;
   readonly responseContract: ResponseContract;
   /**
    * Public codes this operation's adapter names from a provider failure body
@@ -63,6 +61,25 @@ export interface OperationDef {
    */
   readonly namedDownstreamErrors?: readonly ErrorCode[];
 }
+
+export type OperationDef = OperationDefBase &
+  (
+    | {
+        readonly method: 'POST';
+        readonly contentType: 'application/json' | 'multipart/form-data';
+        readonly requestSchema: TSchema;
+        readonly pathParamsSchema?: never;
+      }
+    | {
+        readonly method: 'GET';
+        readonly contentType?: never;
+        readonly requestSchema?: never;
+        readonly pathParamsSchema: TSchema;
+        readonly idempotency: 'none';
+        readonly meteringMode: 'none';
+        readonly maxBodyBytes: 0;
+      }
+  );
 
 export const OPERATION_CATALOG = {
   'writing.task1.grade': {

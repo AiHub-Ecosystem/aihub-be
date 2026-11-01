@@ -4,6 +4,7 @@ import {
   OPERATION_CATALOG,
   type OperationDef,
 } from '@/catalog/operation-catalog';
+import { matchesPathTemplate } from '@/catalog/path-template';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
 import {
   PUBLIC_API_MAJORS,
@@ -120,7 +121,17 @@ export function registerSecurityHeaders(
     }
 
     const routeMethod = request.method === 'HEAD' ? 'GET' : request.method;
-    if (NO_STORE_ROUTES.has(`${routeMethod} ${request.routeOptions.url}`)) {
+    const routePath = request.routeOptions.url;
+    if (
+      NO_STORE_ROUTES.has(`${routeMethod} ${routePath}`) ||
+      (routePath !== undefined &&
+        (Object.values(OPERATION_CATALOG) as OperationDef[]).some(
+          (operation) =>
+            operation.cacheControl?.value === 'no-store' &&
+            operation.method === routeMethod &&
+            matchesPathTemplate(operation.path, routePath),
+        ))
+    ) {
       reply.header('Cache-Control', 'no-store');
     }
 

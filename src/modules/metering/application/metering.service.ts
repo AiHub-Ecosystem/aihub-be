@@ -1,6 +1,7 @@
 import {
   type MeteringMode,
   OPERATION_CATALOG,
+  type OperationDef,
 } from '@/catalog/operation-catalog';
 import { isUsableCount } from '@/common/counts/is-usable-count';
 import type { DownstreamId } from '@/downstream/downstream.types';
@@ -74,9 +75,15 @@ export function resolveMeteringStatus(input: {
   return input.usageReportingExpected ? 'missing_usage' : 'not_applicable';
 }
 
-function usageRecord(input: MeteringFinalizeInput): UsageRecord {
+function usageRecord(
+  input: MeteringFinalizeInput,
+  catalog: Readonly<
+    Record<string, Pick<OperationDef, 'meteringMode' | 'downstream'>>
+  >,
+): UsageRecord {
   const telemetry = normalizeMeteringTelemetry(input);
-  const operation = OPERATION_CATALOG[input.operation];
+  const operation =
+    catalog[input.operation] ?? OPERATION_CATALOG[input.operation];
   const mode = operation.meteringMode;
   const meteringStatus =
     input.quotaUnverified === true
@@ -94,7 +101,11 @@ function usageRecord(input: MeteringFinalizeInput): UsageRecord {
             : { modelCalled: input.modelCalled }),
         });
   const billableRequests =
-    input.outcome === 'success' && input.idempotentReplay !== true ? 1 : 0;
+    mode === 'model' &&
+    input.outcome === 'success' &&
+    input.idempotentReplay !== true
+      ? 1
+      : 0;
   const actorId = safeText(input.actorId);
   const errorCode = safeText(input.errorCode);
   const downstreamMs = nonNegativeInteger(input.downstreamMs);
@@ -131,10 +142,13 @@ export class MeteringService implements MeteringFinalizerPort {
       QuotaCounterPort,
       'increment'
     > = NOOP_QUOTA_COUNTER,
+    private readonly catalog: Readonly<
+      Record<string, Pick<OperationDef, 'meteringMode' | 'downstream'>>
+    > = OPERATION_CATALOG,
   ) {}
 
   async finalize(input: MeteringFinalizeInput): Promise<void> {
-    let record = usageRecord(input);
+    let record = usageRecord(input, this.catalog);
     if (input.quotaTracked === true && record.billableRequests === 1) {
       try {
         await this.quotaCounter.increment({

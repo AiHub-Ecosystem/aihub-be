@@ -4,6 +4,7 @@ import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import { isDownstreamCredentialRejection } from '@/common/errors/downstream-fault';
 import type { ErrorCode } from '@/common/errors/error-code';
+import { isRecord } from '@/common/is-record';
 import {
   recordDownstreamCredentialRejection,
   recordDownstreamRetryEvent,
@@ -300,7 +301,14 @@ export class HttpOperationTransport implements OperationTransportPort {
       throw unconfiguredOperation(operation);
     }
 
-    const downstreamRequest = adapter.buildRequest(input, context);
+    const builtRequest = adapter.buildRequest(input, context);
+    const downstreamRequest =
+      builtRequest.method === 'GET'
+        ? {
+            ...builtRequest,
+            path: resolvePathParameters(builtRequest.path, input),
+          }
+        : builtRequest;
     const authorization =
       adapter.downstream === 'ai-writing'
         ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
@@ -525,4 +533,18 @@ export class HttpOperationTransport implements OperationTransportPort {
       }),
     );
   }
+}
+
+export function resolvePathParameters(path: string, input: unknown): string {
+  const values = isRecord(input) ? input : {};
+  return path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
+    if (typeof values[name] !== 'string') {
+      throw new AppError({
+        code: 'INTERNAL_ERROR',
+        message: 'Operation path parameters are not configured',
+        retryable: false,
+      });
+    }
+    return encodeURIComponent(values[name]);
+  });
 }

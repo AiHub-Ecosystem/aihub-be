@@ -4,6 +4,7 @@ import {
   OPERATION_CATALOG,
   type OperationDef,
 } from '@/catalog/operation-catalog';
+import { matchesPathTemplate } from '@/catalog/path-template';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
@@ -30,7 +31,15 @@ const CALLER_KINDS = new Map<string, PublicApiCallerKind>([
 
 function callerKindOf(method: string, template: string): PublicApiCallerKind {
   const routeMethod = method === 'HEAD' ? 'GET' : method;
-  return CALLER_KINDS.get(`${routeMethod} ${template}`) ?? 'undeclared';
+  const exact = CALLER_KINDS.get(`${routeMethod} ${template}`);
+  if (exact !== undefined) return exact;
+  return (Object.values(OPERATION_CATALOG) as OperationDef[]).some(
+    (operation) =>
+      operation.method === routeMethod &&
+      matchesPathTemplate(operation.path, template),
+  )
+    ? 'api-key'
+    : 'undeclared';
 }
 
 /**

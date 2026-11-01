@@ -179,6 +179,10 @@ export class DownstreamHttpClient {
       );
     }
 
+    if (request.method === 'GET' && request.body !== undefined) {
+      throw configurationError('downstream GET requests cannot have a body');
+    }
+
     const url = new URL(request.path, base);
     if (url.origin !== base.origin) {
       throw configurationError('downstream path changed the configured origin');
@@ -204,7 +208,7 @@ export class DownstreamHttpClient {
           ...(options.authorization === undefined
             ? {}
             : { authorization: options.authorization }),
-          ...(isMultipartBody(request.body)
+          ...(request.method === 'GET' || isMultipartBody(request.body)
             ? {}
             : { 'content-type': request.contentType ?? 'application/json' }),
           'x-request-id': options.requestId,

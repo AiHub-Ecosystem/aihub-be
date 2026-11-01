@@ -1,6 +1,7 @@
 import { Transform } from 'node:stream';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { matchesPathTemplate } from '@/catalog/path-template';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import {
@@ -15,6 +16,7 @@ const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
     operation.timeoutMs,
   ]),
 );
+const OPERATION_TIMEOUTS = Object.values(OPERATION_CATALOG);
 const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;
 
 const TIMED_ROUTES = Object.values(PUBLIC_ROUTES).flatMap((route) =>
@@ -171,6 +173,11 @@ export function registerRequestLifecycle(
       const path = pathnameOf(request.url);
       const timeoutMs =
         OPERATION_TIMEOUT_BY_PATH.get(path) ??
+        OPERATION_TIMEOUTS.find(
+          (operation) =>
+            operation.method === request.method &&
+            matchesPathTemplate(operation.path, path),
+        )?.timeoutMs ??
         TIMED_ROUTES.find(
           (route) => route.method === request.method && route.path.test(path),
         )?.timeoutMs;

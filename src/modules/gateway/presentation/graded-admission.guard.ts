@@ -8,6 +8,7 @@ import {
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
+import { matchesPathTemplate } from '@/catalog/path-template';
 import { AppError } from '@/common/errors/app-error';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
 import { recordRejected } from '@/common/observability/rejected-metric';
@@ -84,7 +85,10 @@ export class GradedAdmissionGuard implements CanActivate {
     // a wiring fault, refused rather than admitted with weaker checks.
     if (
       evidence === undefined ||
-      routeTemplate(request) !== OPERATION_CATALOG[evidence.operation].path
+      !matchesPathTemplate(
+        OPERATION_CATALOG[evidence.operation].path,
+        routeTemplate(request),
+      )
     ) {
       throw new AppError({
         code: 'INTERNAL_ERROR',

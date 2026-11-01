@@ -65,6 +65,35 @@ const input: MeteringFinalizeInput = {
 };
 
 describe('MeteringService', () => {
+  it('does not meter a retrieval operation', () => {
+    expect(
+      resolveMeteringStatus({
+        mode: 'none',
+        usageReportingExpected: true,
+        modelCalled: true,
+        usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+      }),
+    ).toBe('not_applicable');
+  });
+
+  it('does not bill or count quota for an injected non-metered operation', async () => {
+    const repository = new FakeUsageRepository();
+    const quota = new FakeQuotaCounter();
+    const service = new MeteringService(
+      repository,
+      new FakeFailureLogger(),
+      quota,
+      {
+        'speaking.grading': { meteringMode: 'none', downstream: 'ai-speaking' },
+      },
+    );
+
+    await service.finalize({ ...input, operation: 'speaking.grading' });
+
+    expect(repository.records[0]?.billableRequests).toBe(0);
+    expect(quota.increments).toEqual([]);
+  });
+
   it('declares the current usage policy for every catalogued downstream', () => {
     expect(DOWNSTREAM_USAGE_REPORTING).toEqual({
       'ai-writing': false,

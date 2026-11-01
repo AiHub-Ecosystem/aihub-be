@@ -1,5 +1,5 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { OPERATION_IDS } from '@/catalog/operation-id';
+import type { OperationDef } from '@/catalog/operation-catalog';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
 import {
   type PublicApiMajorDef,
@@ -86,12 +86,12 @@ function addHeadOperations(paths: Record<string, unknown>): void {
 /** One major's contract: only its `/vN/...` routes, at its contract version. */
 export function buildOpenApiDocument(
   major: PublicApiMajorDef = latestPublicApiMajor(),
+  operationCatalog: Readonly<Record<string, OperationDef>> = OPERATION_CATALOG,
 ): unknown {
   const paths: Record<string, unknown> = {};
   const groupedErrors = errorsByStatus();
 
-  for (const operationId of OPERATION_IDS) {
-    const operation = OPERATION_CATALOG[operationId];
+  for (const [operationId, operation] of Object.entries(operationCatalog)) {
     paths[operation.path] = {
       ...(paths[operation.path] as Record<string, unknown> | undefined),
       ...operationToPathItem(operationId, operation, groupedErrors),

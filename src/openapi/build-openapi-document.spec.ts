@@ -1,8 +1,10 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationDef } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
+import type { PublicApiMajorDef } from '@/catalog/public-api-majors';
 import { PUBLIC_ROUTES, isPublicRouteId } from '@/catalog/public-routes';
 import type { PublicRouteDef } from '@/catalog/public-routes';
+import { Type } from '@sinclair/typebox';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 
@@ -13,7 +15,7 @@ interface OpenApiResponse {
 interface OpenApiOperation {
   readonly operationId: string;
   readonly parameters: readonly Record<string, unknown>[];
-  readonly requestBody: {
+  readonly requestBody?: {
     readonly required?: boolean;
     readonly content: Record<string, { readonly schema: unknown }>;
   };
@@ -72,7 +74,7 @@ function requestProperty(
   operation: OpenApiOperation | undefined,
   property: string,
 ): Record<string, unknown> | undefined {
-  const schema = operation?.requestBody.content['application/json']?.schema;
+  const schema = operation?.requestBody?.content['application/json']?.schema;
   if (!isRecord(schema) || !isRecord(schema.properties)) {
     return undefined;
   }
@@ -136,6 +138,51 @@ function build(): OpenApiDocument {
 }
 
 describe('buildOpenApiDocument', () => {
+  it('describes an injected retrieval operation without a request body', () => {
+    const retrieval = {
+      openApi: { summary: 'speaking.v2.responses.get' },
+      method: 'GET',
+      path: '/v2/ielts/speaking/responses/{response_id}',
+      requiredScope: 'speaking.grade',
+      identityScope: 'user',
+      execution: 'sync',
+      idempotency: 'none',
+      family: 'speaking',
+      meteringMode: 'none',
+      maxBodyBytes: 0,
+      timeoutMs: 60_000,
+      downstream: 'ai-speaking',
+      downstreamPath: '/api/v2/speaking/responses/{response_id}',
+      pathParamsSchema: Type.Object({ response_id: Type.String() }),
+      responseContract: Type.Object({ result: Type.String() }),
+    } satisfies OperationDef;
+
+    const document = buildOpenApiDocument(
+      {
+        major: 2,
+        contractVersion: '2.0.0-test',
+        status: 'supported',
+        releasedAt: '2026-11-01',
+      } satisfies PublicApiMajorDef,
+      {
+        'speaking.v2.responses.get': retrieval,
+      },
+    );
+    const paths =
+      isRecord(document) && isRecord(document.paths) ? document.paths : {};
+    const candidatePathItem = paths[retrieval.path];
+    const pathItem = isRecord(candidatePathItem) ? candidatePathItem : {};
+    const get = isRecord(pathItem.get) ? pathItem.get : {};
+
+    expect(get.parameters).toContainEqual({
+      name: 'response_id',
+      in: 'path',
+      required: true,
+      schema: retrieval.pathParamsSchema.properties.response_id,
+    });
+    expect(get).not.toHaveProperty('requestBody');
+  });
+
   it('declares OpenAPI 3.1', () => {
     expect(build().openapi).toBe('3.1.0');
   });
@@ -1181,7 +1228,7 @@ describe('buildOpenApiDocument', () => {
     const operation = doc.paths['/v1/ielts/writing/task1/grade']?.post;
     const catalogued = OPERATION_CATALOG['writing.task1.grade'];
 
-    expect(operation?.requestBody.content['application/json']?.schema).toBe(
+    expect(operation?.requestBody?.content['application/json']?.schema).toBe(
       catalogued.requestSchema,
     );
   });

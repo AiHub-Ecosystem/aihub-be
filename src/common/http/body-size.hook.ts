@@ -1,4 +1,5 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { matchesPathTemplate } from '@/catalog/path-template';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { createErrorEnvelope } from '@/common/errors/error-envelope';
 import { isRequestId } from '@/common/request-context/request-id';
@@ -7,12 +8,14 @@ import { pathnameOf } from './request-path';
 import { markRequestAdmission } from './request-timing.hook';
 
 /**
- * Path -> per-operation body limit, built once from the catalog. All current
- * paths are static, so an exact match on the URL's pathname is enough; a
- * future parameterised path would need pattern matching here.
+ * POST path -> per-operation body limit, built once from the catalog. Path
+ * parameters match their Fastify and request path forms.
  */
+const BODY_LIMIT_OPERATIONS = Object.values(OPERATION_CATALOG).filter(
+  (operation) => operation.method === 'POST',
+);
 const MAX_BODY_BYTES_BY_PATH: ReadonlyMap<string, number> = new Map(
-  Object.values(OPERATION_CATALOG).map((operation) => [
+  BODY_LIMIT_OPERATIONS.map((operation) => [
     operation.path,
     operation.maxBodyBytes,
   ]),
@@ -20,6 +23,7 @@ const MAX_BODY_BYTES_BY_PATH: ReadonlyMap<string, number> = new Map(
 
 interface OnRequestParams {
   readonly url: string;
+  readonly method: string;
   readonly id: unknown;
   readonly raw: unknown;
   aihubFailureCode?: ErrorCode;
@@ -74,10 +78,15 @@ export interface HookableFastifyInstance {
  */
 export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
   instance.addHook('onRoute', (route) => {
+    const routePath =
+      route.url === undefined ? undefined : pathnameOf(route.url);
     const limit =
-      route.url === undefined
+      routePath === undefined
         ? undefined
-        : MAX_BODY_BYTES_BY_PATH.get(pathnameOf(route.url));
+        : (MAX_BODY_BYTES_BY_PATH.get(routePath) ??
+          BODY_LIMIT_OPERATIONS.find((operation) =>
+            matchesPathTemplate(operation.path, routePath),
+          )?.maxBodyBytes);
     const methods = Array.isArray(route.method) ? route.method : [route.method];
 
     if (limit !== undefined && methods.includes('POST')) {
@@ -86,7 +95,14 @@ export function registerBodySizeGuard(instance: HookableFastifyInstance): void {
   });
 
   instance.addHook('onRequest', (request, reply, done) => {
-    const limit = MAX_BODY_BYTES_BY_PATH.get(pathnameOf(request.url));
+    const requestPath = pathnameOf(request.url);
+    const limit =
+      request.method === 'POST'
+        ? (MAX_BODY_BYTES_BY_PATH.get(requestPath) ??
+          BODY_LIMIT_OPERATIONS.find((operation) =>
+            matchesPathTemplate(operation.path, requestPath),
+          )?.maxBodyBytes)
+        : undefined;
 
     if (limit === undefined) {
       done();

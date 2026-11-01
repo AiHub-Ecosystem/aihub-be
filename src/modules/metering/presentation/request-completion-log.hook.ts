@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
+import { matchesPathTemplate } from '@/catalog/path-template';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { clientIpSource } from '@/common/http/client-ip-source';
 import { isHealthProbe } from '@/common/http/request-path';
@@ -37,6 +38,22 @@ const OPERATION_BY_ROUTE = new Map<string, OperationId>(
     return [`${operation.method} ${operation.path}`, operationId] as const;
   }),
 );
+
+function operationForRoute(
+  method: string,
+  template: string,
+): OperationId | undefined {
+  return (
+    OPERATION_BY_ROUTE.get(`${method} ${template}`) ??
+    OPERATION_IDS.find((operationId) => {
+      const operation = OPERATION_CATALOG[operationId];
+      return (
+        operation.method === method &&
+        matchesPathTemplate(operation.path, template)
+      );
+    })
+  );
+}
 
 /**
  * One response, as the log records it. A field with no value is left out
@@ -133,7 +150,7 @@ function recordRequestMetrics(
   const evidence = getMeteringEvidence(request);
   const catalogOperation =
     evidence?.operation ??
-    OPERATION_BY_ROUTE.get(`${request.method} ${routeTemplate(request)}`);
+    operationForRoute(request.method, routeTemplate(request));
   const operation = catalogOperation ?? UNMATCHED_ROUTE;
 
   const outcome = requestOutcome(reply.statusCode, request.aihubFailureCode);

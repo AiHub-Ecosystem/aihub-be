@@ -1,3 +1,5 @@
+import type { Static, TSchema } from '@sinclair/typebox';
+
 import type { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import type { RequestContext } from '@/common/request-context/request-context';
@@ -26,13 +28,15 @@ export interface DispatchResult<TOutput> {
   readonly idempotentReplay?: boolean;
 }
 
-/**
- * Request/response types per operation. Input types are a roster — one arm
- * per operation — because they are the application's own command inputs, not
- * the wire format of the catalog schemas. The response family is read off
- * the operation's own catalog record (`family`), so a catalog entry fully
- * determines it; an unknown family yields `never`.
- */
+/** POST commands keep application-owned input types; GET inputs come from path parameters. */
+type CatalogRequest<K extends OperationId> =
+  (typeof OPERATION_CATALOG)[K] extends {
+    readonly method: 'GET';
+    readonly pathParamsSchema: infer T extends TSchema;
+  }
+    ? Static<T>
+    : never;
+
 export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
   ? GradeTask1Request
   : K extends 'writing.task2.grade'
@@ -41,12 +45,22 @@ export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
       ? SpeakingGradeInput
       : K extends 'speaking.grading-json'
         ? SpeakingGradeJsonInput
-        : never;
+        : CatalogRequest<K>;
 
-export type ResponseFor<K extends OperationId> =
-  (typeof OPERATION_CATALOG)[K]['family'] extends 'writing'
-    ? GradeResponse
-    : SpeakingGradeResponse;
+type CatalogResponse<K extends OperationId> =
+  (typeof OPERATION_CATALOG)[K]['responseContract'] extends infer T
+    ? T extends TSchema
+      ? Static<T>
+      : never
+    : never;
+
+export type ResponseFor<K extends OperationId> = K extends
+  | 'writing.task1.grade'
+  | 'writing.task2.grade'
+  ? GradeResponse
+  : K extends 'speaking.grading' | 'speaking.grading-json'
+    ? SpeakingGradeResponse
+    : CatalogResponse<K>;
 
 export interface OperationDispatcherPort {
   /**

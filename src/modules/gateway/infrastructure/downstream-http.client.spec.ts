@@ -5,6 +5,7 @@ import { MockAgent } from 'undici/index.js';
 import type { AppError } from '@/common/errors/app-error';
 import { getMetrics } from '@/common/observability/metrics';
 import { DownstreamHttpClient } from './downstream-http.client';
+import { resolvePathParameters } from './http-operation-dispatcher';
 
 describe('DownstreamHttpClient', () => {
   let mockAgent: MockAgent;
@@ -101,6 +102,52 @@ describe('DownstreamHttpClient', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(responseBody);
+  });
+
+  it('sends a bodyless retrieval to its templated path with trusted identity', async () => {
+    const path = resolvePathParameters(
+      '/api/v2/speaking/responses/{response_id}',
+      { response_id: 'opaque/id' },
+    );
+    mockAgent
+      .get('https://ai-speaking.test')
+      .intercept({
+        method: 'GET',
+        path: '/api/v2/speaking/responses/opaque%2Fid',
+        headers: {
+          'x-aihub-organization-id': 'org_from_context',
+          'x-aihub-user-id': 'student-1',
+          'x-aihub-user-identity-mode': 'declared_id',
+          'x-request-id': 'req_speaking_retrieval',
+          'x-request-deadline': '5000',
+        },
+      })
+      .reply(200, { result: true });
+
+    const client = new DownstreamHttpClient(
+      { 'ai-speaking': 'https://ai-speaking.test' },
+      mockAgent,
+    );
+    const response = await client.request(
+      {
+        method: 'GET',
+        path,
+        headers: {
+          'x-aihub-organization-id': 'org_from_context',
+          'x-aihub-user-id': 'student-1',
+          'x-aihub-user-identity-mode': 'declared_id',
+        },
+      },
+      {
+        downstream: 'ai-speaking',
+        requestId: 'req_speaking_retrieval',
+        deadlineMs: 5000,
+        signal: AbortSignal.timeout(1000),
+      },
+    );
+
+    expect(path).toBe('/api/v2/speaking/responses/opaque%2Fid');
+    expect(response).toMatchObject({ status: 200, body: { result: true } });
   });
 
   it('rejects an absolute or protocol-relative adapter path', async () => {

@@ -6,7 +6,6 @@ import type {
   OperationDef,
 } from '@/catalog/operation-catalog';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import type { OperationId } from '@/catalog/operation-id';
 import type { PublicRouteDef, PublicRouteId } from '@/catalog/public-routes';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { ERROR_CODES, type ErrorCode } from '@/common/errors/error-code';
@@ -14,6 +13,7 @@ import {
   type HttpStatus,
   httpStatusForErrorCode,
 } from '@/common/errors/error-registry';
+import { isRecord } from '@/common/is-record';
 import { toOpenApiPath } from './openapi-path';
 
 /**
@@ -313,7 +313,7 @@ export const USER_IDENTITY_PARAMETER = {
 };
 
 function resolvedResponseSchema(
-  operationId: OperationId,
+  operationId: string,
   operation: OperationDef,
 ): TSchema {
   if (operation.responseContract === 'unresolved') {
@@ -329,16 +329,33 @@ function resolvedResponseSchema(
 }
 
 export function operationToPathItem(
-  operationId: OperationId,
+  operationId: string,
   operation: OperationDef,
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
 ): Record<string, unknown> {
+  const pathParameters =
+    operation.method === 'GET'
+      ? [...operation.path.matchAll(/\{([^}]+)\}/g)].map(([, name]) => {
+          if (name === undefined) throw new Error('Invalid path parameter');
+          const properties = isRecord(operation.pathParamsSchema.properties)
+            ? operation.pathParamsSchema.properties
+            : {};
+          const schema = properties[name];
+          if (schema === undefined) {
+            throw new Error(
+              `${operationId} path parameter ${name} has no schema`,
+            );
+          }
+          return { name, in: 'path', required: true, schema };
+        })
+      : [];
   const parameters = [
     { $ref: '#/components/parameters/CorrelationId' },
     operation.identityScope === 'user'
       ? { $ref: '#/components/parameters/UserIdentity' }
       : undefined,
     idempotencyKeyParameter(operation.idempotency),
+    ...pathParameters,
   ].filter((parameter) => parameter !== undefined);
 
   const successHeaders = {
@@ -405,12 +422,16 @@ export function operationToPathItem(
       'x-idempotency': operation.idempotency,
       security: [{ ApiKeyAuth: [] }],
       parameters,
-      requestBody: {
-        required: true,
-        content: {
-          [operation.contentType]: { schema: operation.requestSchema },
-        },
-      },
+      ...(operation.method === 'POST'
+        ? {
+            requestBody: {
+              required: true,
+              content: {
+                [operation.contentType]: { schema: operation.requestSchema },
+              },
+            },
+          }
+        : {}),
       responses,
       ...operation.openApi.extensions,
     },
