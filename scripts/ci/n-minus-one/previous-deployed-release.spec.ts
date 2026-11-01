@@ -152,6 +152,66 @@ describe('previousDeployedRelease', () => {
     });
   });
 
+  it('finds the CD run that followed the active revision CI when main had moved on', async () => {
+    const activeProductionSha = '2'.repeat(40);
+    const fetchImpl = queuedFetch(
+      {
+        workflow_runs: [
+          {
+            ...workflowRun(7, '9'.repeat(40)),
+            created_at: '2026-10-28T03:00:05Z',
+          },
+        ],
+      },
+      {
+        workflow_runs: [
+          ciRun(1, activeProductionSha, '2026-10-28T03:00:00Z'),
+          ciRun(2, '8'.repeat(40), '2026-10-28T02:00:00Z'),
+        ],
+      },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [productionStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeProductionSha,
+        activeSandboxDisabled: true,
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      production: { runId: 7, sha: activeProductionSha, digestRunId: 7 },
+      sandbox: null,
+    });
+  });
+
+  it('fails closed when no CD run followed the active revision CI', async () => {
+    const fetchImpl = queuedFetch(
+      { workflow_runs: [workflowRun(7, '9'.repeat(40))] },
+      { workflow_runs: [ciRun(1, '2'.repeat(40), '2026-10-28T01:00:00Z')] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeProductionSha: '2'.repeat(40),
+        activeSandboxDisabled: true,
+        fetchImpl,
+      }),
+    ).rejects.toThrow('No successful deployed Production revision');
+  });
+
   it('fails closed when the host reports an invalid active revision', async () => {
     await expect(
       previousDeployedRelease({

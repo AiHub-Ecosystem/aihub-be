@@ -167,53 +167,103 @@ export async function previousDeployedRelease({
       throw new Error(`Active ${tier} revision is not a commit SHA`);
     }
 
-    for (const run of runs) {
-      if (
-        run.event !== 'workflow_run' ||
-        run.head_branch !== 'main' ||
-        run.status !== 'completed' ||
-        !/^[a-f0-9]{40}$/u.test(run.head_sha) ||
-        (activeSha !== undefined && run.head_sha !== activeSha)
-      ) {
-        continue;
-      }
-
-      const deployJob = (await jobsFor(run.id)).find(
-        (job) => job.name === 'Blue-green deploy to VPS',
-      );
-      const tierDeploy = deployJob?.steps?.find(
-        (step) => step.name === stepName,
-      );
-      if (tierDeploy?.conclusion !== 'success') continue;
-
-      const finalHealthWindow = deployJob?.steps?.find(
-        (step) => step.name === 'Final public health window',
-      );
-      const sandboxDeploy = deployJob?.steps?.find(
-        (step) => step.name === 'Deploy Sandbox release and verify caller IP',
-      );
-      if (finalHealthWindow?.conclusion === 'failure') {
-        throw new Error(
-          `CD run ${run.id} failed its final public health window after ${tier} cutover; active revision is unresolved`,
+    // A CD run reports the head of main when it started, not the commit whose
+    // CI triggered it. When main moved while that CI ran, no CD run carries the
+    // active revision as its head_sha; the CD run that deployed it is the first
+    // one created right after that revision's CI finished.
+    async function correlatedRun(sha: string): Promise<WorkflowRun | null> {
+      const ciRuns: WorkflowRun[] = [];
+      for (let page = 1; page <= 100; page += 1) {
+        const result = await getJson(
+          `${baseUrl}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=100&page=${page}`,
         );
+        const pageRuns = result.workflow_runs ?? [];
+        ciRuns.push(...pageRuns);
+        if (pageRuns.length < 100) break;
       }
-      if (
-        tier === 'Production' &&
-        finalHealthWindow?.conclusion === 'skipped' &&
-        sandboxDeploy?.conclusion === 'failure'
-      ) {
-        // ADR-0085 leaves Production active when only the later Sandbox cutover fails.
-      } else if (finalHealthWindow?.conclusion !== 'success') {
-        throw new Error(
-          `CD run ${run.id} has no conclusive final public health window after ${tier} cutover`,
+      const ci = ciRuns
+        .filter((ciRun) => ciRun.head_sha === sha)
+        .sort(
+          (left, right) =>
+            Date.parse(right.updated_at) - Date.parse(left.updated_at),
+        )[0];
+      if (ci === undefined) return null;
+      const finishedAt = Date.parse(ci.updated_at);
+      const candidates = runs
+        .filter(
+          (run) =>
+            run.event === 'workflow_run' &&
+            Date.parse(run.created_at) >= finishedAt &&
+            Date.parse(run.created_at) - finishedAt <= 300_000,
+        )
+        .sort(
+          (left, right) =>
+            Date.parse(left.created_at) - Date.parse(right.created_at),
         );
-      }
+      const first = candidates[0];
+      return first === undefined ? null : { ...first, head_sha: sha };
+    }
 
-      return {
-        runId: run.id,
-        sha: run.head_sha,
-        digestRunId: await digestArtifactRunFor(run),
-      };
+    const scan = async (
+      candidates: readonly WorkflowRun[],
+    ): Promise<{ runId: number; sha: string; digestRunId: number } | null> => {
+      for (const run of candidates) {
+        if (
+          run.event !== 'workflow_run' ||
+          run.head_branch !== 'main' ||
+          run.status !== 'completed' ||
+          !/^[a-f0-9]{40}$/u.test(run.head_sha) ||
+          (activeSha !== undefined && run.head_sha !== activeSha)
+        ) {
+          continue;
+        }
+
+        const deployJob = (await jobsFor(run.id)).find(
+          (job) => job.name === 'Blue-green deploy to VPS',
+        );
+        const tierDeploy = deployJob?.steps?.find(
+          (step) => step.name === stepName,
+        );
+        if (tierDeploy?.conclusion !== 'success') continue;
+
+        const finalHealthWindow = deployJob?.steps?.find(
+          (step) => step.name === 'Final public health window',
+        );
+        const sandboxDeploy = deployJob?.steps?.find(
+          (step) => step.name === 'Deploy Sandbox release and verify caller IP',
+        );
+        if (finalHealthWindow?.conclusion === 'failure') {
+          throw new Error(
+            `CD run ${run.id} failed its final public health window after ${tier} cutover; active revision is unresolved`,
+          );
+        }
+        if (
+          tier === 'Production' &&
+          finalHealthWindow?.conclusion === 'skipped' &&
+          sandboxDeploy?.conclusion === 'failure'
+        ) {
+          // ADR-0085 leaves Production active when only the later Sandbox cutover fails.
+        } else if (finalHealthWindow?.conclusion !== 'success') {
+          throw new Error(
+            `CD run ${run.id} has no conclusive final public health window after ${tier} cutover`,
+          );
+        }
+
+        return {
+          runId: run.id,
+          sha: run.head_sha,
+          digestRunId: await digestArtifactRunFor(run),
+        };
+      }
+      return null;
+    };
+
+    const found = await scan(runs);
+    if (found !== null) return found;
+    if (activeSha !== undefined) {
+      const alternate = await correlatedRun(activeSha);
+      const viaCi = alternate === null ? null : await scan([alternate]);
+      if (viaCi !== null) return viaCi;
     }
     throw new Error(
       activeSha === undefined

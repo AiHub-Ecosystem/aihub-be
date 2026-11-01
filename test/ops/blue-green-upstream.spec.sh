@@ -100,7 +100,7 @@ grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-slot-b.sock;' "$test_root
 if grep -Eq 'proxy_pass[[:space:]]+http://127\.0\.0\.1:' "$test_root/rendered.conf"; then
   fail "no TCP upstream may remain in a socket config"
 fi
-assert_equals "$(grep -c 'proxy_pass' "$test_root/rendered.conf")" 4 "every location is rewritten"
+assert_equals "$(grep -c 'proxy_pass' "$test_root/rendered.conf")" 6 "every location is rewritten"
 assert_equals "$(active_slot sandbox "$(render sandbox a)")" a "sandbox socket A round-trips"
 grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-sandbox.sock;' "$test_root/rendered.conf" || fail "sandbox socket path rendered"
 
