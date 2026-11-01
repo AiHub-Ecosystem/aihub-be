@@ -1,6 +1,6 @@
 # ADR-0143: Public API v2 serves AI Writing v3 grading
 
-- Status: Proposed — design agreed by the AIHUB owner on 2026-11-01; accepted when the provider evidence in [#1457](https://github.com/AiHub-Ecosystem/aihub-be/issues/1457) and [#1456](https://github.com/AiHub-Ecosystem/aihub-be/issues/1456) is recorded.
+- Status: Accepted by the AIHUB owner on 2026-11-01. The provider's written contract answers are recorded in [#1457](https://github.com/AiHub-Ecosystem/aihub-be/issues/1457). The owner accepted it ahead of the isolation evidence in [#1456](https://github.com/AiHub-Ecosystem/aihub-be/issues/1456) and of a probe of `org_...` Organization IDs, which are tracked there and in a separate issue.
 - Date: 2026-11-01
 - Amends: [ADR-0138](0138-batch-ai-service-breaking-changes-into-public-v2.md) decision 2 (when and how Writing joins `/v2`)
 - Related: [ADR-0085](0085-per-tier-blue-green-cutover.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0129](0129-public-route-and-response-convention.md), [ADR-0140](0140-tenant-identity-is-the-organization-and-end-user-id-pair.md), [#1452](https://github.com/AiHub-Ecosystem/aihub-be/issues/1452), [#1454](https://github.com/AiHub-Ecosystem/aihub-be/issues/1454), [#1455](https://github.com/AiHub-Ecosystem/aihub-be/issues/1455), [#70](https://github.com/AiHub-Ecosystem/aihub-be/issues/70)
@@ -46,7 +46,7 @@ The repository holds no provider document for v3 (path, authentication, headers)
 - A spec shows a slow v3 call ending in the provider's `504` is returned as `AI_SERVICE_TIMEOUT`.
 - #1455 is done.
 
-Status of this evidence (2026-11-01): the written answers are in; the contract is recorded. Two items still gate acceptance: a probe confirming `org_...`, and the provider's confirmation that its weakness history is scoped by `(Organization, End-User)` like the rest of the stored data (#1456).
+Status of this evidence (2026-11-01): the written answers are in; the contract is recorded. Two items were still open when the owner accepted this ADR: a probe confirming `org_...`, and the provider's confirmation that its weakness history is scoped by `(Organization, End-User)` like the rest of the stored data (#1456).
 
 ## Consequences
 
