@@ -351,7 +351,8 @@ model Organization {
   invitations                OrganizationInvitation[]
   memberships                OrganizationMembership[]
   notificationEvents         NotificationEvent[]
-  createdByUserAccount      UserAccount?                @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  speakingV2ResultOwnerships SpeakingV2ResultOwnership[]
+  createdByUserAccount     UserAccount?                @relation("organization_created_by", fields: [createdByUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([createdByUserAccountId], map: "organizations_created_by_idx", where: raw("(created_by_user_account_id IS NOT NULL)"))
   @@map("organizations")
@@ -561,6 +562,7 @@ model SpeakingV2ResultOwnership {
   kind           String
   id             String
   recordedAt     DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([organizationId, environment, endUserId, kind, id], map: "speaking_v2_result_ownership_pkey")
   @@map("speaking_v2_result_ownership")
