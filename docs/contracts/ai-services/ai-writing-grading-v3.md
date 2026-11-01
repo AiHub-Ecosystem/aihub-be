@@ -168,3 +168,16 @@ independent evidence; the isolation evidence is tracked in #1456.
 - **Provider `/v1`:** stays available until AIHUB has moved all traffic to v3,
   and for one more month after that. It is removed only after that month ends
   without blocking issues.
+
+### Follow-ups the provider agreed (relayed 2026-11-01)
+
+The AIHUB owner reports on 2026-11-01 that the AI Writing team has made the
+changes it agreed after #1457: it deleted the test records AIHUB created while
+verifying the release, it changed the key of the weakness history to the pair
+`(Organization ID, End-User ID)`, and it changed how v3 authenticates AIHUB's
+calls. The provider has not posted this in writing and AIHUB has not verified it.
+AIHUB has not changed what it sends: the three `X-AIHUB-*` headers and the
+existing bearer token, with the UUIDv5 Organization ID. The authentication
+scheme the provider now expects is not recorded here; replace this paragraph
+with the scheme and a dated smoke call to each `/v2` Writing route when AIHUB
+has them (#1456).
