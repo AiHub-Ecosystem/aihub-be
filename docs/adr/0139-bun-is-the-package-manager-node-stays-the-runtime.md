@@ -22,7 +22,7 @@ The gain per run is small. The decision rests on one install tool across CI, Doc
 
 ## Decision
 
-Bun is the package manager. Node.js 22 remains the application runtime; running the application on Bun is a separate decision ([#228](https://github.com/AiHub-Ecosystem/aihub-be/issues/228)).
+Bun is the package manager. Node.js 22 remains the application runtime; running the application on Bun is a separate decision ([#228](https://github.com/AiHub-Ecosystem/aihub-be/issues/228)), recorded in [ADR-0141](0141-node-22-stays-the-application-runtime.md).
 
 - `package.json` pins `bun@1.4.4` in `packageManager`; CI and the `Dockerfile` install the same version with `npm install --global bun@1.4.4`, because the repository allows only GitHub-owned actions and a short list of Docker actions, and `oven-sh/setup-bun` is not on it.
 - `bun.lock` is the lockfile and `bun install --frozen-lockfile` the CI install. `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `.pnpmfile.cjs` are gone.
