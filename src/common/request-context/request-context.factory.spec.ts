@@ -1,6 +1,24 @@
-import { createRequestContext } from './request-context.factory';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import {
+  MAX_DEADLINE_MS,
+  createRequestContext,
+} from './request-context.factory';
 
 describe('createRequestContext', () => {
+  it('accepts the deadline of every catalog operation, including the 125-second Writing /v2 grading', () => {
+    for (const { timeoutMs } of Object.values(OPERATION_CATALOG)) {
+      expect(() =>
+        createRequestContext({
+          requestId: 'req-123',
+          receivedAt: new Date(),
+          deadlineMs: timeoutMs,
+          scopes: [],
+        }),
+      ).not.toThrow();
+    }
+    expect(MAX_DEADLINE_MS).toBeGreaterThanOrEqual(125_000);
+  });
+
   it('creates a bounded context with an abort signal and deadline', () => {
     const receivedAt = new Date('2026-09-07T00:00:00.000Z');
     const context = createRequestContext({

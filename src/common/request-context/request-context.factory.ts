@@ -1,6 +1,8 @@
 import type { RequestContext, UserIdentityMode } from './request-context';
 
-const MAX_DEADLINE_MS = 120_000;
+// At least the largest operation timeout (Writing /v2 grading, 125 s, ADR-0143);
+// request-context.factory.spec.ts fails when a catalog timeout outgrows it.
+export const MAX_DEADLINE_MS = 125_000;
 
 export interface RequestContextInput {
   readonly requestId: string;

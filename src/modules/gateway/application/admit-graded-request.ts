@@ -25,6 +25,8 @@ export const RETRY_BUDGET_WINDOW_MS = 60_000;
 export const RETRY_BUDGET_OPERATIONS = [
   'writing.task1.grade',
   'writing.task2.grade',
+  'writing.v2.task1.grade',
+  'writing.v2.task2.grade',
 ] as const satisfies readonly OperationId[];
 
 export interface AdmitGradedRequestInput {

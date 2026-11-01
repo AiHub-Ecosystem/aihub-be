@@ -24,8 +24,14 @@ const ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
 // A code an adapter names only for a provider status that never carries the
 // hint: the dispatcher reads the provider's `Retry-After` on 429 and 503 alone,
-// so a provider 404 named `NOT_FOUND` cannot gain `retry_after_ms`.
-const NAMED_FOR_STATUS_WITHOUT_HINT = new Set(['NOT_FOUND']);
+// so a provider 404 named `NOT_FOUND` cannot gain `retry_after_ms`. The Writing
+// v3 adapter names `AI_SERVICE_TIMEOUT` for a 504 and `INVALID_REQUEST` for a
+// 413 or 422 on the same grounds.
+const NAMED_FOR_STATUS_WITHOUT_HINT = new Set([
+  'NOT_FOUND',
+  'AI_SERVICE_TIMEOUT',
+  'INVALID_REQUEST',
+]);
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

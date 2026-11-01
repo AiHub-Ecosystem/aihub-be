@@ -42,6 +42,8 @@ const expectedPaths = [
   '/v1/ielts/writing/task2/grade',
   '/v1/ielts/speaking/grading',
   '/v1/ielts/speaking/grading-json',
+  '/v2/ielts/writing/task1/grade',
+  '/v2/ielts/writing/task2/grade',
   '/v2/ielts/speaking/questions/grade',
   '/v2/ielts/speaking/parts/grade',
   '/v2/ielts/speaking/tests/grade',

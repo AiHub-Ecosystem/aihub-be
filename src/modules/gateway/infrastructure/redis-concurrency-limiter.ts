@@ -29,9 +29,13 @@ export type RedisConcurrencyClient = Pick<
 
 /** A refused permit is told to wait this long, plus up to as long again. */
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
-export const CONCURRENCY_STALE_LEASE_MS = 120_000;
+// A lease older than this no longer counts toward the cap, so it must outlast
+// the longest response deadline (125 s for Writing /v2) or a request still
+// being graded would free its own slot. redis-concurrency-limiter.spec.ts pins it.
+export const CONCURRENCY_STALE_LEASE_MS = 135_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
-// Keep 15 seconds of the 75-second graceful drain for event-loop delay.
+// Keep 15 seconds of the 75-second background drain this budget was sized
+// against for event-loop delay.
 const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS = 60_000;
 const LEASE_REMOVAL_ATTEMPTS = Math.floor(
   (CONCURRENCY_STALE_LEASE_MS - LEASE_REMOVAL_RETRY_MS) /

@@ -19,6 +19,8 @@ const TASK2_BODY = {
 const BODIES = {
   'writing.task1.grade': TASK1_BODY,
   'writing.task2.grade': TASK2_BODY,
+  'writing.v2.task1.grade': TASK1_BODY,
+  'writing.v2.task2.grade': TASK2_BODY,
 } as const;
 
 const stored = {

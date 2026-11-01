@@ -1,9 +1,11 @@
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
 import {
   beginShutdown,
   waitForBackgroundWork,
 } from '@/common/http/background-work-drain';
 import {
+  CONCURRENCY_STALE_LEASE_MS,
   type RedisConcurrencyClient,
   RedisConcurrencyLimiter,
 } from './redis-concurrency-limiter';
@@ -65,6 +67,15 @@ class FakeLogger {
 }
 
 describe('RedisConcurrencyLimiter', () => {
+  it('keeps a lease live for longer than any operation response deadline, so a request still being graded never frees its own slot', () => {
+    const longest = Math.max(
+      ...Object.values(OPERATION_CATALOG).map(({ timeoutMs }) => timeoutMs),
+    );
+
+    expect(CONCURRENCY_STALE_LEASE_MS).toBeGreaterThan(longest);
+    expect(longest).toBeGreaterThanOrEqual(125_000);
+  });
+
   it('atomically acquires an organization lease and releases its request member', async () => {
     const redis = new FakeRedis();
     const limiter = new RedisConcurrencyLimiter(redis);
@@ -89,7 +100,7 @@ describe('RedisConcurrencyLimiter', () => {
         'aihub:v1:inflight:org_acme',
         '20',
         'req_01JCONCURRENCYLEASE0000000000',
-        '120000',
+        '135000',
       ],
     });
 
@@ -163,7 +174,7 @@ describe('RedisConcurrencyLimiter', () => {
         '1',
         '10',
         'req_sandbox',
-        '120000',
+        '135000',
       ],
     });
     if (!decision.allowed) {

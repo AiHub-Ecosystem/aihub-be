@@ -68,6 +68,8 @@ describe('PostgresDispatchAttemptRepository', () => {
     await expect(repository.getUnresolvedByOperation()).resolves.toEqual([
       { operation: 'writing.task1.grade', count: 2 },
       { operation: 'writing.task2.grade', count: 0 },
+      { operation: 'writing.v2.task1.grade', count: 0 },
+      { operation: 'writing.v2.task2.grade', count: 0 },
       { operation: 'speaking.grading', count: 0 },
       { operation: 'speaking.grading-json', count: 0 },
       { operation: 'speaking.v2.question-grading', count: 0 },
@@ -108,6 +110,8 @@ describe('PostgresDispatchAttemptRepository', () => {
     await expect(repository.getUnresolvedByOperation()).resolves.toEqual([
       { operation: 'writing.task1.grade', count: 0 },
       { operation: 'writing.task2.grade', count: 0 },
+      { operation: 'writing.v2.task1.grade', count: 0 },
+      { operation: 'writing.v2.task2.grade', count: 0 },
       { operation: 'speaking.grading', count: 0 },
       { operation: 'speaking.grading-json', count: 0 },
       { operation: 'speaking.v2.question-grading', count: 0 },

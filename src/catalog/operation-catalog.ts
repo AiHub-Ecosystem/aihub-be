@@ -27,6 +27,11 @@ import {
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
 } from '@/contracts/writing/grading';
+import {
+  WritingV2GradeResponseSchema,
+  WritingV2GradeTask1RequestSchema,
+  WritingV2GradeTask2RequestSchema,
+} from '@/contracts/writing/v2/grading';
 import type { DownstreamId } from '@/downstream/downstream.types';
 
 // 'organization' is not an identity scope here and is not coming back.
@@ -128,6 +133,45 @@ export const OPERATION_CATALOG = {
     downstreamPath: '/v1/grading-feedback-task2',
     requestSchema: GradeTask2RequestSchema,
     responseContract: GradeResponseSchema,
+  },
+  'writing.v2.task1.grade': {
+    openApi: { summary: 'writing.v2.task1.grade' },
+    method: 'POST',
+    path: '/v2/ielts/writing/task1/grade',
+    requiredScope: 'writing.grade',
+    identityScope: 'user',
+    execution: 'sync',
+    contentType: 'application/json',
+    idempotency: 'required',
+    family: 'writing',
+    meteringMode: 'model',
+    maxBodyBytes: 256 * 1024,
+    // The provider's v3 pipeline takes 30 to 45 s and gives up at 120 s with
+    // its own 504. 125 s lets AIHUB answer that 504 as AI_SERVICE_TIMEOUT; the
+    // edge allows 135 s (ADR-0143 decisions 5 and 7).
+    timeoutMs: 125_000,
+    downstream: 'ai-writing',
+    downstreamPath: '/v3/grading-feedback-task1',
+    requestSchema: WritingV2GradeTask1RequestSchema,
+    responseContract: WritingV2GradeResponseSchema,
+  },
+  'writing.v2.task2.grade': {
+    openApi: { summary: 'writing.v2.task2.grade' },
+    method: 'POST',
+    path: '/v2/ielts/writing/task2/grade',
+    requiredScope: 'writing.grade',
+    identityScope: 'user',
+    execution: 'sync',
+    contentType: 'application/json',
+    idempotency: 'required',
+    family: 'writing',
+    meteringMode: 'model',
+    maxBodyBytes: 256 * 1024,
+    timeoutMs: 125_000,
+    downstream: 'ai-writing',
+    downstreamPath: '/v3/grading-feedback-task2',
+    requestSchema: WritingV2GradeTask2RequestSchema,
+    responseContract: WritingV2GradeResponseSchema,
   },
   'speaking.grading': {
     openApi: { summary: 'speaking.grading' },

@@ -19,6 +19,8 @@ import { GradedAdmissionGuard } from './graded-admission.guard';
 export const GRADED_REQUEST_OPERATIONS = [
   'writing.task1.grade',
   'writing.task2.grade',
+  'writing.v2.task1.grade',
+  'writing.v2.task2.grade',
   'speaking.grading',
   'speaking.grading-json',
 ] as const satisfies readonly (keyof typeof OPERATION_CATALOG)[];

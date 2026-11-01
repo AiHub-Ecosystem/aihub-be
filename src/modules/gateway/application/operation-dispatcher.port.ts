@@ -19,6 +19,10 @@ import type {
   GradeTask2Request,
 } from '@/contracts/writing/grading';
 import type {
+  WritingV2GradeTask1Request,
+  WritingV2GradeTask2Request,
+} from '@/contracts/writing/v2/grading';
+import type {
   MeteringModel,
   MeteringUsage,
 } from '@/modules/metering/application/metering-finalizer.port';
@@ -46,17 +50,21 @@ export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
   ? GradeTask1Request
   : K extends 'writing.task2.grade'
     ? GradeTask2Request
-    : K extends 'speaking.grading'
-      ? SpeakingGradeInput
-      : K extends 'speaking.grading-json'
-        ? SpeakingGradeJsonInput
-        : K extends 'speaking.v2.question-grading'
-          ? SpeakingV2QuestionGradeInput
-          : K extends 'speaking.v2.part-grading'
-            ? SpeakingV2PartGradeInput
-            : K extends 'speaking.v2.test-grading'
-              ? SpeakingV2TestGradeInput
-              : CatalogRequest<K>;
+    : K extends 'writing.v2.task1.grade'
+      ? WritingV2GradeTask1Request
+      : K extends 'writing.v2.task2.grade'
+        ? WritingV2GradeTask2Request
+        : K extends 'speaking.grading'
+          ? SpeakingGradeInput
+          : K extends 'speaking.grading-json'
+            ? SpeakingGradeJsonInput
+            : K extends 'speaking.v2.question-grading'
+              ? SpeakingV2QuestionGradeInput
+              : K extends 'speaking.v2.part-grading'
+                ? SpeakingV2PartGradeInput
+                : K extends 'speaking.v2.test-grading'
+                  ? SpeakingV2TestGradeInput
+                  : CatalogRequest<K>;
 
 type CatalogResponse<K extends OperationId> =
   (typeof OPERATION_CATALOG)[K]['responseContract'] extends infer T

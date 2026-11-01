@@ -62,9 +62,8 @@ describe('shutdown budget', () => {
     }
   });
 
-  // Writing /v2 grading (125 s, ADR-0143) is not in the catalog yet. Delete
-  // this case once the catalog holds that route: the case above then covers it.
-  it('is covered for the 125-second Writing /v2 timeout before that route exists', () => {
+  it('is covered for the 125-second Writing /v2 grading timeout', () => {
+    expect(largestRequestTimeoutMs()).toBe(125_000);
     for (const period of composeStopGracePeriodsMs()) {
       expect(period).toBeGreaterThanOrEqual(requiredStopGraceMs(125_000));
     }

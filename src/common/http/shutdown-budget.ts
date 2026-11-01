@@ -2,7 +2,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 
 // Shutdown budget: ADR-0085 as amended on 2026-11-01 (the amendment follows
-// ADR-0143, Writing /v2, which is still Proposed). `docker-compose.production.yml`
+// ADR-0143, which routes Writing /v2 grading at 125 s). `docker-compose.production.yml`
 // `stop_grace_period` must be at least requiredStopGraceMs(largest timeout):
 //   HTTP drain   = the largest request timeout
 //   background   = that timeout + 15s (idempotent work runs on after its response

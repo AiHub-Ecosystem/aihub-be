@@ -1241,7 +1241,7 @@ describe('buildOpenApiDocument', () => {
     expect(major).toBeDefined();
     const doc = buildOpenApiDocument(major) as OpenApiDocument;
 
-    expect(V2_OPERATION_IDS).toHaveLength(6);
+    expect(V2_OPERATION_IDS).toHaveLength(8);
     for (const operationId of V2_OPERATION_IDS) {
       const catalogued: OperationDef = OPERATION_CATALOG[operationId];
       const pathItem = doc.paths[catalogued.path];

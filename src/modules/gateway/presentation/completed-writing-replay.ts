@@ -4,6 +4,10 @@ import {
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
 } from '@/contracts/writing/grading';
+import {
+  WritingV2GradeTask1RequestSchema,
+  WritingV2GradeTask2RequestSchema,
+} from '@/contracts/writing/v2/grading';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { CompletedReplayForRequest } from './completed-idempotency-replay';
@@ -12,6 +16,8 @@ import type { CompletedReplayForRequest } from './completed-idempotency-replay';
 const WRITING_GRADE_SCHEMAS = {
   'writing.task1.grade': GradeTask1RequestSchema,
   'writing.task2.grade': GradeTask2RequestSchema,
+  'writing.v2.task1.grade': WritingV2GradeTask1RequestSchema,
+  'writing.v2.task2.grade': WritingV2GradeTask2RequestSchema,
 } as const;
 
 function isWritingGrade(

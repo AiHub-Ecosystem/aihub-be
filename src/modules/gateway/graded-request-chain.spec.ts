@@ -25,6 +25,7 @@ import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-atte
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
 import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
+import { WritingV2GradingController } from '@/modules/writing/presentation/writing-v2-grading.controller';
 import { getOwnPrototypeMethod } from '../../../test/support/own-prototype-method';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
@@ -247,6 +248,7 @@ describe('graded request chain', () => {
   it('wires every graded route to the declared chain, not a private copy', () => {
     for (const controller of [
       WritingGradingController,
+      WritingV2GradingController,
       SpeakingGradingController,
     ]) {
       expect(Reflect.getMetadata(GUARDS_METADATA, controller)).toEqual([
@@ -261,6 +263,7 @@ describe('graded request chain', () => {
   it('serves exactly the declared graded operations from routes that use the chain', () => {
     const served = [
       ...operationsServedBy(WritingGradingController),
+      ...operationsServedBy(WritingV2GradingController),
       ...operationsServedBy(SpeakingGradingController),
     ].sort();
     // Reads the real @RequireOperation from both controllers rather than

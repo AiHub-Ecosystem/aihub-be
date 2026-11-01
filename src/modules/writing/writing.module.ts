@@ -32,6 +32,7 @@ import { PostgresWritingChartUploadRepository } from './infrastructure/postgres-
 import { S3WritingChartUploadStorage } from './infrastructure/s3-writing-chart-upload.storage';
 import { WritingChartUploadController } from './presentation/writing-chart-upload.controller';
 import { WritingGradingController } from './presentation/writing-grading.controller';
+import { WritingV2GradingController } from './presentation/writing-v2-grading.controller';
 
 @Module({
   imports: [
@@ -44,7 +45,11 @@ import { WritingGradingController } from './presentation/writing-grading.control
     PersistenceModule,
     SecretsModule,
   ],
-  controllers: [WritingGradingController, WritingChartUploadController],
+  controllers: [
+    WritingGradingController,
+    WritingV2GradingController,
+    WritingChartUploadController,
+  ],
   providers: [
     SuccessEnvelopeInterceptor,
     {

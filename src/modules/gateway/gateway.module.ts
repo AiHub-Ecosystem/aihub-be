@@ -19,6 +19,10 @@ import {
 } from '@/downstream/speaking/speaking-v2.adapters';
 import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
+import {
+  writingV3Task1GradeAdapter,
+  writingV3Task2GradeAdapter,
+} from '@/downstream/writing/writing-v3-grade.adapters';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
@@ -239,6 +243,8 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
             [
               task1GradeAdapter,
               task2GradeAdapter,
+              writingV3Task1GradeAdapter,
+              writingV3Task2GradeAdapter,
               speakingGradingAdapter,
               speakingGradingJsonAdapter,
               speakingV2QuestionGradingAdapter,
