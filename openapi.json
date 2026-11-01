@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.2.0"
+    "version": "2.3.0"
   },
   "servers": [
     {
@@ -1225,16 +1225,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -1343,16 +1371,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -1461,16 +1517,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -1579,16 +1663,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -2052,16 +2164,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -2170,16 +2310,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -2288,16 +2456,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -2406,16 +2602,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -2909,16 +3133,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -3027,16 +3279,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -3145,16 +3425,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -3263,16 +3571,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -3776,16 +4112,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -3894,16 +4258,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -4012,16 +4404,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -4130,16 +4550,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -4643,16 +5091,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -4761,16 +5237,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -4879,16 +5383,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -4997,16 +5529,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -5508,16 +6068,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -5626,16 +6214,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -5744,16 +6360,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }
@@ -5862,16 +6506,44 @@
                                             "type": "string"
                                           },
                                           "error_codes": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "explain_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           },
                                           "improvement_vi": {
-                                            "type": "string"
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
                                           }
                                         }
                                       }

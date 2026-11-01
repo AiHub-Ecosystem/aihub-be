@@ -54,6 +54,16 @@ has no way to accept a change. It also refuses to drop `openapi/v2.json`, so the
   evidence that the schemas need review against more real responses before the
   next use, not a routine step.
 
+- **Third use, the same day.** Validating real Part, Test and question
+  responses for a recording of a person speaking (not a tone) against the
+  schemas found one more mismatch: a finding in `criteria.*.diagnostics[]` can
+  carry a `null` `error_codes`. 2.2.0 becomes 2.3.0, allowing `null` for the four
+  text fields of a finding. After that change all six operations validated
+  against three consecutive real runs with speech. The earlier schemas were
+  drawn from captures that all held speech but never exercised these cases, so
+  a fourth use should not happen without first running the schemas against a
+  wider set of real recordings.
+
 ## Consequences
 
 The gate can be told to accept a change, which weakens it by exactly the entries

@@ -51,10 +51,12 @@ const SpeakingV2DiagnosticSchema = Type.Object(
       { additionalProperties: false },
     ),
     kind: Type.String(),
-    error_codes: Type.String(),
-    explain_vi: Type.String(),
-    improvement: Type.String(),
-    improvement_vi: Type.String(),
+    // A finding the language check could not classify carries null codes or
+    // advice; a real recording returned null `error_codes`.
+    error_codes: Type.Union([Type.String(), Type.Null()]),
+    explain_vi: Type.Union([Type.String(), Type.Null()]),
+    improvement: Type.Union([Type.String(), Type.Null()]),
+    improvement_vi: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );

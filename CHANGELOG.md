@@ -9,6 +9,17 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.3.0] - 2026-11-01
+
+### Changed
+
+- `/v2` question results: in `data.criteria.*.diagnostics[]`, `error_codes`,
+  `explain_vi`, `improvement` and `improvement_vi` may be `null` for a finding
+  the language check could not classify. A real recording returned a `null`
+  `error_codes`, which contract 2.2.0 refused with
+  `502 AI_SERVICE_CONTRACT_VIOLATION`. Same defect class and acceptance as
+  2.1.0 (ADR-0142).
+
 ## [2.2.0] - 2026-11-01
 
 ### Changed

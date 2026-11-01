@@ -135,6 +135,27 @@ describe('Speaking v2 response adapters', () => {
     },
   );
 
+  it('accepts a located finding whose codes and advice are null, which a real recording returned', () => {
+    const body = fixture('grading-v2-question-post.200.json') as {
+      data: {
+        criteria: Record<string, { diagnostics: Record<string, unknown>[] }>;
+      };
+    };
+    const finding =
+      body.data.criteria.grammatical_range_accuracy?.diagnostics[0];
+    if (finding === undefined) throw new Error('fixture has no finding');
+    finding.error_codes = null;
+    finding.explain_vi = null;
+    finding.improvement = null;
+    finding.improvement_vi = null;
+
+    const result = parseSpeakingV2QuestionResult(body);
+
+    expect(
+      result.criteria.grammatical_range_accuracy.diagnostics?.[0]?.error_codes,
+    ).toBeNull();
+  });
+
   it('fails closed when a required score is missing or mistyped', () => {
     const missing = fixture('grading-v2-question-post.200.json') as {
       data: { scores: Record<string, unknown> };

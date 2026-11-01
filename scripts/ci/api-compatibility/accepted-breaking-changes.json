@@ -23,5 +23,29 @@
       "response property `data/meta/total_speaking_seconds` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
       "the `data/meta/total_speaking_seconds` response property's min was unset from `0.00` for the response status `200`"
     ]
+  },
+  {
+    "major": 2,
+    "baseVersion": "2.2.0",
+    "candidateVersion": "2.3.0",
+    "decision": "docs/adr/0142-a-released-contract-defect-is-corrected-through-an-accepted-change-entry.md",
+    "changes": [
+      "response property `data/criteria/fluency_coherence/diagnostics/anyOf[subschema #2]/items/error_codes` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/fluency_coherence/diagnostics/anyOf[subschema #2]/items/explain_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/fluency_coherence/diagnostics/anyOf[subschema #2]/items/improvement` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/fluency_coherence/diagnostics/anyOf[subschema #2]/items/improvement_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/grammatical_range_accuracy/diagnostics/anyOf[subschema #2]/items/error_codes` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/grammatical_range_accuracy/diagnostics/anyOf[subschema #2]/items/explain_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/grammatical_range_accuracy/diagnostics/anyOf[subschema #2]/items/improvement` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/grammatical_range_accuracy/diagnostics/anyOf[subschema #2]/items/improvement_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/lexical_resource/diagnostics/anyOf[subschema #2]/items/error_codes` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/lexical_resource/diagnostics/anyOf[subschema #2]/items/explain_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/lexical_resource/diagnostics/anyOf[subschema #2]/items/improvement` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/lexical_resource/diagnostics/anyOf[subschema #2]/items/improvement_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/pronunciation/diagnostics/anyOf[subschema #2]/items/error_codes` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/pronunciation/diagnostics/anyOf[subschema #2]/items/explain_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/pronunciation/diagnostics/anyOf[subschema #2]/items/improvement` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
+      "response property `data/criteria/pronunciation/diagnostics/anyOf[subschema #2]/items/improvement_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`"
+    ]
   }
 ]
