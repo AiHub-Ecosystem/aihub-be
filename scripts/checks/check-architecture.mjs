@@ -471,6 +471,9 @@ for (const file of sourceFiles) {
 // Node, `tsx` or dependency-cruiser through `process.execPath`, or a package
 // script through `bun run`.
 const retiredPackageManagerCall = /['"`]pnpm(?:\.cmd)?['"`]/;
+const issue225BenchmarkPath = 'scripts/ops/dev-restart-benchmark/benchmark.mjs';
+const issue225BenchmarkReason =
+  'arch-check: #225 requires the real pnpm dev command';
 for (const directory of ['scripts', 'src', 'test']) {
   const files = readdirSync(join(root, directory), {
     recursive: true,
@@ -480,9 +483,14 @@ for (const directory of ['scripts', 'src', 'test']) {
     const file = join(entry.parentPath, entry.name);
     // This file holds the pattern above, which is itself such a literal.
     if (entry.name === 'check-architecture.mjs') continue;
-    if (retiredPackageManagerCall.test(readFileSync(file, 'utf8'))) {
+    const source = readFileSync(file, 'utf8');
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    const issue225Benchmark =
+      relativePath === issue225BenchmarkPath &&
+      source.includes(issue225BenchmarkReason);
+    if (retiredPackageManagerCall.test(source) && !issue225Benchmark) {
       fail(
-        `${relative(root, file).replace(/\\/g, '/')} spawns pnpm; use process.execPath or 'bun run' (ADR-0139)`,
+        `${relativePath} spawns pnpm; use process.execPath or 'bun run' (ADR-0139)`,
       );
     }
   }

@@ -249,6 +249,44 @@ jobs:
       - name: Exercise Speaking gateway smoke identity handling with stubs
         run: bash test/ops/speaking-gateway-smoke.spec.sh
 
+  dev-restart-budget:
+    name: Dev restart budget
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Set up pnpm for the measured dev command
+        run: npm install --global pnpm@11.20.0
+
+      - name: Test restart benchmark cleanup and isolation
+        run: node --test test/cli/dev-restart-benchmark.spec.mjs
+
+      - name: Run service-free dev restart benchmark
+        run: bun run benchmark:dev-restart
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -1040,6 +1078,7 @@ jobs:
     needs:
       - static
       - test
+      - dev-restart-budget
       - build
       - audit
       - customer-web-contract
@@ -1056,6 +1095,7 @@ jobs:
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          DEV_RESTART_BUDGET_RESULT: ${{ needs.dev-restart-budget.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           AUDIT_RESULT: ${{ needs.audit.result }}
           CUSTOMER_WEB_CONTRACT_RESULT: ${{ needs.customer-web-contract.result }}
@@ -1069,6 +1109,7 @@ jobs:
         run: |
           test "$STATIC_RESULT" = success
           test "$TEST_RESULT" = success
+          test "$DEV_RESTART_BUDGET_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$AUDIT_RESULT" = success
           test "$CUSTOMER_WEB_CONTRACT_RESULT" = success

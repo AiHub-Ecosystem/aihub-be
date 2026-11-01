@@ -1244,6 +1244,23 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.status).not.toBe(0);
   });
 
+  it('keeps package-manager child processes rejected outside the #225 benchmark', () => {
+    const packageManager = ['p', 'npm'].join('');
+    const result = runWithFixtures(
+      [
+        {
+          layer: 'ops',
+          name: 'probe.mjs',
+          source: `spawn('${packageManager}', ['dev']);\n`,
+        },
+      ],
+      join(process.cwd(), 'scripts'),
+    );
+
+    expect(result.output).toContain('spawns pnpm');
+    expect(result.status).not.toBe(0);
+  });
+
   it('allows environment reads and Vault references in their boundary folders', () => {
     const configuration = runWithFixtures(
       [
