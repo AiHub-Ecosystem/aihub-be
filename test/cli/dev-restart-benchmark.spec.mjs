@@ -73,6 +73,65 @@ await test('stops the process tree and removes files when the benchmark fails', 
   assert.equal(existsSync(tempParent), false);
 });
 
+await test(
+  'kills remaining process group members after the leader exits on SIGTERM',
+  { skip: process.platform === 'win32' },
+  async (context) => {
+    const tempParent = mkdtempSync(
+      path.join(tempRoot, 'dev-restart-descendant-'),
+    );
+    const workspaceRoot = path.join(tempParent, 'workspace');
+    mkdirSync(workspaceRoot);
+    const child = spawn(
+      process.execPath,
+      [
+        '-e',
+        [
+          "const { spawn } = require('node:child_process');",
+          "const descendant = spawn(process.execPath, ['-e', \"process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)\"], { stdio: 'ignore' });",
+          "descendant.once('spawn', () => process.stdout.write('ready'));",
+          "process.on('SIGTERM', () => process.exit(0));",
+          'setInterval(() => {}, 1000);',
+        ].join(''),
+      ],
+      {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true,
+      },
+    );
+    const ready = once(child.stdout, 'data');
+    await once(child, 'spawn');
+    await ready;
+    assert.ok(child.pid !== undefined);
+    const processGroupId = child.pid;
+    context.after(() => {
+      try {
+        process.kill(-processGroupId, 'SIGKILL');
+      } catch (error) {
+        if (error.code !== 'ESRCH') throw error;
+      }
+    });
+
+    const groupIsAlive = () => {
+      try {
+        process.kill(-processGroupId, 0);
+        return true;
+      } catch (error) {
+        if (error.code === 'ESRCH') return false;
+        throw error;
+      }
+    };
+
+    await assert.rejects(
+      withBenchmarkCleanup({ child, workspaceRoot, tempParent }, async () => {
+        throw new Error('synthetic benchmark failure');
+      }),
+      /synthetic benchmark failure/,
+    );
+    assert.equal(groupIsAlive(), false);
+  },
+);
 await test('fails a phase only when it exceeds its committed budget', () => {
   const results = comparePhases(
     { compile: 50, shutdown: 2501, boot: 3000 },

@@ -183,35 +183,63 @@ function waitForChildExit(child, timeoutMs) {
   });
 }
 
+/** @param {number} processGroupId */
+function processGroupExists(processGroupId) {
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch (error) {
+    const code = /** @type {NodeJS.ErrnoException} */ (error).code;
+    if (code === 'ESRCH') return false;
+    if (code === 'EPERM') return true;
+    throw error;
+  }
+}
+
+/** @param {number} processGroupId @param {number} timeoutMs */
+async function waitForProcessGroupExit(processGroupId, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (processGroupExists(processGroupId)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return true;
+}
+
+/** @param {number} processGroupId @param {NodeJS.Signals} signal */
+function signalProcessGroup(processGroupId, signal) {
+  try {
+    process.kill(-processGroupId, signal);
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ESRCH')
+      throw error;
+  }
+}
+
 /** @param {ChildProcess | undefined} child */
 async function stopProcessTree(child) {
-  if (childExited(child) || child.pid === undefined) return;
+  if (!child || child.pid === undefined) return;
   if (process.platform === 'win32') {
-    const result = spawnSync(
-      'taskkill',
-      ['/pid', String(child.pid), '/T', '/F'],
-      {
-        stdio: 'ignore',
-      },
-    );
-    if (result.error) throw result.error;
-    if (result.status !== 0 && result.status !== 128) {
-      throw new Error(`taskkill failed with status ${result.status}.`);
+    if (!childExited(child)) {
+      const result = spawnSync(
+        'taskkill',
+        ['/pid', String(child.pid), '/T', '/F'],
+        {
+          stdio: 'ignore',
+        },
+      );
+      if (result.error) throw result.error;
+      if (result.status !== 0 && result.status !== 128) {
+        throw new Error(`taskkill failed with status ${result.status}.`);
+      }
     }
   } else {
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch (error) {
-      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ESRCH')
-        throw error;
+    signalProcessGroup(child.pid, 'SIGTERM');
+    if (!(await waitForProcessGroupExit(child.pid, 2000))) {
+      signalProcessGroup(child.pid, 'SIGKILL');
     }
-    if (!(await waitForChildExit(child, 2000))) {
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch (error) {
-        if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ESRCH')
-          throw error;
-      }
+    if (!(await waitForProcessGroupExit(child.pid, 5000))) {
+      throw new Error('The pnpm dev process tree did not stop.');
     }
   }
   if (!(await waitForChildExit(child, 5000))) {
