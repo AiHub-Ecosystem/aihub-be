@@ -1,4 +1,4 @@
-# ADR-0143: Evaluate in-process Singleflight request coalescing
+# ADR-0144: Evaluate in-process Singleflight request coalescing
 
 - Status: Proposed; implementation and concurrency evidence are recorded under [#1214](https://github.com/AiHub-Ecosystem/aihub-be/issues/1214), but adoption by read endpoints remains a separate decision
 - Date: 2026-11-01

@@ -94,6 +94,7 @@ class ShortDeadlineIdempotencyService implements IdempotencyServicePort {
   constructor(
     private readonly service: IdempotencyService,
     private readonly timeoutMs: number,
+    private readonly responseDeadlineMs: number,
   ) {}
 
   execute<T>(
@@ -105,7 +106,7 @@ class ShortDeadlineIdempotencyService implements IdempotencyServicePort {
       {
         ...input,
         timeoutMs: this.timeoutMs,
-        deadlineAt: new Date(Date.now() + 250),
+        deadlineAt: new Date(Date.now() + this.responseDeadlineMs),
       },
       work,
       decodeReplay,
@@ -186,13 +187,16 @@ class CapturingSpanExporter extends InMemorySpanExporter {
 }
 
 describe('application shutdown drain', () => {
-  // 125 s is the Writing /v2 grading timeout (ADR-0143, #1455). The response
-  // deadline here stays 250 ms, so this case only proves the drain works with a
-  // 250 s hard deadline; the genuinely long path (a 504 at 125 s, completion
-  // 100 s later) runs on fake timers in idempotency-service.spec.ts.
-  it.each([1_000, 125_000])(
-    'drains a graded request with a %i ms timeout, persists its result and usage, refuses new connections, and flushes its span',
-    async (timeoutMs) => {
+  // The 125 s case is the Writing /v2 grading timeout (ADR-0143, #1455). Its
+  // request really outlives 60 s: fake timers carry the clock to the response
+  // deadline, the caller gets the 504, and the drain still lets the grading
+  // finish and be recorded and charged.
+  it.each([
+    { timeoutMs: 1_000, responseDeadlineMs: 250 },
+    { timeoutMs: 125_000, responseDeadlineMs: 125_000 },
+  ])(
+    'drains a graded request with a $timeoutMs ms timeout, persists its result and usage, refuses new connections, and flushes its span',
+    async ({ timeoutMs, responseDeadlineMs }) => {
       const exporter = new CapturingSpanExporter();
       const sdk = new NodeSDK({
         spanProcessors: [
@@ -209,6 +213,7 @@ describe('application shutdown drain', () => {
       const idempotency = new ShortDeadlineIdempotencyService(
         new IdempotencyService(idempotencyRepository),
         timeoutMs,
+        responseDeadlineMs,
       );
       const usageRepository = new InMemoryUsageRepository();
       const downstream = new StubDownstream();
@@ -265,7 +270,12 @@ describe('application shutdown drain', () => {
       }
       const url = `http://127.0.0.1:${address.port}${GRADE_PATH}`;
       try {
-        const response = await fetch(url, {
+        // Installed before the request so its response deadline is a fake timer.
+        const longRequest = responseDeadlineMs > 60_000;
+        if (longRequest) {
+          jest.useFakeTimers();
+        }
+        const pendingResponse = fetch(url, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -275,6 +285,11 @@ describe('application shutdown drain', () => {
           body: JSON.stringify(GRADE_BODY),
         });
         await downstream.started;
+        if (longRequest) {
+          await jest.advanceTimersByTimeAsync(responseDeadlineMs);
+          jest.useRealTimers();
+        }
+        const response = await pendingResponse;
         expect(response.status).toBe(504);
         await response.arrayBuffer();
 
@@ -316,6 +331,7 @@ describe('application shutdown drain', () => {
           exporter.exported.some((span) => span.name === `POST ${GRADE_PATH}`),
         ).toBe(true);
       } finally {
+        jest.useRealTimers();
         downstream.release();
         if (app.getHttpServer().listening) {
           await app.close();

@@ -246,7 +246,8 @@ export class IdempotencyService implements IdempotencyServicePort {
     }
     // Background work can run up to `timeoutMs` past its response deadline
     // (the longest grading route is 125s on Writing /v2); the shutdown budget
-    // allows that timeout plus 15s (shutdown-budget.ts).
+    // allows that timeout plus 15s (shutdown-budget.ts). Change this factor
+    // together with BACKGROUND_SLACK_MS there.
     const hardTimeoutMs = input.timeoutMs * 2;
     const hardDeadlineAt = new Date(this.now() + hardTimeoutMs);
     const controller = new AbortController();

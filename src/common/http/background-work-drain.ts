@@ -1,8 +1,5 @@
 import { backgroundDrainMs, largestRequestTimeoutMs } from './shutdown-budget';
 
-// Sized for the slowest timed route in the catalog (ADR-0085, ADR-0143).
-const MAX_BACKGROUND_DRAIN_MS = backgroundDrainMs(largestRequestTimeoutMs());
-
 let pendingWork = 0;
 let shuttingDown = false;
 const drainWaiters = new Set<() => void>();
@@ -54,11 +51,12 @@ export function waitForBackgroundWork(): Promise<void> {
     };
 
     drainWaiters.add(finish);
+    // Sized for the slowest timed route in the catalog (ADR-0085 amendment).
     timer = setTimeout(() => {
       drainWaiters.delete(finish);
       reject(
         new Error('Background work did not drain before shutdown deadline'),
       );
-    }, MAX_BACKGROUND_DRAIN_MS);
+    }, backgroundDrainMs(largestRequestTimeoutMs()));
   });
 }

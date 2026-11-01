@@ -1,7 +1,8 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 
-// Shutdown budget (ADR-0085, amended by ADR-0143). `docker-compose.production.yml`
+// Shutdown budget: ADR-0085 as amended on 2026-11-01 (the amendment follows
+// ADR-0143, Writing /v2, which is still Proposed). `docker-compose.production.yml`
 // `stop_grace_period` must be at least requiredStopGraceMs(largest timeout):
 //   HTTP drain   = the largest request timeout
 //   background   = that timeout + 15s (idempotent work runs on after its response
@@ -9,12 +10,13 @@ import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 //   telemetry    = 5s flush
 //   margin       = 10s
 // shutdown-budget.spec.ts fails when the compose value falls short.
-const BACKGROUND_EXTRA_MS = 15_000;
+// Slack past the timeout for the final writes after late work ends.
+const BACKGROUND_SLACK_MS = 15_000;
 const TELEMETRY_FLUSH_MS = 5_000;
 const SHUTDOWN_MARGIN_MS = 10_000;
 
 export function backgroundDrainMs(timeoutMs: number): number {
-  return timeoutMs + BACKGROUND_EXTRA_MS;
+  return timeoutMs + BACKGROUND_SLACK_MS;
 }
 
 export function requiredStopGraceMs(timeoutMs: number): number {

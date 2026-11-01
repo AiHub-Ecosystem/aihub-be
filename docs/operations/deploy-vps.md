@@ -2129,9 +2129,10 @@ stop grace (280 seconds). The budget follows the largest request timeout T: T
 for HTTP drain, T + 15 seconds for background work (idempotent requests and the
 email outbox pass in flight, see [email outbox](email-outbox.md#shutdown-833)),
 and 5 seconds for telemetry export, with 10 seconds of margin; the 125-second
-Writing `/v2` timeout gives 280 seconds ([ADR-0143](../adr/0143-public-v2-serves-ai-writing-v3-grading.md)). This drain relies on the background-work
-shutdown behavior and lifecycle coverage completed in #284. The validated upstream is the active-slot
-source of truth; the immutable image SHA and helper history identify the
+Writing `/v2` timeout gives 280 seconds
+([ADR-0143](../adr/0143-public-v2-serves-ai-writing-v3-grading.md)). This drain
+relies on the background-work shutdown behavior and lifecycle coverage completed
+in #284. The validated upstream is the active-slot source of truth; the immutable image SHA and helper history identify the
 release. `.env.production` is not the last-good release record.
 
 Before each deploy, the helper reconciles `AIHUB_SANDBOX_ENABLED` with the
