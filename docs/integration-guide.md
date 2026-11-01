@@ -1210,8 +1210,7 @@ in whole seconds, rounded up, so a standard HTTP client or retry library can
 read it.
 
 These are all the refusals that can carry a hint. A code outside the table never
-does: `AI_SERVICE_TIMEOUT` and `AI_SERVICE_THROTTLED` carry none, so use your
-own backoff there. A row marked "when" carries the hint only in that case, so
+does: `AI_SERVICE_TIMEOUT` carries none, so use your own backoff there. A row marked "when" carries the hint only in that case, so
 read the field when present and fall back to your own backoff when it is
 missing. A hint that AIHUB spreads with random jitter arrives with a different
 value for each client, so clients refused at the same moment are not all told to
@@ -1239,6 +1238,7 @@ come back at the same instant:
 | `IDENTITY_PROVIDER_UNAVAILABLE` (when the JWKS source failed or is in a cooldown)        | The remaining cooldown (30 s after a cold failure), plus 0–999 ms; absent for any other cause, such as the identity configuration store |
 | `AI_SERVICE_UNAVAILABLE` (when AIHUB has stopped sending to the AI service)              | The time left before AIHUB tries the AI service again, at most 30 s; absent when the AI service itself refused or could not be reached  |
 | `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`)       | That wait, read from the AI service's `Retry-After`; absent for any other status                                                        |
+| `AI_SERVICE_THROTTLED` (when the AI service answered `429` with its own `Retry-After`)   | That wait, read from the AI service's `Retry-After`; absent when the AI service sent none                                               |
 | `AUDIO_UNREADABLE` (when the AI service answered `503` with its own `Retry-After`)       | The same wait. The refusal stays `retryable: false`: send a new recording, not the same file again                                      |
 
 Every row with a hint also sends `Retry-After`. The header and the field never
@@ -1278,7 +1278,7 @@ separate table below.
 |  429 | `QUOTA_EXCEEDED`                | Monthly quota exhausted                                                                                                                    | Wait for the reset or contact AIHUB about your quota                                                               |
 |  502 | `AI_SERVICE_ERROR`              | AI service returned an error, including a request timeout it asks you to repeat                                                            | Retry later if `retryable` is true                                                                                 |
 |  502 | `AI_SERVICE_CONTRACT_VIOLATION` | AI service returned an unexpected shape                                                                                                    | Do not retry. Report it with the `request_id`                                                                      |
-|  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                                                                   | Back off and retry                                                                                                 |
+|  503 | `AI_SERVICE_THROTTLED`          | AI service is throttling                                                                                                                   | Wait for `Retry-After` when present, otherwise back off and retry                                                  |
 |  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable or not accepting requests                                                                                           | Retry with backoff                                                                                                 |
 |  503 | `EMAIL_DELIVERY_BACKLOGGED`     | The email queue is too far behind to deliver a link before it expires (registration, resend, password recovery, invitation)                | Retry after `retry_after_ms`; the refused request created nothing and used no rate limit                           |
 |  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement                                                    | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |

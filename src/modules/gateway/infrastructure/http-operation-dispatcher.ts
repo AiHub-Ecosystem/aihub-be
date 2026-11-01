@@ -36,6 +36,7 @@ function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
       code: 'AI_SERVICE_THROTTLED',
       message: 'AI service is temporarily throttled',
       retryable: true,
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     });
   }
 
@@ -235,7 +236,7 @@ function downstreamResponseError(
   if (response.status >= 200 && response.status < 300) return undefined;
   const hint = adapter.parseError?.(response.status, response.body);
   const retryDelay =
-    response.status === 503
+    response.status === 503 || response.status === 429
       ? retryAfterMs(response.headers['retry-after'])
       : undefined;
   return hint === undefined
@@ -245,9 +246,7 @@ function downstreamResponseError(
         message: hint.message,
         retryable: hint.retryable,
         downstreamStatus: response.status,
-        ...(response.status === 503 && retryDelay !== undefined
-          ? { retryAfterMs: retryDelay }
-          : {}),
+        ...(retryDelay !== undefined ? { retryAfterMs: retryDelay } : {}),
       });
 }
 

@@ -1371,6 +1371,40 @@ describe('HttpOperationDispatcher', () => {
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
   });
 
+  function dispatchAfterThrottle(headers: Record<string, string>) {
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .reply(429, {}, { headers });
+    return createHttpOperationDispatcher(
+      new DownstreamHttpClient('https://ai-writing.test', mockAgent),
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
+    ).dispatch('writing.task1.grade', gradeInput, context());
+  }
+
+  it('carries the provider Retry-After on a downstream 429 without retrying it', async () => {
+    await expect(
+      dispatchAfterThrottle({ 'retry-after': '5' }),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_THROTTLED',
+      retryAfterMs: 5_000,
+    });
+  });
+
+  it.each(['soon', '-3', ''])(
+    'drops an unusable Retry-After %p on a downstream 429',
+    async (value) => {
+      const failure = await dispatchAfterThrottle({
+        'retry-after': value,
+      }).catch((error: unknown) => error);
+
+      expect(failure).toMatchObject({ code: 'AI_SERVICE_THROTTLED' });
+      expect(failure).not.toHaveProperty('retryAfterMs', expect.any(Number));
+    },
+  );
+
   async function dispatchAfterDownstreamStatus(status: number) {
     mockAgent
       .get('https://ai-writing.test')
