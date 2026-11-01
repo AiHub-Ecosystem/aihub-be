@@ -16,7 +16,10 @@ export const SpeakingV2TestResultSchema = Type.Object(
         test_id: Type.Union([Type.String(), Type.Null()]),
         test_type: SpeakingV2TestTypeSchema,
         question_count: Type.Integer({ minimum: 0 }),
-        total_speaking_seconds: Type.Number({ minimum: 0 }),
+        total_speaking_seconds: Type.Union([
+          Type.Number({ minimum: 0 }),
+          Type.Null(),
+        ]),
         parts_completed: Type.Array(Type.Integer({ minimum: 1, maximum: 3 })),
         graded_at: Type.String(),
       },

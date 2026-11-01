@@ -43,6 +43,17 @@ has no way to accept a change. It also refuses to drop `openapi/v2.json`, so the
   value is still returned whenever the request or the audio supplies one; a
   client that assumed a string for `test_id` now has to expect `null`.
 
+- **Second use, the same day.** A Sandbox smoke of the 2.1.0 contract on the
+  Part and Test routes answered 502 for a recording without speech:
+  `data.meta.total_speaking_seconds` is `null` there and 2.1.0 still required a
+  number. 2.1.0 becomes 2.2.0, allowing `null` for it on Part and Test results.
+  The evidence is unchanged and still holds; the schemas were checked against
+  real Part and Test aggregation responses for the recordings the smoke used,
+  and no other mismatch was found. This is the second use for the same cause
+  (schemas drawn from captures that all held speech), so a further widening is
+  evidence that the schemas need review against more real responses before the
+  next use, not a routine step.
+
 ## Consequences
 
 The gate can be told to accept a change, which weakens it by exactly the entries

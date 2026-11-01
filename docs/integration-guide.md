@@ -969,7 +969,7 @@ on question results. Each finding has `reference` (`token_range`, `text`,
 and `improvement_vi`; reference timings can be `null`. A question result also
 has `data.transcript` with `text`, `stats.word_count`,
 `stats.speaking_seconds`, and `tokens` containing `index`, `text`, `start_ms`,
-and `end_ms` (either timing can be `null`). Where the AI service has no value, the field is `null`: `data.meta.test_id` when the request named no test; on a question result `data.meta.part_result_id` when it named no Part, and `data.transcript.stats.word_count` and `speaking_seconds` for a recording without speech.
+and `end_ms` (either timing can be `null`). Where the AI service has no value, the field is `null`: `data.meta.test_id` when the request named no test; on a question result `data.meta.part_result_id` when it named no Part, and `data.transcript.stats.word_count` and `speaking_seconds` for a recording without speech. On a Part or Test result, `data.meta.total_speaking_seconds` is `null` when the graded recordings held no speech.
 
 Compared with `/v1`, v2 does not return `scorability`, `relevance`,
 `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,

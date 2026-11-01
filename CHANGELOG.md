@@ -9,6 +9,15 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.2.0] - 2026-11-01
+
+### Changed
+
+- `/v2` Part and Test results: `data.meta.total_speaking_seconds` is `null`
+  when the graded recordings held no speech. Contract 2.1.0 required a number
+  and answered `502 AI_SERVICE_CONTRACT_VIOLATION` for that input. Same defect
+  class and same acceptance as 2.1.0 (ADR-0142).
+
 ## [2.1.0] - 2026-11-01
 
 ### Changed

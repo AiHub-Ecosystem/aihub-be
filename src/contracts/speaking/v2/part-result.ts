@@ -18,7 +18,10 @@ export const SpeakingV2PartResultSchema = Type.Object(
         part_result_id: Type.String({ minLength: 1 }),
         part: Type.Integer({ minimum: 1, maximum: 3 }),
         question_count: Type.Integer({ minimum: 0 }),
-        total_speaking_seconds: Type.Number({ minimum: 0 }),
+        total_speaking_seconds: Type.Union([
+          Type.Number({ minimum: 0 }),
+          Type.Null(),
+        ]),
         graded_at: Type.String(),
       },
       { additionalProperties: false },

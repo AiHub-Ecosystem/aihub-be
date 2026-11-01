@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.1.0"
+    "version": "2.2.0"
   },
   "servers": [
     {
@@ -1858,8 +1858,15 @@
                               "type": "integer"
                             },
                             "total_speaking_seconds": {
-                              "minimum": 0,
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "graded_at": {
                               "type": "string"
@@ -2700,8 +2707,15 @@
                               "type": "integer"
                             },
                             "total_speaking_seconds": {
-                              "minimum": 0,
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "parts_completed": {
                               "type": "array",
@@ -4435,8 +4449,15 @@
                               "type": "integer"
                             },
                             "total_speaking_seconds": {
-                              "minimum": 0,
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "graded_at": {
                               "type": "string"
@@ -5285,8 +5306,15 @@
                               "type": "integer"
                             },
                             "total_speaking_seconds": {
-                              "minimum": 0,
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "parts_completed": {
                               "type": "array",

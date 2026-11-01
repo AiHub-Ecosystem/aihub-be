@@ -122,6 +122,19 @@ describe('Speaking v2 response adapters', () => {
     expect(result.transcript.stats.speaking_seconds).toBeNull();
   });
 
+  it.each([
+    ['grading-v2-part-post.200.json', parseSpeakingV2PartResult],
+    ['grading-v2-test-post.200.json', parseSpeakingV2TestResult],
+  ])(
+    'accepts a null total_speaking_seconds on %s, which the provider returns for recordings without speech',
+    (name, parse) => {
+      const body = fixture(name) as { data: { meta: Record<string, unknown> } };
+      body.data.meta.total_speaking_seconds = null;
+
+      expect(parse(body).meta.total_speaking_seconds).toBeNull();
+    },
+  );
+
   it('fails closed when a required score is missing or mistyped', () => {
     const missing = fixture('grading-v2-question-post.200.json') as {
       data: { scores: Record<string, unknown> };
