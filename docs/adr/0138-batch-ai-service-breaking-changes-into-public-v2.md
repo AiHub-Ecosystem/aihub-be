@@ -1,7 +1,8 @@
 # ADR-0138: Batch AI-service breaking changes into Public API v2
 
-- Status: Proposed — design agreed by the AIHUB owner on 2026-11-01; `/v2` was released ahead of the evidence below, which is tracked in #1450.
+- Status: Proposed; amended by [ADR-0143](0143-public-v2-serves-ai-writing-v3-grading.md) — design agreed by the AIHUB owner on 2026-11-01; `/v2` was released ahead of the evidence below, which is tracked in #1450.
 - Date: 2026-10-31
+- Writing's schema, routes, timeout and enablement gate: [ADR-0143](0143-public-v2-serves-ai-writing-v3-grading.md)
 - Amended: 2026-11-01 — the first `/v2` carries Speaking only and ships with `/v1`'s ADR-0127 sunset; Writing v3 joins `/v2` later as an additive change (decisions 1, 2, 4, 6, 8 and 10)
 - Related: [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0131](0131-customers-are-told-when-grading-behavior-changes.md), [ADR-0140](0140-tenant-identity-is-the-organization-and-end-user-id-pair.md), [#72](https://github.com/AiHub-Ecosystem/aihub-be/issues/72), [#1374](https://github.com/AiHub-Ecosystem/aihub-be/issues/1374), [#70](https://github.com/AiHub-Ecosystem/aihub-be/issues/70)
 
