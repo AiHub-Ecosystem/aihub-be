@@ -1,0 +1,10 @@
+{
+  "name": "Issue #225 service-free dev restart",
+  "recordedOn": "2026-11-01",
+  "runner": "Windows x64, Node v24.21.0, pnpm v11.20.0",
+  "phases": {
+    "compile": { "baselineMs": 95, "budgetMs": 1500 },
+    "shutdown": { "baselineMs": 1000, "budgetMs": 2500 },
+    "boot": { "baselineMs": 1700, "budgetMs": 6000 }
+  }
+}

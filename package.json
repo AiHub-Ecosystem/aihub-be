@@ -21,6 +21,7 @@
     "test:api-compatibility": "node --test --test-concurrency=1 test/cli/api-compatibility-check.spec.mjs test/cli/api-compatibility-release.spec.mjs",
     "test:runner-benchmark": "tsx scripts/ops/test-runner-benchmark/benchmark-check.ts",
     "test:node-runner-probe": "node --test --test-concurrency=1 scripts/ops/test-runner-benchmark/node-test-probe.ts",
+    "benchmark:dev-restart": "node scripts/ops/dev-restart-benchmark/benchmark.mjs",
     "generate:openapi": "tsx scripts/generate/generate-openapi.ts && biome format --write openapi.json openapi",
     "validate:openapi": "node scripts/checks/validate-openapi.mjs",
     "generate:postman": "tsx scripts/generate/generate-postman.ts && biome format --write aihub.postman_collection.json",
