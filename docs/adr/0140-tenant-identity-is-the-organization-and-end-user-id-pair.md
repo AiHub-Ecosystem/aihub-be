@@ -8,7 +8,7 @@
 
 An Organization signs a User Assertion whose `sub` is any identifier it chooses, or declares an End-User ID without signing ([ADR-0053](0053-optional-user-identity-verification.md)). Verification proves which Organization vouched for the value. It does not make the value unique across Organizations, so two Organizations can legitimately use `user_42` for two unrelated learners.
 
-AIHUB authenticates the Organization from the API key and resolves the End-User ID against that Organization's identity configuration, so its own records are Organization-scoped. The AI services behind it are different: AI Speaking v2.4 stores each graded question and reads results back to aggregate Part and Test results, and its aggregation checks the submitted `user_id` as the only owner. If AIHUB passed a tenant-local identifier into that namespace, one Organization's results could be combined with or read back as another's.
+AIHUB authenticates the Organization from the API key and resolves the End-User ID against that Organization's identity configuration, so its own records are Organization-scoped. The AI services behind it are different: AI Speaking v2.4 stores each graded question and reads results back to aggregate Part and Test results, and its aggregation scopes by the `(org_id, user_id)` pair taken from the identity headers, and a result that belongs to another pair answers not-found. The v2.4 request has no `user_id` field. If AIHUB passed a tenant-local identifier into that namespace, one Organization's results could be combined with or read back as another's.
 
 #72 chose how to carry tenant identity downstream; the decision lived only in an issue comment. This record keeps it and states its limits.
 
