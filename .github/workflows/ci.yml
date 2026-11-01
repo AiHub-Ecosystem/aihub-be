@@ -352,13 +352,13 @@ jobs:
       - name: Check candidate error codes against Customer Web dev
         working-directory: customer-web
         env:
-          AIHUB_OPENAPI_CANDIDATE: ${{ github.workspace }}/openapi.json
+          AIHUB_OPENAPI_CANDIDATE: ${{ github.workspace }}/openapi/v1.json
         run: npm run check:aihub-contract
 
       - name: Check candidate responses against Customer Web dev
         working-directory: customer-web
         env:
-          AIHUB_OPENAPI_PATH: ${{ github.workspace }}/openapi.json
+          AIHUB_OPENAPI_PATH: ${{ github.workspace }}/openapi/v1.json
         run: npm run test:e2e
 
       - name: Install linked Customer Web dependencies
@@ -370,14 +370,14 @@ jobs:
         if: steps.customer-web-pr.outputs.found == 'true'
         working-directory: customer-web-linked
         env:
-          AIHUB_OPENAPI_CANDIDATE: ${{ github.workspace }}/openapi.json
+          AIHUB_OPENAPI_CANDIDATE: ${{ github.workspace }}/openapi/v1.json
         run: npm run check:aihub-contract
 
       - name: Check candidate responses against linked Customer Web pull request
         if: steps.customer-web-pr.outputs.found == 'true'
         working-directory: customer-web-linked
         env:
-          AIHUB_OPENAPI_PATH: ${{ github.workspace }}/openapi.json
+          AIHUB_OPENAPI_PATH: ${{ github.workspace }}/openapi/v1.json
         run: npm run test:e2e
 
   audit:

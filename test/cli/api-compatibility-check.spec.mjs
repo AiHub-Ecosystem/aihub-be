@@ -34,7 +34,7 @@ const BASELINE = /** @type {OpenApiDocument} */ (
   JSON.parse(readFileSync(BASELINE_PATH, 'utf8'))
 );
 const OPENAPI = /** @type {OpenApiDocument} */ (
-  JSON.parse(readFileSync(join(ROOT, 'openapi.json'), 'utf8'))
+  JSON.parse(readFileSync(join(ROOT, 'openapi/v1.json'), 'utf8'))
 );
 const WORKFLOW = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
 const API_BREAK_DECLARATION =
@@ -224,7 +224,7 @@ void test('does not let an intentional-break declaration hide an invalid contrac
 void test('compares the generated OpenAPI document, including the existing tuple shapes', () => {
   const result = spawnSync(
     process.execPath,
-    [CHECKER, join(ROOT, 'openapi.json'), join(ROOT, 'openapi.json')],
+    [CHECKER, join(ROOT, 'openapi/v1.json'), join(ROOT, 'openapi/v1.json')],
     { cwd: ROOT, encoding: 'utf8', env: process.env },
   );
 
