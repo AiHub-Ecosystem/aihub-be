@@ -9,6 +9,25 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.4.0] - 2026-11-01
+
+### Added
+
+- `POST /v2/ielts/writing/task1/grade` and `POST /v2/ielts/writing/task2/grade`
+  grade Writing on the AI Writing service's v3 pipeline. The request body is the
+  `/v1` body; an essay of more than 1,000 words is refused with
+  `400 INVALID_REQUEST`. The response is a new shape: `overall_band`, four
+  `criteria` entries with their own `errors` and `suggestions`,
+  `overall_assessment` (`summary` and `progress`) and `data_micro`. The AIHUB
+  budget for these routes is 125 seconds (ADR-0143). `/v1` Writing is unchanged.
+- The Writing routes' error responses document these existing codes, which no earlier
+  `/v2` route documented: `IDEMPOTENCY_CONFLICT`,
+  `AUTH_IDENTITY_UNAVAILABLE`, `AUTH_MFA_ALREADY_ENABLED`,
+  `ORGANIZATION_MEMBER_EXISTS`, `ORGANIZATION_OWNER_REQUIRED`,
+  `ORGANIZATION_IDENTITY_ISSUER_CONFLICT`, `ORGANIZATION_CREATION_LIMIT_REACHED`
+  and `AVATAR_CHANGED`. These codes already exist on `/v1`; no new error code
+  was created.
+
 ## [2.3.0] - 2026-11-01
 
 ### Changed

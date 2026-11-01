@@ -780,6 +780,8 @@ Grading operations are `POST` routes; the three `/v2` Speaking read-back routes 
 | `/v1/ielts/writing/task2/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
 | `/v1/ielts/speaking/grading`                 | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
 | `/v1/ielts/speaking/grading-json`            | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
+| `/v2/ielts/writing/task1/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |          125s |
+| `/v2/ielts/writing/task2/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |          125s |
 | `/v2/ielts/speaking/questions/grade`         | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
 | `/v2/ielts/speaking/parts/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
 | `/v2/ielts/speaking/tests/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
@@ -821,6 +823,9 @@ in Vietnamese.
 | `question` | Task 1, Task 2 | 1–2,000 units  |
 | `topic`    | Task 2         | 1–200 units    |
 | `essay`    | Task 1, Task 2 | 1–20,000 units |
+
+`/v2` Writing also refuses an `essay` of more than 1,000 words; see "Moving
+Writing from `/v1` to `/v2`".
 
 A unit is a UTF-16 code unit, the unit of JavaScript's `String.length`. A
 character outside the Basic Multilingual Plane, such as most emoji, counts as 2. A JSON Schema validator counts code points by default, so it can accept a
@@ -975,7 +980,7 @@ Compared with `/v1`, v2 does not return `scorability`, `relevance`,
 `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
 `strong_point_vi`, `action_plan_vi`, or the `/v1` `pronunciation_detail`
 structure. `ielts/speaking/grading-json` has no v2 counterpart and stays on
-`/v1`. Writing also stays on `/v1` for now. `/v1` stays available alongside `/v2`; its `Deprecation` and `Sunset` headers carry its retirement dates.
+`/v1`. Writing has its own `/v2` routes, described below. `/v1` stays available alongside `/v2`; its `Deprecation` and `Sunset` headers carry its retirement dates.
 
 Only the three POST routes are billed. A GET never adds a charge. The POSTs do not accept an
 `Idempotency-Key`; retrying the question grading POST after a network failure
@@ -1063,6 +1068,113 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/ielts/speaking/grading-json" \
     "test_type": "Practice"
   }'
 ```
+
+### Moving Writing from `/v1` to `/v2`
+
+`/v2` grades Writing on the AI Writing service's v3 pipeline. It uses the same
+API key, `writing.grade` scope, `X-User-Identity` and required `Idempotency-Key`
+as `/v1`, and takes the same request body (`question`, `chart_type` for Task 1
+or `topic` for Task 2, `essay`, and for Task 1 `image_url`, with the limits in
+"Text length limits"). Task 1 still gets its `image_url` from the `/v1` chart
+upload routes in section 3d. Two things differ:
+
+| Method | Route                           |
+| ------ | ------------------------------- |
+| `POST` | `/v2/ielts/writing/task1/grade` |
+| `POST` | `/v2/ielts/writing/task2/grade` |
+
+- **An essay is at most 1,000 words.** A word is a run of non-whitespace
+  characters. AIHUB refuses a longer essay with `400 INVALID_REQUEST` before it
+  calls the AI service, and it is never billed.
+- **The AIHUB budget is 125 seconds**, not 60. v3 typically takes 30 to 45
+  seconds and can take up to 120. **Set your client timeout to at least 160
+  seconds** for these routes. If the AI service gives up at 120 seconds you get
+  `504 AI_SERVICE_TIMEOUT`. A request that carried an `Idempotency-Key` and timed
+  out on our side is still allowed to finish and be stored, as in section 7.
+
+The response uses the common `{ "data", "meta" }` envelope. `data` has:
+
+- `overall_band`: 0–9 in half-band steps.
+- `criteria`: an array of four entries, always in this order: `task_achievement`
+  (Task 1) or `task_response` (Task 2), `coherence_cohesion`, `lexical_resource`,
+  `grammatical_range_accuracy`. Each entry has `id`, `band`, `band_reason`,
+  `strengths`, `areas_for_improvement`, `errors`, `suggestions` and
+  `feedback_detail`. An error has `quote`, `error_codes` (a code such as
+  `LR03`), `error_name`, `explanation` and `improved_version`; a suggestion has
+  `quote`, `explanation` and `improved_version`. These are upgrades, not errors.
+- `overall_assessment`: `summary` (`overall`, `detail`, `cta`) and `progress`
+  (`status`, and the lists `error_recur`, `error_impro` and `error_new`), which
+  reports on this essay against the End-User's earlier results.
+- `data_micro`: the errors grouped by criterion and then by code, as
+  `{ "<criterion>": { "<code>": { "prompt", "question_type", "comments": [{ "quote", "explanation" }] } } }`.
+  It is empty (`{}`) when no error was found. Keep it as it is: the
+  micro-exercise operations will take it back unchanged.
+
+Feedback text is Vietnamese or English as the AI service writes it, and AIHUB
+passes it through unchanged, including a leading `- ` that some strings carry.
+The AI service's token counts, cost, processing time and reasoning notes are not
+part of the response. The error codes in `data_micro` and in `errors` are
+informational: **tolerate a code that is not in this list**, because the AI
+service can add or rename codes without a new API major. The criterion keys of
+`data_micro` are also open; a client that renders the grammar group should
+accept both `grammar_range_accuracy` and `grammatical_range_accuracy`.
+
+| Code    | Meaning                                          |
+| ------- | ------------------------------------------------ |
+| `TA01`  | Missing or Inadequate Overview                   |
+| `TA02`  | Faulty Key Feature Selection                     |
+| `TA03`  | Inaccurate Reporting of Visual Information       |
+| `TA04`  | Inappropriate Content                            |
+| `TA05`  | Copied Wording from the Prompt                   |
+| `TA06`  | Underlength (Task 1)                             |
+| `TR01`  | Inadequate Response to Task Requirements         |
+| `TR02`  | Off-Topic or Topic Shift                         |
+| `TR03`  | Unclear or Missing Position                      |
+| `TR04`  | Inconsistent Position                            |
+| `TR05`  | Weak Development and Support                     |
+| `TR06`  | Logical Fallacy                                  |
+| `TR07`  | Memorised or Template Content                    |
+| `TR08`  | Underlength (Task 2)                             |
+| `CC01`  | Faulty Paragraphing                              |
+| `CC02`  | Missing or Weak Topic Sentence                   |
+| `CC03`  | Multiple Central Topics in One Paragraph         |
+| `CC04`  | Illogical Sequencing of Ideas                    |
+| `CC05`  | Missing or Inaccurate Connector                  |
+| `CC06`  | Overuse or Mechanical Use of Connectors          |
+| `CC07`  | Faulty Reference, Substitution and Ellipsis      |
+| `CC08`  | Weak Information Flow (Theme–Rheme Breakdown)    |
+| `LR01`  | Spelling                                         |
+| `LR02`  | Word Formation (Affixation and Compounding)      |
+| `LR03`  | Word Choice (Semantic and Contextual Inaccuracy) |
+| `LR04`  | Collocation                                      |
+| `LR05`  | Inappropriate Academic Style                     |
+| `LR06`  | Repetition and Limited Lexical Range             |
+| `LR07`  | Redundancy and Wordiness                         |
+| `GRA01` | Tense                                            |
+| `GRA02` | Subject–Verb Agreement                           |
+| `GRA03` | Verb Form (Non-Finite and Modal Complementation) |
+| `GRA04` | Voice (Active–Passive)                           |
+| `GRA05` | Word Class (Part of Speech)                      |
+| `GRA06` | Article                                          |
+| `GRA07` | Singular, Plural and Countability                |
+| `GRA08` | Pronoun Form and Agreement                       |
+| `GRA09` | Preposition                                      |
+| `GRA10` | Word Order                                       |
+| `GRA11` | Sentence Boundary Error                          |
+| `GRA12` | Clause Structure and Conjunction Misuse          |
+| `GRA13` | Relative Clause                                  |
+| `GRA14` | Conditional and Subjunctive                      |
+| `GRA15` | Comparative Structure                            |
+| `GRA16` | Parallel Structure                               |
+| `GRA17` | Modifier Placement (Dangling / Misplaced)        |
+| `GRA18` | Punctuation and Capitalisation                   |
+| `GRA19` | Sentence Variety and Structural Range            |
+
+Compared with `/v1`, `/v2` does not return `language`, `summary` as one string,
+`suggestions` and `next_steps` as lists of strings, or `annotations`; `errors` and
+`suggestions` now sit inside each criterion and `progress` is new. `/v1` Writing
+stays available alongside `/v2`; its `Deprecation` and `Sunset` headers carry
+its retirement dates.
 
 ---
 
@@ -1216,8 +1328,9 @@ again. The stored result is keyed by organization, operation, and
 
 ## 7. Timeouts and cancellation
 
-Writing grading has a 60-second AIHUB budget. **Set your client timeout to at
-least 90 seconds** for Writing `/grade` calls. Speaking multipart grading also
+Writing grading on `/v1` has a 60-second AIHUB budget. **Set your client timeout
+to at least 90 seconds** for `/v1` Writing `/grade` calls. `/v2` Writing grading
+has a 125-second budget; set at least 160 seconds there. Speaking multipart grading also
 has a 60-second budget; use at least 90 seconds for
 `/v1/ielts/speaking/grading`. The budget includes audio upload, so large files
 on slow links need a proportionally larger client timeout. Speaking JSON-by-URL

@@ -9,6 +9,7 @@ import {
   preservePostmanIds,
 } from './build-postman-collection';
 import { SPEAKING_V2_FOLDER_NAME } from './postman-speaking-v2-requests';
+import { WRITING_V2_FOLDER_NAME } from './postman-writing-v2-requests';
 
 const REPO_ROOT = join(__dirname, '../..');
 const COLLECTION_PATH = join(REPO_ROOT, 'aihub.postman_collection.json');
@@ -76,13 +77,15 @@ describe('committed aihub.postman_collection.json', () => {
     const collection = committedCollection() as {
       item: { name: string; item?: { request?: { url?: string } }[] }[];
     };
-    const folder = collection.item.find(
-      (entry) => entry.name === SPEAKING_V2_FOLDER_NAME,
+    const folders = collection.item.filter((entry) =>
+      [SPEAKING_V2_FOLDER_NAME, WRITING_V2_FOLDER_NAME].includes(entry.name),
     );
     // A path parameter stands for the collection variable that holds its value.
-    const urls = (folder?.item ?? []).map((entry) =>
-      (entry.request?.url ?? '').replace(/\{\{v2\w+\}\}/g, '{id}'),
-    );
+    const urls = folders
+      .flatMap((folder) => folder.item ?? [])
+      .map((entry) =>
+        (entry.request?.url ?? '').replace(/\{\{v2\w+\}\}/g, '{id}'),
+      );
 
     for (const path of Object.keys(v2.paths)) {
       expect(urls).toContain(`{{baseUrl}}${path.replace(/\{\w+\}/g, '{id}')}`);

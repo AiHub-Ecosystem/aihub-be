@@ -3951,6 +3951,120 @@
       ]
     },
     {
+      "name": "Public API /v2 (Writing)",
+      "description": "Writing grading on the v3 pipeline. Set `apiKey` and `baseUrl` first. These calls take 30 to 45 seconds and can take up to 120: raise the request timeout in Postman to at least 160 seconds (Settings, General, Request timeout). An essay of more than 1,000 words is refused with `400 INVALID_REQUEST`. Task 1 takes its `image_url` from the chart upload routes in the /v1 folder.",
+      "item": [
+        {
+          "name": "1. Grade a Task 1 essay",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"The chart below shows the total number of minutes (in billions) of telephone calls in the UK, divided into three categories, from 1995-2002. Summarise the information by selecting a reporting the main features, and make comparisons where relevant.\",\n  \"chart_type\": \"Bar Chart\",\n  \"image_url\": \"https://s3.wispace.app/ielts-task1/ca95bd4ab522946d\",\n  \"essay\": \"The bar chart illustrates the total duration, measured in billions of minutes, of telephone calls made in the United Kingdom across three categories between 1995 and 2002. Overall, local fixed line calls were the most popular type throughout the entire period, although their share declined after 1999.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v2/ielts/writing/task1/grade",
+            "description": "Grades a Task 1 essay against a chart. `chart_type` is case-sensitive; `image_url` is an HTTPS link to the chart image. Uses a declared user id from `declaredUserId`, which works for an Organization without an active identity configuration."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.v2.task1.grade');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.test('response has the /v2 shape', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.criteria).to.have.length(4);",
+                  "  pm.expect(data.overall_assessment.progress).to.have.property(\"status\");",
+                  "  pm.expect(data).to.have.property(\"data_micro\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Grade a Task 2 essay",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"With the rise of online learning platforms, some argue that traditional classroom education is becoming obsolete. To what extent do you agree or disagree?\",\n  \"topic\": \"education\",\n  \"essay\": \"The proliferation of online learning platforms has led some observers to claim that conventional classroom instruction is no longer relevant. While I acknowledge the considerable advantages of digital education, I disagree that it renders traditional teaching obsolete.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v2/ielts/writing/task2/grade",
+            "description": "Grades a Task 2 essay. Repeating the call with the same `Idempotency-Key` and body returns the stored result without a new charge."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.v2.task2.grade');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.test('response has the /v2 shape', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.criteria).to.have.length(4);",
+                  "  pm.expect(data.overall_assessment.progress).to.have.property(\"status\");",
+                  "  pm.expect(data).to.have.property(\"data_micro\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)",
       "item": [
         {

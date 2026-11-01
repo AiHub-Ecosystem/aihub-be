@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.3.0"
+    "version": "2.4.0"
   },
   "servers": [
     {
@@ -779,6 +779,883 @@
     }
   },
   "paths": {
+    "/v2/ielts/writing/task1/grade": {
+      "post": {
+        "operationId": "writing.v2.task1.grade",
+        "summary": "writing.v2.task1.grade",
+        "x-required-scope": "writing.grade",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["question", "chart_type", "essay", "image_url"],
+                "properties": {
+                  "question": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
+                    "type": "string"
+                  },
+                  "chart_type": {
+                    "anyOf": [
+                      {
+                        "const": "Bar Chart",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Line Graph",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Pie Chart",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Table",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Map",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Process Diagram",
+                        "type": "string"
+                      },
+                      {
+                        "const": "Multiple Graphs",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "essay": {
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "description": "The limit counts UTF-16 code units. An essay of more than 1000 words, counted by whitespace, is refused with INVALID_REQUEST.",
+                    "type": "string"
+                  },
+                  "image_url": {
+                    "format": "uri",
+                    "pattern": "^[hH][tT][tT][pP][sS]://",
+                    "maxLength": 2000,
+                    "description": "HTTPS URL without userinfo or a non-443 port. IP literals must be public, and host names must be able to be public (no single-label, localhost, .local, .home.arpa, or .internal names); resolved addresses are checked by AI Writing.",
+                    "type": "string"
+                  },
+                  "language": {
+                    "const": "vi",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "overall_band",
+                        "criteria",
+                        "overall_assessment",
+                        "data_micro"
+                      ],
+                      "properties": {
+                        "overall_band": {
+                          "minimum": 0,
+                          "maximum": 9,
+                          "multipleOf": 0.5,
+                          "type": "number"
+                        },
+                        "criteria": {
+                          "minItems": 4,
+                          "maxItems": 4,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "band",
+                              "band_reason",
+                              "strengths",
+                              "areas_for_improvement",
+                              "errors",
+                              "suggestions",
+                              "feedback_detail"
+                            ],
+                            "properties": {
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_response",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "band": {
+                                "minimum": 0,
+                                "maximum": 9,
+                                "multipleOf": 0.5,
+                                "type": "number"
+                              },
+                              "band_reason": {
+                                "type": "string"
+                              },
+                              "strengths": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "areas_for_improvement": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "errors": {
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": [
+                                    "quote",
+                                    "error_codes",
+                                    "error_name",
+                                    "explanation",
+                                    "improved_version"
+                                  ],
+                                  "properties": {
+                                    "quote": {
+                                      "type": "string"
+                                    },
+                                    "error_codes": {
+                                      "type": "string"
+                                    },
+                                    "error_name": {
+                                      "type": "string"
+                                    },
+                                    "explanation": {
+                                      "type": "string"
+                                    },
+                                    "improved_version": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "suggestions": {
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": [
+                                    "quote",
+                                    "explanation",
+                                    "improved_version"
+                                  ],
+                                  "properties": {
+                                    "quote": {
+                                      "type": "string"
+                                    },
+                                    "explanation": {
+                                      "type": "string"
+                                    },
+                                    "improved_version": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "feedback_detail": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "overall_assessment": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["summary", "progress"],
+                          "properties": {
+                            "summary": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": ["overall", "detail", "cta"],
+                              "properties": {
+                                "overall": {
+                                  "type": "string"
+                                },
+                                "detail": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "cta": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "progress": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "status",
+                                "error_recur",
+                                "error_impro",
+                                "error_new"
+                              ],
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                },
+                                "error_recur": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "error_impro": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "error_new": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "data_micro": {
+                          "type": "object",
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "type": "object",
+                              "patternProperties": {
+                                "^(.*)$": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "prompt",
+                                    "question_type",
+                                    "comments"
+                                  ],
+                                  "properties": {
+                                    "prompt": {
+                                      "type": "string"
+                                    },
+                                    "question_type": {
+                                      "type": "string"
+                                    },
+                                    "comments": {
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": ["quote", "explanation"],
+                                        "properties": {
+                                          "quote": {
+                                            "type": "string"
+                                          },
+                                          "explanation": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v2/ielts/writing/task2/grade": {
+      "post": {
+        "operationId": "writing.v2.task2.grade",
+        "summary": "writing.v2.task2.grade",
+        "x-required-scope": "writing.grade",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["question", "topic", "essay"],
+                "properties": {
+                  "question": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
+                    "type": "string"
+                  },
+                  "topic": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.",
+                    "type": "string"
+                  },
+                  "essay": {
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "description": "The limit counts UTF-16 code units. An essay of more than 1000 words, counted by whitespace, is refused with INVALID_REQUEST.",
+                    "type": "string"
+                  },
+                  "language": {
+                    "const": "vi",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "overall_band",
+                        "criteria",
+                        "overall_assessment",
+                        "data_micro"
+                      ],
+                      "properties": {
+                        "overall_band": {
+                          "minimum": 0,
+                          "maximum": 9,
+                          "multipleOf": 0.5,
+                          "type": "number"
+                        },
+                        "criteria": {
+                          "minItems": 4,
+                          "maxItems": 4,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "band",
+                              "band_reason",
+                              "strengths",
+                              "areas_for_improvement",
+                              "errors",
+                              "suggestions",
+                              "feedback_detail"
+                            ],
+                            "properties": {
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_response",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "band": {
+                                "minimum": 0,
+                                "maximum": 9,
+                                "multipleOf": 0.5,
+                                "type": "number"
+                              },
+                              "band_reason": {
+                                "type": "string"
+                              },
+                              "strengths": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "areas_for_improvement": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "errors": {
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": [
+                                    "quote",
+                                    "error_codes",
+                                    "error_name",
+                                    "explanation",
+                                    "improved_version"
+                                  ],
+                                  "properties": {
+                                    "quote": {
+                                      "type": "string"
+                                    },
+                                    "error_codes": {
+                                      "type": "string"
+                                    },
+                                    "error_name": {
+                                      "type": "string"
+                                    },
+                                    "explanation": {
+                                      "type": "string"
+                                    },
+                                    "improved_version": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "suggestions": {
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": [
+                                    "quote",
+                                    "explanation",
+                                    "improved_version"
+                                  ],
+                                  "properties": {
+                                    "quote": {
+                                      "type": "string"
+                                    },
+                                    "explanation": {
+                                      "type": "string"
+                                    },
+                                    "improved_version": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "feedback_detail": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "overall_assessment": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["summary", "progress"],
+                          "properties": {
+                            "summary": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": ["overall", "detail", "cta"],
+                              "properties": {
+                                "overall": {
+                                  "type": "string"
+                                },
+                                "detail": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "cta": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "progress": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "status",
+                                "error_recur",
+                                "error_impro",
+                                "error_new"
+                              ],
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                },
+                                "error_recur": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "error_impro": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "error_new": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "data_micro": {
+                          "type": "object",
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "type": "object",
+                              "patternProperties": {
+                                "^(.*)$": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "prompt",
+                                    "question_type",
+                                    "comments"
+                                  ],
+                                  "properties": {
+                                    "prompt": {
+                                      "type": "string"
+                                    },
+                                    "question_type": {
+                                      "type": "string"
+                                    },
+                                    "comments": {
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": ["quote", "explanation"],
+                                        "properties": {
+                                          "quote": {
+                                            "type": "string"
+                                          },
+                                          "explanation": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
     "/v2/ielts/speaking/questions/grade": {
       "post": {
         "operationId": "speaking.v2.question-grading",

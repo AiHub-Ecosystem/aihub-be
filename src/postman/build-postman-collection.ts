@@ -19,6 +19,7 @@ import {
   SPEAKING_V2_VARIABLES,
   speakingV2Folder,
 } from './postman-speaking-v2-requests';
+import { writingV2Folder } from './postman-writing-v2-requests';
 
 export { preservePostmanIds } from './postman-collection-utils';
 export { stripKey };
@@ -181,6 +182,7 @@ export async function buildPostmanCollection(
     item: [
       ...base.item,
       speakingV2Folder(),
+      writingV2Folder(),
       {
         name: 'D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)',
         item: D1_SCENARIOS.map(scenarioToItem),
