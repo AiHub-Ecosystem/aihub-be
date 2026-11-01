@@ -947,6 +947,14 @@ from that identity, not a `user_id` field. The six routes are:
 | `GET`  | `/v2/ielts/speaking/parts/{part_result_id}`  | Read a stored Part result                                                                                               |
 | `GET`  | `/v2/ielts/speaking/tests/{test_id}`         | Read a stored Test result                                                                                               |
 
+Stored-result ownership is scoped to the Organization, the exact End-User ID
+from `X-User-Identity`, and the selected environment (`production` or
+`sandbox`). A `404 NOT_FOUND` means the identifier is unknown to AIHUB for that
+owner; it does not distinguish an unknown identifier from one recorded for
+another owner. Results graded before this ownership check shipped have no
+AIHUB ownership record, so their `/v2` GETs and aggregation references now
+return `NOT_FOUND`; grade them again to create owned results.
+
 For a Part or Test, grade questions first, aggregate the question results into
 a Part, then aggregate Part results into a Test. The question response returns
 `response_id` and `part_result_id`; the Part request uses `part_result_id` and

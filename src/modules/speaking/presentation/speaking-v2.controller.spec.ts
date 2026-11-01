@@ -12,12 +12,20 @@ import { AppModule } from '@/app.module';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { METERING_FINALIZER } from '@/modules/metering/application/metering-finalizer.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
+import {
+  SPEAKING_V2_RESULT_OWNERSHIP,
+  type SpeakingV2ResultKind,
+  type SpeakingV2ResultOwner,
+  type SpeakingV2ResultOwnershipPort,
+} from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
@@ -26,6 +34,65 @@ const PROVIDER_AUTH = {
   'x-client-id': 'speaking-client',
   'x-secret-key': 'speaking-secret',
 };
+
+const LOCAL_OWNER: SpeakingV2ResultOwner = {
+  organizationId: 'local-development',
+  environment: 'development',
+  endUserId: 'local-development',
+};
+
+class FakeResultOwnership implements SpeakingV2ResultOwnershipPort {
+  readonly rows = new Set<string>();
+  failWrites = false;
+
+  /** Seeds a row for the local-development caller unless another owner is named. */
+  seed(
+    kind: SpeakingV2ResultKind,
+    id: string,
+    owner: SpeakingV2ResultOwner = LOCAL_OWNER,
+  ): void {
+    this.rows.add(this.key(owner, kind, id));
+  }
+
+  holds(
+    kind: SpeakingV2ResultKind,
+    id: string,
+    owner: SpeakingV2ResultOwner = LOCAL_OWNER,
+  ): boolean {
+    return this.rows.has(this.key(owner, kind, id));
+  }
+
+  private key(
+    owner: SpeakingV2ResultOwner,
+    kind: SpeakingV2ResultKind,
+    id: string,
+  ): string {
+    return JSON.stringify([
+      owner.organizationId,
+      owner.environment,
+      owner.endUserId,
+      kind,
+      id,
+    ]);
+  }
+
+  async record(
+    owner: SpeakingV2ResultOwner,
+    kind: SpeakingV2ResultKind,
+    id: string,
+  ): Promise<void> {
+    if (this.failWrites) throw databaseUnavailableError();
+    this.rows.add(this.key(owner, kind, id));
+  }
+
+  async findOwnedIds(
+    owner: SpeakingV2ResultOwner,
+    kind: SpeakingV2ResultKind,
+    ids: readonly string[],
+  ): Promise<readonly string[]> {
+    return ids.filter((id) => this.rows.has(this.key(owner, kind, id)));
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -87,6 +154,8 @@ describe('Speaking v2 HTTP flow', () => {
   let outboundForm: UndiciFormData | undefined;
   let outboundJson: Record<string, unknown> | undefined;
   let outboundHeaders: unknown;
+  let ownership: FakeResultOwnership;
+  const meteringFinalized: unknown[] = [];
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
@@ -124,6 +193,7 @@ describe('Speaking v2 HTTP flow', () => {
     process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = 'speaking-secret';
 
     mockAgent = new MockAgent();
+    ownership = new FakeResultOwnership();
     mockAgent.disableNetConnect();
     provider(
       'POST',
@@ -169,6 +239,8 @@ describe('Speaking v2 HTTP flow', () => {
     );
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(SPEAKING_V2_RESULT_OWNERSHIP)
+      .useValue(ownership)
       .overrideProvider(DownstreamHttpClient)
       .useValue(
         new DownstreamHttpClient(
@@ -179,6 +251,12 @@ describe('Speaking v2 HTTP flow', () => {
       )
       .overrideProvider(DISPATCH_ATTEMPT_RECORD)
       .useValue(noOpDispatchAttemptRecord)
+      .overrideProvider(METERING_FINALIZER)
+      .useValue({
+        finalize: async (record: unknown) => {
+          meteringFinalized.push(record);
+        },
+      })
       .overrideProvider(CONCURRENCY_LIMITER)
       .useValue({
         acquire: async () => ({
@@ -208,6 +286,12 @@ describe('Speaking v2 HTTP flow', () => {
     outboundForm = undefined;
     outboundJson = undefined;
     outboundHeaders = undefined;
+    ownership.rows.clear();
+    ownership.failWrites = false;
+    meteringFinalized.length = 0;
+    ownership.seed('response', 'resp-1');
+    ownership.seed('part', 'part-1');
+    ownership.seed('test', 'test-1');
   });
 
   afterAll(async () => {
@@ -253,6 +337,7 @@ describe('Speaking v2 HTTP flow', () => {
     expect(outboundForm?.get('question_id')).toBe('p1_hometown');
     expect(outboundForm?.get('test_type')).toBe('Full-test');
     expect(outboundForm?.get('part_result_id')).toBe('part-1');
+    expect(ownership.holds('response', '[redacted]')).toBe(true);
     expect(outboundForm?.get('user_id')).toBeNull();
     expect(headerOf(outboundHeaders, 'x-aihub-user-id')).toBe(
       'local-development',
@@ -312,6 +397,139 @@ describe('Speaking v2 HTTP flow', () => {
     });
   });
 
+  it('checks aggregation IDs before dispatch and records the claimed identifiers on success', async () => {
+    const denied = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/parts/grade',
+      headers: { 'content-type': 'application/json' },
+      payload: { part_result_id: 'part-2', response_ids: ['unowned'] },
+    });
+    expect(denied.statusCode).toBe(404);
+    expect(payloadJson(denied)).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    expect(outboundJson).toBeUndefined();
+
+    const allowed = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/parts/grade',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        part_result_id: 'part-2',
+        test_id: 'test-2',
+        response_ids: ['resp-1'],
+      },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(ownership.holds('part', 'part-2')).toBe(true);
+    expect(ownership.holds('test', 'test-2')).toBe(true);
+  });
+
+  it.each([
+    ['another Organization', { ...LOCAL_OWNER, organizationId: 'other-org' }],
+    ['another End-User', { ...LOCAL_OWNER, endUserId: 'other-user' }],
+    ['another environment', { ...LOCAL_OWNER, environment: 'sandbox' }],
+  ])('treats an id recorded for %s as not found', async (_label, other) => {
+    ownership.seed('response', 'foreign-resp', other);
+    ownership.seed('part', 'foreign-part', other);
+    ownership.seed('test', 'foreign-test', other);
+
+    for (const path of [
+      'responses/foreign-resp',
+      'parts/foreign-part',
+      'tests/foreign-test',
+    ]) {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v2/ielts/speaking/${path}`,
+      });
+      expect(response.statusCode).toBe(404);
+    }
+    const aggregation = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/tests/grade',
+      headers: { 'content-type': 'application/json' },
+      payload: { test_id: 'test-9', part_result_ids: ['foreign-part'] },
+    });
+    expect(aggregation.statusCode).toBe(404);
+    expect(outboundHeaders).toBeUndefined();
+    expect(outboundJson).toBeUndefined();
+  });
+
+  it.each([
+    [
+      '/v2/ielts/speaking/parts/grade',
+      { part_result_id: 'part-9', response_ids: ['resp-1'] },
+    ],
+    [
+      '/v2/ielts/speaking/tests/grade',
+      { test_id: 'test-9', part_result_ids: ['part-1'] },
+    ],
+  ])(
+    'fails closed without metering when an aggregation at %s cannot be recorded',
+    async (url, payload) => {
+      ownership.failWrites = true;
+      const response = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/json' },
+        payload,
+      });
+      expect(response.statusCode).toBe(503);
+      expect(payloadJson(response)).toMatchObject({
+        error: { code: 'DATABASE_UNAVAILABLE', retryable: true },
+      });
+      expect(meteringFinalized).toEqual([]);
+    },
+  );
+
+  it('fails closed with retryable DATABASE_UNAVAILABLE when a successful grade cannot be recorded', async () => {
+    ownership.failWrites = true;
+    const request = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/questions/grade',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+    expect(response.statusCode).toBe(503);
+    expect(payloadJson(response)).toMatchObject({
+      error: { code: 'DATABASE_UNAVAILABLE', retryable: true },
+    });
+    expect(meteringFinalized).toEqual([]);
+  });
+
+  it.each([
+    ['responses/unowned', 'response'],
+    ['parts/unowned-part', 'part'],
+    ['tests/unowned-test', 'test'],
+  ])('does not forward an unowned GET identifier: %s', async (path) => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v2/ielts/speaking/${path}`,
+    });
+    expect(response.statusCode).toBe(404);
+    expect(payloadJson(response)).toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
+    expect(outboundHeaders).toBeUndefined();
+  });
+
+  it('checks every Test aggregation ID before forwarding', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/tests/grade',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        test_id: 'test-2',
+        part_result_ids: ['part-1', 'unowned-part'],
+      },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(outboundJson).toBeUndefined();
+  });
+
   it('aggregates a Test, and refuses one that names nothing to aggregate', async () => {
     const empty = await app.inject({
       method: 'POST',
@@ -336,6 +554,7 @@ describe('Speaking v2 HTTP flow', () => {
       test_id: 'test-1',
       part_result_ids: ['part-1'],
     });
+    expect(ownership.holds('test', 'test-1')).toBe(true);
   });
 
   it.each([

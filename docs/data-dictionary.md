@@ -31,6 +31,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | PublicApiMajorUnattributedUsage    | metering    | 6       |
 | DispatchAttempt                    | metering    | 7       |
 | SpeakingAudioAsset                 | speaking    | 9       |
+| SpeakingV2ResultOwnership          | speaking    | 6       |
 | SpeakingAudioUploadIntent          | speaking    | 10      |
 | WritingChartUpload                 | writing     | 15      |
 | WritingChartRevocationAudit        | writing     | 9       |
@@ -433,6 +434,19 @@ Owner: `speaking`
 | byteSize           | Int      | @map("byte_size")                                                       |
 | acceptedAt         | DateTime | @map("accepted_at") @db.Timestamptz(6)                                  |
 | retentionExpiresAt | DateTime | @map("retention_expires_at") @db.Timestamptz(6)                         |
+
+## SpeakingV2ResultOwnership
+
+Owner: `speaking`
+
+| Column         | Type     | Attributes                                             |
+| -------------- | -------- | ------------------------------------------------------ |
+| organizationId | String   | @map("organization_id")                                |
+| environment    | String   |                                                        |
+| endUserId      | String   | @map("end_user_id")                                    |
+| kind           | String   |                                                        |
+| id             | String   |                                                        |
+| recordedAt     | DateTime | @default(now()) @map("recorded_at") @db.Timestamptz(6) |
 
 ## SpeakingAudioUploadIntent
 

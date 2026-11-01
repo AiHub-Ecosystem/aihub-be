@@ -552,6 +552,20 @@ model SpeakingAudioAsset {
   @@map("speaking_audio_assets")
 }
 
+/// The caller ownership AIHUB has observed for a provider-held Speaking v2 result.
+/// @owner speaking
+model SpeakingV2ResultOwnership {
+  organizationId String   @map("organization_id")
+  environment    String
+  endUserId      String   @map("end_user_id")
+  kind           String
+  id             String
+  recordedAt     DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@id([organizationId, environment, endUserId, kind, id], map: "speaking_v2_result_ownership_pkey")
+  @@map("speaking_v2_result_ownership")
+}
+
 /// An in-progress Speaking audio upload, swept when it expires.
 ///
 /// The partial indexes `speaking_audio_upload_intents_expiry_idx` and

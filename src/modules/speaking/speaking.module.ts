@@ -34,8 +34,13 @@ import {
   SPEAKING_UPLOADS_IN_FLIGHT_MAX,
   SPEAKING_UPLOAD_CEILING,
 } from './application/speaking-upload-ceiling';
+import {
+  SPEAKING_V2_RESULT_OWNERSHIP,
+  type SpeakingV2ResultOwnershipPort,
+} from './application/speaking-v2-result-ownership.port';
 import { FastifySpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
+import { PostgresSpeakingV2ResultOwnershipRepository } from './infrastructure/postgres-speaking-v2-result-ownership.repository';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
 import { S3SpeakingAudioStorage } from './infrastructure/s3-speaking-audio.storage';
 import { SpeakingAudioUploadController } from './presentation/speaking-audio-upload.controller';
@@ -66,6 +71,14 @@ import { SpeakingV2Controller } from './presentation/speaking-v2.controller';
     SpeakingAudioUploadController,
   ],
   providers: [
+    {
+      provide: SPEAKING_V2_RESULT_OWNERSHIP,
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (
+        runtime: PrismaClientHolder,
+      ): SpeakingV2ResultOwnershipPort =>
+        new PostgresSpeakingV2ResultOwnershipRepository(runtime.prisma),
+    },
     {
       provide: SPEAKING_AUDIO_UPLOAD_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT],

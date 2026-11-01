@@ -8,8 +8,10 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import type { Static } from '@sinclair/typebox';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import { parseRequestParams } from '@/common/http/parse-request-params';
 import type { SpeakingV2PartResult } from '@/contracts/speaking/v2/part-result';
@@ -28,8 +30,13 @@ import {
   GRADED_REQUEST_EXECUTOR,
   type GradedRequestExecutorPort,
 } from '@/modules/gateway/public/graded-request-executor';
-import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
+import {
+  type AuthenticatedRequest,
+  getAuthenticatedApiKey,
+} from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
+import { getMeteringEvidence } from '@/modules/metering/public/metering-evidence';
+import { requireOwnedSpeakingResults } from '@/modules/speaking/application/require-owned-speaking-results';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
@@ -38,6 +45,12 @@ import {
   type InFlightCeiling,
   SPEAKING_UPLOAD_CEILING,
 } from '@/modules/speaking/application/speaking-upload-ceiling';
+import {
+  SPEAKING_V2_RESULT_OWNERSHIP,
+  type SpeakingV2ResultKind,
+  type SpeakingV2ResultOwner,
+  type SpeakingV2ResultOwnershipPort,
+} from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
 
 const QUESTION_GRADING = 'speaking.v2.question-grading' as const;
@@ -62,7 +75,54 @@ export class SpeakingV2Controller {
     private readonly multipartParser: SpeakingMultipartParserPort,
     @Inject(SPEAKING_UPLOAD_CEILING)
     private readonly uploadCeiling: InFlightCeiling,
+    @Inject(SPEAKING_V2_RESULT_OWNERSHIP)
+    private readonly resultOwnership: SpeakingV2ResultOwnershipPort,
   ) {}
+
+  private owner(request: AuthenticatedRequest): SpeakingV2ResultOwner {
+    const userId = request.aihubIdentity?.userId;
+    if (userId === undefined) {
+      throw new AppError({
+        code: 'INTERNAL_ERROR',
+        message: 'Speaking result ownership unavailable',
+        retryable: false,
+      });
+    }
+    const auth = getAuthenticatedApiKey(request);
+    return {
+      organizationId: auth.organizationId,
+      environment: auth.environment,
+      endUserId: userId,
+    };
+  }
+
+  private async requireOwned(
+    request: AuthenticatedRequest,
+    kind: SpeakingV2ResultKind,
+    ids: readonly string[],
+  ): Promise<void> {
+    await requireOwnedSpeakingResults(
+      this.resultOwnership,
+      this.owner(request),
+      kind,
+      ids,
+    );
+  }
+
+  private async recordSuccessful(
+    request: AuthenticatedRequest,
+    owner: SpeakingV2ResultOwner,
+    kind: SpeakingV2ResultKind,
+    id: string,
+  ): Promise<void> {
+    try {
+      await this.resultOwnership.record(owner, kind, id);
+    } catch (error) {
+      const evidence = getMeteringEvidence(request);
+      if (evidence !== undefined) evidence.settled = true;
+      throw error;
+    }
+  }
 
   @Post(routePath(OPERATION_CATALOG[QUESTION_GRADING].path))
   @HttpCode(200)
@@ -70,7 +130,8 @@ export class SpeakingV2Controller {
   async gradeQuestion(
     @Req() request: AuthenticatedRequest,
   ): Promise<DispatchResult<SpeakingV2QuestionResult>> {
-    return this.gradedRequest.execute(
+    let partResultId: string | undefined;
+    const result = await this.gradedRequest.execute(
       request,
       QUESTION_GRADING,
       async (signal) => {
@@ -82,6 +143,7 @@ export class SpeakingV2Controller {
             source,
             signal,
           );
+          partResultId = input.partResultId;
           return { input, release };
         } catch (error) {
           release();
@@ -89,6 +151,17 @@ export class SpeakingV2Controller {
         }
       },
     );
+    const owner = this.owner(request);
+    await this.recordSuccessful(
+      request,
+      owner,
+      'response',
+      result.data.meta.response_id,
+    );
+    if (partResultId !== undefined) {
+      await this.recordSuccessful(request, owner, 'part', partResultId);
+    }
+    return result;
   }
 
   @Post(routePath(OPERATION_CATALOG[PART_GRADING].path))
@@ -98,9 +171,30 @@ export class SpeakingV2Controller {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<SpeakingV2PartResult>> {
-    return this.gradedRequest.execute(request, PART_GRADING, () => ({
-      input: parseRequestBody(SpeakingV2PartGradeRequestSchema, body, request),
-    }));
+    let input: Static<typeof SpeakingV2PartGradeRequestSchema> | undefined;
+    const result = await this.gradedRequest.execute(
+      request,
+      PART_GRADING,
+      async () => {
+        input = parseRequestBody(
+          SpeakingV2PartGradeRequestSchema,
+          body,
+          request,
+        );
+        if (input.response_ids !== undefined) {
+          await this.requireOwned(request, 'response', input.response_ids);
+        }
+        return { input };
+      },
+    );
+    if (input === undefined)
+      throw new Error('Speaking Part input was not prepared');
+    const owner = this.owner(request);
+    await this.recordSuccessful(request, owner, 'part', input.part_result_id);
+    if (input.test_id !== undefined) {
+      await this.recordSuccessful(request, owner, 'test', input.test_id);
+    }
+    return result;
   }
 
   @Post(routePath(OPERATION_CATALOG[TEST_GRADING].path))
@@ -110,9 +204,34 @@ export class SpeakingV2Controller {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<DispatchResult<SpeakingV2TestResult>> {
-    return this.gradedRequest.execute(request, TEST_GRADING, () => ({
-      input: parseRequestBody(SpeakingV2TestGradeRequestSchema, body, request),
-    }));
+    let input: Static<typeof SpeakingV2TestGradeRequestSchema> | undefined;
+    const result = await this.gradedRequest.execute(
+      request,
+      TEST_GRADING,
+      async () => {
+        input = parseRequestBody(
+          SpeakingV2TestGradeRequestSchema,
+          body,
+          request,
+        );
+        if (input.response_ids !== undefined) {
+          await this.requireOwned(request, 'response', input.response_ids);
+        }
+        if (input.part_result_ids !== undefined) {
+          await this.requireOwned(request, 'part', input.part_result_ids);
+        }
+        return { input };
+      },
+    );
+    if (input === undefined)
+      throw new Error('Speaking Test input was not prepared');
+    await this.recordSuccessful(
+      request,
+      this.owner(request),
+      'test',
+      input.test_id,
+    );
+    return result;
   }
 
   @Get(routePath(OPERATION_CATALOG[RESPONSE_GET].path))
@@ -121,9 +240,11 @@ export class SpeakingV2Controller {
     @Req() request: AuthenticatedRequest,
     @Param() params: unknown,
   ): Promise<DispatchResult<SpeakingV2QuestionResult>> {
-    return this.gradedRequest.execute(request, RESPONSE_GET, () => ({
-      input: parseRequestParams(SpeakingV2ResponsePathSchema, params),
-    }));
+    return this.gradedRequest.execute(request, RESPONSE_GET, async () => {
+      const input = parseRequestParams(SpeakingV2ResponsePathSchema, params);
+      await this.requireOwned(request, 'response', [input.response_id]);
+      return { input };
+    });
   }
 
   @Get(routePath(OPERATION_CATALOG[PART_GET].path))
@@ -132,9 +253,11 @@ export class SpeakingV2Controller {
     @Req() request: AuthenticatedRequest,
     @Param() params: unknown,
   ): Promise<DispatchResult<SpeakingV2PartResult>> {
-    return this.gradedRequest.execute(request, PART_GET, () => ({
-      input: parseRequestParams(SpeakingV2PartPathSchema, params),
-    }));
+    return this.gradedRequest.execute(request, PART_GET, async () => {
+      const input = parseRequestParams(SpeakingV2PartPathSchema, params);
+      await this.requireOwned(request, 'part', [input.part_result_id]);
+      return { input };
+    });
   }
 
   @Get(routePath(OPERATION_CATALOG[TEST_GET].path))
@@ -143,8 +266,10 @@ export class SpeakingV2Controller {
     @Req() request: AuthenticatedRequest,
     @Param() params: unknown,
   ): Promise<DispatchResult<SpeakingV2TestResult>> {
-    return this.gradedRequest.execute(request, TEST_GET, () => ({
-      input: parseRequestParams(SpeakingV2TestPathSchema, params),
-    }));
+    return this.gradedRequest.execute(request, TEST_GET, async () => {
+      const input = parseRequestParams(SpeakingV2TestPathSchema, params);
+      await this.requireOwned(request, 'test', [input.test_id]);
+      return { input };
+    });
   }
 }

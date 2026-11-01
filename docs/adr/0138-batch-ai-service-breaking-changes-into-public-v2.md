@@ -156,3 +156,10 @@ open. What is deferred is tracked: the ownership check in #1449, the provider
 confirmations, captures and approvals in #1450. The Writing v3 fixtures and the
 `/v1` Writing path pin are preparation for Writing joining `/v2`, not customer
 approval.
+
+### Amendment ([#1449](https://github.com/AiHub-Ecosystem/aihub-be/issues/1449))
+
+Decision 4's durable ownership key also includes the request environment
+(`production` or `sandbox`). Checks run in `prepareInput`, after the existing
+graded admission steps and before provider dispatch; the ADR-0057 chain order
+does not change.

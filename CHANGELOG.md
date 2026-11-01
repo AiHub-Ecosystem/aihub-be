@@ -11,6 +11,12 @@ out.
 
 ## [2.4.0] - 2026-11-01
 
+### Changed
+
+- Speaking `/v2` stored-result GETs and Part/Test aggregation inputs now require
+  result IDs previously recorded for the same Organization, exact End-User ID,
+  and environment. Unrecorded pre-release results return `404 NOT_FOUND`.
+
 ### Added
 
 - `POST /v2/ielts/writing/task1/grade` and `POST /v2/ielts/writing/task2/grade`
