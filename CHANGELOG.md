@@ -1,12 +1,32 @@
 # AIHUB Public API Changelog
 
 This changelog tracks the public API contract version, independently of the
-backend package version. `/v1` is the current supported major.
+backend package version. `/v2` is the newest supported major; `/v1` stays
+supported until its sunset.
 Version headings use the date the release shipped. Record each newly added
 public error code and value for an open response enum by name, as a code span
 such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
+
+## [2.0.0] - 2026-11-01
+
+### Added
+
+- `/v2` Speaking: `POST /v2/ielts/speaking/questions/grade`,
+  `POST /v2/ielts/speaking/parts/grade`, `POST /v2/ielts/speaking/tests/grade`,
+  and `GET` routes that read a stored question, Part, or Test result back.
+  A `429` from the AI service now carries `Retry-After` on `/v1` and `/v2`.
+
+### Migration
+
+- Move Speaking grading and result retrieval from `/v1` to `/v2`. `/v1` remains
+  available alongside `/v2` and now carries its `Deprecation` and `Sunset`
+  headers; Writing and `ielts/speaking/grading-json` remain on `/v1`. The `/v2`
+  response is the AI Speaking v2.4 result: it has no `scorability`, `relevance`,
+  `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
+  `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
+  `full_test`.
 
 ## [1.5.0] - 2026-10-30
 

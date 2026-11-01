@@ -11,9 +11,16 @@ describe('operation catalog', () => {
     const paths = entries.map((operation) => operation.path);
 
     expect(new Set(paths).size).toBe(entries.length);
-    expect(entries.every((operation) => operation.method === 'POST')).toBe(
-      true,
-    );
+    expect(
+      entries
+        .filter((operation) => operation.method === 'GET')
+        .every(
+          (operation) =>
+            operation.idempotency === 'none' &&
+            operation.meteringMode === 'none' &&
+            operation.path.startsWith('/v2/'),
+        ),
+    ).toBe(true);
     expect(
       entries.every((operation) => operation.requiredScope.length > 0),
     ).toBe(true);

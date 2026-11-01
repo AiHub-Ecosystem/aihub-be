@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 
 import { isRecord } from '@/common/is-record';
 import { ALLOWED_EXTENSIONS } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
@@ -119,12 +120,16 @@ function items(value: unknown, key: string): unknown[] {
 
 /** A copy of the generated document with the operation changed. */
 function changedDocument(change: (operation: Json) => void): unknown {
-  const document: unknown = JSON.parse(JSON.stringify(buildOpenApiDocument()));
+  const document: unknown = JSON.parse(
+    JSON.stringify(buildOpenApiDocument(publicApiMajorV1())),
+  );
   change(child(child(child(document, 'paths'), expected().path), 'post'));
   return document;
 }
 
-function expected(document: unknown = buildOpenApiDocument()): ExpectedRequest {
+function expected(
+  document: unknown = buildOpenApiDocument(publicApiMajorV1()),
+): ExpectedRequest {
   return expectedRequestFrom(document, OPERATION_ID);
 }
 

@@ -22,6 +22,11 @@ const FORWARDING_FILES = [
 
 const ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
+// A code an adapter names only for a provider status that never carries the
+// hint: the dispatcher reads the provider's `Retry-After` on 429 and 503 alone,
+// so a provider 404 named `NOT_FOUND` cannot gain `retry_after_ms`.
+const NAMED_FOR_STATUS_WITHOUT_HINT = new Set(['NOT_FOUND']);
+
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -89,7 +94,8 @@ function sourceHintCodes(): { codes: Set<string>; unresolved: string[] } {
         namesProviderFailure &&
         ts.isPropertyAssignment(node) &&
         node.name.getText() === 'code' &&
-        ts.isStringLiteral(node.initializer)
+        ts.isStringLiteral(node.initializer) &&
+        !NAMED_FOR_STATUS_WITHOUT_HINT.has(node.initializer.text)
       ) {
         codes.add(node.initializer.text);
       }

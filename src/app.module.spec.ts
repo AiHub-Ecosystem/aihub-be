@@ -1,3 +1,4 @@
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { Controller, Get } from '@nestjs/common';
 import {
   FastifyAdapter,
@@ -172,15 +173,15 @@ describe('AppModule wiring', () => {
       ...Object.values(OPERATION_CATALOG),
       ...Object.values(PUBLIC_ROUTES),
     ]) {
-      expect(path).toMatch(/^\/v1\//);
-      expect(path).not.toMatch(/^\/v1\/v1\//);
+      expect(path).toMatch(/^\/v[1-9][0-9]*\//);
+      expect(path).not.toMatch(/^\/v[1-9][0-9]*\/v[1-9][0-9]*\//);
     }
   });
 
   it('documents every registered Public API Route by method and path shape', () => {
     const missing = missingPublicRoutes(
       registeredRoutes,
-      buildOpenApiDocument(),
+      buildOpenApiDocument(publicApiMajorV1()),
     );
 
     expect(missing).toEqual([]);
@@ -188,7 +189,7 @@ describe('AppModule wiring', () => {
 
   it('fails when the method is missing even though the path remains', () => {
     const openApiDocument = JSON.parse(
-      JSON.stringify(buildOpenApiDocument()),
+      JSON.stringify(buildOpenApiDocument(publicApiMajorV1())),
     ) as { paths: Record<string, unknown> };
     const speakingPath = openApiDocument.paths[
       '/v1/ielts/speaking/questions'

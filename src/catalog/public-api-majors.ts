@@ -42,6 +42,19 @@ export const PUBLIC_API_MAJORS: readonly PublicApiMajorDef[] = [
     contractVersion: '1.5.0',
     status: 'supported',
     releasedAt: '2026-10-27',
+    // ADR-0127: the successor release publishes the predecessor's sunset, at
+    // least 12 months out. The date can only move later (#1376).
+    sunset: {
+      successor: 2,
+      deprecationAt: '2026-11-01T00:00:00Z',
+      sunsetAt: '2027-11-02T00:00:00Z',
+    },
+  },
+  {
+    major: 2,
+    contractVersion: '2.0.0',
+    status: 'supported',
+    releasedAt: '2026-11-01',
   },
 ];
 

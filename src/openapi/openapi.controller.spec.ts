@@ -37,7 +37,7 @@ describe('OpenApiController', () => {
     const response = await app.inject({ method: 'GET', url: '/openapi.json' });
     const versionedResponse = await app.inject({
       method: 'GET',
-      url: '/openapi/v1.json',
+      url: `/openapi/v${latestPublicApiMajor().major}.json`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -46,6 +46,9 @@ describe('OpenApiController', () => {
     });
     expect(versionedResponse.statusCode).toBe(200);
     expect(versionedResponse.json()).toEqual(response.json());
+    const v1 = await app.inject({ method: 'GET', url: '/openapi/v1.json' });
+    expect(v1.statusCode).toBe(200);
+    expect(v1.json()).toMatchObject({ info: { version: '1.5.0' } });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['content-security-policy']).toBe(
@@ -76,8 +79,8 @@ describe('OpenApiController', () => {
       "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com",
     );
     expect(response.payload).toContain('name="version"');
-    expect(response.payload).toContain('value="v1" selected');
-    expect(response.payload).toContain('data-url="/openapi/v1.json"');
+    expect(response.payload).toContain('value="v2" selected');
+    expect(response.payload).toContain('data-url="/openapi/v2.json"');
     expect(versionedResponse.statusCode).toBe(200);
     expect(versionedResponse.payload).toContain('data-url="/openapi/v1.json"');
     expect(response.payload).toContain(
@@ -93,7 +96,7 @@ describe('OpenApiController', () => {
     expect(response.headers['referrer-policy']).toBe('no-referrer');
   });
 
-  it.each(['/openapi/v2.json', '/openapi/v1', '/openapi/latest.json'])(
+  it.each(['/openapi/v3.json', '/openapi/v1', '/openapi/latest.json'])(
     'answers %s, which names no supported major, with 404',
     async (url) => {
       const response = await app.inject({ method: 'GET', url });
@@ -145,13 +148,13 @@ describe('versioned contracts with two supported majors and one retired', () => 
 
   it('builds each document from its own major only', () => {
     const document = buildOpenApiDocument({
-      major: 2,
-      contractVersion: '2.3.0',
+      major: 3,
+      contractVersion: '3.0.0',
       status: 'supported',
-      releasedAt: '2027-01-01',
+      releasedAt: '2028-01-01',
     }) as { info: { version: string }; paths: Record<string, unknown> };
 
-    expect(document.info.version).toBe('2.3.0');
+    expect(document.info.version).toBe('3.0.0');
     expect(Object.keys(document.paths)).toEqual([]);
   });
 

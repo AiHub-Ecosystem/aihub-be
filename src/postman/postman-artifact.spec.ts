@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
-import { latestPublicApiMajor } from '@/catalog/public-api-majors';
 import {
   buildPostmanCollection,
   preservePostmanIds,
@@ -12,7 +11,8 @@ import {
 
 const REPO_ROOT = join(__dirname, '../..');
 const COLLECTION_PATH = join(REPO_ROOT, 'aihub.postman_collection.json');
-const OPENAPI_PATH = join(REPO_ROOT, 'openapi.json');
+// The collection is built from the /v1 contract; /v2 requests are not in it yet.
+const OPENAPI_PATH = join(REPO_ROOT, 'openapi/v1.json');
 
 interface PostmanEntry {
   readonly name?: string;
@@ -48,12 +48,19 @@ function committedOpenApiDocument(): unknown {
   return JSON.parse(readFileSync(OPENAPI_PATH, 'utf8'));
 }
 
+function contractVersion(): string {
+  const document = committedOpenApiDocument() as {
+    info: { version: string };
+  };
+  return document.info.version;
+}
+
 describe('committed aihub.postman_collection.json', () => {
   it('matches generated OpenAPI content and preserves existing Postman IDs', async () => {
     const committed = committedCollection();
     const generated = await buildPostmanCollection(
       committedOpenApiDocument(),
-      latestPublicApiMajor().contractVersion,
+      contractVersion(),
     );
     const fresh = preservePostmanIds(generated, committed);
 
@@ -70,7 +77,7 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = JSON.stringify(
       await buildPostmanCollection(
         committedOpenApiDocument(),
-        latestPublicApiMajor().contractVersion,
+        contractVersion(),
       ),
     );
 
@@ -130,7 +137,7 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = JSON.stringify(
       await buildPostmanCollection(
         committedOpenApiDocument(),
-        latestPublicApiMajor().contractVersion,
+        contractVersion(),
       ),
     );
 

@@ -1,3 +1,4 @@
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -111,7 +112,7 @@ describe('metrics scrape endpoint', () => {
   });
 
   it('never enters the generated OpenAPI document', () => {
-    const document = buildOpenApiDocument() as {
+    const document = buildOpenApiDocument(publicApiMajorV1()) as {
       readonly paths?: Record<string, unknown>;
     };
 

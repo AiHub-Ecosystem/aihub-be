@@ -9,6 +9,11 @@ import type {
   SpeakingGradeResponse,
 } from '@/contracts/speaking/grading';
 import type {
+  SpeakingV2PartGradeInput,
+  SpeakingV2QuestionGradeInput,
+  SpeakingV2TestGradeInput,
+} from '@/contracts/speaking/v2/inputs';
+import type {
   GradeResponse,
   GradeTask1Request,
   GradeTask2Request,
@@ -45,7 +50,13 @@ export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
       ? SpeakingGradeInput
       : K extends 'speaking.grading-json'
         ? SpeakingGradeJsonInput
-        : CatalogRequest<K>;
+        : K extends 'speaking.v2.question-grading'
+          ? SpeakingV2QuestionGradeInput
+          : K extends 'speaking.v2.part-grading'
+            ? SpeakingV2PartGradeInput
+            : K extends 'speaking.v2.test-grading'
+              ? SpeakingV2TestGradeInput
+              : CatalogRequest<K>;
 
 type CatalogResponse<K extends OperationId> =
   (typeof OPERATION_CATALOG)[K]['responseContract'] extends infer T

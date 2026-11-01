@@ -1,27 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { PUBLIC_API_MAJORS } from '@/catalog/public-api-majors';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 const REPO_ROOT = join(__dirname, '../..');
 const SPEC_PATH = join(REPO_ROOT, 'openapi.json');
-const VERSIONED_SPEC_PATH = join(REPO_ROOT, 'openapi/v1.json');
+const V1_SPEC_PATH = join(REPO_ROOT, 'openapi/v1.json');
+const V2_SPEC_PATH = join(REPO_ROOT, 'openapi/v2.json');
 const MAJORS_PATH = join(REPO_ROOT, 'openapi/majors.json');
 
+// The assertions below name /v1 routes, so they read the /v1 contract.
 function committedDocument(): unknown {
-  return JSON.parse(readFileSync(SPEC_PATH, 'utf8'));
+  return JSON.parse(readFileSync(V1_SPEC_PATH, 'utf8'));
 }
 
 describe('committed openapi.json', () => {
   it('matches what the generator produces right now — catches "changed a schema, forgot to regenerate"', () => {
-    const committed = committedDocument();
     const fresh: unknown = JSON.parse(JSON.stringify(buildOpenApiDocument()));
-
-    expect(committed).toEqual(fresh);
-    expect(JSON.parse(readFileSync(VERSIONED_SPEC_PATH, 'utf8'))).toEqual(
-      committed,
+    const freshV1: unknown = JSON.parse(
+      JSON.stringify(buildOpenApiDocument(publicApiMajorV1())),
     );
+
+    // /openapi.json is the alias of the newest major.
+    expect(JSON.parse(readFileSync(SPEC_PATH, 'utf8'))).toEqual(fresh);
+    expect(JSON.parse(readFileSync(V2_SPEC_PATH, 'utf8'))).toEqual(fresh);
+    expect(committedDocument()).toEqual(freshV1);
   });
 
   it('keeps openapi/majors.json, the release gate input, equal to the major registry', () => {

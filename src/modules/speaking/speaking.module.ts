@@ -41,6 +41,7 @@ import { S3SpeakingAudioStorage } from './infrastructure/s3-speaking-audio.stora
 import { SpeakingAudioUploadController } from './presentation/speaking-audio-upload.controller';
 import { SpeakingGradingController } from './presentation/speaking-grading.controller';
 import { SpeakingQuestionsController } from './presentation/speaking-questions.controller';
+import { SpeakingV2Controller } from './presentation/speaking-v2.controller';
 
 // Grading for Speaking goes through the same shared
 // `GradingOrchestratorPort`/`GRADING_ORCHESTRATOR` declared and bound by the
@@ -60,6 +61,7 @@ import { SpeakingQuestionsController } from './presentation/speaking-questions.c
   ],
   controllers: [
     SpeakingGradingController,
+    SpeakingV2Controller,
     SpeakingQuestionsController,
     SpeakingAudioUploadController,
   ],

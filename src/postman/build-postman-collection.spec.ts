@@ -2,6 +2,7 @@ import { runInNewContext } from 'node:vm';
 import type { CollectionDefinition } from 'postman-collection';
 import { Collection } from 'postman-collection';
 
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 import {
   buildPostmanCollection,
@@ -38,7 +39,7 @@ interface PostmanItem {
 }
 
 async function build(): Promise<Record<string, unknown>> {
-  const openApiDocument = buildOpenApiDocument();
+  const openApiDocument = buildOpenApiDocument(publicApiMajorV1());
   return (await buildPostmanCollection(
     openApiDocument,
     '0.0.0-test',

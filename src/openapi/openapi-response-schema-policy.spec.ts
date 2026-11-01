@@ -1,3 +1,4 @@
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 type JsonRecord = Record<string, unknown>;
@@ -71,7 +72,7 @@ function responseSchemas(document: JsonRecord): unknown[] {
 }
 
 describe('public OpenAPI object schema policy', () => {
-  const document = buildOpenApiDocument() as JsonRecord;
+  const document = buildOpenApiDocument(publicApiMajorV1()) as JsonRecord;
 
   it('allows additional properties at every response object boundary', () => {
     const objects = responseSchemas(document).flatMap((schema) =>

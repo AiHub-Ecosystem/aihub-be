@@ -1,7 +1,11 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationDef } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
-import type { PublicApiMajorDef } from '@/catalog/public-api-majors';
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
+import {
+  type PublicApiMajorDef,
+  findPublicApiMajor,
+} from '@/catalog/public-api-majors';
 import { PUBLIC_ROUTES, isPublicRouteId } from '@/catalog/public-routes';
 import type { PublicRouteDef } from '@/catalog/public-routes';
 import { Type } from '@sinclair/typebox';
@@ -134,8 +138,17 @@ const ORGANIZATION_MEMBER_TRANSFER_OPERATION_ID =
   'organizations.members.transfer';
 
 function build(): OpenApiDocument {
-  return buildOpenApiDocument() as OpenApiDocument;
+  return buildOpenApiDocument(publicApiMajorV1()) as OpenApiDocument;
 }
+
+// `build()` is the /v1 document, so the catalog-wide assertions below walk the
+// operations that belong to it; the /v2 operations have their own test.
+const V1_OPERATION_IDS = OPERATION_IDS.filter((operationId) =>
+  OPERATION_CATALOG[operationId].path.startsWith('/v1/'),
+);
+const V2_OPERATION_IDS = OPERATION_IDS.filter((operationId) =>
+  OPERATION_CATALOG[operationId].path.startsWith('/v2/'),
+);
 
 describe('buildOpenApiDocument', () => {
   it('describes an injected retrieval operation without a request body', () => {
@@ -209,9 +222,9 @@ describe('buildOpenApiDocument', () => {
       }
     }
 
-    for (const operationDef of Object.values(
-      OPERATION_CATALOG,
-    ) as OperationDef[]) {
+    for (const operationDef of V1_OPERATION_IDS.map(
+      (operationId): OperationDef => OPERATION_CATALOG[operationId],
+    )) {
       const operation =
         document.paths[toOpenApiPath(operationDef.path)]?.[
           operationDef.method.toLowerCase() as keyof OpenApiPathItem
@@ -291,8 +304,8 @@ describe('buildOpenApiDocument', () => {
     );
 
     expect(undeclared).toEqual([]);
-    expect(dispatchOperationIds.sort()).toEqual([...OPERATION_IDS].sort());
-    expect(dispatchOperationIds).toHaveLength(OPERATION_IDS.length);
+    expect(dispatchOperationIds.sort()).toEqual([...V1_OPERATION_IDS].sort());
+    expect(dispatchOperationIds).toHaveLength(V1_OPERATION_IDS.length);
   });
 
   it('documents every non-dispatch route from the registry, and nothing else off the catalog', () => {
@@ -1212,7 +1225,7 @@ describe('buildOpenApiDocument', () => {
   it('uses the exact public path the catalog declares, with no duplicated version prefix', () => {
     const doc = build();
 
-    for (const operationId of OPERATION_IDS) {
+    for (const operationId of V1_OPERATION_IDS) {
       const catalogued = OPERATION_CATALOG[operationId];
       const pathItem = doc.paths[catalogued.path];
 
@@ -1221,6 +1234,32 @@ describe('buildOpenApiDocument', () => {
       expect(catalogued.path).toMatch(/^\/v1\//);
       expect(catalogued.path).not.toMatch(/^\/v1\/v1\//);
     }
+  });
+
+  it('documents each /v2 operation at its catalog path with its own method', () => {
+    const major = findPublicApiMajor(2);
+    expect(major).toBeDefined();
+    const doc = buildOpenApiDocument(major) as OpenApiDocument;
+
+    expect(V2_OPERATION_IDS).toHaveLength(6);
+    for (const operationId of V2_OPERATION_IDS) {
+      const catalogued: OperationDef = OPERATION_CATALOG[operationId];
+      const pathItem = doc.paths[catalogued.path];
+      const operation =
+        catalogued.method === 'GET' ? pathItem?.get : pathItem?.post;
+
+      expect(operation?.operationId).toBe(operationId);
+      expect(
+        operation?.parameters.map((parameter) => parameter.$ref),
+      ).toContain('#/components/parameters/CorrelationId');
+      // A GET reads by path parameter and carries no body; a POST must.
+      expect(operation?.requestBody === undefined).toBe(
+        catalogued.method === 'GET',
+      );
+    }
+    expect(
+      Object.keys(doc.paths).filter((path) => !path.startsWith('/v2/')),
+    ).toEqual([]);
   });
 
   it('embeds the exact request and response schema objects from the catalog', () => {
@@ -1278,7 +1317,7 @@ describe('buildOpenApiDocument', () => {
   it('references the correlation id header on every operation', () => {
     const doc = build();
 
-    for (const operationId of OPERATION_IDS) {
+    for (const operationId of V1_OPERATION_IDS) {
       const path = OPERATION_CATALOG[operationId].path;
       const refs = doc.paths[path]?.post?.parameters.map(
         (parameter) => parameter.$ref,

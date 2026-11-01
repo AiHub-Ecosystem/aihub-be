@@ -1,4 +1,5 @@
 import type { SpeakingGradeInput } from '@/contracts/speaking/grading';
+import type { SpeakingV2QuestionGradeInput } from '@/contracts/speaking/v2/inputs';
 
 export const SPEAKING_MULTIPART_PARSER = Symbol('SPEAKING_MULTIPART_PARSER');
 
@@ -42,4 +43,8 @@ export interface SpeakingMultipartParserPort {
     source: SpeakingMultipartSource,
     signal: AbortSignal,
   ): Promise<SpeakingGradeInput>;
+  parseQuestionV2(
+    source: SpeakingMultipartSource,
+    signal: AbortSignal,
+  ): Promise<SpeakingV2QuestionGradeInput>;
 }

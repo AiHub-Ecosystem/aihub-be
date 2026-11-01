@@ -8,7 +8,31 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null;
 }
 
-for (const path of ['openapi/v1.json', 'openapi.json']) {
+/** @param {string} path @returns {unknown} */
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const majors = readJson('openapi/majors.json');
+if (!Array.isArray(majors)) {
+  console.error('openapi/majors.json is not a list of majors');
+  process.exit(1);
+}
+/** @type {number[]} */
+const supported = [];
+for (const entry of majors) {
+  if (isRecord(entry) && entry.status === 'supported') {
+    supported.push(Number(entry.major));
+  }
+}
+const newest = Math.max(...supported);
+
+const documents = [
+  ...supported.map((major) => `openapi/v${major}.json`),
+  'openapi.json',
+];
+
+for (const path of documents) {
   const validator = new Validator();
   const result = await validator.validate(path);
 
@@ -26,12 +50,8 @@ for (const path of ['openapi/v1.json', 'openapi.json']) {
   }
 }
 
-const versioned = /** @type {unknown} */ (
-  JSON.parse(readFileSync('openapi/v1.json', 'utf8'))
-);
-const latest = /** @type {unknown} */ (
-  JSON.parse(readFileSync('openapi.json', 'utf8'))
-);
+const versioned = readJson(`openapi/v${newest}.json`);
+const latest = readJson('openapi.json');
 if (
   !isRecord(versioned) ||
   !isRecord(latest) ||
@@ -39,8 +59,8 @@ if (
   !isRecord(latest.info) ||
   versioned.info.version !== latest.info.version
 ) {
-  console.error('openapi.json is not the latest /v1 contract alias');
+  console.error(`openapi.json is not the latest /v${newest} contract alias`);
   process.exit(1);
 }
 
-console.log('openapi/v1.json and openapi.json are valid OpenAPI 3.1 documents');
+console.log(`${documents.join(', ')} are valid OpenAPI 3.1 documents`);

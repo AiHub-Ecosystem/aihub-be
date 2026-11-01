@@ -9,9 +9,13 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
 import { containsUnstorableText } from '@/common/http/unstorable-text';
 import {
+  type SpeakingAudio,
   type SpeakingGradeInput,
   SpeakingGradeRequestSchema,
 } from '@/contracts/speaking/grading';
+import type { SpeakingV2QuestionGradeInput } from '@/contracts/speaking/v2/inputs';
+import { SpeakingV2QuestionGradeRequestSchema } from '@/contracts/speaking/v2/requests';
+import { isSpeakingV2TestType } from '@/contracts/speaking/v2/test-type';
 import type {
   SpeakingMultipartFilePart,
   SpeakingMultipartParserPort,
@@ -157,16 +161,83 @@ function parseFields(
   };
 }
 
+const QUESTION_FIELDS_V2 = new Set([
+  'part',
+  'question_id',
+  'prompt_text',
+  'test_type',
+  'test_code',
+  'part_result_id',
+]);
+
+function parseQuestionFieldsV2(
+  fields: ReadonlyMap<string, string>,
+): Omit<SpeakingV2QuestionGradeInput, 'audio'> {
+  for (const [field, value] of fields) {
+    if (!QUESTION_FIELDS_V2.has(field)) {
+      throw invalidRequest(`Unknown field ${field}`);
+    }
+    if (containsUnstorableText(value)) {
+      throw invalidRequest();
+    }
+  }
+
+  const part = Number(fields.get('part'));
+  const questionId = fields.get('question_id') ?? '';
+  const promptText = fields.get('prompt_text');
+  const testType = fields.get('test_type');
+  const testCode = fields.get('test_code');
+  const partResultId = fields.get('part_result_id');
+  const boundaryValue = {
+    part,
+    question_id: questionId,
+    ...(promptText === undefined ? {} : { prompt_text: promptText }),
+    ...(testType === undefined ? {} : { test_type: testType }),
+    ...(testCode === undefined ? {} : { test_code: testCode }),
+    ...(partResultId === undefined ? {} : { part_result_id: partResultId }),
+  };
+
+  if (!Value.Check(SpeakingV2QuestionGradeRequestSchema, boundaryValue)) {
+    throw invalidRequest();
+  }
+
+  return {
+    part,
+    questionId,
+    ...(promptText === undefined ? {} : { promptText }),
+    ...(testType !== undefined && isSpeakingV2TestType(testType)
+      ? { testType }
+      : {}),
+    ...(testCode === undefined ? {} : { testCode }),
+    ...(partResultId === undefined ? {} : { partResultId }),
+  };
+}
+
 @Injectable()
 export class FastifySpeakingMultipartParser
   implements SpeakingMultipartParserPort
 {
-  async parse(
+  parse(
     source: SpeakingMultipartSource,
     signal: AbortSignal,
   ): Promise<SpeakingGradeInput> {
+    return this.readMultipart(source, signal, parseFields);
+  }
+
+  parseQuestionV2(
+    source: SpeakingMultipartSource,
+    signal: AbortSignal,
+  ): Promise<SpeakingV2QuestionGradeInput> {
+    return this.readMultipart(source, signal, parseQuestionFieldsV2);
+  }
+
+  private async readMultipart<TFields>(
+    source: SpeakingMultipartSource,
+    signal: AbortSignal,
+    parseFieldValues: (fields: ReadonlyMap<string, string>) => TFields,
+  ): Promise<TFields & { readonly audio: SpeakingAudio }> {
     const fields = new Map<string, string>();
-    let audio: SpeakingGradeInput['audio'] | undefined;
+    let audio: SpeakingAudio | undefined;
     const abort = (): void => source.abort();
     signal.addEventListener('abort', abort, { once: true });
 
@@ -219,7 +290,7 @@ export class FastifySpeakingMultipartParser
       throw invalidRequest('Audio must be at least 100 bytes');
     }
 
-    return { audio, ...parseFields(fields) };
+    return { audio, ...parseFieldValues(fields) };
   }
 }
 
@@ -246,6 +317,13 @@ export function registerSpeakingMultipartParser(
         methods.includes('POST')
       ) {
         route.bodyLimit = OPERATION_CATALOG['speaking.grading'].maxBodyBytes;
+      }
+      if (
+        route.url === OPERATION_CATALOG['speaking.v2.question-grading'].path &&
+        methods.includes('POST')
+      ) {
+        route.bodyLimit =
+          OPERATION_CATALOG['speaking.v2.question-grading'].maxBodyBytes;
       }
     },
   ]);

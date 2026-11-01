@@ -209,9 +209,33 @@ describe('UsageCompletenessReportService', () => {
           incompletePercent: 0,
           status: 'healthy',
         },
+        {
+          operation: 'speaking.v2.part-grading',
+          downstream: 'ai-speaking',
+          successfulCount: 0,
+          missingUsageCount: 0,
+          incompletePercent: 0,
+          status: 'healthy',
+        },
+        {
+          operation: 'speaking.v2.question-grading',
+          downstream: 'ai-speaking',
+          successfulCount: 0,
+          missingUsageCount: 0,
+          incompletePercent: 0,
+          status: 'healthy',
+        },
+        {
+          operation: 'speaking.v2.test-grading',
+          downstream: 'ai-speaking',
+          successfulCount: 0,
+          missingUsageCount: 0,
+          incompletePercent: 0,
+          status: 'healthy',
+        },
       ],
       summary: {
-        eligibleOperations: 2,
+        eligibleOperations: 5,
         eligibleRequests: 0,
         alertOperations: 0,
         status: 'healthy',
@@ -220,6 +244,9 @@ describe('UsageCompletenessReportService', () => {
     expect(repository.queries[0]?.operations).toEqual([
       'speaking.grading',
       'speaking.grading-json',
+      'speaking.v2.part-grading',
+      'speaking.v2.question-grading',
+      'speaking.v2.test-grading',
     ]);
   });
 });

@@ -9,6 +9,14 @@ import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
 import { speakingGradingAdapter } from '@/downstream/speaking/speaking-grading.adapter';
+import {
+  speakingV2PartGetAdapter,
+  speakingV2PartGradingAdapter,
+  speakingV2QuestionGradingAdapter,
+  speakingV2ResponseGetAdapter,
+  speakingV2TestGetAdapter,
+  speakingV2TestGradingAdapter,
+} from '@/downstream/speaking/speaking-v2.adapters';
 import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
@@ -233,6 +241,12 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
               task2GradeAdapter,
               speakingGradingAdapter,
               speakingGradingJsonAdapter,
+              speakingV2QuestionGradingAdapter,
+              speakingV2PartGradingAdapter,
+              speakingV2TestGradingAdapter,
+              speakingV2ResponseGetAdapter,
+              speakingV2PartGetAdapter,
+              speakingV2TestGetAdapter,
             ],
             circuitBreakers,
             retryBudget,

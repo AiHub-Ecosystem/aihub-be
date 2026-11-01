@@ -771,16 +771,21 @@ report and respond within one business day.
 
 ## 4. Endpoints
 
-All public grading operations are `POST` routes. Writing and Speaking
-JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
+Grading operations are `POST` routes; the three `/v2` Speaking read-back routes are `GET`. Writing and Speaking JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
 `multipart/form-data`.
 
-| Path                              | `X-User-Identity`                              | `Idempotency-Key` | Max body | AIHUB timeout |
-| --------------------------------- | ---------------------------------------------- | ----------------- | -------: | ------------: |
-| `/v1/ielts/writing/task1/grade`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
-| `/v1/ielts/writing/task2/grade`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
-| `/v1/ielts/speaking/grading`      | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
-| `/v1/ielts/speaking/grading-json` | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
+| Path                                         | `X-User-Identity`                              | `Idempotency-Key` | Max body | AIHUB timeout |
+| -------------------------------------------- | ---------------------------------------------- | ----------------- | -------: | ------------: |
+| `/v1/ielts/writing/task1/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
+| `/v1/ielts/writing/task2/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           60s |
+| `/v1/ielts/speaking/grading`                 | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
+| `/v1/ielts/speaking/grading-json`            | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
+| `/v2/ielts/speaking/questions/grade`         | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
+| `/v2/ielts/speaking/parts/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
+| `/v2/ielts/speaking/tests/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
+| `/v2/ielts/speaking/responses/{response_id}` | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
+| `/v2/ielts/speaking/parts/{part_result_id}`  | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
+| `/v2/ielts/speaking/tests/{test_id}`         | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
 
 These routes are not grading operations and appear here only so the list is
 complete:
@@ -921,6 +926,67 @@ signed object URL, and may be at most 2,048 characters. AIHUB rejects embedded
 credentials, fragments, other hosts/schemes/ports, and unknown fields before
 dispatch. AIHUB validates but does not download the URL; the provider owns
 retrieval and does not follow redirects.
+
+### Moving Speaking from `/v1` to `/v2`
+
+`/v2` adds Speaking grading and stored-result retrieval. It uses the same API
+key, `speaking.grade` scope, and `X-User-Identity` as `/v1`; the End-User comes
+from that identity, not a `user_id` field. The six routes are:
+
+| Method | Route                                        | Request                                                                                                                 |
+| ------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/v2/ielts/speaking/questions/grade`         | Multipart: `audio`, `part` (`1`–`3`), `question_id`; optional `prompt_text`, `test_type`, `test_code`, `part_result_id` |
+| `POST` | `/v2/ielts/speaking/parts/grade`             | JSON: `part_result_id`; optional `part`, `test_id`, `test_type`, `expected_question_count`, `response_ids`              |
+| `POST` | `/v2/ielts/speaking/tests/grade`             | JSON: `test_id`, and at least one of `part_result_ids` or `response_ids`; optional `test_type` and the other ID list    |
+| `GET`  | `/v2/ielts/speaking/responses/{response_id}` | Read a stored question result                                                                                           |
+| `GET`  | `/v2/ielts/speaking/parts/{part_result_id}`  | Read a stored Part result                                                                                               |
+| `GET`  | `/v2/ielts/speaking/tests/{test_id}`         | Read a stored Test result                                                                                               |
+
+For a Part or Test, grade questions first, aggregate the question results into
+a Part, then aggregate Part results into a Test. The question response returns
+`response_id` and `part_result_id`; the Part request uses `part_result_id` and
+can select questions with `response_ids`. A Test request uses `test_id` and
+selects its results with `part_result_ids`, `response_ids`, or both. Use the
+three GET routes to read the stored question, Part, or Test result back.
+
+The v2 `test_type` values are the lowercase `practice` and `full_test`.
+The response uses the common `{ "data", "meta" }` envelope. Every `data.meta` has `schema_version` (`2.4`), `result_type`, `test_id`,
+`test_type`, and `graded_at`. A question result also has `part`, `question_id`,
+`response_id`, and `part_result_id`; a Part result has `part_result_id`, `part`,
+`question_count`, and `total_speaking_seconds`; a Test result has
+`question_count`, `total_speaking_seconds`, and `parts_completed`.
+`data.scores` contains `overall` (0–9 in half-band steps), integer scores from
+0–9 for `fluency_coherence`, `lexical_resource`, `grammatical_range_accuracy`,
+and `pronunciation`, plus the boolean `is_provisional`.
+`data.overall_feedback` contains `overview_vi` and `details`, whose entries have
+`criterion` and `comment_vi`. Every result also has `data.criteria` with
+`fluency_coherence`, `lexical_resource`, `grammatical_range_accuracy`, and
+`pronunciation`. Each criterion has `summary.reason_for_band_vi`,
+`summary.strengths_vi`, and `summary.areas_for_improvement_vi`; its
+`diagnostics` is `null` on Part and Test results and a list of located findings
+on question results. Each finding has `reference` (`token_range`, `text`,
+`start_ms`, and `end_ms`), `kind`, `error_codes`, `explain_vi`, `improvement`,
+and `improvement_vi`; reference timings can be `null`. A question result also
+has `data.transcript` with `text`, `stats.word_count`,
+`stats.speaking_seconds`, and `tokens` containing `index`, `text`, `start_ms`,
+and `end_ms` (either timing can be `null`).
+
+Compared with `/v1`, v2 does not return `scorability`, `relevance`,
+`pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
+`strong_point_vi`, `action_plan_vi`, or the `/v1` `pronunciation_detail`
+structure. `ielts/speaking/grading-json` has no v2 counterpart and stays on
+`/v1`. Writing also stays on `/v1` for now. `/v1` stays available alongside `/v2`; its `Deprecation` and `Sunset` headers carry its retirement dates.
+
+Only the three POST routes are billed. A GET never adds a charge. The POSTs do not accept an
+`Idempotency-Key`; retrying the question grading POST after a network failure
+can grade and charge twice.
+
+A newly graded result may take a short time to become readable. If a GET, or
+an aggregation that includes the newest question, returns `404`, wait briefly
+and retry; no fixed wait is promised. An unknown or foreign result ID returns
+`NOT_FOUND` identically. Aggregation failures use the existing
+`AI_SERVICE_ERROR` family. `429 AI_SERVICE_THROTTLED` responses carry
+`Retry-After` on `/v1` and `/v2`.
 
 ### Retaining a Speaking recording
 
@@ -1268,7 +1334,7 @@ separate table below.
 |  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification                                                         | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                             |
 |  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                                                                     | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key                      |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                                                                      | Use the key issued for that environment                                                                            |
-|  404 | `NOT_FOUND`                     | No such route, or a method the route does not accept                                                                                       | Check path and method                                                                                              |
+|  404 | `NOT_FOUND`                     | No such route, or a method the route does not accept; a v2 stored-result ID is unknown or belongs to another End-User                      | Check path and method; for v2 reads, verify the ID and User Identity                                               |
 |  409 | `IDEMPOTENCY_CONFLICT`          | Writing reused a key with a different body, or an identical Writing request is still running                                               | Different body: use a new key; in-flight request: wait for `Retry-After`, then retry the same key and body         |
 |  410 | `API_VERSION_RETIRED`           | The URI names a retired Public API major (`retryable: false`); `details.successor_major` and `details.successor_docs` name its replacement | Move to the successor major; retrying is pointless                                                                 |
 |  413 | `PAYLOAD_TOO_LARGE`             | Request body exceeded the operation's limit                                                                                                | Reduce the essay or audio size to fit the route limit                                                              |

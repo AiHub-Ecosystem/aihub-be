@@ -1,5 +1,6 @@
 import type { TSchema } from '@sinclair/typebox';
 
+import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import type { PublicRouteDef } from '@/catalog/public-routes';
 import { buildOpenApiDocument } from './build-openapi-document';
@@ -23,7 +24,7 @@ type PublishedPaths = Record<
 const ROUTES = Object.entries(PUBLIC_ROUTES) as [string, PublicRouteDef][];
 
 function publishedOperation(route: PublicRouteDef): PublishedOperation {
-  const { paths } = buildOpenApiDocument() as {
+  const { paths } = buildOpenApiDocument(publicApiMajorV1()) as {
     paths: PublishedPaths;
   };
   const operation =

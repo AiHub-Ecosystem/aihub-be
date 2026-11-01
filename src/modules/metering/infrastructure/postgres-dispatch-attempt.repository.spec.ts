@@ -70,6 +70,12 @@ describe('PostgresDispatchAttemptRepository', () => {
       { operation: 'writing.task2.grade', count: 0 },
       { operation: 'speaking.grading', count: 0 },
       { operation: 'speaking.grading-json', count: 0 },
+      { operation: 'speaking.v2.question-grading', count: 0 },
+      { operation: 'speaking.v2.part-grading', count: 0 },
+      { operation: 'speaking.v2.test-grading', count: 0 },
+      { operation: 'speaking.v2.response-get', count: 0 },
+      { operation: 'speaking.v2.part-get', count: 0 },
+      { operation: 'speaking.v2.test-get', count: 0 },
       { operation: 'other', count: 3 },
     ]);
     expect(query).toHaveBeenCalledWith(expect.any(String), [...OPERATION_IDS]);
@@ -104,6 +110,12 @@ describe('PostgresDispatchAttemptRepository', () => {
       { operation: 'writing.task2.grade', count: 0 },
       { operation: 'speaking.grading', count: 0 },
       { operation: 'speaking.grading-json', count: 0 },
+      { operation: 'speaking.v2.question-grading', count: 0 },
+      { operation: 'speaking.v2.part-grading', count: 0 },
+      { operation: 'speaking.v2.test-grading', count: 0 },
+      { operation: 'speaking.v2.response-get', count: 0 },
+      { operation: 'speaking.v2.part-get', count: 0 },
+      { operation: 'speaking.v2.test-get', count: 0 },
     ]);
   });
 });
