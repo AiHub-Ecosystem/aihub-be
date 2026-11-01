@@ -91,6 +91,10 @@ class AtomicRepository implements IdempotencyRepositoryPort {
   }
 }
 
+// `timeoutMs` is the response deadline and, doubled, the hard deadline. A test
+// that needs the response deadline to fire first and the hard one not to (a
+// background completion) must leave a gap a loaded CI runner cannot overtake;
+// 5 ms against 10 ms did not (#1448).
 function input(requestId = 'req_1', timeoutMs = 50) {
   return {
     organizationId: 'org_acme',
@@ -415,7 +419,7 @@ describe('IdempotencyService', () => {
     await expect(
       service.execute(
         {
-          ...input('req_background_lifecycle', 5),
+          ...input('req_background_lifecycle', 50),
           backgroundLifecycle: lifecycle,
         },
         () => workPromise,
@@ -454,7 +458,7 @@ describe('IdempotencyService', () => {
       await expect(
         service.execute(
           {
-            ...input('req_background_completed', 5),
+            ...input('req_background_completed', 50),
             backgroundLifecycle: lifecycle,
           },
           () => workPromise,
@@ -596,7 +600,7 @@ describe('IdempotencyService', () => {
 
     await expect(
       service.execute(
-        input('req_background_client_error', 5),
+        input('req_background_client_error', 50),
         () => workPromise,
         () => ({ value: 'unused' }),
       ),
