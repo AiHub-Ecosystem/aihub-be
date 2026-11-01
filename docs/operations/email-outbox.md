@@ -422,7 +422,7 @@ sent after the connections it needs have closed:
    outcome, and hands the rest of its batch back without spending an attempt
    (they are claimable again in about five seconds, by this or another instance).
    The pass counts as background work, so closing the server waits for it inside
-   the 75-second background drain of the shutdown budget in
+   the background drain of the shutdown budget (the largest request timeout plus 15 seconds) in
    [deploy-vps.md](deploy-vps.md).
 3. Only then do the Redis clients and the Postgres pools close.
 
@@ -431,7 +431,7 @@ no attempt. The pass is bounded: one request with the provider takes at most the
 five-second attempt timeout, plus a few short writes, and handing back the rest of
 the batch is one write per remaining request (at most nine).
 
-The drain itself has a limit. If background work outlasts the 75 seconds, closing
+The drain itself has a limit. If background work outlasts that background drain, closing
 the server fails, the process exits with status 1, and the Redis and Postgres close
 hooks do not run. That is how every kind of background work behaves, not only the
 outbox. A request left mid-send is recoverable: its lease lapses, and the stable

@@ -91,7 +91,10 @@ class InMemoryIdempotencyRepository implements IdempotencyRepositoryPort {
 }
 
 class ShortDeadlineIdempotencyService implements IdempotencyServicePort {
-  constructor(private readonly service: IdempotencyService) {}
+  constructor(
+    private readonly service: IdempotencyService,
+    private readonly timeoutMs: number,
+  ) {}
 
   execute<T>(
     input: IdempotencyExecutionInput,
@@ -101,7 +104,7 @@ class ShortDeadlineIdempotencyService implements IdempotencyServicePort {
     return this.service.execute(
       {
         ...input,
-        timeoutMs: 1_000,
+        timeoutMs: this.timeoutMs,
         deadlineAt: new Date(Date.now() + 250),
       },
       work,
@@ -183,130 +186,143 @@ class CapturingSpanExporter extends InMemorySpanExporter {
 }
 
 describe('application shutdown drain', () => {
-  it('drains a graded request, persists its result and usage, refuses new connections, and flushes its span', async () => {
-    const exporter = new CapturingSpanExporter();
-    const sdk = new NodeSDK({
-      spanProcessors: [
-        new BatchSpanProcessor({ exporter, scheduledDelayMillis: 60_000 }),
-      ],
-      instrumentations: [],
-    });
-    sdk.start();
-
-    const idempotencyRepository = new InMemoryIdempotencyRepository();
-    const idempotency = new ShortDeadlineIdempotencyService(
-      new IdempotencyService(idempotencyRepository),
-    );
-    const usageRepository = new InMemoryUsageRepository();
-    const downstream = new StubDownstream();
-    const concurrency: ConcurrencyLimiterPort = {
-      acquire: async () => ({
-        allowed: true,
-        lease: { release: async () => undefined },
-      }),
-    };
-    const quota: QuotaCounterPort = {
-      read: async () => 0,
-      increment: async () => undefined,
-    };
-    const runtimeConfiguration = {
-      ...appConfig(),
-      NODE_ENV: 'test' as const,
-      AIHUB_ALLOW_UNAUTHENTICATED_DEV: true,
-    };
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(appConfig.KEY)
-      .useValue(runtimeConfiguration)
-      .overrideProvider(IDEMPOTENCY_SERVICE)
-      .useValue(idempotency)
-      .overrideProvider(OPERATION_DISPATCHER)
-      .useValue(downstream.port)
-      .overrideProvider(CONCURRENCY_LIMITER)
-      .useValue(concurrency)
-      .overrideProvider(QUOTA_COUNTER)
-      .useValue(quota)
-      .overrideProvider(USAGE_REPOSITORY)
-      .useValue(usageRepository)
-      .overrideProvider(GRADED_ADMISSION)
-      .useValue({ consume: async () => ({ stage: 'admitted' }) })
-      .compile();
-
-    const app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new GracefulFastifyAdapter({ genReqId: () => generateRequestId() }, () =>
-        sdk.shutdown(),
-      ),
-    );
-    const fastify = app.getHttpAdapter().getInstance();
-    registerRequestHooks(fastify, trace.getTracer('aihub.request.shutdown'));
-    registerMetricsRoute(fastify);
-    await app.init();
-    await fastify.ready();
-    await app.listen(0, '127.0.0.1');
-
-    const address = app.getHttpServer().address();
-    if (address === null || typeof address === 'string') {
-      throw new Error('expected a TCP listener');
-    }
-    const url = `http://127.0.0.1:${address.port}${GRADE_PATH}`;
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          connection: 'close',
-          'idempotency-key': 'shutdown-drain',
-        },
-        body: JSON.stringify(GRADE_BODY),
+  // 125 s is the Writing /v2 grading timeout (ADR-0143, #1455). The response
+  // deadline here stays 250 ms, so this case only proves the drain works with a
+  // 250 s hard deadline; the genuinely long path (a 504 at 125 s, completion
+  // 100 s later) runs on fake timers in idempotency-service.spec.ts.
+  it.each([1_000, 125_000])(
+    'drains a graded request with a %i ms timeout, persists its result and usage, refuses new connections, and flushes its span',
+    async (timeoutMs) => {
+      const exporter = new CapturingSpanExporter();
+      const sdk = new NodeSDK({
+        spanProcessors: [
+          new BatchSpanProcessor({ exporter, scheduledDelayMillis: 60_000 }),
+        ],
+        instrumentations: [],
       });
-      await downstream.started;
-      expect(response.status).toBe(504);
-      await response.arrayBuffer();
+      // The global tracer provider registers once per process; free it so each
+      // timeout case exports through its own SDK.
+      trace.disable();
+      sdk.start();
 
-      let closed = false;
-      const closing = app.close().then(() => {
-        closed = true;
-        return undefined;
-      });
-      for (
-        let attempt = 0;
-        attempt < 20 && app.getHttpServer().listening;
-        attempt += 1
-      ) {
-        await new Promise((resolvePromise) => setTimeout(resolvePromise, 5));
+      const idempotencyRepository = new InMemoryIdempotencyRepository();
+      const idempotency = new ShortDeadlineIdempotencyService(
+        new IdempotencyService(idempotencyRepository),
+        timeoutMs,
+      );
+      const usageRepository = new InMemoryUsageRepository();
+      const downstream = new StubDownstream();
+      const concurrency: ConcurrencyLimiterPort = {
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      };
+      const quota: QuotaCounterPort = {
+        read: async () => 0,
+        increment: async () => undefined,
+      };
+      const runtimeConfiguration = {
+        ...appConfig(),
+        NODE_ENV: 'test' as const,
+        AIHUB_ALLOW_UNAUTHENTICATED_DEV: true,
+      };
+      const moduleRef = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(appConfig.KEY)
+        .useValue(runtimeConfiguration)
+        .overrideProvider(IDEMPOTENCY_SERVICE)
+        .useValue(idempotency)
+        .overrideProvider(OPERATION_DISPATCHER)
+        .useValue(downstream.port)
+        .overrideProvider(CONCURRENCY_LIMITER)
+        .useValue(concurrency)
+        .overrideProvider(QUOTA_COUNTER)
+        .useValue(quota)
+        .overrideProvider(USAGE_REPOSITORY)
+        .useValue(usageRepository)
+        .overrideProvider(GRADED_ADMISSION)
+        .useValue({ consume: async () => ({ stage: 'admitted' }) })
+        .compile();
+
+      const app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new GracefulFastifyAdapter(
+          { genReqId: () => generateRequestId() },
+          () => sdk.shutdown(),
+        ),
+      );
+      const fastify = app.getHttpAdapter().getInstance();
+      registerRequestHooks(fastify, trace.getTracer('aihub.request.shutdown'));
+      registerMetricsRoute(fastify);
+      await app.init();
+      await fastify.ready();
+      await app.listen(0, '127.0.0.1');
+
+      const address = app.getHttpServer().address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('expected a TCP listener');
       }
-      expect(app.getHttpServer().listening).toBe(false);
-      expect(closed).toBe(false);
-      await expect(refuseNewConnection(address.port)).rejects.toMatchObject({
-        code: 'ECONNREFUSED',
-      });
+      const url = `http://127.0.0.1:${address.port}${GRADE_PATH}`;
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            connection: 'close',
+            'idempotency-key': 'shutdown-drain',
+          },
+          body: JSON.stringify(GRADE_BODY),
+        });
+        await downstream.started;
+        expect(response.status).toBe(504);
+        await response.arrayBuffer();
 
-      downstream.release();
-      await closing;
+        let closed = false;
+        const closing = app.close().then(() => {
+          closed = true;
+          return undefined;
+        });
+        for (
+          let attempt = 0;
+          attempt < 20 && app.getHttpServer().listening;
+          attempt += 1
+        ) {
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, 5));
+        }
+        expect(app.getHttpServer().listening).toBe(false);
+        expect(closed).toBe(false);
+        await expect(refuseNewConnection(address.port)).rejects.toMatchObject({
+          code: 'ECONNREFUSED',
+        });
 
-      expect(idempotencyRepository.completed).toHaveLength(1);
-      // The 504 the caller saw, and the one charge for the grading the drain
-      // let finish (ADR-0097): the drain waits for that write too.
-      expect(
-        usageRepository.records.map((record) => [
-          record.httpStatus,
-          record.billableRequests,
-          record.billingBasis,
-        ]),
-      ).toEqual([
-        [504, 0, 'response'],
-        [200, 1, 'background_completion'],
-      ]);
-      expect(
-        exporter.exported.some((span) => span.name === `POST ${GRADE_PATH}`),
-      ).toBe(true);
-    } finally {
-      downstream.release();
-      if (app.getHttpServer().listening) {
-        await app.close();
+        downstream.release();
+        await closing;
+
+        expect(idempotencyRepository.completed).toHaveLength(1);
+        // The 504 the caller saw, and the one charge for the grading the drain
+        // let finish (ADR-0097): the drain waits for that write too.
+        expect(
+          usageRepository.records.map((record) => [
+            record.httpStatus,
+            record.billableRequests,
+            record.billingBasis,
+          ]),
+        ).toEqual([
+          [504, 0, 'response'],
+          [200, 1, 'background_completion'],
+        ]);
+        expect(
+          exporter.exported.some((span) => span.name === `POST ${GRADE_PATH}`),
+        ).toBe(true);
+      } finally {
+        downstream.release();
+        if (app.getHttpServer().listening) {
+          await app.close();
+        }
+        await sdk.shutdown();
       }
-      await sdk.shutdown();
-    }
-  }, 30_000);
+    },
+    30_000,
+  );
 });

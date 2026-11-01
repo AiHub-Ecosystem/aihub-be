@@ -436,6 +436,54 @@ describe('IdempotencyService', () => {
     expect(lifecycle.settled).toHaveBeenCalledTimes(1);
   });
 
+  it('answers a 125-second request with a timeout and still completes the record when the work ends 100 seconds later (#1455)', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-11-01T04:00:00.000Z'));
+    try {
+      const repository = new FakeRepository();
+      repository.nextReservations.push({
+        kind: 'claimed',
+        requestId: 'req_writing_v2',
+      });
+      const lifecycle = {
+        started: jest.fn(),
+        settled: jest.fn(),
+        completed: jest.fn(),
+      };
+      let resolveWork: ((value: { value: string }) => void) | undefined;
+      const work = new Promise<{ value: string }>((resolve) => {
+        resolveWork = resolve;
+      });
+      const outcome = new IdempotencyService(repository)
+        .execute(
+          {
+            ...input('req_writing_v2', 125_000),
+            backgroundLifecycle: lifecycle,
+          },
+          () => work,
+          () => ({ value: 'unused' }),
+        )
+        .catch((error: unknown) => error);
+
+      await jest.advanceTimersByTimeAsync(125_000);
+      expect(await outcome).toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+      expect(lifecycle.started).toHaveBeenCalledTimes(1);
+      expect(lifecycle.settled).not.toHaveBeenCalled();
+
+      await jest.advanceTimersByTimeAsync(100_000);
+      resolveWork?.({ value: 'graded' });
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(repository.completed[0]?.responseBody).toEqual({
+        value: 'graded',
+      });
+      expect(lifecycle.completed).toHaveBeenCalledTimes(1);
+      expect(lifecycle.settled).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it.each([
     ['stores its result', true, 1],
     ['fails', false, 0],

@@ -906,7 +906,7 @@ prepare_candidate() {
 
 drain_old_slot() {
   local service="$1" status=0
-  # Compose waits out stop_grace_period (150s) on in-flight work, so the edge
+  # Compose waits out stop_grace_period (280s) on in-flight work, so the edge
   # monitor has to span the drain and record_release has to see its samples.
   edge_monitor_start 0
   "${compose[@]}" stop "$service" || status=$?

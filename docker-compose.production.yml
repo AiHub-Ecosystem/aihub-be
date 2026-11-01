@@ -69,12 +69,15 @@ x-app-service: &app-service
   <<: *app-common
   networks: *app-database-networks
   restart: unless-stopped
-  # 60s HTTP drain + at most 75s background drain + 5s telemetry flush = 140s.
+  # Sized for the largest request timeout T (ADR-0085, amended by ADR-0143):
+  # T HTTP drain + (T + 15s) background drain + 5s telemetry flush + 10s margin.
+  # Writing /v2 grading has T = 125s: 125 + 140 + 5 + 10 = 280s.
+  # src/common/http/shutdown-budget.spec.ts fails when this is below the budget.
   # The background drain also covers an email outbox pass in flight (#833): shutdown
   # stops new passes, and a running pass hands back the requests it has not started,
   # so it ends after the request with the provider: at most the 5s attempt timeout
-  # plus a few short writes, well inside the 75s.
-  stop_grace_period: 150s
+  # plus a few short writes, well inside the background drain.
+  stop_grace_period: 280s
   volumes:
     - ${AIHUB_RUNTIME_SECRETS_HOST_DIR:?AIHUB_RUNTIME_SECRETS_HOST_DIR is required}:/run/secrets/aihub:ro
     # Where an app that listens on a Unix socket creates it, for nginx to reach.

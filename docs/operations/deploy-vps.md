@@ -2125,10 +2125,11 @@ Reject a candidate if its OOM state is set or its restart count increases during
 startup or smoke; this triggers rollback while the old service is still
 available. Confirm rollback with the same dependency smoke on the restored
 service. Retain the old service until smoke passes, then wait for Compose's
-150-second stop grace. The budget is 60 seconds for HTTP drain, 75 seconds for
-background work (idempotent requests and the email outbox pass in flight, see
-[email outbox](email-outbox.md#shutdown-833)), and 5 seconds for telemetry
-export, with 10 seconds of margin. This drain relies on the background-work
+stop grace (280 seconds). The budget follows the largest request timeout T: T
+for HTTP drain, T + 15 seconds for background work (idempotent requests and the
+email outbox pass in flight, see [email outbox](email-outbox.md#shutdown-833)),
+and 5 seconds for telemetry export, with 10 seconds of margin; the 125-second
+Writing `/v2` timeout gives 280 seconds ([ADR-0143](../adr/0143-public-v2-serves-ai-writing-v3-grading.md)). This drain relies on the background-work
 shutdown behavior and lifecycle coverage completed in #284. The validated upstream is the active-slot
 source of truth; the immutable image SHA and helper history identify the
 release. `.env.production` is not the last-good release record.

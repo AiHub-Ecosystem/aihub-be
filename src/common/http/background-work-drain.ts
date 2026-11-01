@@ -1,4 +1,7 @@
-const MAX_BACKGROUND_DRAIN_MS = 75_000;
+import { backgroundDrainMs, largestRequestTimeoutMs } from './shutdown-budget';
+
+// Sized for the slowest timed route in the catalog (ADR-0085, ADR-0143).
+const MAX_BACKGROUND_DRAIN_MS = backgroundDrainMs(largestRequestTimeoutMs());
 
 let pendingWork = 0;
 let shuttingDown = false;
