@@ -8,10 +8,11 @@ import {
   buildPostmanCollection,
   preservePostmanIds,
 } from './build-postman-collection';
+import { SPEAKING_V2_FOLDER_NAME } from './postman-speaking-v2-requests';
 
 const REPO_ROOT = join(__dirname, '../..');
 const COLLECTION_PATH = join(REPO_ROOT, 'aihub.postman_collection.json');
-// The collection is built from the /v1 contract; /v2 requests are one more folder.
+// The collection is built from the /v1 contract; the /v2 walkthrough is hand-written.
 const OPENAPI_PATH = join(REPO_ROOT, 'openapi/v1.json');
 const OPENAPI_V2_PATH = join(REPO_ROOT, 'openapi/v2.json');
 
@@ -49,15 +50,6 @@ function committedOpenApiDocument(): unknown {
   return JSON.parse(readFileSync(OPENAPI_PATH, 'utf8'));
 }
 
-function laterMajors(): { name: string; document: unknown }[] {
-  return [
-    {
-      name: 'Public API /v2 (Speaking)',
-      document: JSON.parse(readFileSync(OPENAPI_V2_PATH, 'utf8')),
-    },
-  ];
-}
-
 function contractVersion(): string {
   const document = committedOpenApiDocument() as {
     info: { version: string };
@@ -71,25 +63,29 @@ describe('committed aihub.postman_collection.json', () => {
     const generated = await buildPostmanCollection(
       committedOpenApiDocument(),
       contractVersion(),
-      laterMajors(),
     );
     const fresh = preservePostmanIds(generated, committed);
 
     expect(committed).toEqual(fresh);
   });
 
-  it('carries the six /v2 Speaking requests', () => {
-    const collection = committedCollection() as PostmanCollection;
+  it('walks through every /v2 route in the OpenAPI document', () => {
+    const v2 = JSON.parse(readFileSync(OPENAPI_V2_PATH, 'utf8')) as {
+      paths: Record<string, unknown>;
+    };
+    const collection = committedCollection() as {
+      item: { name: string; item?: { request?: { url?: string } }[] }[];
+    };
+    const folder = collection.item.find(
+      (entry) => entry.name === SPEAKING_V2_FOLDER_NAME,
+    );
+    // A path parameter stands for the collection variable that holds its value.
+    const urls = (folder?.item ?? []).map((entry) =>
+      (entry.request?.url ?? '').replace(/\{\{v2\w+\}\}/g, '{id}'),
+    );
 
-    for (const path of [
-      'v2/ielts/speaking/questions/grade',
-      'v2/ielts/speaking/parts/grade',
-      'v2/ielts/speaking/tests/grade',
-      'v2/ielts/speaking/responses/:response_id',
-      'v2/ielts/speaking/parts/:part_result_id',
-      'v2/ielts/speaking/tests/:test_id',
-    ]) {
-      expect(findPostmanRequest(collection.item, path)).toBeDefined();
+    for (const path of Object.keys(v2.paths)) {
+      expect(urls).toContain(`{{baseUrl}}${path.replace(/\{\w+\}/g, '{id}')}`);
     }
   });
 

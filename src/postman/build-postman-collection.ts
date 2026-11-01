@@ -15,6 +15,10 @@ import {
 } from './postman-example-scenarios';
 import { D1_SCENARIOS } from './postman-scenarios';
 import type { Scenario } from './postman-scenarios';
+import {
+  SPEAKING_V2_VARIABLES,
+  speakingV2Folder,
+} from './postman-speaking-v2-requests';
 
 export { preservePostmanIds } from './postman-collection-utils';
 export { stripKey };
@@ -79,26 +83,9 @@ function convertOpenApiToPostman(
   });
 }
 
-/** The converted requests of a later Public API major, as one folder. */
-async function majorFolder(
-  name: string,
-  document: unknown,
-): Promise<Record<string, unknown>> {
-  const converted = stripKey(
-    await convertOpenApiToPostman(document),
-    'response',
-  );
-  return { name, item: converted.item };
-}
-
-/**
- * `openApiDocument` is the /v1 contract and gives the collection its variables
- * and scenarios; each `laterMajors` entry adds its requests as one more folder.
- */
 export async function buildPostmanCollection(
   openApiDocument: unknown,
   version: string,
-  laterMajors: readonly { name: string; document: unknown }[] = [],
 ): Promise<unknown> {
   const servers = (
     openApiDocument as {
@@ -117,9 +104,6 @@ export async function buildPostmanCollection(
   normalizeRefreshCookieAuth(base);
   addOrganizationRosterCheck(base.item);
   addBffClientSecret(base.item);
-  const majorFolders = await Promise.all(
-    laterMajors.map(({ name, document }) => majorFolder(name, document)),
-  );
 
   return {
     ...base,
@@ -186,6 +170,7 @@ export async function buildPostmanCollection(
         description:
           'Organization targeted by the management invitation route.',
       },
+      ...SPEAKING_V2_VARIABLES,
       {
         key: 'webSessionClientSecret',
         value: 'REPLACE_WITH_THE_CUSTOMER_WEB_BFF_CLIENT_SECRET',
@@ -195,7 +180,7 @@ export async function buildPostmanCollection(
     ],
     item: [
       ...base.item,
-      ...majorFolders,
+      speakingV2Folder(),
       {
         name: 'D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)',
         item: D1_SCENARIOS.map(scenarioToItem),

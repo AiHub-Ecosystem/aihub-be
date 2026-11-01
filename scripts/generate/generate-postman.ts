@@ -9,13 +9,10 @@ import {
 const openApiDocument = JSON.parse(
   readFileSync(join(__dirname, '../../openapi/v1.json'), 'utf8'),
 ) as unknown;
-const openApiV2Document = JSON.parse(
-  readFileSync(join(__dirname, '../../openapi/v2.json'), 'utf8'),
-) as unknown;
 const collectionPath = join(__dirname, '../../aihub.postman_collection.json');
 
 // The collection is built from the /v1 contract: its scenarios are /v1 requests.
-// The /v2 requests are added as their own folder.
+// The /v2 Speaking walkthrough is written by hand in postman-speaking-v2-requests.ts.
 function openApiVersion(document: unknown): string {
   const info = (document as { info?: { version?: unknown } }).info;
   if (typeof info?.version !== 'string') {
@@ -28,7 +25,6 @@ async function main(): Promise<void> {
   const generated = await buildPostmanCollection(
     openApiDocument,
     openApiVersion(openApiDocument),
-    [{ name: 'Public API /v2 (Speaking)', document: openApiV2Document }],
   );
   const collection = existsSync(collectionPath)
     ? preservePostmanIds(

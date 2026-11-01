@@ -3673,668 +3673,280 @@
       }
     },
     {
-      "name": "Public API /v2 (Speaking)",
+      "name": "Public API /v2 (Speaking walkthrough)",
+      "description": "Run the requests in order. Set `apiKey` and `baseUrl` first. Each step stores the ids the next one needs in collection variables (`v2*`). To grade another Test, clear `v2TestId`, `v2PartResultId` and `v2ResponseIds`.",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const stamp = Date.now().toString(36);",
+              "if (!pm.collectionVariables.get('v2TestId')) pm.collectionVariables.set('v2TestId', 'test_' + stamp);",
+              "if (!pm.collectionVariables.get('v2PartResultId')) pm.collectionVariables.set('v2PartResultId', 'part_' + stamp);"
+            ]
+          }
+        }
+      ],
       "item": [
         {
-          "id": "83941357-35e9-42df-ac4f-fb1fd1312696",
-          "name": "speaking.v2.question-grading",
+          "name": "0. Pick a sample question (public, no API key)",
           "request": {
-            "name": "speaking.v2.question-grading",
-            "description": {},
-            "url": {
-              "path": ["v2", "ielts", "speaking", "questions", "grade"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": []
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
             },
+            "url": "{{baseUrl}}/v1/ielts/speaking/questions?part=1",
+            "description": "Lists the published Part 1 sample questions and keeps the first as the question for step 1. Its `audio_url` is a signed link that lasts 15 minutes: open it from the response body, save the recording, and pick that file in step 1. Any recording of your own works too. This is the one request in the walkthrough that is not under /v2: the question list has no /v2 route."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const first = pm.response.json().data.questions[0];",
+                  "pm.collectionVariables.set('v2QuestionId', first.question_id);",
+                  "pm.collectionVariables.set('v2PromptText', first.prompt_text);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1. Grade a question (upload audio)",
+          "request": {
+            "method": "POST",
             "header": [
               {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
                 "key": "X-User-Identity",
-                "value": "<string>"
+                "value": "{{declaredUserId}}"
               },
               {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
                 "key": "Idempotency-Key",
-                "value": "<string>"
-              },
-              {
-                "key": "Content-Type",
-                "value": "multipart/form-data"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json"
+                "value": "{{$guid}}"
               }
             ],
-            "method": "POST",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            },
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "audio",
                   "type": "file",
-                  "description": "(Required) "
+                  "src": []
                 },
                 {
                   "key": "part",
-                  "value": "<integer>",
-                  "type": "text",
-                  "description": "(Required) "
+                  "value": "1",
+                  "type": "text"
                 },
                 {
                   "key": "question_id",
-                  "value": "<string>",
-                  "type": "text",
-                  "description": "(Required) "
+                  "value": "{{v2QuestionId}}",
+                  "type": "text"
                 },
                 {
                   "key": "prompt_text",
-                  "value": "<string>",
-                  "type": "text",
-                  "description": ""
+                  "value": "{{v2PromptText}}",
+                  "type": "text"
                 },
                 {
                   "key": "test_type",
-                  "value": "<string>",
-                  "type": "text",
-                  "description": ""
+                  "value": "practice",
+                  "type": "text"
                 },
                 {
                   "key": "test_code",
-                  "value": "<string>",
-                  "type": "text",
-                  "description": ""
+                  "value": "{{v2TestId}}",
+                  "type": "text"
                 },
                 {
                   "key": "part_result_id",
-                  "value": "<string>",
-                  "type": "text",
-                  "description": ""
+                  "value": "{{v2PartResultId}}",
+                  "type": "text"
                 }
               ]
-            }
+            },
+            "url": "{{baseUrl}}/v2/ielts/speaking/questions/grade",
+            "description": "Grades one recording. Pick the `audio` file in the body. `test_code` and `part_result_id` tie the answer to the Part and Test graded in steps 3 and 5; run this request once per question you want in the Part. Each run adds its response id to `v2ResponseIds`. Uses a declared user id from `declaredUserId`, which works for an Organization without an active identity configuration."
           },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const meta = pm.response.json().data.meta;",
+                  "pm.collectionVariables.set('v2ResponseId', meta.response_id);",
+                  "const ids = JSON.parse(pm.collectionVariables.get('v2ResponseIds') || '[]');",
+                  "if (!ids.includes(meta.response_id)) ids.push(meta.response_id);",
+                  "pm.collectionVariables.set('v2ResponseIds', JSON.stringify(ids));"
+                ]
+              }
+            }
+          ]
         },
         {
-          "id": "38016f7c-5d04-4a97-9911-7cb39ffdf9f9",
-          "name": "speaking.v2.part-grading",
+          "name": "2. Read a question result back",
           "request": {
-            "name": "speaking.v2.part-grading",
-            "description": {},
-            "url": {
-              "path": ["v2", "ielts", "speaking", "parts", "grade"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": []
-            },
+            "method": "GET",
             "header": [
               {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
                 "key": "X-User-Identity",
-                "value": "<string>"
-              },
+                "value": "{{declaredUserId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/speaking/responses/{{v2ResponseId}}",
+            "description": "Reads the stored result of the question graded in step 1. A result may take a moment to appear after grading; a `404 NOT_FOUND` right away means retry."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Grade a Part",
+          "request": {
+            "method": "POST",
+            "header": [
               {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
               },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               },
               {
-                "key": "Accept",
-                "value": "application/json"
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
-            "method": "POST",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"part_result_id\": \"<string>\",\n  \"part\": \"<integer>\",\n  \"test_id\": \"<string>\",\n  \"test_type\": \"<string>\",\n  \"expected_question_count\": \"<integer>\",\n  \"response_ids\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+              "raw": "{\n  \"part_result_id\": \"{{v2PartResultId}}\",\n  \"part\": 1,\n  \"test_id\": \"{{v2TestId}}\",\n  \"test_type\": \"practice\",\n  \"response_ids\": {{v2ResponseIds}}\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
+            },
+            "url": "{{baseUrl}}/v2/ielts/speaking/parts/grade",
+            "description": "Grades the Part from the question responses collected in step 1."
           },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "id": "97206249-5edc-4ca1-beac-d838eb9fe470",
-          "name": "speaking.v2.test-grading",
+          "name": "4. Read a Part result back",
           "request": {
-            "name": "speaking.v2.test-grading",
-            "description": {},
-            "url": {
-              "path": ["v2", "ielts", "speaking", "tests", "grade"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": []
-            },
+            "method": "GET",
             "header": [
               {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
                 "key": "X-User-Identity",
-                "value": "<string>"
-              },
+                "value": "{{declaredUserId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/speaking/parts/{{v2PartResultId}}",
+            "description": "Reads the stored result of the Part graded in step 3."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Grade a Test",
+          "request": {
+            "method": "POST",
+            "header": [
               {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
               },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               },
               {
-                "key": "Accept",
-                "value": "application/json"
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
-            "method": "POST",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"test_id\": \"<string>\",\n  \"part_result_ids\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"test_type\": \"<string>\",\n  \"response_ids\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+              "raw": "{\n  \"test_id\": \"{{v2TestId}}\",\n  \"test_type\": \"practice\",\n  \"part_result_ids\": [\"{{v2PartResultId}}\"],\n  \"response_ids\": {{v2ResponseIds}}\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
+            },
+            "url": "{{baseUrl}}/v2/ielts/speaking/tests/grade",
+            "description": "Grades the Test from the Part and responses of this run."
           },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "id": "0deb1f69-fd38-455a-b357-b51aeab832e7",
-          "name": "speaking.v2.response-get",
+          "name": "6. Read a Test result back",
           "request": {
-            "name": "speaking.v2.response-get",
-            "description": {},
-            "url": {
-              "path": ["v2", "ielts", "speaking", "responses", ":response_id"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": [
-                {
-                  "disabled": false,
-                  "type": "any",
-                  "value": "<string>",
-                  "key": "response_id",
-                  "description": "(Required) "
-                }
-              ]
-            },
-            "header": [
-              {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
-                "key": "X-User-Identity",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
             "method": "GET",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            }
-          },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
-        },
-        {
-          "id": "571e5f58-7808-4272-b363-376157ea5f53",
-          "name": "Retrieve response headers",
-          "request": {
-            "name": "Retrieve response headers",
-            "description": {
-              "content": "Returns the same status and headers as GET without a response body.",
-              "type": "text/plain"
-            },
-            "url": {
-              "path": ["v2", "ielts", "speaking", "responses", ":response_id"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": [
-                {
-                  "disabled": false,
-                  "type": "any",
-                  "value": "<string>",
-                  "key": "response_id",
-                  "description": "(Required) "
-                }
-              ]
-            },
             "header": [
               {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
                 "key": "X-User-Identity",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
+                "value": "{{declaredUserId}}"
               }
             ],
-            "method": "HEAD",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            }
+            "url": "{{baseUrl}}/v2/ielts/speaking/tests/{{v2TestId}}",
+            "description": "Reads the stored result of the Test graded in step 5."
           },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
-        },
-        {
-          "id": "2721d9fd-bfeb-4cc0-8372-64bfa9276395",
-          "name": "speaking.v2.part-get",
-          "request": {
-            "name": "speaking.v2.part-get",
-            "description": {},
-            "url": {
-              "path": ["v2", "ielts", "speaking", "parts", ":part_result_id"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": [
-                {
-                  "disabled": false,
-                  "type": "any",
-                  "value": "<string>",
-                  "key": "part_result_id",
-                  "description": "(Required) "
-                }
-              ]
-            },
-            "header": [
-              {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
-                "key": "X-User-Identity",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json"
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
               }
-            ],
-            "method": "GET",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
             }
-          },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
-        },
-        {
-          "id": "e206e8ad-ee10-40d2-b138-8abd6665cbc8",
-          "name": "Retrieve response headers",
-          "request": {
-            "name": "Retrieve response headers",
-            "description": {
-              "content": "Returns the same status and headers as GET without a response body.",
-              "type": "text/plain"
-            },
-            "url": {
-              "path": ["v2", "ielts", "speaking", "parts", ":part_result_id"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": [
-                {
-                  "disabled": false,
-                  "type": "any",
-                  "value": "<string>",
-                  "key": "part_result_id",
-                  "description": "(Required) "
-                }
-              ]
-            },
-            "header": [
-              {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
-                "key": "X-User-Identity",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
-              }
-            ],
-            "method": "HEAD",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            }
-          },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
-        },
-        {
-          "id": "ac95f370-d659-4eb1-94a8-dd239ae6f54a",
-          "name": "speaking.v2.test-get",
-          "request": {
-            "name": "speaking.v2.test-get",
-            "description": {},
-            "url": {
-              "path": ["v2", "ielts", "speaking", "tests", ":test_id"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": [
-                {
-                  "disabled": false,
-                  "type": "any",
-                  "value": "<string>",
-                  "key": "test_id",
-                  "description": "(Required) "
-                }
-              ]
-            },
-            "header": [
-              {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
-                "key": "X-User-Identity",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "method": "GET",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            }
-          },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
-        },
-        {
-          "id": "c0ddb0a0-3737-4fb3-8ecd-8dc727e65ea5",
-          "name": "Retrieve response headers",
-          "request": {
-            "name": "Retrieve response headers",
-            "description": {
-              "content": "Returns the same status and headers as GET without a response body.",
-              "type": "text/plain"
-            },
-            "url": {
-              "path": ["v2", "ielts", "speaking", "tests", ":test_id"],
-              "host": ["{{baseUrl}}"],
-              "query": [],
-              "variable": [
-                {
-                  "disabled": false,
-                  "type": "any",
-                  "value": "<string>",
-                  "key": "test_id",
-                  "description": "(Required) "
-                }
-              ]
-            },
-            "header": [
-              {
-                "disabled": false,
-                "description": "Client-supplied trace id, echoed back in `meta.correlation_id`. Never used as the request's own identity — that is always AIHUB-generated as `meta.request_id`.",
-                "key": "X-Correlation-Id",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "(Required) Identifies the end user on user-scoped operations. For an Organization with an active identity configuration it must be a Signed User Assertion; otherwise it is a Declared User ID: 1-256 visible ASCII characters with no spaces, compared exactly as sent.",
-                "key": "X-User-Identity",
-                "value": "<string>"
-              },
-              {
-                "disabled": false,
-                "description": "Ignored. This operation never stores or replays an idempotency record.",
-                "key": "Idempotency-Key",
-                "value": "<string>"
-              }
-            ],
-            "method": "HEAD",
-            "auth": {
-              "type": "apikey",
-              "apikey": [
-                {
-                  "key": "key",
-                  "value": "X-API-Key"
-                },
-                {
-                  "key": "value",
-                  "value": "{{apiKey}}"
-                },
-                {
-                  "key": "in",
-                  "value": "header"
-                }
-              ]
-            }
-          },
-          "event": [],
-          "protocolProfileBehavior": {
-            "disableBodyPruning": true
-          }
+          ]
         }
       ]
     },
@@ -5598,6 +5210,36 @@
       "key": "organizationId",
       "value": "REPLACE_WITH_AN_ORGANIZATION_ID",
       "description": "Organization targeted by the management invitation route."
+    },
+    {
+      "key": "v2TestId",
+      "value": "",
+      "description": "Your id for the Test being graded. The folder fills it on first use. Clear it, v2PartResultId and v2ResponseIds to start a new run."
+    },
+    {
+      "key": "v2PartResultId",
+      "value": "",
+      "description": "Your id for the Part being graded. The folder fills it."
+    },
+    {
+      "key": "v2ResponseIds",
+      "value": "[]",
+      "description": "JSON list of the question response ids graded so far in this run."
+    },
+    {
+      "key": "v2ResponseId",
+      "value": "",
+      "description": "Response id of the last graded question."
+    },
+    {
+      "key": "v2QuestionId",
+      "value": "p1_do-you-enjoy-living-in-your-city-or-hometown",
+      "description": "Question graded in step 1. Step 0 replaces it."
+    },
+    {
+      "key": "v2PromptText",
+      "value": "Do you enjoy living in your city or hometown?",
+      "description": "Prompt of the question in v2QuestionId. Step 0 replaces it."
     },
     {
       "key": "webSessionClientSecret",
