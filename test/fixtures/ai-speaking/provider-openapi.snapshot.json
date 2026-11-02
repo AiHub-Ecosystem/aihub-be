@@ -1,74 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AnswerIn": {
-        "properties": {
-          "audio_checksum": {
-            "maxLength": 64,
-            "minLength": 64,
-            "title": "Audio Checksum",
-            "type": "string"
-          },
-          "audio_duration_ms": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Audio Duration Ms"
-          },
-          "audio_size_bytes": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Audio Size Bytes"
-          },
-          "capture_info": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Capture Info"
-          },
-          "consent_for_training": {
-            "default": false,
-            "title": "Consent For Training",
-            "type": "boolean"
-          },
-          "question_id": {
-            "format": "uuid",
-            "title": "Question Id",
-            "type": "string"
-          },
-          "storage_key": {
-            "minLength": 1,
-            "title": "Storage Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "question_id",
-          "storage_key",
-          "audio_checksum"
-        ],
-        "title": "AnswerIn",
-        "type": "object"
-      },
       "Body_assess_speaking_file_api_v1_speaking_grading_post": {
         "properties": {
           "audio": {
@@ -150,9 +82,25 @@
         "title": "Body_assess_speaking_file_api_v1_speaking_grading_post",
         "type": "object"
       },
-      "CreateSessionRequest": {
+      "Body_grade_question_api_v2_speaking_questions_grading_post": {
         "properties": {
-          "dialect": {
+          "audio": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio"
+          },
+          "part": {
+            "title": "Part",
+            "type": "integer"
+          },
+          "part_result_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -161,49 +109,45 @@
                 "type": "null"
               }
             ],
-            "title": "Dialect"
+            "title": "Part Result Id"
           },
-          "user_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "User Id",
+          "prompt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Text"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "test_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Code"
+          },
+          "test_type": {
+            "default": "Practice",
+            "title": "Test Type",
             "type": "string"
           }
         },
         "required": [
-          "user_id"
+          "part",
+          "question_id"
         ],
-        "title": "CreateSessionRequest",
-        "type": "object"
-      },
-      "CreateSessionResponse": {
-        "properties": {
-          "questions": {
-            "items": {
-              "$ref": "#/components/schemas/QuestionOut"
-            },
-            "title": "Questions",
-            "type": "array"
-          },
-          "session_id": {
-            "format": "uuid",
-            "title": "Session Id",
-            "type": "string"
-          },
-          "upload_slots": {
-            "items": {
-              "$ref": "#/components/schemas/UploadSlotOut"
-            },
-            "title": "Upload Slots",
-            "type": "array"
-          }
-        },
-        "required": [
-          "session_id",
-          "questions",
-          "upload_slots"
-        ],
-        "title": "CreateSessionResponse",
+        "title": "Body_grade_question_api_v2_speaking_questions_grading_post",
         "type": "object"
       },
       "CriteriaScore": {
@@ -1006,47 +950,6 @@
         "title": "PronunciationSummary",
         "type": "object"
       },
-      "QuestionOut": {
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "max_duration_seconds": {
-            "title": "Max Duration Seconds",
-            "type": "integer"
-          },
-          "part": {
-            "title": "Part",
-            "type": "integer"
-          },
-          "scoring_context": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scoring Context"
-          }
-        },
-        "required": [
-          "id",
-          "part",
-          "content",
-          "scoring_context",
-          "max_duration_seconds"
-        ],
-        "title": "QuestionOut",
-        "type": "object"
-      },
       "RelevanceInfo": {
         "properties": {
           "feedback_vi": {
@@ -1755,47 +1658,6 @@
         "title": "SubmitGradeResponse",
         "type": "object"
       },
-      "SubmitRequest": {
-        "properties": {
-          "answers": {
-            "items": {
-              "$ref": "#/components/schemas/AnswerIn"
-            },
-            "minItems": 1,
-            "title": "Answers",
-            "type": "array"
-          }
-        },
-        "required": [
-          "answers"
-        ],
-        "title": "SubmitRequest",
-        "type": "object"
-      },
-      "SubmitResponse": {
-        "properties": {
-          "accepted_count": {
-            "title": "Accepted Count",
-            "type": "integer"
-          },
-          "session_id": {
-            "format": "uuid",
-            "title": "Session Id",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "session_id",
-          "accepted_count",
-          "status"
-        ],
-        "title": "SubmitResponse",
-        "type": "object"
-      },
       "SyllableDetail": {
         "properties": {
           "audio_extent_ms": {
@@ -1870,30 +1732,6 @@
           "duration_seconds"
         ],
         "title": "TranscriptInfo",
-        "type": "object"
-      },
-      "UploadSlotOut": {
-        "properties": {
-          "question_id": {
-            "format": "uuid",
-            "title": "Question Id",
-            "type": "string"
-          },
-          "storage_key": {
-            "title": "Storage Key",
-            "type": "string"
-          },
-          "upload_url": {
-            "title": "Upload Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "question_id",
-          "upload_url",
-          "storage_key"
-        ],
-        "title": "UploadSlotOut",
         "type": "object"
       },
       "UsageInfo": {
@@ -2070,7 +1908,7 @@
     }
   },
   "info": {
-    "description": "\n## 🎙️ Hệ thống Chấm điểm & Đánh giá IELTS Speaking ứng dụng AI\n\nHệ thống cung cấp dịch vụ chấm điểm tự động cho kỹ năng **IELTS Speaking** (Part 1, Part 2, Part 3) với độ trễ cực thấp (~2.0s - 2.5s) bằng kiến trúc xử lý song song:\n- **Phân tích Âm học (SpeechAce):** Bóc tách sóng âm, phát âm chi tiết 3 tầng (Word -> Syllable -> Phoneme), trọng âm (Stress), và độ trôi chảy (Fluency / WPM).\n- **Phân tích Ngôn ngữ & Sư phạm (LLM):** Phát hiện & giải thích chi tiết lỗi ngữ pháp, gợi ý nâng cấp từ vựng CEFR, và viết nhận xét sư phạm bằng tiếng Việt.\n- **Tính toán Band chuẩn Cambridge IELTS:** Quy đổi 4 tiêu chí (FC, LR, GRA, PR) và làm tròn 0.5 band chính quy.\n\n### 🔐 Xác thực API Đối tác (Partner Authentication)\nTất cả các API trong nhóm `partner-speaking` yêu cầu cung cấp 2 HTTP Headers:\n- `x-client-id`: Mã định danh đối tác (ví dụ: `wispace_prod_01`)\n- `x-secret-key`: Khóa bí mật đối tác (ví dụ: `sk_live_wispace_2026_xyz`)\n        ",
+    "description": "\n## 🎙️ Hệ thống Chấm điểm & Đánh giá IELTS Speaking ứng dụng AI\n\nHệ thống cung cấp dịch vụ chấm điểm tự động cho kỹ năng **IELTS Speaking** (Part 1, Part 2, Part 3) với độ trễ cực thấp (~2.0s - 2.5s) bằng kiến trúc xử lý song song:\n- **Phân tích Âm học (SpeechAce):** Bóc tách sóng âm, phát âm chi tiết 3 tầng (Word -> Syllable -> Phoneme), trọng âm (Stress), và độ trôi chảy (Fluency / WPM).\n- **Phân tích Ngôn ngữ & Sư phạm (LLM):** Phát hiện & giải thích chi tiết lỗi ngữ pháp, gợi ý nâng cấp từ vựng CEFR, và viết nhận xét sư phạm bằng tiếng Việt.\n- **Tính toán Band chuẩn Cambridge IELTS:** Quy đổi 4 tiêu chí (FC, LR, GRA, PR) và làm tròn 0.5 band chính quy.\n\n### 🔐 Xác thực API Đối tác (Partner Authentication)\nTất cả các API trong nhóm `partner-speaking` yêu cầu cung cấp 2 HTTP Headers:\n- `x-client-id`: Mã định danh đối tác (được cấp riêng, không công khai: `<WISPACE_CLIENT_ID>`)\n- `x-secret-key`: Khóa bí mật đối tác (được cấp riêng, không công khai: `<WISPACE_SECRET_KEY>`)\n        ",
     "title": "AiSpeaking - IELTS Speaking AI Scoring API",
     "version": "1.0.0"
   },
@@ -2078,7 +1916,7 @@
   "paths": {
     "/api/v1/speaking/grading": {
       "post": {
-        "description": "### API Chấm điểm IELTS Speaking Đồng bộ Siêu tốc dành cho Đối tác\n\n**Quy trình xử lý song song (~2.0s - 2.5s):**\n1. **Tiếp nhận file ghi âm** (WAV, MP3, M4A, WEBM, OGG dung lượng tối đa 25MB).\n2. **Kích hoạt 2 nhánh xử lý song song (Parallel Pipeline):**\n   - **Nhánh A (Acoustic - SpeechAce):** Bóc tách sóng âm, đo phát âm chi tiết 3 tầng (Word -> Syllable -> Phoneme), trọng âm (Stress), và độ trôi chảy (Fluency / WPM).\n   - **Nhánh B (Language - LLM):** Gỡ băng siêu tốc (~0.3s với Groq Whisper), sau đó LLM phân tích lỗi ngữ pháp, gợi ý từ vựng band cao và viết nhận xét sư phạm tiếng Việt.\n3. **Tổng hợp kết quả:** Tính toán Band Cambridge IELTS 4 tiêu chí (FC, LR, GRA, PR) và làm tròn 0.5 band chính quy.\n\n**Headers bắt buộc:**\n- `x-client-id`: Mã định danh đối tác (ví dụ: `wispace_prod_01`)\n- `x-secret-key`: Khóa bảo mật đối tác (ví dụ: `sk_live_wispace_2026_xyz`)",
+        "description": "### API Chấm điểm IELTS Speaking Đồng bộ Siêu tốc dành cho Đối tác\n\n**Quy trình xử lý song song (~2.0s - 2.5s):**\n1. **Tiếp nhận file ghi âm** (WAV, MP3, M4A, WEBM, OGG dung lượng tối đa 25MB).\n2. **Kích hoạt 2 nhánh xử lý song song (Parallel Pipeline):**\n   - **Nhánh A (Acoustic - SpeechAce):** Bóc tách sóng âm, đo phát âm chi tiết 3 tầng (Word -> Syllable -> Phoneme), trọng âm (Stress), và độ trôi chảy (Fluency / WPM).\n   - **Nhánh B (Language - LLM):** Gỡ băng siêu tốc (~0.3s với Groq Whisper), sau đó LLM phân tích lỗi ngữ pháp, gợi ý từ vựng band cao và viết nhận xét sư phạm tiếng Việt.\n3. **Tổng hợp kết quả:** Tính toán Band Cambridge IELTS 4 tiêu chí (FC, LR, GRA, PR) và làm tròn 0.5 band chính quy.\n\n**Headers bắt buộc:**\n- `x-client-id`: Mã định danh đối tác (được cấp riêng, không công khai: `<WISPACE_CLIENT_ID>`)\n- `x-secret-key`: Khóa bảo mật đối tác (được cấp riêng, không công khai: `<WISPACE_SECRET_KEY>`)",
         "operationId": "assess_speaking_file_api_v1_speaking_grading_post",
         "parameters": [
           {
@@ -2095,6 +1933,56 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
             }
           }
         ],
@@ -2146,7 +2034,7 @@
     },
     "/api/v1/speaking/grading-json": {
       "post": {
-        "description": "### API Chấm điểm IELTS Speaking qua Đường dẫn File Âm thanh (Audio URL)\n\nDành cho các trường hợp đối tác đã lưu file âm thanh trên Cloud/S3 và muốn gửi request dạng `application/json`.\n\nHệ thống sẽ tải file âm thanh từ `audio_url` và chạy luồng chấm điểm song song tương tự như `/grading`.\n\n**Headers bắt buộc:**\n- `x-client-id`: Mã định danh đối tác (ví dụ: `wispace_prod_01`)\n- `x-secret-key`: Khóa bảo mật đối tác (ví dụ: `sk_live_wispace_2026_xyz`)",
+        "description": "### API Chấm điểm IELTS Speaking qua Đường dẫn File Âm thanh (Audio URL)\n\nDành cho các trường hợp đối tác đã lưu file âm thanh trên Cloud/S3 và muốn gửi request dạng `application/json`.\n\nHệ thống sẽ tải file âm thanh từ `audio_url` và chạy luồng chấm điểm song song tương tự như `/grading`.\n\n**Headers bắt buộc:**\n- `x-client-id`: Mã định danh đối tác (được cấp riêng, không công khai: `<WISPACE_CLIENT_ID>`)\n- `x-secret-key`: Khóa bảo mật đối tác (được cấp riêng, không công khai: `<WISPACE_SECRET_KEY>`)",
         "operationId": "assess_speaking_json_api_v1_speaking_grading_json_post",
         "parameters": [
           {
@@ -2163,6 +2051,56 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
             }
           }
         ],
@@ -2252,6 +2190,22 @@
               "description": "Mốc ngày kết thúc (định dạng YYYY-MM-DD, ví dụ: 2026-09-08)",
               "title": "Todate"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2333,6 +2287,22 @@
               "description": "Loại bài (tùy chọn)",
               "title": "Test Type"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2367,6 +2337,24 @@
       "post": {
         "description": "Lưu trữ kết quả chấm điểm của giáo viên ở chế độ chấm mù.\n\nTự động tính band overall theo chuẩn IELTS nếu giáo viên không chỉ định.\nCập nhật trạng thái bài thi thành 'done'.",
         "operationId": "submit_teacher_grade_api_v1_speaking_sample_grade_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2402,6 +2390,628 @@
         "summary": "Nộp điểm chấm 4 tiêu chí của giáo viên cho bài thi",
         "tags": [
           "teacher-lab"
+        ]
+      }
+    },
+    "/api/v2/speaking/parts/grading": {
+      "post": {
+        "description": "JSON `{part_result_id, part?, test_id?, test_type?, expected_question_count?, response_ids?}`; người dùng lấy từ header AiHub. Đọc các câu đã chấm cùng `part_result_id` của đúng (tổ chức, người dùng). Lỗi: invalid_request | part_not_found | response_not_found | mixed_parts | mixed_tests | not_v2_result | mixed_scorer_engines | language_grading_failed | timeout | rate_limited | storage_unavailable.",
+        "operationId": "grade_part_api_v2_speaking_parts_grading_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "IELTS Speaking v2: tổng hợp một part từ các câu đã chấm (part_result v2.4)",
+        "tags": [
+          "speaking-v2"
+        ]
+      }
+    },
+    "/api/v2/speaking/parts/{part_result_id}": {
+      "get": {
+        "operationId": "get_part_result_api_v2_speaking_parts__part_result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "part_result_id",
+            "required": true,
+            "schema": {
+              "title": "Part Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "IELTS Speaking v2: lấy lại part_result đã tổng hợp",
+        "tags": [
+          "speaking-v2"
+        ]
+      }
+    },
+    "/api/v2/speaking/questions/grading": {
+      "post": {
+        "description": "Multipart như v1 (không có `user_id`) kèm `part_result_id` tùy chọn. Headers: `x-client-id`, `x-secret-key`, `X-AIHUB-Organization-Id`, `X-AIHUB-User-Id`, `X-AIHUB-User-Identity-Mode`. Thành công: envelope `status=success`; lỗi kỹ thuật: envelope `status=error` (audio_unreadable | transcription_failed | acoustic_scoring_failed | language_grading_failed | timeout | rate_limited).",
+        "operationId": "grade_question_api_v2_speaking_questions_grading_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_grade_question_api_v2_speaking_questions_grading_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "IELTS Speaking v2: chấm một câu (question_result v2.4)",
+        "tags": [
+          "speaking-v2"
+        ]
+      }
+    },
+    "/api/v2/speaking/responses/{response_id}": {
+      "get": {
+        "operationId": "get_response_api_v2_speaking_responses__response_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "title": "Response Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "IELTS Speaking v2: lấy lại kết quả đã chấm",
+        "tags": [
+          "speaking-v2"
+        ]
+      }
+    },
+    "/api/v2/speaking/tests/grading": {
+      "post": {
+        "description": "JSON `{test_id, test_type?, part_result_ids: [...], response_ids?: [...]}`. Mã lỗi như `/parts/grading`.",
+        "operationId": "grade_test_api_v2_speaking_tests_grading_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "IELTS Speaking v2: tổng hợp cả bài thi từ các câu đã chấm (test_result v2.4)",
+        "tags": [
+          "speaking-v2"
+        ]
+      }
+    },
+    "/api/v2/speaking/tests/{test_id}": {
+      "get": {
+        "operationId": "get_test_result_api_v2_speaking_tests__test_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_id",
+            "required": true,
+            "schema": {
+              "title": "Test Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+            "in": "header",
+            "name": "x-aihub-organization-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "AIHUB ID: 'org_' + 1-60 ASCII letters, digits, '_' or '-'; legacy UUID also accepted.",
+              "title": "X-Aihub-Organization-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-aihub-user-identity-mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Aihub-User-Identity-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "IELTS Speaking v2: test_result mới nhất của user (từ header) cho test đó",
+        "tags": [
+          "speaking-v2"
         ]
       }
     },
@@ -2443,6 +3053,38 @@
               "format": "uuid",
               "title": "Response Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Secret-Key"
             }
           }
         ],
@@ -2486,47 +3128,6 @@
         ]
       }
     },
-    "/sessions": {
-      "post": {
-        "operationId": "create_session_sessions_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSessionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateSessionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Session",
-        "tags": [
-          "sessions"
-        ]
-      }
-    },
     "/sessions/{session_id}/result": {
       "get": {
         "operationId": "get_result_sessions__session_id__result_get",
@@ -2539,6 +3140,38 @@
               "format": "uuid",
               "title": "Session Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-secret-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Secret-Key"
             }
           }
         ],
@@ -2565,59 +3198,6 @@
           }
         },
         "summary": "Get Result",
-        "tags": [
-          "sessions"
-        ]
-      }
-    },
-    "/sessions/{session_id}/submit": {
-      "post": {
-        "operationId": "submit_responses_sessions__session_id__submit_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SubmitRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SubmitResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Submit Responses",
         "tags": [
           "sessions"
         ]
