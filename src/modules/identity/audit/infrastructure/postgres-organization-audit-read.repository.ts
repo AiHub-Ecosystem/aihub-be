@@ -20,6 +20,7 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
@@ -214,7 +215,7 @@ export class PostgresOrganizationAuditReadRepository
       // event, the same way the open-invitation listing refuses to return
       // partial metadata. A trail with a silent hole is worse than an error.
       if (event === undefined) {
-        throw identityStoreError('Identity data is invalid');
+        throw invalidIdentityData();
       }
       events.push(event);
     }

@@ -28,6 +28,7 @@ import type {
 import {
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,
@@ -282,7 +283,7 @@ export async function lockMutationContext(
     organizationId !== input.organizationId ||
     organizationStatus === undefined
   ) {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
   if (organizationSuspensionClosesSurface(organizationStatus)) {
     throw forbidden(routeDenial);
@@ -296,7 +297,7 @@ export async function lockMutationContext(
   const memberships = membershipRows.map((value) => {
     const membership = mapMutationMembershipRow(value);
     if (membership === undefined) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
     return membership;
   });
@@ -373,7 +374,7 @@ export async function isLastActiveOwner(
   ]);
   const count = ownerCount(ownerRows[0]);
   if (count === undefined) {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
   return count <= 1;
 }
@@ -387,7 +388,7 @@ export function mapUpdatedMembership(value: unknown): {
     ? membershipStatusValue(value, 'membership_status')
     : undefined;
   if (role === undefined || status === undefined) {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
   return { role, status };
 }

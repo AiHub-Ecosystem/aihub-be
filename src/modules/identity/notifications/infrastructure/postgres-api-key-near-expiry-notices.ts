@@ -17,8 +17,8 @@ import type {
 import { planApiKeyNearExpiryNotices } from '@/modules/identity/notifications/application/plan-api-key-near-expiry-notices';
 import {
   dateValue,
-  identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
@@ -145,14 +145,14 @@ const STILL_ACTIVE_KEYS_SQL = `
 
 function requiredString(row: unknown, field: string): string {
   const value = isRecord(row) ? stringValue(row, field) : undefined;
-  if (value === undefined) throw identityStoreError('Identity data is invalid');
+  if (value === undefined) throw invalidIdentityData();
   return value;
 }
 
 function requiredDate(row: unknown, field: string): Date {
   const value = isRecord(row) ? dateValue(row, field) : undefined;
   if (value === undefined || value === null) {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
   return value;
 }

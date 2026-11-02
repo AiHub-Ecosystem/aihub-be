@@ -11,6 +11,7 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   nullableNonNegativeIntegerValue,
   oneOf,
   positiveIntegerValue,
@@ -133,7 +134,7 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
 
     const record = apiKeyRecordFromRow(first);
     if (record === undefined) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     return record;

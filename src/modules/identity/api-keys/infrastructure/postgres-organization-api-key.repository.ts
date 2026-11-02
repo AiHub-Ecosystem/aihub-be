@@ -20,6 +20,7 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   stringArrayValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -224,7 +225,7 @@ export class PostgresOrganizationApiKeyRepository
           // `undefined` is an unreadable value; `null` is a key with no expiry.
           expiresAt === undefined
         ) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         if (key.status !== 'active' && key.status !== 'revoked') {
@@ -340,7 +341,7 @@ export class PostgresOrganizationApiKeyRepository
 
         const keyHash = stringValue(row, 'key_hash_hex');
         if (keyHash === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         // Only an active key is changed. A key already withdrawn keeps the
@@ -355,7 +356,7 @@ export class PostgresOrganizationApiKeyRepository
         // one did: revocation is state-idempotent.
         const key = mapListRow({ ...row, status: 'revoked' });
         if (key === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         // Only the request that actually withdrew the key is an act. The
@@ -419,7 +420,7 @@ export class PostgresOrganizationApiKeyRepository
     return rows.map((row) => {
       const record = mapListRow(row);
       if (record === undefined) {
-        throw identityStoreError('Identity data is invalid');
+        throw invalidIdentityData();
       }
       return record;
     });
@@ -460,7 +461,7 @@ export class PostgresOrganizationApiKeyRepository
 
         const entitlements = stringArrayValue(organization, 'entitlements');
         if (entitlements === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         if (
           !hasRequiredOrganizationApiKeyEntitlements(

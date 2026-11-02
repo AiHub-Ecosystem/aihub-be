@@ -29,6 +29,7 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   membershipRoleValue,
   organizationStatusValue,
   stringValue,
@@ -157,9 +158,7 @@ export class PostgresOrganizationInvitationRepository
           [input.organizationId],
         );
         const name = organizationName(organizationRows[0]);
-        if (name === undefined) {
-          throw identityStoreError('Identity data is invalid');
-        }
+        if (name === undefined) throw invalidIdentityData();
 
         // The inviter is read here, inside the transaction that commits the
         // invitation and its Email Delivery Request, so the message can name
@@ -170,7 +169,7 @@ export class PostgresOrganizationInvitationRepository
         });
         const inviterUsername = inviter?.username;
         if (inviterUsername === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         // An active member whose password identity carries this email.
@@ -326,7 +325,7 @@ export class PostgresOrganizationInvitationRepository
           invitedByUsername: invitedByUser.username,
         });
         if (item === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         return item;
       });
@@ -380,7 +379,7 @@ export class PostgresOrganizationInvitationRepository
           organizationId !== input.organizationId ||
           organizationStatus === undefined
         ) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         if (organizationSuspensionClosesSurface(organizationStatus)) {
           return { kind: 'organization_suspended' };
@@ -416,7 +415,7 @@ export class PostgresOrganizationInvitationRepository
           expiresAt == null ||
           (invitation.consumed_at !== null && consumedAt === undefined)
         ) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         if (
@@ -505,7 +504,7 @@ export class PostgresOrganizationInvitationRepository
           invitedEmail === undefined ||
           invitedRole === undefined
         ) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         const accountRows = await identityRows(
@@ -515,7 +514,7 @@ export class PostgresOrganizationInvitationRepository
         );
         const account = accountRows[0];
         if (!isRecord(account)) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         // A wrong-account attempt leaves the invitation untouched, so nobody
@@ -529,7 +528,7 @@ export class PostgresOrganizationInvitationRepository
           'organization_status',
         );
         if (organizationStatus === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         if (organizationSuspensionClosesSurface(organizationStatus)) {
           return { kind: 'organization_suspended' };
@@ -545,7 +544,7 @@ export class PostgresOrganizationInvitationRepository
           ? membershipRoleValue(membershipRow, 'role')
           : undefined;
         if (grantedRole === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         await transaction.organizationInvitation.updateMany({

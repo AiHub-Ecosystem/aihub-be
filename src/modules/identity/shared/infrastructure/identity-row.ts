@@ -21,6 +21,12 @@ export function identityStoreError(message: string): AppError {
   return new AppError({ code: 'INTERNAL_ERROR', message, retryable: false });
 }
 
+/** A persisted row violated an Identity invariant. Keeps the public message,
+ * code, and non-retryability of `identityStoreError` in one place (issue #1353). */
+export function invalidIdentityData(): AppError {
+  return identityStoreError('Identity data is invalid');
+}
+
 /**
  * A failed identity-store call. A Postgres that could not be reached or
  * stopped answering is a retryable outage (ADR-0118); anything else stays an

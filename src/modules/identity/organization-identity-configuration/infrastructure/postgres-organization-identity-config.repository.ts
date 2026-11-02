@@ -24,6 +24,7 @@ import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   membershipRoleValue,
   membershipStatusValue,
   nullableStringValue,
@@ -263,7 +264,7 @@ export class PostgresOrganizationIdentityConfigRepository
 
     const record = identityConfigFromRow(first);
     if (record === undefined) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     return record;
@@ -279,7 +280,7 @@ export class PostgresOrganizationIdentityConfigRepository
 
     const record = storedIdentityConfigFromRow(first);
     if (record === undefined) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     return record;
@@ -307,7 +308,7 @@ export class PostgresOrganizationIdentityConfigRepository
           'status',
         );
         if (organizationStatus === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         if (organizationStatus !== 'active') {
           return { kind: 'forbidden' as const };
@@ -329,7 +330,7 @@ export class PostgresOrganizationIdentityConfigRepository
         const role = membershipRoleValue(membership, 'role');
         const status = membershipStatusValue(membership, 'status');
         if (role === undefined || status === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         if (role !== 'owner' || status !== 'active') {
           return { kind: 'forbidden' as const };
@@ -383,7 +384,7 @@ export class PostgresOrganizationIdentityConfigRepository
           undefined;
         const config = storedIdentityConfigFromRow(row);
         if (config === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         if (changed) {

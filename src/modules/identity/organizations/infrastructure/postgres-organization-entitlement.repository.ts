@@ -11,8 +11,8 @@ import type {
 } from '@/modules/identity/organizations/application/organization-entitlement.port';
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
-  identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { organizationKeyHashes } from '@/modules/identity/shared/infrastructure/organization-key-hashes';
@@ -59,7 +59,7 @@ export class PostgresOrganizationEntitlementRepository
           !Array.isArray(entitlements) ||
           !entitlements.every((value) => typeof value === 'string')
         ) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         const keyHashes = await organizationKeyHashes(

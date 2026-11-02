@@ -14,8 +14,8 @@ import {
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import {
-  identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,
@@ -76,7 +76,7 @@ export class PostgresOrganizationRenameRepository
           const currentName = stringValue(organization, 'name');
           const status = organizationStatusValue(organization, 'status');
           if (currentName === undefined || status === undefined) {
-            throw identityStoreError('Identity data is invalid');
+            throw invalidIdentityData();
           }
 
           const membershipRows = await identityRows(
@@ -91,7 +91,7 @@ export class PostgresOrganizationRenameRepository
           const role = membershipRoleValue(membership, 'role');
           const membershipStatus = membershipStatusValue(membership, 'status');
           if (role === undefined || membershipStatus === undefined) {
-            throw identityStoreError('Identity data is invalid');
+            throw invalidIdentityData();
           }
 
           // Neither refusal is recorded: a disabled caller no longer belongs,

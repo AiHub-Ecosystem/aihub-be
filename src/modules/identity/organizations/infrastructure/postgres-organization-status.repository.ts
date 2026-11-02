@@ -12,8 +12,8 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
-  identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -82,7 +82,7 @@ export class PostgresOrganizationStatusRepository
       const name = stringValue(organization, 'name');
       const status = organizationStatusValue(organization, 'status');
       if (name === undefined || status === undefined) {
-        throw identityStoreError('Identity data is invalid');
+        throw invalidIdentityData();
       }
 
       const keyHashes = await organizationKeyHashes(

@@ -22,6 +22,7 @@ import type { OrganizationStatus } from '@/modules/identity/organizations/applic
 import {
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   membershipRoleValue,
   membershipStatusValue,
   organizationStatusValue,
@@ -279,7 +280,7 @@ function groupRosterRows(
   for (const rawRow of rows) {
     const row = mapRosterRow(rawRow);
     if (row === undefined) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     const existing = organizations.get(row.organizationId);
@@ -309,7 +310,7 @@ function groupRosterRows(
       existing.memberCount !== row.memberCount ||
       existing.identityConfigured !== row.identityConfigured
     ) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     existing.members.push({
@@ -326,12 +327,12 @@ function mapOrganizationMembershipListRows(
   requestedStatus: OrganizationMembershipStatus,
 ): OrganizationMembershipListResult {
   if (rows.length === 0) {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
 
   const first = rows[0];
   if (!isRecord(first) || typeof first.authorized !== 'boolean') {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
 
   const authorized = first.authorized;
@@ -340,7 +341,7 @@ function mapOrganizationMembershipListRows(
 
   for (const value of rows) {
     if (!isRecord(value) || value.authorized !== authorized) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     if (
@@ -360,7 +361,7 @@ function mapOrganizationMembershipListRows(
       role === undefined ||
       status !== requestedStatus
     ) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     members.push({ username, role, status });
@@ -370,11 +371,11 @@ function mapOrganizationMembershipListRows(
     emptyProjectionCount > 1 ||
     (emptyProjectionCount === 1 && members.length !== 0)
   ) {
-    throw identityStoreError('Identity data is invalid');
+    throw invalidIdentityData();
   }
   if (!authorized) {
     if (rows.length !== 1 || emptyProjectionCount !== 1) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
     return { kind: 'denied' };
   }
@@ -426,7 +427,7 @@ export class PostgresOrganizationMembershipReadRepository
       membership.userId !== input.userId ||
       membership.organizationId !== input.organizationId
     ) {
-      throw identityStoreError('Identity data is invalid');
+      throw invalidIdentityData();
     }
 
     return membership.status === 'active'

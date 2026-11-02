@@ -12,8 +12,8 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/active-account';
 import {
-  identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   membershipRoleValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
@@ -110,7 +110,7 @@ export class PostgresOrganizationFirstOwnerRepository
       ).map((row) => {
         const role = membershipRoleValue(row, 'role');
         if (role === undefined) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         return { userId: row.userAccountId, role };
       });

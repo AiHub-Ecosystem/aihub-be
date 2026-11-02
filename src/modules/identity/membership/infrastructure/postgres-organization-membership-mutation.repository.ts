@@ -7,7 +7,7 @@ import type {
   OrganizationMembershipPort,
 } from '@/modules/identity/membership/application/organization-membership.port';
 import {
-  identityStoreError,
+  invalidIdentityData,
   membershipRoleValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
@@ -99,7 +99,7 @@ export class PostgresOrganizationMembershipMutationRepository
         ]);
         const updated = mapUpdatedMembership(rows[0]);
         if (updated.status !== 'disabled') {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
         await recordOrganizationAuditEvent(
           transaction,
@@ -132,7 +132,7 @@ export class PostgresOrganizationMembershipMutationRepository
         );
         const promoted = mapUpdatedMembership(promotedRows[0]);
         if (promoted.role !== 'owner' || promoted.status !== 'active') {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         const demotedRows = await identityRows(
@@ -145,7 +145,7 @@ export class PostgresOrganizationMembershipMutationRepository
           ? membershipRoleValue(demoted, 'role')
           : undefined;
         if (demotedRole !== 'admin') {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         // Transfer is atomic and produces one event for both role changes.

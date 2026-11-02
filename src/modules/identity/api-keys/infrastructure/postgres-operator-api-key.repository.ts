@@ -16,6 +16,7 @@ import { findActiveAccountId } from '@/modules/identity/shared/infrastructure/ac
 import {
   identityStoreError,
   identityStoreUnavailable,
+  invalidIdentityData,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import {
@@ -157,7 +158,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
           name === undefined ||
           keyPrefix === undefined
         ) {
-          throw identityStoreError('Identity data is invalid');
+          throw invalidIdentityData();
         }
 
         // A repeat is a delivery, not an act: it records nothing.
