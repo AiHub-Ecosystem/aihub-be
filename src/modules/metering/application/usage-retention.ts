@@ -80,6 +80,12 @@ export interface UsageRetentionSummary {
   readonly dispatchAttemptsDeleted: number;
 }
 
+interface UsageRetentionProgress {
+  batches: number;
+  deleted: number;
+  dispatchAttemptsDeleted: number;
+}
+
 function validDate(value: Date): boolean {
   return !Number.isNaN(value.getTime());
 }
@@ -165,14 +171,86 @@ export class UsageRetentionService {
     }
   }
 
+  private async pruneUsageRecords(
+    cutoff: Date,
+    progress: UsageRetentionProgress,
+  ): Promise<void> {
+    let after: UsageRetentionCursor | undefined;
+    while (true) {
+      let batch: UsageRetentionBatch;
+      try {
+        batch = await this.port.pruneBatch({
+          cutoff,
+          batchSize: this.batchSize,
+          ...(after === undefined ? {} : { after }),
+        });
+      } catch {
+        throw new UsagePruneError(
+          'DATABASE_FAILURE',
+          'usage retention database operation failed',
+        );
+      }
+
+      if (
+        typeof batch !== 'object' ||
+        batch === null ||
+        !Number.isSafeInteger(batch.deleted) ||
+        batch.deleted < 0 ||
+        batch.deleted > this.batchSize
+      ) {
+        invalidBatch();
+      }
+      if (batch.deleted === 0) break;
+      if (!validCursor(batch.nextCursor)) invalidBatch();
+      if (
+        after !== undefined &&
+        compareUsageRetentionCursor(batch.nextCursor, after) <= 0
+      ) {
+        invalidBatch();
+      }
+
+      progress.batches += 1;
+      progress.deleted += batch.deleted;
+      after = batch.nextCursor;
+    }
+  }
+
+  private async pruneDispatchAttempts(
+    cutoff: Date,
+    progress: UsageRetentionProgress,
+  ): Promise<void> {
+    while (true) {
+      let deleted: number;
+      try {
+        deleted = await this.port.pruneDispatchAttempts(cutoff, this.batchSize);
+      } catch {
+        throw new UsagePruneError(
+          'DATABASE_FAILURE',
+          'dispatch attempt retention database operation failed',
+        );
+      }
+      if (
+        !Number.isSafeInteger(deleted) ||
+        deleted < 0 ||
+        deleted > this.batchSize
+      ) {
+        invalidBatch();
+      }
+      if (deleted === 0) break;
+      progress.dispatchAttemptsDeleted += deleted;
+    }
+  }
+
   async prune(
     emit: (event: UsageRetentionEvent) => void = () => undefined,
   ): Promise<UsageRetentionSummary> {
     const startedAt = this.now();
     let cutoff: Date | null = null;
-    let batches = 0;
-    let deleted = 0;
-    let dispatchAttemptsDeleted = 0;
+    const progress: UsageRetentionProgress = {
+      batches: 0,
+      deleted: 0,
+      dispatchAttemptsDeleted: 0,
+    };
 
     try {
       cutoff = calculateUsageRetentionCutoff(startedAt);
@@ -183,80 +261,12 @@ export class UsageRetentionService {
         batchSize: this.batchSize,
       });
 
-      let after: UsageRetentionCursor | undefined;
-      while (true) {
-        let batch: UsageRetentionBatch;
-        try {
-          batch = await this.port.pruneBatch({
-            cutoff,
-            batchSize: this.batchSize,
-            ...(after === undefined ? {} : { after }),
-          });
-        } catch {
-          throw new UsagePruneError(
-            'DATABASE_FAILURE',
-            'usage retention database operation failed',
-          );
-        }
-
-        if (
-          typeof batch !== 'object' ||
-          batch === null ||
-          !Number.isSafeInteger(batch.deleted) ||
-          batch.deleted < 0 ||
-          batch.deleted > this.batchSize
-        ) {
-          invalidBatch();
-        }
-        if (batch.deleted === 0) {
-          break;
-        }
-        if (!validCursor(batch.nextCursor)) {
-          invalidBatch();
-        }
-        if (
-          after !== undefined &&
-          compareUsageRetentionCursor(batch.nextCursor, after) <= 0
-        ) {
-          invalidBatch();
-        }
-
-        batches += 1;
-        deleted += batch.deleted;
-        after = batch.nextCursor;
-      }
-
-      while (true) {
-        let batchDeleted: number;
-        try {
-          batchDeleted = await this.port.pruneDispatchAttempts(
-            cutoff,
-            this.batchSize,
-          );
-        } catch {
-          throw new UsagePruneError(
-            'DATABASE_FAILURE',
-            'dispatch attempt retention database operation failed',
-          );
-        }
-        if (
-          !Number.isSafeInteger(batchDeleted) ||
-          batchDeleted < 0 ||
-          batchDeleted > this.batchSize
-        ) {
-          invalidBatch();
-        }
-        if (batchDeleted === 0) {
-          break;
-        }
-        dispatchAttemptsDeleted += batchDeleted;
-      }
+      await this.pruneUsageRecords(cutoff, progress);
+      await this.pruneDispatchAttempts(cutoff, progress);
 
       const summary = {
         cutoff,
-        batches,
-        deleted,
-        dispatchAttemptsDeleted,
+        ...progress,
       } as const;
       emit({
         type: 'completed',
@@ -264,9 +274,7 @@ export class UsageRetentionService {
         completedAt: this.now(),
         cutoff,
         batchSize: this.batchSize,
-        batches,
-        deleted,
-        dispatchAttemptsDeleted,
+        ...progress,
         status: 'completed',
       });
       return summary;
@@ -281,9 +289,7 @@ export class UsageRetentionService {
         failedAt: this.now(),
         cutoff,
         batchSize: this.batchSize,
-        batches,
-        deleted,
-        dispatchAttemptsDeleted,
+        ...progress,
         status: 'failed',
         errorCode: safeError.code,
       });

@@ -38,10 +38,23 @@ export interface WritingChartRevokeCliInput {
   readonly now?: () => Date;
 }
 
-interface ParsedPublicChartUrl {
-  readonly url: URL;
+export interface WritingChartRevokeTarget {
+  readonly publicUrl: string;
   readonly assetId: string;
   readonly publishedKey: string;
+}
+
+export interface WritingChartRevokeEdge {
+  readonly state: WritingChartPublicEdgeOutcome;
+  readonly status: number | null;
+}
+
+export interface WritingChartRevokeResult {
+  readonly assetId: string;
+  readonly origin: 'deleted' | 'already_absent' | 'failed';
+  readonly edge: WritingChartRevokeEdge;
+  readonly propagationPending: boolean;
+  readonly publicationPending: boolean;
 }
 
 const BUCKET_BY_ENVIRONMENT: Readonly<Record<WritingChartEnvironment, string>> =
@@ -50,10 +63,10 @@ const BUCKET_BY_ENVIRONMENT: Readonly<Record<WritingChartEnvironment, string>> =
     sandbox: 'aihub-sandbox-writing-charts',
   };
 
-function parsePublicChartUrl(
+export function parseWritingChartRevokeTarget(
   raw: string,
   environment: WritingChartEnvironment,
-): ParsedPublicChartUrl | undefined {
+): WritingChartRevokeTarget | undefined {
   if (raw !== raw.trim() || raw.includes('?') || raw.includes('#')) {
     return undefined;
   }
@@ -92,7 +105,13 @@ function parsePublicChartUrl(
   ) {
     return undefined;
   }
-  return { url, assetId, publishedKey };
+  return { publicUrl: url.href, assetId, publishedKey };
+}
+
+export function formatWritingChartRevokeResult(
+  result: WritingChartRevokeResult,
+): string {
+  return JSON.stringify(result);
 }
 
 async function probePublicChartEdge(url: string): Promise<{
@@ -123,127 +142,155 @@ async function probePublicChartEdge(url: string): Promise<{
   }
 }
 
-export async function runWritingChartRevokeCommand(
-  input: WritingChartRevokeCliInput,
-) {
-  const parsed = parsePublicChartUrl(input.url, input.environment);
-  if (parsed === undefined) {
-    throw new WritingChartRevokeError('INVALID_PUBLIC_URL');
-  }
-
-  const audit =
-    input.audit ??
-    (await (
-      await import('./operator-writing-chart-client')
-    ).createOperatorWritingChartRevocationAuditClient(input.databaseUrl));
-  let result:
-    | {
-        readonly assetId: string;
-        readonly origin: 'deleted' | 'already_absent' | 'failed';
-        readonly edge: {
-          readonly state: WritingChartPublicEdgeOutcome;
-          readonly status: number | null;
-        };
-        readonly propagationPending: boolean;
-        readonly publicationPending: boolean;
-      }
-    | undefined;
-
-  let operationError: unknown;
+async function activeOperatorAccount(
+  audit: WritingChartRevocationAuditRepositoryPort,
+  actorUsername: string,
+): Promise<string> {
+  let actorUserAccountId: string | undefined;
   try {
-    let actorUserAccountId: string | undefined;
-    try {
-      actorUserAccountId = await audit.findActiveOperatorAccount(
-        input.actorUsername,
-      );
-    } catch {
-      throw new WritingChartRevokeError('DATABASE_FAILURE');
-    }
-    if (actorUserAccountId === undefined) {
-      throw new WritingChartRevokeError('ACTOR_INVALID');
-    }
+    actorUserAccountId = await audit.findActiveOperatorAccount(actorUsername);
+  } catch {
+    throw new WritingChartRevokeError('DATABASE_FAILURE');
+  }
+  if (actorUserAccountId === undefined) {
+    throw new WritingChartRevokeError('ACTOR_INVALID');
+  }
+  return actorUserAccountId;
+}
 
-    let occurredAt: Date;
-    try {
-      occurredAt = (input.now ?? (() => new Date()))();
-      if (Number.isNaN(occurredAt.getTime())) throw new Error('invalid clock');
-    } catch {
-      throw new WritingChartRevokeError('DATABASE_FAILURE');
-    }
+function currentTime(input: WritingChartRevokeCliInput): Date {
+  try {
+    const now = (input.now ?? (() => new Date()))();
+    if (Number.isNaN(now.getTime())) throw new Error('invalid clock');
+    return now;
+  } catch {
+    throw new WritingChartRevokeError('DATABASE_FAILURE');
+  }
+}
 
-    // From here on the asset can never publish again (#1206). A publication
-    // still inside its deadline may yet write the object; it removes what it
-    // wrote, and the operator re-runs this command once it has settled.
-    let publicationPending: boolean;
-    try {
-      ({ publicationPending } = await audit.requestRevocation(
-        {
-          assetId: parsed.assetId,
-          actorUserAccountId,
-          actorSource: 'self_declared_operator',
-          occurredAt,
-          phase: 'requested',
-          originOutcome: null,
-          edgeOutcome: null,
-          edgeStatus: null,
-        },
-        new Date(occurredAt.getTime() - WRITING_CHART_PUBLICATION_LEASE_MS),
-      ));
-    } catch {
-      throw new WritingChartRevokeError('DATABASE_FAILURE');
-    }
-
-    let origin: 'deleted' | 'already_absent' | 'failed' = 'failed';
-    try {
-      const storage =
-        input.storage ?? createCliWritingChartStorage(input.environment);
-      origin = await storage.deletePublishedObjectIfPresent({
-        environment: input.environment,
-        publishedKey: parsed.publishedKey,
-      });
-    } catch {
-      origin = 'failed';
-    }
-
-    let edge: {
-      readonly state: WritingChartPublicEdgeOutcome;
-      readonly status: number | null;
-    };
-    try {
-      edge = await (input.probe ?? probePublicChartEdge)(parsed.url.href);
-    } catch {
-      edge = { state: 'unavailable', status: null };
-    }
-
-    let completedAt: Date;
-    try {
-      completedAt = (input.now ?? (() => new Date()))();
-      if (Number.isNaN(completedAt.getTime())) throw new Error('invalid clock');
-    } catch {
-      throw new WritingChartRevokeError('DATABASE_FAILURE');
-    }
-    try {
-      await audit.append({
-        assetId: parsed.assetId,
+async function requestRevocation(
+  audit: WritingChartRevocationAuditRepositoryPort,
+  target: WritingChartRevokeTarget,
+  actorUserAccountId: string,
+  occurredAt: Date,
+): Promise<boolean> {
+  try {
+    const result = await audit.requestRevocation(
+      {
+        assetId: target.assetId,
         actorUserAccountId,
         actorSource: 'self_declared_operator',
-        occurredAt: completedAt,
-        phase: 'completed',
-        originOutcome: origin,
-        edgeOutcome: edge.state,
-        edgeStatus: edge.status,
-      });
-    } catch {
-      throw new WritingChartRevokeError('AUDIT_COMPLETION_FAILURE');
-    }
+        occurredAt,
+        phase: 'requested',
+        originOutcome: null,
+        edgeOutcome: null,
+        edgeStatus: null,
+      },
+      new Date(occurredAt.getTime() - WRITING_CHART_PUBLICATION_LEASE_MS),
+    );
+    return result.publicationPending;
+  } catch {
+    throw new WritingChartRevokeError('DATABASE_FAILURE');
+  }
+}
 
-    result = {
-      assetId: parsed.assetId,
-      origin,
-      edge,
-      propagationPending: origin !== 'failed' && edge.state === 'serving',
-      publicationPending,
-    };
+async function deletePublishedObject(
+  input: WritingChartRevokeCliInput,
+  target: WritingChartRevokeTarget,
+): Promise<'deleted' | 'already_absent' | 'failed'> {
+  try {
+    const storage =
+      input.storage ?? createCliWritingChartStorage(input.environment);
+    return await storage.deletePublishedObjectIfPresent({
+      environment: input.environment,
+      publishedKey: target.publishedKey,
+    });
+  } catch {
+    return 'failed';
+  }
+}
+
+async function probePublicChart(
+  input: WritingChartRevokeCliInput,
+  target: WritingChartRevokeTarget,
+): Promise<WritingChartRevokeEdge> {
+  try {
+    return await (input.probe ?? probePublicChartEdge)(target.publicUrl);
+  } catch {
+    return { state: 'unavailable', status: null };
+  }
+}
+
+async function appendCompletionAudit(
+  audit: WritingChartRevocationAuditRepositoryPort,
+  target: WritingChartRevokeTarget,
+  actorUserAccountId: string,
+  completedAt: Date,
+  origin: WritingChartRevokeResult['origin'],
+  edge: WritingChartRevokeEdge,
+): Promise<void> {
+  try {
+    await audit.append({
+      assetId: target.assetId,
+      actorUserAccountId,
+      actorSource: 'self_declared_operator',
+      occurredAt: completedAt,
+      phase: 'completed',
+      originOutcome: origin,
+      edgeOutcome: edge.state,
+      edgeStatus: edge.status,
+    });
+  } catch {
+    throw new WritingChartRevokeError('AUDIT_COMPLETION_FAILURE');
+  }
+}
+
+async function revokeWritingChartTarget(
+  input: WritingChartRevokeCliInput,
+  target: WritingChartRevokeTarget,
+  audit: WritingChartRevocationAuditRepositoryPort,
+): Promise<WritingChartRevokeResult> {
+  const actorUserAccountId = await activeOperatorAccount(
+    audit,
+    input.actorUsername,
+  );
+  const occurredAt = currentTime(input);
+  // A publication inside its lease may still write the object (#1206).
+  const publicationPending = await requestRevocation(
+    audit,
+    target,
+    actorUserAccountId,
+    occurredAt,
+  );
+  const origin = await deletePublishedObject(input, target);
+  const edge = await probePublicChart(input, target);
+  const completedAt = currentTime(input);
+  await appendCompletionAudit(
+    audit,
+    target,
+    actorUserAccountId,
+    completedAt,
+    origin,
+    edge,
+  );
+  return {
+    assetId: target.assetId,
+    origin,
+    edge,
+    propagationPending: origin !== 'failed' && edge.state === 'serving',
+    publicationPending,
+  };
+}
+
+async function runAndCloseAudit(
+  input: WritingChartRevokeCliInput,
+  target: WritingChartRevokeTarget,
+  audit: WritingChartRevocationAuditRepositoryPort,
+): Promise<WritingChartRevokeResult> {
+  let result: WritingChartRevokeResult | undefined;
+  let operationError: unknown;
+  try {
+    result = await revokeWritingChartTarget(input, target, audit);
   } catch (error) {
     operationError = error;
   }
@@ -255,10 +302,26 @@ export async function runWritingChartRevokeCommand(
   if (operationError !== undefined) {
     throw operationError;
   }
-
   if (result === undefined) {
     throw new WritingChartRevokeError('DATABASE_FAILURE');
   }
-  (input.emit ?? console.log)(JSON.stringify(result));
+  return result;
+}
+
+export async function runWritingChartRevokeCommand(
+  input: WritingChartRevokeCliInput,
+): Promise<WritingChartRevokeResult> {
+  const target = parseWritingChartRevokeTarget(input.url, input.environment);
+  if (target === undefined) {
+    throw new WritingChartRevokeError('INVALID_PUBLIC_URL');
+  }
+
+  const audit =
+    input.audit ??
+    (await (
+      await import('./operator-writing-chart-client')
+    ).createOperatorWritingChartRevocationAuditClient(input.databaseUrl));
+  const result = await runAndCloseAudit(input, target, audit);
+  (input.emit ?? console.log)(formatWritingChartRevokeResult(result));
   return result;
 }

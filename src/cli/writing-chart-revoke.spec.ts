@@ -5,6 +5,9 @@ import type {
 } from '@/modules/writing/application/writing-chart-revocation.port';
 import {
   type WritingChartRevokeCliInput,
+  type WritingChartRevokeResult,
+  formatWritingChartRevokeResult,
+  parseWritingChartRevokeTarget,
   runWritingChartRevokeCommand,
 } from './writing-chart-revoke';
 
@@ -12,6 +15,33 @@ const ASSET_ID = 'chart_01J00000000000000000000001';
 const PUBLISHED_KEY = `writing-charts/${ASSET_ID}/published`;
 const PUBLIC_URL = `https://s3.wispace.app/aihub-sandbox-writing-charts/${PUBLISHED_KEY}`;
 const NOW = new Date('2026-10-19T12:00:00.000Z');
+
+describe('Writing chart revocation CLI steps', () => {
+  it('parses a chart target without opening connections', () => {
+    expect(parseWritingChartRevokeTarget(PUBLIC_URL, 'sandbox')).toEqual({
+      publicUrl: PUBLIC_URL,
+      assetId: ASSET_ID,
+      publishedKey: PUBLISHED_KEY,
+    });
+    expect(parseWritingChartRevokeTarget(PUBLIC_URL, 'production')).toBe(
+      undefined,
+    );
+  });
+
+  it('renders the result as the existing JSON line', () => {
+    const result: WritingChartRevokeResult = {
+      assetId: ASSET_ID,
+      origin: 'deleted',
+      edge: { state: 'not_serving', status: 404 },
+      propagationPending: false,
+      publicationPending: false,
+    };
+
+    expect(formatWritingChartRevokeResult(result)).toBe(
+      '{"assetId":"chart_01J00000000000000000000001","origin":"deleted","edge":{"state":"not_serving","status":404},"propagationPending":false,"publicationPending":false}',
+    );
+  });
+});
 
 function setup(includeProbe = true) {
   const records: WritingChartRevocationAuditRecord[] = [];

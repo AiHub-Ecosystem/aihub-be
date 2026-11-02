@@ -4,7 +4,11 @@ import type {
 } from '@/modules/metering/application/usage-retention';
 import type { WritingChartRevocationAuditRepositoryPort } from '@/modules/writing/application/writing-chart-revocation.port';
 import { effectiveMaintenanceTime } from '../../scripts/cli/operator-safety.cjs';
-import { formatUsageRetentionEvent, runUsagePruneCommand } from './usage-prune';
+import {
+  formatUsageRetentionEvent,
+  parseUsagePruneArguments,
+  runUsagePruneCommand,
+} from './usage-prune';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -130,6 +134,28 @@ describe('formatUsageRetentionEvent', () => {
         status: 'failed',
         error_code: 'CONFIGURATION_MISSING',
       }),
+    );
+  });
+});
+
+describe('parseUsagePruneArguments', () => {
+  it('normalizes dry-run arguments without opening a database connection', () => {
+    expect(
+      parseUsagePruneArguments({
+        databaseUrl: ' postgres://operator ',
+        dryRun: true,
+        cutoffSource: 'database',
+      }),
+    ).toEqual({
+      databaseUrl: ' postgres://operator ',
+      dryRun: true,
+      cutoffSource: 'database',
+    });
+  });
+
+  it('rejects a missing database URL before opening a connection', () => {
+    expect(() => parseUsagePruneArguments({ databaseUrl: '  ' })).toThrow(
+      'DATABASE_URL is required',
     );
   });
 });
