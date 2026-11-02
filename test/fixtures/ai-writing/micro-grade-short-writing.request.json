@@ -1,0 +1,14 @@
+{
+  "instruction": "Rewrite the sentence using the phrase 'play a vital role'.",
+  "question_no": 1,
+  "question_text": "Forests are important for protecting biodiversity.",
+  "question_image": null,
+  "hint": [
+    "play a vital role in",
+    "biodiversity"
+  ],
+  "sample_answer": "Forests play a vital role in protecting biodiversity.",
+  "ai_grading_rubric": "Score 1-10 for accurate collocation, grammar, and academic vocabulary.",
+  "note": null,
+  "user_answer": "Forests play a vital role in protecting biodiversity."
+}

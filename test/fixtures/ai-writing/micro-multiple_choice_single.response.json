@@ -1,0 +1,158 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793582916_ff4420",
+      "type": "multiple_choice_single",
+      "ai_grading": "false",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Chọn câu có NGỮ PHÁP CHỦ-VỊ ĐÚNG nhất (Subject–Verb Agreement) trong ngữ cảnh cho sẵn (chỉ chọn A, B, C hoặc D).",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Lỗi Subject–Verb Agreement làm câu sai trọng tâm ý tưởng dù từ vựng đúng. Luyện chọn đáp án đúng giúp bạn nhận biết chủ ngữ số ít/số nhiều, danh từ tập thể và đại từ bất định (everyone, each) để chia động từ chính xác."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị: ",
+        "question_image": null,
+        "explanation": "“the number of endangered species” là một cụm với “number” (số lượng) nên về ngữ pháp thường đi với động từ số ít: “is increasing”. Tuy nhiên câu đề bài lỗi là “The number of endangered species are increasing.” Vì thế đáp án đúng phải dùng “is”, không phải “are”.",
+        "options": {
+          "A": "The number of endangered species are increasing.",
+          "B": "The number of endangered species is increasing.",
+          "C": "The number of endangered species is increasinges.",
+          "D": "The number of endangered species were increasing."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“Everyone” (ai cũng) là chủ ngữ số ít, nên động từ phải chia số ít: “needs”. “need”/“are” sai hòa hợp số.",
+        "options": {
+          "A": "Everyone need to follow recycling guidelines to protect the environment.",
+          "B": "Everyone needs to follow recycling guidelines to protect the environment.",
+          "C": "Everyone are following recycling guidelines to protect the environment.",
+          "D": "Everyone have to follow recycling guidelines to protect the environment."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“Each of the residents” có “each” là nhân tố quyết định hòa hợp nên động từ phải chia số ít: “has”.",
+        "options": {
+          "A": "Each of the residents have planted a tree in the neighbourhood.",
+          "B": "Each of the residents has planted a tree in the neighbourhood.",
+          "C": "Each of the residents are planting a tree in the neighbourhood.",
+          "D": "Each of the residents is planting a tree in the neighbourhood."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "Trong cấu trúc “There are + N(plural)”, động từ “are” theo đúng danh từ sau là “solutions”. “There is” là sai do “solutions” số nhiều.",
+        "options": {
+          "A": "There is many solutions to reduce plastic waste.",
+          "B": "There are many solutions to reduce plastic waste.",
+          "C": "There are a solution to reduce plastic waste.",
+          "D": "There is a solutions to reduce plastic waste."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 5,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“The government” thường dùng với động từ số ít khi nhấn mạnh vai trò như một tổ chức: “has”. Các lựa chọn “have/are” sai số ít.",
+        "options": {
+          "A": "The government have launched a new conservation program.",
+          "B": "The government has launched a new conservation program.",
+          "C": "The government are launching a new conservation program.",
+          "D": "The government is launching a new conservation program next month."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 6,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“A lack of funding” (sự thiếu kinh phí) lấy “lack” làm hạt nhân nên số ít -> “affects”. “affect” chỉ số nhiều là sai.",
+        "options": {
+          "A": "A lack of funding affects environmental monitoring.",
+          "B": "A lack of funding affect environmental monitoring.",
+          "C": "Lack of funding affect environmental monitoring.",
+          "D": "A lack of funding are affecting environmental monitoring."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 7,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“Many communities” là số nhiều nên dùng “recycle”. “recycles” sai hòa hợp số.",
+        "options": {
+          "A": "Many communities recycle organic waste to produce compost.",
+          "B": "Many communities recycles organic waste to produce compost.",
+          "C": "Many community recycles organic waste to produce compost.",
+          "D": "Many communities is recycling organic waste to produce compost."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "Chủ ngữ chính là “The laws” (số nhiều) nên động từ chia số nhiều: “require”. Các đáp án dùng “requires” hoặc sai thì.",
+        "options": {
+          "A": "The laws that protect forests requires strict enforcement.",
+          "B": "The laws that protect forests require strict enforcement.",
+          "C": "The law that protects forests require strict enforcement.",
+          "D": "The laws that protect forests is requiring strict enforcement."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 9,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“A series of reports” dùng “series” là số ít -> “shows”. “show” là sai vì cần chia số ít.",
+        "options": {
+          "A": "A series of reports show rising air pollution in the city.",
+          "B": "A series of reports shows rising air pollution in the city.",
+          "C": "The series of reports show rising air pollution in the city.",
+          "D": "A series of reports are showing rising air pollution in the city."
+        },
+        "correct": "B"
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Chọn câu đúng về hòa hợp chủ-vị:",
+        "question_image": null,
+        "explanation": "“Neither” luôn đi với động từ số ít: “works”. “work”/“are” là sai hòa hợp số.",
+        "options": {
+          "A": "Neither of the plans work effectively without public support.",
+          "B": "Neither of the plans works effectively without public support.",
+          "C": "Neither of the plans are working effectively without public support.",
+          "D": "Neither of the plans have worked effectively without public support."
+        },
+        "correct": "B"
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 11492,
+    "output_tokens": 2091,
+    "total_tokens": 13583,
+    "cost": 0.00491215
+  },
+  "metrics": {
+    "ai_processing_ms": 14075
+  }
+}

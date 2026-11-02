@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "message": "Tạo bài tập long writing v2 thành công",
+  "data": {
+    "meta": {
+      "id": "lw_v2_1793583138_70b3b6",
+      "type": "long_writing",
+      "ai_grading": "true",
+      "error_code": [
+        "CC03",
+        "GRA02"
+      ],
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Viết MỘT ĐOẠN VĂN THÂN BÀI WRITING TASK 2 (không phải bài luận hoàn chỉnh với mở bài, nhiều đoạn thân bài và kết bài) cho câu hỏi bên dưới, khoảng 50-100 từ, sao cho khắc phục được các lỗi sai sau:\n1. Mỗi đoạn chỉ xoay quanh một ý trung tâm duy nhất; các nhóm nội dung khác chức năng được tách thành các đoạn riêng.\n2. Động từ luôn hòa hợp đúng với chủ ngữ về ngôi và số trong mọi cấu trúc phức tạp.",
+      "number_of_questions": 1
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Some people believe communities should protect the natural environment. Discuss the problems and possible solutions.\n\nViết MỘT ĐOẠN VĂN THÂN BÀI WRITING TASK 2 (không phải bài luận hoàn chỉnh với mở bài, nhiều đoạn thân bài và kết bài) cho câu hỏi trên, khoảng 50-100 từ, và khắc phục các lỗi:\n1) Đoạn chỉ xoay quanh một ý trung tâm duy nhất.\n2) Động từ luôn hòa hợp đúng với chủ ngữ về ngôi và số trong mọi cấu trúc phức tạp.",
+        "question_image": null,
+        "explanation": "Đoạn văn mẫu dưới đây khắc phục đồng thời CC03 và GRA02 trong phạm vi 1 đoạn:\n\n- Khắc phục CC03 (Multiple Central Topics in One Paragraph): Đoạn chỉ tập trung vào một ý trung tâm duy nhất: “suy giảm đa dạng sinh học do mất môi trường sống” và giải pháp tương ứng trực tiếp trong cùng mạch lập luận (thiết lập khu bảo tồn/khôi phục sinh cảnh + giám sát). Không nhảy sang thêm các nhóm vấn đề/giải pháp khác (ví dụ ô nhiễm không khí, rác thải, giáo dục…). Điều này giúp tránh tình trạng trộn lẫn hai nhóm nội dung.\n\n- Khắc phục GRA02 (Subject–Verb Agreement): Dùng cấu trúc với chủ ngữ rõ ràng số ít: “The number of endangered species **is** increasing”. Vì chủ ngữ là “the number” (danh từ trung tâm số ít), động từ dùng đúng “is”. Ngoài ra, các câu có cấu trúc phức như “that …” cũng giữ đúng chia động từ theo chủ ngữ.\n\n- Tránh fragment: Mọi ý đều nằm trong câu hoàn chỉnh (không dùng “Because forests are important” dạng mảnh câu).",
+        "hint": [
+          "Chọn MỘT vấn đề trung tâm: ví dụ “suy giảm đa dạng sinh học do mất môi trường sống”.",
+          "Sau khi nêu vấn đề, nêu GIẢI PHÁP trực tiếp tương ứng: ví dụ “thành lập khu bảo tồn/khôi phục sinh cảnh và tăng giám sát”.",
+          "Chú ý chủ-vị/động từ: dùng đúng “The number of endangered species **is** …” (không dùng “are”).",
+          "Viết 50–100 từ, chỉ 1 đoạn: mở ý → vấn đề → giải pháp → kết lại gọn."
+        ],
+        "correct": {
+          "sample_answer": "A key problem is that local habitats are being destroyed, so the number of endangered species is increasing. For example, when wetlands are drained for development, wildlife loses food and nesting sites. To tackle this, communities should establish protected areas and restore damaged ecosystems, while also monitoring illegal land clearing. With clear rules and consistent enforcement, biodiversity can recover, and future environmental damage can be prevented more effectively.",
+          "ai_grading_rubric": "Chấm 1–10 theo mức độ khắc phục đúng 2 lỗi trọng tâm.\n\n1) CC03 - Một ý trung tâm duy nhất (1–10): 10 = chỉ bàn một vấn đề + giải pháp tương ứng, không trộn thêm vấn đề/giải pháp khác; 7–8 = có thêm 1 ý phụ nhưng vẫn xoay quanh chủ đề chính; 5–6 = trộn 2 nhóm nội dung khiến mạch chưa rõ; <5 = trộn nhiều ý trung tâm hoặc có fragment.\n\n2) GRA02 - Subject–Verb Agreement (1–10): 10 = không có lỗi hòa hợp chủ-vị; đặc biệt câu với “the number … is/are” đúng (is); 7–8 = 1 lỗi nhỏ không làm mất nghĩa; 5–6 = 2 lỗi; <5 = nhiều lỗi gây sai ngữ nghĩa.\n\n3) Đúng yêu cầu định dạng (1–10): 10 = 1 đoạn 50–100 từ, câu hoàn chỉnh; 7–8 = hơi lệch độ dài/ít câu phức nhưng đúng dạng; <5 = viết nhiều đoạn hoặc không đạt 1 đoạn.\n\nĐiểm cuối = trung bình cộng 3 tiêu chí, làm tròn 1 chữ số."
+        }
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 10766,
+    "output_tokens": 1236,
+    "total_tokens": 12002,
+    "cost": 0.0036982
+  },
+  "metrics": {
+    "ai_processing_ms": 9094
+  }
+}

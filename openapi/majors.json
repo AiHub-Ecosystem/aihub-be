@@ -1,9 +1,9 @@
 [
   {
     "major": 1,
-    "contractVersion": "1.6.0",
+    "contractVersion": "1.7.0",
     "status": "supported",
-    "releasedAt": "2026-10-27",
+    "releasedAt": "2026-11-02",
     "sunset": {
       "successor": 2,
       "deprecationAt": "2026-11-01T00:00:00Z",
@@ -12,8 +12,8 @@
   },
   {
     "major": 2,
-    "contractVersion": "2.4.0",
+    "contractVersion": "2.5.0",
     "status": "supported",
-    "releasedAt": "2026-11-01"
+    "releasedAt": "2026-11-02"
   }
 ]

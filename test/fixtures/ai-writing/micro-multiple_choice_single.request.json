@@ -1,0 +1,22 @@
+{
+  "topic": "Environmental protection",
+  "writing_task": 2,
+  "criterion": "grammar_range_accuracy",
+  "error_code": "GRA02",
+  "exercise_type": "multiple_choice_single",
+  "references": [
+    {
+      "question": {
+        "prompt": "Some people believe communities should protect the natural environment. Discuss the problems and possible solutions.",
+        "image": null,
+        "question_type": "problem_solution"
+      },
+      "comments": [
+        {
+          "quote": "The number of endangered species are increasing.",
+          "explanation": "The singular subject phrase requires a singular verb."
+        }
+      ]
+    }
+  ]
+}

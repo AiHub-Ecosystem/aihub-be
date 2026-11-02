@@ -125,6 +125,22 @@ describe('CreateOrganizationApiKey', () => {
     expect(created.allowedEnvironments).toEqual(['sandbox']);
   });
 
+  it('allows a Writing exercise scope on a customer Sandbox key', async () => {
+    const { useCase, apiKeys } = createUseCase();
+
+    const created = await useCase.create({
+      context: CONTEXT,
+      userId: 'usr_owner',
+      organizationId: 'org_acme',
+      name: 'Writing exercises',
+      scopes: ['writing.exercise'],
+      allowedEnvironments: ['sandbox'],
+    });
+
+    expect(created.scopes).toEqual(['writing.exercise']);
+    expect(apiKeys.created[0]?.scopes).toEqual(['writing.exercise']);
+  });
+
   it('binds a new key to exactly one environment', async () => {
     const { useCase } = createUseCase();
 
@@ -158,7 +174,7 @@ describe('CreateOrganizationApiKey', () => {
     expect(apiKeys.created[0]?.allowedEnvironments).toEqual(['production']);
   });
 
-  it('refuses a Sandbox key carrying a scope outside the demo pair', async () => {
+  it('refuses a Sandbox key carrying a scope outside the AI service scopes', async () => {
     const { useCase } = createUseCase();
 
     await expect(

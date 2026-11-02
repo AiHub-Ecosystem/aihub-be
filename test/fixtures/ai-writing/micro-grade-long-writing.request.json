@@ -1,0 +1,14 @@
+{
+  "instruction": "Write one coherent paragraph proposing ways to protect local wildlife.",
+  "question_no": 1,
+  "question_text": "Explain how communities can protect local wildlife.",
+  "question_image": null,
+  "hint": [
+    "habitat protection",
+    "community action"
+  ],
+  "sample_answer": "Local communities can protect wildlife by preserving habitats and reducing pollution.",
+  "ai_grading_rubric": "Score 1-10 for relevance, coherence, grammar, and vocabulary.",
+  "note": null,
+  "user_answer": "Local communities can protect wildlife by preserving natural habitats. They can also reduce pollution and support conservation programs. These actions help endangered species survive."
+}

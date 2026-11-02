@@ -96,7 +96,10 @@ export class WritingChartUploadController {
 
   @Post(PUBLIC_ROUTES['writing.chartUploads.create'].path)
   @HttpCode(PUBLIC_ROUTES['writing.chartUploads.create'].successStatus)
-  @RequireOperation(OPERATION)
+  @RequireOperation(
+    OPERATION,
+    ...(PUBLIC_ROUTES['writing.chartUploads.create'].acceptedScopes ?? []),
+  )
   async create(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
@@ -118,7 +121,10 @@ export class WritingChartUploadController {
 
   @Post(PUBLIC_ROUTES['writing.chartUploads.refresh'].path)
   @HttpCode(PUBLIC_ROUTES['writing.chartUploads.refresh'].successStatus)
-  @RequireOperation(OPERATION)
+  @RequireOperation(
+    OPERATION,
+    ...(PUBLIC_ROUTES['writing.chartUploads.refresh'].acceptedScopes ?? []),
+  )
   async refresh(
     @Req() request: AuthenticatedRequest,
     @Param('assetId') assetId: string,
@@ -131,7 +137,10 @@ export class WritingChartUploadController {
 
   @Post(PUBLIC_ROUTES['writing.chartUploads.complete'].path)
   @HttpCode(PUBLIC_ROUTES['writing.chartUploads.complete'].successStatus)
-  @RequireOperation(OPERATION)
+  @RequireOperation(
+    OPERATION,
+    ...(PUBLIC_ROUTES['writing.chartUploads.complete'].acceptedScopes ?? []),
+  )
   async complete(
     @Req() request: AuthenticatedRequest,
     @Param('assetId') assetId: string,

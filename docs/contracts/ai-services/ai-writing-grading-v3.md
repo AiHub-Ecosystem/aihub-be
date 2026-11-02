@@ -29,9 +29,9 @@ not copied here or anywhere in this repository.
 | `POST /v2/ielts/writing/task2/grade` | `POST /v3/grading-feedback-task2` | JSON    |
 
 The base URL is the same origin AIHUB already uses for `/v1` Writing
-(`DOWNSTREAM_AI_WRITING_URL`). The micro-exercise operations of the provider
-(`create-micro-exercise`, `create-longwriting-exercise`, `grading-micro-exercise`,
-in v1 and v2) are not part of this contract; they are tracked in #1454.
+(`DOWNSTREAM_AI_WRITING_URL`). The provider's micro-exercise operations are
+documented separately in the [AI Writing exercise provider contract v2](ai-writing-exercises-v2.md),
+tracked in #1454.
 
 ## 2. Authentication and identity
 

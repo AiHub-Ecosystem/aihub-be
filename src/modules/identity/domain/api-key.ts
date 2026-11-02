@@ -50,8 +50,12 @@ export function isKeyEnvironment(
   return value !== undefined && Object.hasOwn(ENVIRONMENT_PREFIXES, value);
 }
 
-/** The grading scopes a Sandbox key may carry and the public demo may select. */
-const GRADING_SCOPES: readonly string[] = ['writing.grade', 'speaking.grade'];
+/** AI service scopes a Sandbox key may carry. */
+const AI_SERVICE_SCOPES: readonly string[] = [
+  'writing.grade',
+  'writing.exercise',
+  'speaking.grade',
+];
 
 /**
  * An Entitlement is the leading segment of a Scope: `writing.grade` requires
@@ -65,8 +69,8 @@ export function entitlementOfScope(scope: string): string | undefined {
     : entitlement;
 }
 
-export function isGradingScope(scope: string): boolean {
-  return GRADING_SCOPES.includes(scope);
+export function isAiServiceScope(scope: string): boolean {
+  return AI_SERVICE_SCOPES.includes(scope);
 }
 
 /**

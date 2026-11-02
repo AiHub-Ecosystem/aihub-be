@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "message": "Lỗi parse JSON hoặc validate từ AI. Trả về kết quả mặc định rỗng.",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793582962_93d24c",
+      "type": "annotation",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Hệ thống đang quá tải hoặc AI sinh lỗi định dạng. Không thể khởi tạo bài tập.",
+      "rationale_for_exercise": null,
+      "number_of_questions": 0,
+      "ai_grading": "false"
+    },
+    "exercise": []
+  },
+  "usage": {
+    "input_tokens": 10314,
+    "output_tokens": 2170,
+    "total_tokens": 12484,
+    "cost": 0.0047753
+  },
+  "metrics": {
+    "ai_processing_ms": 13966
+  }
+}

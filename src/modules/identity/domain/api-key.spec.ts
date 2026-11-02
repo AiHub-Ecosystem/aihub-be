@@ -4,8 +4,8 @@ import {
   apiKeyPrefixForEnvironment,
   apiKeyStatus,
   entitlementOfScope,
+  isAiServiceScope,
   isApiKeyFormat,
-  isGradingScope,
   isKeyEnvironment,
   rotatedKeyEnvironments,
 } from './api-key';
@@ -78,9 +78,10 @@ describe('API key material', () => {
   });
 
   it('names exactly the Writing and Speaking grading scopes', () => {
-    expect(isGradingScope('writing.grade')).toBe(true);
-    expect(isGradingScope('speaking.grade')).toBe(true);
-    expect(isGradingScope('writing.read')).toBe(false);
+    expect(isAiServiceScope('writing.grade')).toBe(true);
+    expect(isAiServiceScope('writing.exercise')).toBe(true);
+    expect(isAiServiceScope('speaking.grade')).toBe(true);
+    expect(isAiServiceScope('writing.read')).toBe(false);
   });
 });
 

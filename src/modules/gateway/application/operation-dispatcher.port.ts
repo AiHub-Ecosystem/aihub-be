@@ -19,6 +19,11 @@ import type {
   GradeTask2Request,
 } from '@/contracts/writing/grading';
 import type {
+  CreateLongWritingExerciseRequest,
+  CreateMicroExerciseRequest,
+  GradeMicroExerciseRequest,
+} from '@/contracts/writing/v2/exercises';
+import type {
   WritingV2GradeTask1Request,
   WritingV2GradeTask2Request,
 } from '@/contracts/writing/v2/grading';
@@ -54,17 +59,23 @@ export type RequestFor<K extends OperationId> = K extends 'writing.task1.grade'
       ? WritingV2GradeTask1Request
       : K extends 'writing.v2.task2.grade'
         ? WritingV2GradeTask2Request
-        : K extends 'speaking.grading'
-          ? SpeakingGradeInput
-          : K extends 'speaking.grading-json'
-            ? SpeakingGradeJsonInput
-            : K extends 'speaking.v2.question-grading'
-              ? SpeakingV2QuestionGradeInput
-              : K extends 'speaking.v2.part-grading'
-                ? SpeakingV2PartGradeInput
-                : K extends 'speaking.v2.test-grading'
-                  ? SpeakingV2TestGradeInput
-                  : CatalogRequest<K>;
+        : K extends 'writing.v2.micro-exercises.create'
+          ? CreateMicroExerciseRequest
+          : K extends 'writing.v2.long-writing-exercises.create'
+            ? CreateLongWritingExerciseRequest
+            : K extends 'writing.v2.micro-exercises.grade'
+              ? GradeMicroExerciseRequest
+              : K extends 'speaking.grading'
+                ? SpeakingGradeInput
+                : K extends 'speaking.grading-json'
+                  ? SpeakingGradeJsonInput
+                  : K extends 'speaking.v2.question-grading'
+                    ? SpeakingV2QuestionGradeInput
+                    : K extends 'speaking.v2.part-grading'
+                      ? SpeakingV2PartGradeInput
+                      : K extends 'speaking.v2.test-grading'
+                        ? SpeakingV2TestGradeInput
+                        : CatalogRequest<K>;
 
 type CatalogResponse<K extends OperationId> =
   (typeof OPERATION_CATALOG)[K]['responseContract'] extends infer T

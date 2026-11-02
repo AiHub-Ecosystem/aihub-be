@@ -41,7 +41,7 @@ const LENGTH_UNIT_NOTE =
 
 export type CriterionId = (typeof CRITERION_IDS)[number];
 
-const CriterionIdSchema = Type.Union(
+export const CriterionIdSchema = Type.Union(
   CRITERION_IDS.map((value) => Type.Literal(value)),
 );
 
@@ -142,4 +142,4 @@ export const GradeResponseSchema = Type.Object(
 
 export type GradeResponse = Static<typeof GradeResponseSchema>;
 
-export { BandSchema, CriterionIdSchema, LanguageSchema };
+export { BandSchema, LanguageSchema };

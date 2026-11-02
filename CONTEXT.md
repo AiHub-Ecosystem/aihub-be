@@ -177,6 +177,9 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Reporting activation:** the point at which a downstream's usage-reporting declaration becomes enabled; records before activation keep their original metering meaning and are not reclassified.
 - **Incomplete usage rate:** missing-usage records divided by successful attempts for reporting-eligible operations in one report window; a zero denominator is healthy, not an alert.
 
+- **Micro-exercise:** A short Writing practice task focused on one selected error pattern; a long-writing exercise combines two to four selected patterns.
+- **Micro-exercise score:** A 1–10 practice result based on the submitted answer and rubric; it is not an IELTS band score or proof of a particular exercise history.
+
 ## Ownership and invariants
 
 - AIHUB owns the control plane: organization identity, API keys, scopes, metering, quota, idempotency, and routing policy.

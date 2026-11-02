@@ -1,0 +1,185 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793582930_2a3022",
+      "type": "multiple_choice_multiple",
+      "ai_grading": "false",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Trong mỗi câu cho sẵn, chọn TẤT CẢ các phương án A, B, C, D trong đó động từ ở vị trí được gạch chân (hoặc phần bị thay thế) ĐÚNG hòa hợp với chủ ngữ (số ít/số nhiều) theo ngữ pháp chuẩn.",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Lỗi Subject–Verb Agreement thường do sai số (is/are; has/have) hoặc do chủ ngữ danh từ số nhiều dài/danh từ tập thể/đại từ bất định. Bài tập dạng chọn tất cả phương án đúng giúp bạn nhận diện nhanh các cấu trúc động từ phù hợp và tránh chọn phương án sai kiểu “quên đổi theo chủ ngữ”."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Chọn TẤT CẢ các phương án đúng để hoàn thành câu sau (chọn đáp án mà động từ hòa hợp đúng với chủ ngữ): \"The number of endangered species ______ increasing every year.\"",
+        "question_image": null,
+        "explanation": "\"The number of …\" (số lượng của …) được xem là danh từ số ít → dùng động từ số ít. Therefore, câu đúng phải dùng \"is\". Các lựa chọn dùng \"are\" sai số hòa hợp.",
+        "options": {
+          "A": "is",
+          "B": "are",
+          "C": "has",
+          "D": "have"
+        },
+        "correct": [
+          "A"
+        ]
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Chọn TẤT CẢ các phương án đúng để hoàn thành câu sau: \"Many communities ______ to reduce plastic waste in local parks.\"",
+        "question_image": null,
+        "explanation": "\"Many communities\" là chủ ngữ số nhiều → dùng động từ số nhiều. Vì vậy đúng là \"are taking\"/\"have taken\" tùy cấu trúc. Trong bốn lựa chọn chỉ các động từ số nhiều phù hợp.",
+        "options": {
+          "A": "is trying",
+          "B": "are trying",
+          "C": "has tried",
+          "D": "have tried"
+        },
+        "correct": [
+          "B",
+          "D"
+        ]
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"The government ______ strict rules on recycling to protect the environment.\"",
+        "question_image": null,
+        "explanation": "\"The government\" trong câu này đóng vai trò chủ ngữ số ít → dùng \"has\" hoặc \"is\" tùy cấu trúc. Với khung \"__ strict rules\" hợp với \"has\" (cụm hoàn chỉnh: has introduced/has implemented, nhưng trong lựa chọn chỉ xét hòa hợp dạng has/have). Các lựa chọn dùng \"have/are\" sai hòa hợp.",
+        "options": {
+          "A": "has introduced",
+          "B": "have introduced",
+          "C": "is introducing",
+          "D": "are introducing"
+        },
+        "correct": [
+          "A",
+          "C"
+        ]
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"Each of the students ______ responsible for sorting recyclable materials.\"",
+        "question_image": null,
+        "explanation": "\"Each\" là đại từ bất định số ít → dùng động từ số ít. Vì vậy đúng phải dùng \"is\"/\"has\" phù hợp dạng. Các đáp án có \"are\"/\"have\" sai.",
+        "options": {
+          "A": "is",
+          "B": "are",
+          "C": "has",
+          "D": "have"
+        },
+        "correct": [
+          "A",
+          "C"
+        ]
+      },
+      {
+        "questions_no": 5,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"There ______ increasing concerns about water pollution in the region.\"",
+        "question_image": null,
+        "explanation": "Trong cấu trúc \"There + be\", động từ phụ thuộc vào danh từ sau \"there\". \"concerns\" là số nhiều → dùng \"are\". \"There is\" sai hòa hợp.",
+        "options": {
+          "A": "is",
+          "B": "are",
+          "C": "has",
+          "D": "have"
+        },
+        "correct": [
+          "B"
+        ]
+      },
+      {
+        "questions_no": 6,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"The plans to restore coastal habitats ______ effective in the long term.\"",
+        "question_image": null,
+        "explanation": "\"The plans\" là danh từ chính số nhiều (plans) → động từ số nhiều. Các đáp án dùng \"is\" sai.",
+        "options": {
+          "A": "is",
+          "B": "are",
+          "C": "were",
+          "D": "has"
+        },
+        "correct": [
+          "B"
+        ]
+      },
+      {
+        "questions_no": 7,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"A number of NGOs ______ campaigning for cleaner air this year.\"",
+        "question_image": null,
+        "explanation": "\"A number of\" + danh từ số nhiều có nghĩa \"một số\" → động từ số nhiều. Vì vậy dùng \"are campaigning\". Các lựa chọn dùng \"is\" sai.",
+        "options": {
+          "A": "is campaigning",
+          "B": "are campaigning",
+          "C": "has campaigned",
+          "D": "have campaigned"
+        },
+        "correct": [
+          "B",
+          "D"
+        ]
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"Nobody in the community ______ fully aware of the recycling rules yet.\"",
+        "question_image": null,
+        "explanation": "\"Nobody\" = nobody = người/ai đó không ai → số ít → dùng động từ số ít. Vì vậy phải dùng \"is\". Các đáp án dùng are/have are sai.",
+        "options": {
+          "A": "is",
+          "B": "are",
+          "C": "has",
+          "D": "have"
+        },
+        "correct": [
+          "A",
+          "C"
+        ]
+      },
+      {
+        "questions_no": 9,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"The use of renewable energy ______ increasing in many countries.\"",
+        "question_image": null,
+        "explanation": "\"The use of ...\" là danh từ chính 'use' (số ít) → dùng động từ số ít: \"is increasing\". Lựa chọn dùng 'are' sai hòa hợp.",
+        "options": {
+          "A": "is increasing",
+          "B": "are increasing",
+          "C": "has increased",
+          "D": "have increased"
+        },
+        "correct": [
+          "A",
+          "C"
+        ]
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Chọn TẤT CẢ các phương án đúng: \"Most of the information on the report ______ available to the public.\"",
+        "question_image": null,
+        "explanation": "\"Most of the information\": danh từ chính là 'information' (số ít) → dùng động từ số ít. Vì vậy đúng là \"is\". Các đáp án dùng 'are' sai.",
+        "options": {
+          "A": "is",
+          "B": "are",
+          "C": "has",
+          "D": "have"
+        },
+        "correct": [
+          "A",
+          "C"
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 11312,
+    "output_tokens": 1843,
+    "total_tokens": 13155,
+    "cost": 0.00456615
+  },
+  "metrics": {
+    "ai_processing_ms": 13814
+  }
+}

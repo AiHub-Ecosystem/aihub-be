@@ -17,8 +17,8 @@ environment's display prefix (`aihub_sandbox_` or `aihub_prod_`). Keys issued
 before this rule keep the shared
 `aihub_sk_` prefix and remain valid in every environment their stored
 `allowed_environments` lists; the prefix is a recognition aid and never
-authorizes anything. A Sandbox key may carry only `writing.grade`,
-`speaking.grade`, or both. The public Writing and Speaking demos accept a key
+authorizes anything. A Sandbox key may carry `writing.grade`,
+`writing.exercise`, and/or `speaking.grade`. The public Writing and Speaking demos accept a key
 only when it carries the selected skill's scope, its stored environment matches
 the page's selection, and the Organization has no active Identity
 Configuration. These live demo requests use the customer's Organization and its

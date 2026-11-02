@@ -121,18 +121,21 @@ describe('nginx edge timeouts', () => {
     },
   );
 
-  it('gives the two Writing /v2 grading routes their own 135-second blocks and leaves other routes at 75', () => {
+  it('gives Writing /v2 routes their operation budgets plus ten seconds', () => {
     for (const server of edgeServers) {
-      for (const path of [
-        '/v2/ielts/writing/task1/grade',
-        '/v2/ielts/writing/task2/grade',
-      ]) {
+      for (const [path, timeout] of [
+        ['/v2/ielts/writing/task1/grade', 135],
+        ['/v2/ielts/writing/task2/grade', 135],
+        ['/v2/ielts/writing/micro-exercises', 55],
+        ['/v2/ielts/writing/long-writing-exercises', 45],
+        ['/v2/ielts/writing/micro-exercises/grade', 30],
+      ] as const) {
         expect(
           effectiveTimeoutSeconds(server, path, 'proxy_read_timeout'),
-        ).toBe(135);
+        ).toBe(timeout);
         expect(
           effectiveTimeoutSeconds(server, path, 'proxy_send_timeout'),
-        ).toBe(135);
+        ).toBe(timeout);
       }
       expect(
         effectiveTimeoutSeconds(

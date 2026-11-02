@@ -21,6 +21,9 @@ export const GRADED_REQUEST_OPERATIONS = [
   'writing.task2.grade',
   'writing.v2.task1.grade',
   'writing.v2.task2.grade',
+  'writing.v2.micro-exercises.create',
+  'writing.v2.long-writing-exercises.create',
+  'writing.v2.micro-exercises.grade',
   'speaking.grading',
   'speaking.grading-json',
 ] as const satisfies readonly (keyof typeof OPERATION_CATALOG)[];

@@ -16,11 +16,54 @@ const TASK2_BODY = {
   essay: 'Cities offer more jobs and services.',
 };
 
+const MICRO_EXERCISE_ERROR = {
+  criterion: 'grammatical_range_accuracy',
+  error_code: 'GRA01',
+  prompt: 'Use the target form.',
+  question_type: 'grammar',
+  comments: [{ quote: 'She go.', explanation: 'Use third-person agreement.' }],
+};
+
+const MICRO_EXERCISE_BODY = {
+  topic: 'education',
+  writing_task: 2,
+  ...MICRO_EXERCISE_ERROR,
+};
+
+const LONG_WRITING_EXERCISE_BODY = {
+  topic: 'education',
+  writing_task: 2,
+  errors: [
+    MICRO_EXERCISE_ERROR,
+    {
+      ...MICRO_EXERCISE_ERROR,
+      criterion: 'coherence_cohesion',
+      error_code: 'CC01',
+    },
+  ],
+};
+
+const MICRO_EXERCISE_GRADE_BODY = {
+  exercise_type: 'short_writing',
+  instruction: 'Write one sentence.',
+  question_no: 1,
+  question_text: 'Use a conjunction.',
+  question_image: null,
+  hint: [],
+  sample_answer: 'I stayed home because it rained.',
+  ai_grading_rubric: 'Uses a correct conjunction.',
+  note: null,
+  user_answer: 'I stayed home because it rained.',
+};
+
 const BODIES = {
   'writing.task1.grade': TASK1_BODY,
   'writing.task2.grade': TASK2_BODY,
   'writing.v2.task1.grade': TASK1_BODY,
   'writing.v2.task2.grade': TASK2_BODY,
+  'writing.v2.micro-exercises.create': MICRO_EXERCISE_BODY,
+  'writing.v2.long-writing-exercises.create': LONG_WRITING_EXERCISE_BODY,
+  'writing.v2.micro-exercises.grade': MICRO_EXERCISE_GRADE_BODY,
 } as const;
 
 const stored = {

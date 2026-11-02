@@ -1,0 +1,22 @@
+{
+  "topic": "Population trends",
+  "writing_task": 1,
+  "criterion": "task_achievement",
+  "error_code": "TA01",
+  "exercise_type": "multiple_choice_single",
+  "references": [
+    {
+      "question": {
+        "prompt": "The line graph shows population changes in two cities between 2000 and 2020.",
+        "image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "question_type": "line_graph"
+      },
+      "comments": [
+        {
+          "quote": "The population of City A increased from 2 million to 4 million.",
+          "explanation": "The overview should compare the trend across both cities."
+        }
+      ]
+    }
+  ]
+}

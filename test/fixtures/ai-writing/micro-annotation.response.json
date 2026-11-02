@@ -1,0 +1,128 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793583405_9b78c3",
+      "type": "annotation",
+      "ai_grading": "false",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Đọc mỗi câu và highlight TẤT CẢ lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement) trong đoạn văn; nếu câu không có lỗi, không highlight gì.",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Hòa hợp chủ–động là lỗi ngữ pháp phổ biến làm giảm độ chính xác trong Task 2. Highlight đúng vị trí sai sẽ giúp bạn sửa nhanh các trường hợp như chủ ngữ số ít/số nhiều (The number...), danh từ tập thể, đại từ bất định (everyone/each), và cấu trúc there is/are."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "“The number of endangered species” được hiểu là ‘số lượng’ (the number) → chủ ngữ số ít, vì vậy động từ phải dùng dạng số ít: “is increasing”. Cụm bị sai là “are increasing” (số nhiều).",
+        "text_for_annotation": "The number of endangered species are increasing each year due to habitat loss and pollution. This trend worries many researchers who study biodiversity in local ecosystems.",
+        "correct": [
+          "are increasing"
+        ]
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "“Each of the students” có ‘each’ → chủ ngữ số ít. Vì vậy phải là “has” (hoặc “is”) thay vì “have”. Lỗi nằm ở động từ đi với chủ ngữ số ít.",
+        "text_for_annotation": "Each of the students have to submit a plan for reducing waste at home. They will also report their progress to the class every week.",
+        "correct": [
+          "have"
+        ]
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "“The committee” là danh từ tập thể, chủ ngữ số ít → động từ đúng phải là “meets/has decided/is”. “are meeting” sai vì động từ ở dạng số nhiều.",
+        "text_for_annotation": "The committee are meeting to discuss new regulations on plastic packaging this afternoon. Several experts from different universities are invited to give advice.",
+        "correct": [
+          "are meeting"
+        ]
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "Trong câu, phần đứng sau “there are” là “a serious problem” (danh từ số ít). Vì vậy phải dùng “there is” chứ không phải “there are”. Lỗi là “there are”.",
+        "text_for_annotation": "In many coastal towns, there are a serious problem with illegal dumping near the harbour. Local authorities claim that the situation can be improved with stricter monitoring.",
+        "correct": [
+          "there are"
+        ]
+      },
+      {
+        "questions_no": 5,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "“Everyone” = số ít → động từ đúng phải là “needs”. Cụm “need” là dạng số nhiều nên sai hòa hợp.",
+        "text_for_annotation": "Everyone need to understand that environmental protection requires long-term commitment. Some people still treat recycling as optional rather than essential.",
+        "correct": [
+          "need"
+        ]
+      },
+      {
+        "questions_no": 6,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "Chủ ngữ “Government policies” là số nhiều (policies) → động từ phải là “encourage”. “encourages” dùng số ít nên sai.",
+        "text_for_annotation": "Government policies encourages companies to invest in cleaner production methods. As a result, factories can reduce emissions without raising costs significantly.",
+        "correct": [
+          "encourages"
+        ]
+      },
+      {
+        "questions_no": 7,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "Chủ ngữ lõi là “The main cause” (cause) → số ít, nên động từ phải là “is”. “are” là số nhiều nên sai dù có cụm “of these floods” xen giữa.",
+        "text_for_annotation": "The main cause of these floods are the loss of wetlands and the increase in extreme rainfall. Urban planners often underestimate how quickly runoff can rise.",
+        "correct": [
+          "are"
+        ]
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "“A number of” = một số lượng (số nhiều) → động từ đúng phải là “have”. “has” (số ít) sai hòa hợp.",
+        "text_for_annotation": "A number of citizens has complained about the smell coming from the recycling plant. However, officials say they will investigate the issue within two weeks.",
+        "correct": [
+          "has"
+        ]
+      },
+      {
+        "questions_no": 9,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "“None of the options/answers” → ‘none’ thường dùng động từ số ít trong chuẩn học thuật: “is”. “are” sai vì số nhiều.",
+        "text_for_annotation": "None of the solutions are realistic if they require local people to change their behaviour overnight. A gradual approach is more likely to succeed in the long run.",
+        "correct": [
+          "are"
+        ]
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Đọc đoạn sau và highlight lỗi sai về hòa hợp Chủ ngữ–Động từ (Subject–Verb Agreement).",
+        "question_image": null,
+        "explanation": "Phần sau “There” là “several environmental problems” (số nhiều) nên động từ đúng là “are”. “is” (số ít) là lỗi hòa hợp.",
+        "text_for_annotation": "There is several environmental problems caused by untreated industrial waste in the region. These issues include river pollution, soil contamination, and harm to aquatic life.",
+        "correct": [
+          "is"
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 10314,
+    "output_tokens": 1807,
+    "total_tokens": 12121,
+    "cost": 0.00432155
+  },
+  "metrics": {
+    "ai_processing_ms": 11837
+  }
+}

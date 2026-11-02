@@ -1,0 +1,21 @@
+{
+  "success": false,
+  "status_code": 400,
+  "error_code": "invalid_request",
+  "message": "Dữ liệu yêu cầu không hợp lệ hoặc thiếu trường bắt buộc.",
+  "detail": "Dữ liệu yêu cầu không hợp lệ hoặc thiếu trường bắt buộc.",
+  "details": [
+    {
+      "type": "literal_error",
+      "loc": [
+        "body",
+        "error_code"
+      ],
+      "msg": "Input should be 'TA01', 'TA02', 'TA03', 'TA04', 'TA05', 'TA06', 'TR01', 'TR02', 'TR03', 'TR04', 'TR05', 'TR06', 'TR07', 'TR08', 'CC01', 'CC02', 'CC03', 'CC04', 'CC05', 'CC06', 'CC07', 'CC08', 'LR01', 'LR02', 'LR03', 'LR04', 'LR05', 'LR06', 'LR07', 'GRA01', 'GRA02', 'GRA03', 'GRA04', 'GRA05', 'GRA06', 'GRA07', 'GRA08', 'GRA09', 'GRA10', 'GRA11', 'GRA12', 'GRA13', 'GRA14', 'GRA15', 'GRA16', 'GRA17', 'GRA18' or 'GRA19'",
+      "input": "ZZ99",
+      "ctx": {
+        "expected": "'TA01', 'TA02', 'TA03', 'TA04', 'TA05', 'TA06', 'TR01', 'TR02', 'TR03', 'TR04', 'TR05', 'TR06', 'TR07', 'TR08', 'CC01', 'CC02', 'CC03', 'CC04', 'CC05', 'CC06', 'CC07', 'CC08', 'LR01', 'LR02', 'LR03', 'LR04', 'LR05', 'LR06', 'LR07', 'GRA01', 'GRA02', 'GRA03', 'GRA04', 'GRA05', 'GRA06', 'GRA07', 'GRA08', 'GRA09', 'GRA10', 'GRA11', 'GRA12', 'GRA13', 'GRA14', 'GRA15', 'GRA16', 'GRA17', 'GRA18' or 'GRA19'"
+      }
+    }
+  ]
+}

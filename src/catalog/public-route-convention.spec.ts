@@ -428,7 +428,9 @@ describe('public route convention (ADR-0129)', () => {
         path: def.path,
         successStatus: 200,
         responseSchema: null,
-        graded: def.method === 'POST',
+        graded:
+          def.method === 'POST' &&
+          /\/(?:grade|grading(?:-json)?)$/.test(def.path),
       })),
     ];
 

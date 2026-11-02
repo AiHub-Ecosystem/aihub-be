@@ -13,7 +13,7 @@ import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { isGradingScope } from '@/modules/identity/domain/api-key';
+import { isAiServiceScope } from '@/modules/identity/domain/api-key';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
@@ -51,7 +51,7 @@ export class ApiKeyUserIdentityGuard implements CanActivate {
       this.configuration,
       {
         forceFresh:
-          requiredScope !== undefined && isGradingScope(requiredScope),
+          requiredScope !== undefined && isAiServiceScope(requiredScope),
       },
     );
     if (

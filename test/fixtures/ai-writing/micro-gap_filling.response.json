@@ -1,0 +1,118 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793582948_b0db74",
+      "type": "gap_filling",
+      "ai_grading": "false",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Chia động từ đúng theo chủ ngữ (số ít/số nhiều) để hoàn thành câu; điền vào chỗ trống _______.",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Lỗi GRA02 thường xuất phát từ việc xác định sai chủ ngữ thật trong câu (đặc biệt với cụm danh từ dài/đại từ bất định/dấu hiệu như “the number of”). Bài tập dạng gap-filling giúp bạn luyện hòa hợp chủ–động (subject–verb agreement) ngay trong ngữ cảnh câu IELTS Task 2."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "The number of endangered species _______ (increase) every year due to habitat loss.",
+        "question_image": null,
+        "explanation": "'The number of + danh từ đếm được' luôn đi với động từ số ít: 'increases'. Nhiều bạn nhầm theo danh từ 'species' nên dùng 'increase'.",
+        "correct": [
+          "increases"
+        ]
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Many communities _______ (organise) local clean-up events to reduce plastic waste.",
+        "question_image": null,
+        "explanation": "'Many' chỉ số nhiều nên dùng 'organise'. Lỗi phổ biến là thêm 'organises' như thể chủ ngữ số ít.",
+        "correct": [
+          "organise"
+        ]
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Each volunteer _______ (receive) training on safe recycling practices before joining the programme.",
+        "question_image": null,
+        "explanation": "'Each' luôn đi với động từ số ít: 'receives'. Tránh nhầm 'volunteers' ở vế sau vì 'each' mới là chủ ngữ chính.",
+        "correct": [
+          "receives"
+        ]
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Large companies, as well as smaller factories, _______ (produce) significant greenhouse-gas emissions.",
+        "question_image": null,
+        "explanation": "Cụm 'A, as well as B' giữ số của động từ theo 'A' (Large companies). Vì vậy dùng 'produce', không dùng 'produces'.",
+        "correct": [
+          "produce"
+        ]
+      },
+      {
+        "questions_no": 5,
+        "question_text": "Biodiversity protection _______ (require) long-term investment and consistent enforcement.",
+        "question_image": null,
+        "explanation": "'Protection' là danh từ không đếm được nên dùng 'requires' ở hiện tại đơn. Lỗi thường gặp là dùng 'require' theo nhầm sang phần 'investment'.",
+        "correct": [
+          "requires"
+        ]
+      },
+      {
+        "questions_no": 6,
+        "question_text": "There _______ (be) several effective strategies for preventing illegal dumping in rivers.",
+        "question_image": null,
+        "explanation": "Cấu trúc 'There are + plural noun' dùng 'are' với 'several strategies'. Lỗi phổ biến là viết 'There is' hoặc chia nhầm theo danh từ theo sau.",
+        "correct": [
+          "are"
+        ]
+      },
+      {
+        "questions_no": 7,
+        "question_text": "One of the most urgent problems _______ (be) the lack of public awareness about conservation.",
+        "question_image": null,
+        "explanation": "'One of + plural noun' → động từ số ít: 'is'. Nhiều bạn nhầm 'problems' nên dùng 'are'.",
+        "correct": [
+          "is"
+        ]
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Everyone in the community _______ (play) a role in reducing air pollution through responsible daily choices.",
+        "question_image": null,
+        "explanation": "'Everyone' luôn dùng động từ số ít: 'plays'. Tránh lỗi dùng 'play'.",
+        "correct": [
+          "plays"
+        ]
+      },
+      {
+        "questions_no": 9,
+        "question_text": "The majority of citizens _______ (support) stricter regulations on industrial emissions.",
+        "question_image": null,
+        "explanation": "Trong IELTS học thuật, 'The majority of + plural noun' thường đi với động từ số ít khi xem 'majority' là hạt nhân: 'supports'. Tránh nhầm theo 'citizens' để dùng 'support'.",
+        "correct": [
+          "supports"
+        ]
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Neither of the new projects _______ (address) the root causes of soil contamination effectively enough.",
+        "question_image": null,
+        "explanation": "'Neither' luôn dùng động từ số ít: 'addresses'. Lỗi phổ biến là dùng 'address' như thể chủ ngữ số nhiều.",
+        "correct": [
+          "addresses"
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 7595,
+    "output_tokens": 1332,
+    "total_tokens": 8927,
+    "cost": 0.003184
+  },
+  "metrics": {
+    "ai_processing_ms": 8363
+  }
+}

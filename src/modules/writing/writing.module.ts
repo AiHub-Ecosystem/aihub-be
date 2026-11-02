@@ -31,6 +31,7 @@ import { WritingChartUploadSweep } from './application/writing-chart-upload.swee
 import { PostgresWritingChartUploadRepository } from './infrastructure/postgres-writing-chart-upload.repository';
 import { S3WritingChartUploadStorage } from './infrastructure/s3-writing-chart-upload.storage';
 import { WritingChartUploadController } from './presentation/writing-chart-upload.controller';
+import { WritingExerciseController } from './presentation/writing-exercise.controller';
 import { WritingGradingController } from './presentation/writing-grading.controller';
 import { WritingV2GradingController } from './presentation/writing-v2-grading.controller';
 
@@ -48,6 +49,7 @@ import { WritingV2GradingController } from './presentation/writing-v2-grading.co
   controllers: [
     WritingGradingController,
     WritingV2GradingController,
+    WritingExerciseController,
     WritingChartUploadController,
   ],
   providers: [
