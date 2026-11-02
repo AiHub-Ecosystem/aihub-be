@@ -44,7 +44,7 @@ const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
 const INHERITED_EXPIRY = new Date('2027-01-01T00:00:00.000Z');
 const RETIRED_HASH = 'a'.repeat(64);
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function rotated() {
   return {

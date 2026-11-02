@@ -37,7 +37,7 @@ const REQUEST_ID = 'req_01J00000000000000000000000';
 const KEYS_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys`;
 const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function secretBody(response: { json(): unknown }) {
   return Value.Parse(OrganizationApiKeySecretResponseSchema, response.json());

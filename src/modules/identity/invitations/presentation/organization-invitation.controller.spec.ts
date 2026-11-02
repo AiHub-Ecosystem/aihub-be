@@ -58,7 +58,7 @@ const INVITE_URL = `/v1/organizations/${ORGANIZATION_ID}/invitations`;
 const INVITATION_ID = 'oiv_01J00000000000000000000000';
 const REVOKE_URL = `${INVITE_URL}/${INVITATION_ID}`;
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 type CallerOverride = {
   readonly role?: OrganizationMembershipRole;
   readonly membershipExists?: boolean;

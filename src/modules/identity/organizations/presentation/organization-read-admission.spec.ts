@@ -44,7 +44,7 @@ const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 const ROUTES: Readonly<Record<OrganizationReadSurface, string>> = {
   membership_list: `/v1/organizations/${ORGANIZATION_ID}/members`,

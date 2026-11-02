@@ -41,7 +41,7 @@ const REVOKE_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys/${KEY_ID}`;
 const CREATED_AT = new Date('2026-09-20T10:00:00.000Z');
 const KEY_HASH = 'b'.repeat(64);
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function revoked() {
   return {

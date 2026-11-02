@@ -39,7 +39,7 @@ const IDENTITY_CONFIG_URL = `/v1/organizations/${ORGANIZATION_ID}/identity-confi
 const purgeJwks = jest.fn(async (_organizationId: string) => undefined);
 const validateRemote = jest.fn(async (_url: string) => undefined);
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function identityConfigBody(response: { json(): unknown }) {
   return Value.Parse(

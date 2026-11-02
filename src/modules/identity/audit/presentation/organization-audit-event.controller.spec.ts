@@ -34,7 +34,7 @@ const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const AUDIT_URL = `/v1/organizations/${ORGANIZATION_ID}/audit-events`;
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function auditBody(response: { json(): unknown }) {
   return Value.Parse(

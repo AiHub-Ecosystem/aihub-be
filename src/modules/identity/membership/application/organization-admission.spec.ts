@@ -26,7 +26,7 @@ function codeOf(decision: OrganizationAdmissionDecision): string | undefined {
   return decision.admitted ? undefined : decision.refusal.code;
 }
 
-type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
