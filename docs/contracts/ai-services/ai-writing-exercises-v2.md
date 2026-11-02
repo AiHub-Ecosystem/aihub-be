@@ -9,7 +9,7 @@ Captures do not verify provider timeout behavior or non-400 failures. The team
 did not specify whether prompts or outputs appear in Uvicorn logs or how onward
 model providers retain data.
 
-Owner: AI Writing service. Consumer: AIHUB Public API `/v2` (ADR-0145).
+Owner: AI Writing service. Consumer: AIHUB Public API `/v2` (ADR-0146).
 
 Fixtures: `test/fixtures/ai-writing/micro-*.{request,response,capture}.json` and
 `longwriting.{request,response,capture}.json`. Grade fixtures are

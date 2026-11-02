@@ -16,7 +16,7 @@ function isCriterionAllowedForTask(
 
 export function isValidWritingExerciseError(
   writingTask: 1 | 2,
-  input: Pick<WritingExerciseError, 'criterion' | 'error_code' | 'image_url'>,
+  input: Pick<WritingExerciseError, 'criterion' | 'image_url'>,
 ): boolean {
   return (
     isCriterionAllowedForTask(writingTask, input.criterion) &&

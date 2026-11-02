@@ -1,4 +1,4 @@
-# ADR-0145: Serve AI Writing micro-exercises through Public API v2
+# ADR-0146: Serve AI Writing micro-exercises through Public API v2
 
 - Status: Proposed — request/response captures and route-level error/timeout handling are recorded. Provider timeout behavior, prompt/output logging, and onward model-provider retention remain unverified.
 - Date: 2026-11-02
@@ -18,6 +18,7 @@ Issue #1454 adds create-micro-exercise, create-longwriting-exercise, and grading
 - Treat micro grading's integer score from 1 to 10 as a practice score, not an IELTS band score or verified result tied to a particular generated exercise. The provider returns no exercise identifier and is stateless. Client-graded exercise types include `correct` in the response; the customer application is responsible for keeping answer keys from learners until appropriate.
 - AIHUB owns the public response schema and models exercise variants as a union discriminated by `meta.type`. Preserve exercise content and answer keys, and omit provider `usage`, `cost`, `metrics`, and `message` from the customer response, consistent with ADR-0143.
 - Allow API keys with `writing.exercise` to use the existing authenticated Writing chart upload and completion flow for exercise images. Keep ADR-0100's image validation, public delivery, retention, and upload limits; AIHUB does not fetch arbitrary image URLs.
+- Persisted-value compatibility (ADR-0128): `writing.exercise` is a new value in the API-key scope array. The reader stores scopes as a plain string array, so a previous release (N-1) does not reject a key that carries it. N-1 does not know the scope, so it answers `403` for an exercise-only key on the chart-upload routes and has no exercise routes. This release teaches the reader and allows issuing the scope together, which departs from ADR-0128's two-release rule and needs the owner's acceptance of this ADR. Until then, deploy as a coordinated cutover and do not issue exercise-only keys while N-1 still receives traffic.
 - Limit each public request body to 256 KiB and enforce provider field limits locally: topic 200 characters, prompt 2,000, quote/explanation 1,000, image URL 2,048, and user answer 1,500 for short writing or 4,000 for long writing. Use AIHUB timeouts of 45 seconds for micro creation, 35 seconds for long-writing creation, and 20 seconds for micro grading. Set nginx timeouts 10 seconds higher: 55, 45, and 30 seconds respectively.
 
 ## Evidence required before release

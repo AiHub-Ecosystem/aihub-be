@@ -24,15 +24,11 @@ describe('Writing exercise request policy', () => {
     [2, 'grammatical_range_accuracy', 'CC01', true],
     [2, 'grammatical_range_accuracy', 'provider-added-code', true],
   ] as const)(
-    'validates task, criterion and canonical code %s/%s/%s',
+    'checks the criterion against the task and treats the error code as opaque %s/%s/%s',
     (task, criterion, errorCode, expected) => {
-      expect(
-        isValidWritingExerciseError(task, {
-          ...error,
-          criterion,
-          error_code: errorCode,
-        }),
-      ).toBe(expected);
+      const input = { ...error, criterion, error_code: errorCode };
+
+      expect(isValidWritingExerciseError(task, input)).toBe(expected);
     },
   );
 
