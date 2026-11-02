@@ -100,6 +100,15 @@ out.
   OpenAPI document marks each route with `x-required-scope`, as it does for the
   grading routes.
 
+## [1.6.0] - 2026-11-02
+
+### Added
+
+- `GET /v1/organizations/{organization_id}/audit-events` now returns
+  `actor_source` on each event: `authenticated_user`,
+  `self_declared_operator`, or `legacy_unknown` for records written before
+  actor provenance was recorded.
+
 ## [1.4.0] - 2026-10-30
 
 ### Changed
