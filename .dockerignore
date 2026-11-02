@@ -18,6 +18,7 @@ scripts/cli/*
 !scripts/cli/cli.mjs
 !scripts/cli/cli-options.cjs
 !scripts/cli/load-cli-runner.cjs
+!scripts/cli/operator-safety.cjs
 !scripts/cli/migrate.mjs
 !scripts/generate/
 scripts/generate/*

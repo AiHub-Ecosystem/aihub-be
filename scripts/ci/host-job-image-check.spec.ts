@@ -11,6 +11,7 @@ describe('host scheduled job image paths', () => {
     expect(collectHostJobImagePaths(process.cwd())).toEqual([
       '/app/scripts/runtime/runtime-entrypoint.mjs',
       '/app/scripts/cli/cli.mjs',
+      '/app/scripts/cli/operator-safety.cjs',
     ]);
   });
 

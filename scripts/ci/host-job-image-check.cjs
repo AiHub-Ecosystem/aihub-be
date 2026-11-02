@@ -64,6 +64,7 @@ function collectHostJobImagePaths(repositoryRoot) {
   const imagePaths = [
     requiredConstant(wrapper, 'CONTAINER_RUNTIME_ENTRYPOINT'),
     requiredConstant(wrapper, 'CONTAINER_CLI'),
+    'scripts/cli/operator-safety.cjs',
   ];
   for (const imagePath of imagePaths) {
     if (imagePath.startsWith('/') || imagePath.split('/').includes('..')) {
