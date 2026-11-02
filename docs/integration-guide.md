@@ -5,22 +5,30 @@ OpenAPI document cannot express: who holds which credential, how to identify
 your end users (plainly or with signed assertions), and how to handle retries,
 timeouts, and errors.
 
-The endpoint reference lives at `GET /docs`, generated from the same schemas
-the server validates against. This guide is the surrounding context.
+The complete interactive API reference is available at `/docs/reference` in the
+Customer Web after you sign in with an active AIHUB User Account. You can
+download the latest OpenAPI document and each supported major there. The
+Customer Web keeps the User Access JWT on its server; Organization Membership
+is not required. Direct API-host requests to `GET /docs`, `GET /openapi.json`,
+and `GET /openapi/vN.json` require that JWT in the Bearer authorization header.
+The Customer Web integration guide and its curated product and endpoint pages
+remain public.
 
-The current API major is `/v1`. Choose a contract in the `/docs` version
-selector, and read the [Public API changelog](../CHANGELOG.md) for customer-visible
+The latest Public API Major is `/v2`. The API Reference selector lists every
+supported major; some operations remain available on `/v1` while others use
+`/v2`. Read the [Public API changelog](../CHANGELOG.md) for customer-visible
 changes by contract version.
 
 ## Compatibility promise
 
-The URI major version applies to the whole Public API Contract. All current
-customer API routes use `/v1`. Within a major, adding a public route or response
-field is additive when existing fields keep their meaning and type. Adding an
-optional request field is compatible when existing callers can omit it. AIHUB
-documents a new optional request field for client use only after the deployed
-release and its normal rollback target both accept it. Request bodies continue
-to reject unknown fields.
+The URI major version applies to the whole Public API Contract. AIHUB currently
+supports `/v1` and `/v2`; each operation appears in the contracts where it is
+available. Within a major, adding a public route or response field is additive
+when existing fields keep their meaning and type. Adding an optional request
+field is compatible when existing callers can omit it. AIHUB documents a new
+optional request field for client use only after the deployed release and its
+normal rollback target both accept it. Request bodies continue to reject
+unknown fields.
 
 Clients must ignore response fields they do not recognize and must not reject a
 response only because it contains an extra field.
@@ -367,7 +375,7 @@ The request must include an `issuer` and exactly one key source: `jwks_url` or
 `public_keys_jwks`. A remote URL must use publicly reachable HTTPS. The
 supported algorithms are `RS256` and `ES256`; the default maximum assertion
 lifetime is 300 seconds and can be configured from 1 to 3,600 seconds. See
-`GET /docs` for the complete request schema and validation rules. Never send a
+`/docs/reference` for the complete request schema and validation rules. Never send a
 private key. This setting is saved once for the Organization; do not send
 issuer or JWKS values as grading headers.
 
@@ -666,7 +674,8 @@ enabled for your deployment. The request uses the same Organization Identity
 Configuration as production: send a Declared User ID when no active
 configuration exists, or a Signed User Assertion when it does. Customer
 Organization keys cannot call `POST /v1/sandbox/assertions`; that route remains
-restricted to the dedicated demo Organization. Use section 4 and `GET /docs`
+restricted to the dedicated demo Organization. Use section 4 and
+`/docs/reference`
 for the Writing request and response schemas.
 
 Sandbox dispatches are limited per Customer Organization per UTC calendar month
@@ -880,7 +889,8 @@ missing image makes the result meaningless. Send a URL for your own chart.
 
 The grading response carries `overall_band`, exactly four `criteria` entries in
 a fixed order, `summary`, `suggestions`, `next_steps`, and `annotations` that
-quote the essay. Bands are whole or half numbers between 0 and 9. See `/docs`
+quote the essay. Bands are whole or half numbers between 0 and 9. See
+`/docs/reference`
 for the full schema.
 
 ### Speaking grading
@@ -929,7 +939,7 @@ Send the learner identity only through `X-User-Identity`; do not send a
 `user_id` form field. AIHUB derives the downstream identity from the End-User ID:
 the verified `sub` claim, or your Declared User ID when your organization has no
 active identity configuration. The response uses the common `{ "data", "meta" }` envelope; see
-`/docs` for the complete Speaking response schema.
+`/docs/reference` for the complete Speaking response schema.
 
 `POST /v1/ielts/speaking/grading-json` is the URL fallback. It accepts the same
 Speaking metadata but replaces `audio` with `audio_url`. The URL must be HTTPS

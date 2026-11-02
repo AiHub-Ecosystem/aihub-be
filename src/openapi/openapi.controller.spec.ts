@@ -8,17 +8,36 @@ import {
   type PublicApiMajorDef,
   latestPublicApiMajor,
 } from '@/catalog/public-api-majors';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { USER_ACCESS_TOKEN_VERIFIER } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { registerRequestHooks } from '@/register-request-hooks';
 import { buildOpenApiDocument } from './build-openapi-document';
-import { docsPage, versionedDocumentMajor } from './openapi.controller';
-import { OpenApiModule } from './openapi.module';
+import {
+  OpenApiController,
+  docsPage,
+  versionedDocumentMajor,
+} from './openapi.controller';
 
 describe('OpenApiController', () => {
   let app: NestFastifyApplication;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [OpenApiModule],
+      controllers: [OpenApiController],
+      providers: [
+        UserAccessJwtGuard,
+        {
+          provide: USER_ACCESS_TOKEN_VERIFIER,
+          useValue: {
+            verify: async () => ({ userId: 'active-user', jti: 'test-token' }),
+          },
+        },
+        {
+          provide: USER_ACCOUNT_REPOSITORY,
+          useValue: { findUserAccountStatus: async () => 'active' },
+        },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -33,11 +52,17 @@ describe('OpenApiController', () => {
     await app.close();
   });
 
-  it('serves /openapi.json unauthenticated, matching the running catalog', async () => {
-    const response = await app.inject({ method: 'GET', url: '/openapi.json' });
+  it('serves /openapi.json to an active account, matching the running catalog', async () => {
+    const headers = { authorization: 'Bearer test.payload.signature' };
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openapi.json',
+      headers,
+    });
     const versionedResponse = await app.inject({
       method: 'GET',
       url: `/openapi/v${latestPublicApiMajor().major}.json`,
+      headers,
     });
 
     expect(response.statusCode).toBe(200);
@@ -46,7 +71,11 @@ describe('OpenApiController', () => {
     });
     expect(versionedResponse.statusCode).toBe(200);
     expect(versionedResponse.json()).toEqual(response.json());
-    const v1 = await app.inject({ method: 'GET', url: '/openapi/v1.json' });
+    const v1 = await app.inject({
+      method: 'GET',
+      url: '/openapi/v1.json',
+      headers,
+    });
     expect(v1.statusCode).toBe(200);
     expect(v1.json()).toMatchObject({ info: { version: '1.7.0' } });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
@@ -65,10 +94,16 @@ describe('OpenApiController', () => {
   });
 
   it('serves /docs as HTML that points Scalar at the same-origin spec endpoint', async () => {
-    const response = await app.inject({ method: 'GET', url: '/docs' });
+    const headers = { authorization: 'Bearer test.payload.signature' };
+    const response = await app.inject({
+      method: 'GET',
+      url: '/docs',
+      headers,
+    });
     const versionedResponse = await app.inject({
       method: 'GET',
       url: '/docs?version=v1',
+      headers,
     });
 
     expect(response.statusCode).toBe(200);
@@ -99,7 +134,11 @@ describe('OpenApiController', () => {
   it.each(['/openapi/v3.json', '/openapi/v1', '/openapi/latest.json'])(
     'answers %s, which names no supported major, with 404',
     async (url) => {
-      const response = await app.inject({ method: 'GET', url });
+      const response = await app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: 'Bearer test.payload.signature' },
+      });
 
       expect(response.statusCode).toBe(404);
     },

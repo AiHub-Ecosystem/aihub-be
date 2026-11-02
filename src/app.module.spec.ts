@@ -10,10 +10,16 @@ import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from './app.module';
 import { OPERATION_CATALOG } from './catalog/operation-catalog';
+import {
+  latestPublicApiMajor,
+  supportedPublicApiMajors,
+} from './catalog/public-api-majors';
 import { PUBLIC_ROUTES } from './catalog/public-routes';
 import { AppError } from './common/errors/app-error';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { generateRequestId } from './common/request-context/request-id';
+import { USER_ACCOUNT_REPOSITORY } from './modules/auth/accounts/application/user-account.port';
+import { USER_ACCESS_TOKEN_VERIFIER } from './modules/auth/web-sessions/application/user-access-token.port';
 import { RUNTIME_CONNECTION_CONFIGURATION } from './modules/secrets/application/runtime-connection-configuration.port';
 import { buildOpenApiDocument } from './openapi/build-openapi-document';
 
@@ -96,6 +102,11 @@ function missingPublicRoutes(
 describe('AppModule wiring', () => {
   let app: NestFastifyApplication;
   const registeredRoutes: RegisteredRoute[] = [];
+  const docsRoutes = [
+    '/docs',
+    '/openapi.json',
+    ...supportedPublicApiMajors().map(({ major }) => `/openapi/v${major}.json`),
+  ];
 
   beforeAll(async () => {
     const moduleBuilder = Test.createTestingModule({
@@ -110,6 +121,21 @@ describe('AppModule wiring', () => {
       redisUrl: undefined,
       sandboxAssertionPrivateKey: undefined,
       sandboxAssertionKeyId: undefined,
+    });
+    moduleBuilder.overrideProvider(USER_ACCESS_TOKEN_VERIFIER).useValue({
+      verify: jest.fn(async (token: string) => {
+        const userId = new Map([
+          ['active.payload.signature', 'active-user'],
+          ['disabled.payload.signature', 'disabled-user'],
+        ]).get(token);
+        if (!userId) throw new Error('invalid token');
+        return { userId, jti: 'test-token' };
+      }),
+    });
+    moduleBuilder.overrideProvider(USER_ACCOUNT_REPOSITORY).useValue({
+      findUserAccountStatus: jest.fn(async (userId: string) =>
+        userId === 'active-user' ? 'active' : 'disabled',
+      ),
     });
     const moduleRef = await moduleBuilder.compile();
 
@@ -158,12 +184,90 @@ describe('AppModule wiring', () => {
     });
   });
 
-  it('serves the docs page and raw spec unauthenticated through the real app wiring', async () => {
-    const spec = await app.inject({ method: 'GET', url: '/openapi.json' });
-    const docs = await app.inject({ method: 'GET', url: '/docs' });
+  it.each(docsRoutes)(
+    'denies unauthenticated, invalid, expired, and disabled-account requests to %s',
+    async (url) => {
+      for (const authorization of [
+        undefined,
+        'Bearer malformed',
+        'Bearer invalid.payload.signature',
+        'Bearer expired.payload.signature',
+        'Bearer disabled.payload.signature',
+      ]) {
+        const response = await app.inject({
+          method: 'GET',
+          url,
+          headers: authorization ? { authorization } : {},
+        });
 
-    expect(spec.statusCode).toBe(200);
-    expect(docs.statusCode).toBe(200);
+        expect(response.statusCode).toBe(401);
+        expect(response.headers['www-authenticate']).toBe('Bearer');
+        expect(response.payload).not.toContain('active.payload.signature');
+      }
+    },
+  );
+
+  it('does not accept access tokens from cookies or query parameters', async () => {
+    const cookie = await app.inject({
+      method: 'GET',
+      url: '/openapi.json',
+      headers: { cookie: 'access_token=active.payload.signature' },
+    });
+    const query = await app.inject({
+      method: 'GET',
+      url: '/openapi.json?access_token=active.payload.signature',
+    });
+
+    expect(cookie.statusCode).toBe(401);
+    expect(query.statusCode).toBe(401);
+  });
+
+  it('serves /docs HTML to an active account with a Bearer token', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/docs',
+      headers: { authorization: 'Bearer active.payload.signature' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.payload).toContain(
+      `data-url="/openapi/v${latestPublicApiMajor().major}.json"`,
+    );
+  });
+
+  it.each([
+    '/openapi.json',
+    ...supportedPublicApiMajors().map(({ major }) => `/openapi/v${major}.json`),
+  ])('serves %s to an active account with a Bearer token', async (url) => {
+    const response = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: 'Bearer active.payload.signature' },
+    });
+
+    const expectedVersion =
+      url === '/openapi.json'
+        ? latestPublicApiMajor().contractVersion
+        : supportedPublicApiMajors().find(({ major }) =>
+            url.endsWith(`/v${major}.json`),
+          )?.contractVersion;
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      info: { version: expectedVersion },
+    });
+  });
+
+  it('does not serve an unsupported version to an active account', async () => {
+    const unsupportedMajor =
+      Math.max(...supportedPublicApiMajors().map(({ major }) => major)) + 1;
+    const response = await app.inject({
+      method: 'GET',
+      url: `/openapi/v${unsupportedMajor}.json`,
+      headers: { authorization: 'Bearer active.payload.signature' },
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it('does not double the version prefix onto any declared public path', () => {

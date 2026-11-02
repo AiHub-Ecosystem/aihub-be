@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Param,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { Type } from '@sinclair/typebox';
 
@@ -15,6 +16,7 @@ import {
   supportedPublicApiMajors,
 } from '@/catalog/public-api-majors';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 const VERSIONED_DOCUMENT = /^v([1-9][0-9]*)\.json$/u;
@@ -85,13 +87,8 @@ ${options}
 const DOCS_CONTENT_SECURITY_POLICY =
   "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com";
 
-/**
- * No `@UseGuards` here, deliberately: this is public reference material, not
- * a Writing operation, and a prospective customer generating a client has no
- * API key yet. Every route in this app is authenticated per-controller (see
- * `src/modules/writing/presentation/`), never through a global guard, so
- * omitting one here is enough to keep this open.
- */
+/** Complete contracts are available to active AIHUB User Accounts via Bearer token. */
+@UseGuards(UserAccessJwtGuard)
 @Controller()
 export class OpenApiController {
   @Get('openapi.json')
