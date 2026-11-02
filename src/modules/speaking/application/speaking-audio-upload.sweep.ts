@@ -1,5 +1,5 @@
-// ponytail: nested batch loop exceeds depth ceiling; refactor when sweep is touched.
 import { SPEAKING_AUDIO_ORPHAN_GRACE_MS } from '@/modules/speaking/domain/speaking-audio-asset';
+import type { SpeakingAudioUploadIntent } from '@/modules/speaking/domain/speaking-audio-asset';
 
 import type {
   SpeakingAudioAssetStoragePort,
@@ -28,6 +28,24 @@ export class SpeakingAudioUploadSweep {
       'deleteObject'
     >,
   ) {}
+
+  private async deleteCandidate(
+    intent: SpeakingAudioUploadIntent,
+    expiredBefore: Date,
+  ): Promise<boolean> {
+    try {
+      await this.storage.deleteObject({
+        environment: intent.environment,
+        objectKey: intent.objectKey,
+      });
+      return await this.repository.removeCleanupCandidate({
+        intent,
+        expiredBefore,
+      });
+    } catch {
+      return false;
+    }
+  }
 
   async run(input: {
     readonly dryRun: boolean;
@@ -58,22 +76,9 @@ export class SpeakingAudioUploadSweep {
 
       if (!input.dryRun) {
         for (const intent of candidates) {
-          try {
-            await this.storage.deleteObject({
-              environment: intent.environment,
-              objectKey: intent.objectKey,
-            });
-            if (
-              await this.repository.removeCleanupCandidate({
-                intent,
-                expiredBefore,
-              })
-            ) {
-              deleted += 1;
-            } else {
-              failed += 1;
-            }
-          } catch {
+          if (await this.deleteCandidate(intent, expiredBefore)) {
+            deleted += 1;
+          } else {
             failed += 1;
           }
         }
