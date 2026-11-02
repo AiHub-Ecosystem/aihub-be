@@ -220,6 +220,49 @@ describe('QuotaReconciliationService', () => {
     ]);
   });
 
+  it('previews the affected counters and drift without overwriting Redis', async () => {
+    const source = new FakeSnapshotPort([
+      {
+        organizationId: 'org_alpha',
+        monthlyRequestQuota: 10,
+        billableRequestCount: 4,
+      },
+    ]);
+    const counter = new FakeCounter();
+    const events: QuotaReconciliationEvent[] = [];
+    const service = new QuotaReconciliationService(source, counter, now);
+
+    await service.reconcile('2026-09', (event) => events.push(event), {
+      dryRun: true,
+    });
+
+    expect(counter.writes).toEqual([]);
+    expect(events).toEqual([
+      {
+        type: 'preview',
+        result: {
+          organizationId: 'org_alpha',
+          month: '2026-09',
+          billableCount: 4,
+          quota: 10,
+          overQuota: false,
+          excess: 0,
+        },
+      },
+      {
+        type: 'preview_summary',
+        month: '2026-09',
+        summary: {
+          reconciled: 1,
+          overQuota: 0,
+          driftedOrganizations: 1,
+          driftRequests: 4,
+          failed: 0,
+        },
+      },
+    ]);
+  });
+
   it('reruns idempotently against persistent counter state', async () => {
     const source = new FakeSnapshotPort([
       {

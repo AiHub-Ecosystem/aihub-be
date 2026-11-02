@@ -126,4 +126,20 @@ export class PostgresWritingChartRevocationAuditRepository
     );
     return rows.length;
   }
+
+  async countExpired(cutoff: Date): Promise<number> {
+    const rows = await this.client.$queryRawUnsafe<
+      readonly { count: string }[]
+    >(
+      `SELECT count(*)::text AS count
+       FROM writing_chart_revocation_audits
+       WHERE occurred_at < $1`,
+      cutoff,
+    );
+    const count = Number(rows[0]?.count);
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error('writing chart audit retention count is invalid');
+    }
+    return count;
+  }
 }

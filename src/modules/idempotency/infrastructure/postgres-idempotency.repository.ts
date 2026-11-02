@@ -142,7 +142,7 @@ const DELETE_SQL = `
 
 export const IDEMPOTENCY_RETENTION_CLEANUP_SQL = `
   DELETE FROM idempotency_records
-  WHERE expires_at <= now()
+  WHERE expires_at <= COALESCE($1::timestamptz, now())
   RETURNING request_id
 `;
 
@@ -342,8 +342,10 @@ export class PostgresIdempotencyRepository
     requireMutationResult(rows, 'Idempotency record was not deleted');
   }
 
-  async cleanupExpired(): Promise<number> {
-    const rows = await this.query(IDEMPOTENCY_RETENTION_CLEANUP_SQL, []);
+  async cleanupExpired(cutoff?: Date): Promise<number> {
+    const rows = await this.query(IDEMPOTENCY_RETENTION_CLEANUP_SQL, [
+      cutoff ?? null,
+    ]);
     return rows.length;
   }
 }

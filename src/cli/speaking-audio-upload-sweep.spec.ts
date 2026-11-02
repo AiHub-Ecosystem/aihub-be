@@ -156,6 +156,7 @@ describe('Speaking Audio upload cleanup command', () => {
         deleted: 1,
         failed: 1,
         dryRun: false,
+        cutoff_source: 'process',
       }),
     ]);
     expect(output.join('')).not.toContain(expired.objectKey);

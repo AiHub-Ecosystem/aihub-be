@@ -4,6 +4,16 @@ import {
   environmentOption,
   quotaOption,
 } from './cli-options.cjs';
+import {
+  CONTROL_PLANE_COMMANDS,
+  MUTATING_COMMANDS,
+  classifyDatabase,
+  effectiveMaintenanceTime,
+  isMutatingCommand,
+  previewOperatorMutation,
+  requireControlPlaneDatabase,
+  requireTargetConfirmation,
+} from './operator-safety.cjs';
 
 function options(
   entries: Readonly<Record<string, string>> = {},
@@ -95,5 +105,119 @@ describe('environmentOption', () => {
     expect(() => environmentOption(options({ envs: value }), 'envs')).toThrow(
       CliUsageError,
     );
+  });
+});
+
+describe('operator CLI safety', () => {
+  it('classifies deployments from the database name', () => {
+    expect(classifyDatabase('aihub')).toBe('production');
+    expect(classifyDatabase('aihub_sandbox')).toBe('sandbox');
+    expect(classifyDatabase('aihub_db_lane')).toBe('test');
+    expect(classifyDatabase('unexpected')).toBe('unknown');
+  });
+
+  it('requires an exact confirmation for production and rejects a mismatch', () => {
+    expect(() => requireTargetConfirmation('production', undefined)).toThrow(
+      'production writes require --target production',
+    );
+    expect(() => requireTargetConfirmation('production', 'sandbox')).toThrow(
+      'database target is production, not sandbox',
+    );
+    expect(() =>
+      requireTargetConfirmation('production', 'production'),
+    ).not.toThrow();
+    expect(() => requireTargetConfirmation('test', 'production')).toThrow(
+      'database target is test, not production',
+    );
+  });
+
+  it('refuses control-plane writes against Sandbox and unknown databases', () => {
+    expect(() => requireControlPlaneDatabase('sandbox')).toThrow(
+      'control-plane commands require the Production control-plane database',
+    );
+    expect(() => requireControlPlaneDatabase('unknown')).toThrow(
+      'control-plane commands require the Production control-plane database',
+    );
+    expect(() => requireControlPlaneDatabase('production')).not.toThrow();
+    expect(() => requireControlPlaneDatabase('test')).not.toThrow();
+  });
+
+  it('uses the earlier clock for age-based deletion', () => {
+    const processNow = new Date('2026-12-01T00:00:00.000Z');
+    const databaseNow = new Date('2026-11-01T00:00:00.000Z');
+
+    expect(effectiveMaintenanceTime(processNow, databaseNow)).toEqual({
+      now: databaseNow,
+      source: 'database',
+    });
+  });
+
+  it('previews command intent without exposing credential values', () => {
+    expect(
+      previewOperatorMutation(
+        'key:create',
+        new Map([
+          ['org', 'org_123'],
+          ['name', 'preview key'],
+          ['actor', 'ops-alice'],
+          ['scopes', 'writing.grade'],
+        ]),
+      ),
+    ).toEqual({
+      command: 'key:create',
+      action: 'create an API key',
+      target: 'org_123',
+    });
+    expect(
+      previewOperatorMutation(
+        'writing:chart-revoke',
+        new Map([
+          [
+            'url',
+            'https://operator:secret@s3.wispace.app/chart.png?token=secret#fragment',
+          ],
+        ]),
+      ),
+    ).toEqual({
+      command: 'writing:chart-revoke',
+      action: 'revoke a published writing chart',
+      target: 'https://s3.wispace.app/chart.png',
+    });
+    expect(() => previewOperatorMutation('key:create', new Map())).toThrow(
+      'operator preview requires --org',
+    );
+  });
+
+  it('keeps the complete current mutation inventory at the safety boundary', () => {
+    expect([...MUTATING_COMMANDS].sort()).toEqual(
+      [
+        'avatar:sweep',
+        'billing:adjust',
+        'billing:statement',
+        'idempotency:cleanup',
+        'identity:set',
+        'key:create',
+        'key:revoke',
+        'notifications:sweep',
+        'org:attach-owner',
+        'org:create',
+        'org:grant-entitlement',
+        'org:restore',
+        'org:suspend',
+        'quota:reconcile',
+        'registrations:sweep',
+        'speaking:audio-upload-sweep',
+        'usage:prune',
+        'writing:chart-revoke',
+        'writing:chart-upload-sweep',
+      ].sort(),
+    );
+    expect(
+      isMutatingCommand('billing:statement', new Map([['close', 'false']])),
+    ).toBe(false);
+    expect(
+      isMutatingCommand('billing:statement', new Map([['close', 'TRUE']])),
+    ).toBe(true);
+    expect([...CONTROL_PLANE_COMMANDS]).toContain('key:revoke');
   });
 });

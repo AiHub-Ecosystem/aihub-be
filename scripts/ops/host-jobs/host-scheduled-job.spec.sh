@@ -270,7 +270,22 @@ assert_contains "$home_dir/.aihub-host-job-metrics/quota-attention.prom" \
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
   --month 2026-09 >"$test_root/quota-month.out" 2>&1
-assert_contains "$FAKE_DOCKER_CALLS" 'quota:reconcile --month 2026-09'
+assert_contains "$FAKE_DOCKER_CALLS" 'quota:reconcile --target production --month 2026-09'
+assert_contains "$FAKE_DOCKER_CALLS" 'quota:reconcile --target sandbox --month 2026-09'
+
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" quota \
+  --month 2026-09 --dry-run true >"$test_root/quota-dry-run.out" 2>&1
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'quota:reconcile --target production --month 2026-09 --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'quota:reconcile --target sandbox --month 2026-09 --dry-run true'
+
+: >"$FAKE_DOCKER_CALLS"
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" prune \
+  --dry-run true >"$test_root/prune-dry-run.out" 2>&1
+assert_contains "$FAKE_DOCKER_CALLS" 'usage:prune --target production --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" 'usage:prune --target sandbox --dry-run true'
 
 : >"$FAKE_DOCKER_CALLS"
 : >"$AIHUB_HOST_JOB_LOG"
@@ -346,15 +361,22 @@ done
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" avatar-sweep \
   --dry-run true >"$test_root/avatar-dry-run.out" 2>&1
-assert_contains "$FAKE_DOCKER_CALLS" 'avatar:sweep --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" 'avatar:sweep --target production --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" 'avatar:sweep --target sandbox --dry-run true'
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" chart-upload-sweep \
   --dry-run true >"$test_root/chart-upload-dry-run.out" 2>&1
-assert_contains "$FAKE_DOCKER_CALLS" 'writing:chart-upload-sweep --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'writing:chart-upload-sweep --target production --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'writing:chart-upload-sweep --target sandbox --dry-run true'
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" speaking-upload-sweep \
   --dry-run true >"$test_root/speaking-upload-dry-run.out" 2>&1
-assert_contains "$FAKE_DOCKER_CALLS" 'speaking:audio-upload-sweep --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'speaking:audio-upload-sweep --target production --dry-run true'
+assert_contains "$FAKE_DOCKER_CALLS" \
+  'speaking:audio-upload-sweep --target sandbox --dry-run true'
 
 printf 'host wrapper test passed: timeouts, same-job overlap skip, bounded stderr, continued Sandbox run, and job metrics\n'
 

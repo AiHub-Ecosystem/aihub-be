@@ -44,6 +44,12 @@ export const DISPATCH_ATTEMPT_RETENTION_BATCH_SQL = `
   RETURNING attempt.attempt_id
 `;
 
+const USAGE_RETENTION_PREVIEW_SQL = `
+  SELECT
+    (SELECT count(*)::text FROM usage_records WHERE created_at < $1) AS usage_records,
+    (SELECT count(*)::text FROM dispatch_attempts WHERE created_at < $1) AS dispatch_attempts
+`;
+
 function cursorFromRow(value: unknown): UsageRetentionCursor {
   if (!isRecord(value) || typeof value.request_id !== 'string') {
     throw new Error('usage retention row is invalid');
@@ -62,6 +68,19 @@ interface UsageRetentionRow {
 
 interface DispatchAttemptRetentionRow {
   readonly attempt_id: string;
+}
+
+interface UsageRetentionPreviewRow {
+  readonly usage_records: string;
+  readonly dispatch_attempts: string;
+}
+
+function countValue(value: string): number {
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error('usage retention count is invalid');
+  }
+  return count;
 }
 
 export class PostgresUsageRetentionRepository implements UsageRetentionPort {
@@ -96,6 +115,18 @@ export class PostgresUsageRetentionRepository implements UsageRetentionPort {
       readonly DispatchAttemptRetentionRow[]
     >(DISPATCH_ATTEMPT_RETENTION_BATCH_SQL, cutoff, batchSize);
     return rows.length;
+  }
+
+  async previewPrune(cutoff: Date) {
+    const rows = await this.client.$queryRawUnsafe<
+      readonly UsageRetentionPreviewRow[]
+    >(USAGE_RETENTION_PREVIEW_SQL, cutoff);
+    const row = rows[0];
+    if (row === undefined) throw new Error('usage retention preview is empty');
+    return {
+      usageRecords: countValue(row.usage_records),
+      dispatchAttempts: countValue(row.dispatch_attempts),
+    };
   }
 
   async close(): Promise<void> {

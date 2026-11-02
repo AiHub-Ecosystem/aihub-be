@@ -225,8 +225,10 @@ describe('PostgresIdempotencyRepository', () => {
   it('deletes expired records in one cleanup query', async () => {
     const client = new QueueClient([[{ request_id: 'req_expired' }]]);
     const repository = new PostgresIdempotencyRepository(client);
+    const cutoff = new Date('2026-10-01T00:00:00.000Z');
 
-    await expect(repository.cleanupExpired()).resolves.toBe(1);
+    await expect(repository.cleanupExpired(cutoff)).resolves.toBe(1);
     expect(client.queries).toHaveLength(1);
+    expect(client.queries[0]?.values).toEqual([cutoff]);
   });
 });

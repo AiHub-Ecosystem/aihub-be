@@ -16,8 +16,18 @@ through the same wrapper to retain the 30-minute per-deployment deadline,
 same-job lock, and result logging:
 
 ```sh
-./scripts/ops/host-jobs/host-scheduled-job.sh prune
+./scripts/ops/host-jobs/host-scheduled-job.sh prune --dry-run true
 ```
+
+The wrapper passes the matching `--target production` or `--target sandbox` to
+each CLI invocation. Review its preview before running the write-enabled job.
+For a direct Production CLI preview:
+
+```sh
+bun run cli usage:prune --target production --dry-run true
+```
+
+After review, repeat without `--dry-run true` to delete the eligible rows.
 
 The wrapper holds a nonblocking `prune` lock and the shared host-wide lock
 across Production and Sandbox. A second `prune` invocation logs
@@ -33,8 +43,10 @@ container.
 ## Retention boundary
 
 One run captures a UTC `retention_cutoff` by subtracting 13 calendar months
-from its start instant. Month-end subtraction clamps to the last valid day of
-the target month. Only rows with:
+from the earlier of the process clock and the database clock at preflight.
+Month-end subtraction clamps to the last valid day of the target month. The
+JSONL `cutoff_source` is `process` or `database` to show which clock won. Only
+rows with:
 
 ```sql
 created_at < :retention_cutoff
@@ -61,12 +73,15 @@ Before the first production run:
    WHERE created_at < :retention_cutoff;
    ```
 
-3. Run `./scripts/ops/host-jobs/host-scheduled-job.sh prune` and retain its per-deployment
-   log output before enabling the nightly schedule.
+3. Run `./scripts/ops/host-jobs/host-scheduled-job.sh prune --dry-run true`
+   and retain its per-deployment preview before enabling the nightly schedule.
 
-The command has no dry-run, confirmation flag, or backup side effect. It
-deletes at most 1,000 rows per transaction using `(created_at, request_id)` as
-the keyset order and `FOR UPDATE SKIP LOCKED` for accidental concurrent runs.
+The preview reports the cutoff and eligible counts for `usage_records`,
+`dispatch_attempts`, and Writing chart revocation audit records. It does not
+delete rows. A write-enabled run requires the exact target confirmation for
+Production. It deletes at most 1,000 rows per transaction using
+`(created_at, request_id)` as the keyset order and `FOR UPDATE SKIP LOCKED` for
+accidental concurrent runs.
 The host wrapper serializes wrapper invocations on this VPS with a local lock;
 direct CLI runs or runs from another host can still overlap. A process
 termination rolls back only the open batch; previously committed batches
@@ -77,8 +92,8 @@ remain deleted and a rerun is safe.
 Successful output is stable JSONL:
 
 ```json
-{"event":"usage_prune_started","started_at":"2026-09-18T02:30:00.000Z","cutoff":"2025-08-18T02:30:00.000Z","batch_size":1000}
-{"event":"usage_prune_completed","completed_at":"2026-09-18T02:30:04.000Z","cutoff":"2025-08-18T02:30:00.000Z","batch_size":1000,"batches":2,"deleted":1234,"status":"completed"}
+{"event":"usage_prune_started","started_at":"2026-09-18T02:30:00.000Z","cutoff":"2025-08-18T02:30:00.000Z","cutoff_source":"database","batch_size":1000}
+{"event":"usage_prune_completed","completed_at":"2026-09-18T02:30:04.000Z","cutoff":"2025-08-18T02:30:00.000Z","cutoff_source":"database","batch_size":1000,"batches":2,"deleted":1234,"status":"completed"}
 ```
 
 An operational failure emits a `usage_prune_failed` event with the cutoff,

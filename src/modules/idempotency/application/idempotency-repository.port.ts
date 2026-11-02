@@ -61,7 +61,7 @@ export interface IdempotencyRepositoryPort {
   complete(input: CompleteIdempotencyInput): Promise<void>;
   markFailed(input: IdempotencyAttemptInput): Promise<void>;
   delete(input: IdempotencyAttemptInput): Promise<void>;
-  cleanupExpired(): Promise<number>;
+  cleanupExpired(cutoff?: Date): Promise<number>;
 }
 
 export const IDEMPOTENCY_REPOSITORY = Symbol('IDEMPOTENCY_REPOSITORY');

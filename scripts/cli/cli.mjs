@@ -59,8 +59,23 @@ import {
   usageError,
 } from './cli-options.cjs';
 import { loadCliRunner } from './load-cli-runner.cjs';
+import {
+  CONTROL_PLANE_COMMANDS,
+  NATIVE_DRY_RUN_COMMANDS,
+  classifyDatabase,
+  effectiveMaintenanceTime,
+  isMutatingCommand,
+  previewOperatorMutation,
+  requireControlPlaneDatabase,
+  requireTargetConfirmation,
+} from './operator-safety.cjs';
 
-/** @typedef {ReadonlyMap<string, string>} CliOptions */
+/** @typedef {Map<string, string>} CliOptions */
+/** @typedef {'production' | 'sandbox' | 'test' | 'unknown'} OperatorDeployment */
+/** @typedef {'DATABASE_URL' | 'CONTROL_PLANE_DATABASE_URL'} DatabaseUrlKey */
+/** @typedef {{database: string; deployment: OperatorDeployment; host: string; port: number; databaseNow: Date}} OperatorDatabaseTarget */
+/** @typedef {{target: OperatorDatabaseTarget; maintenanceClock: {now: Date; source: 'process' | 'database'}; previewed: boolean}} OperatorMutationSafety */
+/** @typedef {{database: string; host: string | null; port: number | null; database_now: Date}} OperatorDatabaseRow */
 /** @typedef {import('./load-cli-runner.cjs').CliRunner} CliRunner */
 /** @template {CliRunner} T @typedef {import('./load-cli-runner.cjs').CliRunnerDescriptor<T>} CliRunnerDescriptor */
 /** @typedef {import('../../src/modules/identity/domain/api-key.ts').GeneratedApiKey} GeneratedApiKey */
@@ -69,7 +84,7 @@ import { loadCliRunner } from './load-cli-runner.cjs';
 /** @typedef {import('@prisma-client/client').PrismaClient} GeneratedPrismaClient */
 /** @typedef {{prisma: GeneratedPrismaClient; close: () => Promise<void>}} OperatorPrismaClient */
 /** @typedef {(role: 'runtime', databaseUrl: string) => OperatorPrismaClient} PrismaClientFactory */
-/** @typedef {new (prisma: GeneratedPrismaClient) => {cleanupExpired: () => Promise<number>}} IdempotencyRepositoryConstructor */
+/** @typedef {new (prisma: GeneratedPrismaClient) => {cleanupExpired: (cutoff?: Date) => Promise<number>}} IdempotencyRepositoryConstructor */
 /** @typedef {{createOperatorPrismaClient?: unknown; default?: Record<string, unknown>}} PrismaClientFactoryModule */
 /** @typedef {{PostgresIdempotencyRepository?: unknown; default?: Record<string, unknown>}} IdempotencyRepositoryModule */
 
@@ -272,7 +287,23 @@ async function runQuotaReconciliation(input) {
   }
 }
 
+/** @type {Record<DatabaseUrlKey, string | undefined>} */
+const inheritedDatabaseUrls = {
+  DATABASE_URL: process.env.DATABASE_URL,
+  CONTROL_PLANE_DATABASE_URL: process.env.CONTROL_PLANE_DATABASE_URL,
+};
+/** @type {Set<DatabaseUrlKey>} */
+const workingEnvDatabaseKeys = new Set();
 if (existsSync('.env')) {
+  const envSource = await readFile('.env', 'utf8');
+  for (const key of /** @type {DatabaseUrlKey[]} */ ([
+    'DATABASE_URL',
+    'CONTROL_PLANE_DATABASE_URL',
+  ])) {
+    if (new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`, 'm').test(envSource)) {
+      workingEnvDatabaseKeys.add(key);
+    }
+  }
   loadEnvFile('.env');
 }
 
@@ -280,6 +311,7 @@ const runtimeConnectionModule = new URL(
   '../../dist/modules/secrets/infrastructure/runtime-connection.environment.js',
   import.meta.url,
 );
+let runtimeConnectionLoaded = false;
 if (existsSync(runtimeConnectionModule)) {
   const runtimeConnection =
     /** @type {typeof import('../../src/modules/secrets/infrastructure/runtime-connection.environment.ts') & {default?: Record<string, unknown>}} */ (
@@ -292,6 +324,33 @@ if (existsSync(runtimeConnectionModule)) {
     throw new Error('runtime connection loader is unavailable');
   }
   loadRuntimeConnectionEnvironment({ env: process.env });
+  runtimeConnectionLoaded = Boolean(
+    process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE?.trim(),
+  );
+}
+
+/** @param {DatabaseUrlKey} key @returns {string} */
+function databaseConfigurationSource(key) {
+  if (key === 'DATABASE_URL' && runtimeConnectionLoaded) {
+    return 'Vault runtime snapshot (takes precedence over process environment and .env)';
+  }
+  if (inheritedDatabaseUrls[key] !== undefined) {
+    return 'process environment';
+  }
+  if (workingEnvDatabaseKeys.has(key)) {
+    return 'working-directory .env';
+  }
+  return 'unset';
+}
+
+/** @param {string} command @returns {string} */
+function selectedDatabaseConfigurationSource(command) {
+  if (CONTROL_PLANE_COMMANDS.has(command)) {
+    return process.env.CONTROL_PLANE_DATABASE_URL?.trim()
+      ? databaseConfigurationSource('CONTROL_PLANE_DATABASE_URL')
+      : `DATABASE_URL fallback (${databaseConfigurationSource('DATABASE_URL')})`;
+  }
+  return databaseConfigurationSource('DATABASE_URL');
 }
 
 /** @param {string[]} values */
@@ -574,7 +633,7 @@ function existingIdentityTtl(row) {
 /** @param {{controlPlane?: boolean}} [options] @returns {Promise<import('pg').Pool>} */
 async function databasePool({ controlPlane = false } = {}) {
   const databaseUrl = controlPlane
-    ? (process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL)
+    ? controlPlaneDatabaseUrl()
     : process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
     throw new Error('DATABASE_URL is required');
@@ -592,6 +651,20 @@ async function databasePool({ controlPlane = false } = {}) {
 
 /** @param {CliOptions} options */
 async function createOrganization(options) {
+  const values = [
+    `org_${ulid()}`,
+    requiredOption(options, 'name'),
+    listOption(options, 'entitlements', 'writing'),
+    positiveIntegerOption(options, 'rate-limit-rpm', '600'),
+    positiveIntegerOption(options, 'max-concurrent', '20'),
+    // Quota and hard stop live on the organization, not the key: they are one
+    // budget shared by every key it issues.
+    quotaOption(options, 'monthly-quota'),
+    booleanOption(options, 'hard-stop'),
+  ];
+  const safety = await prepareOperatorMutation('org:create', options);
+  if (safety?.previewed) return;
+
   const pool = await databasePool({ controlPlane: true });
   try {
     const result = /** @type {import('pg').QueryResult<{id: string}>} */ (
@@ -601,18 +674,7 @@ async function createOrganization(options) {
           monthly_request_quota, hard_stop_on_quota)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-        [
-          `org_${ulid()}`,
-          requiredOption(options, 'name'),
-          listOption(options, 'entitlements', 'writing'),
-          positiveIntegerOption(options, 'rate-limit-rpm', '600'),
-          positiveIntegerOption(options, 'max-concurrent', '20'),
-          // Quota and hard stop live on the organization, not the key: they are
-          // one budget shared by every key it issues, which is what makes
-          // per-person keys safe to hand out.
-          quotaOption(options, 'monthly-quota'),
-          booleanOption(options, 'hard-stop'),
-        ],
+        values,
       )
     );
     console.log(result.rows[0].id);
@@ -625,21 +687,159 @@ async function createOrganization(options) {
 // both need `--actor`: the operator's own AIHUB User Account (ADR-0044). The
 // raw key is generated here and handed to the runner, which prints it after
 // commit; stdout stays exactly the raw key because `demo-bootstrap` captures it.
+/** @returns {string} */
 function controlPlaneDatabaseUrl() {
-  return (
-    process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? ''
+  const explicit = process.env.CONTROL_PLANE_DATABASE_URL?.trim();
+  if (explicit) return explicit;
+  if (process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() === 'sandbox') {
+    throw new Error(
+      'CONTROL_PLANE_DATABASE_URL is required for control-plane commands from Sandbox',
+    );
+  }
+  return process.env.DATABASE_URL ?? '';
+}
+
+/** @param {string} databaseUrl @returns {Promise<OperatorDatabaseTarget>} */
+async function inspectOperatorDatabase(databaseUrl) {
+  if (databaseUrl.trim().length === 0) {
+    throw new Error('operator database URL is required');
+  }
+  const pg = /** @type {typeof import('pg')} */ (await import('pg'));
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 1,
+    connectionTimeoutMillis: 1_000,
+    idleTimeoutMillis: 1_000,
+    statement_timeout: 5_000,
+  });
+  try {
+    const result =
+      /** @type {import('pg').QueryResult<OperatorDatabaseRow>} */ (
+        await pool.query(
+          'SELECT current_database() AS database, inet_server_addr() AS host, inet_server_port() AS port, clock_timestamp() AS database_now',
+        )
+      );
+    const row = result.rows[0];
+    if (
+      row === undefined ||
+      typeof row.database !== 'string' ||
+      (row.host !== null && typeof row.host !== 'string') ||
+      (row.port !== null && typeof row.port !== 'number') ||
+      !(row.database_now instanceof Date)
+    ) {
+      throw new Error('operator database target is invalid');
+    }
+    const configured = new URL(databaseUrl);
+    const databaseNow = new Date(row.database_now);
+    return {
+      database: row.database,
+      deployment: classifyDatabase(row.database),
+      host: row.host && row.host.length > 0 ? row.host : configured.hostname,
+      port: row.port ?? Number(configured.port || '5432'),
+      databaseNow,
+    };
+  } catch {
+    throw new Error('operator database target could not be inspected');
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
+}
+
+/** @param {string | undefined} command @param {CliOptions} options @returns {Promise<OperatorMutationSafety | undefined>} */
+async function prepareOperatorMutation(command, options) {
+  const mutating = isMutatingCommand(command, options);
+  if (!mutating) {
+    if (options.has('target') || options.has('dry-run')) usageError();
+    return undefined;
+  }
+  if (command === undefined) usageError();
+
+  const requestedTarget = options.get('target');
+  options.delete('target');
+  const dryRun = booleanOption(options, 'dry-run');
+  const databaseUrl = CONTROL_PLANE_COMMANDS.has(command)
+    ? controlPlaneDatabaseUrl()
+    : (process.env.DATABASE_URL ?? '');
+  const target = await inspectOperatorDatabase(databaseUrl);
+  requireTargetConfirmation(target.deployment, requestedTarget);
+  if (CONTROL_PLANE_COMMANDS.has(command)) {
+    requireControlPlaneDatabase(target.deployment);
+  }
+
+  const processNow = new Date();
+  const maintenanceClock = effectiveMaintenanceTime(
+    processNow,
+    target.databaseNow,
   );
+  const runtimeScope =
+    process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production';
+  if (
+    target.deployment !== 'test' &&
+    [
+      'avatar:sweep',
+      'speaking:audio-upload-sweep',
+      'writing:chart-upload-sweep',
+      'writing:chart-revoke',
+    ].includes(command) &&
+    runtimeScope !== target.deployment
+  ) {
+    throw new Error(
+      `runtime database scope is ${runtimeScope}, but database resolves to ${target.deployment}`,
+    );
+  }
+
+  console.error(
+    JSON.stringify({
+      event: 'operator_cli_target',
+      host: target.host,
+      port: target.port,
+      database: target.database,
+      deployment: target.deployment,
+    }),
+  );
+  console.error(
+    `database source: selected=${selectedDatabaseConfigurationSource(command)}; DATABASE_URL=${databaseConfigurationSource('DATABASE_URL')}; CONTROL_PLANE_DATABASE_URL=${databaseConfigurationSource('CONTROL_PLANE_DATABASE_URL')}`,
+  );
+  if (options.has('actor')) {
+    console.error('actor identity source: self-declared via --actor');
+  }
+
+  if (dryRun && !NATIVE_DRY_RUN_COMMANDS.has(command)) {
+    options.delete('dry-run');
+    console.error(
+      JSON.stringify({
+        event: 'operator_cli_preview',
+        ...previewOperatorMutation(command, options),
+      }),
+    );
+    return { target, maintenanceClock, previewed: true };
+  }
+
+  if (!NATIVE_DRY_RUN_COMMANDS.has(command)) options.delete('dry-run');
+  return { target, maintenanceClock, previewed: false };
+}
+
+/** @param {OperatorMutationSafety | undefined} safety @returns {OperatorMutationSafety} */
+function requireOperatorSafety(safety) {
+  if (safety === undefined) {
+    throw new Error('operator mutation preflight is missing');
+  }
+  return safety;
 }
 
 /** @param {CliOptions} options */
 async function createKey(options) {
-  const generateApiKey = await loadApiKeyGenerator();
   const organizationId = requiredOption(options, 'org');
   const actorUsername = requiredOption(options, 'actor');
   const name = requiredOption(options, 'name');
   const scopes = listOption(options, 'scopes', 'writing.grade');
   // A new key is bound to one environment and issued under its display prefix.
   const environment = environmentOption(options, 'envs', 'production');
+  const internal = booleanOption(options, 'internal');
+  const safety = await prepareOperatorMutation('key:create', options);
+  if (safety?.previewed) return;
+
+  const generateApiKey = await loadApiKeyGenerator();
   const generated = generateApiKey(`ak_${ulid()}`, environment);
 
   const outcome = await runCliCommand(createOperatorApiKeyDescriptor, {
@@ -655,7 +855,7 @@ async function createKey(options) {
     name,
     scopes,
     allowedEnvironments: [environment],
-    internal: booleanOption(options, 'internal'),
+    internal,
   });
   if (outcome !== 'created') {
     usageError();
@@ -664,11 +864,16 @@ async function createKey(options) {
 
 /** @param {CliOptions} options */
 async function revokeKey(options) {
+  const apiKeyId = requiredOption(options, 'key');
+  const actorUsername = requiredOption(options, 'actor');
+  const safety = await prepareOperatorMutation('key:revoke', options);
+  if (safety?.previewed) return;
+
   const outcome = await runCliCommand(revokeOperatorApiKeyDescriptor, {
     databaseUrl: controlPlaneDatabaseUrl(),
     redisUrl: process.env.REDIS_URL,
-    apiKeyId: requiredOption(options, 'key'),
-    actorUsername: requiredOption(options, 'actor'),
+    apiKeyId,
+    actorUsername,
   });
   if (outcome !== 'revoked' && outcome !== 'unchanged') {
     usageError();
@@ -678,6 +883,9 @@ async function revokeKey(options) {
 /** @param {CliOptions} options */
 async function setIdentity(options) {
   const input = await parseIdentityOptions(options);
+  const safety = await prepareOperatorMutation('identity:set', options);
+  if (safety?.previewed) return;
+
   const pool = await databasePool({ controlPlane: true });
   try {
     const organization = await pool.query(
@@ -764,7 +972,16 @@ async function setIdentity(options) {
   }
 }
 
-async function cleanupIdempotency() {
+/** @param {CliOptions} options */
+async function cleanupIdempotency(options) {
+  for (const name of options.keys()) {
+    if (name !== 'target' && name !== 'dry-run') usageError();
+  }
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('idempotency:cleanup', options),
+  );
+  if (safety?.previewed) return;
+
   const databaseUrl = process.env.DATABASE_URL ?? '';
   if (databaseUrl.trim().length === 0) {
     throw new Error('DATABASE_URL is required');
@@ -808,8 +1025,17 @@ async function cleanupIdempotency() {
   const client = createOperatorPrismaClient('runtime', databaseUrl);
   try {
     const repository = new PostgresIdempotencyRepository(client.prisma);
-    const deleted = await repository.cleanupExpired();
-    console.log(`Deleted ${deleted} expired idempotency records`);
+    const deleted = await repository.cleanupExpired(
+      safety.maintenanceClock.now,
+    );
+    console.log(
+      JSON.stringify({
+        event: 'idempotency_cleanup_completed',
+        cutoff: safety.maintenanceClock.now.toISOString(),
+        cutoff_source: safety.maintenanceClock.source,
+        deleted,
+      }),
+    );
   } finally {
     await client.close();
   }
@@ -818,7 +1044,7 @@ async function cleanupIdempotency() {
 /** @param {CliOptions} options */
 async function reconcileQuotaCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'month') {
+    if (name !== 'month' && name !== 'dry-run' && name !== 'target') {
       usageError();
     }
   }
@@ -826,11 +1052,18 @@ async function reconcileQuotaCommand(options) {
   const requestedMonth = options.get('month');
   const now = new Date();
   await parseTargetMonth(requestedMonth, now);
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  const redisUrl = process.env.REDIS_URL ?? '';
+  if (databaseUrl.trim().length > 0 && redisUrl.trim().length > 0) {
+    const safety = await prepareOperatorMutation('quota:reconcile', options);
+    if (safety?.previewed) return;
+  }
   await runQuotaReconciliation({
     requestedMonth,
     now,
-    databaseUrl: process.env.DATABASE_URL ?? '',
-    redisUrl: process.env.REDIS_URL ?? '',
+    databaseUrl,
+    redisUrl,
+    dryRun: booleanOption(options, 'dry-run'),
   });
 }
 
@@ -855,17 +1088,24 @@ async function auditRedisTtlCommand(options) {
 /** @param {CliOptions} options @param {'active' | 'suspended'} status */
 async function organizationStatusCommand(options, status) {
   for (const name of options.keys()) {
-    if (name !== 'org' && name !== 'actor') {
+    if (!['org', 'actor', 'target', 'dry-run'].includes(name)) {
       usageError();
     }
   }
 
+  const organizationId = requiredOption(options, 'org');
+  const actorUsername = requiredOption(options, 'actor');
+  const safety = await prepareOperatorMutation(
+    status === 'suspended' ? 'org:suspend' : 'org:restore',
+    options,
+  );
+  if (safety?.previewed) return;
+
   const outcome = await runOrganizationStatus({
-    databaseUrl:
-      process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
+    databaseUrl: controlPlaneDatabaseUrl(),
     redisUrl: process.env.REDIS_URL,
-    organizationId: requiredOption(options, 'org'),
-    actorUsername: requiredOption(options, 'actor'),
+    organizationId,
+    actorUsername,
     status,
   });
   if (outcome === 'organization_not_found' || outcome === 'actor_invalid') {
@@ -876,16 +1116,24 @@ async function organizationStatusCommand(options, status) {
 /** @param {CliOptions} options */
 async function organizationGrantEntitlementCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'org' && name !== 'actor' && name !== 'entitlement')
+    if (!['org', 'actor', 'entitlement', 'target', 'dry-run'].includes(name))
       usageError();
   }
+  const organizationId = requiredOption(options, 'org');
+  const actorUsername = requiredOption(options, 'actor');
+  const entitlement = requiredOption(options, 'entitlement');
+  const safety = await prepareOperatorMutation(
+    'org:grant-entitlement',
+    options,
+  );
+  if (safety?.previewed) return;
+
   const outcome = await runGrantOrganizationEntitlement({
-    databaseUrl:
-      process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
+    databaseUrl: controlPlaneDatabaseUrl(),
     redisUrl: process.env.REDIS_URL,
-    organizationId: requiredOption(options, 'org'),
-    actorUsername: requiredOption(options, 'actor'),
-    entitlement: requiredOption(options, 'entitlement'),
+    organizationId,
+    actorUsername,
+    entitlement,
   });
   if (!['granted', 'unchanged'].includes(outcome)) usageError();
 }
@@ -896,17 +1144,22 @@ async function organizationGrantEntitlementCommand(options) {
 /** @param {CliOptions} options */
 async function attachFirstOwnerCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'org' && name !== 'owner' && name !== 'actor') {
+    if (!['org', 'owner', 'actor', 'target', 'dry-run'].includes(name)) {
       usageError();
     }
   }
 
+  const organizationId = requiredOption(options, 'org');
+  const ownerUsername = requiredOption(options, 'owner');
+  const actorUsername = requiredOption(options, 'actor');
+  const safety = await prepareOperatorMutation('org:attach-owner', options);
+  if (safety?.previewed) return;
+
   const outcome = await runAttachFirstOwner({
-    databaseUrl:
-      process.env.CONTROL_PLANE_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
-    organizationId: requiredOption(options, 'org'),
-    ownerUsername: requiredOption(options, 'owner'),
-    actorUsername: requiredOption(options, 'actor'),
+    databaseUrl: controlPlaneDatabaseUrl(),
+    organizationId,
+    ownerUsername,
+    actorUsername,
   });
   if (outcome !== 'attached' && outcome !== 'unchanged') {
     usageError();
@@ -920,14 +1173,21 @@ async function attachFirstOwnerCommand(options) {
 /** @param {CliOptions} options */
 async function sweepAvatarsCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'dry-run') {
+    if (name !== 'dry-run' && name !== 'target') {
       usageError();
     }
   }
+  const dryRun = booleanOption(options, 'dry-run');
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('avatar:sweep', options),
+  );
+  if (safety.previewed) return;
 
   const summary = await runCliCommand(avatarSweepDescriptor, {
     databaseUrl: process.env.DATABASE_URL ?? '',
-    dryRun: booleanOption(options, 'dry-run'),
+    dryRun,
+    now: () => safety.maintenanceClock.now,
+    clockSource: safety.maintenanceClock.source,
   });
   if (summary.failed > 0) {
     throw new Error('avatar sweep could not delete every orphaned object');
@@ -939,20 +1199,30 @@ async function sweepAvatarsCommand(options) {
 // failure leaves the exit status non-zero so cron alerts. Run it daily.
 /** @param {CliOptions} options */
 async function sweepRegistrationsCommand(options) {
-  if (options.size > 0) {
-    usageError();
+  for (const name of options.keys()) {
+    if (name !== 'target' && name !== 'dry-run') usageError();
   }
+  booleanOption(options, 'dry-run');
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('registrations:sweep', options),
+  );
+  if (safety.previewed) return;
 
   await runCliCommand(registrationsSweepDescriptor, {
     databaseUrl: process.env.DATABASE_URL ?? '',
+    now: () => safety.maintenanceClock.now,
+    clockSource: safety.maintenanceClock.source,
   });
 }
 
 /** @param {CliOptions} options */
 async function sweepNotificationsCommand(options) {
-  if (options.size > 0) {
-    usageError();
+  for (const name of options.keys()) {
+    if (name !== 'target' && name !== 'dry-run') usageError();
   }
+  booleanOption(options, 'dry-run');
+  const safety = await prepareOperatorMutation('notifications:sweep', options);
+  if (safety?.previewed) return;
 
   await runCliCommand(notificationsSweepDescriptor, {
     databaseUrl: process.env.DATABASE_URL ?? '',
@@ -962,14 +1232,21 @@ async function sweepNotificationsCommand(options) {
 /** @param {CliOptions} options */
 async function sweepSpeakingAudioUploadsCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'dry-run') {
+    if (name !== 'dry-run' && name !== 'target') {
       usageError();
     }
   }
+  const dryRun = booleanOption(options, 'dry-run');
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('speaking:audio-upload-sweep', options),
+  );
+  if (safety.previewed) return;
 
   const summary = await runCliCommand(speakingAudioUploadSweepDescriptor, {
     databaseUrl: process.env.DATABASE_URL ?? '',
-    dryRun: booleanOption(options, 'dry-run'),
+    dryRun,
+    now: () => safety.maintenanceClock.now,
+    clockSource: safety.maintenanceClock.source,
   });
   if (summary.failed > 0) {
     throw new Error(
@@ -981,11 +1258,19 @@ async function sweepSpeakingAudioUploadsCommand(options) {
 /** @param {CliOptions} options */
 async function sweepWritingChartUploadsCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'dry-run') usageError();
+    if (name !== 'dry-run' && name !== 'target') usageError();
   }
+  const dryRun = booleanOption(options, 'dry-run');
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('writing:chart-upload-sweep', options),
+  );
+  if (safety.previewed) return;
+
   const summary = await runCliCommand(writingChartUploadSweepDescriptor, {
     databaseUrl: process.env.DATABASE_URL ?? '',
-    dryRun: booleanOption(options, 'dry-run'),
+    dryRun,
+    now: () => safety.maintenanceClock.now,
+    clockSource: safety.maintenanceClock.source,
   });
   if (summary.failed > 0) {
     throw new Error('Writing chart upload sweep could not delete every object');
@@ -995,18 +1280,27 @@ async function sweepWritingChartUploadsCommand(options) {
 /** @param {CliOptions} options */
 async function revokeWritingChartCommand(options) {
   for (const name of options.keys()) {
-    if (name !== 'url' && name !== 'actor') usageError();
+    if (!['url', 'actor', 'target', 'dry-run'].includes(name)) usageError();
   }
+  const url = requiredOption(options, 'url');
+  const actorUsername = requiredOption(options, 'actor');
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('writing:chart-revoke', options),
+  );
+  if (safety?.previewed) return;
+
   const environment =
-    process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production';
+    safety.target.deployment === 'test'
+      ? process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production'
+      : safety.target.deployment;
   if (environment !== 'production' && environment !== 'sandbox') usageError();
   let result;
   try {
     result = await runCliCommand(writingChartRevokeDescriptor, {
       databaseUrl: process.env.DATABASE_URL ?? '',
       environment,
-      url: requiredOption(options, 'url'),
-      actorUsername: requiredOption(options, 'actor'),
+      url,
+      actorUsername,
     });
   } catch (error) {
     if (
@@ -1024,12 +1318,25 @@ async function revokeWritingChartCommand(options) {
 
 /** @param {CliOptions} options */
 async function pruneUsageCommand(options) {
-  if (options.size > 0) {
-    usageError();
+  for (const name of options.keys()) {
+    if (name !== 'dry-run' && name !== 'target') usageError();
   }
+  const dryRun = booleanOption(options, 'dry-run');
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  if (databaseUrl.trim().length === 0) {
+    await runUsagePrune({ databaseUrl, dryRun });
+    return;
+  }
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('usage:prune', options),
+  );
+  if (safety?.previewed) return;
 
   await runUsagePrune({
-    databaseUrl: process.env.DATABASE_URL ?? '',
+    databaseUrl,
+    dryRun,
+    clock: () => safety.maintenanceClock.now,
+    cutoffSource: safety.maintenanceClock.source,
   });
 }
 
@@ -1106,7 +1413,9 @@ async function runBilling(descriptor, input) {
 /** @param {CliOptions} options */
 async function billingStatementCommand(options) {
   for (const name of options.keys()) {
-    if (!['month', 'org', 'close', 'actor'].includes(name)) {
+    if (
+      !['month', 'org', 'close', 'actor', 'target', 'dry-run'].includes(name)
+    ) {
       usageError();
     }
   }
@@ -1114,14 +1423,19 @@ async function billingStatementCommand(options) {
   if (close !== options.has('actor')) {
     usageError();
   }
-  await runBilling(billingStatementDescriptor, {
+  const input = {
     databaseUrl: process.env.DATABASE_URL ?? '',
     month: requiredOption(options, 'month'),
     ...(options.has('org')
       ? { organizationId: requiredOption(options, 'org') }
       : {}),
     ...(close ? { closeAs: requiredOption(options, 'actor') } : {}),
-  });
+  };
+  if (close) {
+    const safety = await prepareOperatorMutation('billing:statement', options);
+    if (safety?.previewed) return;
+  }
+  await runBilling(billingStatementDescriptor, input);
 }
 
 // billing:adjust --id <badj_ULID> --org <id> --month YYYY-MM --operation <id>
@@ -1141,6 +1455,8 @@ async function billingAdjustCommand(options) {
     'request-ids',
     'period-from',
     'period-to',
+    'target',
+    'dry-run',
   ];
   for (const name of options.keys()) {
     if (!allowed.includes(name)) {
@@ -1156,7 +1472,7 @@ async function billingAdjustCommand(options) {
   if (!/^[+-]?[1-9][0-9]{0,8}$/.test(rawRequests)) {
     usageError();
   }
-  await runBilling(billingAdjustDescriptor, {
+  const input = {
     databaseUrl: process.env.DATABASE_URL ?? '',
     id: requiredOption(options, 'id'),
     organizationId: requiredOption(options, 'org'),
@@ -1173,12 +1489,21 @@ async function billingAdjustCommand(options) {
             to: requiredOption(options, 'period-to'),
           },
         },
-  });
+  };
+  const safety = await prepareOperatorMutation('billing:adjust', options);
+  if (safety?.previewed) return;
+  await runBilling(billingAdjustDescriptor, input);
 }
 
 async function main() {
   const [command, ...values] = process.argv.slice(2);
   const options = parseOptions(values);
+  if (
+    !isMutatingCommand(command, options) &&
+    (options.has('target') || options.has('dry-run'))
+  ) {
+    usageError();
+  }
 
   if (command === 'org:create') {
     await createOrganization(options);
@@ -1197,7 +1522,7 @@ async function main() {
     return;
   }
   if (command === 'idempotency:cleanup') {
-    await cleanupIdempotency();
+    await cleanupIdempotency(options);
     return;
   }
   if (command === 'quota:reconcile') {

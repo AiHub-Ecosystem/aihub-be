@@ -29,6 +29,7 @@ export interface QuotaReconciliationSummary {
 
 export type QuotaReconciliationEvent =
   | { readonly type: 'reconciled'; readonly result: QuotaReconciledResult }
+  | { readonly type: 'preview'; readonly result: QuotaReconciledResult }
   | {
       readonly type: 'failed';
       readonly organizationId: string;
@@ -41,6 +42,11 @@ export type QuotaReconciliationEvent =
     }
   | {
       readonly type: 'summary';
+      readonly month: string;
+      readonly summary: QuotaReconciliationSummary;
+    }
+  | {
+      readonly type: 'preview_summary';
       readonly month: string;
       readonly summary: QuotaReconciliationSummary;
     };
@@ -196,6 +202,7 @@ export class QuotaReconciliationService {
   async reconcile(
     requestedMonth?: string,
     emit: (event: QuotaReconciliationEvent) => void = () => undefined,
+    options: { readonly dryRun?: boolean } = {},
   ): Promise<QuotaReconciliationSummary> {
     const target = parseTargetMonth(requestedMonth, this.now());
     let sourceSnapshots: readonly QuotaOrganizationSnapshot[];
@@ -232,24 +239,26 @@ export class QuotaReconciliationService {
       }
 
       const drift = Math.abs(currentCount - snapshot.billableCount);
-      try {
-        await this.counterPort.overwrite({
-          organizationId: snapshot.organizationId,
-          month: target.month,
-          count: snapshot.billableCount,
-        });
-      } catch {
-        emit({
-          type: 'failed',
-          organizationId: snapshot.organizationId,
-          month: target.month,
-          reconciled,
-          overQuota,
-          driftedOrganizations: driftedCount,
-          driftRequests,
-          failed: 1,
-        });
-        throw new QuotaReconciliationWriteError(snapshot.organizationId);
+      if (options.dryRun !== true) {
+        try {
+          await this.counterPort.overwrite({
+            organizationId: snapshot.organizationId,
+            month: target.month,
+            count: snapshot.billableCount,
+          });
+        } catch {
+          emit({
+            type: 'failed',
+            organizationId: snapshot.organizationId,
+            month: target.month,
+            reconciled,
+            overQuota,
+            driftedOrganizations: driftedCount,
+            driftRequests,
+            failed: 1,
+          });
+          throw new QuotaReconciliationWriteError(snapshot.organizationId);
+        }
       }
 
       if (snapshot.overQuota) {
@@ -261,7 +270,7 @@ export class QuotaReconciliationService {
       }
       reconciled += 1;
       emit({
-        type: 'reconciled',
+        type: options.dryRun === true ? 'preview' : 'reconciled',
         result: { ...snapshot, month: target.month },
       });
     }
@@ -273,7 +282,11 @@ export class QuotaReconciliationService {
       driftRequests,
       failed: 0,
     } as const;
-    emit({ type: 'summary', month: target.month, summary });
+    emit({
+      type: options.dryRun === true ? 'preview_summary' : 'summary',
+      month: target.month,
+      summary,
+    });
     return summary;
   }
 }

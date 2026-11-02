@@ -16,8 +16,18 @@ wrapper so it gets the 15-minute per-deployment deadline, same-job lock, and
 result logging:
 
 ```sh
-./scripts/ops/host-jobs/host-scheduled-job.sh quota
+./scripts/ops/host-jobs/host-scheduled-job.sh quota --dry-run true
 ```
+
+The wrapper passes `--target production` or `--target sandbox` to the matching
+CLI run. Review the preview before executing the write-enabled job. A direct
+Production CLI preview is:
+
+```sh
+bun run cli quota:reconcile --target production --dry-run true
+```
+
+After review, repeat without `--dry-run true` to repair the counters.
 
 The wrapper uses a nonblocking same-job lock and a host-wide lock shared by all
 scheduled job types. A second `quota` invocation logs
@@ -63,12 +73,15 @@ retained month through the host wrapper, preserving the per-deployment deadline,
 same-job lock, and result log:
 
 ```sh
-./scripts/ops/host-jobs/host-scheduled-job.sh quota --month 2026-09
+./scripts/ops/host-jobs/host-scheduled-job.sh quota --month 2026-09 --dry-run true
 ```
 
 `--month` must be strict `YYYY-MM`, cannot name a future month, and is limited
 to the current month plus the 12 preceding retained calendar months. Reruns
 are idempotent: the same Postgres evidence produces the same counter values.
+The dry-run reports the selected month, each organization's durable count and
+quota, plus aggregate Redis drift, without overwriting Redis. After review,
+repeat the wrapper command without `--dry-run true` to write the counters.
 
 ## Output and exit codes
 

@@ -150,23 +150,30 @@ signing material exist, that route answers `404` and the rest of the gateway is
 unaffected.
 
 Provision Organization, API-key, and identity-configuration records through
-the production control plane. Set `CONTROL_PLANE_DATABASE_URL` to the
-production database for the `bun run cli org:create`, `identity:set`,
-`key:create`, and `key:revoke` commands below. Usage and quota tools continue
-to use `DATABASE_URL`, which should point to `aihub_sandbox` for sandbox usage.
-The CLI can run from a workstation through the SSH tunnel described in
-[`deploy-vps.md`](deploy-vps.md). Sandbox authentication reads the key record
-directly on each request, so revocation and suspension apply on the next
-request.
+the production control plane. The commands below use the Production database
+for `org:create`, `identity:set`, `key:create`, and `key:revoke`; each requires
+`--target production`. Usage and quota tools continue to use `DATABASE_URL`,
+which should point to `aihub_sandbox` for Sandbox usage. The CLI reports the
+database host, name, deployment, and selected connection source before a
+mutation. It refuses control-plane writes when the connected database resolves
+to Sandbox. Sandbox authentication reads the key record directly on each
+request, so revocation and suspension apply on the next request.
 
-For example, expose the production database through the local SSH tunnel and
-set the control-plane URL in the workstation shell before running the
-Organization, identity, or key commands:
+Open the [operator workstation Postgres tunnel](deploy-vps.md#operator-workstation-postgres-tunnel),
+then prompt for the Production URL in a workstation shell. The prompt hides the
+URL; the helper passes it only to each CLI child process, so it is not saved in
+shell history or exported into the interactive shell:
 
 ```sh
-ssh -N -L 15433:127.0.0.1:5433 <user>@<vps>
-export CONTROL_PLANE_DATABASE_URL='postgresql://<user>:<password>@127.0.0.1:15433/aihub'
+read -r -s -p 'Production control-plane database URL: ' control_plane_url
+printf '\n'
+operator_cli() {
+  CONTROL_PLANE_DATABASE_URL="$control_plane_url" bun run cli "$@"
+}
 ```
+
+Run a preview first. After verifying the printed database target and intended
+change, repeat the same command without `--dry-run true` to write it.
 
 ## Environment and organization boundaries
 
@@ -176,7 +183,8 @@ allowed environment; the hostname check adds a second boundary at ingress.
 
 ## 1. Generate the signing key pair
 
-Run this on a workstation, not on the server. Only the public half leaves it.
+Run this on a workstation. Register the public half and store the private half
+in Vault's `sandbox-assertion` bundle.
 
 ```bash
 node -e '
@@ -193,18 +201,21 @@ import("jose").then(async ({ generateKeyPair, exportJWK, exportPKCS8 }) => {
 });'
 ```
 
-`sandbox-private.pem` becomes `AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY` in the gateway's environment and goes nowhere else. It is not distributed to testers — the whole point of the mint endpoint is that nobody needs to hold it.
+The private key is not distributed to testers — the whole point of the mint
+endpoint is that nobody needs to hold it. Do not put it in a deployment env
+file or pass it to an operator command.
 
 ## 2. Create the organization
 
 ```bash
-bun run cli org:create \
+operator_cli org:create \
   --name "AIHUB Sandbox" \
   --entitlements writing,speaking \
   --rate-limit-rpm 60 \
   --max-concurrent 3 \
   --monthly-quota 500 \
-  --hard-stop true
+  --hard-stop true \
+  --target production --dry-run true
 ```
 
 Prints the new `org_...` id. Keep it; the remaining steps need it.
@@ -223,12 +234,13 @@ Quota, rate limit, and concurrency live on the **organization**, not on individu
 ## 3. Register the public key
 
 ```bash
-bun run cli identity:set \
+operator_cli identity:set \
   --org org_... \
   --issuer https://sandbox.aihubproduction.com \
   --public-keys-file ./sandbox-jwks.json \
   --allowed-algorithms RS256 \
-  --max-assertion-ttl-seconds 3600
+  --max-assertion-ttl-seconds 3600 \
+  --target production --dry-run true
 ```
 
 The issuer is a URL, not a fetched endpoint: registering the key set inline means AIHUB never makes an outbound JWKS request for this organization, so the sandbox stays off that path entirely. The URL still has to be unique across organizations and stable, because it is what binds a minted token to this organization.
@@ -241,8 +253,10 @@ The issuer is a URL, not a fetched endpoint: registering the key set inline mean
 
 Configure the dedicated demo organization allowlist on the Sandbox app only;
 the production Compose file supplies it to `app-sandbox` and its standby slot.
-The private signing key and key id are under `sandbox-assertion` in the
-runtime connection file rendered by the shared Vault Agent.
+The private signing key and key id are stored in Vault's `sandbox-assertion`
+bundle. The Sandbox runtime connection loader reads that bundle and places the
+values in the app process; do not put them in a deployment env file or pass
+them to an operator command.
 
 **Current state (2026-10-18): Sandbox and Production share runtime secrets.**
 Both tiers mount the same rendered directory, and the Production policy can
@@ -279,15 +293,20 @@ curl -sS -X POST https://<sandbox host>/v1/sandbox/assertions \
 ## 5. Issue a key per person
 
 ```bash
-bun run cli key:create \
+operator_cli key:create \
   --org org_... \
   --actor <your-username> \
   --name "Minh — manual testing" \
   --scopes speaking.grade,writing.grade \
-  --envs sandbox
+  --envs sandbox \
+  --target production --dry-run true
 ```
 
 `--actor` is the username of your own active AIHUB User Account. The issuance is recorded in the Organization Audit Trail with you as the actor, and the command refuses, exit code 2, an actor that is not an active account. The raw key is printed **once** and never stored. Send it to that person directly, not to a group channel.
+
+The CLI reports `actor identity source: self-declared via --actor` in its
+pre-write diagnostic. The durable audit continues to record the linked active
+AIHUB account as specified by [ADR-0044](../adr/0044-organization-suspension-boundary.md).
 
 One key per person, named after them. A shared key cannot be revoked without disrupting everyone, and the `apiKeyId` in the mint audit line and in `usage_records` is only useful if it identifies someone.
 
@@ -304,10 +323,21 @@ issued before ADR-0095 keep the shared `aihub_sk_` prefix.
 To revoke:
 
 ```bash
-bun run cli key:revoke --key ak_... --actor <your-username>
+operator_cli key:revoke --key ak_... --actor <your-username> \
+  --target production --dry-run true
 ```
 
 Revocation is recorded in the Organization Audit Trail the same way, and repeating it records nothing more. This also purges the Redis cache entry, so revocation is immediate rather than waiting out the 60-second identity cache.
+
+After reviewing the preview, repeat the command without `--dry-run true` to
+apply it. For `key:create`, the write-enabled command prints the raw key once;
+the preview does not issue a key. After the operator work, clear the in-memory
+URL and helper:
+
+```bash
+unset -f operator_cli
+unset control_plane_url
+```
 
 ## 6. Rotating the sandbox signing key
 

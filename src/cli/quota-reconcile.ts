@@ -18,15 +18,19 @@ interface QuotaReconciliationCliInput {
   readonly redisUrl: string;
   readonly requestedMonth?: string;
   readonly now?: Date;
+  readonly dryRun?: boolean;
   readonly emit?: (line: string) => void;
 }
 
 export function formatQuotaReconciliationEvent(
   event: QuotaReconciliationEvent,
 ): string {
-  if (event.type === 'reconciled') {
+  if (event.type === 'reconciled' || event.type === 'preview') {
     return JSON.stringify({
-      event: 'quota_reconciled',
+      event:
+        event.type === 'preview'
+          ? 'quota_reconcile_preview'
+          : 'quota_reconciled',
       organization_id: event.result.organizationId,
       month: event.result.month,
       billable_count: event.result.billableCount,
@@ -50,7 +54,10 @@ export function formatQuotaReconciliationEvent(
   }
 
   return JSON.stringify({
-    event: 'quota_reconcile_summary',
+    event:
+      event.type === 'preview_summary'
+        ? 'quota_reconcile_preview_summary'
+        : 'quota_reconcile_summary',
     month: event.month,
     reconciled: event.summary.reconciled,
     over_quota: event.summary.overQuota,
@@ -115,9 +122,11 @@ export async function runQuotaReconciliationCommand(
   const emit = input.emit ?? console.log;
 
   try {
-    return await service.reconcile(input.requestedMonth, (event) => {
-      emit(formatQuotaReconciliationEvent(event));
-    });
+    return await service.reconcile(
+      input.requestedMonth,
+      (event) => emit(formatQuotaReconciliationEvent(event)),
+      { dryRun: input.dryRun === true },
+    );
   } finally {
     await counter.close();
     await repository.close();

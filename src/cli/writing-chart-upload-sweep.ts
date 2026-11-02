@@ -21,6 +21,7 @@ export interface WritingChartUploadSweepCliInput {
   readonly storage?: WritingChartUploadStoragePort;
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
+  readonly clockSource?: 'process' | 'database';
 }
 
 async function openRepository(
@@ -57,6 +58,11 @@ export async function runWritingChartUploadSweepCommand(
     input.now,
     ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
   );
-  (input.emit ?? console.log)(JSON.stringify(result));
+  (input.emit ?? console.log)(
+    JSON.stringify({
+      ...result,
+      cutoff_source: input.clockSource ?? 'process',
+    }),
+  );
   return result;
 }

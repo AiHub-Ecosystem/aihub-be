@@ -462,10 +462,21 @@ security gate in #376.
    buckets to the responsible party; AIHUB cannot revoke those objects. Once
    the report is substantiated and the chart is in scope, initiate revocation
    promptly.
-3. Run `bun run cli writing:chart-revoke --url <public-url> --actor <active-operator-username>`
-   from that environment's operator host with its operator credentials.
+3. Preview the command, then repeat it without `--dry-run true` after
+   confirming the printed target:
+
+   ```sh
+   bun run cli writing:chart-revoke --url <public-url> \
+     --actor <active-operator-username> --target production --dry-run true
+   bun run cli writing:chart-revoke --url <public-url> \
+     --actor <active-operator-username> --target production
+   ```
+
+   For a Sandbox database, use `--target sandbox` in both commands. Run the
+   command from that environment's operator host with its operator credentials.
    The credentials authorize execution; `--actor` identifies the active AIHUB
    account for audit and grants no privilege by itself.
+
 4. Read the result as two separate facts: whether the origin object was
    deleted or already absent, and whether the public edge stopped serving it.
    The edge probe checks the public GET path with a bounded one-byte Range
@@ -548,6 +559,15 @@ deletion. These are observed results for the tested paths, not a guarantee
 about copies outside AIHUB's control.
 
 ### Scheduled operator jobs
+
+Each mutating CLI preflights its actual database and reports the connected
+host, port, database name, and resolved deployment. A Production mutation
+requires `--target production`; the CLI rejects a mismatched target before
+dispatch. The scheduled wrapper supplies the matching target for every job it
+launches that mutates state, so the Production and Sandbox passes cannot
+inherit one another's confirmation. For a manual mutation, preview with
+`--dry-run true` and verify the reported target. Then repeat with the same
+target and without the dry-run flag.
 
 The versioned schedule is [`ops/host-jobs/aihub.crontab`](../../ops/host-jobs/aihub.crontab).
 CD stages the installer at a temporary candidate path, suspends the managed
@@ -777,6 +797,26 @@ taking a fresh dump of it, and run `quota:reconcile` afterwards so Redis
 counters match the restored `usage_records`.
 
 ## SSH access (#570)
+
+### Operator workstation Postgres tunnel
+
+Postgres is published on the Production host's loopback address at port 5433.
+Keep the tunnel open in its own workstation terminal while an operator CLI
+command uses it:
+
+```sh
+ssh -o ExitOnForwardFailure=yes -N \
+  -L 127.0.0.1:15433:127.0.0.1:5433 <user>@<host>
+```
+
+The local listener is bound to loopback. Use `127.0.0.1:15433` in the
+workstation's database URL and close the SSH session when the work is done.
+The deploy account must have its normal SSH key access; this tunnel does not
+publish Postgres on a public interface. See
+[`sandbox-provisioning.md`](sandbox-provisioning.md) for prompting securely
+for the control-plane URL.
+
+### SSH server access
 
 sshd on the production host accepts keys only.
 `/etc/ssh/sshd_config.d/10-aihub-hardening.conf` sets these three options:

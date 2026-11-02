@@ -40,7 +40,13 @@ describe('registrations:sweep', () => {
     });
 
     expect(summary).toEqual({ deleted: 4, batches: 1 });
-    expect(lines).toEqual([JSON.stringify({ deleted: 4, batches: 1 })]);
+    expect(lines).toEqual([
+      JSON.stringify({
+        deleted: 4,
+        batches: 1,
+        cutoff_source: 'process',
+      }),
+    ]);
     expect(store.calls[0]?.expiredAtOrBefore).toEqual(
       new Date('2026-10-23T03:00:00.000Z'),
     );

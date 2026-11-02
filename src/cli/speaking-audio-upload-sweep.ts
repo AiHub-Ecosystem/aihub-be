@@ -22,6 +22,7 @@ export interface SpeakingAudioUploadSweepCliInput {
   readonly storage?: SpeakingAudioAssetStoragePort;
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
+  readonly clockSource?: 'process' | 'database';
 }
 
 async function openRepository(
@@ -61,7 +62,12 @@ export async function runSpeakingAudioUploadSweepCommand(
     input.now,
     ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
   );
-  (input.emit ?? console.log)(JSON.stringify(result));
+  (input.emit ?? console.log)(
+    JSON.stringify({
+      ...result,
+      cutoff_source: input.clockSource ?? 'process',
+    }),
+  );
   return result;
 }
 import process from 'node:process';

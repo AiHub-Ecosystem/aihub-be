@@ -24,6 +24,8 @@ readonly METRICS_DIR=${AIHUB_HOST_JOB_METRICS_DIR:-$HOME/.aihub-host-job-metrics
 from=
 to=
 quota_month=
+quota_dry_run=false
+prune_dry_run=false
 avatar_dry_run=false
 chart_dry_run=false
 speaking_dry_run=false
@@ -33,6 +35,14 @@ quota_month_provided=false
 if (( $# == 3 )) && [[ "$JOB" == quota && "${2:-}" == --month ]]; then
   quota_month=$3
   quota_month_provided=true
+elif (( $# == 5 )) && [[ "$JOB" == quota && "${2:-}" == --month && "${4:-}" == --dry-run && "${5:-}" == true ]]; then
+  quota_month=$3
+  quota_month_provided=true
+  quota_dry_run=true
+elif (( $# == 3 )) && [[ "$JOB" == quota && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
+  quota_dry_run=true
+elif (( $# == 3 )) && [[ "$JOB" == prune && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
+  prune_dry_run=true
 elif (( $# == 3 )) && [[ "$JOB" == avatar-sweep && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
   avatar_dry_run=true
 elif (( $# == 3 )) && [[ "$JOB" == chart-upload-sweep && "${2:-}" == --dry-run && "${3:-}" == true ]]; then
@@ -44,7 +54,7 @@ elif (( $# == 5 )) && [[ "$JOB" == report && "${2:-}" == --from && "${4:-}" == -
   to=$5
   report_window_provided=true
 elif (( $# != 1 )); then
-  printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]|notification-sweep\n' "$0" >&2
+  printf 'usage: %s quota [--month YYYY-MM] [--dry-run true]|prune [--dry-run true]|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]|notification-sweep\n' "$0" >&2
   exit 2
 fi
 # max_age_seconds is how long after a success Prometheus waits for the next
@@ -61,7 +71,7 @@ case "$JOB" in
   speaking-upload-sweep) commands=(speaking:audio-upload-sweep); timeout_seconds=1800; max_age_seconds=90000 ;;
   notification-sweep) commands=(notifications:sweep); timeout_seconds=900; max_age_seconds=90000 ;;
   registration-sweep) commands=(registrations:sweep); timeout_seconds=900; max_age_seconds=90000 ;;
-  *) printf 'usage: %s quota [--month YYYY-MM]|prune|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]|notification-sweep\n' "$0" >&2; exit 2 ;;
+  *) printf 'usage: %s quota [--month YYYY-MM] [--dry-run true]|prune [--dry-run true]|report [--from UTC --to UTC]|ttl-audit|avatar-sweep [--dry-run true]|chart-upload-sweep [--dry-run true]|speaking-upload-sweep [--dry-run true]|notification-sweep\n' "$0" >&2; exit 2 ;;
 esac
 
 # Only the bare scheduled form reports to Prometheus; a manual rerun of an
@@ -233,8 +243,17 @@ for tier in production sandbox; do
 
   for command in "${commands[@]}"; do
     args=("$command")
+    case "$command" in
+      quota:reconcile|usage:prune|avatar:sweep|speaking:audio-upload-sweep|registrations:sweep|notifications:sweep|writing:chart-upload-sweep)
+        args+=(--target "$tier")
+        ;;
+    esac
     if [[ "$command" == quota:reconcile && "$quota_month_provided" == true ]]; then
       args+=(--month "$quota_month")
+    fi
+    if [[ "$command" == quota:reconcile && "$quota_dry_run" == true ]] ||
+      [[ "$command" == usage:prune && "$prune_dry_run" == true ]]; then
+      args+=(--dry-run true)
     fi
     if [[ "$command" == usage:report ]]; then
       args+=(--from "$from" --to "$to")

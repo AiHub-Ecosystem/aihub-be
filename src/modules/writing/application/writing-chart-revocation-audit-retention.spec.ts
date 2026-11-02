@@ -14,6 +14,7 @@ describe('WritingChartRevocationAuditRetentionService', () => {
       requestRevocation: jest.fn(),
       append: jest.fn(),
       pruneExpired,
+      countExpired: jest.fn(),
     };
     const service = new WritingChartRevocationAuditRetentionService(
       repository,
@@ -44,6 +45,7 @@ describe('WritingChartRevocationAuditRetentionService', () => {
       requestRevocation: jest.fn(),
       append: jest.fn(),
       pruneExpired: jest.fn().mockResolvedValue(0),
+      countExpired: jest.fn().mockResolvedValue(0),
     };
     const service = new WritingChartRevocationAuditRetentionService(
       repository,

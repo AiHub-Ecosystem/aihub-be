@@ -134,6 +134,7 @@ describe('runAvatarSweepCommand', () => {
       deleted: 1,
       failed: 0,
       dryRun: false,
+      cutoff_source: 'process',
     });
     expect(closed.value).toBe(true);
   });

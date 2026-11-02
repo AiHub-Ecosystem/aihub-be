@@ -92,4 +92,19 @@ describe('PostgresUsageRetentionRepository', () => {
 
     expect(query).toHaveBeenCalledWith(expect.any(String), cutoff, 1000);
   });
+
+  it('counts both retention tables without deleting rows', async () => {
+    const { client, query } = fakePrisma([
+      { usage_records: '4', dispatch_attempts: '2' },
+    ]);
+    const repository = new PostgresUsageRetentionRepository(client);
+    const cutoff = new Date('2025-03-01T00:00:00.000Z');
+
+    await expect(repository.previewPrune(cutoff)).resolves.toEqual({
+      usageRecords: 4,
+      dispatchAttempts: 2,
+    });
+
+    expect(query).toHaveBeenCalledWith(expect.any(String), cutoff);
+  });
 });

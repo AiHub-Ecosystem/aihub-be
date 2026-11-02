@@ -36,6 +36,7 @@ function setup(includeProbe = true) {
     requestRevocation,
     append: appendAuditRecord,
     pruneExpired: jest.fn().mockResolvedValue(0),
+    countExpired: jest.fn().mockResolvedValue(0),
     close: closeAudit,
   };
   const deletePublishedObjectIfPresent = jest.fn().mockResolvedValue('deleted');

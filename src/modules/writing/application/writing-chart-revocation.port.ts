@@ -45,6 +45,7 @@ export interface WritingChartRevocationAuditRepositoryPort {
   ): Promise<{ readonly publicationPending: boolean }>;
   append(record: WritingChartRevocationAuditRecord): Promise<void>;
   pruneExpired(cutoff: Date, batchSize: number): Promise<number>;
+  countExpired(cutoff: Date): Promise<number>;
   close?(): Promise<void>;
 }
 

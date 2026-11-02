@@ -15,6 +15,7 @@ export interface RegistrationsSweepCliInput {
   readonly records?: ClosableRecords;
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
+  readonly clockSource?: 'process' | 'database';
 }
 
 async function openRecords(
@@ -45,6 +46,11 @@ export async function runRegistrationsSweepCommand(
     ({ occurredAt }) => expiry.run(occurredAt),
   );
 
-  emit(JSON.stringify(result));
+  emit(
+    JSON.stringify({
+      ...result,
+      cutoff_source: input.clockSource ?? 'process',
+    }),
+  );
   return result;
 }

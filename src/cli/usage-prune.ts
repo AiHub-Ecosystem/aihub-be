@@ -7,16 +7,20 @@ import {
   type UsageRetentionPort,
   UsageRetentionService,
   type UsageRetentionSummary,
+  calculateUsageRetentionCutoff,
 } from '@/modules/metering/public/usage-retention';
 import type { WritingChartRevocationAuditRepositoryPort } from '@/modules/writing/application/writing-chart-revocation.port';
 import {
   WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
   WritingChartRevocationAuditRetentionService,
+  calculateWritingChartRevocationAuditCutoff,
 } from '@/modules/writing/public/chart-revocation';
 import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface UsagePruneCliInput {
   readonly databaseUrl: string;
+  readonly dryRun?: boolean;
+  readonly cutoffSource?: 'process' | 'database';
   readonly now?: Date;
   readonly clock?: () => Date;
   readonly repository?: UsageRetentionPort;
@@ -53,12 +57,16 @@ function emitFailure(
   );
 }
 
-export function formatUsageRetentionEvent(event: UsageRetentionEvent): string {
+export function formatUsageRetentionEvent(
+  event: UsageRetentionEvent,
+  cutoffSource?: 'process' | 'database',
+): string {
   if (event.type === 'started') {
     return JSON.stringify({
       event: 'usage_prune_started',
       started_at: timestamp(event.startedAt),
       cutoff: timestamp(event.cutoff),
+      ...(cutoffSource === undefined ? {} : { cutoff_source: cutoffSource }),
       batch_size: event.batchSize,
     });
   }
@@ -68,6 +76,7 @@ export function formatUsageRetentionEvent(event: UsageRetentionEvent): string {
       event: 'usage_prune_completed',
       completed_at: timestamp(event.completedAt),
       cutoff: timestamp(event.cutoff),
+      ...(cutoffSource === undefined ? {} : { cutoff_source: cutoffSource }),
       batch_size: event.batchSize,
       batches: event.batches,
       deleted: event.deleted,
@@ -80,6 +89,7 @@ export function formatUsageRetentionEvent(event: UsageRetentionEvent): string {
     event: 'usage_prune_failed',
     failed_at: timestamp(event.failedAt),
     cutoff: event.cutoff === null ? null : timestamp(event.cutoff),
+    ...(cutoffSource === undefined ? {} : { cutoff_source: cutoffSource }),
     batch_size: event.batchSize,
     batches: event.batches,
     deleted: event.deleted,
@@ -87,6 +97,118 @@ export function formatUsageRetentionEvent(event: UsageRetentionEvent): string {
     status: event.status,
     error_code: event.errorCode,
   });
+}
+
+function safePreviewCount(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+async function previewUsagePrune(
+  input: UsagePruneCliInput,
+  repository: UsageRetentionPort,
+  cutoff: Date,
+  emit: (line: string) => void,
+): Promise<UsageRetentionSummary> {
+  let usageCounts:
+    | { readonly usageRecords: number; readonly dispatchAttempts: number }
+    | undefined;
+  let previewFailed = false;
+  try {
+    if (repository.previewPrune === undefined) {
+      throw new Error('usage retention preview is unavailable');
+    }
+    usageCounts = await repository.previewPrune(cutoff);
+    if (
+      !safePreviewCount(usageCounts.usageRecords) ||
+      !safePreviewCount(usageCounts.dispatchAttempts)
+    ) {
+      throw new Error('usage retention preview is invalid');
+    }
+  } catch {
+    previewFailed = true;
+  }
+  try {
+    await repository.close?.();
+  } catch {
+    previewFailed = true;
+  }
+  if (previewFailed || usageCounts === undefined) {
+    throw new UsagePruneError(
+      'DATABASE_FAILURE',
+      'usage retention preview failed',
+    );
+  }
+
+  emit(
+    JSON.stringify({
+      event: 'usage_prune_preview',
+      cutoff: timestamp(cutoff),
+      cutoff_source: input.cutoffSource ?? 'process',
+      would_delete: {
+        usage_records: usageCounts.usageRecords,
+        dispatch_attempts: usageCounts.dispatchAttempts,
+      },
+      status: 'preview',
+    }),
+  );
+
+  const shouldPreviewWritingChartAudits =
+    input.writingChartAuditRepository !== undefined ||
+    input.repository === undefined;
+  if (shouldPreviewWritingChartAudits) {
+    let auditRepository = input.writingChartAuditRepository;
+    try {
+      auditRepository ??= await (
+        await import('./operator-writing-chart-client')
+      ).createOperatorWritingChartRevocationAuditClient(input.databaseUrl);
+    } catch {
+      throw new UsagePruneError(
+        'DATABASE_FAILURE',
+        'Writing chart revocation audit preview setup failed',
+      );
+    }
+
+    const auditCutoff = calculateWritingChartRevocationAuditCutoff(
+      input.clock?.() ?? input.now ?? new Date(),
+    );
+    let auditCount: number | undefined;
+    let auditFailed = false;
+    try {
+      auditCount = await auditRepository.countExpired(auditCutoff);
+      if (!safePreviewCount(auditCount)) {
+        throw new Error('writing chart audit preview is invalid');
+      }
+    } catch {
+      auditFailed = true;
+    }
+    try {
+      await auditRepository.close?.();
+    } catch {
+      auditFailed = true;
+    }
+    if (auditFailed || auditCount === undefined) {
+      throw new UsagePruneError(
+        'DATABASE_FAILURE',
+        'Writing chart revocation audit preview failed',
+      );
+    }
+    emit(
+      JSON.stringify({
+        event: 'writing_chart_revocation_audit_prune_preview',
+        cutoff: timestamp(auditCutoff),
+        cutoff_source: input.cutoffSource ?? 'process',
+        would_delete: auditCount,
+        status: 'preview',
+      }),
+    );
+  }
+
+  return {
+    cutoff,
+    batches: 0,
+    deleted: 0,
+    dispatchAttemptsDeleted: 0,
+  };
 }
 
 export async function runUsagePruneCommand(
@@ -119,6 +241,32 @@ export async function runUsagePruneCommand(
     throw error;
   }
 
+  if (input.dryRun === true) {
+    let cutoff: Date;
+    try {
+      cutoff = calculateUsageRetentionCutoff(clock());
+    } catch {
+      const error = new UsagePruneError(
+        'CLOCK_INVALID',
+        'usage retention clock is invalid',
+      );
+      emitFailure(emit, clock(), error.code);
+      await repository.close?.().catch(() => undefined);
+      throw error;
+    }
+    try {
+      return await previewUsagePrune(input, repository, cutoff, emit);
+    } catch (error) {
+      emitFailure(
+        emit,
+        clock(),
+        error instanceof UsagePruneError ? error.code : 'DATABASE_FAILURE',
+        cutoff,
+      );
+      throw error;
+    }
+  }
+
   const service = new UsageRetentionService(repository, clock);
   let summary: UsageRetentionSummary | undefined;
   let completionLine: string | undefined;
@@ -128,10 +276,10 @@ export async function runUsagePruneCommand(
   try {
     summary = await service.prune((event) => {
       if (event.type === 'completed') {
-        completionLine = formatUsageRetentionEvent(event);
+        completionLine = formatUsageRetentionEvent(event, input.cutoffSource);
         return;
       }
-      emit(formatUsageRetentionEvent(event));
+      emit(formatUsageRetentionEvent(event, input.cutoffSource));
     });
   } catch (error) {
     operationFailed = true;
@@ -222,6 +370,7 @@ export async function runUsagePruneCommand(
         started_at: timestamp(startedAt),
         completed_at: timestamp(clock()),
         cutoff: timestamp(auditSummary.cutoff),
+        cutoff_source: input.cutoffSource ?? 'process',
         batch_size: WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
         batches: auditSummary.batches,
         deleted: auditSummary.deleted,

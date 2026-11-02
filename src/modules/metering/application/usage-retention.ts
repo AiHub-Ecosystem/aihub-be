@@ -20,6 +20,10 @@ export interface UsageRetentionBatch {
 export interface UsageRetentionPort {
   pruneBatch(request: UsageRetentionBatchRequest): Promise<UsageRetentionBatch>;
   pruneDispatchAttempts(cutoff: Date, batchSize: number): Promise<number>;
+  previewPrune?(cutoff: Date): Promise<{
+    readonly usageRecords: number;
+    readonly dispatchAttempts: number;
+  }>;
   close?(): Promise<void>;
 }
 

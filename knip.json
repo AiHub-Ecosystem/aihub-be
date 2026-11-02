@@ -55,6 +55,8 @@
     // and cli.mjs reach the .cjs through TypeScript, so without this knip
     // reports a live file as unused.
     "scripts/cli/cli-options.d.cts",
+    // Hand-written types for the shared operator mutation safety helper.
+    "scripts/cli/operator-safety.d.cts",
     // Hand-written types for the dynamic CLI runner's source and built exports.
     "scripts/cli/load-cli-runner.d.cts",
     // The shell drift-check fixture invokes this generator; Knip does not follow that edge.

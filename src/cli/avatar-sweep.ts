@@ -16,6 +16,7 @@ export interface AvatarSweepCliInput {
   readonly storage?: AvatarStoragePort;
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
+  readonly clockSource?: 'process' | 'database';
 }
 
 async function openRepository(
@@ -58,7 +59,12 @@ export async function runAvatarSweepCommand(
     ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
   );
 
-  emit(JSON.stringify(result));
+  emit(
+    JSON.stringify({
+      ...result,
+      cutoff_source: input.clockSource ?? 'process',
+    }),
+  );
   return result;
 }
 import process from 'node:process';
