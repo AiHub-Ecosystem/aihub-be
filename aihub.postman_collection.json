@@ -750,7 +750,7 @@
       "request": {
         "name": "Create a Writing Task 1 chart upload intent",
         "description": {
-          "content": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
+          "content": "Requires an API key with `writing.grade` or `writing.exercise` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
           "type": "text/plain"
         },
         "url": {
@@ -820,7 +820,7 @@
       "request": {
         "name": "Refresh a Writing Task 1 chart upload URL",
         "description": {
-          "content": "Refreshes the signed URL for the same private staging object without extending the intent deadline.",
+          "content": "Requires an API key with `writing.grade` or `writing.exercise`. Refreshes the signed URL for the same private staging object without extending the intent deadline.",
           "type": "text/plain"
         },
         "url": {
@@ -893,7 +893,7 @@
       "request": {
         "name": "Verify and publish a Writing Task 1 chart",
         "description": {
-          "content": "Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
+          "content": "Requires an API key with `writing.grade` or `writing.exercise`.\n\nDownloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
           "type": "text/plain"
         },
         "url": {
@@ -3952,7 +3952,7 @@
     },
     {
       "name": "Public API /v2 (Writing)",
-      "description": "Writing grading on the v3 pipeline. Set `apiKey` and `baseUrl` first. These calls take 30 to 45 seconds and can take up to 120: raise the request timeout in Postman to at least 160 seconds (Settings, General, Request timeout). An essay of more than 1,000 words is refused with `400 INVALID_REQUEST`. Task 1 takes its `image_url` from the chart upload routes in the /v1 folder.",
+      "description": "Writing grading uses the v3 pipeline; exercises use the AI Writing exercise endpoints. Set `apiKey` with `writing.grade` for grading or `writing.exercise` for exercise routes, and set `baseUrl`. Grading calls can take up to 120 seconds: raise the request timeout in Postman to at least 160 seconds (Settings, General, Request timeout). An essay of more than 1,000 words is refused with `400 INVALID_REQUEST`. Task 1 takes its `image_url` from the chart upload routes in the /v1 folder.",
       "item": [
         {
           "name": "1. Grade a Task 1 essay",
@@ -4056,6 +4056,165 @@
                   "  pm.expect(data.criteria).to.have.length(4);",
                   "  pm.expect(data.overall_assessment.progress).to.have.property(\"status\");",
                   "  pm.expect(data).to.have.property(\"data_micro\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Create a micro exercise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"education\",\n  \"writing_task\": 2,\n  \"criterion\": \"grammatical_range_accuracy\",\n  \"error_code\": \"GRA01\",\n  \"prompt\": \"Use the target form.\",\n  \"question_type\": \"grammar\",\n  \"comments\": [\n    {\n      \"quote\": \"She go to school.\",\n      \"explanation\": \"Use third-person agreement.\"\n    }\n  ],\n  \"exercise_type\": \"short_writing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v2/ielts/writing/micro-exercises",
+            "description": "Creates one exercise from a selected Task 2 error. `exercise_type` may be omitted or null to let the provider choose a compatible type. The returned `meta.type` identifies the exercise."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.v2.micro-exercises.create');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.test('response contains a nonempty exercise', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.exercise.length).to.be.above(0);",
+                  "  pm.expect(data.meta.number_of_questions).to.equal(data.exercise.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Create a long-writing exercise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"education\",\n  \"writing_task\": 2,\n  \"errors\": [\n    {\n      \"criterion\": \"grammatical_range_accuracy\",\n      \"error_code\": \"GRA01\",\n      \"prompt\": \"Use the target form.\",\n      \"question_type\": \"grammar\",\n      \"comments\": [\n        {\n          \"quote\": \"She go to school.\",\n          \"explanation\": \"Use third-person agreement.\"\n        }\n      ]\n    },\n    {\n      \"criterion\": \"coherence_cohesion\",\n      \"error_code\": \"CC01\",\n      \"prompt\": \"Connect related ideas.\",\n      \"question_type\": \"cohesion\",\n      \"comments\": [\n        {\n          \"quote\": \"Also,\",\n          \"explanation\": \"Link the clauses more clearly.\"\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v2/ielts/writing/long-writing-exercises",
+            "description": "Creates a long-writing exercise from two to four selected Task 2 errors. Each error includes its criterion, code, prompt, question type, and comments."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.v2.long-writing-exercises.create');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.test('response is a long-writing exercise', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.meta.type).to.equal('long_writing');",
+                  "  pm.expect(data.meta.number_of_questions).to.equal(data.exercise.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Grade a writing exercise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exercise_type\": \"short_writing\",\n  \"instruction\": \"Write one sentence.\",\n  \"question_no\": 1,\n  \"question_text\": \"Use a conjunction.\",\n  \"question_image\": null,\n  \"hint\": [],\n  \"sample_answer\": \"I stayed home because it rained.\",\n  \"ai_grading_rubric\": \"Uses a correct conjunction.\",\n  \"note\": null,\n  \"user_answer\": \"I stayed home because it rained.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v2/ielts/writing/micro-exercises/grade",
+            "description": "Grades one short-writing answer. The result is a practice score from 1 to 10, not an IELTS band score."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success envelope carries the right operation and an AIHUB-generated request id', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.meta.operation).to.eql('writing.v2.micro-exercises.grade');",
+                  "  pm.expect(body.meta.service).to.eql('ai-writing');",
+                  "  pm.expect(body.meta.request_id).to.match(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);",
+                  "});",
+                  "pm.test('response contains a practice score', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.score).to.be.within(1, 10);",
+                  "  pm.expect(data.comment).to.be.a('string');",
                   "});"
                 ]
               }
@@ -5383,6 +5542,6 @@
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `bun run generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact described in docs/history/aihub-deliverable-1-historical-contract.md §G; it is not a CI regression suite.",
-    "version": "1.6.0"
+    "version": "1.7.0"
   }
 }

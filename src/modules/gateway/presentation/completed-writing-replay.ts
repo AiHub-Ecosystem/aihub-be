@@ -5,6 +5,11 @@ import {
   GradeTask2RequestSchema,
 } from '@/contracts/writing/grading';
 import {
+  CreateLongWritingExerciseRequestSchema,
+  CreateMicroExerciseRequestSchema,
+  GradeMicroExerciseRequestSchema,
+} from '@/contracts/writing/v2/exercises';
+import {
   WritingV2GradeTask1RequestSchema,
   WritingV2GradeTask2RequestSchema,
 } from '@/contracts/writing/v2/grading';
@@ -12,18 +17,22 @@ import type { IdempotencyServicePort } from '@/modules/idempotency/application/i
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { CompletedReplayForRequest } from './completed-idempotency-replay';
 
-/** The Writing grading operations a completed replay can be confirmed for. */
-const WRITING_GRADE_SCHEMAS = {
+/** The idempotent Writing operations a completed replay can be confirmed for. */
+const WRITING_REPLAY_SCHEMAS = {
   'writing.task1.grade': GradeTask1RequestSchema,
   'writing.task2.grade': GradeTask2RequestSchema,
   'writing.v2.task1.grade': WritingV2GradeTask1RequestSchema,
   'writing.v2.task2.grade': WritingV2GradeTask2RequestSchema,
+  'writing.v2.micro-exercises.create': CreateMicroExerciseRequestSchema,
+  'writing.v2.long-writing-exercises.create':
+    CreateLongWritingExerciseRequestSchema,
+  'writing.v2.micro-exercises.grade': GradeMicroExerciseRequestSchema,
 } as const;
 
-function isWritingGrade(
+function isWritingReplayOperation(
   operation: OperationId,
-): operation is keyof typeof WRITING_GRADE_SCHEMAS {
-  return Object.hasOwn(WRITING_GRADE_SCHEMAS, operation);
+): operation is keyof typeof WRITING_REPLAY_SCHEMAS {
+  return Object.hasOwn(WRITING_REPLAY_SCHEMAS, operation);
 }
 
 export interface CompletedWritingReplayAttempt {
@@ -49,7 +58,7 @@ export async function findCompletedWritingReplay(
     idempotency?.findCompletedReplay === undefined ||
     actorId === undefined ||
     idempotencyKey === undefined ||
-    !isWritingGrade(operation)
+    !isWritingReplayOperation(operation)
   ) {
     return undefined;
   }
@@ -57,7 +66,7 @@ export async function findCompletedWritingReplay(
   let requestBody: unknown;
   try {
     requestBody = parseRequestBody(
-      WRITING_GRADE_SCHEMAS[operation],
+      WRITING_REPLAY_SCHEMAS[operation],
       request.body,
       request,
     );

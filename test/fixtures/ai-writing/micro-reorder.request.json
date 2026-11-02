@@ -1,0 +1,22 @@
+{
+  "topic": "Environmental protection",
+  "writing_task": 2,
+  "criterion": "coherence_cohesion",
+  "error_code": "CC03",
+  "exercise_type": "reorder",
+  "references": [
+    {
+      "question": {
+        "prompt": "Some people believe communities should protect the natural environment. Discuss the problems and possible solutions.",
+        "image": null,
+        "question_type": "problem_solution"
+      },
+      "comments": [
+        {
+          "quote": "People should protect forests. Because forests are important.",
+          "explanation": "The ideas are connected with a sentence fragment."
+        }
+      ]
+    }
+  ]
+}

@@ -37,7 +37,7 @@ describe('Writing Task 1 image URL policy', () => {
     ['home network name', 'https://nas.home.arpa/chart.png'],
     ['uppercase special-use name', 'https://API.LOCALHOST/chart.png'],
     ['unsupported scheme', 'file:///etc/passwd'],
-    ['oversized URL', `https://charts.example/${'a'.repeat(2_000)}`],
+    ['oversized URL', `https://charts.example/${'a'.repeat(2_001)}`],
     ['URL with whitespace', 'https://charts.example/chart image.png'],
   ])('rejects %s', (_description, value) => {
     expect(isAllowedTask1ImageUrl(value)).toBe(false);

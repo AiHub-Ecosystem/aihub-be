@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "message": "Chấm điểm bài tập thành công",
+  "data": {
+    "score": 10,
+    "comment": "**Ưu điểm:**\n- Dùng đúng collocation theo yêu cầu: “**play a vital role in**”.\n- Ngữ pháp chuẩn: “in **protecting** biodiversity” đúng cấu trúc với V-ing.\n- Từ vựng học thuật phù hợp: “**biodiversity**”.\n- Câu trả lời khớp hoàn toàn với sample: “Forests play a vital role in protecting biodiversity.”\n\n**Nhược điểm:**\n- Không có lỗi.\n\n**Gợi ý cải thiện:**\n- Không cần—câu viết đã hoàn hảo theo đề."
+  },
+  "usage": {
+    "input_tokens": 2977,
+    "output_tokens": 374,
+    "total_tokens": 3351,
+    "cost": 0.0010629
+  },
+  "metrics": {
+    "ai_processing_ms": 3573
+  }
+}

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.4.0"
+    "version": "2.5.0"
   },
   "servers": [
     {
@@ -1564,6 +1564,1800 @@
                             }
                           },
                           "additionalProperties": true
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v2/ielts/writing/micro-exercises": {
+      "post": {
+        "operationId": "writing.v2.micro-exercises.create",
+        "summary": "writing.v2.micro-exercises.create",
+        "x-required-scope": "writing.exercise",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "topic",
+                  "writing_task",
+                  "criterion",
+                  "error_code",
+                  "prompt",
+                  "question_type",
+                  "comments"
+                ],
+                "properties": {
+                  "topic": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "writing_task": {
+                    "anyOf": [
+                      {
+                        "const": 1,
+                        "type": "number"
+                      },
+                      {
+                        "const": 2,
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "criterion": {
+                    "anyOf": [
+                      {
+                        "const": "task_achievement",
+                        "type": "string"
+                      },
+                      {
+                        "const": "task_response",
+                        "type": "string"
+                      },
+                      {
+                        "const": "coherence_cohesion",
+                        "type": "string"
+                      },
+                      {
+                        "const": "lexical_resource",
+                        "type": "string"
+                      },
+                      {
+                        "const": "grammatical_range_accuracy",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "error_code": {
+                    "minLength": 1,
+                    "description": "Provider-owned informational code; clients must tolerate new or renamed values.",
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "question_type": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "image_url": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "comments": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": ["quote", "explanation"],
+                      "properties": {
+                        "quote": {
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "type": "string"
+                        },
+                        "explanation": {
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "exercise_type": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "multiple_choice_single",
+                            "type": "string"
+                          },
+                          {
+                            "const": "multiple_choice_multiple",
+                            "type": "string"
+                          },
+                          {
+                            "const": "choose_from_list",
+                            "type": "string"
+                          },
+                          {
+                            "const": "gap_filling",
+                            "type": "string"
+                          },
+                          {
+                            "const": "annotation",
+                            "type": "string"
+                          },
+                          {
+                            "const": "reorder",
+                            "type": "string"
+                          },
+                          {
+                            "const": "short_writing",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "multiple_choice_single",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "options",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "options": {
+                                    "additionalProperties": true,
+                                    "type": "object",
+                                    "required": ["A", "B", "C", "D"],
+                                    "properties": {
+                                      "A": {
+                                        "type": "string"
+                                      },
+                                      "B": {
+                                        "type": "string"
+                                      },
+                                      "C": {
+                                        "type": "string"
+                                      },
+                                      "D": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "correct": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "multiple_choice_multiple",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "options",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "options": {
+                                    "additionalProperties": true,
+                                    "type": "object",
+                                    "required": ["A", "B", "C", "D"],
+                                    "properties": {
+                                      "A": {
+                                        "type": "string"
+                                      },
+                                      "B": {
+                                        "type": "string"
+                                      },
+                                      "C": {
+                                        "type": "string"
+                                      },
+                                      "D": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "correct": {
+                                    "minItems": 1,
+                                    "maxItems": 4,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "choose_from_list",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "options",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "options": {
+                                    "minItems": 2,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "correct": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "gap_filling",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "correct": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "annotation",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "text_for_annotation",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "text_for_annotation": {
+                                    "type": "string"
+                                  },
+                                  "correct": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "reorder",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "options",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "options": {
+                                    "minItems": 2,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "correct": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["meta", "exercise"],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "ai_grading",
+                                "difficulty",
+                                "topic",
+                                "instruction",
+                                "number_of_questions",
+                                "rationale_for_exercise",
+                                "type",
+                                "error_code"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ai_grading": {
+                                  "type": "string"
+                                },
+                                "difficulty": {
+                                  "type": "string"
+                                },
+                                "topic": {
+                                  "type": "string"
+                                },
+                                "instruction": {
+                                  "type": "string"
+                                },
+                                "number_of_questions": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "rationale_for_exercise": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "type": {
+                                  "const": "short_writing",
+                                  "type": "string"
+                                },
+                                "error_code": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "exercise": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "questions_no",
+                                  "question_text",
+                                  "question_image",
+                                  "explanation",
+                                  "hint",
+                                  "correct"
+                                ],
+                                "properties": {
+                                  "questions_no": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "question_text": {
+                                    "type": "string"
+                                  },
+                                  "question_image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 2048,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "explanation": {
+                                    "type": "string"
+                                  },
+                                  "hint": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "correct": {
+                                    "additionalProperties": true,
+                                    "type": "object",
+                                    "required": [
+                                      "sample_answer",
+                                      "ai_grading_rubric",
+                                      "note"
+                                    ],
+                                    "properties": {
+                                      "sample_answer": {
+                                        "type": "string"
+                                      },
+                                      "ai_grading_rubric": {
+                                        "type": "string"
+                                      },
+                                      "note": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v2/ielts/writing/long-writing-exercises": {
+      "post": {
+        "operationId": "writing.v2.long-writing-exercises.create",
+        "summary": "writing.v2.long-writing-exercises.create",
+        "x-required-scope": "writing.exercise",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["topic", "writing_task", "errors"],
+                "properties": {
+                  "topic": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "writing_task": {
+                    "anyOf": [
+                      {
+                        "const": 1,
+                        "type": "number"
+                      },
+                      {
+                        "const": 2,
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "errors": {
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "criterion",
+                        "error_code",
+                        "prompt",
+                        "question_type",
+                        "comments"
+                      ],
+                      "properties": {
+                        "criterion": {
+                          "anyOf": [
+                            {
+                              "const": "task_achievement",
+                              "type": "string"
+                            },
+                            {
+                              "const": "task_response",
+                              "type": "string"
+                            },
+                            {
+                              "const": "coherence_cohesion",
+                              "type": "string"
+                            },
+                            {
+                              "const": "lexical_resource",
+                              "type": "string"
+                            },
+                            {
+                              "const": "grammatical_range_accuracy",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "error_code": {
+                          "minLength": 1,
+                          "description": "Provider-owned informational code; clients must tolerate new or renamed values.",
+                          "type": "string"
+                        },
+                        "prompt": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "question_type": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "image_url": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 2048,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "comments": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": ["quote", "explanation"],
+                            "properties": {
+                              "quote": {
+                                "minLength": 1,
+                                "maxLength": 1000,
+                                "type": "string"
+                              },
+                              "explanation": {
+                                "minLength": 1,
+                                "maxLength": 1000,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["meta", "exercise"],
+                      "properties": {
+                        "meta": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "type",
+                            "ai_grading",
+                            "error_code",
+                            "difficulty",
+                            "topic",
+                            "instruction",
+                            "number_of_questions"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "long_writing",
+                              "type": "string"
+                            },
+                            "ai_grading": {
+                              "type": "string"
+                            },
+                            "error_code": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "difficulty": {
+                              "type": "string"
+                            },
+                            "topic": {
+                              "type": "string"
+                            },
+                            "instruction": {
+                              "type": "string"
+                            },
+                            "number_of_questions": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "exercise": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "questions_no",
+                              "question_text",
+                              "question_image",
+                              "explanation",
+                              "hint",
+                              "correct"
+                            ],
+                            "properties": {
+                              "questions_no": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "question_text": {
+                                "type": "string"
+                              },
+                              "question_image": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "explanation": {
+                                "type": "string"
+                              },
+                              "hint": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "correct": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                  "sample_answer",
+                                  "ai_grading_rubric"
+                                ],
+                                "properties": {
+                                  "sample_answer": {
+                                    "type": "string"
+                                  },
+                                  "ai_grading_rubric": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "request_id",
+                        "service",
+                        "operation",
+                        "timing"
+                      ],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "correlation_id": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "timing": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "downstream_ms",
+                            "gateway_overhead_ms",
+                            "total_ms"
+                          ],
+                          "properties": {
+                            "downstream_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "gateway_overhead_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      }
+    },
+    "/v2/ielts/writing/micro-exercises/grade": {
+      "post": {
+        "operationId": "writing.v2.micro-exercises.grade",
+        "summary": "writing.v2.micro-exercises.grade",
+        "x-required-scope": "writing.exercise",
+        "x-identity-scope": "user",
+        "x-idempotency": "required",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Required. Trimmed and limited to 1–255 UTF-8 bytes. Scoped to (organization, operation, key); replays the stored result for a repeat call."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "exercise_type",
+                      "instruction",
+                      "question_no",
+                      "question_text",
+                      "question_image",
+                      "hint",
+                      "sample_answer",
+                      "ai_grading_rubric",
+                      "user_answer"
+                    ],
+                    "properties": {
+                      "exercise_type": {
+                        "const": "short_writing",
+                        "type": "string"
+                      },
+                      "instruction": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "question_no": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "question_text": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "question_image": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 2048,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hint": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "sample_answer": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "ai_grading_rubric": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "user_answer": {
+                        "minLength": 1,
+                        "maxLength": 1500,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "exercise_type",
+                      "instruction",
+                      "question_no",
+                      "question_text",
+                      "question_image",
+                      "hint",
+                      "sample_answer",
+                      "ai_grading_rubric",
+                      "user_answer"
+                    ],
+                    "properties": {
+                      "exercise_type": {
+                        "const": "long_writing",
+                        "type": "string"
+                      },
+                      "instruction": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "question_no": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "question_text": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "question_image": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 2048,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hint": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "sample_answer": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "ai_grading_rubric": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "user_answer": {
+                        "minLength": 1,
+                        "maxLength": 4000,
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Idempotent-Replay": {
+                "description": "Present with value true when the completed business result was replayed for this key.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["score", "comment"],
+                      "properties": {
+                        "score": {
+                          "minimum": 1,
+                          "maximum": 10,
+                          "type": "integer"
+                        },
+                        "comment": {
+                          "type": "string"
                         }
                       }
                     },

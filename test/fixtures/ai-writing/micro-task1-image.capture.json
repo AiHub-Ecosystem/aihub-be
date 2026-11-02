@@ -1,0 +1,9 @@
+{
+  "environment": "production",
+  "provider_host": "api-ielts-writing.aihubproduction.com",
+  "path": "/v2/create-micro-exercise",
+  "status": 200,
+  "content_type": "application/json",
+  "duration_ms": 23059,
+  "captured_at": "2026-11-02T01:42:26.138Z"
+}

@@ -18,7 +18,7 @@ export const RETRY_BUDGET_WINDOW_MS = 60_000;
 
 /**
  * The operations whose same-key repeats count against the Organization retry
- * budget. A graded operation that takes an Idempotency-Key must be listed here
+ * budget. A Writing AI operation that takes an Idempotency-Key must be listed here
  * (a spec compares this with the catalog), or its repeats would escape the
  * budget.
  */
@@ -27,6 +27,9 @@ export const RETRY_BUDGET_OPERATIONS = [
   'writing.task2.grade',
   'writing.v2.task1.grade',
   'writing.v2.task2.grade',
+  'writing.v2.micro-exercises.create',
+  'writing.v2.long-writing-exercises.create',
+  'writing.v2.micro-exercises.grade',
 ] as const satisfies readonly OperationId[];
 
 export interface AdmitGradedRequestInput {

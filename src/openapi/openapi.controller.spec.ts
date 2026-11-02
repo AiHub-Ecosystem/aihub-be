@@ -48,7 +48,7 @@ describe('OpenApiController', () => {
     expect(versionedResponse.json()).toEqual(response.json());
     const v1 = await app.inject({ method: 'GET', url: '/openapi/v1.json' });
     expect(v1.statusCode).toBe(200);
-    expect(v1.json()).toMatchObject({ info: { version: '1.6.0' } });
+    expect(v1.json()).toMatchObject({ info: { version: '1.7.0' } });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['content-security-policy']).toBe(

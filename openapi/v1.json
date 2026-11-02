@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "servers": [
     {
@@ -3948,9 +3948,10 @@
       "post": {
         "operationId": "writing.chartUploads.create",
         "summary": "Create a Writing Task 1 chart upload intent",
-        "description": "Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
+        "description": "Requires an API key with `writing.grade` or `writing.exercise` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.\n\nUpload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.",
         "x-identity-scope": "user",
         "x-required-scope": "writing.grade",
+        "x-accepted-scopes": ["writing.grade", "writing.exercise"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -4103,9 +4104,10 @@
       "post": {
         "operationId": "writing.chartUploads.refresh",
         "summary": "Refresh a Writing Task 1 chart upload URL",
-        "description": "Refreshes the signed URL for the same private staging object without extending the intent deadline.",
+        "description": "Requires an API key with `writing.grade` or `writing.exercise`. Refreshes the signed URL for the same private staging object without extending the intent deadline.",
         "x-identity-scope": "user",
         "x-required-scope": "writing.grade",
+        "x-accepted-scopes": ["writing.grade", "writing.exercise"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -4234,9 +4236,10 @@
       "post": {
         "operationId": "writing.chartUploads.complete",
         "summary": "Verify and publish a Writing Task 1 chart",
-        "description": "Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
+        "description": "Requires an API key with `writing.grade` or `writing.exercise`.\n\nDownloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.\n\nThe returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.",
         "x-identity-scope": "user",
         "x-required-scope": "writing.grade",
+        "x-accepted-scopes": ["writing.grade", "writing.exercise"],
         "security": [
           {
             "ApiKeyAuth": []

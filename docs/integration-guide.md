@@ -288,7 +288,7 @@ backend vouched for each user.
 AIHUB and your team complete these steps in order:
 
 1. **Choose the capabilities and environment.** Decide which operations you
-   need (`writing.grade`, `speaking.grade`, or both) and whether you are setting
+   need (`writing.grade`, `writing.exercise`, `speaking.grade`, or a combination) and whether you are setting
    up staging, production, or the separate Writing Sandbox in section 3b. Use a
    key authorized for that environment and scope.
 2. **Create your Organization and API key.** Register an AIHUB account, then
@@ -548,8 +548,8 @@ String assertion = jwt.serialize();
 
 ### Which calls need one
 
-All current grading operations - Writing Task 1, Writing Task 2, and Speaking -
-are user-scoped and require `X-User-Identity`. The required value is a Declared
+All current grading and Writing exercise operations are user-scoped and require
+`X-User-Identity`. The required value is a Declared
 User ID when there is no active identity configuration, or a Signed User
 Assertion when there is one. In signed mode, the assertion's `sub` claim is the
 learner identity AIHUB accepts.
@@ -653,11 +653,12 @@ ceiling bounds the number of AI calls; it is not a USD spending limit.
 ## 3b. Customer Sandbox Environment
 
 The Customer Sandbox backend supports customer Organization keys for trying
-the live Writing grading API without using the Organization's production quota
-or receiving a customer bill. An active Organization owner or admin creates a
-separate API key restricted to the `sandbox` Environment and `writing.grade`.
-Keep production and Sandbox keys separate; a Sandbox key cannot call the
-production hostname. Customer Sandbox supports Writing Task 1 and Task 2.
+the live Writing API without using the Organization's production quota or
+receiving a customer bill. An active Organization owner or admin creates a
+separate API key restricted to the `sandbox` Environment and either
+`writing.grade` or `writing.exercise`. Keep production and Sandbox keys
+separate; a Sandbox key cannot call the production hostname. Customer Sandbox
+supports Writing Task 1 and Task 2 grading and Writing exercises.
 Speaking remains available to the dedicated demo Organization only.
 
 Use `https://sandbox.aihubproduction.com` as the base URL when Sandbox is
@@ -725,7 +726,8 @@ and includes a short `retry_after_ms` hint. Storage calls stop at the request's
 
 ## 3d. Writing Task 1 chart uploads
 
-An API key with `writing.grade` can upload a chart for a Writing Task 1 grade.
+An API key with `writing.grade` or `writing.exercise` can upload a chart for a
+Writing Task 1 grade or exercise.
 The request must include the same `X-User-Identity` value as grading: a
 Declared User ID when the Organization has no active identity configuration,
 or a Signed User Assertion when it does. The upload is bound to the
@@ -748,8 +750,8 @@ rejected with `400`. `503 WRITING_CHART_STORAGE_UNAVAILABLE` is retryable, and
 an Organization past its hourly limit receives `429 RATE_LIMITED` with
 `retry_after_ms` and a `Retry-After` header.
 
-Put the completion response's `image_url` into the existing Task 1
-`image_url` grading field. A completed image is publicly readable by anyone
+Put the completion response's `image_url` into the Task 1 `image_url` field for
+grading or exercise creation. A completed image is publicly readable by anyone
 who learns its URL. AIHUB schedules deletion 24 hours after publication; the
 15-minute cleanup job deletes it on the first successful run after that
 deadline. Do not upload a chart you cannot expose publicly. AIHUB also deletes
@@ -771,7 +773,9 @@ report and respond within one business day.
 
 ## 4. Endpoints
 
-Grading operations are `POST` routes; the three `/v2` Speaking read-back routes are `GET`. Writing and Speaking JSON-by-URL use `Content-Type: application/json`; Speaking file grading uses
+AI grading and exercise operations are `POST` routes; the three `/v2` Speaking
+read-back routes are `GET`. Writing and Speaking JSON-by-URL use
+`Content-Type: application/json`; Speaking file grading uses
 `multipart/form-data`.
 
 | Path                                         | `X-User-Identity`                              | `Idempotency-Key` | Max body | AIHUB timeout |
@@ -782,6 +786,9 @@ Grading operations are `POST` routes; the three `/v2` Speaking read-back routes 
 | `/v1/ielts/speaking/grading-json`            | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
 | `/v2/ielts/writing/task1/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |          125s |
 | `/v2/ielts/writing/task2/grade`              | Required; plain ID or JWT by Organization mode | Required          |   256 KB |          125s |
+| `/v2/ielts/writing/micro-exercises`          | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           45s |
+| `/v2/ielts/writing/long-writing-exercises`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           35s |
+| `/v2/ielts/writing/micro-exercises/grade`    | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           20s |
 | `/v2/ielts/speaking/questions/grade`         | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
 | `/v2/ielts/speaking/parts/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
 | `/v2/ielts/speaking/tests/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
@@ -797,7 +804,7 @@ complete:
 | `/v1/sandbox/assertions`                | Not used                                       | None              | Dedicated demo Organization only; see section 3a                           |
 | `/v1/ielts/speaking/questions`          | Not used                                       | None              | Public question catalog; no API key needed                                 |
 | `/v1/speaking/audio/uploads`            | Required; plain ID or JWT by Organization mode | None              | Requires `speaking.grade`; create, refresh, and complete recording uploads |
-| `/v1/ielts/writing/task1/chart-uploads` | Required; plain ID or JWT by Organization mode | None              | Chart upload intent; see section 3d                                        |
+| `/v1/ielts/writing/task1/chart-uploads` | Required; plain ID or JWT by Organization mode | None              | Requires `writing.grade` or `writing.exercise`; see section 3d             |
 
 `/v1/sandbox/assertions` takes an API key and a `user_id` in its body; it does
 not take `X-User-Identity` because issuing that value is what the route does.
@@ -1121,8 +1128,9 @@ The response uses the common `{ "data", "meta" }` envelope. `data` has:
   reports on this essay against the End-User's earlier results.
 - `data_micro`: the errors grouped by criterion and then by code, as
   `{ "<criterion>": { "<code>": { "prompt", "question_type", "comments": [{ "quote", "explanation" }] } } }`.
-  It is empty (`{}`) when no error was found. Keep it as it is: the
-  micro-exercise operations will take it back unchanged.
+  It is empty (`{}`) when no error was found. Exercise routes take one selected
+  error in the AIHUB-owned request shape below; they do not accept `data_micro`
+  unchanged.
 
 Feedback text is Vietnamese or English as the AI service writes it, and AIHUB
 passes it through unchanged, including a leading `- ` that some strings carry.
@@ -1183,6 +1191,49 @@ accept both `grammar_range_accuracy` and `grammatical_range_accuracy`.
 | `GRA17` | Modifier Placement (Dangling / Misplaced)        |
 | `GRA18` | Punctuation and Capitalisation                   |
 | `GRA19` | Sentence Variety and Structural Range            |
+
+The table above lists currently known codes; it is not a closed set. Error
+codes are provider-owned and informational. Pass a selected code through as
+received, and tolerate new or renamed values without branching on them.
+
+### Creating and grading Writing exercises
+
+Use an API key with `writing.exercise`, the same `X-User-Identity` mode as
+grading, and a unique `Idempotency-Key` for each new request. Reusing the same
+key and body replays the completed response for 24 hours. The three operations
+are:
+
+| Method | Route                                      | AIHUB timeout |
+| ------ | ------------------------------------------ | ------------: |
+| `POST` | `/v2/ielts/writing/micro-exercises`        |           45s |
+| `POST` | `/v2/ielts/writing/long-writing-exercises` |           35s |
+| `POST` | `/v2/ielts/writing/micro-exercises/grade`  |           20s |
+
+A micro request selects one error. Its public body has `topic` (up to 200
+characters), `writing_task` (`1` or `2`), `criterion`, `error_code`, `prompt`
+(up to 2,000 characters), `question_type`, one or more `comments` with `quote`
+and `explanation` up to 1,000 characters each, and optional `image_url` (up to
+2,048 characters). `exercise_type` may be omitted or null to let the provider
+choose, or set to one of `multiple_choice_single`,
+`multiple_choice_multiple`, `choose_from_list`, `gap_filling`, `annotation`,
+`reorder`, or `short_writing`.
+
+Long-writing creation uses the same error fields inside `errors`, with two to
+four entries. Task 1 image URLs must be public HTTPS URLs; the chart upload flow
+in section 3d also accepts `writing.exercise` keys. The grade request includes
+`exercise_type` (`short_writing` or `long_writing`), `instruction`,
+`question_no`, `question_text`, `question_image`, `hint`, `sample_answer`,
+`ai_grading_rubric`, optional `note`, and `user_answer`. Answers are limited to
+1,500 characters for short writing and 4,000 for long writing.
+
+All three routes allow a 256 KB request body and return the common `{ "data",
+"meta" }` envelope. Creation responses identify their variant with
+`data.meta.type`; each exercise row contains its question and answer key. Keep
+answer keys from learners until appropriate. Grading returns `data.score` and
+`data.comment`; the score is a 1–10 practice score, not an IELTS band. AIHUB
+does not return provider cost, usage, or processing-time fields. A provider may
+refuse an unsupported error-code and exercise-type combination with
+`400 INVALID_REQUEST`.
 
 Compared with `/v1`, `/v2` does not return `language`, `summary` as one string,
 `suggestions` and `next_steps` as lists of strings, or `annotations`; `errors` and

@@ -4,7 +4,7 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import {
   type KeyEnvironment,
   entitlementOfScope,
-  isGradingScope,
+  isAiServiceScope,
 } from '@/modules/identity/domain/api-key';
 import { isDisplayText } from '@/modules/identity/domain/display-text';
 import {
@@ -98,7 +98,7 @@ function validateSandboxKey(
 ): void {
   if (
     environments.includes('sandbox') &&
-    scopes.some((scope) => !isGradingScope(scope))
+    scopes.some((scope) => !isAiServiceScope(scope))
   ) {
     throw invalidRequest();
   }

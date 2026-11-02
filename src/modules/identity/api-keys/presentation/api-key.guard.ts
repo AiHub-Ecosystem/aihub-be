@@ -25,14 +25,17 @@ import {
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { isGradingScope } from '@/modules/identity/domain/api-key';
+import { isAiServiceScope } from '@/modules/identity/domain/api-key';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   type RequestEnvironmentConfig,
   isLocalAuthBypassEnabled,
   resolveAihubEnvironment,
 } from '@/modules/identity/shared/presentation/request-environment';
-import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
+import {
+  ADDITIONAL_OPERATION_SCOPES_METADATA,
+  REQUIRED_OPERATION_METADATA,
+} from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { openMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 import {
   authenticateApiKey,
@@ -125,6 +128,11 @@ export class ApiKeyGuard implements CanActivate {
       }
 
       const operation = OPERATION_CATALOG[operationId];
+      const additionalScopes =
+        this.reflector.getAllAndOverride<readonly string[]>(
+          ADDITIONAL_OPERATION_SCOPES_METADATA,
+          [context.getHandler(), context.getClass()],
+        ) ?? [];
       stage = 'runtime_configuration';
       const configuration = this.requireConfiguration();
       stage = 'environment_resolution';
@@ -160,7 +168,9 @@ export class ApiKeyGuard implements CanActivate {
         configuration,
         {
           ...(bffVisitorIp === undefined ? {} : { clientIp: bffVisitorIp }),
-          forceFresh: isGradingScope(operation.requiredScope),
+          forceFresh:
+            isAiServiceScope(operation.requiredScope) ||
+            additionalScopes.some(isAiServiceScope),
         },
       );
       const authorized =
@@ -183,7 +193,11 @@ export class ApiKeyGuard implements CanActivate {
       });
 
       stage = 'scope_authorization';
-      if (!authorized.scopes.includes(operation.requiredScope)) {
+      if (
+        ![operation.requiredScope, ...additionalScopes].some((scope) =>
+          authorized.scopes.includes(scope),
+        )
+      ) {
         throw forbidden();
       }
 

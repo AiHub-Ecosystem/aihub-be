@@ -349,7 +349,7 @@ describe('Writing grading HTTP flow', () => {
     ['private-use .internal name', 'https://metadata.google.internal/'],
     ['single-label name', 'https://intranet/chart.png'],
     ['non-default port', 'https://charts.customer.example:8443/chart.png'],
-    ['oversized URL', `https://charts.customer.example/${'a'.repeat(2_000)}`],
+    ['oversized URL', `https://charts.customer.example/${'a'.repeat(2_001)}`],
   ])(
     'rejects unsafe Task 1 image URL (%s) before dispatch',
     async (kind, imageUrl) => {

@@ -9,6 +9,17 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.5.0] - 2026-11-02
+
+### Added
+
+- `/v2/ielts/writing/micro-exercises`,
+  `/v2/ielts/writing/long-writing-exercises`, and
+  `/v2/ielts/writing/micro-exercises/grade` use the `writing.exercise` scope.
+  Exercise error codes are provider-owned informational strings, so clients
+  must tolerate new and renamed values. Writing chart uploads also accept the
+  `writing.exercise` scope.
+
 ## [2.4.0] - 2026-11-01
 
 ### Changed
@@ -86,6 +97,14 @@ out.
   `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
+
+## [1.7.0] - 2026-11-02
+
+### Changed
+
+- Writing chart upload routes also accept `writing.exercise` API keys so
+  exercise requests can use the existing authenticated chart upload flow.
+  `writing.grade` remains supported.
 
 ## [1.5.0] - 2026-10-30
 

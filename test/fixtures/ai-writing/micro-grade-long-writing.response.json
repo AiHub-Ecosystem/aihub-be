@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "message": "Chấm điểm bài tập thành công",
+  "data": {
+    "score": 8,
+    "comment": "**Ưu điểm:**\n- Nội dung bám sát yêu cầu và trả lời đúng “how communities can protect local wildlife”: “Local communities can protect wildlife…”, “reduce pollution… support conservation programs…”.\n- Bố cục mạch lạc: từ việc bảo vệ môi trường sống → giảm ô nhiễm → nêu kết quả “These actions help endangered species survive.”\n- Ngữ pháp đúng và câu tự nhiên: dùng cấu trúc “can … by + V-ing” chính xác (“by preserving natural habitats”).\n- Từ vựng phù hợp văn phong học thuật: “natural habitats”, “conservation programs”, “endangered species”.\n\n**Nhược điểm:**\n- Liên kết ý còn khá đơn giản (“They can also…”, “These actions…”). Có thể thêm từ nối/phép liên kết phong phú hơn để đoạn văn “mượt” hơn.\n\n**Gợi ý cải thiện:**\n1) Thêm một cụm liên kết để làm rõ quan hệ giữa các ý (ví dụ: “For instance/Additionally/As a result”).\n2) Có thể dùng từ đồng nghĩa gắn với hint “habitat protection” và “community action” rõ hơn (ví dụ: “habitat protection” hoặc “community action” trong câu).\n"
+  },
+  "usage": {
+    "input_tokens": 2990,
+    "output_tokens": 734,
+    "total_tokens": 3724,
+    "cost": 0.00119294
+  },
+  "metrics": {
+    "ai_processing_ms": 5638
+  }
+}

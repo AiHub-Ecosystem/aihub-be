@@ -9,6 +9,10 @@ import type {
   AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
+import {
+  ADDITIONAL_OPERATION_SCOPES_METADATA,
+  REQUIRED_OPERATION_METADATA,
+} from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { ApiKeyGuard } from './api-key.guard';
 
 // writing.task1.grade requires the `writing.grade` Scope.
@@ -53,18 +57,24 @@ function context(value: Record<string, unknown>): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function reflector(): Reflector {
+function reflector(additionalScopes: readonly string[] = []): Reflector {
   return {
-    getAllAndOverride: () => OPERATION_ID,
+    getAllAndOverride: (metadataKey: string) =>
+      metadataKey === REQUIRED_OPERATION_METADATA
+        ? OPERATION_ID
+        : metadataKey === ADDITIONAL_OPERATION_SCOPES_METADATA
+          ? additionalScopes
+          : undefined,
   } as unknown as Reflector;
 }
 
 function guard(
   authenticator: ApiKeyAuthenticatorPort,
   secret?: WebSessionClientSecretPort,
+  additionalScopes: readonly string[] = [],
 ): ApiKeyGuard {
   return new ApiKeyGuard(
-    reflector(),
+    reflector(additionalScopes),
     authenticator,
     {
       NODE_ENV: 'test',
@@ -84,6 +94,23 @@ describe('ApiKeyGuard scope check', () => {
 
     await expect(
       guard({ authenticate: async () => baseKey }).canActivate(context(value)),
+    ).resolves.toBe(true);
+  });
+
+  it('admits a Writing exercise key for a route that accepts it as an alternate scope', async () => {
+    const value = request();
+
+    await expect(
+      guard(
+        {
+          authenticate: async () => ({
+            ...baseKey,
+            scopes: ['writing.exercise'],
+          }),
+        },
+        undefined,
+        ['writing.exercise'],
+      ).canActivate(context(value)),
     ).resolves.toBe(true);
   });
 

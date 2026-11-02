@@ -1,0 +1,46 @@
+{
+  "topic": "Environmental protection",
+  "writing_task": 2,
+  "errors": [
+    {
+      "error_no": 1,
+      "criterion": "coherence_cohesion",
+      "error_code": "CC03",
+      "references": [
+        {
+          "question": {
+            "prompt": "Some people believe communities should protect the natural environment. Discuss the problems and possible solutions.",
+            "image": null,
+            "question_type": "problem_solution"
+          },
+          "comments": [
+            {
+              "quote": "People should protect forests. Because forests are important.",
+              "explanation": "The ideas are connected with a sentence fragment."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "error_no": 2,
+      "criterion": "grammar_range_accuracy",
+      "error_code": "GRA02",
+      "references": [
+        {
+          "question": {
+            "prompt": "Some people believe communities should protect the natural environment. Discuss the problems and possible solutions.",
+            "image": null,
+            "question_type": "problem_solution"
+          },
+          "comments": [
+            {
+              "quote": "The number of endangered species are increasing.",
+              "explanation": "The singular subject phrase requires a singular verb."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

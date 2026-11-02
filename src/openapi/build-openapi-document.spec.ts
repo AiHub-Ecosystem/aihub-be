@@ -29,6 +29,7 @@ interface OpenApiOperation {
   // Optional because the sandbox mint route carries no scope: it is not a
   // catalogued operation and has nothing to authorize against.
   readonly 'x-required-scope'?: string;
+  readonly 'x-accepted-scopes'?: readonly string[];
   readonly 'x-identity-scope': string;
   readonly 'x-idempotency'?: string;
 }
@@ -1241,7 +1242,7 @@ describe('buildOpenApiDocument', () => {
     expect(major).toBeDefined();
     const doc = buildOpenApiDocument(major) as OpenApiDocument;
 
-    expect(V2_OPERATION_IDS).toHaveLength(8);
+    expect(V2_OPERATION_IDS).toHaveLength(11);
     for (const operationId of V2_OPERATION_IDS) {
       const catalogued: OperationDef = OPERATION_CATALOG[operationId];
       const pathItem = doc.paths[catalogued.path];
@@ -1279,6 +1280,17 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.['x-required-scope']).toBe('writing.grade');
     expect(operation?.['x-identity-scope']).toBe('user');
     expect(operation?.['x-idempotency']).toBe('required');
+  });
+
+  it('publishes the alternate scopes accepted by Writing chart uploads', () => {
+    const doc = build();
+    const operation = doc.paths['/v1/ielts/writing/task1/chart-uploads']?.post;
+
+    expect(operation?.['x-required-scope']).toBe('writing.grade');
+    expect(operation?.['x-accepted-scopes']).toEqual([
+      'writing.grade',
+      'writing.exercise',
+    ]);
   });
 
   it('documents an ignored Idempotency-Key parameter for an operation catalogued as none', () => {

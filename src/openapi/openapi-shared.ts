@@ -504,6 +504,16 @@ export function publicRouteToPathItem(
       ...(route.requiredScope === undefined
         ? {}
         : { 'x-required-scope': route.requiredScope }),
+      ...(route.acceptedScopes === undefined
+        ? {}
+        : {
+            'x-accepted-scopes': [
+              ...(route.requiredScope === undefined
+                ? []
+                : [route.requiredScope]),
+              ...route.acceptedScopes,
+            ],
+          }),
       ...routeIdempotencyExtensionsOf(routeId),
       ...routeSecurityOf(routeId),
       parameters,

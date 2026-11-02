@@ -31,7 +31,7 @@ describe('PUBLIC_ROUTES', () => {
     expect(mismatches).toEqual({});
   });
 
-  it('matches Writing chart upload scopes to the grading operation', () => {
+  it('accepts Writing grading or exercise scopes for chart uploads', () => {
     for (const routeId of [
       'writing.chartUploads.create',
       'writing.chartUploads.refresh',
@@ -40,6 +40,9 @@ describe('PUBLIC_ROUTES', () => {
       expect(PUBLIC_ROUTES[routeId].requiredScope).toBe(
         OPERATION_CATALOG['writing.task1.grade'].requiredScope,
       );
+      expect(PUBLIC_ROUTES[routeId].acceptedScopes).toEqual([
+        'writing.exercise',
+      ]);
     }
   });
 

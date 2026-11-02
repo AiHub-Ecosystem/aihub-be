@@ -181,6 +181,8 @@ export interface PublicRouteDef {
   readonly callerAuth: CallerAuth;
   /** The API-key scope enforced by this route, when the key has a fixed scope. */
   readonly requiredScope?: string;
+  /** Additional scopes accepted in place of `requiredScope`. */
+  readonly acceptedScopes?: readonly string[];
   readonly organizationResolution: OrganizationResolution;
   readonly successStatus: SuccessStatus;
   readonly alternateSuccesses?: readonly AlternateSuccess[];
@@ -383,7 +385,7 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'Create a Writing Task 1 chart upload intent',
       description: [
-        'Requires an API key with `writing.grade` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.',
+        'Requires an API key with `writing.grade` or `writing.exercise` and the same declared or signed `X-User-Identity` accepted by Writing Task 1 grading. The intent is bound to that Organization, End User, and API-key environment.',
         'Upload directly to the returned URL as `multipart/form-data`, including every returned `fields` entry and the file under `file`. The signed policy limits the stored file to the declared byte size. Staging remains private. The policy expires after five minutes; the intent expires after one hour and can be refreshed without extending that deadline. Limits are five intents and five published charts per Organization in a rolling hour.',
       ].join('\n\n'),
       successDescription:
@@ -393,6 +395,7 @@ export const PUBLIC_ROUTES = {
     path: '/v1/ielts/writing/task1/chart-uploads',
     callerAuth: 'api-key',
     requiredScope: 'writing.grade',
+    acceptedScopes: ['writing.exercise'],
     organizationResolution: 'caller',
     successStatus: 201,
     publishedIdentityScope: 'user',
@@ -409,7 +412,7 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'Refresh a Writing Task 1 chart upload URL',
       description:
-        'Refreshes the signed URL for the same private staging object without extending the intent deadline.',
+        'Requires an API key with `writing.grade` or `writing.exercise`. Refreshes the signed URL for the same private staging object without extending the intent deadline.',
       parameters: [
         {
           name: 'asset_id',
@@ -430,6 +433,7 @@ export const PUBLIC_ROUTES = {
     path: '/v1/ielts/writing/task1/chart-uploads/:assetId/refresh',
     callerAuth: 'api-key',
     requiredScope: 'writing.grade',
+    acceptedScopes: ['writing.exercise'],
     organizationResolution: 'caller',
     successStatus: 200,
     publishedIdentityScope: 'user',
@@ -446,6 +450,7 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'Verify and publish a Writing Task 1 chart',
       description: [
+        'Requires an API key with `writing.grade` or `writing.exercise`.',
         'Downloads the complete staged object (up to 10 MiB), decodes and verifies the JPEG, PNG, or WebP image, applies EXIF orientation, strips source metadata, and re-encodes it before publishing the sanitized bytes. Completion returns 413 and rejects the intent if the sanitized output exceeds 10 MiB; malformed or mismatched images are rejected with 400.',
         'The returned `image_url` is anonymously readable and shareable until it expires 24 hours after publication. Anyone who learns the URL can read and reuse it. Only the same Organization, End User, and environment can complete the upload.',
       ].join('\n\n'),
@@ -469,6 +474,7 @@ export const PUBLIC_ROUTES = {
     path: '/v1/ielts/writing/task1/chart-uploads/:assetId/complete',
     callerAuth: 'api-key',
     requiredScope: 'writing.grade',
+    acceptedScopes: ['writing.exercise'],
     organizationResolution: 'caller',
     successStatus: 200,
     publishedIdentityScope: 'user',

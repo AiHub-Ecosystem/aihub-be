@@ -10,13 +10,17 @@ import {
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import type { PublicRouteDef } from '@/catalog/public-routes';
 import { ApiKeyUserIdentityGuard } from '@/modules/identity/api-keys/presentation/api-key-user-identity.guard';
 import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
 import {
   REQUIRED_API_KEY_SCOPE_METADATA,
   RequireApiKeyScope,
 } from '@/modules/identity/shared/presentation/require-api-key-scope.decorator';
-import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
+import {
+  ADDITIONAL_OPERATION_SCOPES_METADATA,
+  REQUIRED_OPERATION_METADATA,
+} from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { getOwnPrototypeMethod } from '../../../test/support/own-prototype-method';
 
 type Handler = (...args: never[]) => unknown;
@@ -71,17 +75,17 @@ function guardsOn(target: object): unknown[] {
  * beside the guard that reads it (`ApiKeyUserIdentityGuard`); an operation
  * counts only beside `ApiKeyGuard`, which takes the scope from the catalog.
  */
-function enforcedScope(
+function enforcedScopes(
   controller: Controller_,
   handler: Handler,
-): string | undefined {
+): readonly string[] | undefined {
   const guards = [...guardsOn(controller), ...guardsOn(handler)];
   const scope: unknown = Reflect.getMetadata(
     REQUIRED_API_KEY_SCOPE_METADATA,
     handler,
   );
   if (typeof scope === 'string' && guards.includes(ApiKeyUserIdentityGuard)) {
-    return scope;
+    return [scope];
   }
   const operation: unknown = Reflect.getMetadata(
     REQUIRED_OPERATION_METADATA,
@@ -92,8 +96,20 @@ function enforcedScope(
     operation in OPERATION_CATALOG &&
     guards.includes(ApiKeyGuard)
   ) {
-    return OPERATION_CATALOG[operation as keyof typeof OPERATION_CATALOG]
-      .requiredScope;
+    const additional: unknown = Reflect.getMetadata(
+      ADDITIONAL_OPERATION_SCOPES_METADATA,
+      handler,
+    );
+    const additionalScopes: readonly unknown[] = Array.isArray(additional)
+      ? additional
+      : [];
+    return [
+      OPERATION_CATALOG[operation as keyof typeof OPERATION_CATALOG]
+        .requiredScope,
+      ...additionalScopes.filter(
+        (scope): scope is string => typeof scope === 'string',
+      ),
+    ];
   }
   return undefined;
 }
@@ -125,18 +141,27 @@ describe('API-key route scope enforcement', () => {
     }
 
     const unenforced: Record<string, string> = {};
-    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
-      if (route.callerAuth !== 'api-key' || !('requiredScope' in route)) {
+    const publicRoutes = Object.entries(PUBLIC_ROUTES) as [
+      string,
+      PublicRouteDef,
+    ][];
+    for (const [routeId, route] of publicRoutes) {
+      if (route.callerAuth !== 'api-key' || route.requiredScope === undefined) {
         continue;
       }
       const entry = served.get(`${route.method} ${route.path}`);
       const enforced =
         entry === undefined
           ? undefined
-          : enforcedScope(entry.controller, entry.handler);
-      if (enforced !== route.requiredScope) {
+          : enforcedScopes(entry.controller, entry.handler);
+      const expected = [route.requiredScope, ...(route.acceptedScopes ?? [])];
+      if (
+        enforced === undefined ||
+        expected.length !== enforced.length ||
+        expected.some((scope) => !enforced.includes(scope))
+      ) {
         unenforced[routeId] =
-          `declares ${route.requiredScope}, guard chain checks ${enforced ?? 'nothing'}`;
+          `declares ${expected.join(' or ')}, guard chain checks ${enforced?.join(' or ') ?? 'nothing'}`;
       }
     }
 
@@ -157,15 +182,18 @@ describe('API-key route scope enforcement', () => {
       run(): void {}
     }
 
-    it('returns the scope when the reading guard is in the chain', () => {
+    it('returns scopes when the reading guard is in the chain', () => {
       expect(
-        enforcedScope(Guarded, getOwnPrototypeMethod(Guarded.prototype, 'run')),
-      ).toBe('speaking.grade');
+        enforcedScopes(
+          Guarded,
+          getOwnPrototypeMethod(Guarded.prototype, 'run'),
+        ),
+      ).toEqual(['speaking.grade']);
     });
 
     it('returns nothing for a declared scope no guard reads', () => {
       expect(
-        enforcedScope(
+        enforcedScopes(
           Unguarded,
           getOwnPrototypeMethod(Unguarded.prototype, 'run'),
         ),

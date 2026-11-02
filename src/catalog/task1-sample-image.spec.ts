@@ -7,15 +7,16 @@ const REPO_ROOT = join(__dirname, '../..');
 
 // Issue #190. The sample chart is one asset with one URL, so the literal must
 // live in exactly one place. Postman and the integration guide derive from the
-// constant; the contract document and the captured grading fixture are static
-// files that cannot import anything, and the committed collection is
-// generated. Those four are checked to still name the same asset, and any
-// other file naming it is drift.
+// constant; the contract document and captured requests are static files that
+// cannot import anything, and the committed collection is generated. They are
+// checked to still name the same asset, and any other file naming it is drift.
 const ALLOWED_FILES = [
   'src/catalog/operation-catalog.ts', // the definition
   'docs/integration-guide.md', // quotes it for a reader
   'docs/history/aihub-deliverable-1-historical-contract.md', // static D1 record
   'test/fixtures/ai-writing/grade-task1.request.json', // captured request
+  'test/fixtures/ai-writing/micro-task1-image.request.json', // captured request
+  'test/fixtures/ai-writing/micro-task1-image.response.json', // captured response
   'aihub.postman_collection.json', // generated
   'docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md', // records it
 ];

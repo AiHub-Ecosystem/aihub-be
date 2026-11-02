@@ -20,6 +20,11 @@ import {
 import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
 import {
+  createLongWritingExerciseAdapter,
+  createMicroExerciseAdapter,
+  gradeMicroExerciseAdapter,
+} from '@/downstream/writing/writing-micro-exercises.adapters';
+import {
   writingV3Task1GradeAdapter,
   writingV3Task2GradeAdapter,
 } from '@/downstream/writing/writing-v3-grade.adapters';
@@ -245,6 +250,9 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
               task2GradeAdapter,
               writingV3Task1GradeAdapter,
               writingV3Task2GradeAdapter,
+              createMicroExerciseAdapter,
+              createLongWritingExerciseAdapter,
+              gradeMicroExerciseAdapter,
               speakingGradingAdapter,
               speakingGradingJsonAdapter,
               speakingV2QuestionGradingAdapter,

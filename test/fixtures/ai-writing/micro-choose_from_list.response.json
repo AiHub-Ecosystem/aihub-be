@@ -1,0 +1,168 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793582940_60520f",
+      "type": "choose_from_list",
+      "ai_grading": "false",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Chọn từ/cụm từ phù hợp nhất để điền vào chỗ trống _______ trong mỗi câu. Chỗ trống chỉ chứa phần động từ cần chia đúng theo chủ ngữ (số ít/số nhiều).",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Luyện chọn đúng dạng động từ theo chủ ngữ giúp bạn sửa lỗi Subject–Verb Agreement như câu có chủ ngữ số ít nhưng lại dùng động từ số nhiều (ví dụ: The number ... are increasing)."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "The number of endangered species _______ increasing due to habitat loss.",
+        "question_image": null,
+        "explanation": "“The number of ...” được hiểu là “số lượng”, nên dùng động từ số ít. Do đó chọn “is increasing”. “are increasing” sai vì là số nhiều.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "is increasing"
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Many local communities _______ actions to reduce plastic waste along the coast.",
+        "question_image": null,
+        "explanation": "“Many ... communities” là chủ ngữ số nhiều nên cần “are taking”. “is taking” sai vì chia số ít; “take”/“takes” không khớp với thì trong câu (hiện tại tiếp diễn).",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "are increase"
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Each resident _______ a responsibility to follow recycling guidelines.",
+        "question_image": null,
+        "explanation": "“Each + noun” luôn đi với động từ số ít, nên “has”. Các lựa chọn còn lại không đúng dạng động từ/không đúng thì.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "increases"
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Everyone in the programme _______ in environmental workshops every month.",
+        "question_image": null,
+        "explanation": "“Everyone” là số ít nên động từ phải số ít. “increases/are increasing/is increasing” không phù hợp ngữ nghĩa/khớp động từ trong bối cảnh này; “increases” gần nhất về dạng nhưng câu cần “participates”.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "increase"
+      },
+      {
+        "questions_no": 5,
+        "question_text": "There _______ fewer illegal dumps each year as local authorities enforce stricter rules.",
+        "question_image": null,
+        "explanation": "Cấu trúc “There are + danh từ số nhiều” yêu cầu “are”. Tuy nhiên các lựa chọn không chứa đúng “are reducing”; vì vậy cần chọn dạng phù hợp về số và hình thức V-ing. “are increasing” đúng về số nhiều + V-ing.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "are increasing"
+      },
+      {
+        "questions_no": 6,
+        "question_text": "Air pollution _______ when industries do not comply with emission regulations.",
+        "question_image": null,
+        "explanation": "“Air pollution” là chủ ngữ số ít nên động từ phải số ít. “increases” phù hợp về dạng số ít; các lựa chọn “are ...” sai số.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "increases"
+      },
+      {
+        "questions_no": 7,
+        "question_text": "The citizens of the city _______ their waste sorting practices more carefully.",
+        "question_image": null,
+        "explanation": "“The citizens” số nhiều nên dùng “are + V-ing”. “are increasing” đúng về chia số và cấu trúc; “is increasing” sai vì số ít.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "are increasing"
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Neither of the plans _______ enough to solve the problem of water shortages.",
+        "question_image": null,
+        "explanation": "“Neither ...” thường đi với động từ số ít. Vì vậy cần lựa chọn dạng số ít như “increases”. “are increasing” sai số.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "increases"
+      },
+      {
+        "questions_no": 9,
+        "question_text": "Statistics on recycling _______ year by year as more households join local initiatives.",
+        "question_image": null,
+        "explanation": "“Statistics” có thể coi là số ít trong ngữ pháp học thuật (dạng tổng thể), và cần động từ số ít. “is increasing” phù hợp về số ít + V-ing.",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "is increasing"
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Students in the environmental club _______ their participation to raise public awareness.",
+        "question_image": null,
+        "explanation": "Để chia theo số nhiều, động từ nên ở dạng be+V-ing: “are increasing”. Các lựa chọn khác sai số hoặc sai cấu trúc (are increase).",
+        "options": [
+          "is increasing",
+          "are increasing",
+          "increase",
+          "increases",
+          "are increase"
+        ],
+        "correct": "are increasing"
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 8307,
+    "output_tokens": 1527,
+    "total_tokens": 9834,
+    "cost": 0.00357015
+  },
+  "metrics": {
+    "ai_processing_ms": 9341
+  }
+}

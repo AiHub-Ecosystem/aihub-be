@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793583129_5c2398",
+      "type": "short_writing",
+      "ai_grading": "true",
+      "error_code": "GRA02",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Đặt một câu hoàn chỉnh về Environmental protection sao cho động từ hòa hợp đúng với chủ ngữ (đặc biệt với danh từ số ít/số nhiều và đại từ bất định). Dùng đúng cấu trúc gợi ý ở hint, và câu phải có ý nghĩa rõ ràng theo hướng problem–solution.",
+      "number_of_questions": 3,
+      "rationale_for_exercise": "Lỗi GRA02 thường xuất hiện khi người học nhầm số của chủ ngữ (the number/each/everyone…) hoặc không đặt động từ theo đúng chủ ngữ. Thực hành tạo câu theo khuôn chủ–động từ giúp bạn tự động hoá sự hòa hợp ngữ pháp khi viết Task 2."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Hãy viết 1 câu hoàn chỉnh nêu một vấn đề và giải pháp, dùng đúng cấu trúc: The number of + N (số nhiều) + is/has + V-ed + due to ..., so + S + V.",
+        "question_image": null,
+        "explanation": "Câu mẫu dưới đây đúng ngữ pháp vì: 'The number of endangered species' được xem là chủ ngữ chính dạng số ít, nên động từ là 'is increasing' (không phải 'are'). 'due to' giải thích nguyên nhân, 'so' nêu giải pháp/ hệ quả.",
+        "hint": [
+          "The number of + N is increasing",
+          "due to",
+          "so governments should"
+        ],
+        "correct": {
+          "sample_answer": "The number of endangered species is increasing due to habitat loss, so governments should introduce stricter conservation laws.",
+          "ai_grading_rubric": "Chấm 1–10: 9–10 nếu (1) Đúng hòa hợp chủ–động từ với 'The number of' (is, không dùng are) (2) Câu dùng đủ các phần trong khuôn hint ('due to' và 'so + governments should ...') (3) Ngữ pháp mạch lạc, ý problem–solution rõ ràng. 7–8 nếu đúng chủ–động từ nhưng mắc lỗi nhỏ (từ vựng/giới từ). 5–6 nếu có hòa hợp sai nhưng vẫn đoán được ý. Dưới 5 nếu sai chủ–động từ rõ rệt (ví dụ 'are increasing' với 'The number of') hoặc câu thiếu cấu trúc bắt buộc.",
+          "note": "Tránh lỗi dùng 'are increasing' sau 'The number of...' (sai hòa hợp vì 'the number' là số ít)."
+        }
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Hãy viết 1 câu hoàn chỉnh nêu một hành động cần làm, dùng đúng cấu trúc: Everyone + V(singular) + ... so + we + should + V.",
+        "question_image": null,
+        "explanation": "Trong câu đúng, 'Everyone' là chủ ngữ số ít nên động từ chính phải ở dạng số ít (has/should/does). 'so' nối hành động của 'everyone' với khuyến nghị 'we should' tạo thành mối quan hệ logic vấn đề–giải pháp.",
+        "hint": [
+          "Everyone has a responsibility",
+          "so we should",
+          "reduce waste"
+        ],
+        "correct": {
+          "sample_answer": "Everyone has a responsibility to reduce waste, so we should encourage recycling in every community.",
+          "ai_grading_rubric": "Chấm 1–10: 9–10 nếu (1) 'Everyone' đi với động từ số ít đúng ('has') (2) Có 'so we should + V' theo hint (3) Ý bảo vệ môi trường rõ ràng và câu tự nhiên. 7–8 nếu đúng ngữ pháp nhưng từ vựng hơi kém tự nhiên. 5–6 nếu có ít nhất một lỗi hòa hợp chủ–động từ (ví dụ dùng 'have' với everyone). Dưới 5 nếu sai rõ rệt cấu trúc hoặc thiếu 'so we should'.",
+          "note": "Tránh dùng 'Everyone have/Everyone are' vì everyone luôn dùng động từ số ít."
+        }
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Hãy viết 1 câu hoàn chỉnh dùng đúng cấu trúc: Each + singular noun + V(singular), and + S + V(singular).",
+        "question_image": null,
+        "explanation": "Câu mẫu dùng 'Each resident' là chủ ngữ số ít nên động từ 'should follow' đúng. Vế sau dùng 'and' nhưng vẫn giữ hòa hợp bằng cách chọn động từ phù hợp với chủ ngữ tương ứng.",
+        "hint": [
+          "Each citizen should",
+          "and",
+          "support clean energy"
+        ],
+        "correct": {
+          "sample_answer": "Each citizen should separate household waste, and they should support clean energy to cut emissions.",
+          "ai_grading_rubric": "Chấm 1–10: 9–10 nếu (1) 'Each citizen' dùng động từ số ít đúng ('should') (2) Có cấu trúc 'and + they should...' đúng hòa hợp với 'they' (3) Câu liên quan trực tiếp đến Environmental protection (giảm phát thải/clean energy) và câu tự nhiên. 7–8 nếu đúng hòa hợp nhưng lỗi nhỏ ở từ vựng/giới từ. 5–6 nếu sai hòa hợp ở một chỗ (ví dụ 'Each citizen should' bị viết thành 'Each citizen should not' không sao; hoặc dùng 'Each citizen should' thành 'Each citizen shoulds'). Dưới 5 nếu sai nặng hòa hợp hoặc câu không hoàn chỉnh.",
+          "note": "Tránh lỗi 'Each + danh từ số ít + V-s' (ví dụ dùng sai 'shoulds' hoặc dùng động từ số nhiều với 'each')."
+        }
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 8234,
+    "output_tokens": 1494,
+    "total_tokens": 9728,
+    "cost": 0.0035143
+  },
+  "metrics": {
+    "ai_processing_ms": 10947
+  }
+}

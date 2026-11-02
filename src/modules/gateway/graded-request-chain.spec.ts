@@ -13,6 +13,7 @@ import { Test } from '@nestjs/testing';
 import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
@@ -24,6 +25,7 @@ import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentat
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
+import { WritingExerciseController } from '@/modules/writing/presentation/writing-exercise.controller';
 import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
 import { WritingV2GradingController } from '@/modules/writing/presentation/writing-v2-grading.controller';
 import { getOwnPrototypeMethod } from '../../../test/support/own-prototype-method';
@@ -68,6 +70,16 @@ const task1Request = fixture('grade-task1.request.json') as {
   url: string;
   topic: string;
   essay: string;
+};
+
+const microExerciseRequest = {
+  topic: 'education',
+  writing_task: 2,
+  criterion: 'grammatical_range_accuracy',
+  error_code: 'provider-added-code',
+  prompt: 'Use the target form.',
+  question_type: 'grammar',
+  comments: [{ quote: 'She go.', explanation: 'Use agreement.' }],
 };
 
 /**
@@ -230,6 +242,67 @@ describe('graded request chain', () => {
     expect(executed).toEqual([...EXPECTED_ORDER]);
   });
 
+  it('maps a provider exercise refusal to a sanitized public error', async () => {
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/v2/create-micro-exercise' })
+      .reply(400, fixture('micro-invalid-error-code.response.json'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/writing/micro-exercises',
+      headers: { 'idempotency-key': 'exercise-provider-refusal' },
+      payload: microExerciseRequest,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Writing exercise request was refused by the AI service',
+        retryable: false,
+      },
+    });
+    expect(response.body).not.toContain('Dữ liệu yêu cầu');
+    expect(response.body).not.toContain('provider-added-code');
+  });
+
+  it('returns the public timeout error when exercise creation exceeds its deadline', async () => {
+    const operation = OPERATION_CATALOG['writing.v2.micro-exercises.create'];
+    const timeoutDescriptor = Object.getOwnPropertyDescriptor(
+      operation,
+      'timeoutMs',
+    );
+    if (timeoutDescriptor === undefined) {
+      throw new Error('exercise operation has no timeout configuration');
+    }
+    Object.defineProperty(operation, 'timeoutMs', {
+      ...timeoutDescriptor,
+      value: 1_000,
+    });
+
+    try {
+      mockAgent
+        .get('https://ai-writing.test')
+        .intercept({ method: 'POST', path: '/v2/create-micro-exercise' })
+        .reply(200, fixture('micro-annotation.response.json'))
+        .delay(5_000);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v2/ielts/writing/micro-exercises',
+        headers: { 'idempotency-key': 'exercise-provider-timeout' },
+        payload: microExerciseRequest,
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json()).toMatchObject({
+        error: { code: 'AI_SERVICE_TIMEOUT', retryable: true },
+      });
+    } finally {
+      Object.defineProperty(operation, 'timeoutMs', timeoutDescriptor);
+    }
+  });
+
   it('declares the chain in exactly the order the real chain runs', () => {
     // Both expectations are literal, not derived from EXPECTED_ORDER: deriving
     // them would make the declaration check compare against itself, which is
@@ -247,6 +320,7 @@ describe('graded request chain', () => {
 
   it('wires every graded route to the declared chain, not a private copy', () => {
     for (const controller of [
+      WritingExerciseController,
       WritingGradingController,
       WritingV2GradingController,
       SpeakingGradingController,
@@ -262,6 +336,7 @@ describe('graded request chain', () => {
 
   it('serves exactly the declared graded operations from routes that use the chain', () => {
     const served = [
+      ...operationsServedBy(WritingExerciseController),
       ...operationsServedBy(WritingGradingController),
       ...operationsServedBy(WritingV2GradingController),
       ...operationsServedBy(SpeakingGradingController),

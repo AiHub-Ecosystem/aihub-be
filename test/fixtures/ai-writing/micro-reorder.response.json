@@ -1,0 +1,168 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793583218_4b29a4",
+      "type": "reorder",
+      "ai_grading": "false",
+      "error_code": "CC03",
+      "difficulty": "B2",
+      "topic": "Environmental protection",
+      "instruction": "Sắp xếp các câu đã cho theo đúng thứ tự hợp lý để tạo thành một đoạn văn mạch lạc (mỗi câu triển khai cùng một ý trung tâm theo logic vấn đề → giải pháp).",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Lỗi CC03 thường xảy ra khi người học nhảy sang ý khác trong cùng đoạn hoặc trộn lẫn vấn đề và giải pháp. Bài reorder này buộc bạn sắp xếp đúng chuỗi logic để mỗi đoạn chỉ tập trung vào một vấn đề và dẫn đến các giải pháp tương ứng."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Câu hoàn chỉnh đúng theo thứ tự: \"Deforestation is one of the most urgent environmental problems because it destroys habitats and accelerates climate change. In many regions, forest loss is driven by expanding agriculture and illegal logging. This leads to biodiversity decline as countless plant and animal species lose their natural homes. In addition, removing trees increases carbon emissions, making global warming harder to slow down. To tackle this problem, governments should enforce stricter logging rules and invest in reforestation programmes.\" \nLưu ý: (1) câu chủ đề giới thiệu đúng vấn đề; (2) các câu sau nêu nguyên nhân/hệ quả bám sát chủ đề rừng; (3) câu kết xuất giải pháp bằng cấu trúc “To tackle this problem, …” và động từ khuyến nghị như “should enforce / invest”.",
+        "options": [
+          "In many regions, forest loss is driven by expanding agriculture and illegal logging.",
+          "Deforestation is one of the most urgent environmental problems because it destroys habitats and accelerates climate change.",
+          "To tackle this problem, governments should enforce stricter logging rules and invest in reforestation programmes.",
+          "This leads to biodiversity decline as countless plant and animal species lose their natural homes.",
+          "In addition, removing trees increases carbon emissions, making global warming harder to slow down."
+        ],
+        "correct": "B-A-D-E-C"
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Thứ tự đúng tạo được đoạn thống nhất: \"Plastic pollution is a major threat to marine ecosystems, mainly because large amounts of waste end up in the sea. Much of this waste originates from land-based sources such as littering and poorly managed landfills. Once in the ocean, plastic breaks down into smaller particles that marine animals may mistake for food. As a result, wildlife can suffer injury or even death, while microplastics enter the food chain. To reduce plastic pollution, authorities should improve waste management systems and restrict single-use plastics.\" \nĐiểm ngôn ngữ: dùng liên kết logic “mainly because / once / as a result / to reduce” và danh từ “authorities” để chuyển sang phần giải pháp.",
+        "options": [
+          "Much of this waste originates from land-based sources such as littering and poorly managed landfills.",
+          "Once in the ocean, plastic breaks down into smaller particles that marine animals may mistake for food.",
+          "As a result, wildlife can suffer injury or even death, while microplastics enter the food chain.",
+          "Plastic pollution is a major threat to marine ecosystems, mainly because large amounts of waste end up in the sea.",
+          "To reduce plastic pollution, authorities should improve waste management systems and restrict single-use plastics."
+        ],
+        "correct": "D-A-B-C-E"
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Đoạn đúng theo chuỗi: \"Air pollution in cities is becoming increasingly serious, and it is closely linked to vehicle emissions. For example, exhaust from diesel engines releases nitrogen oxides and fine particles into the atmosphere. Prolonged exposure to these pollutants can trigger respiratory illnesses, especially among children and older people. This problem can also reduce overall quality of life by worsening fatigue and limiting outdoor activities. To tackle it, cities should expand public transport, tighten emission standards, and encourage cleaner vehicle technologies.\" \nCách liên kết: bắt đầu bằng câu chủ đề; tiếp theo “For example” làm rõ; “Prolonged exposure” nêu hệ quả; cuối cùng “To tackle it” đưa giải pháp.",
+        "options": [
+          "Air pollution in cities is becoming increasingly serious, and it is closely linked to vehicle emissions.",
+          "To tackle it, cities should expand public transport, tighten emission standards, and encourage cleaner vehicle technologies.",
+          "Prolonged exposure to these pollutants can trigger respiratory illnesses, especially among children and older people.",
+          "For example, exhaust from diesel engines releases nitrogen oxides and fine particles into the atmosphere.",
+          "This problem can also reduce overall quality of life by worsening fatigue and limiting outdoor activities."
+        ],
+        "correct": "A-B-C-E-D"
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Thứ tự đúng tạo đoạn: \"Climate change is increasingly driven by greenhouse gas emissions produced by industry and energy generation. When factories burn fossil fuels, large quantities of carbon dioxide are released into the atmosphere. Over time, this intensifies extreme weather events such as droughts and floods. It also places pressure on food production and water supplies for many communities. To address this, governments should support renewable energy and provide incentives for companies to improve energy efficiency.\" \nNgữ pháp/liên kết: dùng “When…”, “Over time…”, và “To address this…” để mạch lạc từ nguyên nhân đến giải pháp.",
+        "options": [
+          "Over time, this intensifies extreme weather events such as droughts and floods.",
+          "It also places pressure on food production and water supplies for many communities.",
+          "When factories burn fossil fuels, large quantities of carbon dioxide are released into the atmosphere.",
+          "Climate change is increasingly driven by greenhouse gas emissions produced by industry and energy generation.",
+          "To address this, governments should support renewable energy and provide incentives for companies to improve energy efficiency."
+        ],
+        "correct": "D-C-A-B-E"
+      },
+      {
+        "questions_no": 5,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Câu đúng ghép thành: \"Poor waste management in many cities results in overflowing rubbish and serious environmental contamination. Because collection services are limited and recycling facilities are inadequate, a large portion of waste ends up in illegal dumps. As these sites leak harmful substances, soil and nearby rivers can become polluted. This not only damages local ecosystems but also increases health risks for residents. To solve the problem, governments should expand waste collection, introduce household sorting programmes, and build modern recycling infrastructure.\" \nĐiểm nhấn: sử dụng “Because…”, “As…”, “This not only…, but also…”, và “To solve the problem…” để tránh nhảy sang ý khác.",
+        "options": [
+          "As these sites leak harmful substances, soil and nearby rivers can become polluted.",
+          "Poor waste management in many cities results in overflowing rubbish and serious environmental contamination.",
+          "This not only damages local ecosystems but also increases health risks for residents.",
+          "Because collection services are limited and recycling facilities are inadequate, a large portion of waste ends up in illegal dumps.",
+          "To solve the problem, governments should expand waste collection, introduce household sorting programmes, and build modern recycling infrastructure."
+        ],
+        "correct": "B-D-A-E-C"
+      },
+      {
+        "questions_no": 6,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Thứ tự đúng: \"Soil degradation is a growing environmental problem in many agricultural regions. Intensive farming practices, including excessive tilling and overuse of fertilisers, gradually remove essential nutrients from the soil. Over time, this leads to lower crop yields and makes fields less able to retain water during dry seasons. Farmers may then rely on even more inputs, which worsens the cycle. To prevent this, governments should promote conservation agriculture and support methods such as crop rotation and reduced tillage.\" \nLiên kết: “Over time / then / To prevent this” giúp câu không bị trộn nhiều ý trung tâm.",
+        "options": [
+          "Farmers may then rely on even more inputs, which worsens the cycle.",
+          "Soil degradation is a growing environmental problem in many agricultural regions.",
+          "Over time, this leads to lower crop yields and makes fields less able to retain water during dry seasons.",
+          "Intensive farming practices, including excessive tilling and overuse of fertilisers, gradually remove essential nutrients from the soil.",
+          "To prevent this, governments should promote conservation agriculture and support methods such as crop rotation and reduced tillage."
+        ],
+        "correct": "B-D-A-C-E"
+      },
+      {
+        "questions_no": 7,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Đoạn đúng: \"Urban noise pollution is increasingly affecting residents’ wellbeing. It can cause stress and reduce sleep quality, which may harm both mental health and productivity. The main sources are traffic, construction activities, and frequent use of loud public announcements. If regulations are weak, these disturbances become a constant part of daily life. To address this issue, cities should enforce noise limits, schedule construction work, and promote quieter road surfaces and building designs.\" \nĐiểm ngôn ngữ: dùng “It can…”, “The main sources…”, “If…”, “To address this issue…” để đảm bảo chuỗi logic vấn đề-hệ quả-giải pháp.",
+        "options": [
+          "If regulations are weak, these disturbances become a constant part of daily life.",
+          "Urban noise pollution is increasingly affecting residents’ wellbeing.",
+          "To address this issue, cities should enforce noise limits, schedule construction work, and promote quieter road surfaces and building designs.",
+          "The main sources are traffic, construction activities, and frequent use of loud public announcements.",
+          "It can cause stress and reduce sleep quality, which may harm both mental health and productivity."
+        ],
+        "correct": "B-E-D-C-A"
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Thứ tự đúng tạo đoạn: \"Many cities are facing an urban heat island effect due to limited green spaces. When trees and parks are replaced by concrete and asphalt, less heat is absorbed and more heat is stored. As a result, temperatures remain higher at night, making it harder for residents to cool down. This can increase energy use for air conditioning and worsen air quality. To reduce the problem, urban planners should expand city parks and encourage the planting of trees in streets and public buildings.\" \nTừ nối: “When…, As a result…, This…, To reduce…” giúp bám đúng 1 chuỗi nội dung.",
+        "options": [
+          "Many cities are facing an urban heat island effect due to limited green spaces.",
+          "As a result, temperatures remain higher at night, making it harder for residents to cool down.",
+          "When trees and parks are replaced by concrete and asphalt, less heat is absorbed and more heat is stored.",
+          "This can increase energy use for air conditioning and worsen air quality.",
+          "To reduce the problem, urban planners should expand city parks and encourage the planting of trees in streets and public buildings."
+        ],
+        "correct": "A-C-B-E-D"
+      },
+      {
+        "questions_no": 9,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Câu đúng: \"Water pollution from untreated wastewater is a serious threat to both ecosystems and human health. In many areas, sewage systems are outdated or incomplete, so contaminants are often discharged directly into rivers and lakes. Over time, high levels of pollutants reduce oxygen in water, harming fish and other aquatic life. This degradation of water quality also increases the risk of waterborne diseases for communities that rely on these sources. To tackle this problem, governments should invest in wastewater treatment plants and enforce stricter discharge regulations.\" \nNgữ pháp: dùng “so…”, “Over time…”, và “To tackle this problem…” để chuyển sang giải pháp rõ ràng.",
+        "options": [
+          "Water pollution from untreated wastewater is a serious threat to both ecosystems and human health.",
+          "This degradation of water quality also increases the risk of waterborne diseases for communities that rely on these sources.",
+          "In many areas, sewage systems are outdated or incomplete, so contaminants are often discharged directly into rivers and lakes.",
+          "To tackle this problem, governments should invest in wastewater treatment plants and enforce stricter discharge regulations.",
+          "Over time, high levels of pollutants reduce oxygen in water, harming fish and other aquatic life."
+        ],
+        "correct": "A-B-D-E-C"
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Sắp xếp các câu sau theo đúng thứ tự để tạo thành một đoạn văn mạch lạc (vấn đề → giải pháp):",
+        "question_image": null,
+        "explanation": "Đoạn đúng theo thứ tự: \"Overconsumption of resources is one of the key reasons why environmental damage continues to grow. Many consumers buy goods frequently and discard them long before they are worn out. This creates large amounts of waste and increases demand for raw materials, which drives further pollution. In addition, manufacturing and transporting these products generate significant greenhouse gas emissions. To reduce the impact, people should shift towards repairing and reusing items, while governments support refill systems and stronger recycling policies.\" \nĐiểm ngữ dụng: “Many consumers…” cụ thể hóa nguyên nhân; “In addition…” mở rộng hệ quả; “To reduce…” chuyển sang giải pháp đồng thời cho cá nhân và chính phủ.",
+        "options": [
+          "Many consumers buy goods frequently and discard them long before they are worn out.",
+          "To reduce the impact, people should shift towards repairing and reusing items, while governments support refill systems and stronger recycling policies.",
+          "Overconsumption of resources is one of the key reasons why environmental damage continues to grow.",
+          "This creates large amounts of waste and increases demand for raw materials, which drives further pollution.",
+          "In addition, manufacturing and transporting these products generate significant greenhouse gas emissions."
+        ],
+        "correct": "C-A-D-E-B"
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 11460,
+    "output_tokens": 3680,
+    "total_tokens": 15140,
+    "cost": 0.006892
+  },
+  "metrics": {
+    "ai_processing_ms": 24124
+  }
+}

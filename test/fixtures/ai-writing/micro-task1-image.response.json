@@ -1,0 +1,158 @@
+{
+  "success": true,
+  "message": "Tạo bài tập micro v2 thành công",
+  "data": {
+    "meta": {
+      "id": "micro_v2_1793583746_c53ebb",
+      "type": "multiple_choice_single",
+      "ai_grading": "false",
+      "error_code": "TA01",
+      "difficulty": "B2",
+      "topic": "Population trends",
+      "instruction": "Chọn câu mô tả TỔNG QUAN (overview) đúng nhất dựa trên biểu đồ: khái quát 2–3 đặc điểm nổi bật của xu hướng cho CẢ HAI nhóm dữ liệu (tất cả các danh mục trong chú giải) trong toàn giai đoạn.",
+      "number_of_questions": 10,
+      "rationale_for_exercise": "Lỗi TA01 thường do thí sinh không viết overview hoặc overview quá mờ/không bao quát đủ. Luyện chọn câu overview giúp bạn nắm đúng vai trò khái quát toàn bài và tránh chỉ nêu số liệu lẻ hoặc chỉ so sánh một nhóm."
+    },
+    "exercise": [
+      {
+        "questions_no": 1,
+        "question_text": "Chọn câu overview phù hợp nhất cho biểu đồ:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng vì nêu được 3 đặc điểm bao quát: (1) hai nhóm cuộc gọi cố định (local và national/international) đều đạt đỉnh quanh năm 1998 rồi giảm; (2) mobile tăng đều và mạnh trong toàn giai đoạn. B sai vì chỉ nói chung chung/không phản ánh hướng giảm sau đỉnh của hai nhóm cố định. C sai vì khẳng định mobile giảm trong khi biểu đồ cho thấy mobile tăng. D sai vì nói hai nhóm cố định giảm liên tục mà thực tế chúng tăng đến 1998 rồi mới giảm.",
+        "options": {
+          "A": "Trong giai đoạn 1995–2002, cả hai loại cuộc gọi cố định đều tăng đến đỉnh vào khoảng 1998 rồi giảm dần về sau, trong khi cuộc gọi di động tăng liên tục và tăng mạnh hơn hẳn.",
+          "B": "Từ 1995 đến 2002, cả ba loại cuộc gọi đều tăng đều theo thời gian, cho thấy nhu cầu liên lạc ngày càng cao.",
+          "C": "Cuộc gọi di động giảm dần trong khi các cuộc gọi cố định tăng liên tục đến năm 2002.",
+          "D": "Hai loại cuộc gọi cố định đều giảm liên tục từ 1995 và không có giai đoạn tăng đáng kể, còn di động đi ngang gần như không đổi."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 2,
+        "question_text": "Chọn câu overview bao quát đúng nhất các xu hướng tổng thể trên biểu đồ:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng: nêu mobile tăng dần và là nhóm tăng mạnh nhất; đồng thời hai nhóm fixed-line đạt đỉnh vào khoảng 1998 rồi giảm về cuối kỳ. B sai vì nói mobile gần như không đổi. C sai vì nói fixed-line tăng liên tục đến 2002. D sai vì nói mobile giảm sau 2000.",
+        "options": {
+          "A": "Cuộc gọi di động là nhóm tăng mạnh nhất, đi lên rõ rệt về cuối giai đoạn, còn các cuộc gọi qua đường dây cố định đạt đỉnh vào khoảng 1998 rồi giảm dần sau đó.",
+          "B": "Cuộc gọi di động gần như không thay đổi, trong khi cả hai loại cuộc gọi cố định đều giảm liên tục và không có đỉnh.",
+          "C": "Cả ba loại cuộc gọi đều tăng liên tục đến năm 2002, và không nhóm nào giảm sau mốc 1998.",
+          "D": "Sau năm 2000, cuộc gọi di động giảm nhanh, trong khi cuộc gọi cố định tiếp tục tăng lên rõ rệt."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 3,
+        "question_text": "Chọn câu overview thể hiện đúng sự thay đổi vị thế giữa các loại cuộc gọi trong toàn giai đoạn:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng vì nêu mobile bắt đầu thấp nhưng tăng mạnh, trong khi hai loại fixed-line vốn cao hơn nhưng giảm dần sau đỉnh 1998. B sai vì đảo xu hướng. C sai vì nói mobile luôn thấp và không tăng đáng kể. D sai vì nói fixed-line tăng về cuối kỳ.",
+        "options": {
+          "A": "Mặc dù cuộc gọi di động bắt đầu từ mức thấp, nó tăng nhanh đến cuối giai đoạn; ngược lại, hai nhóm cuộc gọi cố định—dù cao hơn ban đầu—giảm sau khi đạt đỉnh vào khoảng 1998.",
+          "B": "Cuộc gọi di động luôn dẫn đầu về số phút và tăng mạnh, còn các cuộc gọi cố định giảm ngay từ năm 1995.",
+          "C": "Cả ba loại cuộc gọi đều duy trì ở mức tương tự nhau trong 8 năm, chỉ dao động nhẹ.",
+          "D": "Hai loại cuộc gọi cố định giảm trong suốt giai đoạn, trong khi di động giảm từ 1999 đến 2002."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 4,
+        "question_text": "Chọn câu overview đúng nhất (không sa vào số liệu lẻ) :",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng vì khái quát hướng biến thiên chính và không sa vào con số cụ thể. B sai vì chỉ nói đến fixed-line, không bao quát mobile. C sai vì nói fixed-line giảm ngay từ đầu và mobile giảm sau đó (trái biểu đồ). D sai vì nói tất cả các nhóm đều tăng ổn định (trái với việc fixed-line giảm sau 1998).",
+        "options": {
+          "A": "Trong toàn giai đoạn 1995–2002, hai nhóm cuộc gọi qua đường dây cố định đều có xu hướng tăng đến khoảng năm 1998 rồi sau đó đi xuống, còn cuộc gọi di động tăng đều và rõ rệt.",
+          "B": "Nhìn chung, chỉ có các cuộc gọi cố định thay đổi đáng kể, còn cuộc gọi di động gần như không có xu hướng rõ ràng.",
+          "C": "Nhìn chung, các cuộc gọi qua đường dây cố định giảm đều từ năm 1995, trong khi di động cũng giảm dần về cuối kỳ.",
+          "D": "Nhìn chung, tất cả các loại cuộc gọi đều tăng đều đặn qua từng năm cho đến năm 2002."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 5,
+        "question_text": "Chọn câu overview tránh mâu thuẫn với biểu đồ:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng: mobile đi lên và đạt mức cao nhất vào cuối giai đoạn; hai nhóm fixed-line đạt đỉnh xung quanh 1998 rồi giảm. B sai vì nói mobile giảm vào 1998. C sai vì nói fixed-line thấp dần ngay từ 1995 và mobile không đổi. D sai vì nói mobile đi xuống trong khi thực tế tăng mạnh.",
+        "options": {
+          "A": "Cuộc gọi di động tăng dần và đạt mức cao nhất ở cuối giai đoạn, còn hai loại cuộc gọi cố định tăng đến khoảng 1998 rồi giảm về sau.",
+          "B": "Cuộc gọi di động đạt đỉnh vào năm 1998 rồi giảm liên tục đến năm 2002, trong khi các cuộc gọi cố định vẫn tăng.",
+          "C": "Các cuộc gọi cố định luôn giảm kể từ năm 1995, và cuộc gọi di động gần như không thay đổi.",
+          "D": "Hai nhóm cuộc gọi cố định giảm dần từ 1998 trở đi, còn cuộc gọi di động cũng giảm theo cùng xu hướng."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 6,
+        "question_text": "Chọn câu overview nêu đúng 2–3 đặc điểm nổi bật nhất của toàn bộ dữ liệu:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng vì tổng quát được: (1) hai dạng fixed-line cùng dạng 'peak ~1998 rồi giảm'; (2) mobile tăng mạnh, đặc biệt rõ về sau. B sai vì nói fixed-line tăng suốt và mobile đi ngang. C sai vì nói mobile không thay đổi còn fixed-line tăng. D sai vì nói chỉ có một loại fixed-line biến động, còn lại ổn định (không đúng).",
+        "options": {
+          "A": "Các cuộc gọi cố định nhìn chung tăng đến khoảng năm 1998 rồi giảm về sau, trong khi cuộc gọi di động tăng liên tục và trở thành một phần ngày càng quan trọng trong tổng số phút gọi.",
+          "B": "Các cuộc gọi cố định tăng đều đến năm 2002, còn cuộc gọi di động giữ nguyên gần như không đổi trong suốt giai đoạn.",
+          "C": "Cuộc gọi di động gần như không thay đổi; thay vào đó, hai loại cuộc gọi cố định giảm dần từ năm 1995 đến 2002.",
+          "D": "Chỉ có một nhóm cuộc gọi thay đổi đáng kể, còn hai nhóm còn lại dao động nhẹ quanh mức ban đầu."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 7,
+        "question_text": "Chọn câu overview theo phong cách IELTS Writing Task 1 (không cần số liệu cụ thể):",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng với phong cách và nội dung overview: nêu chung xu hướng tăng đến đỉnh rồi giảm ở fixed-line, và tăng liên tục ở mobile. B sai vì thiếu so sánh và không phản ánh mobile tăng. C sai vì đảo xu hướng. D sai vì chỉ nói fixed-line giảm mà không nói mobile tăng mạnh.",
+        "options": {
+          "A": "Overall, fixed-line calls rose to a peak around 1998 before declining, whereas mobile calls showed a steady upward trend throughout 1995–2002.",
+          "B": "Overall, the main change was a gradual decline in mobile calls, while fixed-line calls remained relatively stable.",
+          "C": "Overall, all categories increased continuously from 1995 to 2002 without any decline after 1998.",
+          "D": "Overall, both fixed-line and mobile calls declined steadily over the whole period."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 8,
+        "question_text": "Chọn câu overview KHÁI QUÁT đúng nhất, không rơi vào việc chỉ mô tả một chi tiết hoặc một loại dữ liệu đơn lẻ:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng vì khái quát cho cả các nhóm: fixed-line tăng đến 1998 rồi giảm; mobile tăng mạnh đến cuối giai đoạn. B sai vì đề cập chi phí/không liên quan. C sai vì chỉ nói mobile. D sai vì chỉ nói fixed-line và bỏ mobile.",
+        "options": {
+          "A": "Trong suốt giai đoạn 1995–2002, các cuộc gọi qua đường dây cố định nhìn chung đạt mức cao nhất vào khoảng 1998 rồi sau đó giảm, trong khi cuộc gọi di động tăng rõ rệt và liên tục.",
+          "B": "Trong giai đoạn 1995–2002, sự thay đổi chủ yếu đến từ việc người dùng chuyển sang dùng internet nhiều hơn.",
+          "C": "Trong giai đoạn 1995–2002, chỉ có cuộc gọi di động tăng đáng kể, còn các cuộc gọi cố định gần như không đổi.",
+          "D": "Trong giai đoạn 1995–2002, chỉ có các cuộc gọi cố định tăng rồi giảm; cuộc gọi di động không có xu hướng rõ ràng."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 9,
+        "question_text": "Chọn câu overview đúng về thời điểm đạt đỉnh của các nhóm chính:",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A đúng vì fixed-line đạt đỉnh khoảng 1998 rồi giảm, còn mobile tiếp tục tăng cho tới cuối giai đoạn. B sai vì đặt đỉnh cố định ở 1999 và mobile ở 2000 (không đúng). C sai vì nói fixed-line không đạt đỉnh và mobile giảm. D sai vì nói mobile đạt đỉnh sớm rồi giảm trong khi biểu đồ cho thấy tăng đến 2002.",
+        "options": {
+          "A": "Hai nhóm cuộc gọi cố định đạt đỉnh vào khoảng năm 1998, sau đó giảm dần; ngược lại, cuộc gọi di động tiếp tục tăng cho đến năm 2002.",
+          "B": "Hai nhóm cuộc gọi cố định đạt đỉnh vào năm 1999, còn cuộc gọi di động đạt đỉnh vào năm 2000 rồi giảm.",
+          "C": "Hai nhóm cuộc gọi cố định không có giai đoạn tăng; chúng giảm ngay từ đầu, còn cuộc gọi di động giảm sau mỗi năm.",
+          "D": "Cuộc gọi di động đạt đỉnh vào khoảng năm 1998 rồi giảm nhanh, trong khi các cuộc gọi cố định tăng đến cuối kỳ."
+        },
+        "correct": "A"
+      },
+      {
+        "questions_no": 10,
+        "question_text": "Chọn câu overview chính xác nhất cho toàn bộ biểu đồ (1995–2002):",
+        "question_image": "https://s3.wispace.app/ielts-task1/ca95bd4ab522946d",
+        "explanation": "A là overview chuẩn: (1) fixed-line tăng đến quanh 1998 rồi giảm; (2) mobile tăng theo thời gian và nổi bật cuối kỳ. B sai vì nói cả hai xu hướng đều đi lên. C sai vì nói mobile giảm và fixed-line tăng. D sai vì phủ định mobile tăng và nói fixed-line giảm liên tục từ đầu mà biểu đồ cho thấy chúng tăng giai đoạn đầu.",
+        "options": {
+          "A": "Overall, fixed-line calls climbed to their highest point around 1998 and then fell over the remaining years, whereas mobile calls rose throughout the period and became much higher by 2002.",
+          "B": "Overall, all three categories followed the same pattern of steady growth from 1995 to 2002.",
+          "C": "Overall, mobile calls declined from the start, while fixed-line calls continued to rise until 2002.",
+          "D": "Overall, both fixed-line and mobile calls decreased every year from 1995 onward."
+        },
+        "correct": "A"
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 11812,
+    "output_tokens": 3825,
+    "total_tokens": 15637,
+    "cost": 0.00714365
+  },
+  "metrics": {
+    "ai_processing_ms": 22939
+  }
+}

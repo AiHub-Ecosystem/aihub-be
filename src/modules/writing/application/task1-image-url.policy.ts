@@ -95,10 +95,13 @@ function isNonPublicName(hostname: string): boolean {
  * Checks only the submitted URL's structure. DNS destination checks stay with
  * AI Writing, which performs the image fetch.
  */
-export function isAllowedTask1ImageUrl(value: string): boolean {
+export function isAllowedTask1ImageUrl(
+  value: string,
+  maxLength = TASK1_IMAGE_URL_MAX_LENGTH,
+): boolean {
   if (
     value.length === 0 ||
-    value.length > TASK1_IMAGE_URL_MAX_LENGTH ||
+    value.length > maxLength ||
     value.trim() !== value ||
     /\s/.test(value)
   ) {
