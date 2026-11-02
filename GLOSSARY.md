@@ -131,6 +131,12 @@ The identifier AIHUB associates with a user's operation and usage record. It is
 obtained from either a Signed User Assertion or a Declared User ID.
 _Avoid_: API-key owner ID
 
+**AIHUB User Account**:
+The person-level account AIHUB manages for user-facing access; it is distinct
+from an Organization and its API keys, and may belong to zero or more
+Organizations through Organization Membership.
+_Avoid_: customer account (ambiguous between a person and an Organization)
+
 **Organization Identity Configuration**:
 An Organization-owned policy for verifying end-user identity. When active, it
 requires Signed User Assertions; when absent or disabled, it permits Declared
