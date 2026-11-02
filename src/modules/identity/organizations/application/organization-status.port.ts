@@ -1,4 +1,11 @@
-import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+/**
+ * The lifecycle status an Organization holds in its own record. This is the
+ * single Identity-owned definition every consumer reads; the API-key
+ * authentication contract used to publish it, but it lives here now so the
+ * Membership, Organization management, persistence-mapping, and API-key
+ * surfaces share one source of truth (issue #1440).
+ */
+export type OrganizationStatus = 'active' | 'suspended';
 
 export interface SetOrganizationStatusInput {
   readonly organizationId: string;

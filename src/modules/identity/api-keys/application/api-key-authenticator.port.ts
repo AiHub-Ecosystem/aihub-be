@@ -21,7 +21,7 @@ export interface AuthenticatedApiKey {
   readonly allowedEnvironments: readonly string[];
 }
 
-export type OrganizationStatus = 'active' | 'suspended';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 /** The lifecycle the `api_keys` column holds. Expiry is not one of its
  * values: an expired key still reads `active` here, and the status the API
  * publishes is derived from the key's expiry moment in the domain. */

@@ -4,11 +4,11 @@ import {
   isPostgresUnavailable,
 } from '@/common/postgres/postgres-unavailable-error';
 import { asDateOrIso } from '@/common/postgres/row-readers';
-import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type {
   OrganizationMembershipRole,
   OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 /**
  * Row readers for the identity repositories. The generic ones live in

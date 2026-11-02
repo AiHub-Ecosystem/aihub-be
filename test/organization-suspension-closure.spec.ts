@@ -2,7 +2,6 @@ import { createRequestContext } from '@/common/request-context/request-context.f
 
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
-import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { InviteOrganizationMember } from '@/modules/identity/invitations/application/invite-organization-member';
 import type { OrganizationInvitationPort } from '@/modules/identity/invitations/application/organization-invitation.port';
 import type { OrganizationInviteTokenPort } from '@/modules/identity/invitations/application/organization-invite-token.port';
@@ -13,6 +12,7 @@ import { organizationSuspensionClosesSurface } from '@/modules/identity/membersh
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
 import type { RenameOrganizationRecordInput } from '@/modules/identity/organizations/application/organization-rename-record.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 import { PostgresOrganizationRenameRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-rename.repository';
 import type { IdentityRepositoryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 

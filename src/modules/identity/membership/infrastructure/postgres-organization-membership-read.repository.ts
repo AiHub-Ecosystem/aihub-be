@@ -1,6 +1,5 @@
 import { isRecord } from '@/common/is-record';
 import { ROSTER_MEMBERS_PER_ORGANIZATION } from '@/contracts/organization/pagination';
-import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { ORGANIZATION_READ_ADMISSION } from '@/modules/identity/membership/application/organization-admission';
 import type {
   ListOrganizationMembersInput,
@@ -19,6 +18,7 @@ import type {
   OrganizationRosterPage,
   ResolveMembershipInput,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 import {
   identityStoreError,
   identityStoreUnavailable,

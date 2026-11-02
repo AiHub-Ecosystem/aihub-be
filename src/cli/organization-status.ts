@@ -1,4 +1,4 @@
-import { type OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { type OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 import type {
   OrganizationStatusPort,
   SetOrganizationStatusResult,

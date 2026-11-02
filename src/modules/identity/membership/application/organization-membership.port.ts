@@ -1,5 +1,5 @@
 import type { RequestContext } from '@/common/request-context/request-context';
-import type { OrganizationStatus } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 export type OrganizationMembershipMutationRole = 'admin' | 'member';
 
