@@ -1,11 +1,19 @@
-// ponytail: nested batch loop exceeds depth ceiling; refactor when sweep is touched.
 import { WRITING_CHART_ORPHAN_GRACE_MS } from './writing-chart-upload.policy';
 import type {
+  WritingChartCleanupCandidate,
   WritingChartUploadRepositoryPort,
   WritingChartUploadStoragePort,
 } from './writing-chart-upload.port';
 
 const BATCH_SIZE = 500;
+
+export interface WritingChartUploadSweepSummary {
+  readonly scanned: number;
+  readonly eligible: number;
+  readonly deleted: number;
+  readonly failed: number;
+  readonly dryRun: boolean;
+}
 
 /** Deletes private or expired public chart objects and their durable records. */
 export class WritingChartUploadSweep {
@@ -20,7 +28,10 @@ export class WritingChartUploadSweep {
     >,
   ) {}
 
-  async run(input: { readonly dryRun: boolean; readonly now: Date }) {
+  async run(input: {
+    readonly dryRun: boolean;
+    readonly now: Date;
+  }): Promise<WritingChartUploadSweepSummary> {
     let scanned = 0;
     let eligible = 0;
     let deleted = 0;
@@ -44,32 +55,8 @@ export class WritingChartUploadSweep {
 
       if (!input.dryRun) {
         for (const candidate of candidates) {
-          try {
-            // Every candidate, not only a published row: an interrupted or
-            // ambiguous publication can leave the public object behind a row
-            // that never said published, and nothing else records it (#921).
-            // Deleting an absent object succeeds.
-            const deletions = [
-              this.storage.deleteStagingObject({
-                environment: candidate.environment,
-                stagingKey: candidate.stagingKey,
-              }),
-              this.storage.deletePublishedObject({
-                environment: candidate.environment,
-                publishedKey: candidate.publishedKey,
-              }),
-            ];
-            const outcomes = await Promise.allSettled(deletions);
-            if (outcomes.some((outcome) => outcome.status === 'rejected')) {
-              failed += 1;
-              continue;
-            }
-            if (await this.repository.removeCleanupCandidate(candidate))
-              deleted += 1;
-            else failed += 1;
-          } catch {
-            failed += 1;
-          }
+          if (await this.deleteCandidate(candidate)) deleted += 1;
+          else failed += 1;
         }
       }
 
@@ -79,5 +66,28 @@ export class WritingChartUploadSweep {
       if (candidates.length < BATCH_SIZE) break;
     }
     return { scanned, eligible, deleted, failed, dryRun: input.dryRun };
+  }
+
+  private async deleteCandidate(
+    candidate: WritingChartCleanupCandidate,
+  ): Promise<boolean> {
+    try {
+      // Interrupted publication can leave either object behind any row (#921).
+      const outcomes = await Promise.allSettled([
+        this.storage.deleteStagingObject({
+          environment: candidate.environment,
+          stagingKey: candidate.stagingKey,
+        }),
+        this.storage.deletePublishedObject({
+          environment: candidate.environment,
+          publishedKey: candidate.publishedKey,
+        }),
+      ]);
+      if (outcomes.some((outcome) => outcome.status === 'rejected'))
+        return false;
+      return await this.repository.removeCleanupCandidate(candidate);
+    } catch {
+      return false;
+    }
   }
 }

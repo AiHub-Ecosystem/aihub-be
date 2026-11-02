@@ -17,7 +17,7 @@ Cross-links: ADR-0082 (folder-entry ceiling), ADR-0090 (dependency rule).
 ## Enforcement
 
 - File length: `scripts/checks/check-file-size.mjs` (500 code lines), wired into `pnpm verify`.
-- Complexity: oxlint `eslint/complexity` at 64 via an override for `src/**/*.ts` (specs/testing excluded), with an allowlist for the two current depth sites.
+- Complexity: oxlint `eslint/complexity` at 64 via an override for `src/**/*.ts` (specs/testing excluded), with an allowlist for the remaining depth site.
 - Nesting depth: oxlint `eslint/max-depth` at 4 via the same override.
 - The "floor" rule stays a review guideline with no check.
 

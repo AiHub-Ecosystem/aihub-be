@@ -98,18 +98,77 @@ describe('WritingChartUploadSweep', () => {
 
   it('retains the durable row when either object deletion fails', async () => {
     const { sweep, repository, storage } = makeSweep();
+    repository.cleanupCandidates.mockResolvedValue(candidates);
+    storage.deleteStagingObject
+      .mockRejectedValueOnce(new Error('staging storage down'))
+      .mockResolvedValueOnce(undefined);
     storage.deletePublishedObject
       .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('storage down'));
+      .mockRejectedValueOnce(new Error('published storage down'));
 
     const summary = await sweep.run({
       dryRun: false,
       now: new Date('2026-10-16T00:00:00.000Z'),
     });
 
-    expect(summary.deleted).toBe(1);
-    expect(summary.failed).toBe(1);
-    expect(repository.removeCleanupCandidate).toHaveBeenCalledTimes(1);
+    expect(summary.deleted).toBe(0);
+    expect(summary.failed).toBe(2);
+    expect(storage.deleteStagingObject).toHaveBeenCalledTimes(2);
+    expect(storage.deletePublishedObject).toHaveBeenCalledTimes(2);
+    expect(repository.removeCleanupCandidate).not.toHaveBeenCalled();
+  });
+
+  it('follows the keyset cursor across cleanup batches', async () => {
+    const { sweep, repository, storage } = makeSweep();
+    const paginatedCandidates = Array.from({ length: 501 }, (_, index) => ({
+      kind: 'asset' as const,
+      assetId: `chart_${String(index).padStart(26, '0')}`,
+      environment: 'sandbox' as const,
+      stagingKey: `writing-charts/${index}/staging`,
+      publishedKey: `writing-charts/${index}/published`,
+      createdAt: new Date('2026-10-14T00:00:00.000Z'),
+    }));
+    repository.cleanupCandidates.mockImplementation(
+      async (
+        input: Parameters<
+          WritingChartUploadRepositoryPort['cleanupCandidates']
+        >[0],
+      ) => {
+        const cursorIndex = paginatedCandidates.findIndex(
+          (candidate) => candidate.assetId === input.after?.assetId,
+        );
+        return paginatedCandidates.slice(
+          cursorIndex + 1,
+          cursorIndex + 1 + input.limit,
+        );
+      },
+    );
+
+    const summary = await sweep.run({
+      dryRun: true,
+      now: new Date('2026-10-16T00:00:00.000Z'),
+    });
+
+    expect(summary).toEqual({
+      scanned: 501,
+      eligible: 501,
+      deleted: 0,
+      failed: 0,
+      dryRun: true,
+    });
+    expect(repository.cleanupCandidates).toHaveBeenCalledTimes(2);
+    expect(repository.cleanupCandidates).toHaveBeenNthCalledWith(2, {
+      now: new Date('2026-10-16T00:00:00.000Z'),
+      orphanBefore: new Date('2026-10-15T00:00:00.000Z'),
+      limit: 500,
+      after: {
+        createdAt: paginatedCandidates[499]?.createdAt,
+        assetId: paginatedCandidates[499]?.assetId,
+      },
+    });
+    expect(storage.deleteStagingObject).not.toHaveBeenCalled();
+    expect(storage.deletePublishedObject).not.toHaveBeenCalled();
+    expect(repository.removeCleanupCandidate).not.toHaveBeenCalled();
   });
 
   it('reports eligible objects without deleting them during a dry run', async () => {

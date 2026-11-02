@@ -95,8 +95,7 @@
     },
     {
       "files": [
-        "src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts",
-        "src/modules/writing/application/writing-chart-upload.sweep.ts"
+        "src/modules/identity/user-assertions/infrastructure/jwks-key-provider.ts"
       ],
       "rules": {
         "complexity": "off",
