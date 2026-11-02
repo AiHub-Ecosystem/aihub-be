@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "error": {
+    "code": "part_not_found",
+    "message": "[redacted]"
+  },
+  "usage": null,
+  "data": null
+}
