@@ -81,3 +81,14 @@ export class AppError extends Error {
     return createInternalErrorEnvelope(requestId);
   }
 }
+
+/** A downstream AI service request exceeded its deadline (ADR for graded
+ * requests). One owner for the timeout error policy; the Gateway timeout
+ * mapping and dispatch deadline policy stay separate (issue #1408). */
+export function timeoutError(): AppError {
+  return new AppError({
+    code: 'AI_SERVICE_TIMEOUT',
+    message: 'AI service request timed out',
+    retryable: true,
+  });
+}

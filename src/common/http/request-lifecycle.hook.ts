@@ -3,7 +3,7 @@ import { Transform } from 'node:stream';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { AppError } from '@/common/errors/app-error';
+import { timeoutError } from '@/common/errors/app-error';
 import {
   type DisconnectableRequest,
   createClientDisconnectSignal,
@@ -58,14 +58,6 @@ const lifecycleByRequest = new WeakMap<object, RequestLifecycleState>();
 
 function isObject(value: unknown): value is object {
   return typeof value === 'object' && value !== null;
-}
-
-function timeoutError(): AppError {
-  return new AppError({
-    code: 'AI_SERVICE_TIMEOUT',
-    message: 'AI service request timed out',
-    retryable: true,
-  });
 }
 
 function isPayloadStream(value: unknown): value is PayloadStream {

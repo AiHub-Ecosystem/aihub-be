@@ -1,4 +1,4 @@
-import { AppError } from '@/common/errors/app-error';
+import { AppError, timeoutError } from '@/common/errors/app-error';
 import { isDownstreamFault } from '@/common/errors/downstream-fault';
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
@@ -73,14 +73,6 @@ function missingKeyError(): AppError {
     code: 'INVALID_REQUEST',
     message: 'Idempotency-Key is required for this operation',
     retryable: false,
-  });
-}
-
-function timeoutError(): AppError {
-  return new AppError({
-    code: 'AI_SERVICE_TIMEOUT',
-    message: 'AI service request timed out',
-    retryable: true,
   });
 }
 
