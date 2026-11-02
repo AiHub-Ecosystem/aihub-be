@@ -119,7 +119,7 @@ function membershipAuditWrites(
       'membership.role_changed',
       'membership.disabled',
       'membership.owner_transferred',
-    ].includes(String(values[3])),
+    ].includes(String(values[4])),
   );
 }
 
@@ -715,6 +715,7 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
       expect.stringMatching(/^oae_[0-9A-HJKMNP-TV-Z]{26}$/),
       'org_acme',
       membershipRow.user_account_id,
+      'authenticated_user',
       'membership.role_changed',
       'denied',
       'membership',
@@ -749,8 +750,8 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
     ).rejects.toMatchObject({ code: 'ORGANIZATION_OWNER_REQUIRED' });
 
     const [write] = auditWrites(client);
-    expect(write?.values[4]).toBe('denied');
-    expect(write?.values[8]).toContain('owner_required');
+    expect(write?.values[5]).toBe('denied');
+    expect(write?.values[9]).toContain('owner_required');
   });
 
   it('records nothing when the caller does not belong to the organization', async () => {

@@ -31,6 +31,11 @@ export const ORGANIZATION_AUDIT_ACTIONS = [
 ] as const;
 
 export const ORGANIZATION_AUDIT_OUTCOMES = ['applied', 'denied'] as const;
+export const ORGANIZATION_AUDIT_ACTOR_SOURCES = [
+  'authenticated_user',
+  'self_declared_operator',
+  'legacy_unknown',
+] as const;
 
 /**
  * The page bounds live here rather than beside the use case because three
@@ -53,6 +58,9 @@ const OrganizationAuditActionSchema = Type.String({
 const OrganizationAuditOutcomeSchema = Type.Union(
   ORGANIZATION_AUDIT_OUTCOMES.map((outcome) => Type.Literal(outcome)),
 );
+const OrganizationAuditActorSourceSchema = Type.String({
+  'x-extensible-enum': [...ORGANIZATION_AUDIT_ACTOR_SOURCES],
+});
 
 export const OrganizationAuditEventQuerySchema = Type.Object(
   {
@@ -96,6 +104,7 @@ export const OrganizationAuditEventSchema = Type.Object(
     event_id: Type.String({ pattern: '^oae_[0-9A-HJKMNP-TV-Z]{26}$' }),
     action: OrganizationAuditActionSchema,
     outcome: OrganizationAuditOutcomeSchema,
+    actor_source: OrganizationAuditActorSourceSchema,
     target_type: OrganizationAuditTargetTypeSchema,
     /** `null` once Audit redaction has removed the label; the event stands. */
     target_label: NextCursorSchema,

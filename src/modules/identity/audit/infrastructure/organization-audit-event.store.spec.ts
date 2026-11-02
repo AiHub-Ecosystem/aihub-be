@@ -1,4 +1,10 @@
-import { organizationAuditEventId } from './organization-audit-event.store';
+import type { Prisma } from '@prisma-client/client';
+import {
+  INSERT_ORGANIZATION_AUDIT_EVENT_SQL,
+  auditStamp,
+  organizationAuditEventId,
+  recordOrganizationAuditEvent,
+} from './organization-audit-event.store';
 
 describe('organizationAuditEventId', () => {
   it('prefixes a ULID', () => {
@@ -26,5 +32,47 @@ describe('organizationAuditEventId', () => {
     );
 
     expect([...ids].sort()).toEqual(ids);
+  });
+});
+
+describe('recordOrganizationAuditEvent', () => {
+  it('persists the declared source beside the linked actor account', async () => {
+    const execute = jest.fn().mockResolvedValue(1);
+    const client = {
+      $executeRawUnsafe: execute,
+    } as unknown as Prisma.TransactionClient;
+    const occurredAt = new Date('2026-10-19T12:00:00.000Z');
+    const stamp = auditStamp(
+      {
+        context: { requestId: 'req_01J00000000000000000000000' },
+        organizationId: 'org_acme',
+      },
+      'usr_operator',
+      occurredAt,
+      'self_declared_operator',
+    );
+
+    await recordOrganizationAuditEvent(client, stamp, {
+      action: 'api_key.revoked',
+      apiKeyId: 'key_demo',
+      name: 'Production key',
+      keyPrefix: 'aihub_sk_A1b2C3',
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      INSERT_ORGANIZATION_AUDIT_EVENT_SQL,
+      expect.any(String),
+      'org_acme',
+      'usr_operator',
+      'self_declared_operator',
+      'api_key.revoked',
+      'applied',
+      'api_key',
+      'key_demo',
+      'Production key',
+      JSON.stringify({ keyPrefix: 'aihub_sk_A1b2C3' }),
+      'req_01J00000000000000000000000',
+      occurredAt,
+    );
   });
 });

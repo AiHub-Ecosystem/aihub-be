@@ -5,6 +5,7 @@ import { monotonicFactory } from 'ulid';
 import {
   type OrganizationAuditDraft,
   type OrganizationAuditStamp,
+  type OrganizationAuditWriteActorSource,
   organizationAuditEvent,
   organizationIdOf,
   userAccountIdOf,
@@ -29,10 +30,12 @@ export function auditStamp(
   },
   actorUserAccountId: string,
   occurredAt: Date,
+  actorSource: OrganizationAuditWriteActorSource = 'authenticated_user',
 ): Omit<OrganizationAuditStamp, 'id'> {
   return {
     organizationId: organizationIdOf(input.organizationId),
     actorUserAccountId: userAccountIdOf(actorUserAccountId),
+    actorSource,
     requestId: input.context.requestId,
     occurredAt,
   };
@@ -42,9 +45,9 @@ const logger = new Logger('OrganizationAuditEvent');
 
 export const INSERT_ORGANIZATION_AUDIT_EVENT_SQL = `
   INSERT INTO organization_audit_events (
-    id, organization_id, actor_user_account_id, action, outcome,
+    id, organization_id, actor_user_account_id, actor_source, action, outcome,
     target_type, target_id, target_label, detail, request_id, occurred_at
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `;
 
 /**
@@ -93,6 +96,7 @@ export async function recordOrganizationAuditEvent(
     event.id,
     event.organizationId,
     event.actorUserAccountId,
+    event.actorSource,
     event.action,
     event.outcome,
     event.targetType,

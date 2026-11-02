@@ -1,3 +1,4 @@
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import { isRecord } from '@/common/is-record';
 import { asDateOrIso } from '@/common/postgres/row-readers';
 import type {
@@ -77,7 +78,7 @@ interface UsageRetentionPreviewRow {
 
 function countValue(value: string): number {
   const count = Number(value);
-  if (!Number.isSafeInteger(count) || count < 0) {
+  if (!isUsableCount(count)) {
     throw new Error('usage retention count is invalid');
   }
   return count;

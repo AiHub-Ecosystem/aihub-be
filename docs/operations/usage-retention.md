@@ -61,19 +61,7 @@ exception.
 Before the first production run:
 
 1. Create and verify a `pg_dump -Fc` backup using the deployment backup runbook.
-2. Run a read-only count for the chosen cutoff:
-
-   ```sql
-   SELECT count(*)
-   FROM usage_records
-   WHERE created_at < :retention_cutoff;
-
-   SELECT count(*)
-   FROM dispatch_attempts
-   WHERE created_at < :retention_cutoff;
-   ```
-
-3. Run `./scripts/ops/host-jobs/host-scheduled-job.sh prune --dry-run true`
+2. Run `./scripts/ops/host-jobs/host-scheduled-job.sh prune --dry-run true`
    and retain its per-deployment preview before enabling the nightly schedule.
 
 The preview reports the cutoff and eligible counts for `usage_records`,

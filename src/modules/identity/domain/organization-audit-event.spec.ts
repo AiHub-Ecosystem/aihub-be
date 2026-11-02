@@ -10,6 +10,7 @@ const STAMP: OrganizationAuditStamp = {
   id: 'oae_01J00000000000000000000000',
   organizationId: organizationIdOf('org_acme'),
   actorUserAccountId: userAccountIdOf('usr_01J00000000000000000000001'),
+  actorSource: 'authenticated_user',
   requestId: 'req_01J00000000000000000000002',
   occurredAt: new Date('2026-09-21T10:00:00.000Z'),
 };

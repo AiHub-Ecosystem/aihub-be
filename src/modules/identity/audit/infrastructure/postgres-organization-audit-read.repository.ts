@@ -1,5 +1,6 @@
 import {
   ORGANIZATION_AUDIT_ACTIONS,
+  ORGANIZATION_AUDIT_ACTOR_SOURCES,
   ORGANIZATION_AUDIT_OUTCOMES,
 } from '@/contracts/organization/audit-event';
 import type {
@@ -9,6 +10,7 @@ import type {
 } from '@/modules/identity/audit/application/organization-audit-event-read.port';
 import type {
   OrganizationAuditAction,
+  OrganizationAuditActorSource,
   OrganizationAuditOutcome,
   OrganizationAuditTargetType,
 } from '@/modules/identity/domain/organization-audit-event';
@@ -52,6 +54,7 @@ const LIST_AUDIT_EVENTS_SQL = `
     event.id,
     event.action,
     event.outcome,
+    event.actor_source,
     event.target_type,
     event.target_label,
     event.detail,
@@ -72,7 +75,7 @@ const LIST_AUDIT_EVENTS_SQL = `
 `;
 
 /**
- * These three lookups are also where the published vocabulary and the domain
+ * These lookups are also where the published vocabulary and the domain
  * unions are held to the same sets. Each narrows a contract array into a
  * domain type, so an Audit action present in one and missing from the other
  * fails to compile here rather than returning `undefined` for a real row and
@@ -92,6 +95,13 @@ function outcomeValue(
   return ORGANIZATION_AUDIT_OUTCOMES.find((outcome) => outcome === value);
 }
 
+function actorSourceValue(
+  record: Record<string, unknown>,
+): OrganizationAuditActorSource | undefined {
+  const value = record.actor_source;
+  return ORGANIZATION_AUDIT_ACTOR_SOURCES.find((source) => source === value);
+}
+
 function targetTypeValue(
   record: Record<string, unknown>,
 ): OrganizationAuditTargetType | undefined {
@@ -109,6 +119,7 @@ function mapAuditEvent(
   const id = stringValue(value, 'id');
   const action = actionValue(value);
   const outcome = outcomeValue(value);
+  const actorSource = actorSourceValue(value);
   const targetType = targetTypeValue(value);
   const actorUsername = stringValue(value, 'actor_username');
   const requestId = stringValue(value, 'request_id');
@@ -118,6 +129,7 @@ function mapAuditEvent(
     id === undefined ||
     action === undefined ||
     outcome === undefined ||
+    actorSource === undefined ||
     targetType === undefined ||
     actorUsername === undefined ||
     requestId === undefined ||
@@ -142,6 +154,7 @@ function mapAuditEvent(
     id,
     action,
     outcome,
+    actorSource,
     targetType,
     targetLabel: rawLabel,
     detail: rawDetail ?? {},

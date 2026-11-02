@@ -1,7 +1,7 @@
 /** @typedef {'production' | 'sandbox' | 'test' | 'unknown'} OperatorDeployment */
 /** @typedef {'process' | 'database'} MaintenanceClockSource */
 /** @typedef {{ now: Date; source: MaintenanceClockSource }} MaintenanceClock */
-/** @typedef {{ command: string; action: string; target?: string }} OperatorMutationPreview */
+/** @typedef {{ command: string; action: string; inputs: Record<string, string>; target?: string }} OperatorMutationPreview */
 
 /** @type {ReadonlyMap<string, OperatorDeployment>} */
 const DEPLOYMENT_BY_DATABASE = new Map([
@@ -33,6 +33,52 @@ const MUTATION_ACTIONS = {
   'usage:prune': ['delete usage and dispatch evidence past retention'],
   'billing:adjust': ['record a billing adjustment', 'id'],
   'billing:statement': ['close a billing month', 'month'],
+};
+/** @type {Readonly<Record<string, readonly string[]>>} */
+const MUTATION_PREVIEW_OPTIONS = {
+  'org:create': [
+    'name',
+    'entitlements',
+    'rate-limit-rpm',
+    'max-concurrent',
+    'monthly-quota',
+    'hard-stop',
+  ],
+  'key:create': ['org', 'name', 'scopes', 'envs', 'internal', 'actor'],
+  'key:revoke': ['key', 'actor'],
+  'identity:set': [
+    'org',
+    'issuer',
+    'jwks-url',
+    'allowed-algorithms',
+    'max-assertion-ttl-seconds',
+    'status',
+  ],
+  'idempotency:cleanup': [],
+  'quota:reconcile': ['month'],
+  'org:suspend': ['org', 'actor'],
+  'org:restore': ['org', 'actor'],
+  'org:grant-entitlement': ['org', 'entitlement', 'actor'],
+  'org:attach-owner': ['org', 'owner', 'actor'],
+  'avatar:sweep': [],
+  'speaking:audio-upload-sweep': [],
+  'registrations:sweep': [],
+  'notifications:sweep': [],
+  'writing:chart-upload-sweep': [],
+  'writing:chart-revoke': ['url', 'actor'],
+  'usage:prune': [],
+  'billing:adjust': [
+    'id',
+    'org',
+    'month',
+    'operation',
+    'requests',
+    'request-ids',
+    'period-from',
+    'period-to',
+    'actor',
+  ],
+  'billing:statement': ['month', 'org', 'close', 'actor'],
 };
 const MUTATING_COMMANDS = new Set(Object.keys(MUTATION_ACTIONS));
 const CONTROL_PLANE_COMMANDS = new Set([
@@ -89,6 +135,18 @@ function requireTargetConfirmation(deployment, requestedTarget) {
   }
 }
 
+/** @param {OperatorDeployment} deployment @param {string} runtimeScope */
+function requireStorageDeployment(deployment, runtimeScope) {
+  if (
+    (deployment !== 'production' && deployment !== 'sandbox') ||
+    runtimeScope !== deployment
+  ) {
+    throw new Error(
+      `object storage scope ${runtimeScope} is incompatible with database deployment ${deployment}`,
+    );
+  }
+}
+
 /** @param {OperatorDeployment} deployment */
 function requireControlPlaneDatabase(deployment) {
   if (deployment !== 'production' && deployment !== 'test') {
@@ -125,18 +183,40 @@ function previewOperatorMutation(command, options) {
   if (targetOption !== undefined && !target?.trim()) {
     throw new Error(`operator preview requires --${targetOption}`);
   }
-  if (targetOption === 'url' && target !== undefined) {
-    const safeUrl = new URL(target);
+  /** @param {string} name @param {string} value */
+  const safeValue = (name, value) => {
+    if (name !== 'url' && name !== 'issuer' && name !== 'jwks-url') {
+      return value;
+    }
+    const safeUrl = new URL(value);
     safeUrl.username = '';
     safeUrl.password = '';
     safeUrl.search = '';
     safeUrl.hash = '';
-    return { command, action, target: safeUrl.href };
+    return safeUrl.href;
+  };
+  const inputs = Object.fromEntries(
+    MUTATION_PREVIEW_OPTIONS[command]
+      .filter((name) => options.has(name))
+      .map((name) => [name, safeValue(name, options.get(name))]),
+  );
+  if (command === 'identity:set') {
+    inputs['key-source'] = options.has('public-keys-file')
+      ? 'inline'
+      : options.has('jwks-url')
+        ? 'url'
+        : 'existing';
+  }
+  if (command === 'billing:adjust' && options.has('reason')) {
+    inputs.reason_supplied = 'true';
   }
   return {
     command,
     action,
-    ...(target === undefined ? {} : { target }),
+    inputs,
+    ...(target === undefined
+      ? {}
+      : { target: safeValue(targetOption ?? '', target) }),
   };
 }
 
@@ -149,5 +229,6 @@ module.exports = {
   isMutatingCommand,
   previewOperatorMutation,
   requireControlPlaneDatabase,
+  requireStorageDeployment,
   requireTargetConfirmation,
 };

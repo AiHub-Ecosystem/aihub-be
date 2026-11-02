@@ -67,6 +67,7 @@ import {
   isMutatingCommand,
   previewOperatorMutation,
   requireControlPlaneDatabase,
+  requireStorageDeployment,
   requireTargetConfirmation,
 } from './operator-safety.cjs';
 
@@ -774,18 +775,14 @@ async function prepareOperatorMutation(command, options) {
   const runtimeScope =
     process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production';
   if (
-    target.deployment !== 'test' &&
     [
       'avatar:sweep',
       'speaking:audio-upload-sweep',
       'writing:chart-upload-sweep',
       'writing:chart-revoke',
-    ].includes(command) &&
-    runtimeScope !== target.deployment
+    ].includes(command)
   ) {
-    throw new Error(
-      `runtime database scope is ${runtimeScope}, but database resolves to ${target.deployment}`,
-    );
+    requireStorageDeployment(target.deployment, runtimeScope);
   }
 
   console.error(

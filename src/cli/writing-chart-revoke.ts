@@ -180,6 +180,7 @@ export async function runWritingChartRevokeCommand(
         {
           assetId: parsed.assetId,
           actorUserAccountId,
+          actorSource: 'self_declared_operator',
           occurredAt,
           phase: 'requested',
           originOutcome: null,
@@ -225,6 +226,7 @@ export async function runWritingChartRevokeCommand(
       await audit.append({
         assetId: parsed.assetId,
         actorUserAccountId,
+        actorSource: 'self_declared_operator',
         occurredAt: completedAt,
         phase: 'completed',
         originOutcome: origin,

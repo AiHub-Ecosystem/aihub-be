@@ -125,6 +125,7 @@ describe('runWritingChartRevokeCommand', () => {
       {
         assetId: ASSET_ID,
         actorUserAccountId: 'usr_operator',
+        actorSource: 'self_declared_operator',
         occurredAt: NOW,
         phase: 'requested',
         originOutcome: null,
@@ -134,6 +135,7 @@ describe('runWritingChartRevokeCommand', () => {
       {
         assetId: ASSET_ID,
         actorUserAccountId: 'usr_operator',
+        actorSource: 'self_declared_operator',
         occurredAt: NOW,
         phase: 'completed',
         originOutcome: 'deleted',

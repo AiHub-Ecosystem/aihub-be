@@ -106,6 +106,7 @@ export function formatBillingStatement(
             ? { request_ids: adjustment.corrects.requestIds }
             : { period: adjustment.corrects.period },
         actor: adjustment.actor,
+        actor_source: adjustment.actorSource,
         created_at: adjustment.createdAt.toISOString(),
       }),
     );
@@ -117,6 +118,7 @@ export function formatBillingStatement(
         month,
         organization_id: closed.organizationId,
         closed_by: closed.closedBy,
+        actor_source: closed.actorSource,
         closed_at: closed.closedAt.toISOString(),
       }),
     );

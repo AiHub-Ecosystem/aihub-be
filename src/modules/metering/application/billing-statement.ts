@@ -1,6 +1,11 @@
 import { canonicalJson } from '@/common/serialization/canonical-json';
 import { parseQuotaMonth } from '@/modules/gateway/public/quota-period';
 
+export type BillingActorSource =
+  | 'authenticated_user'
+  | 'self_declared_operator'
+  | 'legacy_unknown';
+
 /**
  * What an Organization is billed for one UTC month (ADR-0097, #404).
  *
@@ -75,6 +80,7 @@ export interface BillingAdjustmentRecord {
   readonly reason: string;
   readonly corrects: BillingAdjustmentTarget;
   readonly actor: string;
+  readonly actorSource: BillingActorSource;
   readonly createdAt: Date;
 }
 
@@ -89,6 +95,7 @@ export interface BillingClosureRecord {
   readonly adjustmentRequests: number;
   readonly totalRequests: number;
   readonly closedBy: string;
+  readonly actorSource: BillingActorSource;
   readonly closedAt: Date;
 }
 
@@ -122,6 +129,7 @@ export interface BillingStatement {
   readonly closed: readonly {
     readonly organizationId: string;
     readonly closedBy: string;
+    readonly actorSource: BillingActorSource;
     readonly closedAt: Date;
   }[];
   /** A closed month whose evidence no longer adds up to what was billed. */
@@ -226,11 +234,15 @@ export function buildBillingStatement(
     ),
   );
 
-  const closedBy = new Map<string, { closedBy: string; closedAt: Date }>();
+  const closedBy = new Map<
+    string,
+    { closedBy: string; actorSource: BillingActorSource; closedAt: Date }
+  >();
   const closedTotals = new Map<string, number>();
   for (const closure of closures) {
     closedBy.set(closure.organizationId, {
       closedBy: closure.closedBy,
+      actorSource: closure.actorSource,
       closedAt: closure.closedAt,
     });
     closedTotals.set(

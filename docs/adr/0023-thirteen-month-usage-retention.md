@@ -1,6 +1,6 @@
 # Thirteen-month usage retention
 
-Status: accepted
+Status: accepted; amended by ADR-0145
 
 AIHUB retains every durable metering record for a rolling 13-calendar-month
 window so operators can compare year-over-year usage without keeping an

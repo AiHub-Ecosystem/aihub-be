@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma-client/client';
 
+import { isUsableCount } from '@/common/counts/is-usable-count';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type {
   WritingChartRevocationAuditRecord,
@@ -32,6 +33,7 @@ function auditData(record: WritingChartRevocationAuditRecord) {
     id: nextAuditId(record.occurredAt),
     assetId: record.assetId,
     actorUserAccountId: record.actorUserAccountId,
+    actorSource: record.actorSource,
     occurredAt: record.occurredAt,
     phase: record.phase,
     originOutcome: record.originOutcome,
@@ -137,7 +139,7 @@ export class PostgresWritingChartRevocationAuditRepository
       cutoff,
     );
     const count = Number(rows[0]?.count);
-    if (!Number.isSafeInteger(count) || count < 0) {
+    if (!isUsableCount(count)) {
       throw new Error('writing chart audit retention count is invalid');
     }
     return count;

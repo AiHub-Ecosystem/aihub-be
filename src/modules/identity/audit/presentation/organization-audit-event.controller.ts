@@ -66,6 +66,7 @@ export class OrganizationAuditEventController {
           event_id: event.id,
           action: event.action,
           outcome: event.outcome,
+          actor_source: event.actorSource,
           target_type: event.targetType,
           target_label: event.targetLabel,
           detail: { ...event.detail },

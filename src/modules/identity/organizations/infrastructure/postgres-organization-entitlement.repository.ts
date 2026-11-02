@@ -82,6 +82,7 @@ export class PostgresOrganizationEntitlementRepository
             },
             actorId,
             input.occurredAt,
+            'self_declared_operator',
           ),
           {
             action: 'organization.entitlement_granted',

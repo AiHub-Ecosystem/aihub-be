@@ -1,6 +1,6 @@
 # ADR-0097: Billing statements, adjustments, closed months, and late Writing results
 
-- Status: Accepted
+- Status: Accepted; amended by ADR-0145
 - Date: 2026-10-14
 - Related issues: [#404](https://github.com/AiHub-Ecosystem/aihub-be/issues/404), [#405](https://github.com/AiHub-Ecosystem/aihub-be/issues/405), [#911](https://github.com/AiHub-Ecosystem/aihub-be/issues/911)
 - Amends: [ADR-0016](0016-metering-boundary-and-billing-evidence.md) for what a usage record bills and how a month is billed

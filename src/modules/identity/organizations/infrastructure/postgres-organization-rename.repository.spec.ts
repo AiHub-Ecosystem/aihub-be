@@ -112,7 +112,7 @@ function auditValues(
   writes: ReadonlyArray<RecordedQuery>,
 ): readonly unknown[][] {
   return writes
-    .filter((write) => write.values[3] === 'organization.renamed')
+    .filter((write) => write.values[4] === 'organization.renamed')
     .map((write) => [...write.values]);
 }
 

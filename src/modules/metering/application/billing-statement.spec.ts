@@ -66,6 +66,7 @@ describe('buildBillingStatement', () => {
           adjustmentRequests: 0,
           totalRequests: 5,
           closedBy: 'op',
+          actorSource: 'legacy_unknown',
           closedAt: new Date(0),
         },
         {
@@ -75,6 +76,7 @@ describe('buildBillingStatement', () => {
           adjustmentRequests: 0,
           totalRequests: 2,
           closedBy: 'op',
+          actorSource: 'legacy_unknown',
           closedAt: new Date(0),
         },
       ],

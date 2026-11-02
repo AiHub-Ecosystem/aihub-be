@@ -28,6 +28,14 @@ export type OrganizationAuditAction =
   | 'api_key.revoked';
 
 export type OrganizationAuditOutcome = 'applied' | 'denied';
+export type OrganizationAuditActorSource =
+  | 'authenticated_user'
+  | 'self_declared_operator'
+  | 'legacy_unknown';
+export type OrganizationAuditWriteActorSource = Exclude<
+  OrganizationAuditActorSource,
+  'legacy_unknown'
+>;
 
 declare const organizationIdBrand: unique symbol;
 declare const userAccountIdBrand: unique symbol;
@@ -84,6 +92,7 @@ export interface OrganizationAuditStamp {
   readonly id: string;
   readonly organizationId: OrganizationId;
   readonly actorUserAccountId: UserAccountId;
+  readonly actorSource: OrganizationAuditWriteActorSource;
   readonly requestId: string;
   readonly occurredAt: Date;
 }
@@ -92,6 +101,7 @@ export interface OrganizationAuditEvent {
   readonly id: string;
   readonly organizationId: OrganizationId;
   readonly actorUserAccountId: UserAccountId;
+  readonly actorSource: OrganizationAuditWriteActorSource;
   readonly action: OrganizationAuditAction;
   readonly outcome: OrganizationAuditOutcome;
   readonly targetType: OrganizationAuditTargetType;
@@ -447,6 +457,7 @@ export function organizationAuditEvent(
     id: stamp.id,
     organizationId: stamp.organizationId,
     actorUserAccountId: stamp.actorUserAccountId,
+    actorSource: stamp.actorSource,
     action: draft.action,
     outcome: mapped.outcome,
     targetType: mapped.targetType,

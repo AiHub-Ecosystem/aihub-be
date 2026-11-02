@@ -1,6 +1,7 @@
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   OrganizationAuditAction,
+  OrganizationAuditActorSource,
   OrganizationAuditOutcome,
   OrganizationAuditTargetType,
 } from '@/modules/identity/domain/organization-audit-event';
@@ -45,6 +46,7 @@ export interface OrganizationAuditEventRecord {
   readonly id: string;
   readonly action: OrganizationAuditAction;
   readonly outcome: OrganizationAuditOutcome;
+  readonly actorSource: OrganizationAuditActorSource;
   readonly targetType: OrganizationAuditTargetType;
   /** `null` once Audit redaction has removed it. */
   readonly targetLabel: string | null;

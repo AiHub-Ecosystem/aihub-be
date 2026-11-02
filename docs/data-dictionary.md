@@ -15,7 +15,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | EmailDailySendBudget               | auth        | 5       |
 | EmailVerificationToken             | auth        | 12      |
 | IdempotencyRecord                  | idempotency | 12      |
-| OrganizationAuditEvent             | identity    | 13      |
+| OrganizationAuditEvent             | identity    | 14      |
 | OrganizationIdentityConfig         | identity    | 12      |
 | OrganizationInvitation             | identity    | 11      |
 | OrganizationMembership             | identity    | 8       |
@@ -34,15 +34,15 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | SpeakingV2ResultOwnership          | speaking    | 7       |
 | SpeakingAudioUploadIntent          | speaking    | 10      |
 | WritingChartUpload                 | writing     | 15      |
-| WritingChartRevocationAudit        | writing     | 9       |
+| WritingChartRevocationAudit        | writing     | 10      |
 | UsageRecord                        | metering    | 21      |
 | UserAccount                        | auth        | 18      |
 | UserAvatar                         | avatar      | 7       |
 | UserMfaFactor                      | auth        | 8       |
 | UserMfaRecoveryCode                | auth        | 5       |
 | WebSession                         | auth        | 8       |
-| BillingAdjustment                  | metering    | 10      |
-| BillingMonthClosure                | metering    | 9       |
+| BillingAdjustment                  | metering    | 11      |
+| BillingMonthClosure                | metering    | 10      |
 
 ## ApiKey
 
@@ -199,6 +199,7 @@ Owner: `identity`
 | id                 | String       | @id                                                                           |
 | organizationId     | String       | @map("organization_id")                                                       |
 | actorUserAccountId | String       | @map("actor_user_account_id")                                                 |
+| actorSource        | String       | @default("legacy_unknown") @map("actor_source")                               |
 | action             | String       |                                                                               |
 | outcome            | String       |                                                                               |
 | targetType         | String       | @map("target_type")                                                           |
@@ -498,6 +499,7 @@ Owner: `writing`
 | id                 | String      | @id                                                                                               |
 | assetId            | String      | @map("asset_id")                                                                                  |
 | actorUserAccountId | String      | @map("actor_user_account_id")                                                                     |
+| actorSource        | String      | @default("legacy_unknown") @map("actor_source")                                                   |
 | occurredAt         | DateTime    | @map("occurred_at") @db.Timestamptz(6)                                                            |
 | phase              | String      |                                                                                                   |
 | originOutcome      | String?     | @map("origin_outcome")                                                                            |
@@ -628,6 +630,7 @@ Owner: `metering`
 | reason         | String       |                                                                                               |
 | corrects       | Json         |                                                                                               |
 | actor          | String       |                                                                                               |
+| actorSource    | String       | @default("legacy_unknown") @map("actor_source")                                               |
 | createdAt      | DateTime     | @default(now()) @map("created_at") @db.Timestamptz(6)                                         |
 | organization   | Organization | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
 
@@ -644,5 +647,6 @@ Owner: `metering`
 | adjustmentRequests | Int          | @map("adjustment_requests")                                                                   |
 | totalRequests      | Int          | @map("total_requests")                                                                        |
 | closedBy           | String       | @map("closed_by")                                                                             |
+| actorSource        | String       | @default("legacy_unknown") @map("actor_source")                                               |
 | closedAt           | DateTime     | @default(now()) @map("closed_at") @db.Timestamptz(6)                                          |
 | organization       | Organization | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |

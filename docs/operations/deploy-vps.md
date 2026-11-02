@@ -475,7 +475,9 @@ security gate in #376.
    For a Sandbox database, use `--target sandbox` in both commands. Run the
    command from that environment's operator host with its operator credentials.
    The credentials authorize execution; `--actor` identifies the active AIHUB
-   account for audit and grants no privilege by itself.
+   account for audit and grants no privilege by itself. The revocation audit
+   stores `actor_source: self_declared_operator` with that account, making its
+   provenance explicit without authenticating the typed username.
 
 4. Read the result as two separate facts: whether the origin object was
    deleted or already absent, and whether the public edge stopped serving it.

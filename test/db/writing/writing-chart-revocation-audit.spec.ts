@@ -104,6 +104,7 @@ describe('Writing chart revocation audit in the managed usage:prune job', () => 
           const base = {
             assetId: scenario.assetId,
             actorUserAccountId: operatorId,
+            actorSource: 'self_declared_operator' as const,
           };
           await repository.append({
             ...base,
@@ -123,6 +124,18 @@ describe('Writing chart revocation audit in the managed usage:prune job', () => 
           });
         }
       }
+
+      const actorSources = await productionPool.query<{
+        actor_source: string;
+      }>(
+        `SELECT DISTINCT actor_source
+         FROM writing_chart_revocation_audits
+         WHERE asset_id = ANY($1::text[])`,
+        [[oldAssetId, recentAssetId]],
+      );
+      expect(actorSources.rows.map(({ actor_source }) => actor_source)).toEqual(
+        ['self_declared_operator'],
+      );
 
       const recentPhases = await productionPool.query<{ phase: string }>(
         `SELECT phase FROM writing_chart_revocation_audits

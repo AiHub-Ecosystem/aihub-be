@@ -14,6 +14,7 @@ export type WritingChartPublicEdgeOutcome =
 interface WritingChartRevocationAuditEvent {
   readonly assetId: string;
   readonly actorUserAccountId: string;
+  readonly actorSource: 'self_declared_operator';
   readonly occurredAt: Date;
 }
 

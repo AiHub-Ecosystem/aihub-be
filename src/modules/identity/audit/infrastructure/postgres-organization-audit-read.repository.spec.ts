@@ -28,6 +28,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     id: 'oae_01J00000000000000000000001',
     action: 'membership.disabled',
     outcome: 'applied',
+    actor_source: 'authenticated_user',
     target_type: 'membership',
     target_label: 'grace',
     detail: { role: 'member', fromStatus: 'active', toStatus: 'disabled' },
@@ -74,6 +75,7 @@ describe('PostgresOrganizationAuditReadRepository', () => {
       prismaFromQueryFake(client),
     ).listAuditEvents(input());
 
+    expect(events[0]?.actorSource).toBe('authenticated_user');
     expect(JSON.stringify(events)).not.toContain(TARGET_USER_ID);
     expect(JSON.stringify(events)).not.toContain('usr_');
     expect(events[0]).not.toHaveProperty('targetId');
@@ -107,6 +109,28 @@ describe('PostgresOrganizationAuditReadRepository', () => {
         prismaFromQueryFake(client),
       ).listAuditEvents(input()),
     ).rejects.toThrow('Identity data is invalid');
+  });
+
+  it('fails the whole page when the actor source is not recognized', async () => {
+    const client = new FakePostgres();
+    client.result = [row({ actor_source: 'operator_claimed_admin' })];
+
+    await expect(
+      new PostgresOrganizationAuditReadRepository(
+        prismaFromQueryFake(client),
+      ).listAuditEvents(input()),
+    ).rejects.toThrow('Identity data is invalid');
+  });
+
+  it('returns the durable unknown marker for events written before provenance was recorded', async () => {
+    const client = new FakePostgres();
+    client.result = [row({ actor_source: 'legacy_unknown' })];
+
+    const events = await new PostgresOrganizationAuditReadRepository(
+      prismaFromQueryFake(client),
+    ).listAuditEvents(input());
+
+    expect(events[0]?.actorSource).toBe('legacy_unknown');
   });
 
   it('keeps a redacted label as an absent label rather than a broken row', async () => {

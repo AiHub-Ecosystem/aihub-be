@@ -1,6 +1,6 @@
 # Organization suspension boundary
 
-Status: accepted
+Status: accepted; amended by ADR-0145
 
 Date: 2026-09-23; related issue: [#137](https://github.com/AiHub-Ecosystem/aihub-be/issues/137)
 

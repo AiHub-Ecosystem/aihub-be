@@ -9,6 +9,7 @@ export interface MaintenanceClock {
 export interface OperatorMutationPreview {
   readonly command: string;
   readonly action: string;
+  readonly inputs: Readonly<Record<string, string>>;
   readonly target?: string;
 }
 
@@ -31,6 +32,10 @@ export function previewOperatorMutation(
 ): OperatorMutationPreview;
 export function requireControlPlaneDatabase(
   deployment: OperatorDeployment,
+): void;
+export function requireStorageDeployment(
+  deployment: OperatorDeployment,
+  runtimeScope: string,
 ): void;
 export function requireTargetConfirmation(
   deployment: OperatorDeployment,

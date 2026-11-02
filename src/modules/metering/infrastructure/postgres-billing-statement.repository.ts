@@ -1,5 +1,6 @@
 import { asDate } from '@/common/postgres/row-readers';
 import {
+  type BillingActorSource,
   type BillingAdjustmentRecord,
   type BillingAdjustmentTarget,
   type BillingAdjustmentWriteResult,
@@ -60,7 +61,8 @@ export const BILLING_USAGE_SQL = `
 `;
 
 const ADJUSTMENTS_SQL = `
-  SELECT id, organization_id, operation, requests, reason, corrects, actor, created_at
+  SELECT id, organization_id, operation, requests, reason, corrects, actor,
+         actor_source, created_at
   FROM billing_adjustments
   WHERE billing_month = $1::date
     AND ($2::text IS NULL OR organization_id = $2)
@@ -69,7 +71,7 @@ const ADJUSTMENTS_SQL = `
 
 const CLOSURES_SQL = `
   SELECT organization_id, operation, billable_requests, adjustment_requests,
-         total_requests, closed_by, closed_at
+         total_requests, closed_by, actor_source, closed_at
   FROM billing_month_closures
   WHERE billing_month = $1::date
     AND ($2::text IS NULL OR organization_id = $2)
@@ -107,6 +109,17 @@ function text(value: unknown, field: string): string {
     throw new Error(`billing field ${field} is invalid`);
   }
   return value;
+}
+
+function actorSource(value: unknown): BillingActorSource {
+  if (
+    value === 'authenticated_user' ||
+    value === 'self_declared_operator' ||
+    value === 'legacy_unknown'
+  ) {
+    return value;
+  }
+  throw new Error('billing field actor_source is invalid');
 }
 
 function date(value: unknown, field: string): Date {
@@ -190,6 +203,7 @@ export class PostgresBillingStatementRepository
       reason: text(row.reason, 'reason'),
       corrects: target(row.corrects),
       actor: text(row.actor, 'actor'),
+      actorSource: actorSource(row.actor_source),
       createdAt: date(row.created_at, 'created_at'),
     }));
   }
@@ -211,6 +225,7 @@ export class PostgresBillingStatementRepository
       ),
       totalRequests: signedCount(row.total_requests, 'total_requests'),
       closedBy: text(row.closed_by, 'closed_by'),
+      actorSource: actorSource(row.actor_source),
       closedAt: date(row.closed_at, 'closed_at'),
     }));
   }
@@ -232,6 +247,7 @@ export class PostgresBillingStatementRepository
           adjustmentRequests: line.adjustmentRequests,
           totalRequests: line.totalRequests,
           closedBy: actor,
+          actorSource: 'self_declared_operator',
         })),
       });
     }, CONTROL_PLANE_TRANSACTION_OPTIONS);
@@ -272,6 +288,7 @@ export class PostgresBillingStatementRepository
             reason: input.reason,
             corrects: storedTarget(input.corrects),
             actor: input.actor,
+            actorSource: 'self_declared_operator',
           },
         ],
         skipDuplicates: true,

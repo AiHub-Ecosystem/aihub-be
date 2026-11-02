@@ -84,8 +84,8 @@ describe('PostgresOrganizationEntitlementRepository', () => {
     expect(grants).toEqual([{ id: 'org_acme', push: 'speaking' }]);
     // The actor lookup, the Organization lock, then the audit event.
     expect(rawStatements).toHaveLength(3);
-    expect(rawStatements[2]?.[3]).toBe('organization.entitlement_granted');
-    expect(rawStatements[2]?.[8]).toBe(
+    expect(rawStatements[2]?.[4]).toBe('organization.entitlement_granted');
+    expect(rawStatements[2]?.[9]).toBe(
       JSON.stringify({ entitlement: 'speaking' }),
     );
   });

@@ -8,6 +8,26 @@ import { join } from 'node:path';
  * the trigger against a real engine.
  */
 describe('organization audit event migration', () => {
+  it('adds durable actor provenance without allowing it to be rewritten', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../../prisma/migrations/0059_operator_actor_provenance/migration.sql',
+      ),
+      'utf8',
+    );
+
+    expect(
+      migration.match(
+        /ADD COLUMN actor_source text NOT NULL DEFAULT 'legacy_unknown'/g,
+      ),
+    ).toHaveLength(4);
+    expect(migration).toContain('actor_source IN');
+    expect(migration).toContain(
+      'OR NEW.actor_source IS DISTINCT FROM OLD.actor_source',
+    );
+  });
+
   it('keeps the durable audit constraints ADR-0035 relies on', async () => {
     const migration = await readFile(
       join(

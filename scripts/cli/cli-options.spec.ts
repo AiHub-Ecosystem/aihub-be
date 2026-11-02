@@ -12,6 +12,7 @@ import {
   isMutatingCommand,
   previewOperatorMutation,
   requireControlPlaneDatabase,
+  requireStorageDeployment,
   requireTargetConfirmation,
 } from './operator-safety.cjs';
 
@@ -142,6 +143,25 @@ describe('operator CLI safety', () => {
     expect(() => requireControlPlaneDatabase('test')).not.toThrow();
   });
 
+  it('requires storage deployment to match a production or sandbox database', () => {
+    expect(() => requireStorageDeployment('test', 'test')).toThrow(
+      'object storage scope test is incompatible with database deployment test',
+    );
+    expect(() => requireStorageDeployment('test', 'production')).toThrow(
+      'incompatible with database deployment test',
+    );
+    expect(() => requireStorageDeployment('test', 'sandbox')).toThrow(
+      'incompatible with database deployment test',
+    );
+    expect(() => requireStorageDeployment('production', 'sandbox')).toThrow(
+      'incompatible with database deployment production',
+    );
+    expect(() =>
+      requireStorageDeployment('production', 'production'),
+    ).not.toThrow();
+    expect(() => requireStorageDeployment('sandbox', 'sandbox')).not.toThrow();
+  });
+
   it('uses the earlier clock for age-based deletion', () => {
     const processNow = new Date('2026-12-01T00:00:00.000Z');
     const databaseNow = new Date('2026-11-01T00:00:00.000Z');
@@ -166,7 +186,64 @@ describe('operator CLI safety', () => {
     ).toEqual({
       command: 'key:create',
       action: 'create an API key',
+      inputs: {
+        org: 'org_123',
+        name: 'preview key',
+        scopes: 'writing.grade',
+        actor: 'ops-alice',
+      },
       target: 'org_123',
+    });
+    expect(
+      previewOperatorMutation(
+        'billing:adjust',
+        new Map([
+          ['id', 'badj_123'],
+          ['org', 'org_123'],
+          ['month', '2026-10'],
+          ['operation', 'writing.grade'],
+          ['requests', '-12'],
+          ['period-from', '2026-10-01T00:00:00.000Z'],
+          ['period-to', '2026-11-01T00:00:00.000Z'],
+          ['actor', 'ops-alice'],
+          ['reason', 'customer correction'],
+        ]),
+      ),
+    ).toEqual({
+      command: 'billing:adjust',
+      action: 'record a billing adjustment',
+      inputs: {
+        id: 'badj_123',
+        org: 'org_123',
+        month: '2026-10',
+        operation: 'writing.grade',
+        requests: '-12',
+        'period-from': '2026-10-01T00:00:00.000Z',
+        'period-to': '2026-11-01T00:00:00.000Z',
+        actor: 'ops-alice',
+        reason_supplied: 'true',
+      },
+      target: 'badj_123',
+    });
+    expect(
+      previewOperatorMutation(
+        'key:create',
+        new Map([
+          ['org', 'org_123'],
+          ['name', 'preview key'],
+          ['scopes', 'writing.grade'],
+          ['envs', 'sandbox'],
+          ['internal', 'false'],
+          ['actor', 'ops-alice'],
+        ]),
+      ).inputs,
+    ).toEqual({
+      org: 'org_123',
+      name: 'preview key',
+      scopes: 'writing.grade',
+      envs: 'sandbox',
+      internal: 'false',
+      actor: 'ops-alice',
     });
     expect(
       previewOperatorMutation(
@@ -181,8 +258,56 @@ describe('operator CLI safety', () => {
     ).toEqual({
       command: 'writing:chart-revoke',
       action: 'revoke a published writing chart',
+      inputs: { url: 'https://s3.wispace.app/chart.png' },
       target: 'https://s3.wispace.app/chart.png',
     });
+    expect(
+      previewOperatorMutation(
+        'org:create',
+        new Map([
+          ['name', 'New org'],
+          ['entitlements', 'writing,speaking'],
+          ['rate-limit-rpm', '600'],
+          ['monthly-quota', '10000'],
+          ['hard-stop', 'true'],
+        ]),
+      ).inputs,
+    ).toEqual({
+      name: 'New org',
+      entitlements: 'writing,speaking',
+      'rate-limit-rpm': '600',
+      'monthly-quota': '10000',
+      'hard-stop': 'true',
+    });
+    expect(
+      previewOperatorMutation(
+        'identity:set',
+        new Map([
+          ['org', 'org_123'],
+          ['issuer', 'https://issuer.example/path?token=secret'],
+          ['public-keys-file', 'C:\\private\\jwks.json'],
+          ['status', 'active'],
+        ]),
+      ).inputs,
+    ).toEqual({
+      org: 'org_123',
+      issuer: 'https://issuer.example/path',
+      status: 'active',
+      'key-source': 'inline',
+    });
+    expect(
+      previewOperatorMutation(
+        'billing:adjust',
+        new Map([
+          ['id', 'badj_123'],
+          ['org', 'org_123'],
+          ['month', '2026-10'],
+          ['operation', 'writing.grade'],
+          ['requests', '12'],
+          ['request-ids', 'req_a,req_b'],
+        ]),
+      ).inputs['request-ids'],
+    ).toBe('req_a,req_b');
     expect(() => previewOperatorMutation('key:create', new Map())).toThrow(
       'operator preview requires --org',
     );

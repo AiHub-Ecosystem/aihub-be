@@ -87,6 +87,16 @@ async function insertEvent(
 }
 
 describe('organization audit events against PostgreSQL', () => {
+  it('marks events from older writers as legacy unknown', async () => {
+    const id = await insertEvent();
+    const result = await pool.query<{ actor_source: string }>(
+      'SELECT actor_source FROM organization_audit_events WHERE id = $1',
+      [id],
+    );
+
+    expect(result.rows[0]?.actor_source).toBe('legacy_unknown');
+  });
+
   it('refuses to delete a recorded event', async () => {
     const id = await insertEvent();
 
@@ -107,6 +117,7 @@ describe('organization audit events against PostgreSQL', () => {
     for (const [column, value] of [
       ['action', 'membership.disabled'],
       ['outcome', 'denied'],
+      ['actor_source', 'self_declared_operator'],
       ['target_id', 'usr_someone_else'],
       ['request_id', `req_${ulid()}`],
     ] as const) {

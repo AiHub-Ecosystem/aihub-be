@@ -154,6 +154,7 @@ export class PostgresOrganizationFirstOwnerRepository
           },
           actorId,
           input.occurredAt,
+          'self_declared_operator',
         ),
         {
           action: 'membership.owner_attached',

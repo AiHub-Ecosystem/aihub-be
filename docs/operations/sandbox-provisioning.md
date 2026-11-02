@@ -305,8 +305,10 @@ operator_cli key:create \
 `--actor` is the username of your own active AIHUB User Account. The issuance is recorded in the Organization Audit Trail with you as the actor, and the command refuses, exit code 2, an actor that is not an active account. The raw key is printed **once** and never stored. Send it to that person directly, not to a group channel.
 
 The CLI reports `actor identity source: self-declared via --actor` in its
-pre-write diagnostic. The durable audit continues to record the linked active
-AIHUB account as specified by [ADR-0044](../adr/0044-organization-suspension-boundary.md).
+pre-write diagnostic. The Organization Audit Event also stores
+`actor_source: self_declared_operator` beside the linked active AIHUB account.
+This records provenance; it does not authenticate the person running the CLI
+([ADR-0145](../adr/0145-operator-dry-runs-and-actor-provenance.md)).
 
 One key per person, named after them. A shared key cannot be revoked without disrupting everyone, and the `apiKeyId` in the mint audit line and in `usage_records` is only useful if it identifies someone.
 

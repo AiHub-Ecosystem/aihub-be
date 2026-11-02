@@ -108,6 +108,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
             },
             actorId,
             input.occurredAt,
+            'self_declared_operator',
           ),
           {
             action: 'api_key.created',
@@ -176,6 +177,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
             { context: { requestId: input.requestId }, organizationId },
             actorId,
             input.occurredAt,
+            'self_declared_operator',
           ),
           {
             action: 'api_key.revoked',

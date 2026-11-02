@@ -1,6 +1,6 @@
 # ADR-0111: Revoke reported public Writing charts
 
-- Status: Accepted
+- Status: Accepted; amended by ADR-0145
 - Date: 2026-10-19
 - Related issue: [#816](https://github.com/AiHub-Ecosystem/aihub-be/issues/816)
 - Amends: [ADR-0100](0100-writing-task1-chart-image-uploads.md), specifically its abuse-report response target and operator response

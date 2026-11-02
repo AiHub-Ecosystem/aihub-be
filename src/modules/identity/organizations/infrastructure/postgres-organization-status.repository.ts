@@ -108,6 +108,7 @@ export class PostgresOrganizationStatusRepository
           },
           actorId,
           input.occurredAt,
+          'self_declared_operator',
         ),
         {
           action:

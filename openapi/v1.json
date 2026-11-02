@@ -8295,6 +8295,7 @@
                               "event_id",
                               "action",
                               "outcome",
+                              "actor_source",
                               "target_type",
                               "target_label",
                               "detail",
@@ -8340,6 +8341,14 @@
                                     "type": "string"
                                   }
                                 ]
+                              },
+                              "actor_source": {
+                                "x-extensible-enum": [
+                                  "authenticated_user",
+                                  "self_declared_operator",
+                                  "legacy_unknown"
+                                ],
+                                "type": "string"
                               },
                               "target_type": {
                                 "anyOf": [
