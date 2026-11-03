@@ -10,6 +10,7 @@ import type {
   RevokeOrganizationInvitationInput,
   RevokeOrganizationInvitationResult,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
+import { mayRevokeOrganizationInvitation } from '@/modules/identity/invitations/application/organization-invitation.revocation-policy';
 import {
   forbidden,
   organizationSuspensionClosesSurface,
@@ -131,8 +132,10 @@ export class PostgresOrganizationInvitationRevokeRepository {
         }
 
         if (
-          input.actorRole === 'member' ||
-          (input.actorRole === 'admin' && role !== 'member')
+          !mayRevokeOrganizationInvitation({
+            actorRole: input.actorRole,
+            invitedRole: role,
+          })
         ) {
           refused = {
             action: 'invitation.revoked',
