@@ -26,6 +26,7 @@ import {
   type SpeakingV2ResultOwner,
   type SpeakingV2ResultOwnershipPort,
 } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
+import { SpeakingV2WorkflowEngine } from '@/modules/speaking/application/speaking-v2-workflow-engine';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
@@ -614,6 +615,52 @@ describe('Speaking v2 HTTP flow', () => {
     expect(payloadJson(response)).toMatchObject({
       error: { code: 'NOT_FOUND', retryable: false },
     });
+  });
+
+  it('delegates all grading routes to the Speaking v2 workflow', async () => {
+    const workflow = app.get(SpeakingV2WorkflowEngine);
+    const execute = jest.spyOn(workflow, 'execute');
+    const multipart = multipartPayload(
+      { part: '1', question_id: 'p1_hometown' },
+      Buffer.alloc(200, 1),
+    );
+
+    const question = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/questions/grade',
+      headers: { 'content-type': multipart.contentType },
+      payload: multipart.payload,
+    });
+    const part = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/parts/grade',
+      headers: { 'content-type': 'application/json' },
+      payload: { part_result_id: 'part-1' },
+    });
+    const test = await app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/tests/grade',
+      headers: { 'content-type': 'application/json' },
+      payload: { test_id: 'test-1', part_result_ids: ['part-1'] },
+    });
+
+    expect([question.statusCode, part.statusCode, test.statusCode]).toEqual([
+      200, 200, 200,
+    ]);
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ operation: 'speaking.v2.question-grading' }),
+    );
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ operation: 'speaking.v2.part-grading' }),
+    );
+    expect(execute).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ operation: 'speaking.v2.test-grading' }),
+    );
+    execute.mockRestore();
   });
 
   it('keeps the v1 Speaking routes registered next to v2', async () => {

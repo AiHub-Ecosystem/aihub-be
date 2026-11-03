@@ -7,6 +7,10 @@ import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { GatewayGradedRequestModule } from '@/modules/gateway/gateway-graded-request.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
+import {
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+} from '@/modules/gateway/public/graded-pipeline';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
@@ -38,6 +42,7 @@ import {
   SPEAKING_V2_RESULT_OWNERSHIP,
   type SpeakingV2ResultOwnershipPort,
 } from './application/speaking-v2-result-ownership.port';
+import { SpeakingV2WorkflowEngine } from './application/speaking-v2-workflow-engine';
 import { FastifySpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
 import { PostgresSpeakingV2ResultOwnershipRepository } from './infrastructure/postgres-speaking-v2-result-ownership.repository';
@@ -78,6 +83,24 @@ import { SpeakingV2Controller } from './presentation/speaking-v2.controller';
         runtime: PrismaClientHolder,
       ): SpeakingV2ResultOwnershipPort =>
         new PostgresSpeakingV2ResultOwnershipRepository(runtime.prisma),
+    },
+    {
+      provide: SpeakingV2WorkflowEngine,
+      inject: [
+        GRADED_PIPELINE_ENGINE,
+        SPEAKING_UPLOAD_CEILING,
+        SPEAKING_V2_RESULT_OWNERSHIP,
+      ],
+      useFactory: (
+        gradedPipeline: GradedPipelineEnginePort,
+        uploadCeiling: InFlightCeiling,
+        resultOwnership: SpeakingV2ResultOwnershipPort,
+      ): SpeakingV2WorkflowEngine =>
+        new SpeakingV2WorkflowEngine(
+          gradedPipeline,
+          uploadCeiling,
+          resultOwnership,
+        ),
     },
     {
       provide: SPEAKING_AUDIO_UPLOAD_REPOSITORY,
