@@ -31,10 +31,10 @@ import {
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
-  ORGANIZATION_INVITATION,
-  type OrganizationInvitationPort,
+  ORGANIZATION_INVITATION_CREATION_RECORD,
+  type OrganizationInvitationCreationRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationInvitationCreateRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-create.repository';
 import {
   type IdentityFixtureClient,
   createPostgresIdentityClient,
@@ -136,8 +136,8 @@ beforeAll(async () => {
   const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
   cipher = createEmailPayloadCipher(secrets);
 
-  const invitations: OrganizationInvitationPort =
-    new PostgresOrganizationInvitationRepository(
+  const invitations: OrganizationInvitationCreationRecordPort =
+    new PostgresOrganizationInvitationCreateRepository(
       identityClient.asPrisma(),
       createDatabaseTestEmailOutbox(secrets),
     );
@@ -151,7 +151,7 @@ beforeAll(async () => {
   };
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(ORGANIZATION_INVITATION)
+    .overrideProvider(ORGANIZATION_INVITATION_CREATION_RECORD)
     .useValue(invitations)
     .overrideProvider(AUTH_RATE_LIMITER)
     .useValue(rateLimiter)

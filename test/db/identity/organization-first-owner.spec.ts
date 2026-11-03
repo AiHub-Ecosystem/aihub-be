@@ -7,7 +7,7 @@ import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationInvitationCreateRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-create.repository';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
 import type { AttachFirstOwnerInput } from '@/modules/identity/organizations/application/organization-first-owner.port';
 import { PostgresOrganizationFirstOwnerRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-first-owner.repository';
@@ -338,7 +338,7 @@ describe('First Owner Attachment against PostgreSQL', () => {
 
     const now = new Date();
     await expect(
-      new PostgresOrganizationInvitationRepository(
+      new PostgresOrganizationInvitationCreateRepository(
         client,
         emailOutbox,
       ).createInvitation({

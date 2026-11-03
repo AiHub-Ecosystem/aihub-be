@@ -11,7 +11,9 @@ import type {
   CreateOrganizationInvitationResult,
   RevokeOrganizationInvitationResult,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationInvitationAcceptRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-accept.repository';
+import { PostgresOrganizationInvitationCreateRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-create.repository';
+import { PostgresOrganizationInvitationRevokeRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-revoke.repository';
 import type { OrganizationMembershipRole } from '@/modules/identity/membership/application/organization-membership.port';
 import {
   type IdentityFixtureClient,
@@ -38,7 +40,9 @@ type MembershipStatus = 'active' | 'disabled';
 
 let pool: Pool;
 let client: IdentityFixtureClient;
-let repository: PostgresOrganizationInvitationRepository;
+let creations: PostgresOrganizationInvitationCreateRepository;
+let acceptances: PostgresOrganizationInvitationAcceptRepository;
+let revocations: PostgresOrganizationInvitationRevokeRepository;
 
 function userId(): string {
   return `usr_${ulid()}`;
@@ -130,7 +134,7 @@ async function invite(options: {
   readonly invitationId?: string;
 }): Promise<CreateOrganizationInvitationResult> {
   const organizationId = options.organizationId ?? ORGANIZATION_ID;
-  return repository.createInvitation({
+  return creations.createInvitation({
     context: createRequestContext({
       requestId: `req_${ulid()}`,
       receivedAt: NOW,
@@ -159,7 +163,7 @@ async function accept(options: {
   readonly tokenHash: string;
   readonly now?: Date;
 }): Promise<AcceptOrganizationInvitationResult> {
-  return repository.acceptInvitation({
+  return acceptances.acceptInvitation({
     context: acceptContext(options.accepterId),
     userId: options.accepterId,
     tokenHash: options.tokenHash,
@@ -175,7 +179,7 @@ async function revoke(options: {
   readonly now?: Date;
 }): Promise<RevokeOrganizationInvitationResult> {
   const organizationId = options.organizationId ?? ORGANIZATION_ID;
-  return repository.revokeInvitation({
+  return revocations.revokeInvitation({
     context: createRequestContext({
       requestId: `req_${ulid()}`,
       receivedAt: options.now ?? NOW,
@@ -271,10 +275,12 @@ beforeAll(() => {
   pool = createTestPool();
   client = createPostgresIdentityClient(testDatabaseUrl());
   const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
-  repository = new PostgresOrganizationInvitationRepository(
+  creations = new PostgresOrganizationInvitationCreateRepository(
     client,
     createDatabaseTestEmailOutbox(secrets),
   );
+  acceptances = new PostgresOrganizationInvitationAcceptRepository(client);
+  revocations = new PostgresOrganizationInvitationRevokeRepository(client);
 });
 
 afterAll(async () => {

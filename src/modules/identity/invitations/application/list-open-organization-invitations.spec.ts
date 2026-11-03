@@ -3,7 +3,7 @@ import type { OrganizationMembershipPort } from '@/modules/identity/membership/a
 import { ListOpenOrganizationInvitations } from './list-open-organization-invitations';
 import type {
   OpenOrganizationInvitationRecord,
-  OrganizationInvitationPort,
+  OpenOrganizationInvitationRecordPort,
 } from './organization-invitation.port';
 
 const context = createRequestContext({
@@ -34,9 +34,7 @@ describe('ListOpenOrganizationInvitations', () => {
   let membershipPort: jest.Mocked<
     Pick<OrganizationMembershipPort, 'resolveMembership'>
   >;
-  let invitationPort: jest.Mocked<
-    Pick<OrganizationInvitationPort, 'listOpenInvitations'>
-  >;
+  let invitationPort: jest.Mocked<OpenOrganizationInvitationRecordPort>;
   let useCase: ListOpenOrganizationInvitations;
 
   beforeEach(() => {

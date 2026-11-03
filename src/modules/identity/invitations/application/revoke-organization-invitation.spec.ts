@@ -3,7 +3,7 @@ import { createRequestContext } from '@/common/request-context/request-context.f
 
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import type {
-  OrganizationInvitationPort,
+  OrganizationInvitationRevocationRecordPort,
   RevokeOrganizationInvitationInput,
   RevokeOrganizationInvitationResult,
 } from './organization-invitation.port';
@@ -47,7 +47,7 @@ describe('RevokeOrganizationInvitation', () => {
     Pick<OrganizationMembershipPort, 'resolveMembership'>
   >;
   let invitations: jest.Mocked<
-    Pick<OrganizationInvitationPort, 'revokeInvitation'>
+    Pick<OrganizationInvitationRevocationRecordPort, 'revokeInvitation'>
   >;
 
   beforeEach(() => {

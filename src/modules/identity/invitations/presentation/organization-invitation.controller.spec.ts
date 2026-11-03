@@ -37,9 +37,13 @@ import {
 } from '@/modules/idempotency/application/idempotency-service.port';
 import {
   type CreateOrganizationInvitationInput,
-  ORGANIZATION_INVITATION,
+  OPEN_ORGANIZATION_INVITATION_RECORD,
+  ORGANIZATION_INVITATION_CREATION_RECORD,
+  ORGANIZATION_INVITATION_REVOCATION_RECORD,
   type OpenOrganizationInvitationRecord,
-  type OrganizationInvitationPort,
+  type OpenOrganizationInvitationRecordPort,
+  type OrganizationInvitationCreationRecordPort,
+  type OrganizationInvitationRevocationRecordPort,
   type RevokeOrganizationInvitationInput,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
@@ -106,7 +110,11 @@ class RateLimiterFake implements AuthRateLimiterPort {
 
 describe('Organization invitation HTTP flow', () => {
   let app: NestFastifyApplication;
-  let invitations: jest.Mocked<OrganizationInvitationPort>;
+  let invitations: jest.Mocked<
+    OrganizationInvitationCreationRecordPort &
+      OpenOrganizationInvitationRecordPort &
+      OrganizationInvitationRevocationRecordPort
+  >;
   let membership: jest.Mocked<OrganizationMembershipPort>;
   let emailSender: jest.Mocked<EmailSenderPort>;
   let tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort>;
@@ -153,7 +161,6 @@ describe('Organization invitation HTTP flow', () => {
           _input,
         ): Promise<readonly OpenOrganizationInvitationRecord[]> => [],
       ),
-      acceptInvitation: jest.fn(),
       revokeInvitation: jest.fn(
         async (_input: RevokeOrganizationInvitationInput) => ({
           kind: 'closed' as const,
@@ -196,7 +203,11 @@ describe('Organization invitation HTTP flow', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(ORGANIZATION_INVITATION)
+      .overrideProvider(ORGANIZATION_INVITATION_CREATION_RECORD)
+      .useValue(invitations)
+      .overrideProvider(OPEN_ORGANIZATION_INVITATION_RECORD)
+      .useValue(invitations)
+      .overrideProvider(ORGANIZATION_INVITATION_REVOCATION_RECORD)
       .useValue(invitations)
       .overrideProvider(ORGANIZATION_MEMBERSHIP)
       .useValue(membership)

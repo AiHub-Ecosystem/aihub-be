@@ -20,9 +20,9 @@ import {
 } from '@/modules/identity/audit/application/organization-audit-event-read.port';
 import {
   type ListOpenOrganizationInvitationsInput,
-  ORGANIZATION_INVITATION,
+  OPEN_ORGANIZATION_INVITATION_RECORD,
   type OpenOrganizationInvitationRecord,
-  type OrganizationInvitationPort,
+  type OpenOrganizationInvitationRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
   ORGANIZATION_READ_ADMISSION,
@@ -204,7 +204,7 @@ const PUBLISHED_REFUSALS: Readonly<Record<OrganizationReadSurface, string>> = {
 describe('Organization read admission through the public route', () => {
   let app: NestFastifyApplication;
   let membership: jest.Mocked<OrganizationMembershipPort>;
-  let invitations: jest.Mocked<OrganizationInvitationPort>;
+  let invitations: jest.Mocked<OpenOrganizationInvitationRecordPort>;
   let auditEvents: jest.Mocked<OrganizationAuditEventReadPort>;
   let identityConfigs: jest.Mocked<OrganizationIdentityConfigRepositoryPort>;
 
@@ -240,9 +240,6 @@ describe('Organization read admission through the public route', () => {
       listOpenInvitations: jest.fn(
         async (_input: ListOpenOrganizationInvitationsInput) => [],
       ),
-      createInvitation: jest.fn(),
-      revokeInvitation: jest.fn(),
-      acceptInvitation: jest.fn(),
     };
     auditEvents = {
       listAuditEvents: jest.fn(
@@ -278,7 +275,7 @@ describe('Organization read admission through the public route', () => {
     })
       .overrideProvider(ORGANIZATION_MEMBERSHIP)
       .useValue(membership)
-      .overrideProvider(ORGANIZATION_INVITATION)
+      .overrideProvider(OPEN_ORGANIZATION_INVITATION_RECORD)
       .useValue(invitations)
       .overrideProvider(ORGANIZATION_AUDIT_EVENT_READ)
       .useValue(auditEvents)

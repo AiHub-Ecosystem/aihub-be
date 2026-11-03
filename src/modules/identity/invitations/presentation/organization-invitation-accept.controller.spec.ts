@@ -22,8 +22,8 @@ import {
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   type AcceptOrganizationInvitationInput,
-  ORGANIZATION_INVITATION,
-  type OrganizationInvitationPort,
+  ORGANIZATION_INVITATION_ACCEPTANCE_RECORD,
+  type OrganizationInvitationAcceptanceRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
@@ -33,13 +33,11 @@ const RAW_TOKEN = 'a-raw-invite-token-value';
 
 describe('Organization invitation acceptance HTTP flow', () => {
   let app: NestFastifyApplication;
-  let invitations: jest.Mocked<OrganizationInvitationPort>;
+  let invitations: jest.Mocked<OrganizationInvitationAcceptanceRecordPort>;
   let tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort>;
 
   beforeAll(async () => {
     invitations = {
-      createInvitation: jest.fn(),
-      listOpenInvitations: jest.fn(),
       acceptInvitation: jest.fn(
         async (_input: AcceptOrganizationInvitationInput) => ({
           kind: 'accepted' as const,
@@ -47,7 +45,6 @@ describe('Organization invitation acceptance HTTP flow', () => {
           role: 'member' as const,
         }),
       ),
-      revokeInvitation: jest.fn(),
     };
     tokenIssuer = {
       issue: jest.fn(async (_userId: string) => ({
@@ -74,7 +71,7 @@ describe('Organization invitation acceptance HTTP flow', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(ORGANIZATION_INVITATION)
+      .overrideProvider(ORGANIZATION_INVITATION_ACCEPTANCE_RECORD)
       .useValue(invitations)
       .overrideProvider(EMAIL_SENDER)
       .useValue(emailSender)

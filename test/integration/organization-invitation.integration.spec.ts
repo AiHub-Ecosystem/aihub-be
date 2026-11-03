@@ -23,7 +23,7 @@ import {
 import {
   type CreateOrganizationInvitationInput,
   type CreateOrganizationInvitationResult,
-  ORGANIZATION_INVITATION,
+  ORGANIZATION_INVITATION_CREATION_RECORD,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
   ORGANIZATION_MEMBERSHIP,
@@ -104,7 +104,7 @@ describe('organization invitation HTTP/application integration', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(ORGANIZATION_INVITATION)
+      .overrideProvider(ORGANIZATION_INVITATION_CREATION_RECORD)
       .useValue({ createInvitation })
       .overrideProvider(AUTH_RATE_LIMITER)
       .useValue(rateLimiter)

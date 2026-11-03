@@ -2,7 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 
 import type { OrganizationMembershipRole } from '@/modules/identity/membership/application/organization-membership.port';
-import type { OrganizationInvitationPort } from './organization-invitation.port';
+import type { OrganizationInvitationAcceptanceRecordPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
 
 export interface AcceptOrganizationInvitationCommand {
@@ -25,10 +25,7 @@ export interface AcceptedOrganizationInvitation {
  */
 export class AcceptOrganizationInvitation {
   constructor(
-    private readonly invitations: Pick<
-      OrganizationInvitationPort,
-      'acceptInvitation'
-    >,
+    private readonly invitations: OrganizationInvitationAcceptanceRecordPort,
     private readonly inviteToken: Pick<OrganizationInviteTokenPort, 'hash'>,
   ) {}
 

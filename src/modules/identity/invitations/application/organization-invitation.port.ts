@@ -91,19 +91,44 @@ export type AcceptOrganizationInvitationResult =
   | { readonly kind: 'token_invalid' }
   | { readonly kind: 'organization_suspended' };
 
-export interface OrganizationInvitationPort {
+/**
+ * Durable invitation records, one port per consumer. Each names the operation
+ * it commits so a use case depends on the one write or read it performs and a
+ * test fakes exactly that.
+ */
+export interface OrganizationInvitationCreationRecordPort {
   createInvitation(
     input: CreateOrganizationInvitationInput,
   ): Promise<CreateOrganizationInvitationResult>;
+}
+
+export interface OpenOrganizationInvitationRecordPort {
   listOpenInvitations(
     input: ListOpenOrganizationInvitationsInput,
   ): Promise<readonly OpenOrganizationInvitationRecord[]>;
+}
+
+export interface OrganizationInvitationRevocationRecordPort {
   revokeInvitation(
     input: RevokeOrganizationInvitationInput,
   ): Promise<RevokeOrganizationInvitationResult>;
+}
+
+export interface OrganizationInvitationAcceptanceRecordPort {
   acceptInvitation(
     input: AcceptOrganizationInvitationInput,
   ): Promise<AcceptOrganizationInvitationResult>;
 }
 
-export const ORGANIZATION_INVITATION = Symbol('ORGANIZATION_INVITATION');
+export const ORGANIZATION_INVITATION_CREATION_RECORD = Symbol(
+  'ORGANIZATION_INVITATION_CREATION_RECORD',
+);
+export const OPEN_ORGANIZATION_INVITATION_RECORD = Symbol(
+  'OPEN_ORGANIZATION_INVITATION_RECORD',
+);
+export const ORGANIZATION_INVITATION_REVOCATION_RECORD = Symbol(
+  'ORGANIZATION_INVITATION_REVOCATION_RECORD',
+);
+export const ORGANIZATION_INVITATION_ACCEPTANCE_RECORD = Symbol(
+  'ORGANIZATION_INVITATION_ACCEPTANCE_RECORD',
+);

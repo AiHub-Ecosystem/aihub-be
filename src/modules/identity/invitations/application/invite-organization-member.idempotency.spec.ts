@@ -21,7 +21,7 @@ import {
 } from './invite-organization-member';
 import type {
   CreateOrganizationInvitationInput,
-  OrganizationInvitationPort,
+  OrganizationInvitationCreationRecordPort,
 } from './organization-invitation.port';
 import type {
   IssuedOrganizationInviteToken,
@@ -250,12 +250,7 @@ describe('organization invitation management idempotency seam', () => {
   let service: IdempotencyService;
   let inviteMember: InviteOrganizationMember;
   let membership: Pick<OrganizationMembershipPort, 'resolveMembership'>;
-  /**
-   * Only `createInvitation` is observed; the other three throw so a use case
-   * that reaches one fails loudly instead of resolving `undefined` and
-   * passing a test that never exercised it.
-   */
-  let invitations: OrganizationInvitationPort;
+  let invitations: OrganizationInvitationCreationRecordPort;
   let invitationCreateInputs: CreateOrganizationInvitationInput[];
   let invitationCreateErrors: Error[];
   let tokenIssuer: OrganizationInviteTokenPort;
@@ -299,15 +294,6 @@ describe('organization invitation management idempotency seam', () => {
         const error = invitationCreateErrors.shift();
         if (error) throw error;
         return { kind: 'created' } as const;
-      },
-      listOpenInvitations: () => {
-        throw new Error('this test does not list invitations');
-      },
-      acceptInvitation: () => {
-        throw new Error('this test does not accept invitations');
-      },
-      revokeInvitation: () => {
-        throw new Error('this test does not revoke invitations');
       },
     };
     tokenIssuer = {

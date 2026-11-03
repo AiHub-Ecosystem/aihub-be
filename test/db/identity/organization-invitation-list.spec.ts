@@ -9,7 +9,6 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
-import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import {
   type ListOpenOrganizationInvitationsResponse,
   ListOpenOrganizationInvitationsResponseSchema,
@@ -21,10 +20,10 @@ import {
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
-  ORGANIZATION_INVITATION,
-  type OrganizationInvitationPort,
+  OPEN_ORGANIZATION_INVITATION_RECORD,
+  type OpenOrganizationInvitationRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
-import { PostgresOrganizationInvitationRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationInvitationReadRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-read.repository';
 import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipRole,
@@ -37,7 +36,6 @@ import {
   resetIdentityTables,
   testDatabaseUrl,
 } from '../shared/database';
-import { createDatabaseTestEmailOutbox } from '../shared/email-outbox';
 
 const ORGANIZATION_ID = 'org_invitation_list';
 const REQUEST_ID = 'req_01J00000000000000000000000';
@@ -145,12 +143,8 @@ beforeAll(async () => {
   const membership = new PostgresOrganizationMembershipRepository(
     identityClient,
   );
-  const secrets = createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
-  const invitationRepo: OrganizationInvitationPort =
-    new PostgresOrganizationInvitationRepository(
-      identityClient,
-      createDatabaseTestEmailOutbox(secrets),
-    );
+  const invitationRepo: OpenOrganizationInvitationRecordPort =
+    new PostgresOrganizationInvitationReadRepository(identityClient);
 
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token) => ({
@@ -169,7 +163,7 @@ beforeAll(async () => {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ORGANIZATION_MEMBERSHIP)
     .useValue(membership)
-    .overrideProvider(ORGANIZATION_INVITATION)
+    .overrideProvider(OPEN_ORGANIZATION_INVITATION_RECORD)
     .useValue(invitationRepo)
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(verifier)

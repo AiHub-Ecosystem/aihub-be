@@ -7,6 +7,7 @@ import {
 import type {
   AcceptOrganizationInvitationInput,
   AcceptOrganizationInvitationResult,
+  OrganizationInvitationAcceptanceRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import { organizationSuspensionClosesSurface } from '@/modules/identity/membership/application/organization-membership.authorization';
 import {
@@ -75,7 +76,9 @@ const UPSERT_MEMBERSHIP_SQL = `
 `;
 
 /** Redeems an invitation token into a membership. */
-export class PostgresOrganizationInvitationAcceptRepository {
+export class PostgresOrganizationInvitationAcceptRepository
+  implements OrganizationInvitationAcceptanceRecordPort
+{
   constructor(private readonly client: IdentityRepositoryClient) {}
 
   async acceptInvitation(

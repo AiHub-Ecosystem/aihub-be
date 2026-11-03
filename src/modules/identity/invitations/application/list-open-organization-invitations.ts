@@ -4,7 +4,7 @@ import { admitOrganizationRead } from '@/modules/identity/membership/application
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
 import type {
   OpenOrganizationInvitationRecord,
-  OrganizationInvitationPort,
+  OpenOrganizationInvitationRecordPort,
 } from './organization-invitation.port';
 
 export interface ListOpenOrganizationInvitationsCommand {
@@ -44,10 +44,7 @@ export class ListOpenOrganizationInvitations {
       OrganizationMembershipPort,
       'resolveMembership'
     >,
-    private readonly invitations: Pick<
-      OrganizationInvitationPort,
-      'listOpenInvitations'
-    >,
+    private readonly invitations: OpenOrganizationInvitationRecordPort,
   ) {}
 
   async list(

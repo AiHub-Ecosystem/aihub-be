@@ -13,7 +13,7 @@ import type {
   OrganizationMembershipPort,
   OrganizationMembershipRole,
 } from '@/modules/identity/membership/application/organization-membership.port';
-import type { OrganizationInvitationPort } from './organization-invitation.port';
+import type { OrganizationInvitationCreationRecordPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
 
 const INVITATION_SENDING_FORBIDDEN =
@@ -78,7 +78,7 @@ export class InviteOrganizationMember {
       OrganizationMembershipPort,
       'resolveMembership'
     >,
-    private readonly invitations: OrganizationInvitationPort,
+    private readonly invitations: OrganizationInvitationCreationRecordPort,
     private readonly tokenIssuer: OrganizationInviteTokenPort,
     private readonly rateLimiter: AuthRateLimiterPort,
     private readonly emailOutbox: EmailOutboxPort,

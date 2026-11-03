@@ -6,7 +6,7 @@ import {
   requireMembershipOfOpenOrganization,
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
-import type { OrganizationInvitationPort } from './organization-invitation.port';
+import type { OrganizationInvitationRevocationRecordPort } from './organization-invitation.port';
 
 const INVITATION_REVOCATION_FORBIDDEN =
   'Organization invitation revocation is forbidden';
@@ -29,10 +29,7 @@ export class RevokeOrganizationInvitation {
       OrganizationMembershipPort,
       'resolveMembership'
     >,
-    private readonly invitations: Pick<
-      OrganizationInvitationPort,
-      'revokeInvitation'
-    >,
+    private readonly invitations: OrganizationInvitationRevocationRecordPort,
     private readonly now: () => Date = () => new Date(),
   ) {}
 

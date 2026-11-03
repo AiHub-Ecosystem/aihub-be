@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import type {
   ListOpenOrganizationInvitationsInput,
   OpenOrganizationInvitationRecord,
+  OpenOrganizationInvitationRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
   identityStoreUnavailable,
@@ -13,7 +14,9 @@ import { mapOpenOrganizationInvitation } from './map-open-organization-invitatio
 import { invalidInvitationInput } from './organization-invitation-input';
 
 /** Lists the open invitations of one Organization. */
-export class PostgresOrganizationInvitationReadRepository {
+export class PostgresOrganizationInvitationReadRepository
+  implements OpenOrganizationInvitationRecordPort
+{
   constructor(private readonly client: IdentityRepositoryClient) {}
 
   async listOpenInvitations(

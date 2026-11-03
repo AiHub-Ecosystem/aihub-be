@@ -7,6 +7,7 @@ import {
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import type { OrganizationAuditDraft } from '@/modules/identity/domain/organization-audit-event';
 import type {
+  OrganizationInvitationRevocationRecordPort,
   RevokeOrganizationInvitationInput,
   RevokeOrganizationInvitationResult,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
@@ -47,7 +48,9 @@ const LOCK_INVITATION_FOR_REVOKE_SQL = `
 `;
 
 /** Closes an open invitation and records who closed it, or who was refused. */
-export class PostgresOrganizationInvitationRevokeRepository {
+export class PostgresOrganizationInvitationRevokeRepository
+  implements OrganizationInvitationRevocationRecordPort
+{
   constructor(private readonly client: IdentityRepositoryClient) {}
 
   async revokeInvitation(

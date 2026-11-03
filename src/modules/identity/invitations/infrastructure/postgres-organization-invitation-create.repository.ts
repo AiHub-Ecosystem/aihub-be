@@ -10,6 +10,7 @@ import {
 import type {
   CreateOrganizationInvitationInput,
   CreateOrganizationInvitationResult,
+  OrganizationInvitationCreationRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
   identityStoreUnavailable,
@@ -41,7 +42,9 @@ function organizationName(value: unknown): string | undefined {
 }
 
 /** Sends an invitation, or resends it by superseding the open one. */
-export class PostgresOrganizationInvitationCreateRepository {
+export class PostgresOrganizationInvitationCreateRepository
+  implements OrganizationInvitationCreationRecordPort
+{
   constructor(
     private readonly client: IdentityRepositoryClient,
     private readonly emailOutbox: EmailOutboxPort,

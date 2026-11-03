@@ -83,8 +83,14 @@ import { INVITE_ORGANIZATION_MEMBER } from './invitations/application/invite-org
 import { ListOpenOrganizationInvitations } from './invitations/application/list-open-organization-invitations';
 import { LIST_OPEN_ORGANIZATION_INVITATIONS } from './invitations/application/list-open-organization-invitations.port';
 import {
-  ORGANIZATION_INVITATION,
-  type OrganizationInvitationPort,
+  OPEN_ORGANIZATION_INVITATION_RECORD,
+  ORGANIZATION_INVITATION_ACCEPTANCE_RECORD,
+  ORGANIZATION_INVITATION_CREATION_RECORD,
+  ORGANIZATION_INVITATION_REVOCATION_RECORD,
+  type OpenOrganizationInvitationRecordPort,
+  type OrganizationInvitationAcceptanceRecordPort,
+  type OrganizationInvitationCreationRecordPort,
+  type OrganizationInvitationRevocationRecordPort,
 } from './invitations/application/organization-invitation.port';
 import {
   ORGANIZATION_INVITE_TOKEN,
@@ -92,7 +98,10 @@ import {
 } from './invitations/application/organization-invite-token.port';
 import { RevokeOrganizationInvitation } from './invitations/application/revoke-organization-invitation';
 import { REVOKE_ORGANIZATION_INVITATION } from './invitations/application/revoke-organization-invitation.port';
-import { PostgresOrganizationInvitationRepository } from './invitations/infrastructure/postgres-organization-invitation.repository';
+import { PostgresOrganizationInvitationAcceptRepository } from './invitations/infrastructure/postgres-organization-invitation-accept.repository';
+import { PostgresOrganizationInvitationCreateRepository } from './invitations/infrastructure/postgres-organization-invitation-create.repository';
+import { PostgresOrganizationInvitationReadRepository } from './invitations/infrastructure/postgres-organization-invitation-read.repository';
+import { PostgresOrganizationInvitationRevokeRepository } from './invitations/infrastructure/postgres-organization-invitation-revoke.repository';
 import { OrganizationInvitationController } from './invitations/presentation/organization-invitation.controller';
 import { ListOrganizationMemberships } from './membership/application/list-organization-memberships';
 import { ManageOrganizationMembership } from './membership/application/manage-organization-membership';
@@ -410,13 +419,37 @@ type IdentityTransactionClient = ReturnType<
       inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_API_KEY, API_KEY_CACHE],
     },
     {
-      provide: ORGANIZATION_INVITATION,
+      provide: ORGANIZATION_INVITATION_CREATION_RECORD,
       useFactory: (
         client: IdentityTransactionClient,
         emailOutbox: EmailOutboxPort,
-      ): OrganizationInvitationPort =>
-        new PostgresOrganizationInvitationRepository(client, emailOutbox),
+      ): OrganizationInvitationCreationRecordPort =>
+        new PostgresOrganizationInvitationCreateRepository(client, emailOutbox),
       inject: [IDENTITY_TRANSACTION_CLIENT, EMAIL_OUTBOX],
+    },
+    {
+      provide: OPEN_ORGANIZATION_INVITATION_RECORD,
+      useFactory: (
+        client: IdentityTransactionClient,
+      ): OpenOrganizationInvitationRecordPort =>
+        new PostgresOrganizationInvitationReadRepository(client),
+      inject: [IDENTITY_TRANSACTION_CLIENT],
+    },
+    {
+      provide: ORGANIZATION_INVITATION_REVOCATION_RECORD,
+      useFactory: (
+        client: IdentityTransactionClient,
+      ): OrganizationInvitationRevocationRecordPort =>
+        new PostgresOrganizationInvitationRevokeRepository(client),
+      inject: [IDENTITY_TRANSACTION_CLIENT],
+    },
+    {
+      provide: ORGANIZATION_INVITATION_ACCEPTANCE_RECORD,
+      useFactory: (
+        client: IdentityTransactionClient,
+      ): OrganizationInvitationAcceptanceRecordPort =>
+        new PostgresOrganizationInvitationAcceptRepository(client),
+      inject: [IDENTITY_TRANSACTION_CLIENT],
     },
     {
       provide: ORGANIZATION_INVITE_TOKEN,
@@ -430,7 +463,7 @@ type IdentityTransactionClient = ReturnType<
       provide: INVITE_ORGANIZATION_MEMBER,
       useFactory: (
         membership: OrganizationMembershipPort,
-        invitations: OrganizationInvitationPort,
+        invitations: OrganizationInvitationCreationRecordPort,
         tokenIssuer: OrganizationInviteTokenPort,
         rateLimiter: AuthRateLimiterPort,
         emailOutbox: EmailOutboxPort,
@@ -444,7 +477,7 @@ type IdentityTransactionClient = ReturnType<
         ),
       inject: [
         ORGANIZATION_MEMBERSHIP,
-        ORGANIZATION_INVITATION,
+        ORGANIZATION_INVITATION_CREATION_RECORD,
         ORGANIZATION_INVITE_TOKEN,
         AUTH_RATE_LIMITER,
         EMAIL_OUTBOX,
@@ -453,26 +486,32 @@ type IdentityTransactionClient = ReturnType<
     {
       provide: ACCEPT_ORGANIZATION_INVITATION,
       useFactory: (
-        invitations: OrganizationInvitationPort,
+        invitations: OrganizationInvitationAcceptanceRecordPort,
         tokenIssuer: OrganizationInviteTokenPort,
       ) => new AcceptOrganizationInvitation(invitations, tokenIssuer),
-      inject: [ORGANIZATION_INVITATION, ORGANIZATION_INVITE_TOKEN],
+      inject: [
+        ORGANIZATION_INVITATION_ACCEPTANCE_RECORD,
+        ORGANIZATION_INVITE_TOKEN,
+      ],
     },
     {
       provide: LIST_OPEN_ORGANIZATION_INVITATIONS,
       useFactory: (
         membership: OrganizationMembershipPort,
-        invitations: OrganizationInvitationPort,
+        invitations: OpenOrganizationInvitationRecordPort,
       ) => new ListOpenOrganizationInvitations(membership, invitations),
-      inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_INVITATION],
+      inject: [ORGANIZATION_MEMBERSHIP, OPEN_ORGANIZATION_INVITATION_RECORD],
     },
     {
       provide: REVOKE_ORGANIZATION_INVITATION,
       useFactory: (
         membership: OrganizationMembershipPort,
-        invitations: OrganizationInvitationPort,
+        invitations: OrganizationInvitationRevocationRecordPort,
       ) => new RevokeOrganizationInvitation(membership, invitations),
-      inject: [ORGANIZATION_MEMBERSHIP, ORGANIZATION_INVITATION],
+      inject: [
+        ORGANIZATION_MEMBERSHIP,
+        ORGANIZATION_INVITATION_REVOCATION_RECORD,
+      ],
     },
     {
       provide: API_KEY_CACHE,
