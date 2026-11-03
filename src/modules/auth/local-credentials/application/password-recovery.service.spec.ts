@@ -8,7 +8,7 @@ import {
   localAuth,
   refusal,
   seedActiveAccount,
-} from '@/modules/auth/testing/local-auth.service.spec-support';
+} from '@/modules/auth/testing/local-credentials.spec-support';
 
 describe('PasswordRecoveryService', () => {
   describe('email outbox backpressure', () => {

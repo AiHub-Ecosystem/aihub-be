@@ -9,7 +9,7 @@ import {
   seedActiveAccount,
   sessionOf,
   setStatus,
-} from '@/modules/auth/testing/local-auth.service.spec-support';
+} from '@/modules/auth/testing/local-credentials.spec-support';
 
 describe('LocalSessionService', () => {
   it('issues an access token only for an active account and does not count success', async () => {

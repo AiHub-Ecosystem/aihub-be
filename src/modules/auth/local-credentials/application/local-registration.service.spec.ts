@@ -7,7 +7,7 @@ import {
   issuedVerificationExpiresAt,
   localAuth,
   refusal,
-} from '@/modules/auth/testing/local-auth.service.spec-support';
+} from '@/modules/auth/testing/local-credentials.spec-support';
 
 describe('LocalRegistrationService', () => {
   describe('email outbox backpressure', () => {
