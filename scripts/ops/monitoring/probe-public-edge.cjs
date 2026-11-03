@@ -71,12 +71,13 @@ async function requestCompletionId(hostname, fetchImpl = fetch) {
     }
     const requestId = response.headers?.get('x-request-id');
     if (
-      response.status < 200 ||
-      response.status >= 300 ||
+      response.status !== 401 ||
       requestId === null ||
       !REQUEST_ID_PATTERN.test(requestId)
     ) {
-      throw new Error('public request did not return a valid request ID');
+      throw new Error(
+        'protected docs probe did not return 401 and a request ID',
+      );
     }
     return requestId;
   } finally {

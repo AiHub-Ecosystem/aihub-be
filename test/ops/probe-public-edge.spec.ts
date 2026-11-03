@@ -199,10 +199,10 @@ describe('public edge health probe', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
-  it('requests the logged docs route and requires its AIHUB request ID', async () => {
+  it('requests protected docs and requires 401 with its AIHUB request ID', async () => {
     const cancel = jest.fn().mockResolvedValue(undefined);
     const fetchImpl = jest.fn().mockResolvedValue({
-      status: 200,
+      status: 401,
       headers: { get: () => 'req_01ARZ3NDEKTSV4RRFFQ69G5FAV' },
       body: { cancel },
     });
@@ -215,6 +215,15 @@ describe('public edge health probe', () => {
       expect.objectContaining({ redirect: 'manual' }),
     );
     expect(cancel).toHaveBeenCalledTimes(1);
+    await expect(
+      requestCompletionId(
+        'api.example.com',
+        jest.fn().mockResolvedValue({
+          status: 200,
+          headers: { get: () => 'req_01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+        }),
+      ),
+    ).rejects.toThrow(/401/);
     await expect(
       requestCompletionId(
         'api.example.com',
