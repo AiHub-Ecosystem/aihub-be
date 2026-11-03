@@ -3,7 +3,6 @@ import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { invalidCredentials } from '@/modules/auth/local-credentials/application/local-auth-errors';
-import type { LocalAuthServiceClock } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
   authenticateCredentials,
   checkLoginLimits,
@@ -11,6 +10,7 @@ import {
 } from '@/modules/auth/local-credentials/application/local-credentials';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
 import type {
   AuthMfaCipherPort,
   AuthMfaRepositoryPort,
@@ -43,7 +43,7 @@ export class AuthMfaService implements AuthMfaServicePort {
     private readonly passwordHasher: PasswordHasherPort,
     private readonly rateLimiter: AuthRateLimiterPort,
     private readonly newFactorId: IdMinter,
-    private readonly clock: LocalAuthServiceClock,
+    private readonly clock: AuthClock,
   ) {}
 
   async loginProof(

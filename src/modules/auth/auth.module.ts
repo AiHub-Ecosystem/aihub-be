@@ -33,13 +33,15 @@ import {
   type EmailOutboxPort,
 } from './email-delivery/application/email-outbox.port';
 import { EmailDeliveryModule } from './email-delivery/email-delivery.module';
-import { LOCAL_AUTH_SERVICE } from './local-credentials/application/local-auth-service.port';
-import {
-  AUTH_CLOCK,
-  type LocalAuthServiceClock,
-} from './local-credentials/application/local-auth.service';
-import { LocalAuthService } from './local-credentials/application/local-auth.service';
+import type { CredentialCheckPorts } from './local-credentials/application/local-credentials';
+import { LOCAL_REGISTRATION } from './local-credentials/application/local-registration.port';
+import { LocalRegistrationService } from './local-credentials/application/local-registration.service';
+import { LOCAL_SESSION } from './local-credentials/application/local-session.port';
+import { LocalSessionService } from './local-credentials/application/local-session.service';
 import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
+import { PASSWORD_RECOVERY } from './local-credentials/application/password-recovery.port';
+import { PasswordRecoveryService } from './local-credentials/application/password-recovery.service';
+import type { SessionTokenIssuers } from './local-credentials/application/session-token-issuers';
 import { Argon2PasswordHasher } from './local-credentials/infrastructure/argon2-password.hasher';
 import {
   AUTH_MFA_CIPHER,
@@ -72,6 +74,7 @@ import {
   type AuthRateLimiterPort,
 } from './rate-limit/application/auth-rate-limiter.port';
 import { RedisAuthRateLimiter } from './rate-limit/infrastructure/redis-auth-rate-limiter';
+import { AUTH_CLOCK, type AuthClock } from './shared/application/auth-clock';
 import { VERIFICATION_TOKEN_REPOSITORY } from './verification/application/verification-token-repository.port';
 import {
   VERIFICATION_TOKEN,
@@ -109,6 +112,10 @@ import { PostgresWebSessionRepository } from './web-sessions/infrastructure/post
 const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
   'EMAIL_VERIFICATION_REQUIRES_PASSWORD',
 );
+/** Collaborators the credential check shares between registration and sessions. */
+const CREDENTIAL_CHECK_PORTS = Symbol('CREDENTIAL_CHECK_PORTS');
+/** Access and refresh token issuers that mint one login or verification session. */
+const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
 
 @Module({
   imports: [
@@ -296,7 +303,7 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
     },
     {
       provide: AUTH_CLOCK,
-      useFactory: (): LocalAuthServiceClock => ({ now: () => new Date() }),
+      useFactory: (): AuthClock => ({ now: () => new Date() }),
     },
     {
       provide: AUTH_RATE_LIMITER,
@@ -343,25 +350,66 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
         configuration.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD,
     },
     {
-      provide: LOCAL_AUTH_SERVICE,
+      provide: CREDENTIAL_CHECK_PORTS,
+      inject: [USER_ACCOUNT_REPOSITORY, PASSWORD_HASHER, AUTH_RATE_LIMITER],
       useFactory: (
-        ...ports: ConstructorParameters<typeof LocalAuthService>
-      ): LocalAuthService => new LocalAuthService(...ports),
+        userAccounts: CredentialCheckPorts['userAccounts'],
+        passwordHasher: CredentialCheckPorts['passwordHasher'],
+        rateLimiter: CredentialCheckPorts['rateLimiter'],
+      ): CredentialCheckPorts => ({
+        userAccounts,
+        passwordHasher,
+        rateLimiter,
+      }),
+    },
+    {
+      provide: SESSION_TOKEN_ISSUERS,
+      inject: [USER_ACCESS_TOKEN_ISSUER, REFRESH_TOKEN_ISSUER],
+      useFactory: (
+        accessTokens: SessionTokenIssuers['accessTokens'],
+        refreshTokens: SessionTokenIssuers['refreshTokens'],
+      ): SessionTokenIssuers => ({ accessTokens, refreshTokens }),
+    },
+    {
+      provide: LOCAL_REGISTRATION,
+      useFactory: (
+        ...ports: ConstructorParameters<typeof LocalRegistrationService>
+      ): LocalRegistrationService => new LocalRegistrationService(...ports),
       inject: [
-        USER_ACCOUNT_REPOSITORY,
+        CREDENTIAL_CHECK_PORTS,
         VERIFICATION_TOKEN_REPOSITORY,
-        PASSWORD_RESET_TOKEN_REPOSITORY,
-        REFRESH_SESSION_REPOSITORY,
-        PASSWORD_HASHER,
         VERIFICATION_TOKEN,
+        EMAIL_OUTBOX,
+        SESSION_TOKEN_ISSUERS,
+        AUTH_CLOCK,
+        EMAIL_VERIFICATION_REQUIRES_PASSWORD,
+      ],
+    },
+    {
+      provide: PASSWORD_RECOVERY,
+      useFactory: (
+        ...ports: ConstructorParameters<typeof PasswordRecoveryService>
+      ): PasswordRecoveryService => new PasswordRecoveryService(...ports),
+      inject: [
+        PASSWORD_RESET_TOKEN_REPOSITORY,
         PASSWORD_RESET_TOKEN,
+        PASSWORD_HASHER,
         EMAIL_OUTBOX,
         AUTH_RATE_LIMITER,
-        USER_ACCESS_TOKEN_ISSUER,
-        REFRESH_TOKEN_ISSUER,
+        AUTH_CLOCK,
+      ],
+    },
+    {
+      provide: LOCAL_SESSION,
+      useFactory: (
+        ...ports: ConstructorParameters<typeof LocalSessionService>
+      ): LocalSessionService => new LocalSessionService(...ports),
+      inject: [
+        CREDENTIAL_CHECK_PORTS,
+        REFRESH_SESSION_REPOSITORY,
+        SESSION_TOKEN_ISSUERS,
         AUTH_CLOCK,
         AUTH_MFA_SERVICE,
-        EMAIL_VERIFICATION_REQUIRES_PASSWORD,
       ],
     },
     UserAccessJwtGuard,
@@ -376,7 +424,6 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
     VERIFICATION_TOKEN_REPOSITORY,
     PASSWORD_RESET_TOKEN_REPOSITORY,
     REFRESH_SESSION_REPOSITORY,
-    LOCAL_AUTH_SERVICE,
     USER_ACCESS_TOKEN_VERIFIER,
     WEB_SESSION_CLIENT_SECRET,
     UserAccessJwtGuard,

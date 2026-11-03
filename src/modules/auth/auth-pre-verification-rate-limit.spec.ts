@@ -1,4 +1,5 @@
 import { AppModule } from '@/app.module';
+import { AUTH_CLOCK } from '@/modules/auth/shared/application/auth-clock';
 import fastifyCookie from '@fastify/cookie';
 import {
   FastifyAdapter,
@@ -6,7 +7,6 @@ import {
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
-import { AUTH_CLOCK } from './local-credentials/application/local-auth.service';
 import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
 import {
   AUTH_MFA_CIPHER,

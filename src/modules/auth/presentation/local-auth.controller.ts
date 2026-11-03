@@ -37,11 +37,19 @@ import {
   RemoveMfaFactorRequestSchema,
 } from '@/contracts/auth/mfa';
 import {
-  type IssuedSession,
-  LOCAL_AUTH_SERVICE,
-  type LocalAuthServicePort,
+  LOCAL_REGISTRATION,
+  type LocalRegistrationPort,
+} from '@/modules/auth/local-credentials/application/local-registration.port';
+import {
+  LOCAL_SESSION,
+  type LocalSessionPort,
   RefreshRotationCommittedError,
-} from '@/modules/auth/local-credentials/application/local-auth-service.port';
+} from '@/modules/auth/local-credentials/application/local-session.port';
+import {
+  PASSWORD_RECOVERY,
+  type PasswordRecoveryPort,
+} from '@/modules/auth/local-credentials/application/password-recovery.port';
+import type { IssuedSession } from '@/modules/auth/local-credentials/application/session-token-issuers';
 import {
   AUTH_MFA_SERVICE,
   type AuthMfaServicePort,
@@ -133,8 +141,12 @@ function isInvalidRefreshToken(error: unknown): boolean {
 @Controller()
 export class LocalAuthController {
   constructor(
-    @Inject(LOCAL_AUTH_SERVICE)
-    private readonly service: LocalAuthServicePort,
+    @Inject(LOCAL_REGISTRATION)
+    private readonly registration: LocalRegistrationPort,
+    @Inject(PASSWORD_RECOVERY)
+    private readonly recovery: PasswordRecoveryPort,
+    @Inject(LOCAL_SESSION)
+    private readonly sessions: LocalSessionPort,
     @Inject(AUTH_MFA_SERVICE)
     private readonly mfa: AuthMfaServicePort,
   ) {}
@@ -145,7 +157,7 @@ export class LocalAuthController {
   async currentUser(
     @Req() request: FastifyRequest,
   ): Promise<ReadCurrentUserResponse> {
-    const profile = await this.service.currentUser(
+    const profile = await this.sessions.currentUser(
       authenticatedUserId(request),
     );
     return {
@@ -161,7 +173,7 @@ export class LocalAuthController {
     @Body() body: unknown,
   ): Promise<RegisterEnvelope> {
     const input = parseRequestBody(RegisterRequestSchema, body, request);
-    const result = await this.service.register(
+    const result = await this.registration.register(
       input,
       requestIp(request),
       input.browser_binding,
@@ -185,7 +197,7 @@ export class LocalAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResultResponse> {
     const input = parseRequestBody(LoginRequestSchema, body, request);
-    const result = await this.service.login(input, requestIp(request));
+    const result = await this.sessions.login(input, requestIp(request));
     if (result.kind === 'mfa-required') {
       reply.status(202);
       return {
@@ -270,7 +282,7 @@ export class LocalAuthController {
       : refreshCookieFrom(request);
 
     try {
-      const result = await this.service.refresh(rawToken, requestIp(request));
+      const result = await this.sessions.refresh(rawToken, requestIp(request));
       return sessionEnvelope(request, reply, result);
     } catch (error) {
       if (isInvalidRefreshToken(error)) {
@@ -294,7 +306,7 @@ export class LocalAuthController {
     const rawToken = hasAlternateRefreshSource(request)
       ? undefined
       : refreshCookieFrom(request);
-    await this.service.logout(rawToken);
+    await this.sessions.logout(rawToken);
     clearRefreshCookie(reply);
   }
 
@@ -312,7 +324,7 @@ export class LocalAuthController {
       body,
       request,
     );
-    const session = await this.service.verify(
+    const session = await this.registration.verify(
       input.token,
       requestIp(request),
       input.browser_binding,
@@ -339,7 +351,7 @@ export class LocalAuthController {
       body,
       request,
     );
-    await this.service.resend(
+    await this.registration.resend(
       input.email,
       requestIp(request),
       input.browser_binding,
@@ -353,7 +365,10 @@ export class LocalAuthController {
     @Body() body: unknown,
   ): Promise<ForgotPasswordEnvelope> {
     const input = parseRequestBody(ForgotPasswordRequestSchema, body, request);
-    const result = await this.service.forgotPassword(input, requestIp(request));
+    const result = await this.recovery.forgotPassword(
+      input,
+      requestIp(request),
+    );
     return {
       data: result,
       meta: { request_id: String(request.id) },
@@ -368,7 +383,7 @@ export class LocalAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     const input = parseRequestBody(ResetPasswordRequestSchema, body, request);
-    await this.service.resetPassword(input, requestIp(request));
+    await this.recovery.resetPassword(input, requestIp(request));
     clearRefreshCookie(reply);
   }
 }

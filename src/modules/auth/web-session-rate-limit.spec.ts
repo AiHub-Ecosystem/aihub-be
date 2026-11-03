@@ -1,5 +1,6 @@
 import { AppModule } from '@/app.module';
 import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
+import { AUTH_CLOCK } from '@/modules/auth/shared/application/auth-clock';
 import fastifyCookie from '@fastify/cookie';
 import {
   FastifyAdapter,
@@ -9,7 +10,6 @@ import { Test } from '@nestjs/testing';
 import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
-import { AUTH_CLOCK } from './local-credentials/application/local-auth.service';
 import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
 import { AUTH_MFA_REPOSITORY } from './mfa/application/auth-mfa-repository.port';
 import {

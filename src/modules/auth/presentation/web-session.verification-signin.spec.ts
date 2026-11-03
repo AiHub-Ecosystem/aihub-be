@@ -13,7 +13,6 @@ import { createRequestLogging } from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CreateWebSessionResponseSchema } from '@/contracts/auth/web-session';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import { AUTH_CLOCK } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
@@ -27,6 +26,7 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { AUTH_CLOCK } from '@/modules/auth/shared/application/auth-clock';
 import {
   type InMemoryAuthState,
   createInMemoryAuthState,

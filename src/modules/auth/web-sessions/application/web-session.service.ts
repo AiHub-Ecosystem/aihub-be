@@ -2,7 +2,6 @@ import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import { type UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
 import { invalidVerificationToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
-import { type LocalAuthServiceClock } from '@/modules/auth/local-credentials/application/local-auth.service';
 import {
   type AuthenticatedCredentials,
   authenticateCredentials,
@@ -16,6 +15,7 @@ import type {
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
 import {
   proveVerificationPassword,
   verificationPasswordInvalid,
@@ -94,7 +94,7 @@ export class WebSessionService implements WebSessionServicePort {
     private readonly userAccounts: UserAccountRepositoryPort,
     private readonly passwordHasher: PasswordHasherPort,
     private readonly rateLimiter: AuthRateLimiterPort,
-    private readonly clock: LocalAuthServiceClock,
+    private readonly clock: AuthClock,
     private readonly verificationTokenStore: VerificationTokenRepositoryPort,
     private readonly verificationTokens: VerificationTokenPort,
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
