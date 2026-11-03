@@ -1222,6 +1222,121 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.status).not.toBe(0);
   });
 
+  function downstreamProbe(source: string): {
+    status: number | null;
+    output: string;
+  } {
+    return runWithFixtures(
+      [{ layer: '.', name: 'probe.ts', source }],
+      join(srcRoot, 'downstream'),
+    );
+  }
+
+  it.each([
+    ["import { request } from 'node:https';\nexport const send = request;\n"],
+    ["import axios from 'axios';\nexport const send = axios;\n"],
+    ['export const send = (path: string) => fetch(path);\n'],
+    ["export const http = require('node:http');\n"],
+    ["export const load = () => import('undici');\n"],
+  ])(
+    'rejects network I/O in a downstream adapter: %s',
+    (source) => {
+      const result = downstreamProbe(source);
+
+      expect(result.output).toContain('network client');
+      expect(result.status).not.toBe(0);
+    },
+    30_000,
+  );
+
+  it.each([
+    ["import { Client } from 'pg';\nexport const db = Client;\n"],
+    ["import Redis from 'ioredis';\nexport const cache = Redis;\n"],
+    [
+      "import { S3Client } from '@aws-sdk/client-s3';\nexport const store = S3Client;\n",
+    ],
+    [
+      "import { readFileSync } from 'node:fs';\nexport const read = readFileSync;\n",
+    ],
+    [
+      "import type { PrismaClient } from '@prisma-client/client';\nexport type Db = PrismaClient;\n",
+    ],
+    [
+      "import { PERSISTENCE } from '@/modules/persistence/public/tokens';\nexport const token = PERSISTENCE;\n",
+    ],
+    [
+      "import { repository } from '@/modules/identity/membership/infrastructure/repository';\nexport const reader = repository;\n",
+    ],
+  ])(
+    'rejects persistence or storage in a downstream adapter: %s',
+    (source) => {
+      const result = downstreamProbe(source);
+
+      expect(result.output).toContain('persistence or storage');
+      expect(result.status).not.toBe(0);
+    },
+    30_000,
+  );
+
+  it.each([
+    ['export const mode = process.env.NODE_ENV;\n'],
+    ["export const mode = process['env'].NODE_ENV;\n"],
+    ['const { env } = process;\nexport const mode = env.NODE_ENV;\n'],
+    ['export const mode = import.meta.env.NODE_ENV;\n'],
+    [
+      "import { ConfigService } from '@nestjs/config';\nexport const c = ConfigService;\n",
+    ],
+    [
+      "import { appConfig } from '@/config/runtime-configuration';\nexport const c = appConfig;\n",
+    ],
+  ])(
+    'rejects environment access in a downstream adapter: %s',
+    (source) => {
+      const result = downstreamProbe(source);
+
+      expect(result.output).toContain('the environment');
+      expect(result.status).not.toBe(0);
+    },
+    30_000,
+  );
+
+  it.each([
+    ['export const note = (message: string) => console.log(message);\n'],
+    ['export const note = (error: unknown) => console.error(error);\n'],
+    [
+      "import { Logger } from '@nestjs/common';\nexport const log = new Logger('x');\n",
+    ],
+    ["import pino from 'pino';\nexport const log = pino();\n"],
+    ['export const note = (text: string) => process.stdout.write(text);\n'],
+  ])(
+    'rejects direct logging in a downstream adapter: %s',
+    (source) => {
+      const result = downstreamProbe(source);
+
+      expect(result.output).toContain('logging');
+      expect(result.status).not.toBe(0);
+    },
+    30_000,
+  );
+
+  it('accepts a pure mapper that only imports contracts and maps data', () => {
+    const result = downstreamProbe(
+      [
+        "import { createHash } from 'node:crypto';",
+        "import { Buffer } from 'node:buffer';",
+        "import { isRecord } from '@/common/is-record';",
+        "import { contractViolation } from '../contract-violation';",
+        'export function map(value: unknown): string {',
+        '  if (!isRecord(value)) throw contractViolation();',
+        "  return createHash('sha256').update(Buffer.from(JSON.stringify(value))).digest('hex');",
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(result.output).not.toContain('pure mapper');
+  }, 60_000);
+
   it('rejects process, PostgreSQL pool, and Vault access outside their boundaries', () => {
     const result = runWithFixtures([
       {

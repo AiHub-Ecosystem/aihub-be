@@ -81,6 +81,255 @@ for (const file of sourceFiles.filter((file) =>
   }
 }
 
+// AGENTS.md: downstream adapters are pure mappers, and the dispatcher owns
+// hosts, timeouts, cancellation, tokens, and error translation. The host
+// literal check above is one face of that; these are the others. Each entry is
+// a thing a pure mapper never needs, named by the reason a reader is given.
+// Module specifiers are matched whole, so a relative `./client` never trips a
+// package name.
+// shortcut: this reads syntax, not types, so an alias such as `const f = fetch`
+// or a renamed `console` slips through. Reach for the type checker only if an
+// alias ever shows up in review.
+/** @type {ReadonlyArray<{ category: string, pattern: RegExp }>} */
+const DOWNSTREAM_FORBIDDEN_MODULES = [
+  {
+    category: 'network client',
+    pattern:
+      /^(?:node:)?(?:https?|http2|net|tls|dgram|dns(?:\/promises)?)$|^(?:undici|axios|got|ky|node-fetch|cross-fetch|superagent|ws|@nestjs\/axios|@nestjs\/microservices|@grpc\/.+)$/,
+  },
+  {
+    // Files count as storage; an `infrastructure` folder of any module is where
+    // a repository or client lives, and `persistence` and `secrets` build them.
+    category: 'persistence or storage',
+    pattern:
+      /^(?:node:)?fs(?:\/promises)?$|^(?:pg|pg-.+|ioredis|redis|@redis\/.+|@prisma\/.+|@prisma-client\/.+|@aws-sdk\/.+|@smithy\/.+)$|^@\/modules\/(?:persistence|secrets)(?:\/|$)|\/infrastructure(?:\/|$)/,
+  },
+  {
+    category: 'the environment',
+    pattern: /^@nestjs\/config$|^@\/config(?:\/|$)/,
+  },
+  {
+    category: 'logging',
+    pattern: /^(?:pino|winston|bunyan|log4js|loglevel|consola|debug)$/,
+  },
+];
+
+/** Names that make a file a logger when imported from the Nest core package. */
+const DOWNSTREAM_NEST_LOGGERS = new Set([
+  'Logger',
+  'ConsoleLogger',
+  'LoggerService',
+]);
+
+/** Runtimes that expose the process environment as a property named `env`. */
+const DOWNSTREAM_ENVIRONMENT_HOLDERS = new Set(['process', 'Bun', 'Deno']);
+
+/** @type {ReadonlySet<string>} */
+const DOWNSTREAM_NETWORK_GLOBALS = new Set([
+  'XMLHttpRequest',
+  'WebSocket',
+  'EventSource',
+]);
+
+/** What a downstream adapter is told when it breaks the rule, per category. */
+const DOWNSTREAM_PURITY_REASON = {
+  'network client':
+    'the dispatcher owns hosts, timeouts, and every network client',
+  'persistence or storage':
+    'durable state is reached through application ports, never from a mapper',
+  'the environment':
+    'configuration reaches it as an argument from the dispatcher, never from the process',
+  logging:
+    'the dispatcher translates errors and owns telemetry, so a mapper returns or throws instead',
+};
+
+/** @param {import('typescript').Expression} expression @returns {boolean} */
+function isEnvironmentHolder(expression) {
+  return (
+    ts.isIdentifier(expression) &&
+    DOWNSTREAM_ENVIRONMENT_HOLDERS.has(expression.text)
+  );
+}
+
+/** @param {import('typescript').Node} node @returns {string | undefined} */
+function moduleSpecifierOf(node) {
+  if (
+    (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+    node.moduleSpecifier !== undefined &&
+    ts.isStringLiteral(node.moduleSpecifier)
+  ) {
+    return node.moduleSpecifier.text;
+  }
+  if (
+    ts.isImportEqualsDeclaration(node) &&
+    ts.isExternalModuleReference(node.moduleReference) &&
+    ts.isStringLiteral(node.moduleReference.expression)
+  ) {
+    return node.moduleReference.expression.text;
+  }
+  if (ts.isCallExpression(node) && node.arguments.length > 0) {
+    const [argument] = node.arguments;
+    const isLoader =
+      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === 'require');
+    if (
+      isLoader &&
+      argument !== undefined &&
+      ts.isStringLiteralLike(argument)
+    ) {
+      return argument.text;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * What in one downstream source file a pure mapper must not do.
+ * @param {import('typescript').SourceFile} sourceFile
+ * @returns {Array<{ line: number, category: string, detail: string }>}
+ */
+function downstreamImpurities(sourceFile) {
+  /** @type {Array<{ line: number, category: string, detail: string }>} */
+  const found = [];
+  /** @param {import('typescript').Node} node @param {string} category @param {string} detail */
+  function report(node, category, detail) {
+    const line =
+      sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
+      1;
+    found.push({ line, category, detail });
+  }
+
+  /** @param {import('typescript').Node} node */
+  function visit(node) {
+    const specifier = moduleSpecifierOf(node);
+    if (specifier !== undefined) {
+      const entry = DOWNSTREAM_FORBIDDEN_MODULES.find(({ pattern }) =>
+        pattern.test(specifier),
+      );
+      if (entry !== undefined) {
+        report(node, entry.category, `imports '${specifier}'`);
+      }
+    }
+
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isIdentifier(callee) && callee.text === 'fetch') {
+        report(node, 'network client', 'calls fetch');
+      }
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        callee.expression.text === 'globalThis' &&
+        callee.name.text === 'fetch'
+      ) {
+        report(node, 'network client', 'calls globalThis.fetch');
+      }
+    }
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      DOWNSTREAM_NETWORK_GLOBALS.has(node.expression.text)
+    ) {
+      report(node, 'network client', `constructs ${node.expression.text}`);
+    }
+
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'env' &&
+      isEnvironmentHolder(node.expression)
+    ) {
+      report(node, 'the environment', `reads ${node.expression.getText()}.env`);
+    }
+    if (
+      ts.isElementAccessExpression(node) &&
+      ts.isStringLiteralLike(node.argumentExpression) &&
+      node.argumentExpression.text === 'env' &&
+      isEnvironmentHolder(node.expression)
+    ) {
+      report(
+        node,
+        'the environment',
+        `reads ${node.expression.getText()}['env']`,
+      );
+    }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'env' &&
+      ts.isMetaProperty(node.expression) &&
+      node.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+    ) {
+      report(node, 'the environment', 'reads import.meta.env');
+    }
+    if (
+      ts.isImportDeclaration(node) &&
+      moduleSpecifierOf(node) === '@nestjs/common' &&
+      node.importClause?.namedBindings !== undefined &&
+      ts.isNamedImports(node.importClause.namedBindings)
+    ) {
+      for (const element of node.importClause.namedBindings.elements) {
+        const imported = (element.propertyName ?? element.name).text;
+        if (DOWNSTREAM_NEST_LOGGERS.has(imported)) {
+          report(
+            element,
+            'logging',
+            `imports ${imported} from '@nestjs/common'`,
+          );
+        }
+      }
+    }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === 'console' ||
+        (node.expression.text === 'process' &&
+          (node.name.text === 'stdout' || node.name.text === 'stderr')))
+    ) {
+      report(
+        node,
+        'logging',
+        `writes through ${node.expression.text}.${node.name.text}`,
+      );
+    }
+    // `const { env } = process` takes the environment without naming `.env`.
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      node.initializer !== undefined &&
+      isEnvironmentHolder(node.initializer) &&
+      node.name.elements.some(
+        (element) => (element.propertyName ?? element.name).getText() === 'env',
+      )
+    ) {
+      report(node, 'the environment', 'destructures env from the process');
+    }
+
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return found;
+}
+
+for (const file of sourceFiles.filter((file) =>
+  file.startsWith(`${downstreamDirectory}${sep}`),
+)) {
+  if (file.endsWith('.spec.ts')) {
+    continue;
+  }
+
+  const sourceFile = ts.createSourceFile(
+    file,
+    sourceText(file),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  for (const { line, category, detail } of downstreamImpurities(sourceFile)) {
+    fail(
+      `${relative(root, file)}:${line} ${detail} (${category}); a downstream adapter is a pure mapper, so ${DOWNSTREAM_PURITY_REASON[category]}`,
+    );
+  }
+}
+
 const configurationDirectory = join(srcDirectory, 'config');
 const cliDirectory = join(srcDirectory, 'cli');
 const postgresPoolFactoryPath = join(
