@@ -52,6 +52,7 @@ function openToken(overrides: Record<string, unknown> = {}) {
     consumed_reason: 'verified',
     browser_binding_hash: 'binding-hash',
     signed_in_at: null,
+    requires_password: false,
     ...overrides,
   };
 }

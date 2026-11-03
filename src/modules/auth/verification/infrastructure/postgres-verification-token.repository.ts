@@ -16,6 +16,13 @@ import {
   authTransaction,
   isUniqueViolation,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
+import {
+  type VerificationAccountFacts,
+  type VerificationDecision,
+  type VerificationTokenFacts,
+  type VerificationTokenState,
+  decideVerification,
+} from '@/modules/auth/verification/application/verification-decision';
 import type {
   ConsumeVerificationTokenInput,
   ResendVerificationTarget,
@@ -29,6 +36,94 @@ import { insertWebSession } from '@/modules/auth/web-sessions/infrastructure/web
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };
+
+type VerificationConsumedReason =
+  | 'verified'
+  | 'superseded'
+  | 'password_attempts';
+
+function isVerificationConsumedReason(
+  value: unknown,
+): value is VerificationConsumedReason {
+  return (
+    value === 'verified' ||
+    value === 'superseded' ||
+    value === 'password_attempts'
+  );
+}
+
+interface LockedVerificationAccount extends VerificationAccountFacts {
+  readonly id: string;
+}
+
+interface LockedVerificationToken {
+  readonly id: string;
+  readonly state: VerificationTokenState;
+  readonly requiresProof: boolean;
+  readonly signInClaimed: boolean;
+  readonly browserBindingHash: string | null;
+}
+
+interface LockedVerificationState {
+  readonly account: LockedVerificationAccount;
+  readonly token: LockedVerificationToken;
+}
+
+function readVerificationAccount(
+  row: Readonly<Record<string, unknown>> | undefined,
+): LockedVerificationAccount | undefined {
+  if (
+    row === undefined ||
+    typeof row.id !== 'string' ||
+    (row.status !== 'pending_verification' && row.status !== 'active')
+  ) {
+    return undefined;
+  }
+  return { id: row.id, status: row.status };
+}
+
+function readVerificationToken(
+  row: Readonly<Record<string, unknown>> | undefined,
+  now: Date,
+): LockedVerificationToken | undefined {
+  if (row === undefined || typeof row.id !== 'string') return undefined;
+
+  const expiresAt = row.expires_at;
+  const consumedAt = row.consumed_at;
+  const consumedReason = row.consumed_reason;
+  const browserBindingHash = row.browser_binding_hash;
+  const signedInAt = row.signed_in_at;
+  const requiresProof = row.requires_password;
+
+  if (
+    !(expiresAt instanceof Date) ||
+    Number.isNaN(expiresAt.getTime()) ||
+    (consumedAt !== null &&
+      (!(consumedAt instanceof Date) || Number.isNaN(consumedAt.getTime()))) ||
+    (consumedReason !== null &&
+      !isVerificationConsumedReason(consumedReason)) ||
+    (browserBindingHash !== null && typeof browserBindingHash !== 'string') ||
+    (signedInAt !== null && !(signedInAt instanceof Date)) ||
+    typeof requiresProof !== 'boolean' ||
+    expiresAt.getTime() <= now.getTime()
+  ) {
+    return undefined;
+  }
+
+  const state =
+    consumedAt === null && consumedReason === null
+      ? 'open'
+      : consumedAt instanceof Date && consumedReason === 'verified'
+        ? 'verified'
+        : 'spent';
+  return {
+    id: row.id,
+    state,
+    requiresProof,
+    signInClaimed: signedInAt !== null,
+    browserBindingHash,
+  };
+}
 const PASSWORD_REQUIRED: VerificationOutcome = { kind: 'password_required' };
 
 /**
@@ -100,164 +195,204 @@ export class PostgresVerificationTokenRepository
     input: ConsumeVerificationTokenInput,
   ): Promise<VerificationOutcome> {
     return authTransaction(this.client, async (transaction) => {
-      // Lock order: account, then verification token and any issued session (ADR-0107).
-      const accounts = await authQueryRows(
+      const state = await this.lockVerificationState(transaction, input);
+      if (state === undefined) return INVALID;
+
+      const decision = await this.resolveVerificationDecision(
         transaction,
-        `
-          SELECT account.id, account.status
-          FROM user_accounts account
-          JOIN email_verification_tokens token
-            ON token.user_account_id = account.id
-          WHERE token.token_hash = $1
-          FOR UPDATE OF account
-        `,
-        [input.tokenHash],
+        input,
+        state,
       );
-      const account = accounts[0];
-      if (
-        account === undefined ||
-        typeof account.id !== 'string' ||
-        (account.status !== 'pending_verification' &&
-          account.status !== 'active')
-      ) {
-        return INVALID;
-      }
-      const accountId: string = account.id;
-
-      const tokens = await authQueryRows(
+      return this.executeVerificationDecision(
         transaction,
-        `
-          SELECT id, expires_at, consumed_at, consumed_reason,
-                 browser_binding_hash, signed_in_at, requires_password
-          FROM email_verification_tokens
-          WHERE user_account_id = $1 AND token_hash = $2
-          FOR UPDATE
-        `,
-        [account.id, input.tokenHash],
+        input,
+        state,
+        decision,
       );
-      const token = tokens[0];
-      if (
-        token === undefined ||
-        typeof token.id !== 'string' ||
-        !(token.expires_at instanceof Date) ||
-        Number.isNaN(token.expires_at.getTime()) ||
-        (token.consumed_at !== null &&
-          (!(token.consumed_at instanceof Date) ||
-            Number.isNaN(token.consumed_at.getTime()))) ||
-        (token.consumed_reason !== null &&
-          token.consumed_reason !== 'verified' &&
-          token.consumed_reason !== 'superseded' &&
-          token.consumed_reason !== 'password_attempts') ||
-        (token.browser_binding_hash !== null &&
-          typeof token.browser_binding_hash !== 'string') ||
-        (token.signed_in_at !== null &&
-          !(token.signed_in_at instanceof Date)) ||
-        token.expires_at.getTime() <= input.now.getTime()
-      ) {
+    });
+  }
+
+  private async lockVerificationState(
+    transaction: AuthTransactionClient,
+    input: ConsumeVerificationTokenInput,
+  ): Promise<LockedVerificationState | undefined> {
+    // Lock order: account, then verification token and any issued session (ADR-0107).
+    const accountRows = await authQueryRows(
+      transaction,
+      `
+        SELECT account.id, account.status
+        FROM user_accounts account
+        JOIN email_verification_tokens token
+          ON token.user_account_id = account.id
+        WHERE token.token_hash = $1
+        FOR UPDATE OF account
+      `,
+      [input.tokenHash],
+    );
+    const account = readVerificationAccount(accountRows[0]);
+    if (account === undefined) return undefined;
+
+    const tokenRows = await authQueryRows(
+      transaction,
+      `
+        SELECT id, expires_at, consumed_at, consumed_reason,
+               browser_binding_hash, signed_in_at, requires_password
+        FROM email_verification_tokens
+        WHERE user_account_id = $1 AND token_hash = $2
+        FOR UPDATE
+      `,
+      [account.id, input.tokenHash],
+    );
+    const token = readVerificationToken(tokenRows[0], input.now);
+    return token === undefined ? undefined : { account, token };
+  }
+
+  private async resolveVerificationDecision(
+    transaction: AuthTransactionClient,
+    input: ConsumeVerificationTokenInput,
+    state: LockedVerificationState,
+  ): Promise<Exclude<VerificationDecision, { readonly kind: 'proof_check' }>> {
+    const accountFacts: VerificationAccountFacts = {
+      status: state.account.status,
+    };
+    const tokenFacts: VerificationTokenFacts = {
+      state: state.token.state,
+      requiresProof: state.token.requiresProof,
+      proofVerified: undefined,
+      browserBindingMatches:
+        input.browserBindingHash !== undefined &&
+        state.token.browserBindingHash === input.browserBindingHash,
+      signInClaimed: state.token.signInClaimed,
+    };
+    const decision = decideVerification(accountFacts, tokenFacts);
+    if (decision.kind !== 'proof_check') return decision;
+
+    const proofVerified = await this.holdsVerifiedPassword(
+      transaction,
+      state.account.id,
+      input.verifiedPasswordHash,
+    );
+    const resolved = decideVerification(accountFacts, {
+      ...tokenFacts,
+      proofVerified,
+    });
+    if (resolved.kind === 'proof_check') {
+      throw new Error('Verification proof check did not resolve');
+    }
+    return resolved;
+  }
+
+  private async executeVerificationDecision(
+    transaction: AuthTransactionClient,
+    input: ConsumeVerificationTokenInput,
+    state: LockedVerificationState,
+    decision: Exclude<VerificationDecision, { readonly kind: 'proof_check' }>,
+  ): Promise<VerificationOutcome> {
+    switch (decision.kind) {
+      case 'invalid':
         return INVALID;
-      }
-
-      const tokenId = token.id as string;
-
-      const signInIfBound = async (): Promise<VerificationOutcome> => {
-        // Verification Sign-in (ADR-0054): only the bound browser, only once.
-        // The conditional update makes two racing requests claim it once.
-        if (
-          input.browserBindingHash === undefined ||
-          token.browser_binding_hash !== input.browserBindingHash ||
-          token.signed_in_at !== null
-        ) {
-          return VERIFIED;
-        }
-        // The admission login needs, with no proof to offer (ADR-0054): an
-        // account with a second factor verifies but gets no session, and the
-        // claim stays unspent because no sign-in happened.
-        const admission = await authorizeMfaSession(
+      case 'proof_required':
+        return PASSWORD_REQUIRED;
+      case 'verified':
+        return VERIFIED;
+      case 'verify': {
+        const activated = await this.consumeAndActivatePendingAccount(
           transaction,
-          accountId,
-          undefined,
+          state.account.id,
+          state.token.id,
           input.now,
         );
-        if (admission === undefined) {
-          return VERIFIED;
-        }
-        const claimed = await transaction.emailVerificationToken.updateMany({
-          where: {
-            id: tokenId,
-            signedInAt: null,
-            consumedReason: 'verified',
-          },
-          data: { signedInAt: input.now },
-        });
-        if (claimed.count === 0) {
-          return VERIFIED;
-        }
-        // The claim, the session it won, and the verification above commit
-        // together, so a failed insert rolls all of them back and the request
-        // stays retryable while the token is unexpired. The session kind is the
-        // caller's to pick; the claim is the only one of its kind, so a token
-        // spends its single session whichever route arrives first.
-        if (input.signInSession.kind === 'refresh') {
-          await insertRefreshSession(
-            transaction,
-            {
-              userId: accountId,
-              token: input.signInSession.token,
-              issuedAt: input.signInSession.issuedAt,
-            },
-            admission,
-          );
-        } else {
-          await this.insertWebSession(
-            transaction,
-            accountId,
-            {
-              sessionId: input.signInSession.sessionId,
-              token: input.signInSession.token,
-              issuedAt: input.signInSession.issuedAt,
-            },
-            admission,
-          );
-        }
-        return { kind: 'signed_in', userId: accountId };
-      };
-
-      if (account.status === 'active') {
-        return token.consumed_at instanceof Date &&
-          token.consumed_reason === 'verified'
-          ? signInIfBound()
-          : INVALID;
+        return activated ? VERIFIED : INVALID;
       }
-
-      if (token.consumed_at !== null || token.consumed_reason !== null) {
-        return INVALID;
-      }
-
-      if (
-        token.requires_password === true &&
-        !(await this.holdsVerifiedPassword(
+      case 'sign_in': {
+        if (decision.activateAccount) {
+          const activated = await this.consumeAndActivatePendingAccount(
+            transaction,
+            state.account.id,
+            state.token.id,
+            input.now,
+          );
+          if (!activated) return INVALID;
+        }
+        return this.claimVerificationSignIn(
           transaction,
-          accountId,
-          input.verifiedPasswordHash,
-        ))
-      ) {
-        return PASSWORD_REQUIRED;
+          input,
+          state.account.id,
+          state.token.id,
+        );
       }
+    }
+  }
 
-      const consumed = await transaction.emailVerificationToken.updateMany({
-        where: { id: tokenId, consumedAt: null },
-        data: { consumedAt: input.now, consumedReason: 'verified' },
-      });
-      if (consumed.count === 0) {
-        return INVALID;
-      }
-
-      const activated = await transaction.userAccount.updateMany({
-        where: { id: accountId, status: 'pending_verification' },
-        data: { status: 'active', updatedAt: input.now },
-      });
-      return activated.count > 0 ? signInIfBound() : INVALID;
+  private async consumeAndActivatePendingAccount(
+    transaction: AuthTransactionClient,
+    accountId: string,
+    tokenId: string,
+    now: Date,
+  ): Promise<boolean> {
+    const consumed = await transaction.emailVerificationToken.updateMany({
+      where: { id: tokenId, consumedAt: null },
+      data: { consumedAt: now, consumedReason: 'verified' },
     });
+    if (consumed.count === 0) return false;
+
+    const activated = await transaction.userAccount.updateMany({
+      where: { id: accountId, status: 'pending_verification' },
+      data: { status: 'active', updatedAt: now },
+    });
+    return activated.count > 0;
+  }
+
+  private async claimVerificationSignIn(
+    transaction: AuthTransactionClient,
+    input: ConsumeVerificationTokenInput,
+    accountId: string,
+    tokenId: string,
+  ): Promise<VerificationOutcome> {
+    // The admission login needs no proof to offer. An enabled factor verifies
+    // the email without claiming the token's one Verification Sign-in (ADR-0054).
+    const admission = await authorizeMfaSession(
+      transaction,
+      accountId,
+      undefined,
+      input.now,
+    );
+    if (admission === undefined) return VERIFIED;
+
+    // The conditional update keeps concurrent requests from claiming twice.
+    const claimed = await transaction.emailVerificationToken.updateMany({
+      where: {
+        id: tokenId,
+        signedInAt: null,
+        consumedReason: 'verified',
+      },
+      data: { signedInAt: input.now },
+    });
+    if (claimed.count === 0) return VERIFIED;
+
+    if (input.signInSession.kind === 'refresh') {
+      await insertRefreshSession(
+        transaction,
+        {
+          userId: accountId,
+          token: input.signInSession.token,
+          issuedAt: input.signInSession.issuedAt,
+        },
+        admission,
+      );
+    } else {
+      await this.insertWebSession(
+        transaction,
+        accountId,
+        {
+          sessionId: input.signInSession.sessionId,
+          token: input.signInSession.token,
+          issuedAt: input.signInSession.issuedAt,
+        },
+        admission,
+      );
+    }
+    return { kind: 'signed_in', userId: accountId };
   }
 
   async readVerificationCredential(input: {
