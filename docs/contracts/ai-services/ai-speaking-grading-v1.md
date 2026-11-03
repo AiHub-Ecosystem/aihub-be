@@ -236,3 +236,11 @@ It carries the remaining dispatch-work milliseconds for each call. This
 extension is pending written approval from the AI Speaking service owner, AIHUB,
 and WISPACE. No provider-side deadline honoring or model-compute cancellation is
 asserted until the service has its own implementation and tests.
+
+## 11. Provider v1 support period
+
+On 2026-11-02, the AI Speaking provider stated that `/api/v1/speaking/*` has no
+fixed removal date. It will remain available while WISPACE uses it; when
+WISPACE stops using it, the provider will notify AIHUB and then turn it off.
+The provider gave no fixed notice interval. The AIHUB `/v2` routes do not depend
+on provider `/v1`. [Source: provider answer on #1450](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450#issuecomment-6581680100).

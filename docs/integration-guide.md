@@ -986,6 +986,19 @@ selects its results with `part_result_ids`, `response_ids`, or both. Use the
 three GET routes to read the stored question, Part, or Test result back.
 
 The v2 `test_type` values are the lowercase `practice` and `full_test`.
+For a full Test, send the same `test_code` with every question and the same
+value as the Test request's `test_id`. The provider stores the trimmed question
+`test_code` as the question result's `data.meta.test_id`; a missing or empty
+value is stored as `null`. Test aggregation accepts referenced question results
+whose stored `test_id` is `null` or exactly the request's `test_id`
+(case-sensitive). The provider rejects a different stored value even when all
+questions share that different value.
+
+Part aggregation applies a different check: the provider rejects a Part whose
+questions contain two or more distinct non-null stored `test_id` values. The
+Part request's `test_id` labels the Part result and is not compared with the
+stored values; if omitted, the stored value is used.
+
 The response uses the common `{ "data", "meta" }` envelope. Every `data.meta` has `schema_version` (`2.4`), `result_type`, `test_id`,
 `test_type`, and `graded_at`. A question result also has `part`, `question_id`,
 `response_id`, and `part_result_id`; a Part result has `part_result_id`, `part`,
@@ -1017,10 +1030,13 @@ Only the three POST routes are billed. A GET never adds a charge. The POSTs do n
 `Idempotency-Key`; retrying the question grading POST after a network failure
 can grade and charge twice.
 
-A newly graded result may take a short time to become readable. If a GET, or
-an aggregation that includes the newest question, returns `404`, wait briefly
-and retry; no fixed wait is promised. An unknown or foreign result ID returns
-`NOT_FOUND` identically. Aggregation failures use the existing
+The provider writes a question result before answering and says it is normally
+readable or usable in aggregation immediately; v2.4 has no one-to-two-second
+read delay. Part and Test aggregation wait briefly for answers still being
+saved before returning `404`. In the rare case that the provider returns a
+grade despite a failed result write, later reads return `NOT_FOUND`; re-grade
+the question because retrying the read will not help. An unknown or foreign
+result ID also returns `NOT_FOUND`. Aggregation failures use the existing
 `AI_SERVICE_ERROR` family. `429 AI_SERVICE_THROTTLED` responses carry
 `Retry-After` on `/v1` and `/v2`.
 

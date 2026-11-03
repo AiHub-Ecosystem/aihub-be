@@ -2,11 +2,12 @@
 
 ## v2.4 provider captures
 
-AI Speaking supplied these response captures from controlled Production probes
-on 2026-10-31. There is no staging environment. The success flow submitted two
-Part 1 questions, aggregated their Part, aggregated a test result, and read back
-the question, Part, and test results. It did not represent a complete
-three-Part IELTS test.
+AI Speaking supplied the original response captures from controlled Production
+probes on 2026-10-31. AIHUB captured the additional complete-exam fixtures in
+controlled Production probes on 2026-11-02 (#1478). There is no staging
+environment. The original success flow submitted two Part 1 questions,
+aggregated their Part, aggregated a test result, and read back the question,
+Part, and test results; it did not represent a complete three-Part IELTS test.
 
 | File                                       | Operation / result                                                       | HTTP |
 | ------------------------------------------ | ------------------------------------------------------------------------ | ---: |
@@ -41,20 +42,24 @@ three-Part IELTS test.
 The `grading-v2-exam-*` files are one complete three-Part exam captured on
 2026-11-02 (#1478): five graded questions, three Part aggregations and the Test
 aggregation, with synthetic speech and identity and `test_type` sent as
-`Full-test`. A first run gave the questions a `test_code` that differed from the
-`test_id` of the aggregations, and the Test aggregation answered
-`422 mixed_tests`; the second run set both to the same value and answered 200.
-The provider also answered 200, with the stored question count, to an
-`expected_question_count` that did not match, and accepted `full_test` as well as
-`Full-test` on a Part aggregation.
+`Full-test`. A first run used a question `test_code` different from the Test
+aggregation's `test_id` and received `422 mixed_tests`; a second run used the
+same value and received 200. The provider later confirmed the exact rules in
+[#1450](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450#issuecomment-6608652752):
+Test aggregation requires each stored question `test_id` to be null or equal to
+the request `test_id`, while Part aggregation compares only the distinct
+non-null stored values within that Part. The provider also answered 200, with
+the stored question count, to a mismatched `expected_question_count`, and
+accepted `full_test` as well as `Full-test` on a Part aggregation.
 
 The provider's v2.4 request and tenant contract, including the required
 `X-AIHUB-*` headers, is summarized in
 [`ai-speaking-grading-v2.4.md`](../../../docs/contracts/ai-services/ai-speaking-grading-v2.4.md).
 The captures are evidence of provider behavior, not an approved AIHUB public
-`/v2` response baseline. In particular, the provider requires a UUID
-Organization header while AIHUB customer Organization IDs use `org_...`; the
-mapping remains unresolved. A `429 rate_limited` response was not captured.
+`/v2` response baseline. The provider's 2026-10-31 release accepts AIHUB's
+`org_...` Organization IDs directly; cross-Organization isolation still needs
+its separate evidence under #1456. A `429 rate_limited` response was not
+captured.
 
 Every non-allowlisted string was replaced with `[redacted]`; only the root
 `status`, `error.code`, and `data.meta.schema_version`, `result_type`, and

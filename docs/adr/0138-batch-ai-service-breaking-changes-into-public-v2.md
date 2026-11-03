@@ -86,10 +86,12 @@ the snake_case `data_micro` codes with standard ones (`LR03`, `TR05`); and drops
    429 becomes `AI_SERVICE_THROTTLED` and now forwards the provider's
    `Retry-After` for `/v1` and `/v2` alike. 503 `storage_unavailable` becomes
    `AI_SERVICE_UNAVAILABLE` with its `Retry-After`. 502 and 504 keep
-   `AI_SERVICE_ERROR` and `AI_SERVICE_TIMEOUT`. The provider's aggregation 422
-   errors are not captured yet, so they stay in the `AI_SERVICE_ERROR` family;
-   a dedicated public code waits for the captures and for the Customer Web
-   contract to list it first ([#1450](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450)).
+   `AI_SERVICE_ERROR` and `AI_SERVICE_TIMEOUT`. One provider `mixed_tests` 422
+   is captured, and the provider has supplied a written list of four
+   aggregation 422 codes. They remain in the `AI_SERVICE_ERROR` family under
+   the current public contract; a dedicated code still waits for the Customer
+   Web contract to list it first ([#1450](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450),
+   [#1478](https://github.com/AiHub-Ecosystem/aihub-be/issues/1478)).
 7. **The three POSTs keep `idempotency: 'none'`,** as `/v1` Speaking does.
    Optional idempotency for a 25 MiB multipart body is a separate decision and
    can be added without breaking a client. The documentation states that a
@@ -138,9 +140,10 @@ the snake_case `data_micro` codes with standard ones (`LR03`, `TR05`); and drops
   (`full_test` against `Full-test`), the list of aggregation error codes, and
   how long stored results are kept.
 - A complete three-Part exam (Part 1, 2, 3, then Part and Test aggregation) is
-  captured as fixtures from the Test environment.
-- Cross-Organization and cross-User isolation for the opaque IDs is verified
-  under #70.
+  captured as fixtures from controlled Production probes using generated
+  speech and synthetic identifiers (#1478).
+- Cross-Organization and cross-User isolation for the opaque IDs is being
+  collected for acceptance under #1456 (carried over from closed #70).
 - AIHUB serves the complete `/v2` route set and publishes the OpenAPI document,
   customer changelog and Integration Guide migration instructions required by
   ADR-0127.
@@ -163,3 +166,21 @@ Decision 4's durable ownership key also includes the request environment
 (`production` or `sandbox`). Checks run in `prepareInput`, after the existing
 graded admission steps and before provider dispatch; the ADR-0057 chain order
 does not change.
+
+### Provider evidence amendment ([#1450](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450), 2026-11-03)
+
+The AI Speaking provider confirmed that its `/v1` endpoint has no fixed removal
+date and remains available while WISPACE uses it; it will notify AIHUB before
+turning it off. The provider also confirmed the `test_type` request values,
+listed the aggregation errors, and stated that results do not expire
+automatically. Question results are normally readable immediately; a rare
+provider write failure can still return a grade whose result later reads as
+`404`, in which case the caller must re-grade. The v2.4 `mixed_tests` grouping
+rules and the provider's list of all four aggregation 422 codes are recorded in
+the [v2.4 provider contract](../contracts/ai-services/ai-speaking-grading-v2.4.md).
+
+AIHUB ownership records therefore have no age-based expiry while provider
+results do not expire. Organization deletion must remove the records as part
+of the Organization purge tracked by #1480 and #1086; the finite-age prune
+described by #1479 is not applicable. ADR-0138 remains Proposed until provider
+isolation evidence and WISPACE/AIHUB schema approvals are complete.

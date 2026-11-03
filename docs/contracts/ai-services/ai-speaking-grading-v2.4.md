@@ -13,6 +13,10 @@ reports that all captured traffic used synthetic test data. There is no
 staging environment. Credentials, audio, transcripts, feedback text, and raw
 response strings are not stored in the fixtures.
 
+Written provider answers received on 2026-11-02 and 2026-11-03 are recorded
+below ([#1450, answers 2–4](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450#issuecomment-6581758654),
+[#1450, answer 10](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450#issuecomment-6608652752)).
+
 On 2026-10-31, AI Speaking deployed commit `148f126` to accept AIHUB's opaque
 `org_...` Organization IDs while retaining legacy UUID support. A controlled
 Production question-grade request using a synthetic `org_...` ID returned
@@ -76,6 +80,21 @@ grading adapters.
 `response_ids` must identify results to aggregate. Neither JSON request has a
 `user_id` field. The three GET operations identify their result in the path.
 
+The provider accepts `Practice`, `Full-test`, and `full_test` for `test_type`,
+case-insensitively. Question grading defaults it to `Practice`; Part and Test
+aggregation can omit it, in which case the stored question value is used.
+Responses return `practice` or `full_test` in `data.meta.test_type`.
+
+Question grading trims `test_code` and stores it as that result's `test_id`,
+also returned in `data.meta.test_id`. An omitted or empty `test_code` stores
+`null`. For Test aggregation with `test_id: Y`, each referenced answer must
+have a stored `test_id` of `null` or exactly `Y` (case-sensitive); another
+value produces `422 mixed_tests`, even if all answers share that other value.
+Part aggregation does not compare its request `test_id` with stored values. It
+returns `422 mixed_tests` only if answers for that `part_result_id` contain two
+or more distinct non-null stored `test_id` values. The request `test_id` labels
+the Part result; when omitted, the stored value is used.
+
 ## 4. Responses and errors
 
 Success responses use `{ status, error, usage, data }`. The provider says all
@@ -102,6 +121,20 @@ All observed failures use the provider envelope with `usage: null` and
 `data: null`. Clients should branch on `error.code`, not the mutable message.
 The supplied captures do not include a `429`, `502`, `503`, or `504` response.
 
+For both aggregation POSTs, the provider's written list of `422` codes is:
+
+| `error.code`           | Provider-stated condition                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `mixed_tests`          | Referenced answers do not satisfy the Test or Part `test_id` grouping rules above.                  |
+| `mixed_parts`          | Answers in one `part_result_id` span multiple Parts, or two groups in one Test cover the same Part. |
+| `not_v2_result`        | A referenced answer is not a stored v2.4 question result.                                           |
+| `mixed_scorer_engines` | Referenced answers were scored by different engines.                                                |
+
+The provider says these four codes mean the request combined answers that do
+not belong together and share the standard error envelope. A real
+`mixed_tests` capture is in the fixtures; the other three codes have written
+descriptions but no captured response yet.
+
 ## 5. Tenant storage and v1 compatibility
 
 The provider says question, Part, and test records are stored and retrieved by
@@ -118,16 +151,27 @@ value for new records; an absent or malformed optional identity-header set
 retains the previous default Organization. Existing v1 records are not
 migrated and v2.4 cannot read them.
 
+The provider stated on 2026-11-02 that stored results do not expire
+automatically and remain until the Organization asks for deletion. It will
+notify AIHUB before introducing an expiry. Question grading normally persists
+the result before returning, so it is available to read or aggregate
+immediately; v2.4 has no one-to-two-second read delay. Part and Test
+aggregation wait briefly for answers still being saved before returning 404.
+In the rare case that the question result write fails, the provider may still
+return the grade and later reads return 404; the caller should re-grade the
+question, since retrying the read will not help.
+
 ## 6. AIHUB integration status
 
 AIHUB's Integration Guide documents customer Organization IDs as opaque
 `org_...` strings. AI Speaking commit `148f126` now accepts those IDs directly
 and retains legacy UUID support, so AIHUB does not need a derived mapping. The
 Production POST and GET smoke above verifies one synthetic Organization/User
-pair only; cross-Organization isolation remains owned by #70 and still needs
-its own evidence. Existing v1 records are not migrated.
+pair only; cross-Organization isolation still needs its separate evidence in
+#1456. Existing v1 records are not migrated.
 
 The captures demonstrate two question results in one Part 1 flow, Part/Test
-aggregation, reads, header/auth failures, unreadable audio, and a cross-User 404. They do not constitute AIHUB approval of the public `/v2` response schema
-or prove a complete three-Part exam. WISPACE and AIHUB review remain required
+aggregation, reads, header/auth failures, unreadable audio, a cross-User 404,
+and a complete three-Part exam (#1478). They do not constitute AIHUB approval
+of the public `/v2` response schema. WISPACE and AIHUB review remain required
 under [ADR-0138](../../adr/0138-batch-ai-service-breaking-changes-into-public-v2.md).

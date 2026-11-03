@@ -27,6 +27,14 @@ describe('parseSpeakingV2ProviderError', () => {
     ).toMatchObject({ code: 'NOT_FOUND', retryable: false });
   });
 
+  it('keeps captured aggregation 422 on the dispatcher generic fallback', () => {
+    expect(
+      parseSpeakingV2ProviderError(
+        fixture('grading-v2-test-mixed-tests.422.json'),
+      ),
+    ).toBeUndefined();
+  });
+
   it('does not guess an undocumented provider error code', () => {
     const body = fixture('grading-v2-audio-unreadable.422.json') as {
       error: { code: string };
