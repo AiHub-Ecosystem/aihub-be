@@ -10,7 +10,6 @@ import type {
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import { organizationSuspensionClosesSurface } from '@/modules/identity/membership/application/organization-membership.authorization';
 import {
-  identityStoreError,
   identityStoreUnavailable,
   invalidIdentityData,
   membershipRoleValue,
@@ -23,6 +22,7 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { invalidInvitationInput } from './organization-invitation-input';
 
 /**
  * Locks the invitation, not the organization: the real contention is two
@@ -86,9 +86,7 @@ export class PostgresOrganizationInvitationAcceptRepository {
       !isOrganizationContextAllowed(input.context, { kind: 'forbidden' }) ||
       !/^[0-9a-f]{64}$/.test(input.tokenHash)
     ) {
-      throw identityStoreError(
-        'Identity organization invitation input is invalid',
-      );
+      throw invalidInvitationInput();
     }
 
     try {

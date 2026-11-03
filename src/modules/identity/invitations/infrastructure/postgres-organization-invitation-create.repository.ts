@@ -12,7 +12,6 @@ import type {
   CreateOrganizationInvitationResult,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
-  identityStoreError,
   identityStoreUnavailable,
   invalidIdentityData,
   stringValue,
@@ -23,6 +22,7 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { invalidInvitationInput } from './organization-invitation-input';
 
 /**
  * Locking the organization row serializes concurrent invitations for the same
@@ -61,9 +61,7 @@ export class PostgresOrganizationInvitationCreateRepository {
       !/^[0-9a-f]{64}$/.test(input.tokenHash) ||
       input.expiresAt.getTime() <= input.now.getTime()
     ) {
-      throw identityStoreError(
-        'Identity organization invitation input is invalid',
-      );
+      throw invalidInvitationInput();
     }
 
     try {

@@ -4,13 +4,13 @@ import type {
   OpenOrganizationInvitationRecord,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
 import {
-  identityStoreError,
   identityStoreUnavailable,
   invalidIdentityData,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
 import type { IdentityRepositoryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { mapOpenOrganizationInvitation } from './map-open-organization-invitation';
+import { invalidInvitationInput } from './organization-invitation-input';
 
 /** Lists the open invitations of one Organization. */
 export class PostgresOrganizationInvitationReadRepository {
@@ -38,9 +38,7 @@ export class PostgresOrganizationInvitationReadRepository {
           typeof input.after.id !== 'string' ||
           input.after.id.trim().length === 0))
     ) {
-      throw identityStoreError(
-        'Identity organization invitation input is invalid',
-      );
+      throw invalidInvitationInput();
     }
 
     // The issuer is read through the relation, so a broken identity projection

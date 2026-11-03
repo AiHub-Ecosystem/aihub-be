@@ -16,7 +16,6 @@ import {
 } from '@/modules/identity/membership/application/organization-membership.authorization';
 import {
   dateValue,
-  identityStoreError,
   identityStoreUnavailable,
   invalidIdentityData,
   membershipRoleValue,
@@ -29,6 +28,7 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import { invalidInvitationInput } from './organization-invitation-input';
 
 const LOCK_ORGANIZATION_FOR_REVOKE_SQL = `
   SELECT id, status
@@ -64,9 +64,7 @@ export class PostgresOrganizationInvitationRevokeRepository {
       !(input.now instanceof Date) ||
       Number.isNaN(input.now.getTime())
     ) {
-      throw identityStoreError(
-        'Identity organization invitation input is invalid',
-      );
+      throw invalidInvitationInput();
     }
 
     const stamp = auditStamp(input, input.actorUserId, input.now);
