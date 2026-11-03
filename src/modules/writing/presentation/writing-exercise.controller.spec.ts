@@ -3,9 +3,14 @@ import type {
   GradedPipelineContext,
   GradedPipelineEnginePort,
 } from '@/modules/gateway/public/graded-pipeline';
-import * as pipelineContext from '@/modules/gateway/public/graded-pipeline';
+import { createGradedPipelineContext } from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { WritingExerciseController } from './writing-exercise.controller';
+
+jest.mock('../../gateway/public/graded-pipeline', () => ({
+  GRADED_PIPELINE_ENGINE: Symbol('GRADED_PIPELINE_ENGINE'),
+  createGradedPipelineContext: jest.fn(),
+}));
 
 function controllerWithDispatch() {
   const calls: { operation: string; input: unknown }[] = [];
@@ -28,15 +33,16 @@ const request = {} as AuthenticatedRequest;
 const reply = { header: jest.fn() } as never;
 
 beforeEach(() => {
-  jest
-    .spyOn(pipelineContext, 'createGradedPipelineContext')
-    .mockImplementation(((_request, _reply, operation, prepareInput) => ({
-      operation,
-      prepareInput,
-    })) as typeof pipelineContext.createGradedPipelineContext);
+  jest.mocked(createGradedPipelineContext).mockImplementation(((
+    _request,
+    _reply,
+    operation,
+    prepareInput,
+  ) => ({
+    operation,
+    prepareInput,
+  })) as typeof createGradedPipelineContext);
 });
-
-afterEach(() => jest.restoreAllMocks());
 
 describe('WritingExerciseController', () => {
   it('validates and dispatches micro exercise creation', async () => {
