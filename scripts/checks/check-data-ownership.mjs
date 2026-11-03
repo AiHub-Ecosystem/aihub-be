@@ -83,11 +83,11 @@ const allowlist = new Map([
     'Prisma read of account for first owner',
   ],
   [
-    'src/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository.ts::user_accounts',
+    'src/modules/identity/invitations/infrastructure/postgres-organization-invitation-accept.repository.ts::user_accounts',
     'account status check',
   ],
   [
-    'src/modules/identity/invitations/infrastructure/postgres-organization-invitation.repository.ts::auth_identities',
+    'src/modules/identity/invitations/infrastructure/postgres-organization-invitation-accept.repository.ts::auth_identities',
     'account identity check',
   ],
   [
