@@ -11,9 +11,9 @@ import {
 } from '@/modules/metering/public/usage-retention';
 import {
   WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
+  type WritingChartRevocationAuditRepositoryPort,
   WritingChartRevocationAuditRetentionService,
   calculateWritingChartRevocationAuditCutoff,
-  type WritingChartRevocationAuditRepositoryPort,
 } from '@/modules/writing/public/chart-uploads';
 import { createOperatorMeteringClient } from './operator-metering-client';
 

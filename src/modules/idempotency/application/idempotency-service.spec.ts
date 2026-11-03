@@ -109,6 +109,16 @@ function input(requestId = 'req_1', timeoutMs = 50) {
   };
 }
 
+async function withFakeTimers(run: () => Promise<void>): Promise<void> {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date('2026-11-03T00:00:00.000Z'));
+  try {
+    await run();
+  } finally {
+    jest.useRealTimers();
+  }
+}
+
 describe('IdempotencyService', () => {
   it('checks for an exact completed gateway replay without reserving or changing the record', async () => {
     const repository = new FakeRepository();
@@ -301,37 +311,51 @@ describe('IdempotencyService', () => {
   });
 
   it('returns timeout at the operation deadline while allowing sent work to complete in the background', async () => {
-    const repository = new FakeRepository();
-    repository.nextReservations.push(
-      { kind: 'claimed', requestId: 'req_timeout' },
-      { kind: 'conflict', reason: 'pending' },
-    );
-    const service = new IdempotencyService(repository);
-    let resolveWork: ((value: { value: string }) => void) | undefined;
-    const workPromise = new Promise<{ value: string }>((resolve) => {
-      resolveWork = resolve;
-    });
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-11-03T00:00:00.000Z'));
+    try {
+      const repository = new FakeRepository();
+      repository.nextReservations.push(
+        { kind: 'claimed', requestId: 'req_timeout' },
+        { kind: 'conflict', reason: 'pending' },
+      );
+      const service = new IdempotencyService(repository);
+      let resolveWork: ((value: { value: string }) => void) | undefined;
+      const workPromise = new Promise<{ value: string }>((resolve) => {
+        resolveWork = resolve;
+      });
 
-    await expect(
-      service.execute(
-        input('req_timeout', 10),
-        () => workPromise,
-        () => ({ value: 'unused' }),
-      ),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT', httpStatus: 504 });
-    await expect(
-      service.execute(
-        input('req_timeout_retry', 10),
-        async () => ({ value: 'unused' }),
-        () => ({ value: 'unused' }),
-      ),
-    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+      const timedOut = service
+        .execute(
+          {
+            ...input('req_timeout', 10),
+            backgroundLifecycle: { started: jest.fn(), settled: jest.fn() },
+          },
+          () => workPromise,
+          () => ({ value: 'unused' }),
+        )
+        .catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(10);
+      expect(await timedOut).toMatchObject({
+        code: 'AI_SERVICE_TIMEOUT',
+        httpStatus: 504,
+      });
+      await expect(
+        service.execute(
+          input('req_timeout_retry', 10),
+          async () => ({ value: 'unused' }),
+          () => ({ value: 'unused' }),
+        ),
+      ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
 
-    resolveWork?.({ value: 'completed-after-timeout' });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(repository.completed[0]?.responseBody).toEqual({
-      value: 'completed-after-timeout',
-    });
+      resolveWork?.({ value: 'completed-after-timeout' });
+      await jest.advanceTimersByTimeAsync(0);
+      expect(repository.completed[0]?.responseBody).toEqual({
+        value: 'completed-after-timeout',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('counts reservation time against the ingress response deadline and keeps work running', async () => {
@@ -400,41 +424,44 @@ describe('IdempotencyService', () => {
     }
   });
 
-  it('signals background lifecycle around work that outlives the response deadline', async () => {
-    const repository = new FakeRepository();
-    repository.nextReservations.push({
-      kind: 'claimed',
-      requestId: 'req_background_lifecycle',
-    });
-    const service = new IdempotencyService(repository);
-    let resolveWork: ((value: { value: string }) => void) | undefined;
-    const workPromise = new Promise<{ value: string }>((resolve) => {
-      resolveWork = resolve;
-    });
-    const lifecycle = {
-      started: jest.fn(),
-      settled: jest.fn(),
-    };
+  it('signals background lifecycle around work that outlives the response deadline', () =>
+    withFakeTimers(async () => {
+      const repository = new FakeRepository();
+      repository.nextReservations.push({
+        kind: 'claimed',
+        requestId: 'req_background_lifecycle',
+      });
+      const service = new IdempotencyService(repository);
+      let resolveWork: ((value: { value: string }) => void) | undefined;
+      const workPromise = new Promise<{ value: string }>((resolve) => {
+        resolveWork = resolve;
+      });
+      const lifecycle = {
+        started: jest.fn(),
+        settled: jest.fn(),
+      };
 
-    await expect(
-      service.execute(
-        {
-          ...input('req_background_lifecycle', 50),
-          backgroundLifecycle: lifecycle,
-        },
-        () => workPromise,
-        () => ({ value: 'unused' }),
-      ),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+      const timedOut = service
+        .execute(
+          {
+            ...input('req_background_lifecycle', 50),
+            backgroundLifecycle: lifecycle,
+          },
+          () => workPromise,
+          () => ({ value: 'unused' }),
+        )
+        .catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(50);
+      expect(await timedOut).toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
 
-    expect(lifecycle.started).toHaveBeenCalledTimes(1);
-    expect(lifecycle.settled).not.toHaveBeenCalled();
+      expect(lifecycle.started).toHaveBeenCalledTimes(1);
+      expect(lifecycle.settled).not.toHaveBeenCalled();
 
-    resolveWork?.({ value: 'done' });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+      resolveWork?.({ value: 'done' });
+      await jest.advanceTimersByTimeAsync(0);
 
-    expect(lifecycle.settled).toHaveBeenCalledTimes(1);
-  });
+      expect(lifecycle.settled).toHaveBeenCalledTimes(1);
+    }));
 
   it('answers a 125-second request with a timeout and still completes the record when the work ends 100 seconds later (#1455)', async () => {
     jest.useFakeTimers();
@@ -489,41 +516,46 @@ describe('IdempotencyService', () => {
     ['fails', false, 0],
   ])(
     'reports background completion only when the late work %s',
-    async (_label, succeeds, completions) => {
-      const repository = new FakeRepository();
-      const service = new IdempotencyService(repository);
-      let finish: ((ok: boolean) => void) | undefined;
-      const workPromise = new Promise<{ value: string }>((resolve, reject) => {
-        finish = (ok) =>
-          ok ? resolve({ value: 'done' }) : reject(new Error('downstream'));
-      });
-      const lifecycle = {
-        started: jest.fn(),
-        settled: jest.fn(),
-        completed: jest.fn(),
-      };
-
-      await expect(
-        service.execute(
-          {
-            ...input('req_background_completed', 50),
-            backgroundLifecycle: lifecycle,
+    (_label, succeeds, completions) =>
+      withFakeTimers(async () => {
+        const repository = new FakeRepository();
+        const service = new IdempotencyService(repository);
+        let finish: ((ok: boolean) => void) | undefined;
+        const workPromise = new Promise<{ value: string }>(
+          (resolve, reject) => {
+            finish = (ok) =>
+              ok ? resolve({ value: 'done' }) : reject(new Error('downstream'));
           },
-          () => workPromise,
-          () => ({ value: 'unused' }),
-        ),
-      ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
-      expect(lifecycle.completed).not.toHaveBeenCalled();
+        );
+        const lifecycle = {
+          started: jest.fn(),
+          settled: jest.fn(),
+          completed: jest.fn(),
+        };
 
-      finish?.(succeeds);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+        const timedOut = service
+          .execute(
+            {
+              ...input('req_background_completed', 50),
+              backgroundLifecycle: lifecycle,
+            },
+            () => workPromise,
+            () => ({ value: 'unused' }),
+          )
+          .catch((error: unknown) => error);
+        await jest.advanceTimersByTimeAsync(50);
+        expect(await timedOut).toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+        expect(lifecycle.completed).not.toHaveBeenCalled();
 
-      expect({
-        completed: lifecycle.completed.mock.calls.length,
-        stored: repository.completed.length,
-        settled: lifecycle.settled.mock.calls.length,
-      }).toEqual({ completed: completions, stored: completions, settled: 1 });
-    },
+        finish?.(succeeds);
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect({
+          completed: lifecycle.completed.mock.calls.length,
+          stored: repository.completed.length,
+          settled: lifecycle.settled.mock.calls.length,
+        }).toEqual({ completed: completions, stored: completions, settled: 1 });
+      }),
   );
 
   it('does not report background completion for work that answered in time', async () => {
@@ -569,28 +601,38 @@ describe('IdempotencyService', () => {
   });
 
   it('marks a sent request failed at the hard deadline if the work ignores cancellation', async () => {
-    const repository = new FakeRepository();
-    repository.nextReservations.push({
-      kind: 'claimed',
-      requestId: 'req_hard',
-    });
-    const service = new IdempotencyService(repository);
-    let workSignal: AbortSignal | undefined;
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-11-03T00:00:00.000Z'));
+    try {
+      const repository = new FakeRepository();
+      repository.nextReservations.push({
+        kind: 'claimed',
+        requestId: 'req_hard',
+      });
+      const service = new IdempotencyService(repository);
+      let workSignal: AbortSignal | undefined;
 
-    await expect(
-      service.execute(
-        input('req_hard', 5),
-        ({ signal }) => {
-          workSignal = signal;
-          return new Promise<{ value: string }>(() => undefined);
-        },
-        () => ({ value: 'unused' }),
-      ),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
-
-    await new Promise((resolve) => setTimeout(resolve, 15));
-    expect(repository.failed[0]?.requestId).toBe('req_hard');
-    expect(workSignal?.reason).toMatchObject({ name: 'TimeoutError' });
+      const lifecycle = { started: jest.fn(), settled: jest.fn() };
+      const timedOut = service
+        .execute(
+          { ...input('req_hard', 5), backgroundLifecycle: lifecycle },
+          ({ signal }) => {
+            workSignal = signal;
+            return new Promise<{ value: string }>(() => undefined);
+          },
+          () => ({ value: 'unused' }),
+        )
+        .catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(5);
+      expect(await timedOut).toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+      expect(lifecycle.started).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(5);
+      expect(lifecycle.settled).toHaveBeenCalledTimes(1);
+      expect(repository.failed[0]?.requestId).toBe('req_hard');
+      expect(workSignal?.reason).toMatchObject({ name: 'TimeoutError' });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   // A downstream 401 or 403 blames AIHUB's credential, so the attempt is marked
@@ -628,39 +670,42 @@ describe('IdempotencyService', () => {
     },
   );
 
-  it('deletes the record when delayed downstream work eventually returns a 4xx', async () => {
-    const repository = new FakeRepository();
-    repository.nextReservations.push({
-      kind: 'claimed',
-      requestId: 'req_background_client_error',
-    });
-    const service = new IdempotencyService(repository);
-    let rejectWork: ((error: unknown) => void) | undefined;
-    const workPromise = new Promise<{ value: string }>((_, reject) => {
-      rejectWork = reject;
-    });
-    const downstreamClientError = new AppError({
-      code: 'AI_SERVICE_ERROR',
-      message: 'downstream rejected the request',
-      retryable: false,
-      downstreamStatus: 400,
-    });
+  it('deletes the record when delayed downstream work eventually returns a 4xx', () =>
+    withFakeTimers(async () => {
+      const repository = new FakeRepository();
+      repository.nextReservations.push({
+        kind: 'claimed',
+        requestId: 'req_background_client_error',
+      });
+      const service = new IdempotencyService(repository);
+      let rejectWork: ((error: unknown) => void) | undefined;
+      const workPromise = new Promise<{ value: string }>((_, reject) => {
+        rejectWork = reject;
+      });
+      const downstreamClientError = new AppError({
+        code: 'AI_SERVICE_ERROR',
+        message: 'downstream rejected the request',
+        retryable: false,
+        downstreamStatus: 400,
+      });
 
-    await expect(
-      service.execute(
-        input('req_background_client_error', 50),
-        () => workPromise,
-        () => ({ value: 'unused' }),
-      ),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
+      const timedOut = service
+        .execute(
+          input('req_background_client_error', 50),
+          () => workPromise,
+          () => ({ value: 'unused' }),
+        )
+        .catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(50);
+      expect(await timedOut).toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
 
-    rejectWork?.(downstreamClientError);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(repository.deleted[0]?.requestId).toBe(
-      'req_background_client_error',
-    );
-    expect(repository.failed).toHaveLength(0);
-  });
+      rejectWork?.(downstreamClientError);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(repository.deleted[0]?.requestId).toBe(
+        'req_background_client_error',
+      );
+      expect(repository.failed).toHaveLength(0);
+    }));
 
   it('ignores an idempotency key for operations catalogued as none', async () => {
     const repository = new FakeRepository();
