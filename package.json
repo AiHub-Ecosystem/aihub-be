@@ -78,7 +78,7 @@
     "test:related": "bun run test -- --changed=origin/main",
     "check:changed": "node scripts/checks/check-changed.mjs",
     "check:batch": "node scripts/checks/check-batch.cjs",
-    "test:check-app-errors": "tsx --test scripts/checks/check-app-errors.spec.ts",
+    "test:check-app-errors": "jest --runTestsByPath scripts/checks/check-app-errors.spec.ts",
     "test:check-changed": "node --test scripts/checks/check-changed.spec.mjs"
   },
   "dependencies": {
