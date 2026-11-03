@@ -2,7 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import {
   requireIdempotencyKey,
   resolveIdempotencyKey,
-} from './idempotency-key';
+} from '@/modules/idempotency/application/idempotency-key';
 
 describe('requireIdempotencyKey', () => {
   it('trims an opaque key and enforces the UTF-8 byte limit', () => {

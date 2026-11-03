@@ -1,6 +1,6 @@
 # ADR-0058: A concurrency permit is acquired and released by one unit
 
-- Status: Accepted
+- Status: Accepted; the proposed change in [ADR-0147](0147-graded-pipeline-engine-owns-execution-lifecycle.md) awaits owner approval, and this decision remains active meanwhile
 - Related issue: #172
 - Related: [ADR-0057](0057-graded-request-order-is-a-declared-contract.md), [ADR-0018](0018-monthly-quota-enforcement.md)
 

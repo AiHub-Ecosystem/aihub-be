@@ -1,19 +1,14 @@
 import type { ArgumentsHost, ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 
-import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
-import type {
-  GradedAdmissionDecision,
-  GradedAdmissionPort,
-} from '@/modules/gateway/application/graded-admission.port';
-import type {
-  QuotaCounterPort,
-  QuotaCounterRequest,
-} from '@/modules/gateway/application/quota-counter.port';
-import { quotaUnverifiableError } from '@/modules/gateway/application/quota-period';
+import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
+import type { GradedAdmissionDecision } from '@/modules/gateway/application/graded-admission.port';
+import { GradedPipelineEngine } from '@/modules/gateway/application/graded-pipeline-engine';
+import type { GradedPipelineContext } from '@/modules/gateway/application/graded-pipeline.port';
+import type { GradingOrchestratorPort } from '@/modules/gateway/application/grading-orchestrator.port';
+import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { openMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import { MeteringService } from '@/modules/metering/application/metering.service';
 import type {
   UsageRecord,
@@ -21,9 +16,9 @@ import type {
 } from '@/modules/metering/application/usage-repository.port';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
-import { GradedAdmissionGuard } from './graded-admission.guard';
+import { openMeteringEvidence } from '@/modules/metering/public/metering-evidence';
 
-class FakeQuotaCounter implements QuotaCounterPort {
+class FakeQuotaCounter {
   unavailable = false;
   readonly increments: string[] = [];
 
@@ -31,10 +26,8 @@ class FakeQuotaCounter implements QuotaCounterPort {
     return this.increments.length;
   }
 
-  async increment(request: QuotaCounterRequest): Promise<void> {
-    if (this.unavailable) {
-      throw new Error('redis unavailable');
-    }
+  async increment(request: { organizationId: string }): Promise<void> {
+    if (this.unavailable) throw new Error('redis unavailable');
     this.increments.push(request.organizationId);
   }
 }
@@ -64,11 +57,17 @@ function requestFor(
 ): Record<string, unknown> {
   const request: Record<string, unknown> = {
     id: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+    raw: {},
     headers: {},
-    routeOptions: { url: OPERATION_CATALOG['writing.task1.grade'].path },
   };
   const authenticated = { ...baseAuthenticated, ...overrides };
-  request.aihubAuth = authenticated;
+  request['aihubAuth'] = authenticated;
+  request['aihubIdentity'] = {
+    userId: 'user_acme',
+    organizationId: authenticated.organizationId,
+    scopes: [],
+    mode: 'declared_id',
+  };
   openMeteringEvidence(request, {
     operation: 'writing.task1.grade',
     organizationId: authenticated.organizationId,
@@ -76,14 +75,6 @@ function requestFor(
     environment: authenticated.environment,
   });
   return request;
-}
-
-function executionContextFor(
-  request: Record<string, unknown>,
-): ExecutionContext {
-  return {
-    switchToHttp: () => ({ getRequest: () => request }),
-  } as ExecutionContext;
 }
 
 function httpContextFor(
@@ -98,29 +89,107 @@ function httpContextFor(
   } as ArgumentsHost;
 }
 
-const now = () => new Date('2026-09-16T12:00:00.000Z');
-
-/** Graded admission with a fixed outcome: a decision, or a thrown refusal. */
-function admissionGuard(
+function runEngine(
+  request: Record<string, unknown>,
   outcome: GradedAdmissionDecision | AppError,
-): GradedAdmissionGuard {
-  const port: GradedAdmissionPort = {
+  dispatchError?: AppError,
+): Promise<unknown> {
+  const authenticated = request['aihubAuth'] as AuthenticatedApiKey;
+  const identity = request[
+    'aihubIdentity'
+  ] as GradedPipelineContext<'writing.task1.grade'>['identity'];
+  const requestId = String(request['id']);
+  const engineContext: GradedPipelineContext<'writing.task1.grade'> = {
+    requestId,
+    receivedAt: new Date('2026-09-16T12:00:00.000Z'),
+    signal: new AbortController().signal,
+    dispose: () => undefined,
+    operation: 'writing.task1.grade',
+    authenticated,
+    identity,
+    idempotencyKey: 'metering-component-key',
+    metering: {
+      evidence: request[
+        'aihubMetering'
+      ] as GradedPipelineContext<'writing.task1.grade'>['metering']['evidence'],
+      setDimensions: () => undefined,
+      addEvidence: (evidence) => {
+        const current = request['aihubMetering'] as Record<string, unknown>;
+        Object.assign(current, evidence);
+      },
+      markCompletionStarted: () => undefined,
+      markCompletionSettled: () => undefined,
+    },
+    markAdmission: () => undefined,
+    prepareInput: async () => ({
+      input: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'A clear essay.',
+        image_url: 'https://example.com/chart.png',
+      },
+    }),
+  };
+  const admission = {
     consume: async () => {
       if (outcome instanceof AppError) throw outcome;
       return outcome;
     },
   };
-  return new GradedAdmissionGuard(port, undefined, now);
+  const concurrency: ConcurrencyLimiterPort = {
+    acquire: async () => ({
+      allowed: true,
+      lease: { release: async () => undefined },
+    }),
+  };
+  const orchestrator = {
+    execute: async (command: { operation: 'writing.task1.grade' }) => {
+      if (dispatchError !== undefined) throw dispatchError;
+      return {
+        operation: command.operation,
+        data: { band: 7 },
+        downstreamMs: 80,
+      };
+    },
+  } as unknown as GradingOrchestratorPort;
+  const idempotency = {} as IdempotencyServicePort;
+  const engine = new GradedPipelineEngine(
+    orchestrator,
+    { finalize: async () => undefined },
+    admission,
+    concurrency,
+    idempotency,
+  );
+  return engine.execute(engineContext);
 }
 
-describe('quota and metering component behaviour', () => {
-  it('hard-stop refuses an unverifiable quota with a retryable 503 and records a non-billable error', async () => {
+async function completeSuccess(
+  request: Record<string, unknown>,
+  result: unknown,
+  metering: MeteringService,
+): Promise<void> {
+  await firstValueFrom(
+    new SuccessEnvelopeInterceptor(metering).intercept(
+      httpContextFor(request, { header: jest.fn() }) as ExecutionContext,
+      { handle: () => of(result) },
+    ),
+  );
+}
+
+describe('quota and metering through GradedPipelineEngine', () => {
+  it('hard-stop refuses an unverifiable quota and records a non-billable error', async () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor({ hardStopOnQuota: true });
-    const quota = admissionGuard(quotaUnverifiableError());
-
-    const failure = await quota.canActivate(executionContextFor(request)).then(
+    const failure = await runEngine(
+      request,
+      new AppError({
+        code: 'REDIS_UNAVAILABLE',
+        message: 'Grading controls are temporarily unavailable',
+        retryable: true,
+        retryAfterMs: 1_500,
+      }),
+    ).then(
       () => undefined,
       (error: unknown) => error,
     );
@@ -128,14 +197,13 @@ describe('quota and metering component behaviour', () => {
     expect(failure).toMatchObject({
       code: 'REDIS_UNAVAILABLE',
       httpStatus: 503,
-      // The hint is spread over [1 s, 2 s) (#1352).
-      retryAfterMs: expect.closeTo(1_499.5, -3) as unknown,
+      retryAfterMs: 1_500,
     });
-
     const repository = new FakeUsageRepository();
-    const metering = new MeteringService(repository, undefined, counter);
     const send = jest.fn<void, [unknown]>();
-    await new HttpExceptionFilter(metering).catch(
+    await new HttpExceptionFilter(
+      new MeteringService(repository, undefined, counter),
+    ).catch(
       failure,
       httpContextFor(request, {
         header: jest.fn(),
@@ -143,8 +211,7 @@ describe('quota and metering component behaviour', () => {
       }),
     );
 
-    const responseBody: unknown = send.mock.calls[0]?.[0];
-    expect(responseBody).toMatchObject({
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
       error: { code: 'REDIS_UNAVAILABLE' },
     });
     expect(repository.records[0]).toEqual(
@@ -157,32 +224,21 @@ describe('quota and metering component behaviour', () => {
     );
   });
 
-  it('soft-fail preserves a successful response and records quota uncertainty', async () => {
+  it('preserves an admitted request and records quota uncertainty on success', async () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor();
-    const quota = admissionGuard({
+    const result = await runEngine(request, {
       stage: 'admitted',
       quotaUnverified: true,
     });
-
-    await expect(quota.canActivate(executionContextFor(request))).resolves.toBe(
-      true,
-    );
-
     const repository = new FakeUsageRepository();
-    const metering = new MeteringService(repository, undefined, counter);
     const envelope = await firstValueFrom(
-      new SuccessEnvelopeInterceptor(metering).intercept(
+      new SuccessEnvelopeInterceptor(
+        new MeteringService(repository, undefined, counter),
+      ).intercept(
         httpContextFor(request, { header: jest.fn() }) as ExecutionContext,
-        {
-          handle: () =>
-            of({
-              operation: 'writing.task1.grade',
-              data: { band: 7 },
-              downstreamMs: 80,
-            }),
-        },
+        { handle: () => of(result) },
       ),
     );
 
@@ -196,33 +252,36 @@ describe('quota and metering component behaviour', () => {
     );
   });
 
-  it('soft-fail preserves quota uncertainty for a non-billable error', async () => {
+  it('preserves quota uncertainty for a non-billable dispatch error', async () => {
     const counter = new FakeQuotaCounter();
     counter.unavailable = true;
     const request = requestFor();
+    const error = new AppError({
+      code: 'INVALID_REQUEST',
+      message: 'Request failed validation',
+      retryable: false,
+    });
     await expect(
-      admissionGuard({
-        stage: 'admitted',
-        quotaUnverified: true,
-      }).canActivate(executionContextFor(request)),
-    ).resolves.toBe(true);
+      runEngine(
+        request,
+        {
+          stage: 'admitted',
+          quotaUnverified: true,
+        },
+        error,
+      ),
+    ).rejects.toBe(error);
 
     const repository = new FakeUsageRepository();
-    const send = jest.fn();
     await new HttpExceptionFilter(
       new MeteringService(repository, undefined, counter),
     ).catch(
-      new AppError({
-        code: 'INVALID_REQUEST',
-        message: 'Request failed validation',
-        retryable: false,
-      }),
+      error,
       httpContextFor(request, {
         header: jest.fn(),
-        status: () => ({ send }),
+        status: () => ({ send: jest.fn() }),
       }),
     );
-
     expect(repository.records[0]).toEqual(
       expect.objectContaining({
         outcome: 'client_error',
@@ -232,29 +291,15 @@ describe('quota and metering component behaviour', () => {
     );
   });
 
-  it('advances the quota counter for a billable success on a tracked quota', async () => {
+  it('advances the quota counter for a billable success', async () => {
     const counter = new FakeQuotaCounter();
     const request = requestFor();
-    await expect(
-      admissionGuard({ stage: 'admitted' }).canActivate(
-        executionContextFor(request),
-      ),
-    ).resolves.toBe(true);
-
+    const result = await runEngine(request, { stage: 'admitted' });
     const repository = new FakeUsageRepository();
-    const metering = new MeteringService(repository, undefined, counter);
-    await firstValueFrom(
-      new SuccessEnvelopeInterceptor(metering).intercept(
-        httpContextFor(request, { header: jest.fn() }) as ExecutionContext,
-        {
-          handle: () =>
-            of({
-              operation: 'writing.task1.grade',
-              data: { band: 7 },
-              downstreamMs: 80,
-            }),
-        },
-      ),
+    await completeSuccess(
+      request,
+      result,
+      new MeteringService(repository, undefined, counter),
     );
 
     expect(counter.increments).toEqual(['org_acme']);
@@ -263,28 +308,25 @@ describe('quota and metering component behaviour', () => {
   it('does not advance the quota counter for a non-billable error', async () => {
     const counter = new FakeQuotaCounter();
     const request = requestFor();
-    await expect(
-      admissionGuard({ stage: 'admitted' }).canActivate(
-        executionContextFor(request),
-      ),
-    ).resolves.toBe(true);
+    const error = new AppError({
+      code: 'INVALID_REQUEST',
+      message: 'Request failed validation',
+      retryable: false,
+    });
+    await expect(runEngine(request, { stage: 'admitted' }, error)).rejects.toBe(
+      error,
+    );
 
     const repository = new FakeUsageRepository();
-    const send = jest.fn();
     await new HttpExceptionFilter(
       new MeteringService(repository, undefined, counter),
     ).catch(
-      new AppError({
-        code: 'INVALID_REQUEST',
-        message: 'Request failed validation',
-        retryable: false,
-      }),
+      error,
       httpContextFor(request, {
         header: jest.fn(),
-        status: () => ({ send }),
+        status: () => ({ send: jest.fn() }),
       }),
     );
-
     expect(counter.increments).toEqual([]);
   });
 });

@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
@@ -14,9 +23,10 @@ import {
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
-  GRADED_REQUEST_EXECUTOR,
-  type GradedRequestExecutorPort,
-} from '@/modules/gateway/public/graded-request-executor';
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+  createGradedPipelineContext,
+} from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import {
@@ -32,8 +42,8 @@ const MICRO_GRADE = 'writing.v2.micro-exercises.grade' as const;
 @GradedRequest()
 export class WritingExerciseController {
   constructor(
-    @Inject(GRADED_REQUEST_EXECUTOR)
-    private readonly gradedRequest: GradedRequestExecutorPort,
+    @Inject(GRADED_PIPELINE_ENGINE)
+    private readonly gradedRequest: GradedPipelineEnginePort,
   ) {}
 
   @Post(OPERATION_CATALOG[MICRO_CREATE].path)
@@ -42,18 +52,21 @@ export class WritingExerciseController {
   async createMicro(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<MicroExerciseResponse>> {
-    return this.gradedRequest.execute(request, MICRO_CREATE, () => {
-      const input = parseRequestBody(
-        CreateMicroExerciseRequestSchema,
-        body,
-        request,
-      );
-      if (!isValidWritingExerciseError(input.writing_task, input)) {
-        throw invalidRequest();
-      }
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, MICRO_CREATE, () => {
+        const input = parseRequestBody(
+          CreateMicroExerciseRequestSchema,
+          body,
+          request,
+        );
+        if (!isValidWritingExerciseError(input.writing_task, input)) {
+          throw invalidRequest();
+        }
+        return { input };
+      }),
+    );
   }
 
   @Post(OPERATION_CATALOG[LONG_CREATE].path)
@@ -62,22 +75,25 @@ export class WritingExerciseController {
   async createLongWriting(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<LongWritingExerciseResponse>> {
-    return this.gradedRequest.execute(request, LONG_CREATE, () => {
-      const input = parseRequestBody(
-        CreateLongWritingExerciseRequestSchema,
-        body,
-        request,
-      );
-      if (
-        input.errors.some(
-          (error) => !isValidWritingExerciseError(input.writing_task, error),
-        )
-      ) {
-        throw invalidRequest();
-      }
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, LONG_CREATE, () => {
+        const input = parseRequestBody(
+          CreateLongWritingExerciseRequestSchema,
+          body,
+          request,
+        );
+        if (
+          input.errors.some(
+            (error) => !isValidWritingExerciseError(input.writing_task, error),
+          )
+        ) {
+          throw invalidRequest();
+        }
+        return { input };
+      }),
+    );
   }
 
   @Post(OPERATION_CATALOG[MICRO_GRADE].path)
@@ -86,17 +102,20 @@ export class WritingExerciseController {
   async gradeMicro(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<MicroExerciseGradeResponse>> {
-    return this.gradedRequest.execute(request, MICRO_GRADE, () => {
-      const input = parseRequestBody(
-        GradeMicroExerciseRequestSchema,
-        body,
-        request,
-      );
-      if (!isValidWritingExerciseImage(input.question_image)) {
-        throw invalidRequest();
-      }
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, MICRO_GRADE, () => {
+        const input = parseRequestBody(
+          GradeMicroExerciseRequestSchema,
+          body,
+          request,
+        );
+        if (!isValidWritingExerciseImage(input.question_image)) {
+          throw invalidRequest();
+        }
+        return { input };
+      }),
+    );
   }
 }

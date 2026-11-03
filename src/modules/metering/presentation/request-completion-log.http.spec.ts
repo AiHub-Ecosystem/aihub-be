@@ -28,7 +28,6 @@ import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
-import { GradedAdmissionGuard } from '@/modules/gateway/presentation/graded-admission.guard';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -212,6 +211,8 @@ class ScriptedUsageRepository {
 
 let idempotencyDelayMs = 0;
 let retryBudgetUnavailable = false;
+let admissionDelayMs = 0;
+let admissionRefusalDelayMs = 0;
 let permitReleaseDelayMs = 0;
 let permitReleaseUnavailable = false;
 
@@ -306,6 +307,21 @@ describe('request completion log over the HTTP boundary', () => {
       .overrideProvider(GRADED_ADMISSION)
       .useValue({
         consume: async () => {
+          if (admissionDelayMs > 0) {
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, admissionDelayMs),
+            );
+          }
+          if (admissionRefusalDelayMs > 0) {
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, admissionRefusalDelayMs),
+            );
+            throw new AppError({
+              code: 'QUOTA_EXCEEDED',
+              message: 'Monthly request quota exceeded',
+              retryable: true,
+            });
+          }
           if (retryBudgetUnavailable) {
             throw new AppError({
               code: 'REDIS_UNAVAILABLE',
@@ -370,6 +386,8 @@ describe('request completion log over the HTTP boundary', () => {
     usageRepository.succeed();
     idempotencyDelayMs = 0;
     retryBudgetUnavailable = false;
+    admissionDelayMs = 0;
+    admissionRefusalDelayMs = 0;
     permitReleaseDelayMs = 0;
     permitReleaseUnavailable = false;
     usageRepository.delayMs = 0;
@@ -484,12 +502,8 @@ describe('request completion log over the HTTP boundary', () => {
     expect(log.only()['total_ms']).toBe(usageRepository.records[0]?.totalMs);
   });
 
-  it('includes a slow real guard in response, log, and histograms', async () => {
+  it('includes slow graded admission in response, log, and histograms', async () => {
     const delayMs = 75;
-    const original = getOwnPrototypeMethod(
-      GradedAdmissionGuard.prototype,
-      'canActivate',
-    );
     const totalBefore = await metricValue(
       app,
       'aihub_request_duration_seconds_sum',
@@ -498,12 +512,7 @@ describe('request completion log over the HTTP boundary', () => {
       app,
       'aihub_admission_duration_seconds_sum',
     );
-    const delayGuard = jest
-      .spyOn(GradedAdmissionGuard.prototype, 'canActivate')
-      .mockImplementation(async function (this: GradedAdmissionGuard, context) {
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-        return original.call(this, context);
-      });
+    admissionDelayMs = delayMs;
 
     try {
       const response = await app.inject({
@@ -530,7 +539,7 @@ describe('request completion log over the HTTP boundary', () => {
           admissionBefore,
       ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
     } finally {
-      delayGuard.mockRestore();
+      admissionDelayMs = 0;
     }
   });
 
@@ -677,7 +686,7 @@ describe('request completion log over the HTTP boundary', () => {
     }
   });
 
-  it('records guard refusal time before dispatch in the log and histograms', async () => {
+  it('records admission refusal time before dispatch in the log and histograms', async () => {
     const delayMs = 75;
     const totalBefore = await metricValue(
       app,
@@ -687,16 +696,7 @@ describe('request completion log over the HTTP boundary', () => {
       app,
       'aihub_admission_duration_seconds_sum',
     );
-    const refusalGuard = jest
-      .spyOn(GradedAdmissionGuard.prototype, 'canActivate')
-      .mockImplementation(async () => {
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-        throw new AppError({
-          code: 'QUOTA_EXCEEDED',
-          message: 'Monthly request quota exceeded',
-          retryable: true,
-        });
-      });
+    admissionRefusalDelayMs = delayMs;
 
     try {
       const response = await app.inject({
@@ -718,7 +718,7 @@ describe('request completion log over the HTTP boundary', () => {
           admissionBefore,
       ).toBeGreaterThanOrEqual((delayMs - 10) / 1000);
     } finally {
-      refusalGuard.mockRestore();
+      admissionRefusalDelayMs = 0;
     }
   });
 

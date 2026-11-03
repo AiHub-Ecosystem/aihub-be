@@ -147,11 +147,14 @@ describe('cross-module import rules', () => {
       ),
     ).toBe(false);
     expect(
+      matches(pathNot, 'src/modules/gateway/public/graded-pipeline.ts'),
+    ).toBe(true);
+    expect(
       matches(
         pathNot,
-        'src/modules/gateway/presentation/graded-admission.guard.ts',
+        'src/modules/gateway/presentation/graded-pipeline-context.ts',
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('treats a file declaring module fastify as shared, read from source', () => {

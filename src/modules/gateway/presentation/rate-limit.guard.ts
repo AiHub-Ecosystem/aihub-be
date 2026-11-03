@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { rateLimitedError } from '@/modules/gateway/application/rate-limited-error';
@@ -19,7 +20,7 @@ import { reportStanding } from './rate-limit-standing';
 
 /**
  * The plain per-key rate limit for routes outside the graded-request chain
- * (uploads, sandbox). Graded requests are admitted by `GradedAdmissionGuard`,
+ * (uploads, sandbox). Graded requests are admitted by `GradedPipelineEngine`,
  * which applies this same limit together with the retry budget and the quota.
  *
  * Lives in `gateway` rather than any one operation's module: rate limiting
@@ -42,7 +43,10 @@ export class RateLimitGuard implements CanActivate {
       keyId: authenticated.apiKeyId,
       limit: authenticated.rateLimitRpm,
     });
-    reportStanding(context, decision.standing);
+    reportStanding(
+      context.switchToHttp().getResponse<FastifyReply>(),
+      decision.standing,
+    );
 
     if (!decision.allowed) {
       recordRejected('rate_limit');

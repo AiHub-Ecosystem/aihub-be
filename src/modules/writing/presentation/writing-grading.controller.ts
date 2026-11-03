@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
@@ -11,9 +20,10 @@ import {
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
-  GRADED_REQUEST_EXECUTOR,
-  type GradedRequestExecutorPort,
-} from '@/modules/gateway/public/graded-request-executor';
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+  createGradedPipelineContext,
+} from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { isAllowedTask1ImageUrl } from '@/modules/writing/application/task1-image-url.policy';
@@ -29,8 +39,8 @@ const TASK2_OPERATION = 'writing.task2.grade' as const;
 @GradedRequest()
 export class WritingGradingController {
   constructor(
-    @Inject(GRADED_REQUEST_EXECUTOR)
-    private readonly gradedRequest: GradedRequestExecutorPort,
+    @Inject(GRADED_PIPELINE_ENGINE)
+    private readonly gradedRequest: GradedPipelineEnginePort,
   ) {}
 
   @Post(OPERATION_CATALOG[TASK1_OPERATION].path)
@@ -39,14 +49,17 @@ export class WritingGradingController {
   async gradeTask1(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<GradeResponse>> {
-    return this.gradedRequest.execute(request, TASK1_OPERATION, () => {
-      const input = parseRequestBody(GradeTask1RequestSchema, body, request);
-      if (!isAllowedTask1ImageUrl(input.image_url)) {
-        throw invalidRequest();
-      }
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, TASK1_OPERATION, () => {
+        const input = parseRequestBody(GradeTask1RequestSchema, body, request);
+        if (!isAllowedTask1ImageUrl(input.image_url)) {
+          throw invalidRequest();
+        }
+        return { input };
+      }),
+    );
   }
 
   @Post(OPERATION_CATALOG[TASK2_OPERATION].path)
@@ -55,9 +68,12 @@ export class WritingGradingController {
   async gradeTask2(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<GradeResponse>> {
-    return this.gradedRequest.execute(request, TASK2_OPERATION, () => ({
-      input: parseRequestBody(GradeTask2RequestSchema, body, request),
-    }));
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, TASK2_OPERATION, () => ({
+        input: parseRequestBody(GradeTask2RequestSchema, body, request),
+      })),
+    );
   }
 }

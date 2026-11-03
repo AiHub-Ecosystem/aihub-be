@@ -1,8 +1,7 @@
+import { waitForBackgroundWork as waitForTrackedWork } from '@/common/background-work-tracker';
 import { backgroundDrainMs, largestRequestTimeoutMs } from './shutdown-budget';
 
-let pendingWork = 0;
 let shuttingDown = false;
-const drainWaiters = new Set<() => void>();
 
 /**
  * Shutdown has begun: background loops start no new round, and a round already
@@ -19,44 +18,7 @@ export function isShuttingDown(): boolean {
   return shuttingDown;
 }
 
-export function backgroundWorkStarted(): void {
-  pendingWork += 1;
-}
-
-export function backgroundWorkSettled(): void {
-  if (pendingWork === 0) {
-    return;
-  }
-
-  pendingWork -= 1;
-  if (pendingWork === 0) {
-    for (const resolve of drainWaiters) {
-      resolve();
-    }
-    drainWaiters.clear();
-  }
-}
-
 export function waitForBackgroundWork(): Promise<void> {
-  if (pendingWork === 0) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    let timer: ReturnType<typeof setTimeout>;
-    const finish = (): void => {
-      clearTimeout(timer);
-      drainWaiters.delete(finish);
-      resolve();
-    };
-
-    drainWaiters.add(finish);
-    // Sized for the slowest timed route in the catalog (ADR-0085 amendment).
-    timer = setTimeout(() => {
-      drainWaiters.delete(finish);
-      reject(
-        new Error('Background work did not drain before shutdown deadline'),
-      );
-    }, backgroundDrainMs(largestRequestTimeoutMs()));
-  });
+  // Sized for the slowest timed route in the catalog (ADR-0085 amendment).
+  return waitForTrackedWork(backgroundDrainMs(largestRequestTimeoutMs()));
 }

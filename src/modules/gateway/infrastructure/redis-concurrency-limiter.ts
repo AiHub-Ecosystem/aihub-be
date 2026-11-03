@@ -1,15 +1,15 @@
 import { Logger } from '@nestjs/common';
 
+import {
+  backgroundWorkSettled,
+  backgroundWorkStarted,
+} from '@/common/background-work-tracker';
 import { AppError } from '@/common/errors/app-error';
 import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
-import {
-  backgroundWorkSettled,
-  backgroundWorkStarted,
-  isShuttingDown,
-} from '@/common/http/background-work-drain';
+import { isShuttingDown } from '@/common/http/background-work-drain';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   ConcurrencyDecision,

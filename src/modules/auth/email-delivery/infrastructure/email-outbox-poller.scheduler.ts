@@ -9,8 +9,8 @@ import {
 import {
   backgroundWorkSettled,
   backgroundWorkStarted,
-  isShuttingDown,
-} from '@/common/http/background-work-drain';
+} from '@/common/background-work-tracker';
+import { isShuttingDown } from '@/common/http/background-work-drain';
 import {
   type EmailDeliveryKindLabel,
   type EmailOutboxBacklogSample,

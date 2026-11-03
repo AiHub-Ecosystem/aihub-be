@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { CallHandler } from '@nestjs/common';
-import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
-import { from, lastValueFrom } from 'rxjs';
-
+import { AppError } from '@/common/errors/app-error';
 import {
   QUERY_TIMEOUT_MARGIN_MS,
   REQUEST_POSTGRES_TIMEOUTS,
@@ -13,7 +10,6 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
-import { ConcurrencyPermitInterceptor } from '@/modules/gateway/presentation/concurrency-permit.interceptor';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
 import {
   type PrismaClientHolder,
@@ -50,46 +46,47 @@ const NOOP_LOGGER = { warn: () => undefined, log: () => undefined };
 let pool: ReturnType<typeof createTestPool>;
 let raw: ReturnType<typeof createTenantIsolationRedis>;
 let gatewayRedis: RedisGatewayClient;
-let interceptor: ConcurrencyPermitInterceptor;
+let limiter: RedisConcurrencyLimiter;
 let proxy: TcpFaultProxy;
 let holder: PrismaClientHolder;
 let usage: PostgresUsageRepository;
 let fixture: TenantIsolationFixture;
 
 /** A graded request whose response waits for its usage write, under a permit. */
-function gradedWithUsage(organizationId: string): Promise<unknown> {
+async function gradedWithUsage(organizationId: string): Promise<unknown> {
   const requestId = `req_${randomUUID()}`;
-  const request = {
-    id: requestId,
-    aihubAuth: {
+  const decision = await limiter.acquire({
+    organizationId,
+    maxConcurrent: MAX_CONCURRENT,
+    requestId,
+    environment: 'production',
+  });
+  if (!decision.allowed) {
+    throw new AppError({
+      code: 'CONCURRENCY_LIMIT',
+      message: 'Concurrency limit exceeded',
+      retryable: true,
+      retryAfterMs: decision.retryAfterMs,
+    });
+  }
+  try {
+    return await usage.insert({
+      requestId,
       organizationId,
       apiKeyId: fixture.organizationA.apiKey.id,
+      service: 'writing',
+      operation: 'writing.task2.grade',
       environment: 'production',
-      maxConcurrent: MAX_CONCURRENT,
-    },
-  };
-  const next: CallHandler = {
-    handle: () =>
-      from(
-        usage.insert({
-          requestId,
-          organizationId,
-          apiKeyId: fixture.organizationA.apiKey.id,
-          service: 'writing',
-          operation: 'writing.task2.grade',
-          environment: 'production',
-          outcome: 'success',
-          httpStatus: 200,
-          billableRequests: 1,
-          meteringStatus: 'complete',
-          totalMs: 1,
-          billingBasis: 'response',
-        }),
-      ),
-  };
-  return interceptor
-    .intercept(new ExecutionContextHost([request]), next)
-    .then((observable) => lastValueFrom(observable));
+      outcome: 'success',
+      httpStatus: 200,
+      billableRequests: 1,
+      meteringStatus: 'complete',
+      totalMs: 1,
+      billingBasis: 'response',
+    });
+  } finally {
+    await decision.lease.release();
+  }
 }
 
 /** Clients that each keep one request in flight, so at most MAX_CONCURRENT. */
@@ -122,9 +119,7 @@ beforeAll(async () => {
   if (client === undefined) throw new Error('Gateway Redis client missing');
   gatewayRedis = client;
   await redisAnswers(client);
-  interceptor = new ConcurrencyPermitInterceptor(
-    new RedisConcurrencyLimiter(gatewayRedis, NOOP_LOGGER),
-  );
+  limiter = new RedisConcurrencyLimiter(gatewayRedis, NOOP_LOGGER);
 });
 
 beforeEach(async () => {

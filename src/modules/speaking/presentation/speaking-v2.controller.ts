@@ -7,8 +7,10 @@ import {
   Param,
   Post,
   Req,
+  Res,
 } from '@nestjs/common';
 import type { Static } from '@sinclair/typebox';
+import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
@@ -27,9 +29,10 @@ import type { SpeakingV2TestResult } from '@/contracts/speaking/v2/test-result';
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
-  GRADED_REQUEST_EXECUTOR,
-  type GradedRequestExecutorPort,
-} from '@/modules/gateway/public/graded-request-executor';
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+  createGradedPipelineContext,
+} from '@/modules/gateway/public/graded-pipeline';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
@@ -60,7 +63,7 @@ const RESPONSE_GET = 'speaking.v2.response-get' as const;
 const PART_GET = 'speaking.v2.part-get' as const;
 const TEST_GET = 'speaking.v2.test-get' as const;
 
-/** The catalog writes a path parameter as `{name}`; Fastify wants `:name`. */
+/** The catalog writes a path parameter as {name}; Fastify wants :name. */
 function routePath(template: string): string {
   return template.replace(/\{([^}]+)\}/g, ':$1');
 }
@@ -69,8 +72,8 @@ function routePath(template: string): string {
 @GradedRequest()
 export class SpeakingV2Controller {
   constructor(
-    @Inject(GRADED_REQUEST_EXECUTOR)
-    private readonly gradedRequest: GradedRequestExecutorPort,
+    @Inject(GRADED_PIPELINE_ENGINE)
+    private readonly gradedRequest: GradedPipelineEnginePort,
     @Inject(SPEAKING_MULTIPART_PARSER)
     private readonly multipartParser: SpeakingMultipartParserPort,
     @Inject(SPEAKING_UPLOAD_CEILING)
@@ -129,39 +132,44 @@ export class SpeakingV2Controller {
   @RequireOperation(QUESTION_GRADING)
   async gradeQuestion(
     @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingV2QuestionResult>> {
     let partResultId: string | undefined;
-    const result = await this.gradedRequest.execute(
-      request,
-      QUESTION_GRADING,
-      async (signal) => {
-        // Acquire before reading the body, so a refused upload never buffers audio.
-        const release = this.uploadCeiling.enter();
-        try {
-          const source = createFastifySpeakingMultipartSource(request);
-          const input = await this.multipartParser.parseQuestionV2(
-            source,
-            signal,
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(
+        request,
+        reply,
+        QUESTION_GRADING,
+        async (signal) => {
+          // Acquire before reading the body, so a refused upload never buffers audio.
+          const release = this.uploadCeiling.enter();
+          try {
+            const source = createFastifySpeakingMultipartSource(request);
+            const input = await this.multipartParser.parseQuestionV2(
+              source,
+              signal,
+            );
+            partResultId = input.partResultId;
+            return { input, release };
+          } catch (error) {
+            release();
+            throw error;
+          }
+        },
+        async (result) => {
+          const owner = this.owner(request);
+          await this.recordSuccessful(
+            request,
+            owner,
+            'response',
+            result.data.meta.response_id,
           );
-          partResultId = input.partResultId;
-          return { input, release };
-        } catch (error) {
-          release();
-          throw error;
-        }
-      },
+          if (partResultId !== undefined) {
+            await this.recordSuccessful(request, owner, 'part', partResultId);
+          }
+        },
+      ),
     );
-    const owner = this.owner(request);
-    await this.recordSuccessful(
-      request,
-      owner,
-      'response',
-      result.data.meta.response_id,
-    );
-    if (partResultId !== undefined) {
-      await this.recordSuccessful(request, owner, 'part', partResultId);
-    }
-    return result;
   }
 
   @Post(routePath(OPERATION_CATALOG[PART_GRADING].path))
@@ -170,31 +178,42 @@ export class SpeakingV2Controller {
   async gradePart(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingV2PartResult>> {
     let input: Static<typeof SpeakingV2PartGradeRequestSchema> | undefined;
-    const result = await this.gradedRequest.execute(
-      request,
-      PART_GRADING,
-      async () => {
-        input = parseRequestBody(
-          SpeakingV2PartGradeRequestSchema,
-          body,
-          request,
-        );
-        if (input.response_ids !== undefined) {
-          await this.requireOwned(request, 'response', input.response_ids);
-        }
-        return { input };
-      },
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(
+        request,
+        reply,
+        PART_GRADING,
+        async () => {
+          input = parseRequestBody(
+            SpeakingV2PartGradeRequestSchema,
+            body,
+            request,
+          );
+          if (input.response_ids !== undefined) {
+            await this.requireOwned(request, 'response', input.response_ids);
+          }
+          return { input };
+        },
+        async () => {
+          if (input === undefined) {
+            throw new Error('Speaking Part input was not prepared');
+          }
+          const owner = this.owner(request);
+          await this.recordSuccessful(
+            request,
+            owner,
+            'part',
+            input.part_result_id,
+          );
+          if (input.test_id !== undefined) {
+            await this.recordSuccessful(request, owner, 'test', input.test_id);
+          }
+        },
+      ),
     );
-    if (input === undefined)
-      throw new Error('Speaking Part input was not prepared');
-    const owner = this.owner(request);
-    await this.recordSuccessful(request, owner, 'part', input.part_result_id);
-    if (input.test_id !== undefined) {
-      await this.recordSuccessful(request, owner, 'test', input.test_id);
-    }
-    return result;
   }
 
   @Post(routePath(OPERATION_CATALOG[TEST_GRADING].path))
@@ -203,35 +222,41 @@ export class SpeakingV2Controller {
   async gradeTest(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingV2TestResult>> {
     let input: Static<typeof SpeakingV2TestGradeRequestSchema> | undefined;
-    const result = await this.gradedRequest.execute(
-      request,
-      TEST_GRADING,
-      async () => {
-        input = parseRequestBody(
-          SpeakingV2TestGradeRequestSchema,
-          body,
-          request,
-        );
-        if (input.response_ids !== undefined) {
-          await this.requireOwned(request, 'response', input.response_ids);
-        }
-        if (input.part_result_ids !== undefined) {
-          await this.requireOwned(request, 'part', input.part_result_ids);
-        }
-        return { input };
-      },
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(
+        request,
+        reply,
+        TEST_GRADING,
+        async () => {
+          input = parseRequestBody(
+            SpeakingV2TestGradeRequestSchema,
+            body,
+            request,
+          );
+          if (input.response_ids !== undefined) {
+            await this.requireOwned(request, 'response', input.response_ids);
+          }
+          if (input.part_result_ids !== undefined) {
+            await this.requireOwned(request, 'part', input.part_result_ids);
+          }
+          return { input };
+        },
+        async () => {
+          if (input === undefined) {
+            throw new Error('Speaking Test input was not prepared');
+          }
+          await this.recordSuccessful(
+            request,
+            this.owner(request),
+            'test',
+            input.test_id,
+          );
+        },
+      ),
     );
-    if (input === undefined)
-      throw new Error('Speaking Test input was not prepared');
-    await this.recordSuccessful(
-      request,
-      this.owner(request),
-      'test',
-      input.test_id,
-    );
-    return result;
   }
 
   @Get(routePath(OPERATION_CATALOG[RESPONSE_GET].path))
@@ -239,12 +264,15 @@ export class SpeakingV2Controller {
   async getResponse(
     @Req() request: AuthenticatedRequest,
     @Param() params: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingV2QuestionResult>> {
-    return this.gradedRequest.execute(request, RESPONSE_GET, async () => {
-      const input = parseRequestParams(SpeakingV2ResponsePathSchema, params);
-      await this.requireOwned(request, 'response', [input.response_id]);
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, RESPONSE_GET, async () => {
+        const input = parseRequestParams(SpeakingV2ResponsePathSchema, params);
+        await this.requireOwned(request, 'response', [input.response_id]);
+        return { input };
+      }),
+    );
   }
 
   @Get(routePath(OPERATION_CATALOG[PART_GET].path))
@@ -252,12 +280,15 @@ export class SpeakingV2Controller {
   async getPart(
     @Req() request: AuthenticatedRequest,
     @Param() params: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingV2PartResult>> {
-    return this.gradedRequest.execute(request, PART_GET, async () => {
-      const input = parseRequestParams(SpeakingV2PartPathSchema, params);
-      await this.requireOwned(request, 'part', [input.part_result_id]);
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, PART_GET, async () => {
+        const input = parseRequestParams(SpeakingV2PartPathSchema, params);
+        await this.requireOwned(request, 'part', [input.part_result_id]);
+        return { input };
+      }),
+    );
   }
 
   @Get(routePath(OPERATION_CATALOG[TEST_GET].path))
@@ -265,11 +296,14 @@ export class SpeakingV2Controller {
   async getTest(
     @Req() request: AuthenticatedRequest,
     @Param() params: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingV2TestResult>> {
-    return this.gradedRequest.execute(request, TEST_GET, async () => {
-      const input = parseRequestParams(SpeakingV2TestPathSchema, params);
-      await this.requireOwned(request, 'test', [input.test_id]);
-      return { input };
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, TEST_GET, async () => {
+        const input = parseRequestParams(SpeakingV2TestPathSchema, params);
+        await this.requireOwned(request, 'test', [input.test_id]);
+        return { input };
+      }),
+    );
   }
 }

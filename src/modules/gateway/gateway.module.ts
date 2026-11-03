@@ -102,8 +102,6 @@ import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from './infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
-import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
-import { GradedAdmissionGuard } from './presentation/graded-admission.guard';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 
 @Module({
@@ -291,8 +289,6 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
     },
     RateLimitGuard,
-    GradedAdmissionGuard,
-    ConcurrencyPermitInterceptor,
   ],
   exports: [
     GATEWAY_REDIS_READINESS,
@@ -304,10 +300,8 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     RATE_LIMITER,
     GRADED_ADMISSION,
     RateLimitGuard,
-    GradedAdmissionGuard,
     QUOTA_COUNTER,
     CONCURRENCY_LIMITER,
-    ConcurrencyPermitInterceptor,
   ],
 })
 export class GatewayModule {}

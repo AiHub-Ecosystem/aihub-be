@@ -2,7 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import {
   type IdempotencyOperation,
   idempotencyMode,
-} from '@/modules/idempotency/application/idempotency-operation';
+} from './idempotency-operation';
 
 function invalidIdempotencyKey(): AppError {
   return new AppError({

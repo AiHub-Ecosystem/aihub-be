@@ -25,12 +25,11 @@ import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentat
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
+import { SpeakingV2Controller } from '@/modules/speaking/presentation/speaking-v2.controller';
 import { WritingExerciseController } from '@/modules/writing/presentation/writing-exercise.controller';
 import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
 import { WritingV2GradingController } from '@/modules/writing/presentation/writing-v2-grading.controller';
-import { getOwnPrototypeMethod } from '../../../test/support/own-prototype-method';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
-import { ConcurrencyPermitInterceptor } from './presentation/concurrency-permit.interceptor';
 import {
   GRADED_REQUEST_GUARDS,
   GRADED_REQUEST_INTERCEPTORS,
@@ -88,16 +87,14 @@ const microExerciseRequest = {
  * the (mutable) declaration, reordering the declaration would still match
  * itself and pass, so "moving a step fails verification" would be false.
  * ADR-0018 requires quota to be read before concurrency admission; the retry
- * budget also precedes quota so its refusal takes priority over a replay; both
- * now happen inside the one GradedAdmissionGuard (#1312). ADR-0058
- * moved concurrency admission to a permit interceptor, so it is recorded across
- * the guard/interceptor boundary as one sequence.
+ * budget also precedes quota so its refusal takes priority over a replay; these
+ * checks and concurrency admission now run inside GradedPipelineEngine.
  */
 const EXPECTED_ORDER = [
   'ApiKeyGuard',
   'UserIdentityGuard',
-  'GradedAdmissionGuard',
-  'ConcurrencyPermitInterceptor',
+  'GradedAdmission',
+  'ConcurrencyPermit',
 ] as const;
 
 describe('graded request chain', () => {
@@ -117,9 +114,8 @@ describe('graded request chain', () => {
     process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
     process.env.DOWNSTREAM_AI_WRITING_URL = 'https://ai-writing.test';
 
-    // Record the order the real guards are dispatched in, while still running
-    // their real bodies. The recording is only an instrument; the chain and the
-    // request are real (see ADR-0057).
+    // Record the real authentication guards; admission and concurrency are
+    // observed at their application ports below.
     for (const guard of GRADED_REQUEST_GUARDS) {
       const original = guard.prototype.canActivate;
       jest
@@ -129,21 +125,6 @@ describe('graded request chain', () => {
           return original.call(this, context);
         });
     }
-
-    // The concurrency permit is now one interceptor that acquires before the
-    // handler and releases after (ADR-0058). Recording its acquire here, in the
-    // same sequence as the guards, keeps the quota-before-concurrency guarantee
-    // observable across the guard/interceptor boundary.
-    const permitOriginal = getOwnPrototypeMethod(
-      ConcurrencyPermitInterceptor.prototype,
-      'intercept',
-    );
-    jest
-      .spyOn(ConcurrencyPermitInterceptor.prototype, 'intercept')
-      .mockImplementation(async function (this: unknown, context, next) {
-        executed.push('ConcurrencyPermitInterceptor');
-        return permitOriginal.call(this, context, next);
-      });
 
     mockAgent = new MockAgent();
     mockAgent.disableNetConnect();
@@ -173,13 +154,21 @@ describe('graded request chain', () => {
       .overrideProvider(WEB_SESSION_CLIENT_SECRET)
       .useValue({ resolve: () => 'test-bff-client-secret' })
       .overrideProvider(GRADED_ADMISSION)
-      .useValue({ consume: async () => ({ stage: 'admitted' }) })
+      .useValue({
+        consume: async () => {
+          executed.push('GradedAdmission');
+          return { stage: 'admitted' };
+        },
+      })
       .overrideProvider(CONCURRENCY_LIMITER)
       .useValue({
-        acquire: async () => ({
-          allowed: true,
-          lease: { release: async () => undefined },
-        }),
+        acquire: async () => {
+          executed.push('ConcurrencyPermit');
+          return {
+            allowed: true,
+            lease: { release: async () => undefined },
+          };
+        },
       })
       .compile();
 
@@ -310,10 +299,8 @@ describe('graded request chain', () => {
     expect(GRADED_REQUEST_GUARDS.map((guard) => guard.name)).toEqual([
       'ApiKeyGuard',
       'UserIdentityGuard',
-      'GradedAdmissionGuard',
     ]);
     expect(GRADED_REQUEST_INTERCEPTORS.map((i) => i.name)).toEqual([
-      'ConcurrencyPermitInterceptor',
       'SuccessEnvelopeInterceptor',
     ]);
   });
@@ -324,6 +311,7 @@ describe('graded request chain', () => {
       WritingGradingController,
       WritingV2GradingController,
       SpeakingGradingController,
+      SpeakingV2Controller,
     ]) {
       expect(Reflect.getMetadata(GUARDS_METADATA, controller)).toEqual([
         ...GRADED_REQUEST_GUARDS,
@@ -340,6 +328,7 @@ describe('graded request chain', () => {
       ...operationsServedBy(WritingGradingController),
       ...operationsServedBy(WritingV2GradingController),
       ...operationsServedBy(SpeakingGradingController),
+      ...operationsServedBy(SpeakingV2Controller),
     ].sort();
     // Reads the real @RequireOperation from both controllers rather than
     // restating a literal, so a graded operation added to (or dropped from) a

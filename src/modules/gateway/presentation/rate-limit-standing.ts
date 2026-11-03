@@ -1,4 +1,3 @@
-import type { ExecutionContext } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
 import { RATE_WINDOW_MS } from '@/modules/gateway/application/rate-limit-window';
@@ -10,11 +9,10 @@ import type { RateLimitStanding } from '@/modules/gateway/application/rate-limit
  * down before it is refused. Only the key's own figures are ever reported.
  */
 export function reportStanding(
-  context: ExecutionContext,
+  reply: FastifyReply,
   standing: RateLimitStanding | undefined,
 ): void {
   if (standing === undefined) return;
-  const reply = context.switchToHttp().getResponse<FastifyReply>();
   reply.header(
     'RateLimit-Policy',
     `"per-key";q=${standing.limit};w=${RATE_WINDOW_MS / 1_000}`,

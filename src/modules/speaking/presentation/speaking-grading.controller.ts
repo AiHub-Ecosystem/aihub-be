@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
@@ -11,9 +20,10 @@ import {
 import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
-  GRADED_REQUEST_EXECUTOR,
-  type GradedRequestExecutorPort,
-} from '@/modules/gateway/public/graded-request-executor';
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+  createGradedPipelineContext,
+} from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/speaking-audio-url.policy';
@@ -63,8 +73,8 @@ function parseJsonBody(
 @GradedRequest()
 export class SpeakingGradingController {
   constructor(
-    @Inject(GRADED_REQUEST_EXECUTOR)
-    private readonly gradedRequest: GradedRequestExecutorPort,
+    @Inject(GRADED_PIPELINE_ENGINE)
+    private readonly gradedRequest: GradedPipelineEnginePort,
     @Inject(SPEAKING_MULTIPART_PARSER)
     private readonly multipartParser: SpeakingMultipartParserPort,
     @Inject(SPEAKING_UPLOAD_CEILING)
@@ -76,19 +86,22 @@ export class SpeakingGradingController {
   @RequireOperation(OPERATION)
   async grade(
     @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
-    return this.gradedRequest.execute(request, OPERATION, async (signal) => {
-      // Acquire before reading the body, so a refused upload never buffers audio.
-      const release = this.uploadCeiling.enter();
-      try {
-        const source = createFastifySpeakingMultipartSource(request);
-        const input = await this.multipartParser.parse(source, signal);
-        return { input, release };
-      } catch (error) {
-        release();
-        throw error;
-      }
-    });
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, OPERATION, async (signal) => {
+        // Acquire before reading the body, so a refused upload never buffers audio.
+        const release = this.uploadCeiling.enter();
+        try {
+          const source = createFastifySpeakingMultipartSource(request);
+          const input = await this.multipartParser.parse(source, signal);
+          return { input, release };
+        } catch (error) {
+          release();
+          throw error;
+        }
+      }),
+    );
   }
 
   @Post(OPERATION_CATALOG[JSON_OPERATION].path)
@@ -97,9 +110,12 @@ export class SpeakingGradingController {
   async gradeJson(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
-    return this.gradedRequest.execute(request, JSON_OPERATION, () => ({
-      input: parseJsonBody(body, request),
-    }));
+    return this.gradedRequest.execute(
+      createGradedPipelineContext(request, reply, JSON_OPERATION, () => ({
+        input: parseJsonBody(body, request),
+      })),
+    );
   }
 }

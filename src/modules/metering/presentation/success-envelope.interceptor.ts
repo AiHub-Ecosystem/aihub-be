@@ -15,6 +15,7 @@ import {
   buildSuccessEnvelope,
 } from '@/common/http/success-envelope';
 import { isRequestId } from '@/common/request-context/request-id';
+import { completeGradedPipelineResponse } from '@/modules/gateway/public/graded-pipeline';
 import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
 import {
   addMeteringEvidence,
@@ -74,65 +75,71 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       mergeMap(async (value: unknown) => {
-        if (!isDispatchResult(value)) {
-          throw new Error('success response is missing dispatch metadata');
-        }
+        try {
+          if (!isDispatchResult(value)) {
+            throw new Error('success response is missing dispatch metadata');
+          }
 
-        const downstreamMs = Math.max(0, Math.round(value.downstreamMs));
-        if (
-          getMeteringEvidence(request) !== undefined &&
-          isOperationId(value.operation)
-        ) {
-          addMeteringEvidence(request, {
-            downstreamMs,
-            ...(value.usage === undefined ? {} : { usage: value.usage }),
-            ...(value.models === undefined ? {} : { models: value.models }),
-            ...(value.aiProcessingMs === undefined
-              ? {}
-              : { aiProcessingMs: value.aiProcessingMs }),
-            ...(value.idempotentReplay === undefined
-              ? {}
-              : { idempotentReplay: value.idempotentReplay }),
-            modelCalled: true,
-          });
-        }
+          const downstreamMs = Math.max(0, Math.round(value.downstreamMs));
+          if (
+            getMeteringEvidence(request) !== undefined &&
+            isOperationId(value.operation)
+          ) {
+            addMeteringEvidence(request, {
+              downstreamMs,
+              ...(value.usage === undefined ? {} : { usage: value.usage }),
+              ...(value.models === undefined ? {} : { models: value.models }),
+              ...(value.aiProcessingMs === undefined
+                ? {}
+                : { aiProcessingMs: value.aiProcessingMs }),
+              ...(value.idempotentReplay === undefined
+                ? {}
+                : { idempotentReplay: value.idempotentReplay }),
+              modelCalled: true,
+            });
+          }
 
-        const totalMs = requestDurationMs(
-          request.raw,
-          performance.now() - startedAt,
-        );
-        const requestId = isRequestId(request.id)
-          ? request.id
-          : String(request.id);
-        const correlation = correlationId(request);
-        if (value.idempotentReplay === true) {
-          reply.header('Idempotent-Replay', 'true');
-        }
-
-        // A request whose id never validated cannot be identified, so there is
-        // nothing to write a record against; the envelope below still carries
-        // the raw id exactly as it did before.
-        if (isRequestId(request.id)) {
-          await completeRequestMetering(
-            getMeteringEvidence(request),
-            this.metering,
-            {
-              requestId: request.id,
-              outcome: 'success',
-              httpStatus: 200,
-              totalMs,
-            },
+          const totalMs = requestDurationMs(
+            request.raw,
+            performance.now() - startedAt,
           );
-        }
+          const requestId = isRequestId(request.id)
+            ? request.id
+            : String(request.id);
+          const correlation = correlationId(request);
+          if (value.idempotentReplay === true) {
+            reply.header('Idempotent-Replay', 'true');
+          }
 
-        return buildSuccessEnvelope({
-          data: value.data,
-          operation: value.operation,
-          downstreamMs,
-          totalMs,
-          requestId,
-          ...(correlation === undefined ? {} : { correlationId: correlation }),
-        });
+          // A request whose id never validated cannot be identified, so there is
+          // nothing to write a record against; the envelope below still carries
+          // the raw id exactly as it did before.
+          if (isRequestId(request.id)) {
+            await completeRequestMetering(
+              getMeteringEvidence(request),
+              this.metering,
+              {
+                requestId: request.id,
+                outcome: 'success',
+                httpStatus: 200,
+                totalMs,
+              },
+            );
+          }
+
+          return buildSuccessEnvelope({
+            data: value.data,
+            operation: value.operation,
+            downstreamMs,
+            totalMs,
+            requestId,
+            ...(correlation === undefined
+              ? {}
+              : { correlationId: correlation }),
+          });
+        } finally {
+          await completeGradedPipelineResponse(value);
+        }
       }),
     );
   }

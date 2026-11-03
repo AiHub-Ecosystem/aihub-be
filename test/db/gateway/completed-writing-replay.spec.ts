@@ -1,13 +1,11 @@
-import Fastify from 'fastify';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { findCompletedWritingReplay } from '@/modules/gateway/presentation/completed-writing-replay';
+import { findCompletedWritingReplay } from '@/modules/gateway/application/completed-writing-replay';
 import { createIdempotencyFingerprint } from '@/modules/idempotency/application/idempotency-fingerprint';
 import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
 import type { IdempotencyWork } from '@/modules/idempotency/application/idempotency-service.port';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
-import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
 
 import { createTestPool } from '../shared/database';
@@ -45,29 +43,14 @@ interface ReplayLookup {
 }
 
 async function lookup(organizationId: string): Promise<ReplayLookup> {
-  const app = Fastify();
-  app.post('/replay', async (request: AuthenticatedRequest) => {
-    request.aihubIdentity = {
-      userId: ACTOR_ID,
-      organizationId,
-      scopes: [],
-      mode: 'declared_id',
-    };
-    const replay = await findCompletedWritingReplay(request, service, {
-      organizationId,
-      operation: OPERATION,
-      idempotencyKey: IDEMPOTENCY_KEY,
-    });
-    return { replay: replay?.replay ?? null };
+  const replay = await findCompletedWritingReplay(service, {
+    organizationId,
+    operation: OPERATION,
+    idempotencyKey: IDEMPOTENCY_KEY,
+    actorId: ACTOR_ID,
+    requestBody: REQUEST_BODY,
   });
-  const response = await app.inject({
-    method: 'POST',
-    url: '/replay',
-    payload: REQUEST_BODY,
-  });
-  await app.close();
-  expect(response.statusCode).toBe(200);
-  return response.json<ReplayLookup>();
+  return { replay: replay ?? null };
 }
 
 beforeAll(async () => {

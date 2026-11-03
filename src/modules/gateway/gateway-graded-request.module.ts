@@ -1,31 +1,60 @@
 import { Module } from '@nestjs/common';
 
 import {
+  CONCURRENCY_LIMITER,
+  type ConcurrencyLimiterPort,
+} from '@/modules/gateway/application/concurrency-limiter.port';
+import {
+  GRADED_ADMISSION,
+  type GradedAdmissionPort,
+} from '@/modules/gateway/application/graded-admission.port';
+import {
+  GRADING_ORCHESTRATOR,
+  type GradingOrchestratorPort,
+} from '@/modules/gateway/application/grading-orchestrator.port';
+import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
+import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
+import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
+import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
 } from '@/modules/metering/application/metering-finalizer.port';
 import { MeteringModule } from '@/modules/metering/metering.module';
+import { GradedPipelineEngine } from './application/graded-pipeline-engine';
 import {
-  GRADING_ORCHESTRATOR,
-  type GradingOrchestratorPort,
-} from './application/grading-orchestrator.port';
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+} from './application/graded-pipeline.port';
 import { GatewayModule } from './gateway.module';
-import { GradedRequestExecutor } from './presentation/graded-request-executor';
-import { GRADED_REQUEST_EXECUTOR } from './public/graded-request-executor';
 
 @Module({
-  imports: [GatewayModule, MeteringModule],
+  imports: [GatewayModule, IdempotencyModule, MeteringModule],
   providers: [
     {
-      provide: GRADED_REQUEST_EXECUTOR,
-      inject: [GRADING_ORCHESTRATOR, METERING_FINALIZER],
+      provide: GRADED_PIPELINE_ENGINE,
+      inject: [
+        GRADING_ORCHESTRATOR,
+        METERING_FINALIZER,
+        GRADED_ADMISSION,
+        CONCURRENCY_LIMITER,
+        IDEMPOTENCY_SERVICE,
+      ],
       useFactory: (
         orchestrator: GradingOrchestratorPort,
         finalizer: MeteringFinalizerPort,
-      ): GradedRequestExecutor =>
-        new GradedRequestExecutor(orchestrator, finalizer),
+        admission: GradedAdmissionPort,
+        concurrencyLimiter: ConcurrencyLimiterPort,
+        idempotency: IdempotencyServicePort,
+      ): GradedPipelineEnginePort =>
+        new GradedPipelineEngine(
+          orchestrator,
+          finalizer,
+          admission,
+          concurrencyLimiter,
+          idempotency,
+        ),
     },
   ],
-  exports: [GRADED_REQUEST_EXECUTOR],
+  exports: [GRADED_PIPELINE_ENGINE],
 })
 export class GatewayGradedRequestModule {}

@@ -1,8 +1,8 @@
 import {
   backgroundWorkSettled,
   backgroundWorkStarted,
-  waitForBackgroundWork,
-} from './background-work-drain';
+} from '@/common/background-work-tracker';
+import { waitForBackgroundWork } from './background-work-drain';
 import { backgroundDrainMs, largestRequestTimeoutMs } from './shutdown-budget';
 
 describe('background work drain', () => {

@@ -79,7 +79,7 @@ describe('background-completed grading billing', () => {
       idempotency.execute(
         request(
           'req_first',
-          5,
+          250, // Let the async reservation complete before the response deadline.
           billBackgroundCompletion({
             requestId: 'req_first',
             receivedAt: new Date(),

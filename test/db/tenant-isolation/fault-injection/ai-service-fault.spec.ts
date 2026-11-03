@@ -2,11 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { type Server, createServer } from 'node:http';
 
-import type { CallHandler } from '@nestjs/common';
-import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import type Redis from 'ioredis';
-import { from, lastValueFrom } from 'rxjs';
 
+import { AppError } from '@/common/errors/app-error';
 import type { GradeTask2Request } from '@/contracts/writing/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { OperationDispatcherPort } from '@/modules/gateway/application/operation-dispatcher.port';
@@ -20,7 +18,6 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
-import { ConcurrencyPermitInterceptor } from '@/modules/gateway/presentation/concurrency-permit.interceptor';
 
 import { createTenantIsolationRedis } from '../fixtures';
 
@@ -59,7 +56,7 @@ let httpClient: DownstreamHttpClient;
 let dispatcher: OperationDispatcherPort;
 let gatewayRedis: RedisGatewayClient;
 let raw: Redis;
-let interceptor: ConcurrencyPermitInterceptor;
+let limiter: RedisConcurrencyLimiter;
 
 const adapter: DownstreamAdapter<GradeTask2Request, unknown> = {
   operation: OPERATION,
@@ -79,38 +76,39 @@ function cancelledByDeadline(): Promise<number> {
 }
 
 /** One graded request: permit, dispatch, and release, as the route runs it. */
-function gradedCall(
+async function gradedCall(
   organizationId: string,
   maxConcurrent = 2,
   deadlineMs = DEADLINE_MS,
 ): Promise<unknown> {
   const requestId = `req_${randomUUID()}`;
-  const request = {
-    id: requestId,
-    aihubAuth: {
+  const decision = await limiter.acquire({
+    organizationId,
+    maxConcurrent,
+    requestId,
+    environment: 'production',
+  });
+  if (!decision.allowed) {
+    throw new AppError({
+      code: 'CONCURRENCY_LIMIT',
+      message: 'Concurrency limit exceeded',
+      retryable: true,
+      retryAfterMs: decision.retryAfterMs,
+    });
+  }
+  try {
+    return await dispatcher.dispatch(OPERATION, GRADING_INPUT, {
+      requestId,
+      receivedAt: new Date(),
+      deadlineAt: new Date(Date.now() + deadlineMs),
+      operationTimeoutMs: deadlineMs,
       organizationId,
-      apiKeyId: 'ak_ai_service_fault',
-      environment: 'production',
-      maxConcurrent,
-    },
-  };
-  const next: CallHandler = {
-    handle: () =>
-      from(
-        dispatcher.dispatch(OPERATION, GRADING_INPUT, {
-          requestId,
-          receivedAt: new Date(),
-          deadlineAt: new Date(Date.now() + deadlineMs),
-          operationTimeoutMs: deadlineMs,
-          organizationId,
-          scopes: [],
-          signal: new AbortController().signal,
-        }),
-      ),
-  };
-  return interceptor
-    .intercept(new ExecutionContextHost([request]), next)
-    .then((observable) => lastValueFrom(observable));
+      scopes: [],
+      signal: new AbortController().signal,
+    });
+  } finally {
+    await decision.lease.release();
+  }
 }
 
 function organizationId(label: string): string {
@@ -153,9 +151,7 @@ beforeAll(async () => {
   // The gateway client never queues commands, so wait until it is connected.
   await redisAnswers(client);
   raw = createTenantIsolationRedis();
-  interceptor = new ConcurrencyPermitInterceptor(
-    new RedisConcurrencyLimiter(gatewayRedis, NOOP_LOGGER),
-  );
+  limiter = new RedisConcurrencyLimiter(gatewayRedis, NOOP_LOGGER);
 });
 
 beforeEach(() => {
