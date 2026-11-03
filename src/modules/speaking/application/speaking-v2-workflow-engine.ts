@@ -1,4 +1,5 @@
 import type { OperationId } from '@/catalog/operation-id';
+import { internalError } from '@/common/errors/app-error';
 import type {
   SpeakingV2PartGradeInput,
   SpeakingV2PartPath,
@@ -191,7 +192,7 @@ export class SpeakingV2WorkflowEngine {
       },
       async () => {
         if (input === undefined) {
-          throw new Error('Speaking Part input was not prepared');
+          throw internalError('Speaking Part input was not prepared');
         }
         const owner = this.owner(context);
         await this.recordSuccessful(
@@ -231,7 +232,7 @@ export class SpeakingV2WorkflowEngine {
       },
       async () => {
         if (input === undefined) {
-          throw new Error('Speaking Test input was not prepared');
+          throw internalError('Speaking Test input was not prepared');
         }
         await this.recordSuccessful(
           context,

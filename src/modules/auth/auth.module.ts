@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
@@ -313,7 +314,7 @@ const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(
       ): JoseUserAccessTokenService => {
         const issuer = configuration.AIHUB_USER_ACCESS_ISSUER?.trim();
         if (issuer === undefined || issuer.length === 0) {
-          throw new Error('AIHUB_USER_ACCESS_ISSUER is required');
+          throw internalError('AIHUB_USER_ACCESS_ISSUER is required');
         }
         const runtime = provider.getSnapshot().userAccessJwt;
         return new JoseUserAccessTokenService({

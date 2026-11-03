@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { RequestContext, UserIdentityMode } from './request-context';
 
 // At least the largest operation timeout (Writing /v2 grading, 125 s, ADR-0143);
@@ -21,7 +22,7 @@ export function createRequestContext(
   input: RequestContextInput,
 ): RequestContext {
   if (input.requestId.trim().length === 0) {
-    throw new Error('requestId must not be empty');
+    throw internalError('requestId must not be empty');
   }
 
   if (
@@ -29,7 +30,7 @@ export function createRequestContext(
     input.deadlineMs <= 0 ||
     input.deadlineMs > MAX_DEADLINE_MS
   ) {
-    throw new Error(
+    throw internalError(
       `deadlineMs must be an integer between 1 and ${MAX_DEADLINE_MS}`,
     );
   }

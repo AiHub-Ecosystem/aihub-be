@@ -1,4 +1,8 @@
-import { AppError, timeoutError } from '@/common/errors/app-error';
+import {
+  AppError,
+  internalError,
+  timeoutError,
+} from '@/common/errors/app-error';
 import { isDownstreamFault } from '@/common/errors/downstream-fault';
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
@@ -198,7 +202,7 @@ export class IdempotencyService implements IdempotencyServicePort {
         reservation.responseStatus >= 300
       ) {
         throw malformedReplayError(
-          new Error('stored idempotency response status is not successful'),
+          internalError('stored idempotency response status is not successful'),
         );
       }
 

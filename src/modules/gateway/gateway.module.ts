@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { Logger, Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import {
@@ -130,7 +131,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       ): GatewayRedisReadiness => ({
         async check() {
           if (client === undefined || (await client.ping()) !== 'PONG') {
-            throw new Error('Redis is unavailable');
+            throw internalError('Redis is unavailable');
           }
         },
       }),

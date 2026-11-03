@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   insertEmailDelivery,
@@ -277,7 +278,7 @@ export class PostgresVerificationTokenRepository
       proofVerified,
     });
     if (resolved.kind === 'proof_check') {
-      throw new Error('Verification proof check did not resolve');
+      throw internalError('Verification proof check did not resolve');
     }
     return resolved;
   }

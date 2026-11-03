@@ -11,6 +11,6 @@ import {
 export function publicApiMajorV1(): PublicApiMajorDef {
   const major = findPublicApiMajor(1);
   if (major === undefined)
-    throw new Error('Public API major 1 is not released');
+    throw new Error('Public API major 1 is not released'); // app-error-check: allow this spec-only fixture is imported by specs.
   return major;
 }

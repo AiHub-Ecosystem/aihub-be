@@ -1,3 +1,4 @@
+import { internalError } from './errors/app-error';
 let pendingWork = 0;
 const drainWaiters = new Set<() => void>();
 
@@ -30,7 +31,7 @@ export function waitForBackgroundWork(timeoutMs: number): Promise<void> {
     timer = setTimeout(() => {
       drainWaiters.delete(finish);
       reject(
-        new Error('Background work did not drain before shutdown deadline'),
+        internalError('Background work did not drain before shutdown deadline'),
       );
     }, timeoutMs);
   });

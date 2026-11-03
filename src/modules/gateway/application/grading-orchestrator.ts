@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -62,7 +63,7 @@ function decodeStoredResult<K extends OperationId>(
   if (!isRecord(value) || data === undefined) {
     const operationGroup = operation.split('.')[0] ?? 'graded';
     const label = `${operationGroup[0]?.toUpperCase()}${operationGroup.slice(1)}`;
-    throw new Error(`stored ${label} grading response is malformed`);
+    throw internalError(`stored ${label} grading response is malformed`);
   }
 
   return withDispatchTelemetry(
@@ -104,7 +105,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
   ): Promise<DispatchResult<ResponseForCommand<C>>> {
     const def = this.catalog[command.operation];
     if (def === undefined) {
-      throw new Error(`Unknown operation: ${command.operation}`);
+      throw internalError(`Unknown operation: ${command.operation}`);
     }
     const context = createRequestContext({
       requestId: command.requestId,
@@ -151,7 +152,9 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
         preloadedReplay.responseStatus < 200 ||
         preloadedReplay.responseStatus >= 300
       ) {
-        throw new Error('stored idempotency response status is not successful');
+        throw internalError(
+          'stored idempotency response status is not successful',
+        );
       }
       return {
         ...decodeStoredResult(

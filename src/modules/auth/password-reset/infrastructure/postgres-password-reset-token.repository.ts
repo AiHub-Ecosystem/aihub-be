@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   insertEmailDelivery,
@@ -206,7 +207,7 @@ export class PostgresPasswordResetTokenRepository
         data: { passwordHash: input.passwordHash, updatedAt: input.now },
       });
       if (identity.count === 0) {
-        throw new Error('local password identity is missing');
+        throw internalError('local password identity is missing');
       }
       await transaction.passwordResetToken.updateMany({
         where: { userAccountId: inspection.userId, consumedAt: null },

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   WRITING_CHART_PUBLICATION_LEASE_MS,
   type WritingChartEnvironment,
@@ -159,7 +160,7 @@ async function activeOperatorAccount(
 function currentTime(input: WritingChartRevokeCliInput): Date {
   try {
     const now = (input.now ?? (() => new Date()))();
-    if (Number.isNaN(now.getTime())) throw new Error('invalid clock');
+    if (Number.isNaN(now.getTime())) throw internalError('invalid clock');
     return now;
   } catch {
     throw new WritingChartRevokeError('DATABASE_FAILURE');

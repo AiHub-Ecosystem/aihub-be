@@ -49,6 +49,7 @@
     "lint": "node scripts/generate/generate-prisma-client.mjs && oxlint . && biome check .",
     "format:check": "prettier --check \"**/*.{md,yaml,yml}\"",
     "arch-check": "node scripts/checks/check-architecture.mjs",
+    "check:app-errors": "tsx scripts/checks/check-app-errors.ts",
     "check:imports": "tsx scripts/checks/check-import-style.ts",
     "check:imports:dist": "tsx scripts/checks/check-import-style.ts --dist",
     "check:migrations": "squawk --no-error-on-unmatched-pattern \"prisma/migrations/*/migration.sql\"",
@@ -62,7 +63,7 @@
     "verify:summary": "node scripts/checks/verify-summary.cjs",
     "benchmark:test-runners": "tsx scripts/ops/test-runner-benchmark/run-benchmark.ts",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
-    "verify": "bun run knip && bun run lint && bun run format:check && bun run type-check && bun run arch-check && bun run check:batch && bun run check:nginx-headers && bun run test && bun run test:monitoring-config && bun run build && bun run check:imports:dist",
+    "verify": "bun run knip && bun run lint && bun run format:check && bun run type-check && bun run arch-check && bun run check:app-errors && bun run check:batch && bun run check:nginx-headers && bun run test && bun run test:monitoring-config && bun run build && bun run check:imports:dist",
     "prepare": "husky",
     "generate:data-dictionary": "tsx scripts/generate/generate-data-dictionary.ts",
     "check:data-dictionary": "node scripts/checks/check-data-dictionary.mjs",
@@ -77,6 +78,7 @@
     "test:related": "bun run test -- --changed=origin/main",
     "check:changed": "node scripts/checks/check-changed.mjs",
     "check:batch": "node scripts/checks/check-batch.cjs",
+    "test:check-app-errors": "tsx --test scripts/checks/check-app-errors.spec.ts",
     "test:check-changed": "node --test scripts/checks/check-changed.spec.mjs"
   },
   "dependencies": {

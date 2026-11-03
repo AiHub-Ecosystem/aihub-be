@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
@@ -72,13 +73,13 @@ export function normalizeCustomerWebBaseUrl(
   const trimmed = value?.trim();
   if (trimmed === undefined || trimmed.length === 0) {
     if (requireCustomerWebUrl) {
-      throw new Error('CUSTOMER_WEB_BASE_URL is required in production');
+      throw internalError('CUSTOMER_WEB_BASE_URL is required in production');
     }
     return undefined;
   }
   const normalized = parseCustomerWebBaseUrl(trimmed, requireHttps);
   if (normalized === undefined) {
-    throw new Error(invalidMessage);
+    throw internalError(invalidMessage);
   }
   return normalized;
 }
@@ -119,7 +120,7 @@ function linkedEmailHtml(input: LinkedEmailHtmlInput): string {
     (_placeholder, name: string) => {
       const value = values[name as keyof typeof values];
       if (value === undefined) {
-        throw new Error(`Unknown transactional email placeholder: ${name}`);
+        throw internalError(`Unknown transactional email placeholder: ${name}`);
       }
       return escapeHtml(value);
     },

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { asDate } from '@/common/postgres/row-readers';
 import {
   type BillingActorSource,
@@ -81,7 +82,7 @@ const CLOSURES_SQL = `
 function count(value: unknown, field: string): number {
   const parsed = safeNonNegativeCount(value);
   if (parsed === undefined) {
-    throw new Error(`billing field ${field} is invalid`);
+    throw internalError(`billing field ${field} is invalid`);
   }
   return parsed;
 }
@@ -99,14 +100,14 @@ function signedCount(value: unknown, field: string): number {
         ? value
         : Number.NaN;
   if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`billing field ${field} is invalid`);
+    throw internalError(`billing field ${field} is invalid`);
   }
   return parsed;
 }
 
 function text(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`billing field ${field} is invalid`);
+    throw internalError(`billing field ${field} is invalid`);
   }
   return value;
 }
@@ -119,13 +120,13 @@ function actorSource(value: unknown): BillingActorSource {
   ) {
     return value;
   }
-  throw new Error('billing field actor_source is invalid');
+  throw internalError('billing field actor_source is invalid');
 }
 
 function date(value: unknown, field: string): Date {
   const parsed = asDate(value);
   if (parsed === undefined) {
-    throw new Error(`billing field ${field} is invalid`);
+    throw internalError(`billing field ${field} is invalid`);
   }
   return parsed;
 }
@@ -144,7 +145,7 @@ function target(value: unknown): BillingAdjustmentTarget {
       return { period: { from: period.from, to: period.to } };
     }
   }
-  throw new Error('billing field corrects is invalid');
+  throw internalError('billing field corrects is invalid');
 }
 
 function storedTarget(value: BillingAdjustmentTarget): object {
@@ -300,7 +301,7 @@ export class PostgresBillingStatementRepository
         where: { id: input.id },
       });
       if (duplicate === null) {
-        throw new Error(
+        throw internalError(
           'billing adjustment identity conflict could not be read',
         );
       }

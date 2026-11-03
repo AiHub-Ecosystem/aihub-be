@@ -1,4 +1,4 @@
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import {
@@ -36,7 +36,7 @@ function mapIntent(row: WritingChartUploadModel): WritingChartUploadIntent {
       'INTERNAL_ERROR',
       'Writing chart store is unavailable',
       false,
-      new Error('Writing chart upload intent is invalid'),
+      internalError('Writing chart upload intent is invalid'),
     );
   }
   return {
@@ -68,7 +68,7 @@ function mapAsset(row: WritingChartUploadModel): WritingChartAsset | undefined {
       'INTERNAL_ERROR',
       'Writing chart store is unavailable',
       false,
-      new Error('Writing chart asset is invalid'),
+      internalError('Writing chart asset is invalid'),
     );
   }
   return {
@@ -371,7 +371,7 @@ export class PostgresWritingChartUploadRepository
           'INTERNAL_ERROR',
           'Writing chart store is unavailable',
           false,
-          new Error('Writing chart environment is invalid'),
+          internalError('Writing chart environment is invalid'),
         );
       return {
         kind: row.status === 'published' ? 'asset' : 'intent',

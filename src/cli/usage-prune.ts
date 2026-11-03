@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
 import {
   USAGE_PRUNE_BATCH_SIZE,
@@ -147,14 +148,14 @@ async function previewUsageRetentionCounts(
   let failed = false;
   try {
     if (repository.previewPrune === undefined) {
-      throw new Error('usage retention preview is unavailable');
+      throw internalError('usage retention preview is unavailable');
     }
     counts = await repository.previewPrune(cutoff);
     if (
       !safePreviewCount(counts.usageRecords) ||
       !safePreviewCount(counts.dispatchAttempts)
     ) {
-      throw new Error('usage retention preview is invalid');
+      throw internalError('usage retention preview is invalid');
     }
   } catch {
     failed = true;
@@ -204,7 +205,7 @@ async function previewWritingChartAudits(
   try {
     auditCount = await auditRepository.countExpired(auditCutoff);
     if (!safePreviewCount(auditCount)) {
-      throw new Error('writing chart audit preview is invalid');
+      throw internalError('writing chart audit preview is invalid');
     }
   } catch {
     failed = true;

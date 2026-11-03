@@ -9,7 +9,7 @@ import {
   jwtVerify,
 } from 'jose';
 
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import {
   USER_ACCESS_TOKEN_MINIMUM_RSA_MODULUS_BITS,
   userAccessTokenRsaModulusIsAcceptable,
@@ -57,30 +57,30 @@ export class JoseUserAccessTokenService
       config.expiresInSeconds > 900 ||
       config.clockSkewSeconds < 0
     ) {
-      throw new Error('User Access JWT configuration is invalid');
+      throw internalError('User Access JWT configuration is invalid');
     }
 
     let privateKey: ReturnType<typeof createPrivateKey>;
     try {
       privateKey = createPrivateKey(config.privateKeyPem);
     } catch {
-      throw new Error(INVALID_KEY_CONFIGURATION_MESSAGE);
+      throw internalError(INVALID_KEY_CONFIGURATION_MESSAGE);
     }
     if (privateKey.asymmetricKeyType !== 'rsa') {
-      throw new Error(INVALID_KEY_CONFIGURATION_MESSAGE);
+      throw internalError(INVALID_KEY_CONFIGURATION_MESSAGE);
     }
     if (
       !userAccessTokenRsaModulusIsAcceptable(
         privateKey.asymmetricKeyDetails?.modulusLength,
       )
     ) {
-      throw new Error(INVALID_SIGNING_KEY_MESSAGE);
+      throw internalError(INVALID_SIGNING_KEY_MESSAGE);
     }
     this.privateKey = privateKey;
     try {
       this.publicKey = createPublicKey(privateKey);
     } catch {
-      throw new Error(INVALID_KEY_CONFIGURATION_MESSAGE);
+      throw internalError(INVALID_KEY_CONFIGURATION_MESSAGE);
     }
   }
 

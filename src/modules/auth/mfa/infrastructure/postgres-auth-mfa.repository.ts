@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
@@ -213,7 +214,7 @@ export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
     if (factor === null) return undefined;
     const email = factor.userAccount.authIdentities[0]?.canonicalEmail;
     if (email === undefined) {
-      throw new Error('Auth MFA factor projection is invalid');
+      throw internalError('Auth MFA factor projection is invalid');
     }
     return {
       factorId: factor.factorId,

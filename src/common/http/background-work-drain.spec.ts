@@ -42,9 +42,10 @@ describe('background work drain', () => {
       expect(settledEarly).toBe(false);
 
       await jest.advanceTimersByTimeAsync(1);
-      expect(await drain).toEqual(
-        new Error('Background work did not drain before shutdown deadline'),
-      );
+      expect(await drain).toMatchObject({
+        code: 'INTERNAL_ERROR',
+        message: 'Background work did not drain before shutdown deadline',
+      });
     } finally {
       jest.useRealTimers();
       backgroundWorkSettled();

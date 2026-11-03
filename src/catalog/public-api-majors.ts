@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 /**
  * The Public API majors AIHUB has released (ADR-0127). This list is the one
  * source for which majors are served, their OpenAPI documents and `/docs`
@@ -76,7 +77,7 @@ export function latestPublicApiMajor(
     undefined,
   );
   if (latest === undefined) {
-    throw new Error('No supported Public API major');
+    throw internalError('No supported Public API major');
   }
   return latest;
 }

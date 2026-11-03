@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { connectCliRedis } from './cli-redis';
 
 const AIHUB_KEY_SCAN_COUNT = 250;
@@ -38,11 +39,11 @@ async function connectRedis(url: string): Promise<RedisTtlAuditClient> {
       }
       const replies = await pipeline.exec();
       if (replies === null || replies.length !== keys.length) {
-        throw new Error('Redis TTL audit returned an invalid result');
+        throw internalError('Redis TTL audit returned an invalid result');
       }
       return replies.map(([error, ttl]) => {
         if (error !== null || typeof ttl !== 'number') {
-          throw new Error('Redis TTL audit failed');
+          throw internalError('Redis TTL audit failed');
         }
         return ttl;
       });
@@ -58,7 +59,7 @@ export async function runRedisTtlAuditCommand(
   input: RedisTtlAuditInput,
 ): Promise<RedisTtlAuditSummary> {
   if (input.redisUrl.trim().length === 0) {
-    throw new Error('REDIS_URL is required');
+    throw internalError('REDIS_URL is required');
   }
 
   const client = input.client ?? (await connectRedis(input.redisUrl));
@@ -72,18 +73,18 @@ export async function runRedisTtlAuditCommand(
     do {
       const [nextCursor, keys] = await client.scan(cursor);
       if (!/^\d+$/.test(nextCursor)) {
-        throw new Error('Redis TTL audit returned an invalid cursor');
+        throw internalError('Redis TTL audit returned an invalid cursor');
       }
       const ttls = await client.getTtls(keys);
       if (ttls.length !== keys.length) {
-        throw new Error('Redis TTL audit returned an invalid result');
+        throw internalError('Redis TTL audit returned an invalid result');
       }
 
       // shortcut: count SCAN hits without deduplication; this check only alerts on nonzero findings, add a bounded inventory if exact totals are needed.
       scanHits += keys.length;
       for (const [index, ttl] of ttls.entries()) {
         if (!Number.isInteger(ttl) || ttl < -2) {
-          throw new Error('Redis TTL audit returned an invalid TTL');
+          throw internalError('Redis TTL audit returned an invalid TTL');
         }
         if (ttl !== -1) {
           continue;

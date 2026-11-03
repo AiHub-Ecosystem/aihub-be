@@ -4,6 +4,7 @@ import {
   type OperationDef,
 } from '@/catalog/operation-catalog';
 import { type OperationId, isOperationId } from '@/catalog/operation-id';
+import { internalError } from '@/common/errors/app-error';
 
 export const ORGANIZATION_INVITATION_CREATE_OPERATION =
   'organizations.invitations.create' as const;
@@ -38,5 +39,5 @@ export function idempotencyMode(
     return 'optional';
   }
 
-  throw new Error('Unknown idempotency operation');
+  throw internalError('Unknown idempotency operation');
 }

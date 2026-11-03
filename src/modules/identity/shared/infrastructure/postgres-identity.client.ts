@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   createPrismaClient,
   isLifecycleProperty,
@@ -128,7 +129,7 @@ export function createIdentityTransactionRunner(
  * graph, so the test fixture resolves without a pool and fails on first use.
  */
 function missingDatabaseUrl(): never {
-  throw new Error('DATABASE_URL is missing');
+  throw internalError('DATABASE_URL is missing');
 }
 
 /** A Prisma client with the query helpers a database-lane spec asserts through. */

@@ -6,7 +6,7 @@ import {
   FormData as UndiciFormData,
 } from 'undici/index.js';
 
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -72,7 +72,7 @@ function configurationError(reason: string): AppError {
       code: 'INTERNAL_ERROR',
       message: 'Downstream HTTP client is not configured',
       retryable: false,
-      cause: new Error(reason),
+      cause: internalError(reason),
     }),
   );
 }

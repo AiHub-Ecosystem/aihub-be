@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
   type JWK,
@@ -30,7 +31,7 @@ function toJwk(key: PublicJsonWebKey): JWK {
     return { kty: 'EC', crv: key.crv, x: key.x, y: key.y };
   }
 
-  throw new Error('JWKS key material is invalid');
+  throw internalError('JWKS key material is invalid');
 }
 
 export class JoseUserAssertionCrypto implements UserAssertionCryptoPort {
@@ -52,7 +53,7 @@ export class JoseUserAssertionCrypto implements UserAssertionCryptoPort {
       Buffer.from(result.payload).toString('utf8'),
     );
     if (!isRecord(payload)) {
-      throw new Error('User assertion payload is invalid');
+      throw internalError('User assertion payload is invalid');
     }
 
     return payload;

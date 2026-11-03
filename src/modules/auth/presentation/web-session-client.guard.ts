@@ -1,4 +1,4 @@
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import {
   WEB_SESSION_CLIENT_SECRET_HEADER,
   clientSecretFrom,
@@ -32,7 +32,7 @@ function authenticateClient(
   const expected = secret.resolve();
   if (expected === undefined || expected.length === 0) {
     throw webSessionUnavailable(
-      new Error('no Customer Web BFF client secret is provisioned'),
+      internalError('no Customer Web BFF client secret is provisioned'),
     );
   }
   const presented = clientSecretFrom(request);

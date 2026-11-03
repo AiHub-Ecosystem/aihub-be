@@ -1,5 +1,6 @@
 import { Resolver } from 'node:dns/promises';
 import { type LookupFunction, isIP } from 'node:net';
+import { internalError } from '@/common/errors/app-error';
 
 import { unsafeJwksUrl } from '@/modules/identity/shared/application/jwks-errors';
 import { sourceUnavailable } from './jwks-source-errors';
@@ -269,13 +270,13 @@ async function withDeadline<T>(
 ): Promise<T> {
   const remainingMs = deadlineAt - Date.now();
   if (remainingMs <= 0) {
-    throw new Error('JWKS lookup timed out');
+    throw internalError('JWKS lookup timed out');
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new Error('JWKS lookup timed out')),
+      () => reject(internalError('JWKS lookup timed out')),
       remainingMs,
     );
   });
@@ -307,9 +308,11 @@ export function pinnedLookup(addresses: readonly DnsAddress[]): LookupFunction {
     const address = addresses[0];
     if (address === undefined) {
       callback(
-        Object.assign(new Error('No public JWKS address'), {
-          code: 'ENOTFOUND',
-        }),
+        Object.assign(
+          // app-error-check: allow node:dns requires the ENOTFOUND errno code.
+          new Error('No public JWKS address'),
+          { code: 'ENOTFOUND' },
+        ),
         '',
         0,
       );

@@ -1,4 +1,5 @@
 import { createHmac, hkdfSync } from 'node:crypto';
+import { internalError } from '@/common/errors/app-error';
 import { asDateOrIso } from '@/common/postgres/row-readers';
 
 import {
@@ -34,13 +35,15 @@ function fingerprintEmailRecipients(
   secrets: EmailOutboxRuntimeSecrets | undefined,
 ): readonly AuthEmailRecipientFingerprint[] {
   if (secrets === undefined) {
-    throw new Error('authentication email recipient keyring is unavailable');
+    throw internalError(
+      'authentication email recipient keyring is unavailable',
+    );
   }
   return Object.entries(secrets.keys)
     .map(([keyVersion, encodedKey]) => {
       const masterKey = Buffer.from(encodedKey, 'base64');
       if (masterKey.length !== 32) {
-        throw new Error('authentication email recipient key is invalid');
+        throw internalError('authentication email recipient key is invalid');
       }
       const key = Buffer.from(
         hkdfSync(
@@ -68,7 +71,7 @@ function fingerprintEmailRecipients(
 function counterDate(value: Date | string): Date {
   const date = asDateOrIso(value);
   if (date === undefined) {
-    throw new Error('authentication email recipient counter is invalid');
+    throw internalError('authentication email recipient counter is invalid');
   }
   return date;
 }
@@ -178,7 +181,9 @@ export async function reserveAuthenticationEmailRecipient(
     0,
     ...active.map((row) => {
       if (!Number.isInteger(row.request_count) || row.request_count < 1) {
-        throw new Error('authentication email recipient counter is invalid');
+        throw internalError(
+          'authentication email recipient counter is invalid',
+        );
       }
       return row.request_count;
     }),
@@ -187,7 +192,7 @@ export async function reserveAuthenticationEmailRecipient(
     ({ keyVersion }) => keyVersion === secrets?.currentKeyId,
   );
   if (currentFingerprint === undefined) {
-    throw new Error(
+    throw internalError(
       'authentication email recipient key version is unavailable',
     );
   }
@@ -207,7 +212,7 @@ export async function reserveAuthenticationEmailRecipient(
             addressHmac === existingCounter.address_hmac,
         );
   if (writeFingerprint === undefined) {
-    throw new Error(
+    throw internalError(
       'authentication email recipient counter key is unavailable',
     );
   }

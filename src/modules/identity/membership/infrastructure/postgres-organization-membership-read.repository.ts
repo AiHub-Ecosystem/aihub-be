@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import { ROSTER_MEMBERS_PER_ORGANIZATION } from '@/contracts/organization/pagination';
 import { ORGANIZATION_READ_ADMISSION } from '@/modules/identity/membership/application/organization-admission';
@@ -108,7 +109,7 @@ export function admittedRoles(
   roles: readonly OrganizationMembershipRole[],
 ): readonly OrganizationMembershipRole[] {
   if (roles.length === 0) {
-    throw new Error(
+    throw internalError(
       'organization read admission must admit at least one Membership Role',
     );
   }

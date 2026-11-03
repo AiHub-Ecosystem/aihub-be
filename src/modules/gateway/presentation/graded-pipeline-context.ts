@@ -3,7 +3,7 @@ import type { FastifyReply } from 'fastify';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { matchesPathTemplate } from '@/catalog/path-template';
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { markRequestAdmission } from '@/common/http/request-timing.hook';
@@ -51,7 +51,7 @@ export function createGradedPipelineContext<K extends OperationId>(
   }
   const lifecycle = getRequestLifecycle(request.raw);
   if (lifecycle === undefined) {
-    throw new Error('request lifecycle state is missing');
+    throw internalError('request lifecycle state is missing');
   }
   const identity = request.aihubIdentity;
   if (identity === undefined) throw userIdentityRequired();

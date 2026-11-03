@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { internalError } from '@/common/errors/app-error';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import {
   type GeneratedApiKey,
@@ -26,7 +27,7 @@ function mintApiKey(id: string, environment?: string): GeneratedApiKey {
   while (value > 0n) {
     const character = BASE62[Number(value % 62n)];
     if (character === undefined) {
-      throw new Error('API key alphabet is misconfigured');
+      throw internalError('API key alphabet is misconfigured');
     }
     secret = character + secret;
     value /= 62n;

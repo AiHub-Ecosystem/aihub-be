@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import type {
   QuotaOrganizationSnapshot,
@@ -28,7 +29,7 @@ export const QUOTA_RECONCILIATION_SQL = `
 function safeNonNegativeInteger(value: unknown, field: string): number {
   const parsed = safeNonNegativeCount(value);
   if (parsed === undefined) {
-    throw new Error(`quota reconciliation field ${field} is invalid`);
+    throw internalError(`quota reconciliation field ${field} is invalid`);
   }
   return parsed;
 }
@@ -41,14 +42,14 @@ interface QuotaReconciliationRow {
 
 function snapshotFromRow(value: unknown): QuotaOrganizationSnapshot {
   if (!isRecord(value)) {
-    throw new Error('quota reconciliation row is invalid');
+    throw internalError('quota reconciliation row is invalid');
   }
   const row = value;
   if (
     typeof row.organization_id !== 'string' ||
     row.organization_id.length === 0
   ) {
-    throw new Error('quota reconciliation organization is invalid');
+    throw internalError('quota reconciliation organization is invalid');
   }
 
   const quota = row.quota ?? row.monthly_request_quota;

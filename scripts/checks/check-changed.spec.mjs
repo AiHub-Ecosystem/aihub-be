@@ -19,6 +19,7 @@ const pathCases = [
     gates: [
       'arch-check',
       'build',
+      'check:app-errors',
       'check:data-ownership',
       'check:deprecation',
       'check:doc-drift',
@@ -38,6 +39,7 @@ const pathCases = [
     gates: [
       'arch-check',
       'build',
+      'check:app-errors',
       'check:data-ownership',
       'check:deprecation',
       'check:doc-drift',
@@ -49,6 +51,24 @@ const pathCases = [
       'lint',
       'test:related',
       'type-check',
+    ],
+  },
+  {
+    path: 'scripts/checks/check-app-errors.spec.ts',
+    gates: [
+      'check:app-errors',
+      'check:doc-drift',
+      'lint',
+      'test:check-app-errors',
+    ],
+  },
+  {
+    path: 'scripts/checks/check-app-errors.ts',
+    gates: [
+      'check:app-errors',
+      'check:doc-drift',
+      'lint',
+      'test:check-app-errors',
     ],
   },
   {
@@ -107,6 +127,7 @@ const pathCases = [
     gates: [
       'arch-check',
       'build',
+      'check:app-errors',
       'check:data-ownership',
       'check:deprecation',
       'check:doc-drift',

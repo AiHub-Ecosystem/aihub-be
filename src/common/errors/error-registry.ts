@@ -77,7 +77,7 @@ export function httpStatusForErrorCode(code: string): HttpStatus {
   // codes that are a closed union today, but this function is the boundary
   // that says "unregistered code is a bug", and it must keep saying it.
   if (!Object.hasOwn(ERROR_STATUS_BY_CODE, code)) {
-    throw new Error(`Unknown ErrorCode: ${code}`);
+    throw new Error(`Unknown ErrorCode: ${code}`); // app-error-check: allow no AppError code is valid here.
   }
   return ERROR_STATUS_BY_CODE[code as keyof typeof ERROR_STATUS_BY_CODE];
 }

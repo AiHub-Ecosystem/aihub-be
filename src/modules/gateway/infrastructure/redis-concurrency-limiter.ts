@@ -4,7 +4,7 @@ import {
   backgroundWorkSettled,
   backgroundWorkStarted,
 } from '@/common/background-work-tracker';
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
@@ -138,7 +138,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         return this.denied();
       }
       if (result !== 1) {
-        throw new Error('Redis concurrency response is invalid');
+        throw internalError('Redis concurrency response is invalid');
       }
 
       this.reportRecovered();

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
   Body,
@@ -70,7 +71,7 @@ import { parseOrganizationInvitationQuery } from './organization-invitation-quer
  */
 function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
   if (!isRecord(value)) {
-    throw new Error('stored invitation replay is invalid');
+    throw internalError('stored invitation replay is invalid');
   }
 
   const invitationId = value.invitationId;
@@ -87,12 +88,12 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     typeof expiresAt !== 'string' ||
     (emailDeliveryStatus !== undefined && emailDeliveryStatus !== 'queued')
   ) {
-    throw new Error('stored invitation replay is invalid');
+    throw internalError('stored invitation replay is invalid');
   }
 
   const parsedExpiresAt = new Date(expiresAt);
   if (Number.isNaN(parsedExpiresAt.getTime())) {
-    throw new Error('stored invitation replay is invalid');
+    throw internalError('stored invitation replay is invalid');
   }
 
   return {

@@ -1,5 +1,5 @@
 import type { OperationId } from '@/catalog/operation-id';
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   DispatchAttemptOutcome,
@@ -110,7 +110,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     const organizationId = context.organizationId;
     if (organizationId === undefined) {
       throw dispatchEvidenceUnavailable(
-        new Error('organization context is required'),
+        internalError('organization context is required'),
       );
     }
     try {

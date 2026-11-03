@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   isRowlessWrite,
   normalizeRawRows,
@@ -55,7 +56,7 @@ export function authTransaction<T>(
     .$transaction(
       (transaction) =>
         runGuardedTransaction(transaction, callback, {
-          expired: () => new Error('Auth transaction is no longer active'),
+          expired: () => internalError('Auth transaction is no longer active'),
           mapFailure: postgresError,
         }),
       CONTROL_PLANE_TRANSACTION_OPTIONS,

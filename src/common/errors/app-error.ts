@@ -9,6 +9,7 @@ import { type HttpStatus, httpStatusForErrorCode } from './error-registry';
 export interface AppErrorOptions {
   readonly code: ErrorCode;
   readonly message: string;
+  readonly publicMessage?: string;
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
@@ -27,6 +28,7 @@ export interface AppErrorOptions {
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly httpStatus: HttpStatus;
+  readonly publicMessage?: string;
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
   readonly details?: Readonly<Record<string, unknown>>;
@@ -41,6 +43,9 @@ export class AppError extends Error {
     this.name = 'AppError';
     this.code = options.code;
     this.httpStatus = httpStatusForErrorCode(options.code);
+    if (options.publicMessage !== undefined) {
+      this.publicMessage = options.publicMessage;
+    }
     this.retryable = options.retryable;
 
     if (options.retryAfterMs !== undefined) {
@@ -63,7 +68,7 @@ export class AppError extends Error {
   toEnvelope(requestId: string): ErrorEnvelope {
     return createErrorEnvelope({
       code: this.code,
-      message: this.message,
+      message: this.publicMessage ?? this.message,
       requestId,
       retryable: this.retryable,
       ...(this.retryAfterMs === undefined
@@ -80,6 +85,19 @@ export class AppError extends Error {
 
     return createInternalErrorEnvelope(requestId);
   }
+}
+
+export function internalError(
+  message: string,
+  options?: ErrorOptions,
+): AppError {
+  return new AppError({
+    code: 'INTERNAL_ERROR',
+    message,
+    publicMessage: 'Internal server error',
+    retryable: false,
+    ...(options?.cause === undefined ? {} : { cause: options.cause }),
+  });
 }
 
 /** A downstream AI service request exceeded its deadline (ADR for graded

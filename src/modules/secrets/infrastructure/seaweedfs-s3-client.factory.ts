@@ -1,5 +1,6 @@
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
+import { internalError } from '@/common/errors/app-error';
 
 import { S3Client } from '@aws-sdk/client-s3';
 
@@ -26,7 +27,7 @@ export function createSeaweedFsS3Client(
   const endpoint = options.endpoint ?? DEFAULT_SEAWEEDFS_ENDPOINT;
   const region = options.region ?? DEFAULT_SEAWEEDFS_REGION;
   if (endpoint !== DEFAULT_SEAWEEDFS_ENDPOINT || region.trim().length === 0) {
-    throw new Error('SeaweedFS S3 configuration is invalid');
+    throw internalError('SeaweedFS S3 configuration is invalid');
   }
 
   // Upload routes share 10s across all steps/body reads; S3 gets 5s to response headers, including queue time.

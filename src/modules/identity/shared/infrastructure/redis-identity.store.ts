@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
@@ -368,7 +369,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   ): Promise<void> {
     this.localJwks.delete(localJwksKey(organizationId, configVersion));
     if (this.client === undefined) {
-      throw new Error('Redis is unavailable');
+      throw internalError('Redis is unavailable');
     }
 
     const generationKey = jwksGenerationKey(organizationId);

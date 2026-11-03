@@ -1,4 +1,4 @@
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import type {
   AvatarRepositoryPort,
   RecordAvatarResult,
@@ -41,7 +41,7 @@ function mapRow(row: UserAvatar | null): Avatar | undefined {
     return undefined;
   }
   if (!isAvatarContentType(row.contentType)) {
-    throw storeError(new Error('Avatar row is invalid'));
+    throw storeError(internalError('Avatar row is invalid'));
   }
   return {
     assetId: row.id,

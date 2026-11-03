@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient, type PoolConfig, type QueryConfig } from 'pg';
 
@@ -124,7 +125,7 @@ class TransactionSafePool extends Pool {
         return;
       }
       this.onDiscard(client, status ?? 'unknown');
-      release(new Error('PostgreSQL connection left a transaction open'));
+      release(internalError('PostgreSQL connection left a transaction open'));
     };
     return client;
   }

@@ -13,7 +13,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   EmptyAuthRequestSchema,
@@ -94,7 +94,9 @@ function credentialIp(request: FastifyRequest): string {
   const ip = endUserIpFrom(request);
   if (ip === undefined) {
     throw webSessionUnavailable(
-      new Error('Customer Web BFF omitted or malformed X-AIHUB-End-User-IP'),
+      internalError(
+        'Customer Web BFF omitted or malformed X-AIHUB-End-User-IP',
+      ),
     );
   }
   return ip;

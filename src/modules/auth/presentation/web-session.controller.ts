@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   Body,
   Controller,
@@ -82,7 +83,9 @@ export class WebSessionController {
     const endUserIp = endUserIpFrom(request);
     if (endUserIp === undefined) {
       throw webSessionUnavailable(
-        new Error('Customer Web BFF omitted or malformed X-AIHUB-End-User-IP'),
+        internalError(
+          'Customer Web BFF omitted or malformed X-AIHUB-End-User-IP',
+        ),
       );
     }
 

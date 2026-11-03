@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { internalError } from '@/common/errors/app-error';
 
 import type { OnModuleDestroy } from '@nestjs/common';
 
@@ -49,14 +50,14 @@ const UNRESOLVED_DISPATCH_ATTEMPTS_SQL = `
 
 function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
   if (!isRecord(value) || typeof value.operation !== 'string') {
-    throw new Error('dispatch attempt metric row is invalid');
+    throw internalError('dispatch attempt metric row is invalid');
   }
   const count = safeNonNegativeCount(value.unresolved_count);
   if (
     (!isOperationId(value.operation) && value.operation !== 'other') ||
     count === undefined
   ) {
-    throw new Error('dispatch attempt metric row is invalid');
+    throw internalError('dispatch attempt metric row is invalid');
   }
   return { operation: value.operation, count };
 }

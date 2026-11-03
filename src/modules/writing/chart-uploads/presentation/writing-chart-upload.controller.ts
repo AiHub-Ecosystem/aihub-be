@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   Body,
   Controller,
@@ -36,7 +37,7 @@ function requestContext(request: AuthenticatedRequest) {
   const authenticated = request.aihubAuth;
   const identity = request.aihubIdentity;
   if (authenticated === undefined || identity === undefined) {
-    throw new Error('writing chart upload identity is missing');
+    throw internalError('writing chart upload identity is missing');
   }
   const lifecycle = getRequestLifecycle(request.raw);
   return createRequestContext({

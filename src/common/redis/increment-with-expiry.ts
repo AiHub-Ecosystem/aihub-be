@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 export type RedisScriptEvaluator = (
   script: string,
   numberOfKeys: number,
@@ -23,7 +24,7 @@ export async function incrementRedisCounterWithExpiry(
   ttlSeconds: number,
 ): Promise<number> {
   if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
-    throw new Error('Redis counter TTL is invalid');
+    throw internalError('Redis counter TTL is invalid');
   }
 
   const count = await evaluate(
@@ -33,7 +34,7 @@ export async function incrementRedisCounterWithExpiry(
     ttlSeconds,
   );
   if (!Number.isSafeInteger(count) || count < 1) {
-    throw new Error('Redis counter result is invalid');
+    throw internalError('Redis counter result is invalid');
   }
   return count;
 }

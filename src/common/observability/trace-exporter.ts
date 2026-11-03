@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { Logger } from '@nestjs/common';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
@@ -40,7 +41,7 @@ export function withTraceExportSignals(exporter: SpanExporter): SpanExporter {
           error:
             cause instanceof Error
               ? cause
-              : new Error('OTLP trace export failed'),
+              : internalError('OTLP trace export failed'),
         });
       }
     },

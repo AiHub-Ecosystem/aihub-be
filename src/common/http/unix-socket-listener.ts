@@ -1,5 +1,6 @@
 import { chmod, lstat, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { internalError } from '@/common/errors/app-error';
 
 import type { FastifyInstance } from 'fastify';
 
@@ -38,7 +39,9 @@ export function prepareSocketListener(
         },
       );
       if (existing && !existing.isSocket()) {
-        throw new Error(`Refusing to replace non-socket path: ${socketPath}`);
+        throw internalError(
+          `Refusing to replace non-socket path: ${socketPath}`,
+        );
       }
       if (existing) await unlink(socketPath);
     }

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import {
   SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
@@ -78,7 +79,7 @@ export class PostgresSandboxDispatchBudget
         monthStart,
       );
       if (monthlyLimit === null) {
-        throw new Error('Sandbox allowance policy is unavailable');
+        throw internalError('Sandbox allowance policy is unavailable');
       }
 
       // Both counts run under the month's advisory lock, so no reservation

@@ -1,4 +1,5 @@
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import { asDateOrIso } from '@/common/postgres/row-readers';
 import type {
@@ -53,11 +54,11 @@ const USAGE_RETENTION_PREVIEW_SQL = `
 
 function cursorFromRow(value: unknown): UsageRetentionCursor {
   if (!isRecord(value) || typeof value.request_id !== 'string') {
-    throw new Error('usage retention row is invalid');
+    throw internalError('usage retention row is invalid');
   }
   const createdAt = asDateOrIso(value.created_at);
   if (createdAt === undefined || value.request_id.length === 0) {
-    throw new Error('usage retention row is invalid');
+    throw internalError('usage retention row is invalid');
   }
   return { createdAt, requestId: value.request_id };
 }
@@ -79,7 +80,7 @@ interface UsageRetentionPreviewRow {
 function countValue(value: string): number {
   const count = Number(value);
   if (!isUsableCount(count)) {
-    throw new Error('usage retention count is invalid');
+    throw internalError('usage retention count is invalid');
   }
   return count;
 }
@@ -123,7 +124,8 @@ export class PostgresUsageRetentionRepository implements UsageRetentionPort {
       readonly UsageRetentionPreviewRow[]
     >(USAGE_RETENTION_PREVIEW_SQL, cutoff);
     const row = rows[0];
-    if (row === undefined) throw new Error('usage retention preview is empty');
+    if (row === undefined)
+      throw internalError('usage retention preview is empty');
     return {
       usageRecords: countValue(row.usage_records),
       dispatchAttempts: countValue(row.dispatch_attempts),

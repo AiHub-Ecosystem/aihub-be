@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
   Body,
@@ -45,7 +46,7 @@ import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organ
 
 function decodeOrganizationReplay(value: unknown): CreatedOrganization {
   if (!isRecord(value)) {
-    throw new Error('stored organization replay is invalid');
+    throw internalError('stored organization replay is invalid');
   }
   const { organizationId, name, status, role } = value;
   if (
@@ -54,7 +55,7 @@ function decodeOrganizationReplay(value: unknown): CreatedOrganization {
     status !== 'active' ||
     role !== 'owner'
   ) {
-    throw new Error('stored organization replay is invalid');
+    throw internalError('stored organization replay is invalid');
   }
   return { organizationId, name, status, role };
 }

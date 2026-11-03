@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 import type {
@@ -144,7 +145,7 @@ function deferPrismaClient(getPrisma: () => PrismaClient): PrismaClient {
  */
 function unconfiguredPrismaClient(): PrismaClientHolder {
   const unconfigured = (): never => {
-    throw new Error('PostgreSQL is not configured');
+    throw internalError('PostgreSQL is not configured');
   };
 
   return {
@@ -234,7 +235,7 @@ export function createFixturePrismaClient(
   unavailableMessage = 'DATABASE_URL is missing',
 ): PrismaClient & { close(): Promise<void> } {
   if (databaseUrl.trim().length === 0) {
-    throw new Error(unavailableMessage);
+    throw internalError(unavailableMessage);
   }
 
   const holder = createPrismaClient('integration-test', databaseUrl);

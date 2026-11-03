@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { calculateMonthAnchoredCutoff } from '@/modules/metering/public/usage-retention';
 import type { WritingChartRevocationAuditRepositoryPort } from './writing-chart-revocation.port';
 
@@ -12,7 +13,7 @@ function validDate(value: Date): boolean {
 
 export function calculateWritingChartRevocationAuditCutoff(now: Date): Date {
   if (!validDate(now)) {
-    throw new Error('Writing chart revocation audit clock is invalid');
+    throw internalError('Writing chart revocation audit clock is invalid');
   }
   return calculateMonthAnchoredCutoff(
     now,
@@ -30,7 +31,9 @@ export class WritingChartRevocationAuditRetentionService {
     private readonly batchSize = WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
   ) {
     if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
-      throw new Error('Writing chart revocation audit batch size is invalid');
+      throw internalError(
+        'Writing chart revocation audit batch size is invalid',
+      );
     }
   }
 
@@ -45,7 +48,7 @@ export class WritingChartRevocationAuditRetentionService {
     while (true) {
       const count = await this.repository.pruneExpired(cutoff, this.batchSize);
       if (!Number.isSafeInteger(count) || count < 0 || count > this.batchSize) {
-        throw new Error('Writing chart revocation audit batch is invalid');
+        throw internalError('Writing chart revocation audit batch is invalid');
       }
       if (count === 0) break;
       batches += 1;

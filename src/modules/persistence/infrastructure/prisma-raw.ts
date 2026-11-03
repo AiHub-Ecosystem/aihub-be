@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { internalError } from '@/common/errors/app-error';
 
 import { Prisma } from '@prisma-client/client';
 
@@ -115,7 +116,7 @@ export function postgresError(error: unknown): unknown {
       ? Reflect.get(cause, 'originalMessage')
       : undefined;
   return Object.assign(
-    new Error(
+    internalError(
       typeof message === 'string'
         ? message
         : error instanceof Error

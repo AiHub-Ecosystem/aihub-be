@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import { readUtf8File } from '@/common/security/secret-document';
 
@@ -73,36 +74,37 @@ function loadKeyring(options: AuthMfaCipherOptions): AuthMfaKeyring {
     const currentKeyId = options.values.AIHUB_AUTH_MFA_CURRENT_KEY_ID?.trim();
     const rawKeys = options.values.AIHUB_AUTH_MFA_KEYS;
     if (!currentKeyId || !rawKeys)
-      throw new Error('Auth MFA keyring is incomplete');
+      throw internalError('Auth MFA keyring is incomplete');
     let keys: unknown;
     try {
       keys = JSON.parse(rawKeys);
     } catch {
-      throw new Error('Auth MFA keyring is invalid');
+      throw internalError('Auth MFA keyring is invalid');
     }
-    if (!isStringRecord(keys)) throw new Error('Auth MFA keyring is invalid');
+    if (!isStringRecord(keys))
+      throw internalError('Auth MFA keyring is invalid');
     return { currentKeyId, keys };
   }
 
   const path = options.secretsFile?.trim();
-  if (!path) throw new Error('AIHUB_AUTH_MFA_SECRETS_FILE is required');
+  if (!path) throw internalError('AIHUB_AUTH_MFA_SECRETS_FILE is required');
   let parsed: unknown;
   try {
     parsed = JSON.parse((options.readFile ?? readUtf8File)(path));
   } catch {
-    throw new Error('Auth MFA secret file is invalid');
+    throw internalError('Auth MFA secret file is invalid');
   }
   if (
     !isRecord(parsed) ||
     Object.keys(parsed).some((key) => !['current_key_id', 'keys'].includes(key))
   ) {
-    throw new Error('Auth MFA secret file is invalid');
+    throw internalError('Auth MFA secret file is invalid');
   }
   if (
     typeof parsed.current_key_id !== 'string' ||
     !isStringRecord(parsed.keys)
   ) {
-    throw new Error('Auth MFA secret file is invalid');
+    throw internalError('Auth MFA secret file is invalid');
   }
   return { currentKeyId: parsed.current_key_id, keys: parsed.keys };
 }

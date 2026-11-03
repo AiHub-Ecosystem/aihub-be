@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
+import { internalError } from '@/common/errors/app-error';
 
 import type {
   RuntimeConfiguration,
@@ -38,22 +39,22 @@ function assertUsableRsaSigningKey(privateKeyPem: string): void {
   try {
     const privateKey = createPrivateKey(privateKeyPem);
     if (privateKey.asymmetricKeyType !== 'rsa') {
-      throw new Error('the key is not RSA');
+      throw internalError('the key is not RSA');
     }
     const jwk = createPublicKey(privateKey).export({ format: 'jwk' });
     if (typeof jwk.n !== 'string') {
-      throw new Error('the key carries no modulus');
+      throw internalError('the key carries no modulus');
     }
     modulusBits = Buffer.from(jwk.n, 'base64url').length * 8;
   } catch (error) {
-    throw new Error(
+    throw internalError(
       `AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY is not a usable RS256 signing key: ${
         error instanceof Error ? error.message : 'unknown reason'
       }`,
     );
   }
   if (modulusBits < MIN_SANDBOX_ASSERTION_MODULUS_BITS) {
-    throw new Error(
+    throw internalError(
       `AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY carries a ${modulusBits}-bit RSA key; sandbox assertions need at least ${MIN_SANDBOX_ASSERTION_MODULUS_BITS} bits.`,
     );
   }

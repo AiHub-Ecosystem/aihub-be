@@ -1,4 +1,4 @@
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type {
@@ -27,7 +27,7 @@ function requiredEnvironment(value: string): SpeakingAudioEnvironment {
       'INTERNAL_ERROR',
       'Speaking Audio store is unavailable',
       false,
-      new Error('Speaking Audio environment is invalid'),
+      internalError('Speaking Audio environment is invalid'),
     );
   }
   return value;
@@ -47,7 +47,7 @@ function mapIntent(
       'INTERNAL_ERROR',
       'Speaking Audio store is unavailable',
       false,
-      new Error('Speaking Audio intent is invalid'),
+      internalError('Speaking Audio intent is invalid'),
     );
   }
   return {
@@ -73,7 +73,7 @@ function mapAsset(row: AssetModel | undefined): SpeakingAudioAsset | undefined {
       'INTERNAL_ERROR',
       'Speaking Audio store is unavailable',
       false,
-      new Error('Speaking Audio asset is invalid'),
+      internalError('Speaking Audio asset is invalid'),
     );
   }
   return {
@@ -244,7 +244,7 @@ export class PostgresSpeakingAudioUploadRepository
           'INTERNAL_ERROR',
           'Speaking Audio store is unavailable',
           false,
-          new Error('Speaking Audio intent changed'),
+          internalError('Speaking Audio intent changed'),
         );
       }
 
@@ -269,7 +269,7 @@ export class PostgresSpeakingAudioUploadRepository
           'INTERNAL_ERROR',
           'Speaking Audio store is unavailable',
           false,
-          new Error('Speaking Audio intent changed'),
+          internalError('Speaking Audio intent changed'),
         );
       }
       return 'created';

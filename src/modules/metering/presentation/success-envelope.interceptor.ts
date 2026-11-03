@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   type CallHandler,
   type ExecutionContext,
@@ -77,7 +78,9 @@ export class SuccessEnvelopeInterceptor implements NestInterceptor {
       mergeMap(async (value: unknown) => {
         try {
           if (!isDispatchResult(value)) {
-            throw new Error('success response is missing dispatch metadata');
+            throw internalError(
+              'success response is missing dispatch metadata',
+            );
           }
 
           const downstreamMs = Math.max(0, Math.round(value.downstreamMs));

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import {
   type RedisQuotaReconciliationClient,
   RedisQuotaReconciliationCounter,
@@ -96,10 +97,10 @@ export async function runQuotaReconciliationCommand(
   input: QuotaReconciliationCliInput,
 ): Promise<QuotaReconciliationSummary> {
   if (input.databaseUrl.trim().length === 0) {
-    throw new Error('DATABASE_URL is required');
+    throw internalError('DATABASE_URL is required');
   }
   if (input.redisUrl.trim().length === 0) {
-    throw new Error('REDIS_URL is required');
+    throw internalError('REDIS_URL is required');
   }
 
   const repository = new PostgresQuotaReconciliationRepository(

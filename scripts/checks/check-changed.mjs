@@ -23,6 +23,7 @@ import { pathToFileURL } from 'node:url';
 const TS_GATES = [
   'arch-check',
   'build',
+  'check:app-errors',
   'check:data-ownership',
   'check:deprecation',
   'check:file-size',
@@ -43,6 +44,7 @@ export const GATE_COMMANDS = {
   build: 'build',
   'coverage:unit': 'coverage:unit',
   'check:data-dictionary': 'check:data-dictionary',
+  'check:app-errors': 'check:app-errors',
   'check:deprecation': 'check:deprecation',
   'check:domain-globals': 'check:domain-globals',
   'check:file-size': 'check:file-size',
@@ -58,6 +60,7 @@ export const GATE_COMMANDS = {
   test: 'test',
   'test:capacity-benchmark': 'test:capacity-benchmark',
   'test:check-changed': 'test:check-changed',
+  'test:check-app-errors': 'test:check-app-errors',
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
   'test:issue-triage': 'test:issue-triage',
@@ -93,6 +96,10 @@ function classifyPathGates(p) {
 
   if (/(^|\/)jest\.config[^/]*\.(?:cjs|js|ts)$/.test(path)) {
     return ['coverage:unit', 'lint'];
+  }
+
+  if (path.includes('check-app-errors')) {
+    return ['check:app-errors', 'lint', 'test:check-app-errors'];
   }
 
   // Contract schemas also define the published surface, so a change there needs

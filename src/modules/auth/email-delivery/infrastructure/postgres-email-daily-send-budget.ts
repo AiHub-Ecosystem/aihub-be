@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type {
   EmailDailyBudgetReservation,
   EmailDailySendBudgetCategory,
@@ -178,7 +179,8 @@ export class PostgresEmailDailySendBudget implements EmailDailySendBudgetPort {
       values: [this.limits.dailyBudget],
     });
     const row = mapUsageRow(result.rows[0]);
-    if (row === undefined) throw new Error('email daily budget is unavailable');
+    if (row === undefined)
+      throw internalError('email daily budget is unavailable');
     return row;
   }
 }

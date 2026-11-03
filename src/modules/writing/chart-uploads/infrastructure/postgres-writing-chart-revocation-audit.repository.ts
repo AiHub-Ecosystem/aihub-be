@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { PrismaClient } from '@prisma-client/client';
 
 import { isUsableCount } from '@/common/counts/is-usable-count';
@@ -140,7 +141,7 @@ export class PostgresWritingChartRevocationAuditRepository
     );
     const count = Number(rows[0]?.count);
     if (!isUsableCount(count)) {
-      throw new Error('writing chart audit retention count is invalid');
+      throw internalError('writing chart audit retention count is invalid');
     }
     return count;
   }

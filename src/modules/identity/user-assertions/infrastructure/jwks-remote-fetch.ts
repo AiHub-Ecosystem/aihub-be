@@ -109,7 +109,12 @@ export async function fetchRemoteJwks(
   try {
     url = new URL(urlValue);
   } catch (error) {
-    throw new Error('JWKS URL is invalid', { cause: error });
+    throw new AppError({
+      code: 'IDENTITY_JWKS_URL_UNSAFE',
+      message: 'JWKS URL is invalid',
+      retryable: false,
+      cause: error,
+    });
   }
 
   if (!isSafeJwksUrl(url)) {

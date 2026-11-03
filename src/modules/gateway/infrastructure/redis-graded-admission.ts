@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
 
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
@@ -163,17 +163,18 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
     // The script stops before any write when the quota counter is missing,
     // so it can run again once the counter is rebuilt (#371).
     if (result === QUOTA_COUNTER_MISSING) {
-      try {
-        if (this.seeder === undefined) {
-          throw new Error('No quota counter source is configured');
+      if (this.seeder !== undefined) {
+        try {
+          await this.seeder.seed(request.organizationId, new Date(now));
+          [result, rateCount] = await evaluate(quota);
+        } catch (cause) {
+          if (cause instanceof AppError) throw cause;
+          if (request.hardStopOnQuota) throw quotaUnverifiableError();
+          [result, rateCount] = await evaluate(null);
+          quotaUnverified = true;
         }
-        await this.seeder.seed(request.organizationId, new Date(now));
-        [result, rateCount] = await evaluate(quota);
-        if (result === QUOTA_COUNTER_MISSING) {
-          throw new Error('Redis quota counter is missing');
-        }
-      } catch (cause) {
-        if (cause instanceof AppError) throw cause;
+      }
+      if (result === QUOTA_COUNTER_MISSING) {
         if (request.hardStopOnQuota) throw quotaUnverifiableError();
         [result, rateCount] = await evaluate(null);
         quotaUnverified = true;
@@ -208,7 +209,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
       default:
         this.reportDegraded();
         throw redisUnavailable(
-          new Error('Redis graded admission result is invalid'),
+          internalError('Redis graded admission result is invalid'),
           this.random,
         );
     }
@@ -257,7 +258,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
     if (result === undefined || rateCount === undefined) {
       this.reportDegraded();
       throw redisUnavailable(
-        new Error('Redis graded admission result is invalid'),
+        internalError('Redis graded admission result is invalid'),
         this.random,
       );
     }

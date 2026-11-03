@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 export const USAGE_PRUNE_BATCH_SIZE = 1000;
 const USAGE_RETENTION_MONTHS = 13;
 
@@ -167,7 +168,7 @@ export class UsageRetentionService {
     private readonly batchSize = USAGE_PRUNE_BATCH_SIZE,
   ) {
     if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
-      throw new Error('usage retention batch size is invalid');
+      throw internalError('usage retention batch size is invalid');
     }
   }
 

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { getRuntimeConfiguration } from '@/config/runtime-configuration';
 import { type FastifyServerOptions, LogController } from 'fastify';
 
@@ -20,7 +21,7 @@ function configuredLogLevel(configured: string | undefined): string {
   const levelName = configured?.trim() || DEFAULT_LOG_LEVEL;
   const level = LOG_LEVELS.find((candidate) => candidate === levelName);
   if (level === undefined) {
-    throw new Error(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}`);
+    throw internalError(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}`);
   }
 
   return level;

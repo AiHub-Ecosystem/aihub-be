@@ -1,4 +1,5 @@
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { internalError } from '@/common/errors/app-error';
 import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
@@ -25,14 +26,14 @@ export class RedisQuotaReconciliationCounter
 
     const count = Number(value);
     if (!/^(0|[1-9]\d*)$/.test(value) || !isUsableCount(count)) {
-      throw new Error('Redis quota counter value is invalid');
+      throw internalError('Redis quota counter value is invalid');
     }
     return count;
   }
 
   async overwrite(request: QuotaCounterOverwriteRequest): Promise<void> {
     if (!isUsableCount(request.count)) {
-      throw new Error('Redis quota counter value is invalid');
+      throw internalError('Redis quota counter value is invalid');
     }
 
     const result = await this.client.set(
@@ -42,7 +43,7 @@ export class RedisQuotaReconciliationCounter
       QUOTA_TTL_SECONDS,
     );
     if (result !== 'OK') {
-      throw new Error('Redis quota counter overwrite failed');
+      throw internalError('Redis quota counter overwrite failed');
     }
   }
 

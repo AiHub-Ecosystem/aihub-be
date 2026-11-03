@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { internalError } from '@/common/errors/app-error';
 
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 
@@ -65,7 +66,8 @@ function encodeBase32(value: Uint8Array): string {
 }
 
 function decodeBase32(value: string): Buffer {
-  if (!/^[A-Z2-7]+$/u.test(value)) throw new Error('TOTP secret is invalid');
+  if (!/^[A-Z2-7]+$/u.test(value))
+    throw internalError('TOTP secret is invalid');
   let bits = 0;
   let buffer = 0;
   const decoded: number[] = [];

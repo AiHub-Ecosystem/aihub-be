@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { createRedisClient } from '@/common/redis/create-redis-client';
 import { numberReply } from '@/common/redis/number-reply';
 import Redis from 'ioredis';
@@ -36,7 +37,7 @@ export function integerArrayReply(result: unknown): readonly number[] {
     !Array.isArray(result) ||
     !result.every((item): item is number => typeof item === 'number')
   ) {
-    throw new Error('Redis command result is invalid');
+    throw internalError('Redis command result is invalid');
   }
   return result;
 }

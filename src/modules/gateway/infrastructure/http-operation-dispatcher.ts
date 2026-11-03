@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import type { OperationId } from '@/catalog/operation-id';
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 import { isDownstreamCredentialRejection } from '@/common/errors/downstream-fault';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { isRecord } from '@/common/is-record';
@@ -49,7 +49,7 @@ function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
       message: 'AI service is temporarily unavailable',
       retryable: true,
       downstreamStatus: status,
-      cause: new Error(`downstream status ${status}`),
+      cause: internalError(`downstream status ${status}`),
     });
   }
 
@@ -60,7 +60,7 @@ function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
     retryable: status >= 500 || status === 408 || status === 425,
     downstreamStatus: status,
     ...(status === 503 && retryAfterMs !== undefined ? { retryAfterMs } : {}),
-    cause: new Error(`downstream status ${status}`),
+    cause: internalError(`downstream status ${status}`),
   });
 }
 
@@ -145,7 +145,7 @@ function unconfiguredOperation(operation: OperationId): AppError {
     code: 'INTERNAL_ERROR',
     message: 'Operation is not configured',
     retryable: false,
-    cause: new Error(`no adapter registered for ${operation}`),
+    cause: internalError(`no adapter registered for ${operation}`),
   });
 }
 
@@ -282,7 +282,7 @@ export class HttpOperationTransport implements OperationTransportPort {
       adapters.map((adapter) => [adapter.operation, adapter]),
     );
     if (registry.size !== adapters.length) {
-      throw new Error('Duplicate downstream adapter registration');
+      throw internalError('Duplicate downstream adapter registration');
     }
     this.adapters = registry;
   }

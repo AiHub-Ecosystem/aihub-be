@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 function canonicalize(value: unknown): unknown {
   if (
@@ -10,7 +11,7 @@ function canonicalize(value: unknown): unknown {
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new Error('canonical JSON cannot contain a non-finite number');
+      throw internalError('canonical JSON cannot contain a non-finite number');
     }
     return value;
   }
@@ -28,14 +29,14 @@ function canonicalize(value: unknown): unknown {
     for (const key of Object.keys(value).sort()) {
       const item = value[key];
       if (item === undefined) {
-        throw new Error('canonical JSON cannot contain undefined');
+        throw internalError('canonical JSON cannot contain undefined');
       }
       normalized[key] = canonicalize(item);
     }
     return normalized;
   }
 
-  throw new Error('canonical JSON contains an unsupported value');
+  throw internalError('canonical JSON contains an unsupported value');
 }
 
 /**
@@ -45,7 +46,7 @@ function canonicalize(value: unknown): unknown {
 export function canonicalJson(value: unknown): string {
   const serialized = JSON.stringify(canonicalize(value));
   if (serialized === undefined) {
-    throw new Error('canonical JSON could not be serialized');
+    throw internalError('canonical JSON could not be serialized');
   }
   return serialized;
 }

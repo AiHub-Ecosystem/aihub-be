@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { MonthlyBillableUsagePort } from '@/modules/metering/application/monthly-billable-usage.port';
 import { billableRequestSql } from './billable-request-sql';
 import { safeNonNegativeCount } from './metering-row';
@@ -31,7 +32,7 @@ export class PostgresMonthlyBillableUsage implements MonthlyBillableUsagePort {
     >(MONTHLY_BILLABLE_USAGE_SQL, organizationId, from, to);
     const count = safeNonNegativeCount(rows[0]?.billable_count);
     if (count === undefined) {
-      throw new Error('monthly billable usage is invalid');
+      throw internalError('monthly billable usage is invalid');
     }
     return count;
   }

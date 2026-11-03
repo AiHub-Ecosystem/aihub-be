@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { Logger } from '@nestjs/common';
 
 import { isUsableCount } from '@/common/counts/is-usable-count';
@@ -37,13 +38,13 @@ function monthKey(organizationId: string, now: Date): string {
 function parseCount(value: string): number {
   const count = safeNonNegativeCount(value);
   if (count === undefined || !isUsableCount(count)) {
-    throw new Error('Redis quota counter value is invalid');
+    throw internalError('Redis quota counter value is invalid');
   }
   return count;
 }
 
 function unavailable(): Error {
-  return new Error('Redis quota counter is unavailable');
+  return internalError('Redis quota counter is unavailable');
 }
 
 // Incrementing a missing counter would restart it at 1 and hide the month's
@@ -86,7 +87,7 @@ export class RedisQuotaCounter implements QuotaCounterPort {
         value = await this.client.get(key);
       }
       if (value === null) {
-        throw new Error('Redis quota counter is missing');
+        throw internalError('Redis quota counter is missing');
       }
       const count = parseCount(value);
       this.reportRecovered();
@@ -108,10 +109,10 @@ export class RedisQuotaCounter implements QuotaCounterPort {
       const key = monthKey(request.organizationId, this.now());
       const count = await client.eval(INCREMENT_EXISTING_SCRIPT, 1, key);
       if (count === 0) {
-        throw new Error('Redis quota counter is missing');
+        throw internalError('Redis quota counter is missing');
       }
       if (!isUsableCount(count)) {
-        throw new Error('Redis quota counter result is invalid');
+        throw internalError('Redis quota counter result is invalid');
       }
 
       this.reportRecovered();

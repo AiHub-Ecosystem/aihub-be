@@ -1,4 +1,4 @@
-import { AppError } from '@/common/errors/app-error';
+import { AppError, internalError } from '@/common/errors/app-error';
 
 /**
  * The error every downstream response adapter throws when the provider's body
@@ -11,6 +11,6 @@ export function contractViolation(reason: string): AppError {
     message: 'AI service returned an unexpected response shape',
     retryable: false,
     diagnostic: reason,
-    cause: new Error(reason),
+    cause: internalError(reason),
   });
 }

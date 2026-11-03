@@ -1,4 +1,4 @@
-import { AppError } from './app-error';
+import { AppError, internalError } from './app-error';
 
 describe('AppError', () => {
   it('serializes only the public error envelope', () => {
@@ -94,6 +94,20 @@ describe('AppError', () => {
         code: 'INTERNAL_ERROR',
         message: 'Internal server error',
         request_id: 'req-456',
+        retryable: false,
+      },
+    });
+  });
+
+  it('keeps internal error messages private in the public envelope', () => {
+    const error = internalError('database query failed: private detail');
+
+    expect(error.message).toBe('database query failed: private detail');
+    expect(error.toEnvelope('req-internal')).toEqual({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        request_id: 'req-internal',
         retryable: false,
       },
     });

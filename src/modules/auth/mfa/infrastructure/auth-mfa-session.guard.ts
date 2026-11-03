@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type { MfaSessionProof } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import {
   type AuthSqlClient,
@@ -40,7 +41,7 @@ export function assertAdmitted(
   userId: string,
 ): void {
   if (admission.userId !== userId) {
-    throw new Error('session admission belongs to another account');
+    throw internalError('session admission belongs to another account');
   }
 }
 

@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import type {
   EmailDispatchOptions,
   EmailMessage,
@@ -29,7 +30,7 @@ export class ResendEmailSender implements EmailSenderPort {
     private readonly fetcher: ResendFetch = fetch,
   ) {
     if (from.trim().length === 0) {
-      throw new Error('RESEND_FROM is required');
+      throw internalError('RESEND_FROM is required');
     }
   }
 

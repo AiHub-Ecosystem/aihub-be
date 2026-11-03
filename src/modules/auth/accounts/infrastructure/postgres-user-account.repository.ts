@@ -1,3 +1,4 @@
+import { internalError } from '@/common/errors/app-error';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { ulid } from 'ulid';
 
@@ -158,7 +159,7 @@ export class PostgresUserAccountRepository
       return undefined;
     }
     if (!isAccountStatus(identity.userAccount.status)) {
-      throw new Error('local auth identity projection is invalid');
+      throw internalError('local auth identity projection is invalid');
     }
     return {
       userId: identity.userAccount.id,
@@ -181,7 +182,7 @@ export class PostgresUserAccountRepository
     });
     if (identity === null) return undefined;
     if (!isAccountStatus(identity.userAccount.status)) {
-      throw new Error('local auth identity projection is invalid');
+      throw internalError('local auth identity projection is invalid');
     }
     return {
       userId,
@@ -216,7 +217,7 @@ export class PostgresUserAccountRepository
       return undefined;
     }
     if (!isAccountStatus(account.status)) {
-      throw new Error('local account status projection is invalid');
+      throw internalError('local account status projection is invalid');
     }
     return account.status;
   }
