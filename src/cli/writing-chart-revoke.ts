@@ -1,13 +1,11 @@
-import type {
-  WritingChartPublicEdgeOutcome,
-  WritingChartRevocationAuditRepositoryPort,
-  WritingChartRevocationStoragePort,
-} from '@/modules/writing/application/writing-chart-revocation.port';
 import {
   WRITING_CHART_PUBLICATION_LEASE_MS,
   type WritingChartEnvironment,
+  type WritingChartPublicEdgeOutcome,
+  type WritingChartRevocationAuditRepositoryPort,
+  type WritingChartRevocationStoragePort,
   isWritingChartAssetId,
-} from '@/modules/writing/public/chart-revocation';
+} from '@/modules/writing/public/chart-uploads';
 import { createCliWritingChartStorage } from './writing-chart-storage';
 
 export type WritingChartRevokeErrorCode =

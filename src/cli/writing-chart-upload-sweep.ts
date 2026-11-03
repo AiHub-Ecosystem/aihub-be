@@ -1,10 +1,10 @@
 import process from 'node:process';
 
-import type {
-  WritingChartUploadRepositoryPort,
-  WritingChartUploadStoragePort,
-} from '@/modules/writing/application/writing-chart-upload.port';
-import { WritingChartUploadSweep } from '@/modules/writing/application/writing-chart-upload.sweep';
+import {
+  type WritingChartUploadRepositoryPort,
+  type WritingChartUploadStoragePort,
+  WritingChartUploadSweep,
+} from '@/modules/writing/public/chart-uploads';
 import { createCliWritingChartStorage } from './writing-chart-storage';
 
 import { runOperatorCommand } from './operator-command-context';

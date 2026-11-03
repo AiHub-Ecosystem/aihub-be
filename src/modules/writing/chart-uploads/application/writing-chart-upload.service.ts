@@ -13,7 +13,7 @@ import {
   isWritingChartContentType,
   writingChartPublishedKey,
   writingChartStagingKey,
-} from '@/modules/writing/domain/writing-chart-upload';
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import { serializeWritingChartImageProcessing } from './writing-chart-image-processing';
 import { sanitizeWritingChartImage } from './writing-chart-image-verifier';
 import {

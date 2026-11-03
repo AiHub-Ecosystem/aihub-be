@@ -8,7 +8,7 @@ import { getMetrics } from '@/common/observability/metrics';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';
-import { S3WritingChartUploadStorage } from '@/modules/writing/infrastructure/s3-writing-chart-upload.storage';
+import { S3WritingChartUploadStorage } from '@/modules/writing/chart-uploads/infrastructure/s3-writing-chart-upload.storage';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

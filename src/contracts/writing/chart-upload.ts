@@ -1,6 +1,6 @@
 import { type Static, Type } from '@sinclair/typebox';
 import '@/contracts/date-time-format';
-import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/public/chart-uploads';
 
 const MetaSchema = Type.Object(
   { request_id: Type.String() },

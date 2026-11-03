@@ -1,4 +1,4 @@
-import type { WritingChartUploadStoragePort } from '@/modules/writing/application/writing-chart-upload.port';
+import type { WritingChartUploadStoragePort } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 
 export const CHART_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC',

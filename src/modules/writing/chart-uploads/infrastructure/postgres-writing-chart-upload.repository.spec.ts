@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma-client/client';
 
-import type { WritingChartUploadIntent } from '@/modules/writing/domain/writing-chart-upload';
+import type { WritingChartUploadIntent } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import { PostgresWritingChartUploadRepository } from './postgres-writing-chart-upload.repository';
 
 function fakePrisma(count: jest.Mock) {

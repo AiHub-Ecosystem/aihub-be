@@ -36,20 +36,20 @@ import {
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
-import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 import {
   WRITING_CHART_UPLOAD_CLOCK,
   WRITING_CHART_UPLOAD_REPOSITORY,
   WRITING_CHART_UPLOAD_STORAGE,
   type WritingChartUploadRepositoryPort,
   type WritingChartUploadStoragePort,
-} from '@/modules/writing/application/writing-chart-upload.port';
+} from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import {
   type WritingChartAsset,
   type WritingChartContentType,
   type WritingChartEnvironment,
   type WritingChartUploadIntent,
-} from '@/modules/writing/domain/writing-chart-upload';
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 
 const FIXTURES = join(__dirname, '../fixtures/ai-writing');
 const task1 = JSON.parse(

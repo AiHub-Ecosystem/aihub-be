@@ -32,7 +32,7 @@ import { RequireOperation } from '@/modules/identity/shared/presentation/require
 import {
   isValidWritingExerciseError,
   isValidWritingExerciseImage,
-} from '@/modules/writing/application/writing-exercise-request.policy';
+} from '@/modules/writing/grading/application/writing-exercise-request.policy';
 
 const MICRO_CREATE = 'writing.v2.micro-exercises.create' as const;
 const LONG_CREATE = 'writing.v2.long-writing-exercises.create' as const;

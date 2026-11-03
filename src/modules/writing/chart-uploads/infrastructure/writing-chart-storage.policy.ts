@@ -1,4 +1,4 @@
-import type { WritingChartEnvironment } from '@/modules/writing/domain/writing-chart-upload';
+import type { WritingChartEnvironment } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 
 export const WRITING_CHART_UPLOAD_URL_TTL_SECONDS = 5 * 60;
 

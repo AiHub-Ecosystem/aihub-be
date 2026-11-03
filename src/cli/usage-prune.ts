@@ -9,12 +9,12 @@ import {
   type UsageRetentionSummary,
   calculateUsageRetentionCutoff,
 } from '@/modules/metering/public/usage-retention';
-import type { WritingChartRevocationAuditRepositoryPort } from '@/modules/writing/application/writing-chart-revocation.port';
 import {
   WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE,
   WritingChartRevocationAuditRetentionService,
   calculateWritingChartRevocationAuditCutoff,
-} from '@/modules/writing/public/chart-revocation';
+  type WritingChartRevocationAuditRepositoryPort,
+} from '@/modules/writing/public/chart-uploads';
 import { createOperatorMeteringClient } from './operator-metering-client';
 
 export interface UsagePruneCliInput {

@@ -25,15 +25,15 @@ import {
   WRITING_CHART_UPLOAD_STORAGE,
   type WritingChartUploadRepositoryPort,
   type WritingChartUploadStoragePort,
-} from './application/writing-chart-upload.port';
-import { WritingChartUploadService } from './application/writing-chart-upload.service';
-import { WritingChartUploadSweep } from './application/writing-chart-upload.sweep';
-import { PostgresWritingChartUploadRepository } from './infrastructure/postgres-writing-chart-upload.repository';
-import { S3WritingChartUploadStorage } from './infrastructure/s3-writing-chart-upload.storage';
-import { WritingChartUploadController } from './presentation/writing-chart-upload.controller';
-import { WritingExerciseController } from './presentation/writing-exercise.controller';
-import { WritingGradingController } from './presentation/writing-grading.controller';
-import { WritingV2GradingController } from './presentation/writing-v2-grading.controller';
+} from './chart-uploads/application/writing-chart-upload.port';
+import { WritingChartUploadService } from './chart-uploads/application/writing-chart-upload.service';
+import { WritingChartUploadSweep } from './chart-uploads/application/writing-chart-upload.sweep';
+import { PostgresWritingChartUploadRepository } from './chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
+import { S3WritingChartUploadStorage } from './chart-uploads/infrastructure/s3-writing-chart-upload.storage';
+import { WritingChartUploadController } from './chart-uploads/presentation/writing-chart-upload.controller';
+import { WritingExerciseController } from './grading/presentation/writing-exercise.controller';
+import { WritingGradingController } from './grading/presentation/writing-grading.controller';
+import { WritingV2GradingController } from './grading/presentation/writing-v2-grading.controller';
 
 @Module({
   imports: [

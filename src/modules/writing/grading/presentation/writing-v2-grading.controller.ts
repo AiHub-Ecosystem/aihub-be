@@ -26,8 +26,8 @@ import {
 } from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import { isWithinEssayWordLimit } from '@/modules/writing/application/essay-word-limit.policy';
-import { isAllowedTask1ImageUrl } from '@/modules/writing/application/task1-image-url.policy';
+import { isWithinEssayWordLimit } from '@/modules/writing/grading/application/essay-word-limit.policy';
+import { isAllowedTask1ImageUrl } from '@/modules/writing/grading/application/task1-image-url.policy';
 
 const TASK1_OPERATION = 'writing.v2.task1.grade' as const;
 const TASK2_OPERATION = 'writing.v2.task2.grade' as const;

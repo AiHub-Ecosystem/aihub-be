@@ -1,4 +1,4 @@
-import { calculateWritingChartRevocationAuditCutoff } from '@/modules/writing/public/chart-revocation';
+import { calculateWritingChartRevocationAuditCutoff } from '@/modules/writing/public/chart-uploads';
 
 import {
   UsagePruneError,

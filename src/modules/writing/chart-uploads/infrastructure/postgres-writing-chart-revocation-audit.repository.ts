@@ -5,7 +5,7 @@ import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type {
   WritingChartRevocationAuditRecord,
   WritingChartRevocationAuditRepositoryPort,
-} from '@/modules/writing/application/writing-chart-revocation.port';
+} from '@/modules/writing/chart-uploads/application/writing-chart-revocation.port';
 import {
   WRITING_CHART_LOCK_SQL,
   writingChartPublicationLockKey,

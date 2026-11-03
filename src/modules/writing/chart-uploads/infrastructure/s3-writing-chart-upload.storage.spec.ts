@@ -7,7 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
-import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 import { S3WritingChartUploadStorage } from './s3-writing-chart-upload.storage';
 
 const STAGING_KEY = 'writing-charts/chart_01J00000000000000000000001/staging';

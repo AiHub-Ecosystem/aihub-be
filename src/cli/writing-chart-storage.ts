@@ -1,7 +1,7 @@
 import process from 'node:process';
 
-import { S3WritingChartUploadStorage } from '@/modules/writing/infrastructure/s3-writing-chart-upload.storage';
-import type { WritingChartEnvironment } from '@/modules/writing/public/chart-revocation';
+import { S3WritingChartUploadStorage } from '@/modules/writing/chart-uploads/infrastructure/s3-writing-chart-upload.storage';
+import type { WritingChartEnvironment } from '@/modules/writing/public/chart-uploads';
 import { createCliSeaweedFsClient } from './seaweedfs-client';
 
 /**

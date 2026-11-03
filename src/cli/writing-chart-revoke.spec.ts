@@ -2,7 +2,7 @@ import type {
   WritingChartRevocationAuditRecord,
   WritingChartRevocationAuditRepositoryPort,
   WritingChartRevocationStoragePort,
-} from '@/modules/writing/application/writing-chart-revocation.port';
+} from '@/modules/writing/chart-uploads/application/writing-chart-revocation.port';
 import {
   type WritingChartRevokeCliInput,
   type WritingChartRevokeResult,

@@ -12,13 +12,13 @@ import {
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
-import type { WritingChartRevocationStoragePort } from '@/modules/writing/application/writing-chart-revocation.port';
-import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/application/writing-chart-upload.policy';
-import type { WritingChartUploadStoragePort } from '@/modules/writing/application/writing-chart-upload.port';
+import type { WritingChartRevocationStoragePort } from '@/modules/writing/chart-uploads/application/writing-chart-revocation.port';
+import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
+import type { WritingChartUploadStoragePort } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import {
   type WritingChartContentType,
   type WritingChartEnvironment,
-} from '@/modules/writing/domain/writing-chart-upload';
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import {
   WRITING_CHART_BUCKETS,
   WRITING_CHART_UPLOAD_URL_TTL_SECONDS,

@@ -4,7 +4,7 @@ import type {
   WritingChartContentType,
   WritingChartEnvironment,
   WritingChartUploadIntent,
-} from '@/modules/writing/domain/writing-chart-upload';
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 
 export interface WritingChartUploadOwner {
   readonly assetId: string;

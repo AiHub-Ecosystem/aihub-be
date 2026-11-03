@@ -6,20 +6,20 @@ import {
   WRITING_CHART_PUBLICATION_LEASE_MS,
   WRITING_CHART_RATE_WINDOW_MS,
   WRITING_CHART_RETENTION_MS,
-} from '@/modules/writing/application/writing-chart-upload.policy';
+} from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 import type {
   WritingChartCleanupCandidate,
   WritingChartUploadLookup,
   WritingChartUploadOwner,
   WritingChartUploadRepositoryPort,
-} from '@/modules/writing/application/writing-chart-upload.port';
+} from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import {
   type WritingChartAsset,
   type WritingChartUploadIntent,
   isWritingChartContentType,
   isWritingChartEnvironment,
   isWritingChartUploadStatus,
-} from '@/modules/writing/domain/writing-chart-upload';
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import type {
   Prisma,
   PrismaClient,

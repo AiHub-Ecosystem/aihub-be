@@ -28,7 +28,7 @@ import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/a
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 
-const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-writing');
+const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 
 const Task1FixtureSchema = Type.Object(
   {

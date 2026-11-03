@@ -19,7 +19,9 @@ registerHooks({
   },
 });
 
-const domain = await import('@/modules/writing/domain/writing-chart-upload.js');
+const domain = await import(
+  '@/modules/writing/chart-uploads/domain/writing-chart-upload.js'
+);
 
 void describe('Writing chart upload domain values with node:test', () => {
   void it('validates content types, environments, and intent states', () => {

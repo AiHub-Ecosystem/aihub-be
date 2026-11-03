@@ -25,7 +25,7 @@ import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/a
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 
-const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-writing');
+const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 const PROVIDER_URL = 'https://ai-writing.test';
 const ORGANIZATION_ID = 'org_writing_v2';
 const USER_ID = 'learner_v2';

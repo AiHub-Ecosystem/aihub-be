@@ -238,7 +238,7 @@ function importSharpFromApp() {
 function importChartVerifierFromApp() {
   return /** @type {Promise<ChartVerifierModule>} */ (
     import(
-      '/app/dist/modules/writing/application/writing-chart-image-verifier.js'
+      '/app/dist/modules/writing/chart-uploads/application/writing-chart-image-verifier.js'
     )
   );
 }
@@ -247,7 +247,7 @@ function importChartVerifierFromApp() {
 function importChartProcessingFromApp() {
   return /** @type {Promise<ChartProcessingModule>} */ (
     import(
-      '/app/dist/modules/writing/application/writing-chart-image-processing.js'
+      '/app/dist/modules/writing/chart-uploads/application/writing-chart-image-processing.js'
     )
   );
 }

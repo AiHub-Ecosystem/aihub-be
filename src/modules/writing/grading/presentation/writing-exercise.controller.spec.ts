@@ -7,7 +7,7 @@ import { createGradedPipelineContext } from '@/modules/gateway/public/graded-pip
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { WritingExerciseController } from './writing-exercise.controller';
 
-jest.mock('../../gateway/public/graded-pipeline', () => ({
+jest.mock('../../../gateway/public/graded-pipeline', () => ({
   GRADED_PIPELINE_ENGINE: Symbol('GRADED_PIPELINE_ENGINE'),
   createGradedPipelineContext: jest.fn(),
 }));

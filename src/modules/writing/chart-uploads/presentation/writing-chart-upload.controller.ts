@@ -27,8 +27,8 @@ import { UserIdentityGuard } from '@/modules/identity/shared/presentation/user-i
 import {
   WRITING_CHART_UPLOAD_SERVICE,
   type WritingChartUploadServicePort,
-} from '@/modules/writing/application/writing-chart-upload.port';
-import type { WritingChartAsset } from '@/modules/writing/domain/writing-chart-upload';
+} from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
+import type { WritingChartAsset } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 
 const OPERATION = 'writing.task1.grade' as const;
 

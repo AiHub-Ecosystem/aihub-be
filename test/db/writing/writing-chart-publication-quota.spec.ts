@@ -2,11 +2,11 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
-import type { WritingChartUploadOwner } from '@/modules/writing/application/writing-chart-upload.port';
+import type { WritingChartUploadOwner } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import {
   PostgresWritingChartUploadRepository,
   writingChartPublicationLockKey,
-} from '@/modules/writing/infrastructure/postgres-writing-chart-upload.repository';
+} from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 
 // The Organization's hourly publication limit holds while another publication

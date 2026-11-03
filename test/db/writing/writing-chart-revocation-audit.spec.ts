@@ -4,8 +4,8 @@ import { ulid } from 'ulid';
 import { runUsagePruneCommand } from '@/cli/usage-prune';
 import type { UsageRetentionPort } from '@/modules/metering/application/usage-retention';
 import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
-import { calculateWritingChartRevocationAuditCutoff } from '@/modules/writing/application/writing-chart-revocation-audit-retention';
-import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/infrastructure/postgres-writing-chart-revocation-audit.repository';
+import { calculateWritingChartRevocationAuditCutoff } from '@/modules/writing/chart-uploads/application/writing-chart-revocation-audit-retention';
+import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository';
 import {
   createSandboxTestPool,
   createTestPool,

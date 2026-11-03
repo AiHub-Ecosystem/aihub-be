@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 
-import type { WritingChartContentType } from '@/modules/writing/domain/writing-chart-upload';
+import type { WritingChartContentType } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import {
   WRITING_CHART_MAX_BYTES,
   WRITING_CHART_MAX_PIXELS,

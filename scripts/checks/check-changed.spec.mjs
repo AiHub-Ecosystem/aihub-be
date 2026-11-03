@@ -164,7 +164,10 @@ await test('the Bun runner accepts a focused spec path', () => {
 });
 
 await test('the Bun runner preserves substring and directory filters', () => {
-  for (const filter of ['writing-chart-upload', 'src/modules/writing/domain']) {
+  for (const filter of [
+    'writing-chart-upload',
+    'src/modules/writing/chart-uploads/domain',
+  ]) {
     const args = buildBunTestArgs(['--', filter]);
     assert.ok(args.includes(filter));
     assert.notEqual(args.at(-1), '.spec.ts');

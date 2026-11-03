@@ -26,9 +26,11 @@ import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-atte
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SpeakingGradingController } from '@/modules/speaking/presentation/speaking-grading.controller';
 import { SpeakingV2Controller } from '@/modules/speaking/presentation/speaking-v2.controller';
-import { WritingExerciseController } from '@/modules/writing/presentation/writing-exercise.controller';
-import { WritingGradingController } from '@/modules/writing/presentation/writing-grading.controller';
-import { WritingV2GradingController } from '@/modules/writing/presentation/writing-v2-grading.controller';
+import {
+  WritingExerciseController,
+  WritingGradingController,
+  WritingV2GradingController,
+} from '@/modules/writing/public/grading';
 import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
 import {
   GRADED_REQUEST_GUARDS,

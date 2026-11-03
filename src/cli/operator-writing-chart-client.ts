@@ -2,7 +2,7 @@ export async function createOperatorWritingChartClient(databaseUrl: string) {
   const [prismaModule, repositoryModule] = await Promise.all([
     import('@/modules/persistence/infrastructure/prisma-client'),
     import(
-      '@/modules/writing/infrastructure/postgres-writing-chart-upload.repository'
+      '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository'
     ),
   ]);
   const holder = prismaModule.createOperatorPrismaClient(
@@ -21,7 +21,7 @@ export async function createOperatorWritingChartRevocationAuditClient(
   const [{ createOperatorPrismaClient }, repositoryModule] = await Promise.all([
     import('@/modules/persistence/infrastructure/prisma-client'),
     import(
-      '@/modules/writing/infrastructure/postgres-writing-chart-revocation-audit.repository'
+      '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository'
     ),
   ]);
   const holder = createOperatorPrismaClient('runtime', databaseUrl);
