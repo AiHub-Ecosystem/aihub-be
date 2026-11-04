@@ -1249,6 +1249,44 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.status).toBe(0);
   });
 
+  it('allows SQL built from an allowlisted fragment builder', () => {
+    const result = runWithFixtures([
+      {
+        layer: 'infrastructure',
+        name: 'billable-request-sql.ts',
+        source:
+          'export function billableRequestSql(alias = ""): string { return alias; }\n',
+      },
+      {
+        layer: 'infrastructure',
+        name: 'raw-sql.repository.ts',
+        source: [
+          "import { billableRequestSql } from './billable-request-sql';",
+          'const COUNT_SQL = `SELECT COUNT(*) FROM usage_records u WHERE ${billableRequestSql("u")}`;',
+          'export const count = (client: any) => client.$queryRawUnsafe(COUNT_SQL);',
+          '',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(result.output).not.toContain('passes dynamic SQL to');
+    expect(result.status).toBe(0);
+  });
+
+  it.each([
+    // same name from a module that is not on the allowlist
+    "import { billableRequestSql } from './other-sql';\nconst S = `SELECT 1 WHERE ${billableRequestSql()}`;\nclient.$queryRawUnsafe(S);\n",
+    // allowlisted builder fed a request value
+    "import { billableRequestSql } from './billable-request-sql';\nclient.$queryRawUnsafe(`SELECT 1 WHERE ${billableRequestSql(request.alias)}`);\n",
+    // a sort column taken from the request, not from the allowlist
+    "import { billableRequestSql } from './billable-request-sql';\nclient.$queryRawUnsafe(`SELECT 1 ORDER BY ${request.sort}`);\n",
+  ])('rejects a fragment that is not allowlisted: %s', (source) => {
+    const result = rawSqlProbe(source);
+
+    expect(result.output).toContain('passes dynamic SQL to');
+    expect(result.status).not.toBe(0);
+  });
+
   it('allows static SQL with bound values', () => {
     const result = rawSqlProbe(
       "client.$queryRawUnsafe('SELECT * FROM records WHERE id = $1', request.id);\n",

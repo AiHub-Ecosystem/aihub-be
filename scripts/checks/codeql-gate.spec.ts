@@ -10,87 +10,138 @@ import {
 function result(
   ruleId: string,
   uri: string,
-  suppressions?: readonly { kind: string }[],
-): readonly SarifResult[] {
-  return [
-    {
-      ruleId,
-      message: { text: 'finding' },
-      locations: [
-        {
-          physicalLocation: {
-            artifactLocation: { uri },
-            region: { startLine: 3 },
-          },
+  options: {
+    readonly fingerprint?: string;
+    readonly suppressions?: readonly { kind: string }[];
+  } = {},
+): SarifResult {
+  return {
+    ruleId,
+    message: { text: 'finding' },
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri },
+          region: { startLine: 3 },
         },
-      ],
-      ...(suppressions === undefined ? {} : { suppressions }),
-    },
-  ];
+      },
+    ],
+    ...(options.fingerprint === undefined
+      ? {}
+      : {
+          partialFingerprints: { primaryLocationLineHash: options.fingerprint },
+        }),
+    ...(options.suppressions === undefined
+      ? {}
+      : { suppressions: options.suppressions }),
+  };
+}
+
+function sarifOf(...results: SarifResult[]): Sarif {
+  return { runs: [{ results }] };
 }
 
 const NO_TRIAGE: Triage = { entries: [] };
+const SQL = 'aihub/request-data-to-raw-sql';
 
 describe('codeql gate', () => {
   it('fails on a finding nobody triaged', () => {
-    const sarif: Sarif = {
-      runs: [{ results: result('aihub/request-data-to-raw-sql', 'src/a.ts') }],
-    };
-
-    const outcome = evaluateSarif(sarif, NO_TRIAGE);
+    const outcome = evaluateSarif(
+      sarifOf(result(SQL, 'src/a.ts', { fingerprint: 'h1:1' })),
+      NO_TRIAGE,
+    );
 
     expect(outcome.untriaged.map((item) => item.path)).toEqual(['src/a.ts']);
   });
 
-  it('passes a finding the manifest triages for that rule and path', () => {
-    const sarif: Sarif = {
-      runs: [{ results: result('aihub/request-data-to-raw-sql', 'src/a.ts') }],
-    };
+  it('passes the alert the manifest triages by fingerprint', () => {
     const triage: Triage = {
       entries: [
         {
-          ruleId: 'aihub/request-data-to-raw-sql',
+          ruleId: SQL,
           path: 'src/a.ts',
+          fingerprint: 'h1:1',
           reason: 'identifier comes from a reviewed allowlist',
         },
       ],
     };
 
-    expect(evaluateSarif(sarif, triage).untriaged).toEqual([]);
+    const outcome = evaluateSarif(
+      sarifOf(result(SQL, 'src/a.ts', { fingerprint: 'h1:1' })),
+      triage,
+    );
+
+    expect(outcome.untriaged).toEqual([]);
+  });
+
+  it('fails a second alert of the same rule in a triaged file', () => {
+    const triage: Triage = {
+      entries: [
+        { ruleId: SQL, path: 'src/a.ts', fingerprint: 'h1:1', reason: 'ok' },
+      ],
+    };
+
+    const outcome = evaluateSarif(
+      sarifOf(
+        result(SQL, 'src/a.ts', { fingerprint: 'h1:1' }),
+        result(SQL, 'src/a.ts', { fingerprint: 'h2:1' }),
+      ),
+      triage,
+    );
+
+    expect(outcome.untriaged.map((item) => item.fingerprint)).toEqual(['h2:1']);
   });
 
   it('does not let a triage entry for one path cover another', () => {
-    const sarif: Sarif = {
-      runs: [{ results: result('aihub/request-data-to-raw-sql', 'src/b.ts') }],
-    };
     const triage: Triage = {
       entries: [
-        {
-          ruleId: 'aihub/request-data-to-raw-sql',
-          path: 'src/a.ts',
-          reason: 'reviewed',
-        },
+        { ruleId: SQL, path: 'src/a.ts', fingerprint: 'h1:1', reason: 'ok' },
       ],
     };
 
-    expect(evaluateSarif(sarif, triage).untriaged).toHaveLength(1);
+    const outcome = evaluateSarif(
+      sarifOf(result(SQL, 'src/b.ts', { fingerprint: 'h1:1' })),
+      triage,
+    );
+
+    expect(outcome.untriaged).toHaveLength(1);
+  });
+
+  it('fails a finding that carries no fingerprint', () => {
+    const triage: Triage = {
+      entries: [
+        { ruleId: SQL, path: 'src/a.ts', fingerprint: 'h1:1', reason: 'ok' },
+      ],
+    };
+
+    expect(
+      evaluateSarif(sarifOf(result(SQL, 'src/a.ts')), triage).untriaged,
+    ).toHaveLength(1);
   });
 
   it('passes a finding the scanner reports as suppressed', () => {
-    const sarif: Sarif = {
-      runs: [
-        {
-          results: result('js/redos', 'src/a.ts', [{ kind: 'inSource' }]),
-        },
-      ],
-    };
+    const outcome = evaluateSarif(
+      sarifOf(
+        result('js/redos', 'src/a.ts', {
+          suppressions: [{ kind: 'inSource' }],
+        }),
+      ),
+      NO_TRIAGE,
+    );
 
-    expect(evaluateSarif(sarif, NO_TRIAGE).untriaged).toEqual([]);
+    expect(outcome.untriaged).toEqual([]);
   });
 
   it('reports triage entries that no longer match a finding', () => {
     const triage: Triage = {
-      entries: [{ ruleId: 'js/redos', path: 'src/gone.ts', reason: 'old' }],
+      entries: [
+        {
+          ruleId: 'js/redos',
+          path: 'src/gone.ts',
+          fingerprint: 'h9:1',
+          reason: 'old',
+        },
+      ],
     };
 
     expect(evaluateSarif({ runs: [{ results: [] }] }, triage).stale).toEqual(
@@ -105,7 +156,17 @@ describe('codeql gate', () => {
 
   it('rejects a manifest entry without a reason', () => {
     expect(() =>
-      parseTriage('{"entries":[{"ruleId":"js/redos","path":"src/a.ts"}]}'),
+      parseTriage(
+        '{"entries":[{"ruleId":"js/redos","path":"src/a.ts","fingerprint":"h:1"}]}',
+      ),
     ).toThrow('reason');
+  });
+
+  it('rejects a manifest entry without a fingerprint', () => {
+    expect(() =>
+      parseTriage(
+        '{"entries":[{"ruleId":"js/redos","path":"src/a.ts","reason":"ok"}]}',
+      ),
+    ).toThrow('fingerprint');
   });
 });

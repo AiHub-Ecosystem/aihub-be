@@ -41,13 +41,19 @@ then needs GitHub Advanced Security.
 The scan runs with `upload: never`, uploads the SARIF in a separate step, and
 then `scripts/checks/codeql-gate.ts` decides the job result. A finding passes
 when the scanner marks it suppressed or `.github/codeql/triage.json` holds an
-entry for that rule at that path with a written reason. Any other finding
-fails the job. A SARIF file with no runs also fails, so a scan that did not
-happen cannot pass.
+entry for that one alert with a written reason. Any other finding fails the
+job. A SARIF file with no runs also fails, so a scan that did not happen
+cannot pass.
 
-A triage entry waives one rule in one file, not one alert. A later finding of
-the same rule in that file also passes. Keep triaged files small and review the
-file's diff when an entry exists.
+A triage entry names an alert by rule, path and `fingerprint`, the scanner's
+`primaryLocationLineHash`. A second alert of the same rule in the same file is
+new and fails. So does the same alert after its source line changes, because
+the hash changes; the author then re-triages it. The failing gate prints the
+fingerprint to copy into the entry.
+
+A separate `fixtures` job in the same workflow runs `codeql test run` over
+`.github/codeql/tests`, so a query that stops matching its positive fixture, or
+starts matching its negative one, fails CI.
 
 Tooling paths (`scripts/`, `ops/`, `prisma/`, root `*.config.*`) are outside
 the `process.env` query, because they have no configuration module. `src/` is
@@ -57,12 +63,21 @@ inside it except `src/config` and `src/cli`. `test/`, `*.spec.ts`, `dist`,
 ## Structural guard
 
 `bun run arch-check` rejects a `$queryRawUnsafe` or `$executeRawUnsafe` call
-whose first argument is not a string literal or a same-file `const` that holds
-one. A deliberately dynamic call keeps only with an `arch-check: <reason>`
-comment on the previous, same or next line. The marker sits on a shared SQL
-wrapper or on a fragment taken from a closed set such as `billableRequestSql`.
-This layer proves the shape of the call. The CodeQL query proves where its
-values came from.
+whose first argument is not a string literal, a template literal made of
+static parts, or a same-file `const` that holds one. It also rejects a use of
+either method that is not a direct call (destructured, `.bind`, `.call`).
+
+A `WHERE` or `ORDER BY` fragment built from a closed set is listed once, in
+`SQL_FRAGMENT_ALLOWLIST` in `scripts/checks/check-architecture.mjs`. A template
+literal may interpolate a call to a listed builder (today `billableRequestSql`)
+when it is imported from the listed module and its arguments are literals.
+Adding a builder means adding it to that list after review; a request value
+cannot reach a fragment, because arguments must be literals.
+
+A deliberately dynamic call, such as a shared SQL wrapper, keeps only with an
+`arch-check: <reason>` comment on the previous, same or next line. This layer
+proves the shape of the call. The CodeQL query proves where its values came
+from.
 
 ## Runtime
 
@@ -83,6 +98,7 @@ that the action resolves the local `./.github/codeql` pack and writes
 
 - A new finding blocks merge once branch protection requires the `CodeQL`
   check; that requirement is tracked in #1385.
-- Every triage entry is a reviewed claim in `.github/codeql/triage.json`. A
-  stale entry (no matching finding) prints a warning and does not fail.
+- Every triage entry is a reviewed claim about one alert in
+  `.github/codeql/triage.json`. A stale entry (no matching finding) prints a
+  warning and does not fail.
 - Adding a sink means adding a query and a fixture pair, not editing the gate.

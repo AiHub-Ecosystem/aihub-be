@@ -84,7 +84,6 @@ export class PostgresQuotaReconciliationRepository
   async list(
     target: QuotaReconciliationTarget,
   ): Promise<readonly QuotaOrganizationSnapshot[]> {
-    // arch-check: WHERE predicate comes from shared billableRequestSql allowlist
     const rows = await this.client.$queryRawUnsafe<
       readonly QuotaReconciliationRow[]
     >(QUOTA_RECONCILIATION_SQL, target.from, target.to);

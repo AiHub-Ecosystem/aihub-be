@@ -167,7 +167,6 @@ export class PostgresBillingStatementRepository
     month: BillingMonth,
     organizationId: string | undefined,
   ): Promise<readonly BillingUsageRow[]> {
-    // arch-check: WHERE predicate comes from shared billableRequestSql allowlist
     const rows = await this.client.$queryRawUnsafe<
       readonly Record<string, unknown>[]
     >(BILLING_USAGE_SQL, month.from, month.to, organizationId ?? null);

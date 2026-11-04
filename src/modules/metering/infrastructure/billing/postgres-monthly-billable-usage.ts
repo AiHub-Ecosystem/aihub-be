@@ -27,7 +27,6 @@ export class PostgresMonthlyBillableUsage implements MonthlyBillableUsagePort {
     from: Date,
     to: Date,
   ): Promise<number> {
-    // arch-check: WHERE predicate comes from shared billableRequestSql allowlist
     const rows = await this.client.$queryRawUnsafe<
       readonly { readonly billable_count: unknown }[]
     >(MONTHLY_BILLABLE_USAGE_SQL, organizationId, from, to);

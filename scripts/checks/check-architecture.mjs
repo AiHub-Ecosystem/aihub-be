@@ -663,12 +663,62 @@ function sqlConstDeclaration(node, name, declarationsByScope) {
   return undefined;
 }
 
-/** @param {import('typescript').Expression} expression @param {Map<import('typescript').Node, Map<string, import('typescript').VariableDeclaration[]>>} declarationsByScope @param {Set<import('typescript').VariableDeclaration>} seen */
-function isStaticSqlExpression(
-  expression,
-  declarationsByScope,
-  seen = new Set(),
-) {
+/**
+ * The one list of SQL fragment builders a query may interpolate: a closed set
+ * of reviewed predicates (a WHERE filter, a sort column). A template literal
+ * passes only when each `${}` is static or a call to one of these, imported
+ * from the module named here. Add a builder here after reviewing it; a
+ * request value never reaches a fragment through its static arguments.
+ */
+const SQL_FRAGMENT_ALLOWLIST = [
+  { name: 'billableRequestSql', module: 'billable-request-sql' },
+];
+
+/** @param {import('typescript').SourceFile} sourceFile */
+function sqlNamedImports(sourceFile) {
+  /** @type {Map<string, { name: string, specifier: string }>} */
+  const imports = new Map();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.importClause?.isTypeOnly === true
+    ) {
+      continue;
+    }
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      imports.set(element.name.text, {
+        name: (element.propertyName ?? element.name).text,
+        specifier: statement.moduleSpecifier.text,
+      });
+    }
+  }
+  return imports;
+}
+
+/** @param {import('typescript').Expression} expression @param {{ declarations: Map<import('typescript').Node, Map<string, import('typescript').VariableDeclaration[]>>, imports: Map<string, { name: string, specifier: string }> }} context */
+function isAllowlistedSqlFragment(expression, context) {
+  if (!ts.isCallExpression(expression)) return false;
+  if (!ts.isIdentifier(expression.expression)) return false;
+  const imported = context.imports.get(expression.expression.text);
+  if (imported === undefined) return false;
+  const base = imported.specifier.split('/').at(-1);
+  return (
+    SQL_FRAGMENT_ALLOWLIST.some(
+      (fragment) => fragment.name === imported.name && fragment.module === base,
+    ) &&
+    expression.arguments.every(
+      (argument) =>
+        ts.isStringLiteralLike(argument) || ts.isNumericLiteral(argument),
+    )
+  );
+}
+
+/** @param {import('typescript').Expression} expression @param {{ declarations: Map<import('typescript').Node, Map<string, import('typescript').VariableDeclaration[]>>, imports: Map<string, { name: string, specifier: string }> }} context @param {Set<import('typescript').VariableDeclaration>} seen @returns {boolean} */
+function isStaticSqlExpression(expression, context, seen = new Set()) {
+  const declarationsByScope = context.declarations;
   let value = expression;
   while (
     ts.isParenthesizedExpression(value) ||
@@ -682,6 +732,13 @@ function isStaticSqlExpression(
 
   if (ts.isStringLiteralLike(value)) {
     return true;
+  }
+  if (ts.isTemplateExpression(value)) {
+    return value.templateSpans.every(
+      (span) =>
+        isAllowlistedSqlFragment(span.expression, context) ||
+        isStaticSqlExpression(span.expression, context, seen),
+    );
   }
   if (!ts.isIdentifier(value)) {
     return false;
@@ -700,10 +757,10 @@ function isStaticSqlExpression(
     return false;
   }
   seen.add(declaration);
-  return isStaticSqlExpression(
-    declaration.initializer,
-    declarationsByScope,
-    seen,
+  // The @returns above keeps tsgolint from inferring `any` through the
+  // threaded context union; the value is always boolean.
+  return /** @type {boolean} */ (
+    isStaticSqlExpression(declaration.initializer, context, seen)
   );
 }
 
@@ -729,7 +786,10 @@ for (const file of sourceFiles) {
     ts.ScriptKind.TS,
   );
   const lines = source.split(/\r?\n/);
-  const declarationsByScope = sqlConstDeclarations(sourceFile);
+  const sqlContext = {
+    declarations: sqlConstDeclarations(sourceFile),
+    imports: sqlNamedImports(sourceFile),
+  };
 
   /** @param {import('typescript').Node} node */
   function visit(node) {
@@ -739,7 +799,7 @@ for (const file of sourceFiles) {
       if (
         method !== undefined &&
         query !== undefined &&
-        !isStaticSqlExpression(query, declarationsByScope) &&
+        !isStaticSqlExpression(query, sqlContext) &&
         !hasRawSqlMarker(sourceFile, node, lines)
       ) {
         const line =

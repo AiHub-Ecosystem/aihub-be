@@ -15,6 +15,7 @@ export interface SarifResult {
     };
   }[];
   readonly suppressions?: readonly { readonly kind: string }[];
+  readonly partialFingerprints?: { readonly primaryLocationLineHash?: string };
 }
 
 export interface Sarif {
@@ -24,6 +25,8 @@ export interface Sarif {
 export interface TriageEntry {
   readonly ruleId: string;
   readonly path: string;
+  /** The scanner's stable id for one alert (`primaryLocationLineHash`). */
+  readonly fingerprint: string;
   readonly reason: string;
 }
 
@@ -35,6 +38,7 @@ export interface Finding {
   readonly ruleId: string;
   readonly path: string;
   readonly line: number | undefined;
+  readonly fingerprint: string | undefined;
   readonly message: string;
 }
 
@@ -47,7 +51,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A triage entry waives one rule at one path and must say why. */
+/** A triage entry waives one alert, named by its fingerprint, and must say why. */
 export function parseTriage(text: string): Triage {
   const parsed: unknown = JSON.parse(text);
   if (!isRecord(parsed) || !Array.isArray(parsed.entries)) {
@@ -61,12 +65,22 @@ export function parseTriage(text: string): Triage {
     ) {
       throw new Error(`${TRIAGE_FILE} entry needs a ruleId and a path`);
     }
+    if (typeof entry.fingerprint !== 'string' || entry.fingerprint === '') {
+      throw new Error(
+        `${TRIAGE_FILE} entry ${entry.ruleId} at ${entry.path} needs a fingerprint`,
+      );
+    }
     if (typeof entry.reason !== 'string' || entry.reason.trim() === '') {
       throw new Error(
         `${TRIAGE_FILE} entry ${entry.ruleId} at ${entry.path} needs a reason`,
       );
     }
-    return { ruleId: entry.ruleId, path: entry.path, reason: entry.reason };
+    return {
+      ruleId: entry.ruleId,
+      path: entry.path,
+      fingerprint: entry.fingerprint,
+      reason: entry.reason,
+    };
   });
   return { entries };
 }
@@ -81,6 +95,7 @@ function findings(sarif: Sarif): { finding: Finding; suppressed: boolean }[] {
           ruleId: result.ruleId ?? 'unknown',
           path: location?.artifactLocation?.uri ?? 'unknown',
           line: location?.region?.startLine,
+          fingerprint: result.partialFingerprints?.primaryLocationLineHash,
           message: result.message?.text ?? '',
         },
       };
@@ -90,24 +105,26 @@ function findings(sarif: Sarif): { finding: Finding; suppressed: boolean }[] {
 
 /**
  * A finding passes when the scanner marks it suppressed or the manifest
- * triages its rule at its path. Anything else is new and fails the job.
+ * triages that one alert: same rule, path and fingerprint. A second alert of
+ * the same rule in the same file, or the same alert after its line changes,
+ * is new and fails the job.
  */
 export function evaluateSarif(sarif: Sarif, triage: Triage): GateOutcome {
   const all = findings(sarif);
-  const triaged = (finding: Finding): boolean =>
-    triage.entries.some(
-      (entry) => entry.ruleId === finding.ruleId && entry.path === finding.path,
-    );
+  const matches = (entry: TriageEntry, finding: Finding): boolean =>
+    entry.ruleId === finding.ruleId &&
+    entry.path === finding.path &&
+    entry.fingerprint === finding.fingerprint;
   return {
     untriaged: all
-      .filter(({ finding, suppressed }) => !suppressed && !triaged(finding))
+      .filter(
+        ({ finding, suppressed }) =>
+          !suppressed &&
+          !triage.entries.some((entry) => matches(entry, finding)),
+      )
       .map(({ finding }) => finding),
     stale: triage.entries.filter(
-      (entry) =>
-        !all.some(
-          ({ finding }) =>
-            entry.ruleId === finding.ruleId && entry.path === finding.path,
-        ),
+      (entry) => !all.some(({ finding }) => matches(entry, finding)),
     ),
   };
 }
@@ -146,17 +163,17 @@ function main(sarifPaths: readonly string[]): void {
 
   for (const entry of outcome.stale) {
     console.warn(
-      `codeql-gate: triage entry ${entry.ruleId} at ${entry.path} matches no finding; remove it from ${TRIAGE_FILE}`,
+      `codeql-gate: triage entry ${entry.ruleId} at ${entry.path} (${entry.fingerprint}) matches no finding; remove it from ${TRIAGE_FILE}`,
     );
   }
   for (const finding of outcome.untriaged) {
     console.error(
-      `codeql-gate: ${finding.ruleId} ${finding.path}:${finding.line ?? '?'} ${finding.message}`,
+      `codeql-gate: ${finding.ruleId} ${finding.path}:${finding.line ?? '?'} fingerprint=${finding.fingerprint ?? 'none'} ${finding.message}`,
     );
   }
   if (outcome.untriaged.length > 0) {
     console.error(
-      `codeql-gate: ${outcome.untriaged.length} untriaged finding(s). Fix them, or add a reasoned entry to ${TRIAGE_FILE}.`,
+      `codeql-gate: ${outcome.untriaged.length} untriaged finding(s). Fix them, or add an entry with the finding's rule, path, fingerprint and a reason to ${TRIAGE_FILE}.`,
     );
     process.exitCode = 1;
   }

@@ -77,3 +77,29 @@ jobs:
 
       - name: Fail on untriaged findings
         run: bunx tsx scripts/checks/codeql-gate.ts codeql-results/javascript.sarif
+
+  # Each AIHUB query has a positive and a negative fixture under
+  # .github/codeql/tests. A query that stops matching its positive case, or
+  # starts matching its negative one, fails here. It runs beside the scan so it
+  # does not lengthen the scan's critical path.
+  fixtures:
+    name: Query fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install CodeQL CLI
+        id: codeql
+        uses: github/codeql-action/setup-codeql@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: javascript-typescript
+
+      - name: Run query fixtures
+        env:
+          CODEQL: ${{ steps.codeql.outputs.codeql-path }}
+        run: '"$CODEQL" test run --threads=0 .github/codeql/tests'

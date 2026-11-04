@@ -64,7 +64,6 @@ export class PostgresUsageCompletenessReportRepository
   async snapshot(
     query: UsageReportSnapshotQuery,
   ): Promise<readonly UsageReportSnapshotRow[]> {
-    // arch-check: WHERE predicate comes from shared billableRequestSql allowlist
     const rows = await this.client.$queryRawUnsafe<readonly UsageReportRow[]>(
       USAGE_REPORT_SQL,
       query.from,
