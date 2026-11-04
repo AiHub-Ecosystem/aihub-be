@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-08
 - Amends: [ADR-0046](0046-customer-web-aihub-auth-identity-boundary.md) — its "Session and authorization boundary" section
+- Amended by: [ADR-0150](0150-revoke-individual-user-access-jwts.md) — adds individual User Access JWT revocation; the existing logout behavior remains unchanged
 - Related: [#347](https://github.com/AiHub-Ecosystem/aihub-be/issues/347), [#345](https://github.com/AiHub-Ecosystem/aihub-be/issues/345), [ADR-0024](0024-rotating-refresh-session-boundary.md), [ADR-0025](0025-password-recovery-boundary.md), [ADR-0054](0054-verification-sign-in-bound-to-signup-browser.md)
 
 The Customer Web login session becomes a first-class AIHUB concept, the **Web Session**, stored in AIHUB's own Postgres. This amends ADR-0046, which put that session in a dedicated Redis owned by the BFF. It does not rewrite ADR-0046: the browser-holds-only-an-opaque-cookie rule, the 30-day TTL, the fail-closed cutover, and the membership decision cache all survive unchanged.

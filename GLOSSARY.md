@@ -137,6 +137,11 @@ from an Organization and its API keys, and may belong to zero or more
 Organizations through Organization Membership.
 _Avoid_: customer account (ambiguous between a person and an Organization)
 
+**User Access JWT revocation**:
+Invalidating one issued User Access JWT before its normal expiry. It leaves
+sibling JWTs and the account's login sessions active.
+_Avoid_: session revocation
+
 **Organization Identity Configuration**:
 An Organization-owned policy for verifying end-user identity. When active, it
 requires Signed User Assertions; when absent or disabled, it permits Declared

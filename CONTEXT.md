@@ -244,11 +244,11 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - The #65 login slice returns only a 15-minute User Access JWT in the shared success envelope; #66 adds the secure Refresh Token cookie and rotation without changing the access-token body contract.
 - User Access JWTs contain exactly `iss`, `aud`, `sub`, `jti`, `iat`, and `exp`; `iss` is the configured canonical AIHUB issuer, `aud` is `aihub-user-api`, and `sub` is the stable `AIHUB User Account` ID, while email, username, organization, membership, scopes, API-key data, and credential state remain outside the token.
 - User Access JWT signing material is a separate RS256 runtime-secret/configuration bundle with a required `kid`; the #65 slice does not publish a JWKS endpoint or reuse sandbox/assertion/internal-JWT keys.
-- User Access JWT verification requires RS256, a non-empty `kid`, exact issuer and audience, bounded `usr_...` subject, integer time claims, a maximum 900-second lifetime, and the shared 60-second clock-skew allowance; `jti` is not persisted for revocation in this slice.
-- A Bearer request must resolve an `active` AIHUB User Account at authorization time; disabling an account invalidates its still-signed access tokens immediately without introducing a token blacklist.
+- The current #65 User Access JWT verifier requires RS256, a non-empty `kid`, exact issuer and audience, bounded `usr_...` subject, integer time claims, a maximum 900-second lifetime, and the shared 60-second clock-skew allowance; it does not yet persist `jti` for revocation. Accepted [ADR-0150](docs/adr/0150-revoke-individual-user-access-jwts.md) adds durable per-token revocation keyed by verified `(iss, jti)`.
+- A Bearer request must resolve an `active` AIHUB User Account at authorization time. Under ADR-0150, it also checks individual-token revocation on each protected request; Postgres lookup failures fail closed with retryable `503 DATABASE_UNAVAILABLE`.
 - Missing and invalid Bearer credentials use separate safe `401` auth errors and a `WWW-Authenticate: Bearer` challenge; cryptographic failure details never enter the public response.
 - An inactive account presented with an otherwise valid User Access JWT maps to the same invalid-Bearer error; no account-state-specific public code is added.
-- The User Access JWT response is `Cache-Control: no-store`; the #65 boundary accepts one compact token from the Bearer header only, never a cookie, query parameter, or duplicate header.
+- The User Access JWT response is `Cache-Control: no-store`; caller authentication accepts one compact token from the Bearer header only, never a cookie, query parameter, or duplicate header. The #518 revocation operation separately accepts its target JWT in the request body and never logs or persists that raw token.
 - Login reads one durable projection of Auth Identity plus its owning User Account (`userId`, status, password hash); organization membership is not part of credential authentication.
 - User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and User Identity boundaries until a separate authorization decision changes them.
 - Refresh Tokens are renewable credentials with explicit rotation and revocation; they are not interchangeable with API keys or User Access JWTs.
@@ -366,6 +366,7 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 - [ADR-0046: Customer Web identity boundary on AIHUB auth and Organization Membership](docs/adr/0046-customer-web-aihub-auth-identity-boundary.md)
 - [ADR-0021: Customer Web Speaking sandbox boundary](docs/adr/0021-customer-web-speaking-sandbox-boundary.md)
 - [ADR-0022: AIHUB-owned local user authentication](docs/adr/0022-aihub-local-user-authentication.md)
+- [ADR-0150: Durably revoke individual User Access JWTs](docs/adr/0150-revoke-individual-user-access-jwts.md) — implements #518 and amends ADR-0022 and ADR-0081
 - [ADR-0027: Organization membership, invitation, and API-key self-service boundary](docs/adr/0027-organization-membership-and-key-management.md)
 - [ADR-0028: Organization roster read boundary](docs/adr/0028-organization-roster-read-boundary.md)
 - [ADR-0029: Organization membership mutation boundary](docs/adr/0029-organization-membership-mutation-boundary.md)
