@@ -6,6 +6,7 @@ import {
   readSandboxSigningMaterial,
 } from './sandbox-assertion.config';
 
+// Generated at test runtime; this key is never used by any deployment.
 const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
   .privateKey.export({ type: 'pkcs8', format: 'pem' })
   .toString();

@@ -1,1 +1,2 @@
 bunx lint-staged --hide-all
+gitleaks git --staged --config .gitleaks.toml --redact --no-banner

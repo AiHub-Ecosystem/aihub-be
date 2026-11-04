@@ -20,6 +20,13 @@ specifications and work tracking.
 - Use Conventional Commit headers and write commits, issues, pull requests, and
   comments in English, as described in [AGENTS.md](AGENTS.md).
 
+## Secret detection
+
+Install Gitleaks v8.30.1 before committing. The pre-commit hook and CI scan with
+redacted output. If a real credential is detected, notify the repository owner
+or security contact and rotate or revoke it at its source; deleting the line does
+not invalidate the credential. Follow the [secret-scanning runbook](docs/operations/secret-scanning.md).
+
 ## Public API compatibility
 
 CI compares the generated OpenAPI contract with the pull request's base. Adding
