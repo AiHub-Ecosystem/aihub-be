@@ -215,8 +215,7 @@ describe('SeaweedFS S3 transport', () => {
     });
   });
 
-  it('exposes queued calls and releases them when the caller cancels', async () => {
-    const abort = new AbortController();
+  it('fails fast instead of queueing after the shared socket budget is exhausted', async () => {
     let connected = 0;
     let ready: () => void = () => undefined;
     const occupied = new Promise<void>((resolve) => {
@@ -225,19 +224,34 @@ describe('SeaweedFS S3 transport', () => {
     server.on('request', () => {
       if (++connected === 16) ready();
     });
-    const calls = Array.from({ length: 17 }, () =>
-      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' }), {
-        abortSignal: abort.signal,
-      }),
+    const calls = Array.from({ length: 16 }, () =>
+      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' })),
     );
     const settled = Promise.allSettled(calls);
     try {
       await occupied;
+      const started = performance.now();
+      await expect(
+        new S3AvatarStorage(client, {
+          bucket: 'aihub-user-assets',
+        }).describeObject(
+          'users/usr_test/avatar/ava_test/original',
+          AbortSignal.timeout(1_500),
+        ),
+      ).rejects.toMatchObject({
+        httpStatus: 503,
+        retryable: true,
+        diagnostic: 'object_storage:bulkhead_exhausted',
+      });
+      expect(performance.now() - started).toBeLessThan(100);
       expect(await getMetrics()).toContain(
-        'aihub_object_storage_queued_requests 1',
+        'aihub_object_storage_queued_requests 0',
+      );
+      expect(await getMetrics()).toContain(
+        'aihub_object_storage_failures_total{reason="bulkhead_exhausted"} 1',
       );
     } finally {
-      abort.abort();
+      server.closeAllConnections();
       await settled;
     }
     expect((await settled).every((call) => call.status === 'rejected')).toBe(

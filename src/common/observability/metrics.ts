@@ -44,6 +44,7 @@ export type ObjectStorageFailureReason =
   | 'connection_refused'
   | 'connection_timeout'
   | 'request_timeout'
+  | 'bulkhead_exhausted'
   | 'unavailable';
 
 export function recordObjectStorageFailure(
