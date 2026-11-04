@@ -1,1 +1,1 @@
-| test.ts:1:32:1:42 | process.env | Read validated environment values through configuration outside src/config or src/cli. |
+| src/modules/outside-boundary.ts:1:32:1:42 | process.env | Read validated environment values through configuration outside src/config or src/cli. |
