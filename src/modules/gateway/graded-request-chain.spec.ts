@@ -108,6 +108,8 @@ describe('graded request chain', () => {
     nodeEnv: process.env.NODE_ENV,
     token: process.env.DOWNSTREAM_AI_WRITING_TOKEN,
     url: process.env.DOWNSTREAM_AI_WRITING_URL,
+    speakingToken: process.env.DOWNSTREAM_AI_SPEAKING_TOKEN,
+    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
   };
 
   beforeAll(async () => {
@@ -115,6 +117,8 @@ describe('graded request chain', () => {
     process.env.NODE_ENV = 'test';
     process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
     process.env.DOWNSTREAM_AI_WRITING_URL = 'https://ai-writing.test';
+    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = 'speaking-token';
+    process.env.DOWNSTREAM_AI_SPEAKING_URL = 'https://ai-speaking.test';
 
     // Record the real authentication guards; admission and concurrency are
     // observed at their application ports below.
@@ -145,10 +149,24 @@ describe('graded request chain', () => {
       })
       .reply(200, fixture('grade-task1.response.json'))
       .persist();
+    mockAgent
+      .get('https://ai-speaking.test')
+      .intercept({ method: 'POST', path: '/simulate-provider-hang' })
+      .reply(200, {})
+      .delay(30_000)
+      .persist();
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(DownstreamHttpClient)
-      .useValue(new DownstreamHttpClient('https://ai-writing.test', mockAgent))
+      .useValue(
+        new DownstreamHttpClient(
+          {
+            'ai-writing': 'https://ai-writing.test',
+            'ai-speaking': 'https://ai-speaking.test',
+          },
+          mockAgent,
+        ),
+      )
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(new InMemoryIdempotencyRepository())
       .overrideProvider(DISPATCH_ATTEMPT_RECORD)
@@ -189,6 +207,8 @@ describe('graded request chain', () => {
     process.env.NODE_ENV = originalEnv.nodeEnv;
     process.env.DOWNSTREAM_AI_WRITING_TOKEN = originalEnv.token;
     process.env.DOWNSTREAM_AI_WRITING_URL = originalEnv.url;
+    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = originalEnv.speakingToken;
+    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
   });
 
   beforeEach(() => {
@@ -210,6 +230,52 @@ describe('graded request chain', () => {
 
     expect(response.statusCode).toBe(200);
     expect(executed).toEqual([...EXPECTED_ORDER]);
+  });
+
+  it('keeps Core Auth and Writing grading responsive while AI Speaking hangs', async () => {
+    const client = app.get(DownstreamHttpClient);
+    const controllers = Array.from({ length: 10 }, () => new AbortController());
+    const stalled = controllers.map((controller, index) =>
+      client.request(
+        { method: 'POST', path: '/simulate-provider-hang', body: {} },
+        {
+          downstream: 'ai-speaking',
+          requestId: `req_slow_speaking_${index}`,
+          deadlineMs: 30_000,
+          signal: controller.signal,
+        },
+      ),
+    );
+    const settled = Promise.allSettled(stalled);
+
+    try {
+      const authStartedAt = performance.now();
+      const auth = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/login',
+        payload: {},
+      });
+      expect(auth.statusCode).toBe(400);
+      expect(performance.now() - authStartedAt).toBeLessThan(20);
+
+      const writingStartedAt = performance.now();
+      const writing = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        headers: { 'idempotency-key': 'slow-speaking-isolation' },
+        payload: {
+          question: task1Request.question,
+          chart_type: task1Request.topic,
+          essay: task1Request.essay,
+          image_url: task1Request.url,
+        },
+      });
+      expect(writing.statusCode).toBe(200);
+      expect(performance.now() - writingStartedAt).toBeLessThan(20);
+    } finally {
+      controllers.forEach((controller) => controller.abort());
+      await settled;
+    }
   });
 
   it('authenticates BFF grading requests with the shared client secret', async () => {
