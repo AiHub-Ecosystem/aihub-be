@@ -1,5 +1,4 @@
-import { EmailDeliveryPoller } from './email-delivery-poller';
-import { EmailPayloadUnknownKeyVersionError } from './email-delivery-request.port';
+import { EmailPayloadUnknownKeyVersionError } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   ClaimEmailDeliveryRequestsInput,
   ClaimedFailureReport,
@@ -13,22 +12,23 @@ import type {
   EmailNoticeResolvers,
   EmailPayloadCipherPort,
   ReleaseUnspentEmailAttemptInput,
-} from './email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   EmailProviderOutageCircuitPort,
   EmailProviderSendPermit,
-} from './email-provider-outage-circuit.port';
-import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
+} from '@/modules/auth/email-delivery/application/email-provider-outage-circuit.port';
+import type { EmailDailySendBudgetPort } from '@/modules/auth/email-delivery/application/email-send-daily-budget.port';
 import type {
   EmailSendRateLimiterPort,
   EmailSendRateReservation,
-} from './email-send-rate-limiter.port';
+} from '@/modules/auth/email-delivery/application/email-send-rate-limiter.port';
 import type {
   EmailDispatchOptions,
   EmailMessage,
   EmailProviderResponse,
   EmailSenderPort,
-} from './email-sender.port';
+} from '@/modules/auth/email-delivery/application/email-sender.port';
+import { EmailDeliveryPoller } from './email-delivery-poller';
 
 export const NOW = new Date('2026-10-05T12:00:00.000Z');
 export const HOUR = 60 * 60 * 1000;

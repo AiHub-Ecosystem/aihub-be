@@ -11,14 +11,14 @@ import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
-import { EmailOutbox } from '@/modules/auth/email-delivery/application/email-outbox';
 import { EMAIL_OUTBOX } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   EMAIL_SENDER,
   type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
+import { EmailOutbox } from '@/modules/auth/email-delivery/application/outbox/email-outbox';
+import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { PASSWORD_HASHER } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import { Argon2PasswordHasher } from '@/modules/auth/local-credentials/infrastructure/argon2-password.hasher';

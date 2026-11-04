@@ -1,3 +1,14 @@
+import type {
+  ApiKeyNearExpiryNotificationPayload,
+  EmailNoticeResolvers,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type {
+  EmailDispatchOptions,
+  EmailMessage,
+  EmailProviderResponse,
+  EmailSenderPort,
+} from '@/modules/auth/email-delivery/application/email-sender.port';
+import { EmailProviderTransportError } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,
@@ -9,17 +20,6 @@ import {
   claimed,
   sealed,
 } from './email-delivery-poller.spec-support';
-import type {
-  ApiKeyNearExpiryNotificationPayload,
-  EmailNoticeResolvers,
-} from './email-delivery-request.port';
-import type {
-  EmailDispatchOptions,
-  EmailMessage,
-  EmailProviderResponse,
-  EmailSenderPort,
-} from './email-sender.port';
-import { EmailProviderTransportError } from './email-sender.port';
 
 /** Resend documents idempotency-key retention of 24 hours. */
 const RESEND_IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1000;

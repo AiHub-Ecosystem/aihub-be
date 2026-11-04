@@ -1,6 +1,3 @@
-import { readEmailPayload } from './email-delivery-payload.reader';
-import { EmailDeliveryPollerMaintenance } from './email-delivery-poller-maintenance';
-import type { EmailDeliveryPollerMaintenanceOptions } from './email-delivery-poller-maintenance';
 import type {
   EmailCredentialActionabilityPort,
   EmailCredentialState,
@@ -9,25 +6,28 @@ import type {
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
   EmailNoticeResolvers,
-} from './email-delivery-request.port';
-import type { EmailPayloadCipherPort } from './email-delivery-request.port';
-import type { ValidatedEmailDelivery } from './email-kind-handler.registry';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { ValidatedEmailDelivery } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import { readEmailPayload } from '@/modules/auth/email-delivery/application/payload/email-delivery-payload.reader';
+import { EmailDeliveryPollerMaintenance } from './email-delivery-poller-maintenance';
+import type { EmailDeliveryPollerMaintenanceOptions } from './email-delivery-poller-maintenance';
 export { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller-maintenance';
 import type {
   EmailProviderOutageCircuitPort,
   EmailProviderSendPermit,
-} from './email-provider-outage-circuit.port';
-import { emailProviderRetryAfterMs } from './email-provider-retry-after.policy';
-import { emailDailySendBudgetCategory } from './email-send-daily-budget.policy';
-import type { EmailDailySendBudgetPort } from './email-send-daily-budget.port';
-import type { EmailSendRateLimiterPort } from './email-send-rate-limiter.port';
-import { EMAIL_ATTEMPT_TIMEOUT_MS } from './email-sender.port';
+} from '@/modules/auth/email-delivery/application/email-provider-outage-circuit.port';
+import type { EmailDailySendBudgetPort } from '@/modules/auth/email-delivery/application/email-send-daily-budget.port';
+import type { EmailSendRateLimiterPort } from '@/modules/auth/email-delivery/application/email-send-rate-limiter.port';
+import { EMAIL_ATTEMPT_TIMEOUT_MS } from '@/modules/auth/email-delivery/application/email-sender.port';
 import type {
   EmailMessage,
   EmailProviderResponse,
   EmailSenderPort,
-} from './email-sender.port';
-import { EmailProviderTransportError } from './email-sender.port';
+} from '@/modules/auth/email-delivery/application/email-sender.port';
+import { EmailProviderTransportError } from '@/modules/auth/email-delivery/application/email-sender.port';
+import { emailProviderRetryAfterMs } from '@/modules/auth/email-delivery/application/send-policy/email-provider-retry-after.policy';
+import { emailDailySendBudgetCategory } from '@/modules/auth/email-delivery/application/send-policy/email-send-daily-budget.policy';
 
 /**
  * How long a request this instance could not open waits before any instance

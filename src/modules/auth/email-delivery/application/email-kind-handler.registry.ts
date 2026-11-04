@@ -4,6 +4,14 @@ import { Value } from '@sinclair/typebox/value';
 import { isRecord } from '@/common/is-record';
 import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 import {
+  composeApiKeyNearExpiryNotification,
+  composeMfaSecurityNotification,
+  composeOrganizationInviteEmail,
+  composePasswordResetEmail,
+  composeVerificationEmail,
+} from './email-message.composer';
+import type { EmailMessage } from './email-sender.port';
+import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationPayload,
   ApiKeyNearExpiryNotificationPayloadSchema,
@@ -13,15 +21,7 @@ import {
   INVITE_EMAIL_ROLES,
   MfaSecurityNotificationPayloadSchema,
   OrganizationInviteEmailDeliveryPayloadSchema,
-} from './email-delivery-payload';
-import {
-  composeApiKeyNearExpiryNotification,
-  composeMfaSecurityNotification,
-  composeOrganizationInviteEmail,
-  composePasswordResetEmail,
-  composeVerificationEmail,
-} from './email-message.composer';
-import type { EmailMessage } from './email-sender.port';
+} from './payload/email-delivery-payload';
 
 type Credential = Pick<AuthEmailDeliveryPayload, 'token' | 'expiresAt'>;
 

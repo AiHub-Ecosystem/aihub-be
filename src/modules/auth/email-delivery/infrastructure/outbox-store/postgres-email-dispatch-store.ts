@@ -9,9 +9,9 @@ import type {
   EmailDispatchStorePort,
   ReleaseUnspentEmailAttemptInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import type { EmailDeliveryBacklogRow } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import type { claimEmailDeliveryRequests } from './email-delivery-claim';
-import { PostgresEmailDeliveryRequestRepository } from './postgres-email-delivery-request.repository';
-import type { EmailDeliveryBacklogRow } from './postgres-email-delivery-request.repository';
 import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';
 
 /**

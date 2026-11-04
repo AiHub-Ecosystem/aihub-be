@@ -6,15 +6,15 @@ import type {
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
   ReleaseUnspentEmailAttemptInput,
-} from './email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_KIND_POLICIES,
-} from './email-kind-handler.registry';
+} from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
 
 export const MAX_DELIVERY_ATTEMPTS = 3;
 
-export { MAX_CREDENTIAL_LIFETIME_MS } from './email-kind-handler.registry';
+export { MAX_CREDENTIAL_LIFETIME_MS } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
 
 export interface EmailDeliveryPollerMaintenanceOptions {
   readonly owner: string;

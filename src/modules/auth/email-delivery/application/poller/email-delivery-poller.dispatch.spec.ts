@@ -1,3 +1,12 @@
+import type {
+  EmailDeliveryPayload,
+  EmailPayloadCipherPort,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import {
+  EmailProviderTransportError,
+  type EmailSenderPort,
+} from '@/modules/auth/email-delivery/application/email-sender.port';
+import { EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS } from '@/modules/auth/email-delivery/application/send-policy/email-provider-retry-after.policy';
 import {
   DEFER_RETRY_MS,
   EmailDeliveryPoller,
@@ -20,15 +29,6 @@ import {
   unknownKeyVersionCipher,
   unreadableCipher,
 } from './email-delivery-poller.spec-support';
-import type {
-  EmailDeliveryPayload,
-  EmailPayloadCipherPort,
-} from './email-delivery-request.port';
-import { EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS } from './email-provider-retry-after.policy';
-import {
-  EmailProviderTransportError,
-  type EmailSenderPort,
-} from './email-sender.port';
 
 describe('EmailDeliveryPoller', () => {
   it('dispatches MFA security notices without checking credential actionability', async () => {

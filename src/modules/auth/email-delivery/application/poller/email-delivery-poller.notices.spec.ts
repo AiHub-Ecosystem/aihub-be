@@ -1,3 +1,8 @@
+import { API_KEY_NEAR_EXPIRY_WINDOW_MS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type {
+  ApiKeyNearExpiryNotificationPayload,
+  EmailNoticeResolvers,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller';
 import {
   NOW,
@@ -5,11 +10,6 @@ import {
   claimed,
   harness,
 } from './email-delivery-poller.spec-support';
-import { API_KEY_NEAR_EXPIRY_WINDOW_MS } from './email-delivery-request.port';
-import type {
-  ApiKeyNearExpiryNotificationPayload,
-  EmailNoticeResolvers,
-} from './email-delivery-request.port';
 
 const PAYLOAD: ApiKeyNearExpiryNotificationPayload = {
   organizationId: 'org_123',

@@ -22,7 +22,7 @@ import {
   setEmailOutboxCancellationSource,
   setEmailProviderOutageDurationSource,
 } from '@/common/observability/metrics';
-import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
+import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 
 /** How often an instance looks for work. The lease, not this, bounds overlap. */

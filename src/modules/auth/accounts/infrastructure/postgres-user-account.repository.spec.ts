@@ -1,6 +1,6 @@
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/public/argon2id-parameters';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { LOCK_PASSWORD_IDENTITY_SQL } from '@/modules/auth/shared/infrastructure/local-auth-statements';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresUserAccountRepository } from './postgres-user-account.repository';

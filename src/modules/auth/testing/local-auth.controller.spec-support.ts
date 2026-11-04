@@ -10,7 +10,6 @@ import { AppModule } from '@/app.module';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
 import type {
   BackpressureEmailKind,
   EmailOutboxQueueAgePort,
@@ -19,6 +18,7 @@ import {
   EMAIL_OUTBOX,
   type EmailOutboxPort,
 } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/outbox/email-outbox-backpressure.gate';
 import {
   PASSWORD_HASHER,
   type PasswordHasherPort,

@@ -18,17 +18,19 @@ export async function createOperatorNotificationClient(databaseUrl: string) {
     import(
       '@/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices'
     ),
-    import('@/modules/auth/email-delivery/infrastructure/email-payload-cipher'),
+    import(
+      '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher'
+    ),
     import(
       '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository'
     ),
     import('@/modules/auth/public/email-outbox'),
     import('@/common/ids/prefixed-id'),
     import(
-      '@/modules/auth/email-delivery/infrastructure/postgres-email-outbox-queue-age'
+      '@/modules/auth/email-delivery/infrastructure/outbox-store/postgres-email-outbox-queue-age'
     ),
     import(
-      '@/modules/auth/email-delivery/infrastructure/postgres-email-dispatch-store'
+      '@/modules/auth/email-delivery/infrastructure/outbox-store/postgres-email-dispatch-store'
     ),
     import('@/common/observability/metrics'),
   ]);

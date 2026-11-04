@@ -5,14 +5,14 @@ export type { EmailDeliveryKind } from './email-kind-handler.registry';
 export {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   isApiKeyNearExpiryNotificationPayload,
-} from './email-delivery-payload';
+} from './payload/email-delivery-payload';
 export type {
   ApiKeyNearExpiryNotificationInput,
   ApiKeyNearExpiryNotificationPayload,
   ApiKeyNearExpiryNoticeResolverPort,
   AuthEmailDeliveryPayload,
   EmailNoticeResolvers,
-} from './email-delivery-payload';
+} from './payload/email-delivery-payload';
 export type { EmailDeliveryPayload } from './email-kind-handler.registry';
 
 export const EMAIL_NOTICE_RESOLVERS = Symbol('EMAIL_NOTICE_RESOLVERS');

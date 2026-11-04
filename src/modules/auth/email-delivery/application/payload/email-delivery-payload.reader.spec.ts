@@ -1,12 +1,12 @@
-import { readEmailPayload } from './email-delivery-payload.reader';
+import { EnvelopeCipherError } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
   VERIFICATION_PAYLOAD,
   claimed,
   sealed,
   unknownKeyVersionCipher,
-} from './email-delivery-poller.spec-support';
-import { EnvelopeCipherError } from './email-delivery-request.port';
-import type { EmailPayloadCipherPort } from './email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/poller/email-delivery-poller.spec-support';
+import { readEmailPayload } from './email-delivery-payload.reader';
 
 function cipherThrowing(error: Error): EmailPayloadCipherPort {
   return {

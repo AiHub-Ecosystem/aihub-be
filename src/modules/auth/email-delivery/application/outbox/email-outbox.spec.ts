@@ -3,7 +3,7 @@ import type {
   EmailDeliveryTransaction,
   EmailPayloadCipherPort,
   InsertEmailDeliveryRequestInput,
-} from './email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailOutbox } from './email-outbox';
 
 const transaction = {} as EmailDeliveryTransaction;

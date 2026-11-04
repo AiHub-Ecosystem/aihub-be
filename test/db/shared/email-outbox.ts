@@ -1,8 +1,8 @@
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import type { EmailDeliveryRequestWriterPort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EmailOutbox } from '@/modules/auth/email-delivery/application/email-outbox';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
+import { EmailOutbox } from '@/modules/auth/email-delivery/application/outbox/email-outbox';
+import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 

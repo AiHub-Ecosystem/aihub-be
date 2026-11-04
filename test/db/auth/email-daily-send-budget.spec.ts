@@ -1,4 +1,4 @@
-import { emailDailySendBudgetLimits } from '@/modules/auth/email-delivery/application/email-send-daily-budget.policy';
+import { emailDailySendBudgetLimits } from '@/modules/auth/email-delivery/application/send-policy/email-send-daily-budget.policy';
 import { PostgresEmailDailySendBudget } from '@/modules/auth/email-delivery/infrastructure/postgres-email-daily-send-budget';
 import { createTestPool, resetIdentityTables } from '../shared/database';
 

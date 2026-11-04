@@ -5,14 +5,14 @@ import type {
   EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
   EmailPayloadCipherPort,
-} from './email-delivery-request.port';
-import { EMAIL_KIND_POLICIES } from './email-kind-handler.registry';
-import type { AdmitEmailRequestPort } from './email-outbox-backpressure.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EMAIL_KIND_POLICIES } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import type {
   EmailDeliveryPayloadByKind,
   EmailOutboxPort,
   QueueEmailDeliveryRequestInput,
-} from './email-outbox.port';
+} from '@/modules/auth/email-delivery/application/email-outbox.port';
 
 export class EmailOutbox implements EmailOutboxPort {
   constructor(

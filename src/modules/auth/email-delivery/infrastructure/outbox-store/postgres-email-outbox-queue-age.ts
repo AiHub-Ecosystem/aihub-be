@@ -1,6 +1,6 @@
 import type { EmailDeliveryKind } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { EmailOutboxQueueAgePort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
-import type { EmailDeliveryBacklogRow } from './postgres-email-delivery-request.repository';
+import type { EmailDeliveryBacklogRow } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 
 /** How long one read of the queue serves every request that arrives meanwhile. */
 export const QUEUE_AGE_CACHE_MS = 10_000;

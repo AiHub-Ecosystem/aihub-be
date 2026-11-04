@@ -26,7 +26,6 @@ import {
   type RuntimeSecretProvider,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
-import { EmailDeliveryPoller } from './application/email-delivery-poller';
 import {
   EMAIL_DELIVERY_ID,
   EMAIL_DELIVERY_REQUEST_WRITER,
@@ -41,8 +40,6 @@ import {
   EMAIL_DELIVERY_KINDS,
 } from './application/email-kind-handler.registry';
 import { normalizeCustomerWebBaseUrl } from './application/email-message.composer';
-import { EmailOutbox } from './application/email-outbox';
-import { EmailOutboxBackpressureGate } from './application/email-outbox-backpressure.gate';
 import { ADMIT_EMAIL_REQUEST } from './application/email-outbox-backpressure.port';
 import {
   EMAIL_OUTBOX,
@@ -52,7 +49,6 @@ import {
   EMAIL_PROVIDER_OUTAGE_CIRCUIT,
   type EmailProviderOutageCircuitPort,
 } from './application/email-provider-outage-circuit.port';
-import { emailDailySendBudgetLimits } from './application/email-send-daily-budget.policy';
 import {
   EMAIL_DAILY_SEND_BUDGET,
   type EmailDailySendBudgetPort,
@@ -65,11 +61,14 @@ import {
   EMAIL_SENDER,
   type EmailSenderPort,
 } from './application/email-sender.port';
+import { EmailOutbox } from './application/outbox/email-outbox';
+import { EmailOutboxBackpressureGate } from './application/outbox/email-outbox-backpressure.gate';
+import { EmailDeliveryPoller } from './application/poller/email-delivery-poller';
+import { emailDailySendBudgetLimits } from './application/send-policy/email-send-daily-budget.policy';
 import {
   assertRetainedKeyVersionsCoverLiveWindows,
   pruneExpiredAuthEmailRecipientLimits,
 } from './infrastructure/auth-email-recipient-limit';
-import { missingQueuedEmailPayloadKeyVersions } from './infrastructure/email-outbox-key-retention';
 import {
   EMAIL_OUTBOX_POLL_INTERVAL_MS,
   EmailOutboxPollerScheduler,
@@ -78,13 +77,14 @@ import {
   reportTerminalEmailDeliveryFailure,
   reportUnrecognisedEmailPayload,
 } from './infrastructure/email-outbox-poller.scheduler';
-import { createEmailPayloadCipher } from './infrastructure/email-payload-cipher';
+import { missingQueuedEmailPayloadKeyVersions } from './infrastructure/outbox-store/email-outbox-key-retention';
+import { PostgresEmailDispatchStore } from './infrastructure/outbox-store/postgres-email-dispatch-store';
+import { PostgresEmailOutboxQueueAge } from './infrastructure/outbox-store/postgres-email-outbox-queue-age';
+import { createEmailPayloadCipher } from './infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailDailySendBudget } from './infrastructure/postgres-email-daily-send-budget';
 import { PostgresEmailDeliveryRequestRepository } from './infrastructure/postgres-email-delivery-request.repository';
-import { PostgresEmailDispatchStore } from './infrastructure/postgres-email-dispatch-store';
-import { PostgresEmailOutboxQueueAge } from './infrastructure/postgres-email-outbox-queue-age';
-import { RedisEmailSendRateLimiter } from './infrastructure/redis-email-send-rate-limiter';
-import { ResendEmailSender } from './infrastructure/resend-email.sender';
+import { RedisEmailSendRateLimiter } from './infrastructure/redis-rate-limiter/redis-email-send-rate-limiter';
+import { ResendEmailSender } from './infrastructure/resend/resend-email.sender';
 
 registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
 

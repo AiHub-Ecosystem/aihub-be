@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import {
   EMAIL_SEND_RATE_RESERVATION_KEY,
   RedisEmailSendRateLimiter,
-} from '@/modules/auth/email-delivery/infrastructure/redis-email-send-rate-limiter';
+} from '@/modules/auth/email-delivery/infrastructure/redis-rate-limiter/redis-email-send-rate-limiter';
 import {
   createSandboxTestRedis,
   sandboxTestRedisUrl,

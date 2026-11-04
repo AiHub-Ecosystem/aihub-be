@@ -5,10 +5,6 @@ import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { getMetrics } from '@/common/observability/metrics';
-import {
-  DEFER_RETRY_MS,
-  EmailDeliveryPoller,
-} from '@/modules/auth/email-delivery/application/email-delivery-poller';
 import type {
   EmailDeliveryKind,
   EmailDeliveryRequestRecord,
@@ -22,11 +18,15 @@ import type {
   EmailProviderResponse,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
+import {
+  DEFER_RETRY_MS,
+  EmailDeliveryPoller,
+} from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { reportTerminalEmailDeliveryFailure } from '@/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
+import { PostgresEmailDispatchStore } from '@/modules/auth/email-delivery/infrastructure/outbox-store/postgres-email-dispatch-store';
+import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailCredentialRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-credential.repository';
-import { PostgresEmailDispatchStore } from '@/modules/auth/email-delivery/infrastructure/postgres-email-dispatch-store';
-import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/public/argon2id-parameters';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,

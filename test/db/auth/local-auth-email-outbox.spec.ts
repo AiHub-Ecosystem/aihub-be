@@ -21,15 +21,15 @@ import {
   type EmailDeliveryKind,
   type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EmailOutbox } from '@/modules/auth/email-delivery/application/email-outbox';
 import { EMAIL_OUTBOX } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   EMAIL_SENDER,
   type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
+import { EmailOutbox } from '@/modules/auth/email-delivery/application/outbox/email-outbox';
 import { pruneExpiredAuthEmailRecipientLimits } from '@/modules/auth/email-delivery/infrastructure/auth-email-recipient-limit';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
+import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import {

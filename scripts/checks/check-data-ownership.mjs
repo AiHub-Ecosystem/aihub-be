@@ -99,10 +99,6 @@ const allowlist = new Map([
     'near-expiry notice reads the recipient email at dispatch (ADR-0120)',
   ],
   [
-    'src/modules/auth/local-credentials/infrastructure/postgres-email-credential.repository.ts::organization_invitations',
-    'lookup invitation for email credential',
-  ],
-  [
     'src/modules/metering/infrastructure/billing/postgres-billing-statement.repository.ts::api_keys',
     'display key metadata on billing statement',
   ],

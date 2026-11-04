@@ -1,4 +1,4 @@
-import type { EmailDeliveryBacklogRow } from './postgres-email-delivery-request.repository';
+import type { EmailDeliveryBacklogRow } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import {
   PostgresEmailOutboxQueueAge,
   QUEUE_AGE_CACHE_MS,

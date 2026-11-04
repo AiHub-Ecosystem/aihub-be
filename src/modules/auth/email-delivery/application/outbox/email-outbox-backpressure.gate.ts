@@ -2,12 +2,12 @@ import { AppError } from '@/common/errors/app-error';
 
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 
-import { EMAIL_KIND_POLICIES } from './email-kind-handler.registry';
+import { EMAIL_KIND_POLICIES } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
 import type {
   AdmitEmailRequestPort,
   BackpressureEmailKind,
   EmailOutboxQueueAgePort,
-} from './email-outbox-backpressure.port';
+} from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 
 /**
  * A request is refused once the backlog has used this share of the lifetime of

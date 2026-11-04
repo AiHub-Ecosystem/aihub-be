@@ -20,7 +20,7 @@ import {
   type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
-import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
+import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import {
   AUTH_RATE_LIMITER,

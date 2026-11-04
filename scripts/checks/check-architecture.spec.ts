@@ -947,7 +947,7 @@ describe('a session is stored only with the second-factor check', () => {
       mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
       writeFileSync(
         join(fixtureRoot, 'infrastructure', 'probe.ts'),
-        `import { admitSessionContinuation } from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';\nexport const admission = admitSessionContinuation('usr_1');\n`,
+        `import { admitSessionContinuation } from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';\nexport const admission = admitSessionContinuation('usr_1');\n`,
       );
       writeFileSync(
         join(fixtureRoot, 'tsconfig.json'),

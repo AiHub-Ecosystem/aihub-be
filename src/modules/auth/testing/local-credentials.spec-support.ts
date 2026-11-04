@@ -1,11 +1,11 @@
 import { AppError } from '@/common/errors/app-error';
 import type { EmailDeliveryKind } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
 import type {
   BackpressureEmailKind,
   EmailOutboxQueueAgePort,
 } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/outbox/email-outbox-backpressure.gate';
 import { LocalRegistrationService } from '@/modules/auth/local-credentials/application/local-registration.service';
 import { LocalSessionService } from '@/modules/auth/local-credentials/application/local-session.service';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';

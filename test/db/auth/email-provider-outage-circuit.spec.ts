@@ -6,7 +6,7 @@ import {
   type EmailSendRateRedisClient,
   OUTAGE_PROBE_STALE_MS,
   RedisEmailSendRateLimiter,
-} from '@/modules/auth/email-delivery/infrastructure/redis-email-send-rate-limiter';
+} from '@/modules/auth/email-delivery/infrastructure/redis-rate-limiter/redis-email-send-rate-limiter';
 import { createSandboxTestRedis } from '../shared/database';
 
 /** Answers every script from Redis except the failure script, which throws. */

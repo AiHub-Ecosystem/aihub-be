@@ -24,7 +24,7 @@ import { reserveAuthenticationEmailRecipient } from './auth-email-recipient-limi
 import {
   CLAIM_UNREPORTED_FAILURES_SQL,
   withFailureClaims,
-} from './email-failure-report-claim';
+} from './outbox-store/email-failure-report-claim';
 
 import { isRecord } from '@/common/is-record';
 import {
@@ -40,8 +40,8 @@ import {
   oneOf,
   stringValue,
 } from '@/modules/auth/shared/infrastructure/auth-row';
-import { claimEmailDeliveryRequests } from './email-delivery-claim';
-import { CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL } from './email-delivery-stale-cancellation';
+import { claimEmailDeliveryRequests } from './outbox-store/email-delivery-claim';
+import { CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL } from './outbox-store/email-delivery-stale-cancellation';
 
 /**
  * A request that spent its last attempt but whose outcome was never written:

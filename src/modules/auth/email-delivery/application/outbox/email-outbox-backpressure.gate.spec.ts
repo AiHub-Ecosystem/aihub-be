@@ -1,15 +1,15 @@
 import { AppError } from '@/common/errors/app-error';
 import { OPAQUE_TOKEN_BINDINGS } from '@/common/security/opaque-token-issuer';
 
+import type {
+  BackpressureEmailKind,
+  EmailOutboxQueueAgePort,
+} from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
 import {
   BACKPRESSURE_MAX_RETRY_MS,
   BACKPRESSURE_MIN_RETRY_MS,
   EmailOutboxBackpressureGate,
 } from './email-outbox-backpressure.gate';
-import type {
-  BackpressureEmailKind,
-  EmailOutboxQueueAgePort,
-} from './email-outbox-backpressure.port';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

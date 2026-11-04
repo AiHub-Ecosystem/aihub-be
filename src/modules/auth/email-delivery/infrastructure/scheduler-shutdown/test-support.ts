@@ -2,7 +2,7 @@ import type { OnModuleDestroy } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
-import type { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/email-delivery-poller';
+import type { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 
 const INTERVAL_MS = 5;
 

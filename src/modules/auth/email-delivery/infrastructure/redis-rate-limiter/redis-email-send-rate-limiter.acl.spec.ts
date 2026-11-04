@@ -11,7 +11,7 @@ const CONNECTION_COMMANDS = ['select', 'client|setinfo', 'info', 'eval'];
 
 function aclGrant(): { keys: string[]; commands: string[] } {
   const readme = readFileSync(
-    join(__dirname, '../../../../../ops/vault/README.md'),
+    join(__dirname, '../../../../../../ops/vault/README.md'),
     'utf8',
   );
   const line = readme

@@ -1,11 +1,11 @@
 import { internalError } from '@/common/errors/app-error';
 import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
+import type { EmailMessage } from './email-sender.port';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
   type ApiKeyNearExpiryNotificationInput,
   type InviteEmailRole,
-} from './email-delivery-payload';
-import type { EmailMessage } from './email-sender.port';
+} from './payload/email-delivery-payload';
 import { AUTH_TRANSACTIONAL_EMAIL_TEMPLATE } from './templates/transactional-email.template.generated';
 
 export interface VerificationEmailInput {

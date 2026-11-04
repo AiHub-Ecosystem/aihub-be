@@ -1,4 +1,4 @@
-import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/public/argon2id-parameters';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { PostgresPasswordResetTokenRepository } from './postgres-password-reset-token.repository';
