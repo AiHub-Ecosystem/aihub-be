@@ -302,15 +302,6 @@ module.exports = {
   // dedicated tooling and may overlap with Knip.
   forbidden: [
     {
-      name: 'temporary-policy-cache-check',
-      severity: 'error',
-      comment: 'temporary policy cache regression fixture',
-      from: {
-        path: '^src/modules/identity/[.]tmp-policy-cache-[^/]+/application/probe[.]ts$',
-      },
-      to: { path: '^src/modules/identity/domain/organization-name[.]ts$' },
-    },
-    {
       name: 'no-circular',
       severity: 'error',
       comment:
