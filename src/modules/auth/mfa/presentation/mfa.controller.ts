@@ -27,8 +27,10 @@ import {
   authenticatedUserId,
   credentialIp,
 } from '@/modules/auth/shared/presentation/auth-request';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
-import { OptionalWebSessionClientGuard } from '@/modules/auth/web-sessions/presentation/web-session-client.guard';
+import {
+  OptionalWebSessionClientGuard,
+  UserAccessJwtGuard,
+} from '@/modules/auth/web-sessions/public';
 
 @Controller()
 export class MfaController {

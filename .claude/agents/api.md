@@ -5,6 +5,7 @@
 **File ownership:**
 
 - `src/**/presentation/**`
+- `src/modules/auth/testing/auth-http-*.spec.ts`
 - `src/**/*.controller.ts`
 - `src/catalog/**`
 - `src/contracts/**`

@@ -15,7 +15,7 @@ import {
   type LocalSessionPort,
 } from '@/modules/auth/local-credentials/application/local-session.port';
 import { authenticatedUserId } from '@/modules/auth/shared/presentation/auth-request';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
 
 @Controller()
 export class AccountsController {
