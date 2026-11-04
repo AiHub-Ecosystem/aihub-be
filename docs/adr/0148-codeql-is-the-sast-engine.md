@@ -70,9 +70,14 @@ Measured on 2026-11-04 on a developer machine, full repository, 791 files:
 database create 124 s, query analysis 97 s, 221 s in total. The CI target is
 350 s for the scan. The slowest job in the latest `ci.yml` run on `main` is
 Unit tests at 343 s; SAST runs as a separate workflow in parallel, so it
-lengthens the critical path only if it exceeds that job. Record the first CI
-run's duration in [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330)
-and compare it with 343 s.
+lengthens the critical path only if it exceeds that job.
+
+First CI run (2026-11-04, run 41809681993 on `004638b1`): the job took 327 s
+end to end (init 17 s, analyze 288 s, install and upload 15 s). That is under
+the 350 s target and under the 343 s Unit tests job. The run also confirmed
+that the action resolves the local `./.github/codeql` pack and writes
+`codeql-results/javascript.sarif`, and the gate passed with the committed
+`triage.json`.
 
 ## Consequences
 
