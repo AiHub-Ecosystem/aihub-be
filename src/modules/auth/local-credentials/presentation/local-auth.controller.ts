@@ -1,41 +1,24 @@
 import {
   Body,
   Controller,
-  Delete,
-  Get,
   HttpCode,
   Inject,
   Post,
   Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { AppError, internalError } from '@/common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   EmptyAuthRequestSchema,
-  ForgotPasswordRequestSchema,
   LoginRequestSchema,
   type LoginResponse,
   type LoginResultResponse,
-  type ReadCurrentUserResponse,
   RegisterRequestSchema,
-  type ResendVerificationRequest,
-  ResendVerificationRequestSchema,
-  ResetPasswordRequestSchema,
-  type VerifyEmailRequest,
-  VerifyEmailRequestSchema,
 } from '@/contracts/auth/local-auth';
-import {
-  BeginMfaEnrollmentRequestSchema,
-  type BeginMfaEnrollmentResponse,
-  ConfirmMfaEnrollmentRequestSchema,
-  type ConfirmMfaEnrollmentResponse,
-  RemoveMfaFactorRequestSchema,
-} from '@/contracts/auth/mfa';
 import {
   LOCAL_REGISTRATION,
   type LocalRegistrationPort,
@@ -45,28 +28,15 @@ import {
   type LocalSessionPort,
   RefreshRotationCommittedError,
 } from '@/modules/auth/local-credentials/application/local-session.port';
+import { requestIp } from '@/modules/auth/shared/presentation/auth-request';
 import {
-  PASSWORD_RECOVERY,
-  type PasswordRecoveryPort,
-} from '@/modules/auth/local-credentials/application/password-recovery.port';
-import type { IssuedSession } from '@/modules/auth/local-credentials/application/session-token-issuers';
+  clearRefreshCookie,
+  sessionEnvelope,
+} from '@/modules/auth/shared/presentation/session-transport';
 import {
-  AUTH_MFA_SERVICE,
-  type AuthMfaServicePort,
-} from '@/modules/auth/mfa/application/auth-mfa-repository.port';
-import { accessTokenEnvelope } from '@/modules/auth/shared/presentation/access-token-envelope';
-import { endUserIpFrom } from '@/modules/auth/shared/presentation/web-session-transport';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
-import { OptionalWebSessionClientGuard } from '@/modules/auth/web-sessions/presentation/web-session-client.guard';
-import { webSessionUnavailable } from '@/modules/auth/web-sessions/public';
-import {
-  REFRESH_COOKIE_CLEAR_OPTIONS,
-  REFRESH_COOKIE_NAME,
-  REFRESH_COOKIE_OPTIONS,
   hasAlternateRefreshSource,
   refreshCookieFrom,
 } from '@/modules/auth/web-sessions/public/refresh-cookie';
-import { requestIp } from './auth-request';
 
 interface RegisterEnvelope {
   readonly data: {
@@ -76,60 +46,6 @@ interface RegisterEnvelope {
     readonly email_delivery_status: 'queued' | 'suppressed';
   };
   readonly meta: { readonly request_id: string };
-}
-
-interface ForgotPasswordEnvelope {
-  readonly data: { readonly message: string };
-  readonly meta: { readonly request_id: string };
-}
-
-function authenticatedUserId(request: FastifyRequest): string {
-  const userId = request.aihubUser?.userId;
-  if (userId === undefined) {
-    throw new AppError({
-      code: 'INTERNAL_ERROR',
-      message: 'Authenticated user context is missing',
-      retryable: false,
-    });
-  }
-  return userId;
-}
-
-function credentialIp(request: FastifyRequest): string {
-  if (request.aihubClientIpSource !== 'customer_web_bff') {
-    return requestIp(request);
-  }
-  const ip = endUserIpFrom(request);
-  if (ip === undefined) {
-    throw webSessionUnavailable(
-      internalError(
-        'Customer Web BFF omitted or malformed X-AIHUB-End-User-IP',
-      ),
-    );
-  }
-  return ip;
-}
-
-/** Sets the refresh cookie and returns the envelope every session-issuing route shares. */
-function sessionEnvelope(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  session: IssuedSession,
-): LoginResponse {
-  reply.setCookie(
-    REFRESH_COOKIE_NAME,
-    session.refreshToken,
-    REFRESH_COOKIE_OPTIONS,
-  );
-  return accessTokenEnvelope(
-    session.accessToken,
-    session.expiresIn,
-    String(request.id),
-  );
-}
-
-function clearRefreshCookie(reply: FastifyReply): void {
-  reply.setCookie(REFRESH_COOKIE_NAME, '', REFRESH_COOKIE_CLEAR_OPTIONS);
 }
 
 function isInvalidRefreshToken(error: unknown): boolean {
@@ -143,28 +59,9 @@ export class LocalAuthController {
   constructor(
     @Inject(LOCAL_REGISTRATION)
     private readonly registration: LocalRegistrationPort,
-    @Inject(PASSWORD_RECOVERY)
-    private readonly recovery: PasswordRecoveryPort,
     @Inject(LOCAL_SESSION)
     private readonly sessions: LocalSessionPort,
-    @Inject(AUTH_MFA_SERVICE)
-    private readonly mfa: AuthMfaServicePort,
   ) {}
-
-  @Get(PUBLIC_ROUTES['me.profile.read'].path)
-  @UseGuards(UserAccessJwtGuard)
-  @HttpCode(PUBLIC_ROUTES['me.profile.read'].successStatus)
-  async currentUser(
-    @Req() request: FastifyRequest,
-  ): Promise<ReadCurrentUserResponse> {
-    const profile = await this.sessions.currentUser(
-      authenticatedUserId(request),
-    );
-    return {
-      data: profile,
-      meta: { request_id: String(request.id) },
-    };
-  }
 
   @Post(PUBLIC_ROUTES['auth.register'].path)
   @HttpCode(PUBLIC_ROUTES['auth.register'].successStatus)
@@ -208,67 +105,6 @@ export class LocalAuthController {
     return sessionEnvelope(request, reply, result.session);
   }
 
-  @Post(PUBLIC_ROUTES['auth.mfa.enrollment'].path)
-  @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment'].successStatus)
-  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
-  async beginMfaEnrollment(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-  ): Promise<BeginMfaEnrollmentResponse> {
-    const input = parseRequestBody(
-      BeginMfaEnrollmentRequestSchema,
-      body,
-      request,
-    );
-    const enrollment = await this.mfa.beginEnrollment({
-      userId: authenticatedUserId(request),
-      password: input.password,
-      ip: credentialIp(request),
-    });
-    return {
-      data: { secret: enrollment.secret, otpauth_uri: enrollment.otpauthUri },
-      meta: { request_id: String(request.id) },
-    };
-  }
-
-  @Post(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].path)
-  @HttpCode(PUBLIC_ROUTES['auth.mfa.enrollment.confirm'].successStatus)
-  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
-  async confirmMfaEnrollment(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-  ): Promise<ConfirmMfaEnrollmentResponse> {
-    const input = parseRequestBody(
-      ConfirmMfaEnrollmentRequestSchema,
-      body,
-      request,
-    );
-    const recoveryCodes = await this.mfa.confirmEnrollment({
-      userId: authenticatedUserId(request),
-      code: input.code,
-      ip: credentialIp(request),
-    });
-    return {
-      data: { recovery_codes: [...recoveryCodes] },
-      meta: { request_id: String(request.id) },
-    };
-  }
-
-  @Delete(PUBLIC_ROUTES['auth.mfa.remove'].path)
-  @HttpCode(PUBLIC_ROUTES['auth.mfa.remove'].successStatus)
-  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
-  async removeMfaFactor(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-  ): Promise<void> {
-    const proof = parseRequestBody(RemoveMfaFactorRequestSchema, body, request);
-    await this.mfa.removeFactor({
-      userId: authenticatedUserId(request),
-      proof,
-      ip: credentialIp(request),
-    });
-  }
-
   @Post(PUBLIC_ROUTES['auth.refresh'].path)
   @HttpCode(PUBLIC_ROUTES['auth.refresh'].successStatus)
   async refresh(
@@ -307,83 +143,6 @@ export class LocalAuthController {
       ? undefined
       : refreshCookieFrom(request);
     await this.sessions.logout(rawToken);
-    clearRefreshCookie(reply);
-  }
-
-  // No `@HttpCode`: the status is the request's answer, not a fixed success
-  // status. Verification Sign-in returns 200, a verify without a binding
-  // returns 204, so the registry's primary success status would be a lie here.
-  @Post(PUBLIC_ROUTES['auth.verify_email'].path)
-  async verify(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<LoginResponse | undefined> {
-    const input: VerifyEmailRequest = parseRequestBody(
-      VerifyEmailRequestSchema,
-      body,
-      request,
-    );
-    const session = await this.registration.verify(
-      input.token,
-      requestIp(request),
-      input.browser_binding,
-      input.password,
-    );
-    if (session === undefined) {
-      reply.status(204);
-      return undefined;
-    }
-
-    // Verification Sign-in (ADR-0054): the same session a login returns.
-    reply.status(200);
-    return sessionEnvelope(request, reply, session);
-  }
-
-  @Post(PUBLIC_ROUTES['auth.resend_verification'].path)
-  @HttpCode(PUBLIC_ROUTES['auth.resend_verification'].successStatus)
-  async resend(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-  ): Promise<void> {
-    const input: ResendVerificationRequest = parseRequestBody(
-      ResendVerificationRequestSchema,
-      body,
-      request,
-    );
-    await this.registration.resend(
-      input.email,
-      requestIp(request),
-      input.browser_binding,
-    );
-  }
-
-  @Post(PUBLIC_ROUTES['auth.forgot_password'].path)
-  @HttpCode(PUBLIC_ROUTES['auth.forgot_password'].successStatus)
-  async forgotPassword(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-  ): Promise<ForgotPasswordEnvelope> {
-    const input = parseRequestBody(ForgotPasswordRequestSchema, body, request);
-    const result = await this.recovery.forgotPassword(
-      input,
-      requestIp(request),
-    );
-    return {
-      data: result,
-      meta: { request_id: String(request.id) },
-    };
-  }
-
-  @Post(PUBLIC_ROUTES['auth.reset_password'].path)
-  @HttpCode(PUBLIC_ROUTES['auth.reset_password'].successStatus)
-  async resetPassword(
-    @Req() request: FastifyRequest,
-    @Body() body: unknown,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<void> {
-    const input = parseRequestBody(ResetPasswordRequestSchema, body, request);
-    await this.recovery.resetPassword(input, requestIp(request));
     clearRefreshCookie(reply);
   }
 }

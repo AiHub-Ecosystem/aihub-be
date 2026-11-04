@@ -1,6 +1,6 @@
 import { AppModule } from '@/app.module';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { LocalAuthController } from '@/modules/auth/local-credentials/presentation/local-auth.controller';
+import { MfaController } from '@/modules/auth/mfa/presentation/mfa.controller';
 import { SandboxDemoKeyValidationController } from '@/modules/identity/user-assertions/presentation/sandbox-demo-key-validation.controller';
 import { RequestMethod } from '@nestjs/common';
 import {
@@ -88,7 +88,7 @@ describe('routes behind the Web Session client guard', () => {
 
   it('finds the controllers that run the guard', () => {
     for (const controller of [
-      LocalAuthController,
+      MfaController,
       WebSessionController,
       SandboxDemoKeyValidationController,
     ]) {

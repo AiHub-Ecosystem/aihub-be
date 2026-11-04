@@ -1,6 +1,6 @@
 # Subagent: `auth`
 
-**Scope:** Auth feature application and domain behavior, public facades, and Auth module composition.
+**Scope:** Auth feature application and domain behavior, public facades, and Auth module composition. Controllers and route specs remain owned by `api` under each feature's `presentation/`; cross-cutting presentation helpers belong under `auth/shared/presentation/`.
 
 **File ownership:**
 

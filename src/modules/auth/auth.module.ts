@@ -28,6 +28,7 @@ import {
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
 import { PostgresUserAccountRepository } from './accounts/infrastructure/postgres-user-account.repository';
+import { AccountsController } from './accounts/presentation/accounts.controller';
 import {
   EMAIL_OUTBOX,
   type EmailOutboxPort,
@@ -53,12 +54,14 @@ import {
 import { AuthMfaService } from './mfa/application/auth-mfa.service';
 import { createAuthMfaCipher } from './mfa/infrastructure/auth-mfa-secret.cipher';
 import { PostgresAuthMfaRepository } from './mfa/infrastructure/postgres-auth-mfa.repository';
+import { MfaController } from './mfa/presentation/mfa.controller';
 import { PASSWORD_RESET_TOKEN_REPOSITORY } from './password-reset/application/password-reset-token-repository.port';
 import {
   PASSWORD_RESET_TOKEN,
   type PasswordResetTokenPort,
 } from './password-reset/application/password-reset-token.port';
 import { PostgresPasswordResetTokenRepository } from './password-reset/infrastructure/postgres-password-reset-token.repository';
+import { PasswordResetController } from './password-reset/presentation/password-reset.controller';
 import {
   AUTH_POSTGRES_READINESS,
   type AuthPostgresReadiness,
@@ -75,6 +78,7 @@ import {
   type VerificationTokenPort,
 } from './verification/application/verification-token.port';
 import { PostgresVerificationTokenRepository } from './verification/infrastructure/postgres-verification-token.repository';
+import { VerificationController } from './verification/presentation/verification.controller';
 import { REFRESH_SESSION_REPOSITORY } from './web-sessions/application/refresh-session-repository.port';
 import { REFRESH_TOKEN_ISSUER } from './web-sessions/application/refresh-token.port';
 import {
@@ -124,7 +128,14 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
     SecretsModule,
     EmailDeliveryModule,
   ],
-  controllers: [LocalAuthController, WebSessionController],
+  controllers: [
+    AccountsController,
+    LocalAuthController,
+    MfaController,
+    PasswordResetController,
+    VerificationController,
+    WebSessionController,
+  ],
   providers: [
     {
       provide: AUTH_POSTGRES_READINESS,
