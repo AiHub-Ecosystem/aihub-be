@@ -1,0 +1,8 @@
+edges
+| test.ts:6:14:6:21 | req.body | test.ts:6:14:6:28 | req.body.script | provenance |  |
+nodes
+| test.ts:6:14:6:21 | req.body | semmle.label | req.body |
+| test.ts:6:14:6:28 | req.body.script | semmle.label | req.body.script |
+subpaths
+#select
+| test.ts:6:14:6:28 | req.body.script | test.ts:6:14:6:21 | req.body | test.ts:6:14:6:28 | req.body.script | Request-controlled data reaches a Redis eval script. |

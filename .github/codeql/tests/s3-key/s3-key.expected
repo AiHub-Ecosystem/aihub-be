@@ -1,0 +1,8 @@
+edges
+| test.ts:9:58:9:65 | req.body | test.ts:9:58:9:69 | req.body.key | provenance |  |
+nodes
+| test.ts:9:58:9:65 | req.body | semmle.label | req.body |
+| test.ts:9:58:9:69 | req.body.key | semmle.label | req.body.key |
+subpaths
+#select
+| test.ts:9:58:9:69 | req.body.key | test.ts:9:58:9:65 | req.body | test.ts:9:58:9:69 | req.body.key | Request-controlled data determines an S3 object key. |

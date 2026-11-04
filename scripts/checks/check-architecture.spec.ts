@@ -1206,6 +1206,64 @@ describe('source-text architecture rules fail arch-check', () => {
     }
   }
 
+  function rawSqlProbe(source: string): {
+    status: number | null;
+    output: string;
+  } {
+    return runWithFixtures([
+      { layer: 'infrastructure', name: 'raw-sql.repository.ts', source },
+    ]);
+  }
+
+  it.each([
+    'client.$queryRawUnsafe(`SELECT * FROM records WHERE id = ${request.id}`);\n',
+    "const query = prefix + request.sql;\nclient['$executeRawUnsafe'](query);\n",
+  ])('rejects dynamic SQL passed to Prisma unsafe APIs: %s', (source) => {
+    const result = rawSqlProbe(source);
+
+    expect(result.output).toContain('passes dynamic SQL to');
+    expect(result.status).not.toBe(0);
+  });
+
+  it('allows static SQL with bound values', () => {
+    const result = rawSqlProbe(
+      "client.$queryRawUnsafe('SELECT * FROM records WHERE id = $1', request.id);\n",
+    );
+
+    expect(result.output).not.toContain('passes dynamic SQL to');
+    expect(result.status).toBe(0);
+  });
+
+  it('allows module-level static SQL constants inside functions', () => {
+    const result = rawSqlProbe(
+      [
+        "const INSERT_SQL = 'INSERT INTO records (id) VALUES ($1)';",
+        'function insert(client: any, id: string) {',
+        '  return client.$queryRawUnsafe(INSERT_SQL, id);',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(result.output).not.toContain('passes dynamic SQL to');
+    expect(result.status).toBe(0);
+  });
+
+  it('requires an explicit arch-check reason for dynamic SQL wrappers', () => {
+    const result = rawSqlProbe(
+      [
+        'function execute(client: any, sql: string) {',
+        '  // arch-check: wrapper accepts reviewed SQL and bound values only',
+        '  client.$executeRawUnsafe(sql);',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(result.output).not.toContain('passes dynamic SQL to');
+    expect(result.status).toBe(0);
+  });
+
   it('rejects host literals in downstream source files', () => {
     const result = runWithFixtures(
       [

@@ -1,0 +1,8 @@
+edges
+| test.ts:7:19:7:26 | req.body | test.ts:7:19:7:32 | req.body.value | provenance |  |
+nodes
+| test.ts:7:19:7:26 | req.body | semmle.label | req.body |
+| test.ts:7:19:7:32 | req.body.value | semmle.label | req.body.value |
+subpaths
+#select
+| test.ts:7:19:7:32 | req.body.value | test.ts:7:19:7:26 | req.body | test.ts:7:19:7:32 | req.body.value | Request-controlled text reaches a regular expression with exponential backtracking behavior. |

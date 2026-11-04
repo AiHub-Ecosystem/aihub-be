@@ -1,0 +1,6 @@
+name: aihub/codeql-queries
+version: 0.0.1
+extractor: javascript
+dependencies:
+  codeql/javascript-all: 3.0.0
+  codeql/javascript-queries: 2.5.0

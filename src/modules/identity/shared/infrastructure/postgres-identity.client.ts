@@ -47,10 +47,11 @@ export async function identityRows(
   values: readonly unknown[] = [],
 ): Promise<readonly Record<string, unknown>[]> {
   if (isRowlessWrite(text)) {
-    await client.$executeRawUnsafe(text, ...values);
+    await client.$executeRawUnsafe(text, ...values); // arch-check: shared SQL wrapper binds values separately
     return [];
   }
 
+  // arch-check: shared SQL wrapper binds values separately
   const rows = await client.$queryRawUnsafe<readonly Record<string, unknown>[]>(
     text,
     ...values,

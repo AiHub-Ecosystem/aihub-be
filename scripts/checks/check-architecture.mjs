@@ -548,6 +548,177 @@ function hasQueryValidationMarker(sourceFile, node, lines) {
   );
 }
 
+const RAW_SQL_METHODS = new Set(['$queryRawUnsafe', '$executeRawUnsafe']);
+const RAW_SQL_MARKER = /(?:^|\s)(?:\/\/|\/\*|\*)\s*arch-check:\s*\S/;
+
+/** @param {import('typescript').CallExpression} call */
+function rawSqlMethodName(call) {
+  const callee = call.expression;
+  if (ts.isPropertyAccessExpression(callee)) {
+    return RAW_SQL_METHODS.has(callee.name.text) ? callee.name.text : undefined;
+  }
+  if (
+    ts.isElementAccessExpression(callee) &&
+    callee.argumentExpression !== undefined &&
+    ts.isStringLiteralLike(callee.argumentExpression)
+  ) {
+    return RAW_SQL_METHODS.has(callee.argumentExpression.text)
+      ? callee.argumentExpression.text
+      : undefined;
+  }
+  return undefined;
+}
+
+/** @param {import('typescript').Node} node */
+function sqlLexicalScope(node) {
+  let current = node;
+  while (
+    current.parent !== undefined &&
+    !ts.isSourceFile(current) &&
+    !ts.isBlock(current) &&
+    !isFunctionLikeNode(current)
+  ) {
+    current = current.parent;
+  }
+  return current;
+}
+
+/** @param {import('typescript').SourceFile} sourceFile */
+function sqlConstDeclarations(sourceFile) {
+  /** @type {Map<import('typescript').Node, Map<string, import('typescript').VariableDeclaration[]>>} */
+  const declarationsByScope = new Map();
+
+  /** @param {import('typescript').Node} node */
+  function visit(node) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      ts.isVariableDeclarationList(node.parent) &&
+      (node.parent.flags & ts.NodeFlags.Const) !== 0
+    ) {
+      const scope = sqlLexicalScope(node);
+      let declarations = declarationsByScope.get(scope);
+      if (declarations === undefined) {
+        declarations = new Map();
+        declarationsByScope.set(scope, declarations);
+      }
+      const matches = declarations.get(node.name.text) ?? [];
+      matches.push(node);
+      declarations.set(node.name.text, matches);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return declarationsByScope;
+}
+
+/** @param {import('typescript').Node} node @param {string} name @param {Map<import('typescript').Node, Map<string, import('typescript').VariableDeclaration[]>>} declarationsByScope */
+function sqlConstDeclaration(node, name, declarationsByScope) {
+  let scope = sqlLexicalScope(node);
+  while (scope !== undefined) {
+    const declarations = declarationsByScope.get(scope)?.get(name);
+    if (declarations !== undefined) {
+      return declarations.length === 1 ? declarations[0] : undefined;
+    }
+    scope =
+      scope.parent === undefined ? undefined : sqlLexicalScope(scope.parent);
+  }
+  return undefined;
+}
+
+/** @param {import('typescript').Expression} expression @param {Map<import('typescript').Node, Map<string, import('typescript').VariableDeclaration[]>>} declarationsByScope @param {Set<import('typescript').VariableDeclaration>} seen */
+function isStaticSqlExpression(
+  expression,
+  declarationsByScope,
+  seen = new Set(),
+) {
+  let value = expression;
+  while (
+    ts.isParenthesizedExpression(value) ||
+    ts.isAsExpression(value) ||
+    ts.isTypeAssertionExpression(value) ||
+    ts.isNonNullExpression(value) ||
+    ts.isSatisfiesExpression(value)
+  ) {
+    value = value.expression;
+  }
+
+  if (ts.isStringLiteralLike(value)) {
+    return true;
+  }
+  if (!ts.isIdentifier(value)) {
+    return false;
+  }
+
+  const declaration = sqlConstDeclaration(
+    value,
+    value.text,
+    declarationsByScope,
+  );
+  if (
+    declaration === undefined ||
+    declaration.initializer === undefined ||
+    seen.has(declaration)
+  ) {
+    return false;
+  }
+  seen.add(declaration);
+  return isStaticSqlExpression(
+    declaration.initializer,
+    declarationsByScope,
+    seen,
+  );
+}
+
+/** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */
+function hasRawSqlMarker(sourceFile, node, lines) {
+  const line = sourceFile.getLineAndCharacterOfPosition(
+    node.getStart(sourceFile),
+  ).line;
+  return [lines[line - 1], lines[line], lines[line + 1]].some(
+    (candidate) => candidate !== undefined && RAW_SQL_MARKER.test(candidate),
+  );
+}
+
+for (const file of sourceFiles) {
+  if (file.endsWith('.spec.ts')) continue;
+
+  const source = sourceText(file);
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const lines = source.split(/\r?\n/);
+  const declarationsByScope = sqlConstDeclarations(sourceFile);
+
+  /** @param {import('typescript').Node} node */
+  function visit(node) {
+    if (ts.isCallExpression(node)) {
+      const method = rawSqlMethodName(node);
+      const query = node.arguments[0];
+      if (
+        method !== undefined &&
+        query !== undefined &&
+        !isStaticSqlExpression(query, declarationsByScope) &&
+        !hasRawSqlMarker(sourceFile, node, lines)
+      ) {
+        const line =
+          sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+            .line + 1;
+        fail(
+          `${relative(root, file)}:${line} passes dynamic SQL to ${method}; use a static SQL literal with bound values, or mark the call with "arch-check: <reason>"`,
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+}
+
 /** @param {import('typescript').Node} node @returns {node is import('typescript').CallExpression} */
 function isParseRequestQueryCall(node) {
   return (

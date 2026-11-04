@@ -23,8 +23,10 @@ export function authQueryRows<T extends object = Record<string, unknown>>(
   values: readonly unknown[],
 ): Promise<readonly T[]> {
   const query = isRowlessWrite(text)
-    ? client.$executeRawUnsafe(text, ...values).then(() => [] as readonly T[])
-    : client
+    ? client // arch-check: shared SQL wrapper binds values separately
+        .$executeRawUnsafe(text, ...values)
+        .then(() => [] as readonly T[])
+    : client // arch-check: shared SQL wrapper binds values separately
         .$queryRawUnsafe<readonly T[]>(text, ...values)
         .then(normalizeRawRows);
   const translated = query.catch((error) => {

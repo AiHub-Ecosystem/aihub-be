@@ -1,0 +1,13 @@
+name: AIHUB CodeQL
+queries:
+  - uses: security-extended
+  - uses: ./.github/codeql
+# Fixtures are vulnerable on purpose and specs build fake requests; neither
+# ships. The query tests under .github/codeql/tests run through `codeql test`.
+paths-ignore:
+  - .github/codeql/tests
+  - "**/*.spec.ts"
+  - test
+  - dist
+  - coverage
+  - node_modules

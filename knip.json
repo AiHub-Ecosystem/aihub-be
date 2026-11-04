@@ -24,6 +24,10 @@
   // lose the `export` keyword, not show up as dead code. Symbols nothing
   // outside the defining module references remain reportable.
   "ignoreExportsUsedInFile": true,
+  "ignore": [
+    // CodeQL fixtures are query inputs, not application source or dependencies.
+    ".github/codeql/tests/**"
+  ],
   "entry": [
     // Nest bootstrap: package `start` points at dist/main.js; the nest plugin
     // does not always map that back to the TypeScript entry on its own.

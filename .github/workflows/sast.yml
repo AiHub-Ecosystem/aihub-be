@@ -1,0 +1,79 @@
+name: SAST
+
+# CodeQL over the TypeScript source: the stock security-extended suite plus the
+# AIHUB queries in .github/codeql (request data reaching raw SQL, a Redis eval
+# script, an S3 key, a log call or a backtracking regex; process.env outside
+# the configuration boundary).
+#
+# The gate is scripts/checks/codeql-gate.ts, not the upload: a finding fails the
+# job unless the scanner marks it suppressed or .github/codeql/triage.json
+# waives that rule at that path with a reason. The SARIF is uploaded either way
+# so the Security tab shows what the gate saw.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sast-${{ github.workflow }}-${{ github.ref }}
+  # A newer push cancels a stale PR scan, never a main or weekly scan.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    # The target is 350 s of scanning; the rest is setup and upload headroom.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:javascript-typescript
+          output: codeql-results
+          upload: never
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Upload SARIF
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: codeql-results
+          category: /language:javascript-typescript
+
+      - name: Fail on untriaged findings
+        run: bunx tsx scripts/checks/codeql-gate.ts codeql-results/javascript.sarif

@@ -1,0 +1,18 @@
+edges
+| test.ts:5:25:5:29 | query | test.ts:6:26:6:30 | query | provenance |  |
+| test.ts:10:18:10:64 | `SELECT ... dy.id}` | test.ts:5:25:5:29 | query | provenance |  |
+| test.ts:10:52:10:59 | req.body | test.ts:10:18:10:64 | `SELECT ... dy.id}` | provenance |  |
+| test.ts:15:9:15:13 | query | test.ts:16:31:16:35 | query | provenance |  |
+| test.ts:15:52:15:71 | req.params.sessionId | test.ts:15:9:15:13 | query | provenance |  |
+nodes
+| test.ts:5:25:5:29 | query | semmle.label | query |
+| test.ts:6:26:6:30 | query | semmle.label | query |
+| test.ts:10:18:10:64 | `SELECT ... dy.id}` | semmle.label | `SELECT ... dy.id}` |
+| test.ts:10:52:10:59 | req.body | semmle.label | req.body |
+| test.ts:15:9:15:13 | query | semmle.label | query |
+| test.ts:15:52:15:71 | req.params.sessionId | semmle.label | req.params.sessionId |
+| test.ts:16:31:16:35 | query | semmle.label | query |
+subpaths
+#select
+| test.ts:6:26:6:30 | query | test.ts:10:52:10:59 | req.body | test.ts:6:26:6:30 | query | Request-controlled data reaches an unsafe raw SQL query. |
+| test.ts:16:31:16:35 | query | test.ts:15:52:15:71 | req.params.sessionId | test.ts:16:31:16:35 | query | Request-controlled data reaches an unsafe raw SQL query. |

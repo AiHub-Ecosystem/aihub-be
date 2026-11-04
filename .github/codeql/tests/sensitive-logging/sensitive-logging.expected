@@ -1,0 +1,20 @@
+edges
+| test.ts:17:9:17:16 | response | test.ts:18:22:18:29 | response | provenance |  |
+| test.ts:17:20:17:55 | await f ... gv[2])) | test.ts:17:9:17:16 | response | provenance |  |
+| test.ts:17:26:17:55 | fetch(S ... gv[2])) | test.ts:17:20:17:55 | await f ... gv[2])) | provenance |  |
+| test.ts:18:22:18:29 | response | test.ts:18:22:18:36 | response.text() | provenance |  |
+| test.ts:18:22:18:36 | response.text() | test.ts:18:16:18:36 | await r ... .text() | provenance |  |
+nodes
+| test.ts:6:15:6:22 | req.body | semmle.label | req.body |
+| test.ts:7:15:7:38 | req.get ... ation') | semmle.label | req.get ... ation') |
+| test.ts:17:9:17:16 | response | semmle.label | response |
+| test.ts:17:20:17:55 | await f ... gv[2])) | semmle.label | await f ... gv[2])) |
+| test.ts:17:26:17:55 | fetch(S ... gv[2])) | semmle.label | fetch(S ... gv[2])) |
+| test.ts:18:16:18:36 | await r ... .text() | semmle.label | await r ... .text() |
+| test.ts:18:22:18:29 | response | semmle.label | response |
+| test.ts:18:22:18:36 | response.text() | semmle.label | response.text() |
+subpaths
+#select
+| test.ts:6:15:6:22 | req.body | test.ts:6:15:6:22 | req.body | test.ts:6:15:6:22 | req.body | Request-controlled data reaches a log call. |
+| test.ts:7:15:7:38 | req.get ... ation') | test.ts:7:15:7:38 | req.get ... ation') | test.ts:7:15:7:38 | req.get ... ation') | Request-controlled data reaches a log call. |
+| test.ts:18:16:18:36 | await r ... .text() | test.ts:17:26:17:55 | fetch(S ... gv[2])) | test.ts:18:16:18:36 | await r ... .text() | Request-controlled data reaches a log call. |

@@ -69,6 +69,7 @@ export class PostgresWritingChartRevocationAuditRepository
       });
       // A pruned row has no publisher left to fence; #816 deletes by key.
       if (upload !== null) {
+        // arch-check: imported lock statement uses a bound organization key
         await transaction.$executeRawUnsafe(
           WRITING_CHART_LOCK_SQL,
           writingChartPublicationLockKey(upload.organizationId),

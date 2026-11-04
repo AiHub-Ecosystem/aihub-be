@@ -103,7 +103,13 @@
       }
     }
   ],
-  // Mirrors `files.ignore` in biome.json. `test/fixtures` holds captured
-  // downstream responses, which are data rather than source.
-  "ignorePatterns": ["dist", "coverage", "node_modules", "test/fixtures"]
+  // Mirrors `files.ignore` in biome.json. CodeQL fixtures are query inputs,
+  // not application TypeScript; test/fixtures holds captured downstream data.
+  "ignorePatterns": [
+    "dist",
+    "coverage",
+    "node_modules",
+    "test/fixtures",
+    ".github/codeql/tests"
+  ]
 }

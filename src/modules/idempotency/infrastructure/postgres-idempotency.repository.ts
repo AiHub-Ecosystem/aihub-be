@@ -224,6 +224,7 @@ export class PostgresIdempotencyRepository
   constructor(private readonly client: IdempotencyClient) {}
 
   private query(text: string, values: readonly unknown[]) {
+    // arch-check: shared wrapper separates reviewed SQL statements from bound values
     return this.client.$queryRawUnsafe<readonly IdempotencyQueryRow[]>(
       text,
       ...values,
