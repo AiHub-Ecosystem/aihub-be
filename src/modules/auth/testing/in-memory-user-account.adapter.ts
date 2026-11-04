@@ -3,7 +3,7 @@ import type {
   RegisterLocalAccountInput,
   UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import type { InMemoryAuthState } from './in-memory-auth.state';
 

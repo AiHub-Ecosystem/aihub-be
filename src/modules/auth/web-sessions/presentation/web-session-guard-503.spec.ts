@@ -1,5 +1,6 @@
 import { AppModule } from '@/app.module';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { LocalAuthController } from '@/modules/auth/local-credentials/presentation/local-auth.controller';
 import { SandboxDemoKeyValidationController } from '@/modules/identity/user-assertions/presentation/sandbox-demo-key-validation.controller';
 import { RequestMethod } from '@nestjs/common';
 import {
@@ -8,7 +9,6 @@ import {
   MODULE_METADATA,
   PATH_METADATA,
 } from '@nestjs/common/constants';
-import { LocalAuthController } from './local-auth.controller';
 import {
   OptionalWebSessionClientGuard,
   WebSessionClientGuard,

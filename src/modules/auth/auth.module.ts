@@ -43,6 +43,7 @@ import { PASSWORD_RECOVERY } from './local-credentials/application/password-reco
 import { PasswordRecoveryService } from './local-credentials/application/password-recovery.service';
 import type { SessionTokenIssuers } from './local-credentials/application/session-token-issuers';
 import { Argon2PasswordHasher } from './local-credentials/infrastructure/argon2-password.hasher';
+import { LocalAuthController } from './local-credentials/presentation/local-auth.controller';
 import {
   AUTH_MFA_CIPHER,
   AUTH_MFA_ID,
@@ -58,13 +59,6 @@ import {
   type PasswordResetTokenPort,
 } from './password-reset/application/password-reset-token.port';
 import { PostgresPasswordResetTokenRepository } from './password-reset/infrastructure/postgres-password-reset-token.repository';
-import { LocalAuthController } from './presentation/local-auth.controller';
-import { UserAccessJwtGuard } from './presentation/user-access-jwt.guard';
-import {
-  OptionalWebSessionClientGuard,
-  WebSessionClientGuard,
-} from './presentation/web-session-client.guard';
-import { WebSessionController } from './presentation/web-session.controller';
 import {
   AUTH_POSTGRES_READINESS,
   type AuthPostgresReadiness,
@@ -107,6 +101,12 @@ import {
 } from './web-sessions/infrastructure/jose-user-access-token.service';
 import { PostgresRefreshSessionRepository } from './web-sessions/infrastructure/postgres-refresh-session.repository';
 import { PostgresWebSessionRepository } from './web-sessions/infrastructure/postgres-web-session.repository';
+import { UserAccessJwtGuard } from './web-sessions/presentation/user-access-jwt.guard';
+import {
+  OptionalWebSessionClientGuard,
+  WebSessionClientGuard,
+} from './web-sessions/presentation/web-session-client.guard';
+import { WebSessionController } from './web-sessions/presentation/web-session.controller';
 
 /** Whether a new verification token needs the registration password (ADR-0123). */
 const EMAIL_VERIFICATION_REQUIRES_PASSWORD = Symbol(

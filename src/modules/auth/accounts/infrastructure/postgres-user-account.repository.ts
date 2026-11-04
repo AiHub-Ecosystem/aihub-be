@@ -1,5 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
-import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import { ulid } from 'ulid';
 
 import type {
@@ -7,12 +7,8 @@ import type {
   RegisterLocalAccountInput,
   UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import {
-  LOCK_PASSWORD_IDENTITY_SQL,
-  insertEmailDelivery,
-} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import {
   type AuthRepositoryClient,
@@ -21,6 +17,10 @@ import {
   isUniqueViolation,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import { isAccountStatus } from '@/modules/auth/shared/infrastructure/auth-row';
+import {
+  LOCK_PASSWORD_IDENTITY_SQL,
+  insertEmailDelivery,
+} from '@/modules/auth/shared/infrastructure/local-auth-statements';
 
 /**
  * One User Account: registration, the login-identity lookup, and the status

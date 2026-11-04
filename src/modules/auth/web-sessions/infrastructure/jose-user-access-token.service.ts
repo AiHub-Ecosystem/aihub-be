@@ -1,5 +1,5 @@
 import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
-import { invalidUserAccessToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
+import { invalidUserAccessToken } from '@/modules/auth/shared/application/local-auth-errors';
 
 import {
   type CryptoKey,

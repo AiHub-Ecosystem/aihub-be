@@ -1,5 +1,5 @@
 import type { UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 
 /**
  * The User Account slice Bearer authorization reads, for a test outside local

@@ -16,7 +16,7 @@ import {
   supportedPublicApiMajors,
 } from '@/catalog/public-api-majors';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
-import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 const VERSIONED_DOCUMENT = /^v([1-9][0-9]*)\.json$/u;

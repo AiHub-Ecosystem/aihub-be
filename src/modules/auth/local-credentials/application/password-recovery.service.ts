@@ -1,20 +1,20 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
 import type { ResetPasswordRequest } from '@/contracts/auth/local-auth';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   normalizeEmail,
   validatePassword,
-} from '@/modules/auth/domain/local-auth';
-import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
+} from '@/modules/auth/local-credentials/public/local-auth';
 import type { PasswordResetTokenRepositoryPort } from '@/modules/auth/password-reset/application/password-reset-token-repository.port';
 import type { PasswordResetTokenPort } from '@/modules/auth/password-reset/application/password-reset-token.port';
-import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
+import { invalidPasswordResetToken } from '@/modules/auth/shared/application/local-auth-errors';
 import {
   AUTH_EMAIL_REQUEST_LIMIT,
   emailDeliveryRequest,
 } from './auth-email-request';
-import { invalidPasswordResetToken } from './local-auth-errors';
 import type { PasswordHasherPort } from './password-hasher.port';
 import type { PasswordRecoveryPort } from './password-recovery.port';
 

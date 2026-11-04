@@ -1,18 +1,18 @@
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type {
   EmailOutboxPort,
   QueueEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import {
   type SessionAdmission,
   assertAdmitted,
-} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
+} from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
 import {
   type AuthSqlClient,
   type AuthTransactionClient,
   authQueryRows,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import type { RefreshSessionRowInput } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 
 /**

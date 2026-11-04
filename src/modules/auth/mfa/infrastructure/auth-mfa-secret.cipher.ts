@@ -4,11 +4,11 @@ import { isRecord } from '@/common/is-record';
 import { readUtf8File } from '@/common/security/secret-document';
 
 import { EnvelopeCipherError } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EnvelopeCipher } from '@/modules/auth/email-delivery/infrastructure/envelope-cipher';
 import type {
   AuthMfaCipherPort,
   AuthMfaKeyring,
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
+import { EnvelopeCipher } from '@/modules/auth/shared/infrastructure/envelope-cipher';
 
 export interface AuthMfaCipherOptions {
   readonly source: string | undefined;

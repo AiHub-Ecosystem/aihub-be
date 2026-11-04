@@ -1,15 +1,10 @@
 import { internalError } from '@/common/errors/app-error';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import {
-  insertEmailDelivery,
-  insertRefreshSession,
-  lockIssuableIdentity,
-} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
+import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import {
   type SessionAdmission,
   authorizeMfaSession,
-} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
-import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
+} from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
   type AuthTransactionClient,
@@ -17,6 +12,12 @@ import {
   authTransaction,
   isUniqueViolation,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
+import {
+  insertEmailDelivery,
+  insertRefreshSession,
+  lockIssuableIdentity,
+} from '@/modules/auth/shared/infrastructure/local-auth-statements';
+import { insertWebSession } from '@/modules/auth/shared/infrastructure/web-session-statements';
 import {
   type VerificationAccountFacts,
   type VerificationDecision,
@@ -33,7 +34,6 @@ import type {
   VerificationTokenRepositoryPort,
 } from '@/modules/auth/verification/application/verification-token-repository.port';
 import type { IssuedWebSessionToken } from '@/modules/auth/web-sessions/application/web-session-token.port';
-import { insertWebSession } from '@/modules/auth/web-sessions/infrastructure/web-session-statements';
 
 const INVALID: VerificationOutcome = { kind: 'invalid' };
 const VERIFIED: VerificationOutcome = { kind: 'verified' };

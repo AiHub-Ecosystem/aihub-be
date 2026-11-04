@@ -24,9 +24,9 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { reportTerminalEmailDeliveryFailure } from '@/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/email-payload-cipher';
+import { PostgresEmailCredentialRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-credential.repository';
 import { PostgresEmailDispatchStore } from '@/modules/auth/email-delivery/infrastructure/postgres-email-dispatch-store';
-import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
-import { PostgresEmailCredentialRepository } from '@/modules/auth/local-credentials/infrastructure/postgres-email-credential.repository';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/public/argon2id-parameters';
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,

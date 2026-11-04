@@ -1,5 +1,4 @@
 import { AppError } from '@/common/errors/app-error';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type { EmailDeliveryKind } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.gate';
 import type {
@@ -11,6 +10,7 @@ import { LocalRegistrationService } from '@/modules/auth/local-credentials/appli
 import { LocalSessionService } from '@/modules/auth/local-credentials/application/local-session.service';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import { PasswordRecoveryService } from '@/modules/auth/local-credentials/application/password-recovery.service';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import type { AuthMfaServicePort } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type {
   IssuedPasswordResetToken,

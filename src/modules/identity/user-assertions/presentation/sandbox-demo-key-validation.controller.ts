@@ -17,7 +17,7 @@ import {
   SandboxDemoKeyValidationRequestSchema,
   type SandboxDemoKeyValidationResponse,
 } from '@/contracts/sandbox/demo-key-validation';
-import { WebSessionClientGuard } from '@/modules/auth/presentation/web-session-client.guard';
+import { WebSessionClientGuard } from '@/modules/auth/web-sessions/presentation/web-session-client.guard';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
 import { SandboxDemoKeyValidationGuard } from '@/modules/identity/api-keys/presentation/sandbox-demo-key-validation.guard';
 import {

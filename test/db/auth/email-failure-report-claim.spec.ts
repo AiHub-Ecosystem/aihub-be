@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import { createPostgresAuthClient } from './postgres-auth.client';
 
 import {

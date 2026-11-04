@@ -6,8 +6,8 @@ import {
   EmailPayloadUnknownKeyVersionError,
   EnvelopeCipherError,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EnvelopeCipher } from '@/modules/auth/shared/infrastructure/envelope-cipher';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
-import { EnvelopeCipher } from './envelope-cipher';
 
 // v1 carries no associated data and is only read, until the rows sealed under it
 // drain (docs/operations/email-outbox.md, "Release order", #439). v2

@@ -1,4 +1,4 @@
-import { invalidUserAccessToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
+import { invalidUserAccessToken } from '@/modules/auth/shared/application/local-auth-errors';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -12,7 +12,7 @@ import {
   USER_ACCOUNT_REPOSITORY,
   type UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,

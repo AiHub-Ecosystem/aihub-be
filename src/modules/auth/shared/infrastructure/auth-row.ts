@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 
 const ACCOUNT_STATUSES = [
   'pending_verification',

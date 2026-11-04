@@ -432,6 +432,26 @@ module.exports = {
       from: { path: '^src/common/' },
       to: { path: '^src/modules/' },
     },
+    {
+      name: 'no-auth-cross-feature-internal-import',
+      severity: 'error',
+      comment:
+        'Auth features import another feature through its public/ facade or application port; cross-cutting implementations belong under auth/shared/.',
+      from: {
+        path: '^src/modules/auth/([^/]+)/',
+        pathNot: ['[.]spec[.]ts$', '^src/modules/auth/(public|testing)/'],
+      },
+      to: {
+        path: '^src/modules/auth/(?!$1/)[^/]+/',
+        pathNot: [
+          '^src/modules/auth/public/',
+          '^src/modules/auth/shared/',
+          '^src/modules/auth/[^/]+/public/',
+          '^src/modules/auth/[^/]+/(application/|.*/application/).*[.]port[.]ts$',
+          ...nestExportPaths(),
+        ],
+      },
+    },
     crossModuleRule(),
     cliRule(),
   ],

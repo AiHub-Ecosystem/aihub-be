@@ -1,5 +1,5 @@
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import { Logger } from '@nestjs/common';
-import { EmailDeliveryTransactionAdapter } from './email-delivery-transaction.adapter';
 
 import type { InsertEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {

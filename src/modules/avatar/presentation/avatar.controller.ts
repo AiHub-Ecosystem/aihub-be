@@ -22,7 +22,7 @@ import {
   CreateAvatarUploadRequestSchema,
   type ReadAvatarResponse,
 } from '@/contracts/avatar/avatar';
-import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import {
   AvatarUploadService,
   type PublishedAvatar,

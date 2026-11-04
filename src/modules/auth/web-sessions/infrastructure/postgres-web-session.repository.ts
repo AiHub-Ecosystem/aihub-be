@@ -1,9 +1,10 @@
-import { passwordHashIsCurrent } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
-import { authorizeMfaSession } from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
+import { authorizeMfaSession } from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
   authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
+import { passwordHashIsCurrent } from '@/modules/auth/shared/infrastructure/local-auth-statements';
+import { insertWebSession } from '@/modules/auth/shared/infrastructure/web-session-statements';
 import type {
   CreateWebSessionInput,
   ExchangeableWebSession,
@@ -12,7 +13,6 @@ import type {
   RevokeWebSessionInput,
   WebSessionRepositoryPort,
 } from '@/modules/auth/web-sessions/application/web-session-repository.port';
-import { insertWebSession } from './web-session-statements';
 
 /** Stores only the token hash; see `insertWebSession` for the renewal baseline. */
 export class PostgresWebSessionRepository implements WebSessionRepositoryPort {

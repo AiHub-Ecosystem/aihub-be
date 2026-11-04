@@ -1,4 +1,4 @@
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 

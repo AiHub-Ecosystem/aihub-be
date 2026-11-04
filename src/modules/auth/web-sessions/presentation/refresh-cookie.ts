@@ -5,7 +5,7 @@ import { SESSION_LIFETIME_MS } from '@/modules/auth/web-sessions/application/web
 import {
   hasDuplicateCookie,
   offersCredentialOutsideTransport,
-} from './credential-transport';
+} from '@/modules/auth/shared/presentation/credential-transport';
 
 export const REFRESH_COOKIE_NAME = '__Host-aihub_refresh';
 export const REFRESH_COOKIE_MAX_AGE_SECONDS = SESSION_LIFETIME_MS / 1000;

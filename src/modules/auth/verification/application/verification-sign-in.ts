@@ -1,5 +1,5 @@
-import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import { type VerificationTokenPort } from './verification-token.port';
 
 /** Browser verification uses the peer IP; BFF verification uses the token hash. */

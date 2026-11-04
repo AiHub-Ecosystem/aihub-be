@@ -753,7 +753,7 @@ describe('cross-module table access', () => {
  */
 describe('request bodies reach their contract through parseRequestBody', () => {
   const PRESENTATION_ALLOWLIST = [
-    'modules/auth/presentation/access-token-envelope.ts',
+    'modules/auth/shared/presentation/access-token-envelope.ts',
     'modules/identity/organization-identity-configuration/presentation/organization-identity-config.controller.ts',
     'modules/identity/shared/presentation/organization-id.pipe.ts',
   ];

@@ -1,4 +1,4 @@
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import { ulid } from 'ulid';

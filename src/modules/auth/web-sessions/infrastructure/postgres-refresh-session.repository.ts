@@ -1,19 +1,19 @@
 import {
-  LOCK_ACCOUNT_SQL,
-  insertRefreshSession,
-  lockOwningAccount,
-  passwordHashIsCurrent,
-} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
-import {
   admitSessionContinuation,
   authorizeMfaSession,
-} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
+} from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
   type AuthTransactionClient,
   authQueryRows,
   authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
+import {
+  LOCK_ACCOUNT_SQL,
+  insertRefreshSession,
+  lockOwningAccount,
+  passwordHashIsCurrent,
+} from '@/modules/auth/shared/infrastructure/local-auth-statements';
 import type {
   CreateRefreshSessionInput,
   RefreshSessionRepositoryPort,

@@ -5,8 +5,8 @@ import { ulid } from 'ulid';
 
 import { PostgresPendingRegistrationRecords } from '@/modules/auth/accounts/infrastructure/postgres-pending-registration-records';
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
-import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
-import { PostgresEmailCredentialRepository } from '@/modules/auth/local-credentials/infrastructure/postgres-email-credential.repository';
+import { PostgresEmailCredentialRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-credential.repository';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/public/argon2id-parameters';
 import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { createPostgresAuthClient } from './postgres-auth.client';
 

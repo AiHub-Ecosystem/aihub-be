@@ -14,7 +14,7 @@ import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/common/http/client-secret-he
 import { isRecord } from '@/common/is-record';
 import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import { OrganizationIdSchema } from '@/contracts/organization/organization-id';
-import { REFRESH_COOKIE_NAME } from '@/modules/auth/presentation/refresh-cookie';
+import { REFRESH_COOKIE_NAME } from '@/modules/auth/web-sessions/public/refresh-cookie';
 import { buildErrorResponses } from './openapi-error-responses';
 import { localAuthPathItems } from './openapi-local-auth-path-items';
 import { extendPublicResponseSchemas } from './openapi-response-schemas';

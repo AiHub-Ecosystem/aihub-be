@@ -1,5 +1,5 @@
-import type { LocalAccountStatus } from '@/modules/auth/domain/local-auth';
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import type { RefreshTokenRecord } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 
 export interface InMemoryAccount {

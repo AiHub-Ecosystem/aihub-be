@@ -29,8 +29,8 @@ import {
   ListOpenOrganizationInvitationsQuerySchema,
   type ListOpenOrganizationInvitationsResponse,
 } from '@/contracts/organization/invitation';
-import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
 import { normalizeEmail } from '@/modules/auth/public/local-auth';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,

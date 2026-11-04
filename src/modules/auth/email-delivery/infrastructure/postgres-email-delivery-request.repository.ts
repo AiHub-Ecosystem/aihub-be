@@ -17,10 +17,10 @@ import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_DELIVERY_REQUEST_STATUSES,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 import { Logger } from '@nestjs/common';
 import { reserveAuthenticationEmailRecipient } from './auth-email-recipient-limit';
-import { EmailDeliveryTransactionAdapter } from './email-delivery-transaction.adapter';
 import {
   CLAIM_UNREPORTED_FAILURES_SQL,
   withFailureClaims,

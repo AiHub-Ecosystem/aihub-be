@@ -54,19 +54,19 @@ import {
   AUTH_MFA_SERVICE,
   type AuthMfaServicePort,
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
-import { webSessionUnavailable } from '@/modules/auth/web-sessions/application/web-session-errors';
-import { accessTokenEnvelope } from './access-token-envelope';
-import { requestIp } from './auth-request';
+import { accessTokenEnvelope } from '@/modules/auth/shared/presentation/access-token-envelope';
+import { endUserIpFrom } from '@/modules/auth/shared/presentation/web-session-transport';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
+import { OptionalWebSessionClientGuard } from '@/modules/auth/web-sessions/presentation/web-session-client.guard';
+import { webSessionUnavailable } from '@/modules/auth/web-sessions/public';
 import {
   REFRESH_COOKIE_CLEAR_OPTIONS,
   REFRESH_COOKIE_NAME,
   REFRESH_COOKIE_OPTIONS,
   hasAlternateRefreshSource,
   refreshCookieFrom,
-} from './refresh-cookie';
-import { UserAccessJwtGuard } from './user-access-jwt.guard';
-import { OptionalWebSessionClientGuard } from './web-session-client.guard';
-import { endUserIpFrom } from './web-session-transport';
+} from '@/modules/auth/web-sessions/public/refresh-cookie';
+import { requestIp } from './auth-request';
 
 interface RegisterEnvelope {
   readonly data: {

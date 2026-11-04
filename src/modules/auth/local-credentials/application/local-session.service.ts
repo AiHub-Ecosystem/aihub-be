@@ -3,13 +3,13 @@ import type {
   AuthMfaServicePort,
   MfaSessionProof,
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
-import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
+import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
-import type { RefreshSessionRepositoryPort } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import {
   invalidRefreshToken,
   invalidUserAccessToken,
-} from './local-auth-errors';
+} from '@/modules/auth/shared/application/local-auth-errors';
+import type { RefreshSessionRepositoryPort } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import {
   type AuthenticatedCredentials,
   type CredentialCheckPorts,

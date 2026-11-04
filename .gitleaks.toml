@@ -61,9 +61,7 @@ commits = [
 paths = [
   '(^|/)src/modules/auth/mfa/application/auth-mfa\.service\.spec\.ts$',
   '(^|/)src/modules/auth/mfa/application/mfa-policy\.spec\.ts$',
-  '(^|/)src/modules/auth/auth-pre-verification-rate-limit\.spec\.ts$',
-  '(^|/)src/modules/auth/application/auth-mfa\.service\.spec\.ts$',
-  '(^|/)src/modules/auth/application/mfa-policy\.spec\.ts$',
+  '(^|/)test/integration/auth-pre-verification-rate-limit\.spec\.ts$',
 ]
 
 [[rules.allowlists]]

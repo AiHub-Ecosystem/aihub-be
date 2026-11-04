@@ -982,7 +982,7 @@ for (const file of sourceFiles) {
 // The type system cannot see who calls an exported function, so check the
 // source text.
 const SESSION_CONTINUATION_USERS = new Set([
-  'src/modules/auth/mfa/infrastructure/auth-mfa-session.guard.ts',
+  'src/modules/auth/shared/infrastructure/auth-mfa-session.guard.ts',
   'src/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository.ts',
 ]);
 for (const file of sourceFiles) {

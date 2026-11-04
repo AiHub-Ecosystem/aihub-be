@@ -1,40 +1,40 @@
 import { AppModule } from '@/app.module';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { PASSWORD_HASHER } from '@/modules/auth/local-credentials/application/password-hasher.port';
+import {
+  AUTH_MFA_CIPHER,
+  AUTH_MFA_REPOSITORY,
+} from '@/modules/auth/mfa/application/auth-mfa-repository.port';
+import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import {
+  type AuthRedisClient,
+  RedisAuthRateLimiter,
+} from '@/modules/auth/rate-limit/infrastructure/redis-auth-rate-limiter';
 import { AUTH_CLOCK } from '@/modules/auth/shared/application/auth-clock';
+import { InMemoryAuthMfaAdapter } from '@/modules/auth/testing/in-memory-auth-mfa.adapter';
+import {
+  createInMemoryAuthState,
+  seedAccount,
+} from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
+import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
+import { InMemoryWebSessionAdapter } from '@/modules/auth/testing/in-memory-web-session.adapter';
+import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
+import {
+  USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessTokenVerifierPort,
+} from '@/modules/auth/web-sessions/application/user-access-token.port';
+import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
+import { WEB_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/web-session-repository.port';
 import fastifyCookie from '@fastify/cookie';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
-import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
-import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
-import {
-  AUTH_MFA_CIPHER,
-  AUTH_MFA_REPOSITORY,
-} from './mfa/application/auth-mfa-repository.port';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from './rate-limit/application/auth-rate-limiter.port';
-import {
-  type AuthRedisClient,
-  RedisAuthRateLimiter,
-} from './rate-limit/infrastructure/redis-auth-rate-limiter';
-import { InMemoryAuthMfaAdapter } from './testing/in-memory-auth-mfa.adapter';
-import {
-  createInMemoryAuthState,
-  seedAccount,
-} from './testing/in-memory-auth.state';
-import { InMemoryUserAccountAdapter } from './testing/in-memory-user-account.adapter';
-import { InMemoryVerificationTokenAdapter } from './testing/in-memory-verification-token.adapter';
-import { InMemoryWebSessionAdapter } from './testing/in-memory-web-session.adapter';
-import { VERIFICATION_TOKEN_REPOSITORY } from './verification/application/verification-token-repository.port';
-import {
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenVerifierPort,
-} from './web-sessions/application/user-access-token.port';
-import { WEB_SESSION_CLIENT_SECRET } from './web-sessions/application/web-session-client-secret.port';
-import { WEB_SESSION_REPOSITORY } from './web-sessions/application/web-session-repository.port';
 
 const LOGIN = '/v1/auth/login';
 const MFA_BEGIN = '/v1/auth/mfa/enrollment';

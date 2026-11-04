@@ -26,17 +26,17 @@ import {
   type LogoutWebSessionRequest,
   LogoutWebSessionRequestSchema,
 } from '@/contracts/auth/web-session';
+import { accessTokenEnvelope } from '@/modules/auth/shared/presentation/access-token-envelope';
+import {
+  endUserIpFrom,
+  hasAlternateWebSessionSource,
+} from '@/modules/auth/shared/presentation/web-session-transport';
 import { webSessionUnavailable } from '@/modules/auth/web-sessions/application/web-session-errors';
 import {
   WEB_SESSION_SERVICE,
   type WebSessionServicePort,
 } from '@/modules/auth/web-sessions/application/web-session-service.port';
-import { accessTokenEnvelope } from './access-token-envelope';
 import { WebSessionClientGuard } from './web-session-client.guard';
-import {
-  endUserIpFrom,
-  hasAlternateWebSessionSource,
-} from './web-session-transport';
 
 /** The one envelope both creation routes answer, so a BFF reads them alike. */
 function createdWebSession(

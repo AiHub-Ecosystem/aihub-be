@@ -1,30 +1,30 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import {
   type NormalizedRegistration,
   type RegistrationInput,
   normalizeEmail,
   normalizeRegistration,
-} from '@/modules/auth/domain/local-auth';
-import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
+} from '@/modules/auth/local-credentials/public/local-auth';
+import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
+import { invalidVerificationToken } from '@/modules/auth/shared/application/local-auth-errors';
+import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
+import type { VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
 import {
   proveVerificationPassword,
   verificationPasswordInvalid,
-} from '@/modules/auth/verification/application/verification-password';
+} from '@/modules/auth/verification/public/verification-password';
 import {
   browserBindingHash,
   enforceVerificationRateLimit,
-} from '@/modules/auth/verification/application/verification-sign-in';
-import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
-import type { VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
+} from '@/modules/auth/verification/public/verification-sign-in';
 import {
   AUTH_EMAIL_REQUEST_LIMIT,
   emailDeliveryRequest,
 } from './auth-email-request';
-import { invalidVerificationToken } from './local-auth-errors';
 import type { CredentialCheckPorts } from './local-credentials';
 import type {
   LocalRegistrationPort,

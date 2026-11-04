@@ -21,7 +21,7 @@ import {
   type OrganizationApiKeySecretResponse,
   type RevokeOrganizationApiKeyResponse,
 } from '@/contracts/organization/api-key';
-import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import {
   CREATE_ORGANIZATION_API_KEY,
   type CreateOrganizationApiKeyPort,

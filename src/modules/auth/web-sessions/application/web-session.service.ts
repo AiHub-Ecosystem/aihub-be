@@ -1,31 +1,31 @@
 import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import { type UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
-import { invalidVerificationToken } from '@/modules/auth/local-credentials/application/local-auth-errors';
+import { type PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import {
   type AuthenticatedCredentials,
   authenticateCredentials,
   rejectCredentials,
   upgradePasswordHashIfNeeded,
-} from '@/modules/auth/local-credentials/application/local-credentials';
-import { type PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
+} from '@/modules/auth/local-credentials/public/credential-check';
 import type {
   AuthMfaServicePort,
   MfaSessionProof,
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
-import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/application/auth-rate-limit';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
+import { invalidVerificationToken } from '@/modules/auth/shared/application/local-auth-errors';
+import { type VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
+import { type VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
 import {
   proveVerificationPassword,
   verificationPasswordInvalid,
-} from '@/modules/auth/verification/application/verification-password';
+} from '@/modules/auth/verification/public/verification-password';
 import {
   browserBindingHash,
   enforceWebSessionVerificationRateLimit,
-} from '@/modules/auth/verification/application/verification-sign-in';
-import { type VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
-import { type VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
+} from '@/modules/auth/verification/public/verification-sign-in';
 import {
   type IssuedUserAccessToken,
   type UserAccessTokenIssuerPort,

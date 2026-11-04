@@ -1,11 +1,6 @@
 import { internalError } from '@/common/errors/app-error';
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import { EmailDeliveryTransactionAdapter } from '@/modules/auth/email-delivery/infrastructure/email-delivery-transaction.adapter';
-import {
-  LOCK_ACCOUNT_SQL,
-  lockActivePasswordIdentity,
-} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,
@@ -16,7 +11,12 @@ import {
   authQueryRows,
   authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
-import { revokeUserWebSessions } from '@/modules/auth/web-sessions/infrastructure/web-session-statements';
+import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
+import {
+  LOCK_ACCOUNT_SQL,
+  lockActivePasswordIdentity,
+} from '@/modules/auth/shared/infrastructure/local-auth-statements';
+import { revokeUserWebSessions } from '@/modules/auth/shared/infrastructure/web-session-statements';
 
 export class PostgresAuthMfaRepository implements AuthMfaRepositoryPort {
   constructor(

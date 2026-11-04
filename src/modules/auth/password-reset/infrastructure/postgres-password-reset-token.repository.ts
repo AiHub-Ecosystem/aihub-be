@@ -1,10 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import {
-  insertEmailDelivery,
-  lockIssuableIdentity,
-  lockOwningAccount,
-} from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
 import type {
   IssuePasswordResetTokenInput,
   PasswordResetResult,
@@ -18,7 +13,12 @@ import {
   authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import { isAccountStatus } from '@/modules/auth/shared/infrastructure/auth-row';
-import { revokeUserWebSessions } from '@/modules/auth/web-sessions/infrastructure/web-session-statements';
+import {
+  insertEmailDelivery,
+  lockIssuableIdentity,
+  lockOwningAccount,
+} from '@/modules/auth/shared/infrastructure/local-auth-statements';
+import { revokeUserWebSessions } from '@/modules/auth/shared/infrastructure/web-session-statements';
 
 /** The password-reset token and its account, as the two reads project them. */
 interface PasswordResetTokenRow {

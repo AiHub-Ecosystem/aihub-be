@@ -1,7 +1,7 @@
-import { insertRefreshSession } from '@/modules/auth/local-credentials/infrastructure/local-auth-statements';
-import { insertWebSession } from '@/modules/auth/web-sessions/infrastructure/web-session-statements';
+import { admitSessionContinuation } from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
+import { insertRefreshSession } from '@/modules/auth/shared/infrastructure/local-auth-statements';
+import { insertWebSession } from '@/modules/auth/shared/infrastructure/web-session-statements';
 import type { Prisma } from '@prisma-client/client';
-import { admitSessionContinuation } from './auth-mfa-session.guard';
 
 const refreshToken = {
   id: 'rft_01J00000000000000000000000',

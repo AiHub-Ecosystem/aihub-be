@@ -2,15 +2,15 @@ import { AppError } from '@/common/errors/app-error';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
 import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import { invalidCredentials } from '@/modules/auth/local-credentials/application/local-auth-errors';
+import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import {
   authenticateCredentials,
   checkLoginLimits,
   rejectCredentials,
-} from '@/modules/auth/local-credentials/application/local-credentials';
-import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
+} from '@/modules/auth/local-credentials/public/credential-check';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
+import { invalidCredentials } from '@/modules/auth/shared/application/local-auth-errors';
 import type {
   AuthMfaCipherPort,
   AuthMfaRepositoryPort,

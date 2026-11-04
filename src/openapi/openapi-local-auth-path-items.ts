@@ -14,7 +14,7 @@ import {
 import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
-} from '@/modules/auth/domain/local-auth';
+} from '@/modules/auth/local-credentials/public/local-auth';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import {
   routeAlternateSuccessResponsesOf,

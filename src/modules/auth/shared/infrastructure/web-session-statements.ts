@@ -1,7 +1,7 @@
 import {
   type SessionAdmission,
   assertAdmitted,
-} from '@/modules/auth/mfa/infrastructure/auth-mfa-session.guard';
+} from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
 import type { Prisma } from '@prisma-client/client';
 
 type WebSessions = Pick<Prisma.TransactionClient, 'webSession'>;

@@ -9,8 +9,8 @@ import {
   latestPublicApiMajor,
 } from '@/catalog/public-api-majors';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import { UserAccessJwtGuard } from '@/modules/auth/presentation/user-access-jwt.guard';
 import { USER_ACCESS_TOKEN_VERIFIER } from '@/modules/auth/web-sessions/application/user-access-token.port';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import { registerRequestHooks } from '@/register-request-hooks';
 import { buildOpenApiDocument } from './build-openapi-document';
 import {

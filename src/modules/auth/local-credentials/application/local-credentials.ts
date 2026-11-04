@@ -1,12 +1,12 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { type UserAccountRepositoryPort } from '@/modules/auth/accounts/application/user-account.port';
-import { normalizeLogin } from '@/modules/auth/domain/local-auth';
-import { invalidCredentials } from '@/modules/auth/local-credentials/application/local-auth-errors';
+import { normalizeLogin } from '@/modules/auth/local-credentials/public/local-auth';
+import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import {
   checkAuthRateLimits,
   enforceAuthRateLimits,
-} from '@/modules/auth/rate-limit/application/auth-rate-limit';
-import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+} from '@/modules/auth/rate-limit/public/auth-rate-limit';
+import { invalidCredentials } from '@/modules/auth/shared/application/local-auth-errors';
 import { ARGON2ID_DUMMY_HASH } from './argon2id-parameters';
 import { type PasswordHasherPort } from './password-hasher.port';
 
