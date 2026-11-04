@@ -22,8 +22,10 @@ specifications and work tracking.
 
 ## Secret detection
 
-Install Gitleaks v8.30.1 before committing. The pre-commit hook and CI scan with
-redacted output. If a real credential is detected, notify the repository owner
+Install Gitleaks v8.30.1 (on `PATH`; verify with `gitleaks version`) before
+committing. On Windows use the `windows_x64` archive. The pre-commit hook fails
+if Gitleaks is missing. The hook and CI scan with redacted output. If a real
+credential is detected, notify the repository owner
 or security contact and rotate or revoke it at its source; deleting the line does
 not invalidate the credential. Follow the [secret-scanning runbook](docs/operations/secret-scanning.md).
 
