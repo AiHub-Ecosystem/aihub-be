@@ -1,6 +1,6 @@
 # ADR-0148: Use CodeQL as the SAST engine
 
-- Status: Accepted — approved by the AIHUB owner on 2026-11-04 while implementing [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330).
+- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-11-04 in [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330).
 - Date: 2026-11-04
 - Related: [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330), [ADR-0088](0088-prisma-for-control-plane-persistence.md), [ADR-0110](0110-source-file-length-and-class-responsibility-ceiling.md)
 
