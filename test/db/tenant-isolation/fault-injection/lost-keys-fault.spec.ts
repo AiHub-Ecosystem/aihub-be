@@ -11,9 +11,9 @@ import {
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
 import { quotaKeyForMonth } from '@/modules/gateway/infrastructure/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
-import type { MonthlyBillableUsagePort } from '@/modules/metering/application/monthly-billable-usage.port';
-import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/postgres-monthly-billable-usage';
-import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import type { MonthlyBillableUsagePort } from '@/modules/metering/application/billing/monthly-billable-usage.port';
+import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/billing/postgres-monthly-billable-usage';
+import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import {
   type PrismaClientHolder,
   createPrismaClient,

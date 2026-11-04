@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import type { PublicApiMajorUsageSample } from '@/modules/metering/application/public-api-major-usage';
+import type { PublicApiMajorUsageSample } from '@/modules/metering/application/billing/public-api-major-usage';
 import { registerPublicApiMajorUsage } from './public-api-major-usage.hook';
 
 async function server(authenticatedAs?: string): Promise<{

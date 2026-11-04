@@ -1,5 +1,5 @@
 import { parseUtcTimestamp } from '@/common/time/parse-utc-timestamp';
-import { PostgresUsageCompletenessReportRepository } from '@/modules/metering/infrastructure/postgres-usage-completeness-report.repository';
+import { PostgresUsageCompletenessReportRepository } from '@/modules/metering/infrastructure/billing/postgres-usage-completeness-report.repository';
 import {
   type UsageCompletenessReport,
   UsageCompletenessReportService,

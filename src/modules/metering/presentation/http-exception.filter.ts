@@ -32,13 +32,13 @@ import {
   isPostgresUnavailable,
 } from '@/common/postgres/postgres-unavailable-error';
 import { isRequestId } from '@/common/request-context/request-id';
-import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
-import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import { completeRequestMetering } from '@/modules/metering/application/usage-recording/metering-completion';
+import { getMeteringEvidence } from '@/modules/metering/application/usage-recording/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '@/modules/metering/application/metering-finalizer.port';
-import { requestOutcome } from '@/modules/metering/application/request-outcome';
+} from '@/modules/metering/application/usage-recording/metering-finalizer.port';
+import { requestOutcome } from '@/modules/metering/application/usage-recording/request-outcome';
 
 interface FrameworkError {
   readonly code: ErrorCode;

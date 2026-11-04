@@ -2,10 +2,10 @@ import type { Pool } from 'pg';
 
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
-import { parseBillingMonth } from '@/modules/metering/application/billing-statement';
-import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
-import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { parseBillingMonth } from '@/modules/metering/application/billing/billing-statement';
+import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/billing/postgres-billing-statement.repository';
+import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import { createFixturePrismaClient } from '@/modules/persistence/persistence.module';
 
 import { createTestPool, testDatabaseUrl } from '../shared/database';

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { admitGradedRequest } from '@/modules/gateway/application/admit-graded-request';
+import { admitGradedRequest } from '@/modules/gateway/application/graded-request/admit-graded-request';
 import { RedisDownstreamRetryBudget } from '@/modules/gateway/infrastructure/redis-downstream-retry-budget';
 import { createRedisGatewayClient } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';

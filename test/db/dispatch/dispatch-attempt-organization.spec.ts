@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/postgres-dispatch-attempt.repository';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-dispatch-attempt.repository';
+import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 

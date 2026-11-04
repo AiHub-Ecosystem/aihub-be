@@ -5,9 +5,9 @@ import {
   type PrismaClientHolder,
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/persistence.module';
-import { DISPATCH_ATTEMPT_RECORD } from './application/dispatch-attempt-record.port';
-import { DispatchAttemptMetricsRegistrar } from './infrastructure/dispatch-attempt-metrics.registrar';
-import { PostgresDispatchAttemptRepository } from './infrastructure/postgres-dispatch-attempt.repository';
+import { DISPATCH_ATTEMPT_RECORD } from './application/usage-recording/dispatch-attempt-record.port';
+import { DispatchAttemptMetricsRegistrar } from './infrastructure/usage-recording/dispatch-attempt-metrics.registrar';
+import { PostgresDispatchAttemptRepository } from './infrastructure/usage-recording/postgres-dispatch-attempt.repository';
 
 @Module({
   imports: [PersistenceModule],

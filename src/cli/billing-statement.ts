@@ -1,5 +1,5 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
+import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/billing/postgres-billing-statement.repository';
 import {
   type BillingAdjustmentTarget,
   type BillingStatement,

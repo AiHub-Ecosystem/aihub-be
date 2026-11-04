@@ -1,0 +1,581 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import type { OperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
+import type { RequestContext } from '@/common/request-context/request-context';
+import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
+import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
+import type { GradeResponse } from '@/contracts/writing/grading';
+import type { OperationDispatcherPort } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import type {
+  IdempotencyExecution,
+  IdempotencyExecutionInput,
+  IdempotencyReplayDecoder,
+  IdempotencyServicePort,
+  IdempotencyWork,
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { Value } from '@sinclair/typebox/value';
+import {
+  type CatalogLookup,
+  GradingOrchestrator,
+} from './grading-orchestrator';
+import type {
+  GradingOrchestratorPort,
+  GradingRequestMetadata,
+} from './grading-orchestrator.port';
+
+const writingData: GradeResponse = {
+  overall_band: 7,
+  language: 'vi',
+  criteria: [
+    {
+      id: 'task_achievement',
+      name: 'Task achievement',
+      band: 7,
+      band_reason: '',
+      strengths: [],
+      improvements: [],
+    },
+    {
+      id: 'coherence_cohesion',
+      name: 'Coherence',
+      band: 7,
+      band_reason: '',
+      strengths: [],
+      improvements: [],
+    },
+    {
+      id: 'lexical_resource',
+      name: 'Vocabulary',
+      band: 7,
+      band_reason: '',
+      strengths: [],
+      improvements: [],
+    },
+    {
+      id: 'grammatical_range_accuracy',
+      name: 'Grammar',
+      band: 7,
+      band_reason: '',
+      strengths: [],
+      improvements: [],
+    },
+  ],
+  summary: '',
+  suggestions: [],
+  next_steps: [],
+  annotations: [],
+};
+
+const speakingData = speakingResponseFixture();
+const receivedAt = new Date('2026-09-27T04:00:00.000Z');
+
+function speakingResponseFixture(): SpeakingGradeResponse {
+  const value: unknown = JSON.parse(
+    readFileSync(
+      join(
+        __dirname,
+        '../../../../../test/fixtures/ai-speaking/grading.response.json',
+      ),
+      'utf8',
+    ),
+  );
+  if (!isRecord(value) || !('data' in value)) {
+    throw new Error('Speaking response fixture must contain data');
+  }
+  return Value.Parse(SpeakingGradeResponseSchema, value.data);
+}
+
+function metadata(signal: AbortSignal): GradingRequestMetadata {
+  return {
+    requestId: 'req-183',
+    receivedAt,
+    signal,
+    organizationId: 'org-183',
+    apiKeyId: 'key-183',
+    environment: 'production',
+    userId: 'user-183',
+    identityMode: 'declared_id',
+    scopes: ['writing.grade', 'speaking.grade'],
+  };
+}
+
+function fixture(catalog: CatalogLookup = OPERATION_CATALOG) {
+  const calls: Array<{
+    operation: OperationId;
+    input: unknown;
+    context: RequestContext;
+    abortedAtDispatch: boolean;
+  }> = [];
+  const executions: IdempotencyExecutionInput[] = [];
+  const stored = new Map<string, unknown>();
+  const workSignal = new AbortController().signal;
+  const workDeadline = new Date('2026-09-27T04:02:00.000Z');
+  const dispatcher = {
+    dispatch: async (
+      operation: OperationId,
+      input: unknown,
+      context: RequestContext,
+    ) => {
+      calls.push({
+        operation,
+        input,
+        context,
+        abortedAtDispatch: context.signal.aborted,
+      });
+      return {
+        operation,
+        data: operation.startsWith('writing.') ? writingData : speakingData,
+        downstreamMs: 23,
+      };
+    },
+  } as OperationDispatcherPort;
+  const idempotency: IdempotencyServicePort = {
+    async execute<T>(
+      input: IdempotencyExecutionInput,
+      work: IdempotencyWork<T>,
+      decodeReplay: IdempotencyReplayDecoder<T>,
+    ): Promise<IdempotencyExecution<T>> {
+      executions.push(input);
+      const key = `${input.operation}:${input.idempotencyKey}`;
+      if (stored.has(key)) {
+        return { result: decodeReplay(stored.get(key)), replay: true };
+      }
+      const result = await work({
+        signal: workSignal,
+        deadlineAt: workDeadline,
+      });
+      stored.set(key, result);
+      return { result, replay: false };
+    },
+  };
+  const port: GradingOrchestratorPort = new GradingOrchestrator(
+    dispatcher,
+    idempotency,
+    catalog,
+  );
+  return { port, calls, executions, stored, workSignal, workDeadline };
+}
+
+describe('GradingOrchestratorPort', () => {
+  it('returns a quota-approved completed replay without rechecking idempotency or dispatching', async () => {
+    const { port, calls, executions } = fixture();
+    const result = await port.execute({
+      ...metadata(new AbortController().signal),
+      operation: 'writing.task1.grade',
+      input: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart',
+        essay: 'A clear essay.',
+        image_url: 'https://example.com/chart.png',
+      },
+      idempotencyKey: 'grade-1',
+      completedReplay: {
+        responseStatus: 200,
+        responseBody: {
+          operation: 'writing.task1.grade',
+          data: writingData,
+          downstreamMs: 23,
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      data: writingData,
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+    expect(calls).toEqual([]);
+    expect(executions).toEqual([]);
+  });
+
+  it('uses the ingress deadline and detached Writing work context for both tasks and their replays', async () => {
+    const { port, calls, executions, workSignal, workDeadline } = fixture();
+    const lifecycle = new AbortController();
+    lifecycle.abort();
+    const backgroundLifecycle = {
+      started: jest.fn(),
+      settled: jest.fn(),
+    };
+    const common = { ...metadata(lifecycle.signal), backgroundLifecycle };
+    const task1DispatchStart = jest.fn();
+    const task2DispatchStart = jest.fn();
+    const task1 = {
+      ...common,
+      onDispatchStart: task1DispatchStart,
+      operation: 'writing.task1.grade' as const,
+      input: {
+        question: 'Describe the chart.',
+        chart_type: 'Bar Chart' as const,
+        essay: 'A clear essay.',
+        image_url: 'https://example.com/chart.png',
+      },
+      idempotencyKey: 'task1-key',
+    };
+    const task2 = {
+      ...common,
+      onDispatchStart: task2DispatchStart,
+      operation: 'writing.task2.grade' as const,
+      input: {
+        question: 'Discuss the topic.',
+        topic: 'education',
+        essay: 'A clear essay.',
+      },
+      idempotencyKey: 'task2-key',
+    };
+
+    const firstTask1 = await port.execute(task1);
+    const firstTask2 = await port.execute(task2);
+    const replayTask1 = await port.execute(task1);
+    const replayTask2 = await port.execute(task2);
+
+    expect(firstTask1).toMatchObject({
+      operation: 'writing.task1.grade',
+      data: writingData,
+    });
+    expect(firstTask2).toMatchObject({
+      operation: 'writing.task2.grade',
+      data: writingData,
+    });
+    expect(calls).toHaveLength(2);
+    const task1Call = calls.find(
+      (call) => call.operation === 'writing.task1.grade',
+    );
+    const task2Call = calls.find(
+      (call) => call.operation === 'writing.task2.grade',
+    );
+    expect(task1Call?.input).toBe(task1.input);
+    expect(task2Call?.input).toBe(task2.input);
+    expect(task1Call?.context).toMatchObject({
+      organizationId: 'org-183',
+      apiKeyId: 'key-183',
+      userId: 'user-183',
+      receivedAt,
+      deadlineAt: workDeadline,
+      signal: workSignal,
+    });
+    expect(task2Call?.context).toMatchObject({
+      organizationId: 'org-183',
+      apiKeyId: 'key-183',
+      userId: 'user-183',
+      receivedAt,
+      deadlineAt: workDeadline,
+      signal: workSignal,
+    });
+    expect(executions).toHaveLength(4);
+    expect(
+      executions.find(
+        (execution) => execution.operation === 'writing.task1.grade',
+      ),
+    ).toMatchObject({
+      requestId: 'req-183',
+      requestBody: task1.input,
+      organizationId: 'org-183',
+      actorId: 'user-183',
+      idempotencyKey: 'task1-key',
+      signal: lifecycle.signal,
+      deadlineAt: new Date(
+        receivedAt.getTime() +
+          OPERATION_CATALOG['writing.task1.grade'].timeoutMs,
+      ),
+      backgroundLifecycle,
+    });
+    expect(
+      executions.find(
+        (execution) => execution.operation === 'writing.task2.grade',
+      ),
+    ).toMatchObject({
+      requestBody: task2.input,
+      idempotencyKey: 'task2-key',
+      signal: lifecycle.signal,
+      deadlineAt: new Date(
+        receivedAt.getTime() +
+          OPERATION_CATALOG['writing.task2.grade'].timeoutMs,
+      ),
+      backgroundLifecycle,
+    });
+    expect(task1Call?.abortedAtDispatch).toBe(false);
+    expect(task2Call?.abortedAtDispatch).toBe(false);
+    expect(task1DispatchStart).toHaveBeenCalledTimes(1);
+    expect(task2DispatchStart).toHaveBeenCalledTimes(1);
+    expect(replayTask1).toMatchObject({
+      operation: 'writing.task1.grade',
+      data: writingData,
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+    expect(replayTask2).toMatchObject({
+      operation: 'writing.task2.grade',
+      data: writingData,
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+  });
+
+  it('decodes replay telemetry and rejects malformed Writing data without another dispatch', async () => {
+    const { port, calls, stored } = fixture();
+    const command = {
+      ...metadata(new AbortController().signal),
+      operation: 'writing.task2.grade' as const,
+      input: {
+        question: 'Discuss the topic.',
+        topic: 'education',
+        essay: 'A clear essay.',
+      },
+      idempotencyKey: 'replay-key',
+    };
+    const first = await port.execute(command);
+    const key = 'writing.task2.grade:replay-key';
+    stored.set(key, { ...first, aiProcessingMs: 17 });
+
+    await expect(port.execute(command)).resolves.toMatchObject({
+      data: writingData,
+      downstreamMs: 0,
+      aiProcessingMs: 17,
+      idempotentReplay: true,
+    });
+    stored.set(key, {
+      ...first,
+      data: { ...writingData, overall_band: 10 },
+    });
+    await expect(port.execute(command)).rejects.toThrow(
+      'stored Writing grading response is malformed',
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  describe('a stored body carrying members a newer release added', () => {
+    const writingCommand = {
+      ...metadata(new AbortController().signal),
+      operation: 'writing.task2.grade' as const,
+      input: {
+        question: 'Discuss the topic.',
+        topic: 'education',
+        essay: 'A clear essay.',
+      },
+      idempotencyKey: 'newer-member-key',
+    };
+    const [firstCriterion, ...otherCriteria] = writingData.criteria;
+    const newerWritingData = {
+      ...writingData,
+      confidence: 0.9,
+      criteria: [{ ...firstCriterion, rubric_version: 2 }, ...otherCriteria],
+    };
+
+    it('replays through idempotency without the unknown members', async () => {
+      const { port, calls, stored } = fixture();
+      await port.execute(writingCommand);
+      stored.set('writing.task2.grade:newer-member-key', {
+        operation: 'writing.task2.grade',
+        data: newerWritingData,
+        downstreamMs: 23,
+      });
+
+      const replay = await port.execute(writingCommand);
+
+      expect(replay.data).toEqual(writingData);
+      expect(replay).toMatchObject({
+        downstreamMs: 0,
+        idempotentReplay: true,
+      });
+      expect(calls).toHaveLength(1);
+    });
+
+    it('replays a preloaded completed replay without the unknown members', async () => {
+      const { port, calls, executions } = fixture();
+
+      const replay = await port.execute({
+        ...writingCommand,
+        completedReplay: {
+          responseStatus: 200,
+          responseBody: {
+            operation: 'writing.task2.grade',
+            data: newerWritingData,
+            downstreamMs: 23,
+          },
+        },
+      });
+
+      expect(replay.data).toEqual(writingData);
+      expect(replay.idempotentReplay).toBe(true);
+      expect(calls).toHaveLength(0);
+      expect(executions).toHaveLength(0);
+    });
+
+    it('replays a Speaking body without the unknown members', async () => {
+      const { port, calls } = fixture({
+        ...OPERATION_CATALOG,
+        'speaking.grading-json': {
+          ...OPERATION_CATALOG['speaking.grading-json'],
+          idempotency: 'required',
+        },
+      });
+
+      const replay = await port.execute({
+        ...metadata(new AbortController().signal),
+        operation: 'speaking.grading-json',
+        input: {
+          audioUrl: 'https://example.com/answer.wav',
+          part: 1 as const,
+          questionId: 'p1_hometown',
+        },
+        idempotencyKey: 'speaking-newer-member-key',
+        completedReplay: {
+          responseStatus: 200,
+          responseBody: {
+            operation: 'speaking.grading-json',
+            data: { ...speakingData, confidence: 0.9 },
+            downstreamMs: 23,
+          },
+        },
+      });
+
+      expect(replay.data).toEqual(speakingData);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('still refuses a known member of the wrong type', async () => {
+      const { port, calls, stored } = fixture();
+      await port.execute(writingCommand);
+      stored.set('writing.task2.grade:newer-member-key', {
+        operation: 'writing.task2.grade',
+        data: { ...newerWritingData, overall_band: '7' },
+        downstreamMs: 23,
+      });
+
+      await expect(port.execute(writingCommand)).rejects.toThrow(
+        'stored Writing grading response is malformed',
+      );
+      expect(calls).toHaveLength(1);
+    });
+  });
+
+  it('dispatches both Speaking operations directly with the lifecycle signal and individual deadlines', async () => {
+    const { port, calls, executions } = fixture();
+    const lifecycle = new AbortController();
+    const common = metadata(lifecycle.signal);
+    const multipartInput = {
+      audio: {
+        blob: new Blob(['audio']),
+        filename: 'answer.wav',
+        contentType: 'audio/wav',
+      },
+      part: 1 as const,
+      questionId: 'p1_hometown',
+    };
+    const jsonInput = {
+      audioUrl: 'https://example.com/answer.wav',
+      part: 1 as const,
+      questionId: 'p1_hometown',
+      testType: 'Practice',
+    };
+
+    const multipart = await port.execute({
+      ...common,
+      operation: 'speaking.grading',
+      input: multipartInput,
+    });
+    lifecycle.abort();
+    const json = await port.execute({
+      ...common,
+      operation: 'speaking.grading-json',
+      input: jsonInput,
+    });
+
+    expect(multipart).toMatchObject({
+      operation: 'speaking.grading',
+      data: speakingData,
+    });
+    expect(json).toMatchObject({
+      operation: 'speaking.grading-json',
+      data: speakingData,
+    });
+    expect(executions).toHaveLength(0);
+    expect(calls).toHaveLength(2);
+    const multipartCall = calls.find(
+      (call) => call.operation === 'speaking.grading',
+    );
+    const jsonCall = calls.find(
+      (call) => call.operation === 'speaking.grading-json',
+    );
+    expect(multipartCall?.input).toBe(multipartInput);
+    expect(jsonCall?.input).toBe(jsonInput);
+    expect(multipartCall?.abortedAtDispatch).toBe(false);
+    expect(jsonCall?.abortedAtDispatch).toBe(true);
+    for (const call of calls) {
+      expect(call.context).toMatchObject({
+        organizationId: 'org-183',
+        userId: 'user-183',
+        identityMode: 'declared_id',
+        receivedAt,
+        deadlineAt: new Date(
+          receivedAt.getTime() + OPERATION_CATALOG[call.operation].timeoutMs,
+        ),
+        signal: lifecycle.signal,
+      });
+      expect(call.context.signal).toBe(lifecycle.signal);
+    }
+  });
+
+  it('ignores preloaded replay data for an operation cataloged without idempotency', async () => {
+    const { port, calls, executions } = fixture();
+
+    const result = await port.execute({
+      ...metadata(new AbortController().signal),
+      operation: 'speaking.grading-json',
+      input: {
+        audioUrl: 'https://example.com/answer.wav',
+        part: 1,
+        questionId: 'p1_hometown',
+      },
+      completedReplay: {
+        responseStatus: 200,
+        responseBody: { malformed: true },
+      },
+    });
+
+    expect(result).toMatchObject({
+      operation: 'speaking.grading-json',
+      data: speakingData,
+    });
+    expect(result.idempotentReplay).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(executions).toHaveLength(0);
+  });
+
+  it('decodes a Speaking replay when idempotency is enabled by its catalog entry', async () => {
+    const catalog: CatalogLookup = {
+      ...OPERATION_CATALOG,
+      'speaking.grading-json': {
+        ...OPERATION_CATALOG['speaking.grading-json'],
+        idempotency: 'required',
+      },
+    };
+    const { port, calls, executions } = fixture(catalog);
+    const command = {
+      ...metadata(new AbortController().signal),
+      operation: 'speaking.grading-json' as const,
+      input: {
+        audioUrl: 'https://example.com/answer.wav',
+        part: 1 as const,
+        questionId: 'p1_hometown',
+      },
+      idempotencyKey: 'speaking-grade-key',
+    };
+
+    const first = await port.execute(command);
+    const replay = await port.execute(command);
+
+    expect(first.data).toEqual(speakingData);
+    expect(replay).toMatchObject({
+      operation: 'speaking.grading-json',
+      data: speakingData,
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+    expect(calls).toHaveLength(1);
+    expect(executions).toHaveLength(2);
+  });
+});

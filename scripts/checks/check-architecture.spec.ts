@@ -1225,6 +1225,30 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.status).not.toBe(0);
   });
 
+  it.each([
+    'const { $queryRawUnsafe } = client;\n',
+    'const run = client.$executeRawUnsafe.bind(client);\n',
+    "client['$queryRawUnsafe'].call(client, request.sql);\n",
+  ])('rejects an unsafe API used without a direct call: %s', (source) => {
+    const result = rawSqlProbe(source);
+
+    expect(result.output).toContain('without calling it');
+    expect(result.status).not.toBe(0);
+  });
+
+  it('allows a referenced unsafe API that carries an arch-check reason', () => {
+    const result = rawSqlProbe(
+      [
+        '// arch-check: proxy forwards to the guarded wrapper',
+        'const run = client.$executeRawUnsafe.bind(client);',
+        '',
+      ].join('\n'),
+    );
+
+    expect(result.output).not.toContain('without calling it');
+    expect(result.status).toBe(0);
+  });
+
   it('allows static SQL with bound values', () => {
     const result = rawSqlProbe(
       "client.$queryRawUnsafe('SELECT * FROM records WHERE id = $1', request.id);\n",

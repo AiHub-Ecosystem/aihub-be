@@ -17,7 +17,7 @@ const GUIDE = readFileSync(join(SRC, '../docs/integration-guide.md'), 'utf8');
 const FORWARDING_FILES = [
   'common/errors/app-error.ts',
   'common/errors/error-envelope.ts',
-  'modules/gateway/infrastructure/http-operation-dispatcher.ts',
+  'modules/gateway/infrastructure/dispatch/http-operation-dispatcher.ts',
 ];
 
 const ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;

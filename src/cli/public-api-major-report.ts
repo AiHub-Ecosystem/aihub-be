@@ -1,4 +1,4 @@
-import { PostgresPublicApiMajorUsageRepository } from '@/modules/metering/infrastructure/postgres-public-api-major-usage.repository';
+import { PostgresPublicApiMajorUsageRepository } from '@/modules/metering/infrastructure/billing/postgres-public-api-major-usage.repository';
 import {
   type PublicApiMajorReport,
   PublicApiMajorUsageError,

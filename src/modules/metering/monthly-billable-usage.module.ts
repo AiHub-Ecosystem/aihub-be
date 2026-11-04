@@ -8,8 +8,8 @@ import {
 import {
   MONTHLY_BILLABLE_USAGE,
   type MonthlyBillableUsagePort,
-} from './application/monthly-billable-usage.port';
-import { PostgresMonthlyBillableUsage } from './infrastructure/postgres-monthly-billable-usage';
+} from './application/billing/monthly-billable-usage.port';
+import { PostgresMonthlyBillableUsage } from './infrastructure/billing/postgres-monthly-billable-usage';
 
 @Module({
   imports: [PersistenceModule],

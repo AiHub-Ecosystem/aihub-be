@@ -12,7 +12,7 @@ import type {
   AuthFailureCounterPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
-import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import { createPrismaClient } from '@/modules/persistence/persistence.module';
 

@@ -3,5 +3,5 @@ export {
   type DispatchAttemptOutcome,
   type DispatchAttemptRecordPort,
   type DispatchAttemptStart,
-} from '@/modules/metering/application/dispatch-attempt-record.port';
+} from '@/modules/metering/application/usage-recording/dispatch-attempt-record.port';
 export { DispatchAttemptModule } from '@/modules/metering/dispatch-attempt.module';

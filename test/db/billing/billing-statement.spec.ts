@@ -4,11 +4,11 @@ import { runBillingAdjustCommand } from '@/cli/billing-statement';
 import {
   BillingStatementService,
   parseBillingMonth,
-} from '@/modules/metering/application/billing-statement';
-import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
-import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/postgres-monthly-billable-usage';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
-import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/prisma-metering.client';
+} from '@/modules/metering/application/billing/billing-statement';
+import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/billing/postgres-billing-statement.repository';
+import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/billing/postgres-monthly-billable-usage';
+import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import {
   createTestPool,
   resetIdentityTables,

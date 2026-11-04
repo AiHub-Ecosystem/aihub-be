@@ -3,10 +3,10 @@ import type { Pool } from 'pg';
 import type {
   PublicApiMajorUsageRow,
   PublicApiMajorUsageWrite,
-} from '@/modules/metering/application/public-api-major-usage';
-import { PostgresPublicApiMajorUsageRepository } from '@/modules/metering/infrastructure/postgres-public-api-major-usage.repository';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
-import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/prisma-metering.client';
+} from '@/modules/metering/application/billing/public-api-major-usage';
+import { PostgresPublicApiMajorUsageRepository } from '@/modules/metering/infrastructure/billing/postgres-public-api-major-usage.repository';
+import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 
 let pool: Pool;

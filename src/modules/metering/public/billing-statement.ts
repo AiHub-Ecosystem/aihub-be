@@ -5,4 +5,4 @@ export {
   type BillingStatementRepositoryPort,
   BillingStatementService,
   parseBillingMonth,
-} from '@/modules/metering/application/billing-statement';
+} from '@/modules/metering/application/billing/billing-statement';

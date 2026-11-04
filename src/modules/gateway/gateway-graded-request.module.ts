@@ -11,20 +11,20 @@ import {
 import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
-} from '@/modules/gateway/application/grading-orchestrator.port';
+} from '@/modules/gateway/application/graded-request/grading-orchestrator.port';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '@/modules/metering/application/metering-finalizer.port';
+} from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { MeteringModule } from '@/modules/metering/metering.module';
-import { GradedPipelineEngine } from './application/graded-pipeline-engine';
+import { GradedPipelineEngine } from './application/graded-request/graded-pipeline-engine';
 import {
   GRADED_PIPELINE_ENGINE,
   type GradedPipelineEnginePort,
-} from './application/graded-pipeline.port';
+} from './application/graded-request/graded-pipeline.port';
 import { GatewayModule } from './gateway.module';
 
 @Module({

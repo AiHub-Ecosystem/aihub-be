@@ -9,8 +9,8 @@ import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
+import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,
@@ -19,8 +19,8 @@ import type {
   IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
-import { METERING_FINALIZER } from './application/metering-finalizer.port';
-import type { MeteringFinalizeInput } from './application/metering-finalizer.port';
+import { METERING_FINALIZER } from './application/usage-recording/metering-finalizer.port';
+import type { MeteringFinalizeInput } from './application/usage-recording/metering-finalizer.port';
 
 class FakeFinalizer {
   readonly inputs: MeteringFinalizeInput[] = [];

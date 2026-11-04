@@ -1,0 +1,97 @@
+import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
+import type {
+  QuotaOrganizationSnapshot,
+  QuotaReconciliationSnapshotPort,
+  QuotaReconciliationTarget,
+} from '@/modules/metering/application/billing/quota-reconciliation.port';
+import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
+import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
+import { billableRequestSql } from './billable-request-sql';
+
+export const QUOTA_RECONCILIATION_SQL = `
+  SELECT
+    o.id AS organization_id,
+    o.monthly_request_quota AS quota,
+    COUNT(*) FILTER (
+      WHERE ${billableRequestSql('u')}
+    )::bigint AS billable_count
+  FROM organizations AS o
+  LEFT JOIN usage_records AS u
+    ON u.organization_id = o.id
+   AND u.created_at >= $1
+   AND u.created_at < $2
+  WHERE o.monthly_request_quota IS NOT NULL
+  GROUP BY o.id, o.monthly_request_quota
+  ORDER BY o.id
+`;
+
+function safeNonNegativeInteger(value: unknown, field: string): number {
+  const parsed = safeNonNegativeCount(value);
+  if (parsed === undefined) {
+    throw internalError(`quota reconciliation field ${field} is invalid`);
+  }
+  return parsed;
+}
+
+interface QuotaReconciliationRow {
+  readonly organization_id: string;
+  readonly quota: number | null;
+  readonly billable_count: bigint;
+}
+
+function snapshotFromRow(value: unknown): QuotaOrganizationSnapshot {
+  if (!isRecord(value)) {
+    throw internalError('quota reconciliation row is invalid');
+  }
+  const row = value;
+  if (
+    typeof row.organization_id !== 'string' ||
+    row.organization_id.length === 0
+  ) {
+    throw internalError('quota reconciliation organization is invalid');
+  }
+
+  const quota = row.quota ?? row.monthly_request_quota;
+  return {
+    organizationId: row.organization_id,
+    monthlyRequestQuota:
+      quota === null || quota === undefined
+        ? null
+        : safeNonNegativeInteger(quota, 'quota'),
+    billableRequestCount: safeNonNegativeInteger(
+      row.billable_count,
+      'billable_count',
+    ),
+  };
+}
+
+function orderSnapshots(
+  snapshots: readonly QuotaOrganizationSnapshot[],
+): readonly QuotaOrganizationSnapshot[] {
+  return [...snapshots].sort((left, right) => {
+    if (left.organizationId < right.organizationId) return -1;
+    if (left.organizationId > right.organizationId) return 1;
+    return 0;
+  });
+}
+
+export class PostgresQuotaReconciliationRepository
+  implements QuotaReconciliationSnapshotPort
+{
+  constructor(private readonly client: PrismaMeteringClient) {}
+
+  async list(
+    target: QuotaReconciliationTarget,
+  ): Promise<readonly QuotaOrganizationSnapshot[]> {
+    // arch-check: WHERE predicate comes from shared billableRequestSql allowlist
+    const rows = await this.client.$queryRawUnsafe<
+      readonly QuotaReconciliationRow[]
+    >(QUOTA_RECONCILIATION_SQL, target.from, target.to);
+    return orderSnapshots(rows.map(snapshotFromRow));
+  }
+
+  async close(): Promise<void> {
+    await this.client.close?.();
+  }
+}

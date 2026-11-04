@@ -1,5 +1,5 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { RETRY_BUDGET_OPERATIONS } from '@/modules/gateway/application/admit-graded-request';
+import { RETRY_BUDGET_OPERATIONS } from '@/modules/gateway/application/graded-request/admit-graded-request';
 import { GRADED_REQUEST_OPERATIONS } from './graded-request.decorator';
 
 describe('graded request operations', () => {

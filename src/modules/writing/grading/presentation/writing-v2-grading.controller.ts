@@ -17,7 +17,7 @@ import {
   WritingV2GradeTask1RequestSchema,
   WritingV2GradeTask2RequestSchema,
 } from '@/contracts/writing/v2/grading';
-import type { DispatchResult } from '@/modules/gateway/application/operation-dispatcher.port';
+import type { DispatchResult } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
   GRADED_PIPELINE_ENGINE,

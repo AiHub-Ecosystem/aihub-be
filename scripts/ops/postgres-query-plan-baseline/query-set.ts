@@ -10,13 +10,13 @@ import {
   LIST_ROSTER_SQL,
   RESOLVE_MEMBERSHIP_SQL,
 } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
-import { BILLING_USAGE_SQL } from '@/modules/metering/infrastructure/postgres-billing-statement.repository';
-import { QUOTA_RECONCILIATION_SQL } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
-import { USAGE_REPORT_SQL } from '@/modules/metering/infrastructure/postgres-usage-completeness-report.repository';
+import { BILLING_USAGE_SQL } from '@/modules/metering/infrastructure/billing/postgres-billing-statement.repository';
+import { QUOTA_RECONCILIATION_SQL } from '@/modules/metering/infrastructure/billing/postgres-quota-reconciliation.repository';
+import { USAGE_REPORT_SQL } from '@/modules/metering/infrastructure/billing/postgres-usage-completeness-report.repository';
 import {
   DISPATCH_ATTEMPT_RETENTION_BATCH_SQL,
   USAGE_RETENTION_BATCH_SQL,
-} from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
+} from '@/modules/metering/infrastructure/billing/postgres-usage-retention.repository';
 
 import { BASELINE, TARGET_ORGANIZATION_ID, TARGET_USER_ID } from './config';
 import type { BaselineQuery } from './types';

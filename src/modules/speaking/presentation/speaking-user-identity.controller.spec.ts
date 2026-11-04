@@ -14,7 +14,7 @@ import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,

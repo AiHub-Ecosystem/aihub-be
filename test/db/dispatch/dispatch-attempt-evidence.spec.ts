@@ -3,10 +3,10 @@ import { type Server, createServer } from 'node:http';
 
 import { ulid } from 'ulid';
 
-import { calculateUsageRetentionCutoff } from '@/modules/metering/application/usage-retention';
-import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/postgres-dispatch-attempt.repository';
-import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { calculateUsageRetentionCutoff } from '@/modules/metering/application/billing/usage-retention';
+import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/billing/postgres-usage-retention.repository';
+import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-dispatch-attempt.repository';
+import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import {
   createSandboxTestRedis,
   createTestPool,

@@ -18,7 +18,7 @@ import { providerOrganizationId } from '@/downstream/writing/writing-v3-organiza
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';

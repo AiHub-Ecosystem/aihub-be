@@ -8,12 +8,12 @@ import {
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
-import { RETRY_BUDGET_WINDOW_MS } from '@/modules/gateway/application/admit-graded-request';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
   GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
+import { RETRY_BUDGET_WINDOW_MS } from '@/modules/gateway/application/graded-request/admit-graded-request';
 import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
 import {
   quotaPeriod,

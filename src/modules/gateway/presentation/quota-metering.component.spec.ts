@@ -4,16 +4,16 @@ import { firstValueFrom, of } from 'rxjs';
 import { AppError } from '@/common/errors/app-error';
 import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
 import type { GradedAdmissionDecision } from '@/modules/gateway/application/graded-admission.port';
-import { GradedPipelineEngine } from '@/modules/gateway/application/graded-pipeline-engine';
-import type { GradedPipelineContext } from '@/modules/gateway/application/graded-pipeline.port';
-import type { GradingOrchestratorPort } from '@/modules/gateway/application/grading-orchestrator.port';
+import { GradedPipelineEngine } from '@/modules/gateway/application/graded-request/graded-pipeline-engine';
+import type { GradedPipelineContext } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
+import type { GradingOrchestratorPort } from '@/modules/gateway/application/graded-request/grading-orchestrator.port';
 import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { MeteringService } from '@/modules/metering/application/metering.service';
+import { MeteringService } from '@/modules/metering/application/usage-recording/metering.service';
 import type {
   UsageRecord,
   UsageRepositoryPort,
-} from '@/modules/metering/application/usage-repository.port';
+} from '@/modules/metering/application/usage-recording/usage-repository.port';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import { openMeteringEvidence } from '@/modules/metering/public/metering-evidence';

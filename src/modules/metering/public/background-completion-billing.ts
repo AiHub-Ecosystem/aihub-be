@@ -1,1 +1,1 @@
-export { billBackgroundCompletion } from '@/modules/metering/application/background-completion-billing';
+export { billBackgroundCompletion } from '@/modules/metering/application/usage-recording/background-completion-billing';

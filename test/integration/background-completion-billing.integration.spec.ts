@@ -1,14 +1,14 @@
 import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
-import { billBackgroundCompletion } from '@/modules/metering/application/background-completion-billing';
-import { completeRequestMetering } from '@/modules/metering/application/metering-completion';
-import type { MeteringEvidence } from '@/modules/metering/application/metering-evidence';
-import { MeteringService } from '@/modules/metering/application/metering.service';
+import { billBackgroundCompletion } from '@/modules/metering/application/usage-recording/background-completion-billing';
+import { completeRequestMetering } from '@/modules/metering/application/usage-recording/metering-completion';
+import type { MeteringEvidence } from '@/modules/metering/application/usage-recording/metering-evidence';
+import { MeteringService } from '@/modules/metering/application/usage-recording/metering.service';
 import type {
   UsageRecord,
   UsageRepositoryPort,
-} from '@/modules/metering/application/usage-repository.port';
+} from '@/modules/metering/application/usage-recording/usage-repository.port';
 
 /**
  * #405: a Writing grading that outlives its `504` and is then replayed is

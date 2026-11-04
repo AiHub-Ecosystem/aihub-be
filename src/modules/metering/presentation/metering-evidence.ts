@@ -1,4 +1,4 @@
-import type { MeteringEvidence } from '@/modules/metering/application/metering-evidence';
+import type { MeteringEvidence } from '@/modules/metering/application/usage-recording/metering-evidence';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -10,4 +10,4 @@ export {
   getMeteringEvidence,
   openMeteringEvidence,
   addMeteringEvidence,
-} from '@/modules/metering/application/metering-evidence';
+} from '@/modules/metering/application/usage-recording/metering-evidence';

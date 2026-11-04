@@ -13,12 +13,12 @@ import {
   type ConcurrencyDecision,
   type ConcurrencyLimiterPort,
 } from '@/modules/gateway/application/concurrency-limiter.port';
-import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import {
   type DispatchResult,
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
-} from '@/modules/gateway/application/operation-dispatcher.port';
+} from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import type {
   IdempotencyExecution,
   IdempotencyExecutionInput,

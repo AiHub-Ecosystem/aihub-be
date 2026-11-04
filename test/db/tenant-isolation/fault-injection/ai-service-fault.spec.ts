@@ -7,9 +7,9 @@ import type Redis from 'ioredis';
 import { AppError } from '@/common/errors/app-error';
 import type { GradeTask2Request } from '@/contracts/writing/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
-import type { OperationDispatcherPort } from '@/modules/gateway/application/operation-dispatcher.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
-import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/http-operation-dispatcher.testing';
+import type { OperationDispatcherPort } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 import {
   CONCURRENCY_RETRY_AFTER_MS,
   RedisConcurrencyLimiter,

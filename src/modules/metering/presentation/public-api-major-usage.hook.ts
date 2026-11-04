@@ -8,12 +8,12 @@ import { matchesPathTemplate } from '@/catalog/path-template';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { routeTemplate } from '@/common/http/request-tracing.hook';
-import { getMeteringEvidence } from '@/modules/metering/application/metering-evidence';
 import type {
   PublicApiCallerKind,
   PublicApiMajorUsageSample,
-} from '@/modules/metering/application/public-api-major-usage';
-import { requestOutcome } from '@/modules/metering/application/request-outcome';
+} from '@/modules/metering/application/billing/public-api-major-usage';
+import { getMeteringEvidence } from '@/modules/metering/application/usage-recording/metering-evidence';
+import { requestOutcome } from '@/modules/metering/application/usage-recording/request-outcome';
 
 /**
  * How each route authenticates its caller, keyed by method and route template.

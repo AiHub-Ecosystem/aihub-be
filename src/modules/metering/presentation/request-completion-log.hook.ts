@@ -21,9 +21,9 @@ import {
 import {
   type MeteringEvidence,
   getMeteringEvidence,
-} from '@/modules/metering/application/metering-evidence';
-import type { MeteringOutcome } from '@/modules/metering/application/metering-finalizer.port';
-import { requestOutcome } from '@/modules/metering/application/request-outcome';
+} from '@/modules/metering/application/usage-recording/metering-evidence';
+import type { MeteringOutcome } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
+import { requestOutcome } from '@/modules/metering/application/usage-recording/request-outcome';
 import {
   recordGradedAdmission,
   requestGradedCompletionMs,

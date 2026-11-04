@@ -3,7 +3,7 @@ import {
   type RedisQuotaReconciliationClient,
   RedisQuotaReconciliationCounter,
 } from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
-import { PostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/postgres-quota-reconciliation.repository';
+import { PostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/billing/postgres-quota-reconciliation.repository';
 import {
   type QuotaReconciliationEvent,
   QuotaReconciliationService,

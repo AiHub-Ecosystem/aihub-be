@@ -1,0 +1,83 @@
+# ADR-0148: Use CodeQL as the SAST engine
+
+- Status: Proposed — awaiting AIHUB owner review in [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330).
+- Date: 2026-11-04
+- Related: [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330), [ADR-0088](0088-prisma-for-control-plane-persistence.md), [ADR-0110](0110-source-file-length-and-class-responsibility-ceiling.md)
+
+## Context
+
+CI runs lint, type-check, architecture and import checks, and a dependency
+audit. None of them follows a value from untrusted input to a dangerous sink.
+Issue #330 asks for a static analysis job on pull requests, pushes to `main`
+and a weekly schedule, with custom rules for raw SQL, the logger, Redis `eval`
+script text, S3 object keys, regular-expression backtracking and `process.env`
+reads.
+
+The repository is public, so CodeQL needs no licence. The choice is CodeQL or
+Semgrep.
+
+## Decision
+
+Use CodeQL (`security-extended` plus the queries in `.github/codeql/`) in
+`.github/workflows/sast.yml`.
+
+- **Data flow.** CodeQL's taint tracking models Fastify and Express request
+  input, so "request value reaches `$queryRawUnsafe`" is a flow query, not a
+  text pattern. The Semgrep OSS engine tracks flow inside one function only.
+- **Reporting.** SARIF uploads to GitHub code scanning under the category
+  `/language:javascript-typescript`, with alert history and per-alert dismissal.
+- **Tests.** Each custom query has a fixture directory under
+  `.github/codeql/tests/` with a positive and a negative case, run with
+  `codeql test run`.
+- **Cost accepted.** Queries are written in QL, which fewer contributors know
+  than Semgrep rules. The CodeQL job also needs a database build, about 125 s
+  locally.
+
+Re-evaluate the choice if the repository becomes private, since code scanning
+then needs GitHub Advanced Security.
+
+## Gate
+
+The scan runs with `upload: never`, uploads the SARIF in a separate step, and
+then `scripts/checks/codeql-gate.ts` decides the job result. A finding passes
+when the scanner marks it suppressed or `.github/codeql/triage.json` holds an
+entry for that rule at that path with a written reason. Any other finding
+fails the job. A SARIF file with no runs also fails, so a scan that did not
+happen cannot pass.
+
+A triage entry waives one rule in one file, not one alert. A later finding of
+the same rule in that file also passes. Keep triaged files small and review the
+file's diff when an entry exists.
+
+Tooling paths (`scripts/`, `ops/`, `prisma/`, root `*.config.*`) are outside
+the `process.env` query, because they have no configuration module. `src/` is
+inside it except `src/config` and `src/cli`. `test/`, `*.spec.ts`, `dist`,
+`coverage` and the query fixtures are not scanned.
+
+## Structural guard
+
+`bun run arch-check` rejects a `$queryRawUnsafe` or `$executeRawUnsafe` call
+whose first argument is not a string literal or a same-file `const` that holds
+one. A deliberately dynamic call keeps only with an `arch-check: <reason>`
+comment on the previous, same or next line. The marker sits on a shared SQL
+wrapper or on a fragment taken from a closed set such as `billableRequestSql`.
+This layer proves the shape of the call. The CodeQL query proves where its
+values came from.
+
+## Runtime
+
+Measured on 2026-11-04 on a developer machine, full repository, 791 files:
+database create 124 s, query analysis 97 s, 221 s in total. The CI target is
+350 s for the scan. The slowest job in the latest `ci.yml` run on `main` is
+Unit tests at 343 s; SAST runs as a separate workflow in parallel, so it
+lengthens the critical path only if it exceeds that job. Record the first CI
+run's duration in [#330](https://github.com/AiHub-Ecosystem/aihub-be/issues/330)
+and compare it with 343 s.
+
+## Consequences
+
+- A new finding blocks merge once branch protection requires the `CodeQL`
+  check; that requirement is tracked in #1385.
+- Every triage entry is a reviewed claim in `.github/codeql/triage.json`. A
+  stale entry (no matching finding) prints a warning and does not fail.
+- Adding a sink means adding a query and a fixture pair, not editing the gate.

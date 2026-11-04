@@ -63,16 +63,16 @@ import {
 import {
   DOWNSTREAM_RETRY_BUDGET,
   type DownstreamRetryBudgetPort,
-} from './application/downstream-retry-budget.port';
-import { GRADED_ADMISSION } from './application/graded-admission.port';
-import { GradingOrchestrator } from './application/grading-orchestrator';
-import { GRADING_ORCHESTRATOR } from './application/grading-orchestrator.port';
-import { GuardedOperationDispatcher } from './application/guarded-operation-dispatcher';
-import { INTERNAL_TOKEN_ISSUER } from './application/internal-token-issuer.port';
+} from './application/dispatch/downstream-retry-budget.port';
+import { GuardedOperationDispatcher } from './application/dispatch/guarded-operation-dispatcher';
+import { INTERNAL_TOKEN_ISSUER } from './application/dispatch/internal-token-issuer.port';
 import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
-} from './application/operation-dispatcher.port';
+} from './application/dispatch/operation-dispatcher.port';
+import { GRADED_ADMISSION } from './application/graded-admission.port';
+import { GradingOrchestrator } from './application/graded-request/grading-orchestrator';
+import { GRADING_ORCHESTRATOR } from './application/graded-request/grading-orchestrator.port';
 import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
@@ -83,14 +83,14 @@ import {
   SANDBOX_DISPATCH_BUDGET,
   type SandboxDispatchBudgetPort,
 } from './application/sandbox-dispatch-budget.port';
-import { ConfiguredTokenIssuer } from './infrastructure/configured-token-issuer';
-import { DownstreamCircuitBreakers } from './infrastructure/downstream-circuit-breakers';
-import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
+import { ConfiguredTokenIssuer } from './infrastructure/dispatch/configured-token-issuer';
+import { DownstreamCircuitBreakers } from './infrastructure/dispatch/downstream-circuit-breakers';
+import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 import {
   DISPATCHER_LOG_CONTEXT,
   HttpOperationTransport,
-} from './infrastructure/http-operation-dispatcher';
-import { metricsDispatchObserver } from './infrastructure/metrics-dispatch-observer';
+} from './infrastructure/dispatch/http-operation-dispatcher';
+import { metricsDispatchObserver } from './infrastructure/dispatch/metrics-dispatch-observer';
 import { PostgresSandboxDispatchBudget } from './infrastructure/postgres-sandbox-dispatch-budget';
 import { RedisConcurrencyLimiter } from './infrastructure/redis-concurrency-limiter';
 import { RedisDownstreamRetryBudget } from './infrastructure/redis-downstream-retry-budget';

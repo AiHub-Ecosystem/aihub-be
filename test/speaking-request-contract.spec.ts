@@ -8,7 +8,7 @@ import { createRequestContext } from '@/common/request-context/request-context.f
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
 import { speakingGradingAdapter } from '@/downstream/speaking/speaking-grading.adapter';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 
 import {
   requestContractFailures,

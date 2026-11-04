@@ -57,7 +57,7 @@ function crossModuleRule() {
       path: '^src/modules/(?!$1/)[^/]+/',
       pathNot: [
         '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
-        '^src/modules/[^/]+/(application/|.*/application/)[^/]*[.]port[.]ts$',
+        '^src/modules/[^/]+/(application/|.*/application/).*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
         ...publicModuleApiPaths(),
@@ -93,7 +93,7 @@ function cliRule() {
       pathNot: [
         '^src/modules/[^/]+/(infrastructure/|.*/infrastructure/)',
         '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
-        '^src/modules/[^/]+/(application/|.*/application/)[^/]*[.]port[.]ts$',
+        '^src/modules/[^/]+/(application/|.*/application/).*[.]port[.]ts$',
         ...sharedPrimitivePaths(),
         ...nestExportPaths(),
         ...publicModuleApiPaths(),
@@ -301,6 +301,15 @@ module.exports = {
   // no-orphans is intentionally omitted; orphan/liveness analysis belongs to
   // dedicated tooling and may overlap with Knip.
   forbidden: [
+    {
+      name: 'temporary-policy-cache-check',
+      severity: 'error',
+      comment: 'temporary policy cache regression fixture',
+      from: {
+        path: '^src/modules/identity/[.]tmp-policy-cache-[^/]+/application/probe[.]ts$',
+      },
+      to: { path: '^src/modules/identity/domain/organization-name[.]ts$' },
+    },
     {
       name: 'no-circular',
       severity: 'error',

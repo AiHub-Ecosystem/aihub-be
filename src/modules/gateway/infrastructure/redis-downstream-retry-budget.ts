@@ -6,7 +6,7 @@ import type { DownstreamId } from '@/downstream/downstream.types';
 import type {
   DownstreamRetryBudgetDecision,
   DownstreamRetryBudgetPort,
-} from '@/modules/gateway/application/downstream-retry-budget.port';
+} from '@/modules/gateway/application/dispatch/downstream-retry-budget.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
 const WINDOW_MS = 60_000;

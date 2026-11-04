@@ -1,7 +1,7 @@
 import type {
   UsageRetentionBatch,
   UsageRetentionPort,
-} from '@/modules/metering/application/usage-retention';
+} from '@/modules/metering/application/billing/usage-retention';
 import type { WritingChartRevocationAuditRepositoryPort } from '@/modules/writing/chart-uploads/application/writing-chart-revocation.port';
 import { effectiveMaintenanceTime } from '../../scripts/cli/operator-safety.cjs';
 import {

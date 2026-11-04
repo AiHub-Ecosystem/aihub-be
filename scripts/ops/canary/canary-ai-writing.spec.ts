@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { MockAgent } from 'undici/index.js';
 
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import {
   type CanaryResult,
   type WebhookPayload,

@@ -3,4 +3,4 @@ export {
   normalizeMeteringModels,
   normalizeMeteringTelemetry,
   normalizeMeteringUsage,
-} from '@/modules/metering/application/metering.telemetry';
+} from '@/modules/metering/application/usage-recording/metering.telemetry';

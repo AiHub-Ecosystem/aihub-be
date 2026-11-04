@@ -1,5 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
-import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/postgres-usage-retention.repository';
+import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/billing/postgres-usage-retention.repository';
 import {
   USAGE_PRUNE_BATCH_SIZE,
   UsagePruneError,

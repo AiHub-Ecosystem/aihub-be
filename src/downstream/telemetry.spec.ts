@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { extractDownstreamTelemetry } from '@/modules/metering/application/metering.telemetry';
+import { extractDownstreamTelemetry } from '@/modules/metering/application/usage-recording/metering.telemetry';
 
 describe('extractDownstreamTelemetry', () => {
   it('reads the additive internal usage envelope without touching business data', () => {

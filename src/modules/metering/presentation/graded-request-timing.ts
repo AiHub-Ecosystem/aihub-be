@@ -3,7 +3,7 @@ import { registry } from '@/common/observability/metrics';
 import {
   type GradedRequestTiming,
   getMeteringEvidence,
-} from '@/modules/metering/application/metering-evidence';
+} from '@/modules/metering/application/usage-recording/metering-evidence';
 import { Histogram } from '@prometheus-io/client';
 
 const admissionDuration = new Histogram({

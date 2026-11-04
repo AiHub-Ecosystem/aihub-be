@@ -18,22 +18,22 @@ const repositoryRoot = path.resolve(
 );
 const require = createRequire(import.meta.url);
 const usageModule =
-  /** @type {typeof import('../../src/modules/metering/application/public-api-major-usage')} */ (
+  /** @type {typeof import('../../src/modules/metering/application/billing/public-api-major-usage')} */ (
     require(
       path.join(
         repositoryRoot,
-        'dist/modules/metering/application/public-api-major-usage.js',
+        'dist/modules/metering/application/billing/public-api-major-usage.js',
       ),
     )
   );
 const { PublicApiMajorUsageBuffer, PUBLIC_API_MAJOR_USAGE_MAX_KEYS } =
   usageModule;
 const flusherModule =
-  /** @type {typeof import('../../src/modules/metering/application/public-api-major-usage-flusher')} */ (
+  /** @type {typeof import('../../src/modules/metering/application/billing/public-api-major-usage-flusher')} */ (
     require(
       path.join(
         repositoryRoot,
-        'dist/modules/metering/application/public-api-major-usage-flusher.js',
+        'dist/modules/metering/application/billing/public-api-major-usage-flusher.js',
       ),
     )
   );

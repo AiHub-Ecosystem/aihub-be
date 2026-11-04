@@ -25,7 +25,7 @@ import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';

@@ -7,9 +7,9 @@ import type {
 } from '@/contracts/writing/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
-import type { InternalTokenIssuerPort } from '@/modules/gateway/application/internal-token-issuer.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
-import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/http-operation-dispatcher.testing';
+import type { InternalTokenIssuerPort } from '@/modules/gateway/application/dispatch/internal-token-issuer.port';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 import type { IdempotencyRepositoryPort } from '@/modules/idempotency/application/idempotency-repository.port';
 import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
 import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';

@@ -569,6 +569,42 @@ function rawSqlMethodName(call) {
   return undefined;
 }
 
+/**
+ * A raw SQL method used without being called directly: destructured, passed
+ * on, or reached through `.bind`, `.call` or `.apply`. Such a use hides the
+ * SQL argument from the call check, so it needs its own reason.
+ * @param {import('typescript').Node} node
+ */
+function rawSqlReferenceName(node) {
+  if (
+    node.parent !== undefined &&
+    ts.isCallExpression(node.parent) &&
+    node.parent.expression === node
+  ) {
+    return undefined;
+  }
+  if (ts.isPropertyAccessExpression(node)) {
+    return RAW_SQL_METHODS.has(node.name.text) ? node.name.text : undefined;
+  }
+  if (
+    ts.isElementAccessExpression(node) &&
+    node.argumentExpression !== undefined &&
+    ts.isStringLiteralLike(node.argumentExpression)
+  ) {
+    return RAW_SQL_METHODS.has(node.argumentExpression.text)
+      ? node.argumentExpression.text
+      : undefined;
+  }
+  if (ts.isBindingElement(node)) {
+    const name = node.propertyName ?? node.name;
+    return (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) &&
+      RAW_SQL_METHODS.has(name.text)
+      ? name.text
+      : undefined;
+  }
+  return undefined;
+}
+
 /** @param {import('typescript').Node} node */
 function sqlLexicalScope(node) {
   let current = node;
@@ -713,6 +749,15 @@ for (const file of sourceFiles) {
           `${relative(root, file)}:${line} passes dynamic SQL to ${method}; use a static SQL literal with bound values, or mark the call with "arch-check: <reason>"`,
         );
       }
+    }
+    const reference = rawSqlReferenceName(node);
+    if (reference !== undefined && !hasRawSqlMarker(sourceFile, node, lines)) {
+      const line =
+        sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+          .line + 1;
+      fail(
+        `${relative(root, file)}:${line} references ${reference} without calling it; call it directly with static SQL, or mark the line with "arch-check: <reason>"`,
+      );
     }
     ts.forEachChild(node, visit);
   }

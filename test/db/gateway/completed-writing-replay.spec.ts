@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { findCompletedWritingReplay } from '@/modules/gateway/application/completed-writing-replay';
+import { findCompletedWritingReplay } from '@/modules/gateway/application/graded-request/completed-writing-replay';
 import { createIdempotencyFingerprint } from '@/modules/idempotency/application/idempotency-fingerprint';
 import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
 import type { IdempotencyWork } from '@/modules/idempotency/application/idempotency-service.port';

@@ -1,7 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import type { RequestContext } from '@/common/request-context/request-context';
-import { requireTimeLeft } from './dispatch-deadline';
+import { requireTimeLeft } from './dispatch/dispatch-deadline';
 import { quotaExceededError } from './quota-period';
 import type { SandboxDispatchBudgetPort } from './sandbox-dispatch-budget.port';
 

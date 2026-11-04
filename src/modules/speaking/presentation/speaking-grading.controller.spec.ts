@@ -21,7 +21,7 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import {

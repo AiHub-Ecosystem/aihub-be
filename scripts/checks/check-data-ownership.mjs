@@ -103,11 +103,11 @@ const allowlist = new Map([
     'lookup invitation for email credential',
   ],
   [
-    'src/modules/metering/infrastructure/postgres-billing-statement.repository.ts::api_keys',
+    'src/modules/metering/infrastructure/billing/postgres-billing-statement.repository.ts::api_keys',
     'display key metadata on billing statement',
   ],
   [
-    'src/modules/metering/infrastructure/postgres-quota-reconciliation.repository.ts::organizations',
+    'src/modules/metering/infrastructure/billing/postgres-quota-reconciliation.repository.ts::organizations',
     'quota reconciliation by org',
   ],
 ]);

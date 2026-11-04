@@ -9,11 +9,11 @@ import { AppError } from '@/common/errors/app-error';
 import {
   addMeteringEvidence,
   openMeteringEvidence,
-} from '@/modules/metering/application/metering-evidence';
+} from '@/modules/metering/application/usage-recording/metering-evidence';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
-} from '@/modules/metering/application/metering-finalizer.port';
+} from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './success-envelope.interceptor';
 

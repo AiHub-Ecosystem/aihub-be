@@ -23,7 +23,7 @@ import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-l
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import {

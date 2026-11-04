@@ -10,7 +10,7 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
-import { PostgresUsageRepository } from '@/modules/metering/infrastructure/postgres-usage.repository';
+import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import {
   type PrismaClientHolder,
   createPrismaClient,

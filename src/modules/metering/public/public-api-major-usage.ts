@@ -4,11 +4,11 @@ export {
   PublicApiMajorUsageError,
   buildPublicApiMajorReport,
   parsePublicApiMajorWindow,
-} from '@/modules/metering/application/public-api-major-usage';
+} from '@/modules/metering/application/billing/public-api-major-usage';
 export type {
   PublicApiMajorReport,
   PublicApiMajorUsageErrorCode,
   PublicApiMajorUsageRepositoryPort,
   PublicApiMajorUsageSample,
   PublicApiMajorWindow,
-} from '@/modules/metering/application/public-api-major-usage';
+} from '@/modules/metering/application/billing/public-api-major-usage';

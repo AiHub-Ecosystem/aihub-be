@@ -19,12 +19,12 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
-import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import type {
   DispatchResult,
   OperationDispatcherPort,
-} from '@/modules/gateway/application/operation-dispatcher.port';
-import { OPERATION_DISPATCHER } from '@/modules/gateway/application/operation-dispatcher.port';
+} from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import type {
@@ -46,8 +46,8 @@ import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempoten
 import type {
   UsageRecord,
   UsageRepositoryPort,
-} from '@/modules/metering/application/usage-repository.port';
-import { USAGE_REPOSITORY } from '@/modules/metering/application/usage-repository.port';
+} from '@/modules/metering/application/usage-recording/usage-repository.port';
+import { USAGE_REPOSITORY } from '@/modules/metering/application/usage-recording/usage-repository.port';
 import { registerRequestHooks } from '@/register-request-hooks';
 
 const GRADE_PATH = '/v1/ielts/writing/task1/grade';

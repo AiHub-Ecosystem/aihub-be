@@ -6,4 +6,4 @@ export {
 export type {
   MeteringEvidence,
   MeteringGatheredEvidence,
-} from '@/modules/metering/application/metering-evidence';
+} from '@/modules/metering/application/usage-recording/metering-evidence';

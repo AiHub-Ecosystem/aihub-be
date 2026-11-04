@@ -31,7 +31,7 @@ import {
   WritingGradingController,
   WritingV2GradingController,
 } from '@/modules/writing/public/grading';
-import { DownstreamHttpClient } from './infrastructure/downstream-http.client';
+import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 import {
   GRADED_REQUEST_GUARDS,
   GRADED_REQUEST_INTERCEPTORS,

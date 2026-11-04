@@ -4,7 +4,7 @@ import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
   QuotaCounterReadRequest,
-} from '@/modules/metering/application/quota-reconciliation.port';
+} from '@/modules/metering/application/billing/quota-reconciliation.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
 

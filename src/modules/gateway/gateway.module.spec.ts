@@ -16,7 +16,7 @@ import {
 import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
-} from './application/operation-dispatcher.port';
+} from './application/dispatch/operation-dispatcher.port';
 import { GatewayModule } from './gateway.module';
 
 const FIXTURES = join(__dirname, '../../../test/fixtures');

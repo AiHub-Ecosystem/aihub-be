@@ -16,30 +16,30 @@ import {
   RUNTIME_PRISMA_CLIENT,
 } from '@/modules/persistence/persistence.module';
 import {
-  METERING_FINALIZER,
-  type MeteringFinalizerPort,
-} from './application/metering-finalizer.port';
-import {
-  METERING_FAILURE_LOGGER,
-  type MeteringFailureLoggerPort,
-} from './application/metering-logger.port';
-import { MeteringService } from './application/metering.service';
-import {
   PUBLIC_API_MAJOR_USAGE_BUFFER,
   PUBLIC_API_MAJOR_USAGE_REPOSITORY,
   PublicApiMajorUsageBuffer,
   type PublicApiMajorUsageRepositoryPort,
-} from './application/public-api-major-usage';
-import { PublicApiMajorUsageFlusher } from './application/public-api-major-usage-flusher';
+} from './application/billing/public-api-major-usage';
+import { PublicApiMajorUsageFlusher } from './application/billing/public-api-major-usage-flusher';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+} from './application/usage-recording/metering-finalizer.port';
+import {
+  METERING_FAILURE_LOGGER,
+  type MeteringFailureLoggerPort,
+} from './application/usage-recording/metering-logger.port';
+import { MeteringService } from './application/usage-recording/metering.service';
 import {
   USAGE_REPOSITORY,
   type UsageRepositoryPort,
-} from './application/usage-repository.port';
-import { NestMeteringFailureLogger } from './infrastructure/nest-metering-failure.logger';
-import { PostgresPublicApiMajorUsageRepository } from './infrastructure/postgres-public-api-major-usage.repository';
-import { PostgresUsageRepository } from './infrastructure/postgres-usage.repository';
-import { recordPublicApiMajorUsageDrop } from './infrastructure/public-api-major-usage-drop-metric';
-import { PublicApiMajorUsageScheduler } from './infrastructure/public-api-major-usage.scheduler';
+} from './application/usage-recording/usage-repository.port';
+import { PostgresPublicApiMajorUsageRepository } from './infrastructure/billing/postgres-public-api-major-usage.repository';
+import { recordPublicApiMajorUsageDrop } from './infrastructure/billing/public-api-major-usage-drop-metric';
+import { PublicApiMajorUsageScheduler } from './infrastructure/billing/public-api-major-usage.scheduler';
+import { NestMeteringFailureLogger } from './infrastructure/usage-recording/nest-metering-failure.logger';
+import { PostgresUsageRepository } from './infrastructure/usage-recording/postgres-usage.repository';
 import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
