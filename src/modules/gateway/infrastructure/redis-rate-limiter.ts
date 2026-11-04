@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
+import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import {
   rateLimitDecision,
   rateLimitWindow,
@@ -31,16 +31,14 @@ interface FallbackWindow {
 export class RedisRateLimiter implements RateLimiterPort {
   private readonly client: RedisRateLimitClient | undefined;
   private readonly now: () => number;
-  private readonly logger: Pick<Logger, 'warn' | 'log'>;
   private readonly random: () => number;
-
   // ponytail: a process-local, single-instance approximation of the same
   // per-minute limit, only ever consulted while Redis is unreachable. It is
   // not shared across replicas and resets on restart — a coarse backstop so
   // an outage means "capped at roughly the configured limit per instance",
   // not "unlimited", never a substitute for the real distributed counter.
   private readonly fallbackWindows = new Map<string, FallbackWindow>();
-  private redisIsDegraded = false;
+  private readonly health: RedisHealthReporter;
 
   constructor(
     url: string,
@@ -51,8 +49,13 @@ export class RedisRateLimiter implements RateLimiterPort {
   ) {
     this.client = client ?? createRedisGatewayClient(url);
     this.now = now;
-    this.logger = logger;
     this.random = random;
+    this.health = new RedisHealthReporter(
+      'rate_limit',
+      'rate limiter',
+      logger,
+      'falling back to a process-local ceiling until it recovers',
+    );
   }
 
   async consume(request: RateLimitRequest): Promise<RateLimitDecision> {
@@ -72,43 +75,16 @@ export class RedisRateLimiter implements RateLimiterPort {
         120,
       );
     } catch (error) {
-      this.reportDegraded(error);
+      this.health.reportDegraded(error);
       return this.consumeFallback(request);
     }
 
-    this.reportRecovered();
+    this.health.reportRecovered();
     return rateLimitDecision(request.limit, count, window, this.random);
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.client?.quit().catch(() => undefined);
-  }
-
-  /**
-   * Fires once per outage, not once per request: at any real RPS, logging on
-   * every failed command during an actual Redis outage would flood the log
-   * with an identical line rather than alert on anything.
-   */
-  private reportDegraded(error: unknown): void {
-    recordRedisUnavailable('rate_limit');
-    if (this.redisIsDegraded) {
-      return;
-    }
-
-    this.redisIsDegraded = true;
-    const reason = error instanceof Error ? error.message : String(error);
-    this.logger.warn(
-      `Redis rate limiter unreachable (${reason}); falling back to a process-local ceiling until it recovers`,
-    );
-  }
-
-  private reportRecovered(): void {
-    if (!this.redisIsDegraded) {
-      return;
-    }
-
-    this.redisIsDegraded = false;
-    this.logger.log('Redis rate limiter recovered');
   }
 
   private consumeFallback(request: RateLimitRequest): RateLimitDecision {

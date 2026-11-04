@@ -10,7 +10,7 @@ import {
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
 import { isShuttingDown } from '@/common/http/background-work-drain';
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   ConcurrencyDecision,
   ConcurrencyLease,
@@ -84,7 +84,7 @@ interface LoggerLike {
 }
 
 export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
-  private redisIsDegraded = false;
+  private readonly health: RedisHealthReporter;
   private stopping = false;
   private readonly pendingRemovals = new Set<() => void>();
   private readonly removalTimers = new Map<
@@ -94,11 +94,16 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
 
   constructor(
     private readonly client: RedisConcurrencyClient | undefined,
-    private readonly logger: LoggerLike = new Logger(
-      RedisConcurrencyLimiter.name,
-    ),
+    logger: LoggerLike = new Logger(RedisConcurrencyLimiter.name),
     private readonly random: () => number = Math.random,
-  ) {}
+  ) {
+    this.health = new RedisHealthReporter(
+      'concurrency',
+      'concurrency limiter',
+      logger,
+      'refusing requests until it recovers',
+    );
+  }
 
   async acquire(request: ConcurrencyRequest): Promise<ConcurrencyDecision> {
     if (
@@ -110,7 +115,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
 
     const client = this.client;
     if (client === undefined) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw this.unavailableError();
     }
 
@@ -134,14 +139,14 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
             ]),
       );
       if (result === 0) {
-        this.reportRecovered();
+        this.health.reportRecovered();
         return this.denied();
       }
       if (result !== 1) {
         throw internalError('Redis concurrency response is invalid');
       }
 
-      this.reportRecovered();
+      this.health.reportRecovered();
       return {
         allowed: true,
         lease: this.remoteLease(client, keys, request.requestId),
@@ -149,7 +154,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     } catch (error) {
       // A slow reply can time out after Redis already added the lease.
       this.removeLater(client, keys, request.requestId);
-      this.reportDegraded(error);
+      this.health.reportDegraded(error);
       throw this.unavailableError(error);
     }
   }
@@ -171,11 +176,11 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         releaseAttempt ??= Promise.resolve().then(async () => {
           try {
             await Promise.all(keys.map((key) => client.zrem(key, requestId)));
-            this.reportRecovered();
+            this.health.reportRecovered();
             return undefined;
           } catch (error) {
             this.removeLater(client, keys, requestId);
-            this.reportDegraded(error);
+            this.health.reportDegraded(error);
             throw this.unavailableError(error);
           }
         });
@@ -228,12 +233,12 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         .then(() => Promise.all(keys.map((key) => client.zrem(key, requestId))))
         .then(
           () => {
-            this.reportRecovered();
+            this.health.reportRecovered();
             settle();
             return true;
           },
-          () => {
-            recordRedisUnavailable('concurrency');
+          (error) => {
+            this.health.reportDegraded(error);
             if (attempt < LEASE_REMOVAL_ATTEMPTS && !this.stopping) {
               this.removeLater(
                 client,
@@ -263,28 +268,6 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         CONCURRENCY_RETRY_AFTER_MS,
       ),
     };
-  }
-
-  private reportDegraded(error?: unknown): void {
-    recordRedisUnavailable('concurrency');
-    if (this.redisIsDegraded) {
-      return;
-    }
-
-    this.redisIsDegraded = true;
-    const reason = error instanceof Error ? error.message : 'Redis unavailable';
-    this.logger.warn(
-      `Redis concurrency limiter unreachable (${reason}); refusing requests until it recovers`,
-    );
-  }
-
-  private reportRecovered(): void {
-    if (!this.redisIsDegraded) {
-      return;
-    }
-
-    this.redisIsDegraded = false;
-    this.logger.log('Redis concurrency limiter recovered');
   }
 
   private unavailableError(cause?: unknown): AppError {

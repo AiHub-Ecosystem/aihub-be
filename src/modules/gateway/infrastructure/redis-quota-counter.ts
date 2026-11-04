@@ -2,7 +2,7 @@ import { internalError } from '@/common/errors/app-error';
 import { Logger } from '@nestjs/common';
 
 import { isUsableCount } from '@/common/counts/is-usable-count';
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   QuotaCounterPort,
   QuotaCounterRequest,
@@ -57,8 +57,7 @@ return redis.call('INCR', KEYS[1])
 export class RedisQuotaCounter implements QuotaCounterPort {
   private readonly client: RedisQuotaCounterClient | undefined;
   private readonly now: () => Date;
-  private readonly logger: LoggerLike;
-  private redisIsDegraded = false;
+  private readonly health: RedisHealthReporter;
 
   constructor(
     client: RedisQuotaCounterClient | undefined,
@@ -68,12 +67,17 @@ export class RedisQuotaCounter implements QuotaCounterPort {
   ) {
     this.client = client;
     this.now = now;
-    this.logger = logger;
+    this.health = new RedisHealthReporter(
+      'quota',
+      'quota counter',
+      logger,
+      'quota admission will use its configured outage policy',
+    );
   }
 
   async read(request: QuotaCounterRequest): Promise<number> {
     if (this.client === undefined) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw unavailable();
     }
 
@@ -90,17 +94,17 @@ export class RedisQuotaCounter implements QuotaCounterPort {
         throw internalError('Redis quota counter is missing');
       }
       const count = parseCount(value);
-      this.reportRecovered();
+      this.health.reportRecovered();
       return count;
     } catch (error) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw error;
     }
   }
 
   async increment(request: QuotaCounterRequest): Promise<void> {
     if (this.client === undefined) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw unavailable();
     }
 
@@ -115,35 +119,14 @@ export class RedisQuotaCounter implements QuotaCounterPort {
         throw internalError('Redis quota counter result is invalid');
       }
 
-      this.reportRecovered();
+      this.health.reportRecovered();
     } catch (error) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw error;
     }
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.client?.quit().catch(() => undefined);
-  }
-
-  private reportDegraded(): void {
-    recordRedisUnavailable('quota');
-    if (this.redisIsDegraded) {
-      return;
-    }
-
-    this.redisIsDegraded = true;
-    this.logger.warn(
-      'Redis quota counter unavailable; quota admission will use its configured outage policy',
-    );
-  }
-
-  private reportRecovered(): void {
-    if (!this.redisIsDegraded) {
-      return;
-    }
-
-    this.redisIsDegraded = false;
-    this.logger.log('Redis quota counter recovered');
   }
 }

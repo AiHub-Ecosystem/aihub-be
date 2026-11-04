@@ -7,7 +7,7 @@ import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
@@ -134,22 +134,29 @@ function redisUnavailable(
 }
 
 export class RedisGradedAdmission implements GradedAdmissionPort {
-  private redisIsDegraded = false;
+  private readonly health: RedisHealthReporter;
 
   constructor(
     private readonly client: RedisGradedAdmissionClient | undefined,
     private readonly now: () => number = () => Date.now(),
     private readonly random: () => number = Math.random,
-    private readonly logger: LoggerLike = new Logger(RedisGradedAdmission.name),
+    logger: LoggerLike = new Logger(RedisGradedAdmission.name),
     private readonly seeder?: QuotaCounterSeedPort,
-  ) {}
+  ) {
+    this.health = new RedisHealthReporter(
+      'graded_admission',
+      'graded admission',
+      logger,
+      'refusing requests until it recovers',
+    );
+  }
 
   async consume(
     request: GradedAdmissionRequest,
   ): Promise<GradedAdmissionDecision> {
     const client = this.client;
     if (client === undefined) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw redisUnavailable(undefined, this.random);
     }
 
@@ -181,7 +188,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
       }
     }
 
-    this.reportRecovered();
+    this.health.reportRecovered();
     const rate = rateLimitStanding(request.rateLimitRpm, rateCount, window);
     switch (result) {
       case 0:
@@ -207,7 +214,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
         return { stage: 'quota', quota: quota ?? 0, rate };
       case 4:
       default:
-        this.reportDegraded();
+        this.health.reportDegraded();
         throw redisUnavailable(
           internalError('Redis graded admission result is invalid'),
           this.random,
@@ -251,32 +258,17 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
         quota === null ? '' : String(quota),
       );
     } catch (cause) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw redisUnavailable(cause, this.random);
     }
     const [result, rateCount] = reply;
     if (result === undefined || rateCount === undefined) {
-      this.reportDegraded();
+      this.health.reportDegraded();
       throw redisUnavailable(
         internalError('Redis graded admission result is invalid'),
         this.random,
       );
     }
     return [result, rateCount];
-  }
-
-  private reportDegraded(): void {
-    recordRedisUnavailable('graded_admission');
-    if (this.redisIsDegraded) return;
-    this.redisIsDegraded = true;
-    this.logger.warn(
-      'Redis graded admission unavailable; refusing requests until it recovers',
-    );
-  }
-
-  private reportRecovered(): void {
-    if (!this.redisIsDegraded) return;
-    this.redisIsDegraded = false;
-    this.logger.log('Redis graded admission recovered');
   }
 }

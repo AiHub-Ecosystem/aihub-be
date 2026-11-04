@@ -10,6 +10,7 @@ import {
 import { createRedisClient } from '@/common/redis/create-redis-client';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import { numberReply } from '@/common/redis/number-reply';
+import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   ApiKeyCachePort,
   ApiKeyRecord,
@@ -452,7 +453,10 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
 export class RedisAuthFailureCounter implements AuthFailureCounterPort {
   private readonly client: RedisIdentityClient | undefined;
-  private readonly logger: Pick<Logger, 'warn' | 'log'>;
+  // Every outage counts the metric through the shared reporter; the recovered
+  // line waits until BOTH the read and write paths are healthy again, so the
+  // log covers the counter as a whole rather than either half.
+  private readonly health: RedisHealthReporter;
   private readonly degradedOperations = new Set<'read' | 'write'>();
 
   constructor(
@@ -463,7 +467,12 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
     ),
   ) {
     this.client = client ?? connect(url);
-    this.logger = logger;
+    this.health = new RedisHealthReporter(
+      'auth_failure_counter',
+      'API-key authentication failure counter',
+      logger,
+      'brute-force protection is failing open until it recovers',
+    );
   }
 
   async get(ip: string): Promise<number> {
@@ -509,16 +518,8 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
   }
 
   private reportDegraded(operation: 'read' | 'write'): void {
-    recordRedisUnavailable('auth_failure_counter');
-    const wasDegraded = this.degradedOperations.size > 0;
     this.degradedOperations.add(operation);
-    if (wasDegraded) {
-      return;
-    }
-
-    this.logger.warn(
-      'Redis API-key authentication failure counter unavailable; brute-force protection is failing open until it recovers',
-    );
+    this.health.reportDegraded();
   }
 
   private reportRecovered(operation: 'read' | 'write'): void {
@@ -529,6 +530,6 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
       return;
     }
 
-    this.logger.log('Redis API-key authentication failure counter recovered');
+    this.health.reportRecovered();
   }
 }
