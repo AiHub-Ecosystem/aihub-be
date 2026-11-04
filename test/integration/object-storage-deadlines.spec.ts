@@ -2,7 +2,11 @@ import { once } from 'node:events';
 import { type Server, createServer } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 
-import { HeadObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  type S3Client,
+} from '@aws-sdk/client-s3';
 
 import { getMetrics } from '@/common/observability/metrics';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
@@ -257,6 +261,67 @@ describe('SeaweedFS S3 transport', () => {
     expect((await settled).every((call) => call.status === 'rejected')).toBe(
       true,
     );
+  });
+
+  it('holds S3 capacity until a GetObject response body settles', async () => {
+    let blockedHeads = 0;
+    let resolveBlockedHeads: () => void = () => undefined;
+    const allBlockedHeads = new Promise<void>((resolve) => {
+      resolveBlockedHeads = resolve;
+    });
+    let finishObjectBody: () => void = () => undefined;
+    server.on('request', (request, response) => {
+      if (request.method === 'GET') {
+        response.writeHead(200, {
+          'Content-Length': '1',
+          ETag: '"version"',
+          'Content-Type': 'image/png',
+        });
+        response.flushHeaders();
+        finishObjectBody = () => response.end('x');
+        return;
+      }
+      if (request.method === 'HEAD' && ++blockedHeads <= 15) {
+        if (blockedHeads === 15) resolveBlockedHeads();
+        return;
+      }
+      response.writeHead(200, { 'Content-Length': '0', ETag: '"version"' });
+      response.end();
+    });
+
+    const object = await client.send(
+      new GetObjectCommand({ Bucket: 'test', Key: 'streaming' }),
+    );
+    if (object.Body === undefined) throw new Error('missing GetObject body');
+    const objectBytes = object.Body.transformToByteArray();
+    const stalledHeads = Array.from({ length: 15 }, () =>
+      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'stalled' })),
+    );
+    const settled = Promise.allSettled(stalledHeads);
+
+    try {
+      await allBlockedHeads;
+      const rejectedAt = performance.now();
+      await expect(
+        client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'overflow' })),
+      ).rejects.toMatchObject({
+        diagnostic: 'object_storage:bulkhead_exhausted',
+      });
+      expect(performance.now() - rejectedAt).toBeLessThan(100);
+
+      finishObjectBody();
+      await expect(objectBytes).resolves.toEqual(Uint8Array.of(120));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(
+        client.send(
+          new HeadObjectCommand({ Bucket: 'test', Key: 'after-body' }),
+        ),
+      ).resolves.toMatchObject({ ETag: '"version"' });
+    } finally {
+      finishObjectBody();
+      server.closeAllConnections();
+      await settled;
+    }
   });
 
   it.each(['avatar', 'speaking', 'writing'] as const)(

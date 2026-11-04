@@ -201,12 +201,14 @@ export class DownstreamHttpClient {
 
     const inFlight = this.inFlightByOrigin.get(base.origin) ?? 0;
     if (inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN) {
-      throw new AppError({
-        code: 'AI_SERVICE_UNAVAILABLE',
-        message: 'AI service is temporarily unavailable',
-        retryable: true,
-        diagnostic: 'ai_service:bulkhead_exhausted',
-      });
+      throw markNotDispatched(
+        new AppError({
+          code: 'AI_SERVICE_UNAVAILABLE',
+          message: 'AI service is temporarily unavailable',
+          retryable: true,
+          diagnostic: 'ai_service:bulkhead_exhausted',
+        }),
+      );
     }
     this.inFlightByOrigin.set(base.origin, inFlight + 1);
 

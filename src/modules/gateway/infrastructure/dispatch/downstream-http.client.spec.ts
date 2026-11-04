@@ -3,7 +3,10 @@ import type { AddressInfo } from 'node:net';
 import { MockAgent } from 'undici/index.js';
 
 import type { AppError } from '@/common/errors/app-error';
-import { DownstreamHttpClient } from './downstream-http.client';
+import {
+  DownstreamHttpClient,
+  isDefinitelyNotDispatched,
+} from './downstream-http.client';
 import { resolvePathParameters } from './http-operation-dispatcher';
 
 describe('DownstreamHttpClient', () => {
@@ -211,11 +214,16 @@ describe('DownstreamHttpClient', () => {
       await request('ai-writing');
       await tenSpeakingRequests;
       const rejectedAt = performance.now();
-      await expect(request('ai-speaking')).rejects.toMatchObject({
+      const bulkheadError = await request('ai-speaking').then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(bulkheadError).toMatchObject({
         code: 'AI_SERVICE_UNAVAILABLE',
         httpStatus: 503,
         retryable: true,
       } satisfies Partial<AppError>);
+      expect(isDefinitelyNotDispatched(bulkheadError)).toBe(true);
       expect(performance.now() - rejectedAt).toBeLessThan(20);
 
       const writingStartedAt = performance.now();

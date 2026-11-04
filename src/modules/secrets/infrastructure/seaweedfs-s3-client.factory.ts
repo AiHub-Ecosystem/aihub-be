@@ -1,5 +1,7 @@
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
+import { Readable } from 'node:stream';
+import { finished } from 'node:stream/promises';
 import { AppError, internalError } from '@/common/errors/app-error';
 
 import { S3Client } from '@aws-sdk/client-s3';
@@ -87,10 +89,34 @@ export function createSeaweedFsS3Client(
         });
       }
       inFlight += 1;
+      let holdPermitForBody = false;
+      let released = false;
+      const release = (): void => {
+        if (!released) {
+          released = true;
+          inFlight -= 1;
+        }
+      };
       try {
-        return await next(args);
+        const result = await next(args);
+        const body =
+          typeof result.output === 'object' &&
+          result.output !== null &&
+          'Body' in result.output
+            ? result.output.Body
+            : undefined;
+        if (
+          body instanceof Readable &&
+          !body.readableEnded &&
+          !body.destroyed
+        ) {
+          holdPermitForBody = true;
+          // GetObject resolves at headers while its body still owns a socket.
+          void finished(body, { cleanup: true }).then(release, release);
+        }
+        return result;
       } finally {
-        inFlight -= 1;
+        if (!holdPermitForBody) release();
       }
     },
     { step: 'initialize', name: 'objectStorageBulkhead', priority: 'high' },
