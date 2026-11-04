@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import fastifyCookie from '@fastify/cookie';
 import {
   GUARDS_METADATA,
   INTERCEPTORS_METADATA,
@@ -16,6 +17,27 @@ import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { PASSWORD_HASHER } from '@/modules/auth/local-credentials/application/password-hasher.port';
+import { AUTH_MFA_SERVICE } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
+import { AUTH_RATE_LIMITER } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import {
+  type InMemoryAuthState,
+  createInMemoryAuthState,
+  seedAccount,
+} from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-refresh-session.adapter';
+import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
+import {
+  AccessTokenIssuerFake,
+  HasherFake,
+  LimiterFake,
+  MfaFake,
+  RefreshTokenIssuerFake,
+} from '@/modules/auth/testing/local-auth.controller.spec-support';
+import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
+import { REFRESH_TOKEN_ISSUER } from '@/modules/auth/web-sessions/application/refresh-token.port';
+import { USER_ACCESS_TOKEN_ISSUER } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
@@ -102,12 +124,15 @@ const EXPECTED_ORDER = [
 describe('graded request chain', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
+  let authState: InMemoryAuthState;
   const executed: string[] = [];
   const originalEnv = {
     allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
     nodeEnv: process.env.NODE_ENV,
     token: process.env.DOWNSTREAM_AI_WRITING_TOKEN,
     url: process.env.DOWNSTREAM_AI_WRITING_URL,
+    speakingToken: process.env.DOWNSTREAM_AI_SPEAKING_TOKEN,
+    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
   };
 
   beforeAll(async () => {
@@ -115,6 +140,8 @@ describe('graded request chain', () => {
     process.env.NODE_ENV = 'test';
     process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
     process.env.DOWNSTREAM_AI_WRITING_URL = 'https://ai-writing.test';
+    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = 'speaking-token';
+    process.env.DOWNSTREAM_AI_SPEAKING_URL = 'https://ai-speaking.test';
 
     // Record the real authentication guards; admission and concurrency are
     // observed at their application ports below.
@@ -145,10 +172,39 @@ describe('graded request chain', () => {
       })
       .reply(200, fixture('grade-task1.response.json'))
       .persist();
+    mockAgent
+      .get('https://ai-speaking.test')
+      .intercept({ method: 'POST', path: '/simulate-provider-hang' })
+      .reply(200, {})
+      .delay(30_000)
+      .persist();
 
+    authState = createInMemoryAuthState();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(USER_ACCOUNT_REPOSITORY)
+      .useValue(new InMemoryUserAccountAdapter(authState))
+      .overrideProvider(PASSWORD_HASHER)
+      .useValue(new HasherFake())
+      .overrideProvider(AUTH_RATE_LIMITER)
+      .useValue(new LimiterFake())
+      .overrideProvider(REFRESH_SESSION_REPOSITORY)
+      .useValue(new InMemoryRefreshSessionAdapter(authState))
+      .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
+      .useValue(new AccessTokenIssuerFake())
+      .overrideProvider(REFRESH_TOKEN_ISSUER)
+      .useValue(new RefreshTokenIssuerFake())
+      .overrideProvider(AUTH_MFA_SERVICE)
+      .useValue(new MfaFake())
       .overrideProvider(DownstreamHttpClient)
-      .useValue(new DownstreamHttpClient('https://ai-writing.test', mockAgent))
+      .useValue(
+        new DownstreamHttpClient(
+          {
+            'ai-writing': 'https://ai-writing.test',
+            'ai-speaking': 'https://ai-speaking.test',
+          },
+          mockAgent,
+        ),
+      )
       .overrideProvider(IDEMPOTENCY_REPOSITORY)
       .useValue(new InMemoryIdempotencyRepository())
       .overrideProvider(DISPATCH_ATTEMPT_RECORD)
@@ -177,9 +233,11 @@ describe('graded request chain', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
-    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    const fastify = app.getHttpAdapter().getInstance();
+    await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
+    registerRequestLifecycle(fastify);
     await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    await fastify.ready();
   });
 
   afterAll(async () => {
@@ -189,10 +247,13 @@ describe('graded request chain', () => {
     process.env.NODE_ENV = originalEnv.nodeEnv;
     process.env.DOWNSTREAM_AI_WRITING_TOKEN = originalEnv.token;
     process.env.DOWNSTREAM_AI_WRITING_URL = originalEnv.url;
+    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = originalEnv.speakingToken;
+    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
   });
 
   beforeEach(() => {
     executed.length = 0;
+    authState.reset();
   });
 
   it('runs every declared step in the declared order on a real request', async () => {
@@ -210,6 +271,63 @@ describe('graded request chain', () => {
 
     expect(response.statusCode).toBe(200);
     expect(executed).toEqual([...EXPECTED_ORDER]);
+  });
+
+  it('keeps Core Auth and Writing grading responsive while AI Speaking hangs', async () => {
+    const client = app.get(DownstreamHttpClient);
+    const controllers = Array.from({ length: 10 }, () => new AbortController());
+    const stalled = controllers.map((controller, index) =>
+      client.request(
+        { method: 'POST', path: '/simulate-provider-hang', body: {} },
+        {
+          downstream: 'ai-speaking',
+          requestId: `req_slow_speaking_${index}`,
+          deadlineMs: 30_000,
+          signal: controller.signal,
+        },
+      ),
+    );
+    const settled = Promise.allSettled(stalled);
+
+    try {
+      seedAccount(authState, {
+        userId: 'usr_01J00000000000000000000000',
+        email: 'student@example.test',
+        username: 'student',
+        passwordHash: 'stored-password-hash',
+      });
+      const authStartedAt = performance.now();
+      const auth = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/login',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          email: 'student@example.test',
+          password: 'correct-password',
+        },
+      });
+      expect(auth.statusCode).toBe(200);
+      expect(auth.headers['set-cookie']).toBeDefined();
+      expect(performance.now() - authStartedAt).toBeLessThan(20);
+
+      const writingStartedAt = performance.now();
+      const writing = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        headers: { 'idempotency-key': 'slow-speaking-isolation' },
+        payload: {
+          question: task1Request.question,
+          chart_type: task1Request.topic,
+          essay: task1Request.essay,
+          image_url: task1Request.url,
+        },
+      });
+      expect(writing.statusCode).toBe(200);
+      expect(performance.now() - writingStartedAt).toBeLessThan(20);
+    } finally {
+      controllers.forEach((controller) => controller.abort());
+      await settled;
+    }
   });
 
   it('authenticates BFF grading requests with the shared client secret', async () => {

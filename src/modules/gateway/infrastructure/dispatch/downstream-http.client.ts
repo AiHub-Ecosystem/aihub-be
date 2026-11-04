@@ -34,6 +34,8 @@ type DownstreamHeaders = Readonly<
   Partial<Record<DownstreamId, Readonly<Record<string, string>>>>
 >;
 
+const MAX_CONCURRENT_REQUESTS_PER_ORIGIN = 10;
+
 const definitelyNotDispatched = new WeakSet<AppError>();
 const downstreamPools = new Map<string, Set<Pool>>();
 
@@ -159,6 +161,7 @@ function normalizeHeaders(
 
 export class DownstreamHttpClient {
   private readonly dispatchers = new Map<string, Dispatcher>();
+  private readonly inFlightByOrigin = new Map<string, number>();
 
   constructor(
     private readonly baseUrls: DownstreamBaseUrls,
@@ -196,61 +199,83 @@ export class DownstreamHttpClient {
       }
     }
 
-    let response: Dispatcher.ResponseData;
-    try {
-      const requestOptions: Dispatcher.RequestOptions = {
-        origin: base.origin,
-        path: `${url.pathname}${url.search}`,
-        method: request.method,
-        headers: {
-          ...this.configuredHeaders[downstream],
-          ...request.headers,
-          ...(options.authorization === undefined
-            ? {}
-            : { authorization: options.authorization }),
-          ...(request.method === 'GET' || isMultipartBody(request.body)
-            ? {}
-            : { 'content-type': request.contentType ?? 'application/json' }),
-          'x-request-id': options.requestId,
-          'x-request-deadline': String(options.deadlineMs),
-        },
-        signal: options.signal,
-        headersTimeout: options.deadlineMs,
-        bodyTimeout: options.deadlineMs,
-      };
-      if (body !== undefined) {
-        requestOptions.body = body;
-      }
-      response = await this.getDispatcher(base).request(requestOptions);
-    } catch (error) {
-      throw transportError(error, options.signal.aborted);
+    const inFlight = this.inFlightByOrigin.get(base.origin) ?? 0;
+    if (inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN) {
+      throw markNotDispatched(
+        new AppError({
+          code: 'AI_SERVICE_UNAVAILABLE',
+          message: 'AI service is temporarily unavailable',
+          retryable: true,
+          diagnostic: 'ai_service:bulkhead_exhausted',
+        }),
+      );
     }
-    options.onResponseReceived?.(response.statusCode);
+    this.inFlightByOrigin.set(base.origin, inFlight + 1);
 
-    let parsedBody: unknown;
     try {
-      parsedBody = await response.body.json();
-    } catch (error) {
-      if (options.signal.aborted || isTransportFailure(error)) {
+      let response: Dispatcher.ResponseData;
+      try {
+        const requestOptions: Dispatcher.RequestOptions = {
+          origin: base.origin,
+          path: `${url.pathname}${url.search}`,
+          method: request.method,
+          headers: {
+            ...this.configuredHeaders[downstream],
+            ...request.headers,
+            ...(options.authorization === undefined
+              ? {}
+              : { authorization: options.authorization }),
+            ...(request.method === 'GET' || isMultipartBody(request.body)
+              ? {}
+              : { 'content-type': request.contentType ?? 'application/json' }),
+            'x-request-id': options.requestId,
+            'x-request-deadline': String(options.deadlineMs),
+          },
+          signal: options.signal,
+          headersTimeout: options.deadlineMs,
+          bodyTimeout: options.deadlineMs,
+        };
+        if (body !== undefined) {
+          requestOptions.body = body;
+        }
+        response = await this.getDispatcher(base).request(requestOptions);
+      } catch (error) {
         throw transportError(error, options.signal.aborted);
       }
-      if (response.statusCode >= 400) {
-        parsedBody = undefined;
+      options.onResponseReceived?.(response.statusCode);
+
+      let parsedBody: unknown;
+      try {
+        parsedBody = await response.body.json();
+      } catch (error) {
+        if (options.signal.aborted || isTransportFailure(error)) {
+          throw transportError(error, options.signal.aborted);
+        }
+        if (response.statusCode >= 400) {
+          parsedBody = undefined;
+        } else {
+          throw new AppError({
+            code: 'AI_SERVICE_CONTRACT_VIOLATION',
+            message: 'AI service returned an unexpected response shape',
+            retryable: false,
+            cause: error,
+          });
+        }
+      }
+
+      return {
+        status: response.statusCode,
+        headers: normalizeHeaders(response.headers),
+        body: parsedBody,
+      };
+    } finally {
+      const remaining = (this.inFlightByOrigin.get(base.origin) ?? 1) - 1;
+      if (remaining === 0) {
+        this.inFlightByOrigin.delete(base.origin);
       } else {
-        throw new AppError({
-          code: 'AI_SERVICE_CONTRACT_VIOLATION',
-          message: 'AI service returned an unexpected response shape',
-          retryable: false,
-          cause: error,
-        });
+        this.inFlightByOrigin.set(base.origin, remaining);
       }
     }
-
-    return {
-      status: response.statusCode,
-      headers: normalizeHeaders(response.headers),
-      body: parsedBody,
-    };
   }
 
   async close(): Promise<void> {
@@ -285,13 +310,7 @@ export class DownstreamHttpClient {
       return existing;
     }
 
-    // `allowH2` is off in undici by default, which pins this pool to HTTP/1.1
-    // and caps it at one in-flight request per socket. Leaving `connections`
-    // at 10 makes enabling it safe either way: a provider that negotiates h2
-    // multiplexes up to `maxConcurrentStreams` per socket, and one that does
-    // not keeps exactly the concurrency it had before. Capping `connections`
-    // to 1 to force a single h2 session would cut concurrency tenfold on a
-    // provider that never negotiates h2, so it is deliberately not done.
+    // This limit preserves HTTP/1.1 capacity and caps multiplexed HTTP/2 streams.
     //
     // `keepAliveTimeout` was 10s, which expires a socket inside the bursts
     // this gateway sees: production traffic runs around one request a minute
@@ -300,7 +319,7 @@ export class DownstreamHttpClient {
     // below the ceiling a provider can ask for.
     const dispatcher = new Pool(base.origin, {
       allowH2: true,
-      connections: 10,
+      connections: MAX_CONCURRENT_REQUESTS_PER_ORIGIN,
       keepAliveTimeout: 300_000,
       keepAliveMaxTimeout: 600_000,
     });

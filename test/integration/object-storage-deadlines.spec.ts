@@ -2,7 +2,11 @@ import { once } from 'node:events';
 import { type Server, createServer } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 
-import { HeadObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  type S3Client,
+} from '@aws-sdk/client-s3';
 
 import { getMetrics } from '@/common/observability/metrics';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
@@ -215,8 +219,7 @@ describe('SeaweedFS S3 transport', () => {
     });
   });
 
-  it('exposes queued calls and releases them when the caller cancels', async () => {
-    const abort = new AbortController();
+  it('fails fast instead of queueing after the shared socket budget is exhausted', async () => {
     let connected = 0;
     let ready: () => void = () => undefined;
     const occupied = new Promise<void>((resolve) => {
@@ -225,24 +228,133 @@ describe('SeaweedFS S3 transport', () => {
     server.on('request', () => {
       if (++connected === 16) ready();
     });
-    const calls = Array.from({ length: 17 }, () =>
-      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' }), {
-        abortSignal: abort.signal,
-      }),
+    const calls = Array.from({ length: 16 }, () =>
+      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' })),
     );
     const settled = Promise.allSettled(calls);
     try {
       await occupied;
+      const started = performance.now();
+      await expect(
+        new S3AvatarStorage(client, {
+          bucket: 'aihub-user-assets',
+        }).describeObject(
+          'users/usr_test/avatar/ava_test/original',
+          AbortSignal.timeout(1_500),
+        ),
+      ).rejects.toMatchObject({
+        httpStatus: 503,
+        retryable: true,
+        diagnostic: 'object_storage:bulkhead_exhausted',
+      });
+      expect(performance.now() - started).toBeLessThan(100);
       expect(await getMetrics()).toContain(
-        'aihub_object_storage_queued_requests 1',
+        'aihub_object_storage_queued_requests 0',
+      );
+      expect(await getMetrics()).toContain(
+        'aihub_object_storage_failures_total{reason="bulkhead_exhausted"} 1',
       );
     } finally {
-      abort.abort();
+      server.closeAllConnections();
       await settled;
     }
     expect((await settled).every((call) => call.status === 'rejected')).toBe(
       true,
     );
+  });
+
+  it('does not consume S3 capacity to create a presigned URL', async () => {
+    let connected = 0;
+    let resolveConnections: () => void = () => undefined;
+    const allConnections = new Promise<void>((resolve) => {
+      resolveConnections = resolve;
+    });
+    server.on('request', () => {
+      if (++connected === 16) resolveConnections();
+    });
+    const calls = Array.from({ length: 16 }, () =>
+      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' })),
+    );
+    const settled = Promise.allSettled(calls);
+
+    try {
+      await allConnections;
+      const upload = await new S3AvatarStorage(client, {
+        bucket: 'aihub-user-assets',
+      }).createUploadUrl({
+        objectKey:
+          'users/usr_test/avatar/ava_01J00000000000000000000001/original',
+        contentType: 'image/png',
+      });
+      expect(new URL(upload.url).searchParams.has('X-Amz-Signature')).toBe(
+        true,
+      );
+      expect(connected).toBe(16);
+    } finally {
+      server.closeAllConnections();
+      await settled;
+    }
+  });
+
+  it('holds S3 capacity until a GetObject response body settles', async () => {
+    let blockedHeads = 0;
+    let resolveBlockedHeads: () => void = () => undefined;
+    const allBlockedHeads = new Promise<void>((resolve) => {
+      resolveBlockedHeads = resolve;
+    });
+    let finishObjectBody: () => void = () => undefined;
+    server.on('request', (request, response) => {
+      if (request.method === 'GET') {
+        response.writeHead(200, {
+          'Content-Length': '1',
+          ETag: '"version"',
+          'Content-Type': 'image/png',
+        });
+        response.flushHeaders();
+        finishObjectBody = () => response.end('x');
+        return;
+      }
+      if (request.method === 'HEAD' && ++blockedHeads <= 15) {
+        if (blockedHeads === 15) resolveBlockedHeads();
+        return;
+      }
+      response.writeHead(200, { 'Content-Length': '0', ETag: '"version"' });
+      response.end();
+    });
+
+    const object = await client.send(
+      new GetObjectCommand({ Bucket: 'test', Key: 'streaming' }),
+    );
+    if (object.Body === undefined) throw new Error('missing GetObject body');
+    const objectBytes = object.Body.transformToByteArray();
+    const stalledHeads = Array.from({ length: 15 }, () =>
+      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'stalled' })),
+    );
+    const settled = Promise.allSettled(stalledHeads);
+
+    try {
+      await allBlockedHeads;
+      const rejectedAt = performance.now();
+      await expect(
+        client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'overflow' })),
+      ).rejects.toMatchObject({
+        diagnostic: 'object_storage:bulkhead_exhausted',
+      });
+      expect(performance.now() - rejectedAt).toBeLessThan(100);
+
+      finishObjectBody();
+      await expect(objectBytes).resolves.toEqual(Uint8Array.of(120));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(
+        client.send(
+          new HeadObjectCommand({ Bucket: 'test', Key: 'after-body' }),
+        ),
+      ).resolves.toMatchObject({ ETag: '"version"' });
+    } finally {
+      finishObjectBody();
+      server.closeAllConnections();
+      await settled;
+    }
   });
 
   it.each(['avatar', 'speaking', 'writing'] as const)(

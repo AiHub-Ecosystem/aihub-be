@@ -1,10 +1,12 @@
-import { type ServerResponse, createServer } from 'node:http';
+import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { MockAgent } from 'undici/index.js';
 
 import type { AppError } from '@/common/errors/app-error';
-import { getMetrics } from '@/common/observability/metrics';
-import { DownstreamHttpClient } from './downstream-http.client';
+import {
+  DownstreamHttpClient,
+  isDefinitelyNotDispatched,
+} from './downstream-http.client';
 import { resolvePathParameters } from './http-operation-dispatcher';
 
 describe('DownstreamHttpClient', () => {
@@ -172,64 +174,75 @@ describe('DownstreamHttpClient', () => {
     } satisfies Partial<AppError>);
   });
 
-  it('reports requests waiting beyond the configured downstream pool connections', async () => {
-    let requestsSeen = 0;
-    let resolveTenRequests!: () => void;
-    let responsesReleased = false;
-    const pendingResponses: ServerResponse[] = [];
-    const tenRequestsArrived = new Promise<void>((resolve) => {
-      resolveTenRequests = resolve;
+  it('fails fast at one origin without blocking another origin', async () => {
+    let speakingRequests = 0;
+    let resolveTenSpeakingRequests!: () => void;
+    const tenSpeakingRequests = new Promise<void>((resolve) => {
+      resolveTenSpeakingRequests = resolve;
     });
-    const sendResponse = (response: ServerResponse): void => {
+    const speakingServer = createServer(() => {
+      if (++speakingRequests === 10) resolveTenSpeakingRequests();
+    });
+    const writingServer = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end('{}');
-    };
-    const server = createServer((_request, response) => {
-      requestsSeen += 1;
-      if (requestsSeen === 10) resolveTenRequests();
-      if (responsesReleased) sendResponse(response);
-      else pendingResponses.push(response);
     });
-    const releaseResponses = (): void => {
-      responsesReleased = true;
-      pendingResponses.splice(0).forEach(sendResponse);
-    };
-    await new Promise<void>((resolve) =>
-      server.listen(0, '127.0.0.1', resolve),
-    );
+    const listen = (server: ReturnType<typeof createServer>) =>
+      new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await Promise.all([listen(speakingServer), listen(writingServer)]);
 
-    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    const client = new DownstreamHttpClient(origin);
-    const requests = Array.from({ length: 11 }, () =>
+    const speakingOrigin = `http://127.0.0.1:${(speakingServer.address() as AddressInfo).port}`;
+    const writingOrigin = `http://127.0.0.1:${(writingServer.address() as AddressInfo).port}`;
+    const client = new DownstreamHttpClient({
+      'ai-speaking': speakingOrigin,
+      'ai-writing': writingOrigin,
+    });
+    const request = (downstream: 'ai-speaking' | 'ai-writing') =>
       client.request(
-        { method: 'POST', path: '/queued', body: {} },
+        { method: 'POST', path: '/grade', body: {} },
         {
+          downstream,
           requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-          deadlineMs: 5000,
-          signal: AbortSignal.timeout(5000),
+          deadlineMs: 30_000,
+          signal: AbortSignal.timeout(30_000),
         },
-      ),
-    );
+      );
+    const stalled = Array.from({ length: 10 }, () => request('ai-speaking'));
+    const settled = Promise.allSettled(stalled);
 
     try {
-      await tenRequestsArrived;
-      expect(await getMetrics()).toContain(
-        `aihub_downstream_pool_queued{origin="${origin}"} 1`,
+      await request('ai-writing');
+      await tenSpeakingRequests;
+      const rejectedAt = performance.now();
+      const bulkheadError = await request('ai-speaking').then(
+        () => undefined,
+        (error: unknown) => error,
       );
-      releaseResponses();
-      await Promise.allSettled(requests);
-      expect(await getMetrics()).toContain(
-        `aihub_downstream_pool_queued{origin="${origin}"} 0`,
-      );
+      expect(bulkheadError).toMatchObject({
+        code: 'AI_SERVICE_UNAVAILABLE',
+        httpStatus: 503,
+        retryable: true,
+      } satisfies Partial<AppError>);
+      expect(isDefinitelyNotDispatched(bulkheadError)).toBe(true);
+      expect(performance.now() - rejectedAt).toBeLessThan(20);
+
+      const writingStartedAt = performance.now();
+      await expect(request('ai-writing')).resolves.toMatchObject({
+        status: 200,
+      });
+      expect(performance.now() - writingStartedAt).toBeLessThan(20);
     } finally {
-      releaseResponses();
-      await Promise.allSettled(requests);
+      speakingServer.closeAllConnections();
+      await settled;
       await client.close();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
+      await Promise.all(
+        [speakingServer, writingServer].map(
+          (server) =>
+            new Promise<void>((resolve, reject) =>
+              server.close((error) => (error ? reject(error) : resolve())),
+            ),
+        ),
       );
     }
-
-    expect(await getMetrics()).not.toContain(`origin="${origin}"`);
   });
 });

@@ -40,6 +40,12 @@ function failureReason(
       : 'cancelled';
   }
   if (typeof error !== 'object' || error === null) return 'unavailable';
+  if (
+    'diagnostic' in error &&
+    error.diagnostic === 'object_storage:bulkhead_exhausted'
+  ) {
+    return 'bulkhead_exhausted';
+  }
   const message =
     'message' in error && typeof error.message === 'string'
       ? error.message
