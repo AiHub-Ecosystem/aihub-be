@@ -119,7 +119,7 @@ export function createSeaweedFsS3Client(
         if (!holdPermitForBody) release();
       }
     },
-    { step: 'initialize', name: 'objectStorageBulkhead', priority: 'high' },
+    { step: 'finalizeRequest', name: 'objectStorageBulkhead', priority: 'low' },
   );
   return client;
 }

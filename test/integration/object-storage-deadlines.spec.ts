@@ -263,6 +263,39 @@ describe('SeaweedFS S3 transport', () => {
     );
   });
 
+  it('does not consume S3 capacity to create a presigned URL', async () => {
+    let connected = 0;
+    let resolveConnections: () => void = () => undefined;
+    const allConnections = new Promise<void>((resolve) => {
+      resolveConnections = resolve;
+    });
+    server.on('request', () => {
+      if (++connected === 16) resolveConnections();
+    });
+    const calls = Array.from({ length: 16 }, () =>
+      client.send(new HeadObjectCommand({ Bucket: 'test', Key: 'test' })),
+    );
+    const settled = Promise.allSettled(calls);
+
+    try {
+      await allConnections;
+      const upload = await new S3AvatarStorage(client, {
+        bucket: 'aihub-user-assets',
+      }).createUploadUrl({
+        objectKey:
+          'users/usr_test/avatar/ava_01J00000000000000000000001/original',
+        contentType: 'image/png',
+      });
+      expect(new URL(upload.url).searchParams.has('X-Amz-Signature')).toBe(
+        true,
+      );
+      expect(connected).toBe(16);
+    } finally {
+      server.closeAllConnections();
+      await settled;
+    }
+  });
+
   it('holds S3 capacity until a GetObject response body settles', async () => {
     let blockedHeads = 0;
     let resolveBlockedHeads: () => void = () => undefined;
