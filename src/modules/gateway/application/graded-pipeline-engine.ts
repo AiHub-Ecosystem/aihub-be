@@ -125,6 +125,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
     private readonly admission: GradedAdmissionPort,
     private readonly concurrencyLimiter: ConcurrencyLimiterPort,
     private readonly idempotency: IdempotencyServicePort,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async execute<K extends OperationId>(
@@ -178,7 +179,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
         throw gradedAdmissionRefusal(
           decision,
           authenticated.organizationId,
-          () => new Date(),
+          () => this.now(),
         );
       }
       if (decision.stage === 'retry_budget') {
@@ -186,7 +187,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
         throw gradedAdmissionRefusal(
           decision,
           authenticated.organizationId,
-          () => new Date(),
+          () => this.now(),
         );
       }
 
@@ -210,7 +211,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
           throw gradedAdmissionRefusal(
             decision,
             authenticated.organizationId,
-            () => new Date(),
+            () => this.now(),
           );
         }
       } else if (decision.quotaUnverified) {

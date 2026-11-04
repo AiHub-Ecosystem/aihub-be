@@ -71,6 +71,7 @@ function engineWith(
     readonly concurrency?: ConcurrencyLimiterPort;
     readonly idempotency?: IdempotencyServicePort;
     readonly orchestrator?: GradingOrchestratorPort;
+    readonly now?: () => Date;
   } = {},
 ) {
   const release = jest.fn(async () => undefined);
@@ -91,6 +92,7 @@ function engineWith(
       acquire: async () => ({ allowed: true, lease: { release } }),
     },
     options.idempotency ?? ({} as IdempotencyServicePort),
+    options.now ?? (() => new Date()),
   );
   return { engine, release };
 }
@@ -208,6 +210,29 @@ describe('GradedPipelineEngine', () => {
     });
     expect(release).toHaveBeenCalledTimes(1);
     expect(context.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the injected clock for quota refusal timestamps', async () => {
+    const fixed = new Date('2026-11-03T00:00:00.000Z');
+    const { engine } = engineWith({
+      admission: { consume: async () => ({ stage: 'quota', quota: 10 }) },
+      now: () => fixed,
+    });
+
+    const error = await engine
+      .execute(pipelineContext())
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ code: 'QUOTA_EXCEEDED' });
+    if (!(error instanceof AppError)) {
+      throw new Error('expected AppError');
+    }
+    // retryAfterMs = Dec 1 00:00 UTC - Nov 3 00:00 UTC = 28 days, plus stable offset [0,10m)
+    const retryAfterMs: number = error.retryAfterMs ?? Number.NaN;
+    expect(retryAfterMs).toBeGreaterThanOrEqual(28 * 24 * 60 * 60 * 1000);
+    expect(retryAfterMs).toBeLessThan(
+      28 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000,
+    );
   });
 
   it('holds the lease for detached idempotent work until background settlement', async () => {

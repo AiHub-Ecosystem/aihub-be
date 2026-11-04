@@ -13,6 +13,11 @@ export interface RetiredPublicApiMajor {
   readonly link: string;
 }
 
+/** Injection token for the lookup, so specs can stand in a retired major. */
+export const RETIRED_PUBLIC_API_MAJOR_LOOKUP = Symbol(
+  'RETIRED_PUBLIC_API_MAJOR_LOOKUP',
+);
+
 /**
  * The `410` a request under a retired Public API major gets (ADR-0127). The
  * release that retires a major removes its routes, so these requests reach

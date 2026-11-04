@@ -1,3 +1,5 @@
+import { isObject } from './is-object';
+
 interface TimingHookableInstance {
   addHook(...args: never[]): unknown;
 }
@@ -12,10 +14,6 @@ interface RequestTiming {
 }
 
 const timingByRequest = new WeakMap<object, RequestTiming>();
-
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
-}
 
 export function registerRequestTiming(instance: TimingHookableInstance): void {
   Reflect.apply(instance.addHook.bind(instance), instance, [

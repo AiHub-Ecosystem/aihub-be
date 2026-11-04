@@ -5,6 +5,7 @@ import {
   HttpException,
   Inject,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -21,6 +22,7 @@ import {
   requestDurationMs,
 } from '@/common/http/request-timing.hook';
 import {
+  RETIRED_PUBLIC_API_MAJOR_LOOKUP,
   type RetiredPublicApiMajor,
   retiredPublicApiMajor,
 } from '@/common/http/retired-public-api-major';
@@ -78,14 +80,21 @@ function fromHttpException(status: number): FrameworkError {
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
-  /** Replaced in specs to stand in a registry with a retired major. */
-  retiredMajor: (url: string) => RetiredPublicApiMajor | undefined =
-    retiredPublicApiMajor;
+  private readonly retiredMajor: (
+    url: string,
+  ) => RetiredPublicApiMajor | undefined;
 
   constructor(
     @Inject(METERING_FINALIZER)
     private readonly metering: MeteringFinalizerPort,
-  ) {}
+    @Optional()
+    @Inject(RETIRED_PUBLIC_API_MAJOR_LOOKUP)
+    retiredMajor: (
+      url: string,
+    ) => RetiredPublicApiMajor | undefined = retiredPublicApiMajor,
+  ) {
+    this.retiredMajor = retiredMajor;
+  }
 
   async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const http = host.switchToHttp();

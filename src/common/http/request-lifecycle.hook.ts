@@ -8,6 +8,7 @@ import {
   type DisconnectableRequest,
   createClientDisconnectSignal,
 } from './client-disconnect-signal';
+import { isObject } from './is-object';
 import { pathnameOf } from './request-path';
 
 const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
@@ -55,10 +56,6 @@ interface LifecycleHookableInstance {
 }
 
 const lifecycleByRequest = new WeakMap<object, RequestLifecycleState>();
-
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
-}
 
 function isPayloadStream(value: unknown): value is PayloadStream {
   return (

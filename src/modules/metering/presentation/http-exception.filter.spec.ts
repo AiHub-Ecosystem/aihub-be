@@ -21,7 +21,9 @@ interface Caught {
 async function catchException(
   exception: unknown,
   url = '/v1/auth/login',
-  configure: (filter: HttpExceptionFilter) => void = () => undefined,
+  retiredMajor: (
+    url: string,
+  ) => ReturnType<typeof retiredPublicApiMajor> = retiredPublicApiMajor,
 ): Promise<Caught> {
   const request = {
     id: 'invalid-request-id',
@@ -48,10 +50,12 @@ async function catchException(
       getResponse: () => response,
     }),
   } as unknown as ArgumentsHost;
-  const filter = new HttpExceptionFilter({
-    finalize: jest.fn().mockResolvedValue(undefined),
-  });
-  configure(filter);
+  const filter = new HttpExceptionFilter(
+    {
+      finalize: jest.fn().mockResolvedValue(undefined),
+    },
+    retiredMajor,
+  );
 
   await filter.catch(exception, host);
 
@@ -148,9 +152,7 @@ describe('HttpExceptionFilter for a retired Public API major', () => {
       releasedAt: '2027-01-01',
     },
   ];
-  const withRegistry = (filter: HttpExceptionFilter): void => {
-    filter.retiredMajor = (url) => retiredPublicApiMajor(url, MAJORS);
-  };
+  const retiredMajor = (url: string) => retiredPublicApiMajor(url, MAJORS);
 
   it.each([
     ['a dispatch route', OPERATION_CATALOG['writing.task1.grade'].path],
@@ -161,7 +163,7 @@ describe('HttpExceptionFilter for a retired Public API major', () => {
     const { body, status, headers } = await catchException(
       new NotFoundException(),
       url,
-      withRegistry,
+      retiredMajor,
     );
 
     expect(status).toHaveBeenCalledWith(410);
@@ -192,7 +194,7 @@ describe('HttpExceptionFilter for a retired Public API major', () => {
     const { status } = await catchException(
       new NotFoundException(),
       url,
-      withRegistry,
+      retiredMajor,
     );
 
     expect(status).toHaveBeenCalledWith(404);
@@ -206,7 +208,7 @@ describe('HttpExceptionFilter for a retired Public API major', () => {
         retryable: false,
       }),
       '/v1/organizations/org_1',
-      withRegistry,
+      retiredMajor,
     );
 
     expect(status).toHaveBeenCalledWith(404);
