@@ -287,7 +287,10 @@ describe('graded request chain', () => {
         },
       ),
     );
-    const settled = Promise.allSettled(stalled);
+    let speakingSettled = false;
+    const settled = Promise.allSettled(stalled).then(
+      () => (speakingSettled = true),
+    );
 
     try {
       seedAccount(authState, {
@@ -296,7 +299,6 @@ describe('graded request chain', () => {
         username: 'student',
         passwordHash: 'stored-password-hash',
       });
-      const authStartedAt = performance.now();
       const auth = await app.inject({
         method: 'POST',
         url: '/v1/auth/login',
@@ -308,9 +310,8 @@ describe('graded request chain', () => {
       });
       expect(auth.statusCode).toBe(200);
       expect(auth.headers['set-cookie']).toBeDefined();
-      expect(performance.now() - authStartedAt).toBeLessThan(20);
+      expect(speakingSettled).toBe(false);
 
-      const writingStartedAt = performance.now();
       const writing = await app.inject({
         method: 'POST',
         url: '/v1/ielts/writing/task1/grade',
@@ -323,7 +324,7 @@ describe('graded request chain', () => {
         },
       });
       expect(writing.statusCode).toBe(200);
-      expect(performance.now() - writingStartedAt).toBeLessThan(20);
+      expect(speakingSettled).toBe(false);
     } finally {
       controllers.forEach((controller) => controller.abort());
       await settled;
