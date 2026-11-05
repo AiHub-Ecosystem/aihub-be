@@ -701,6 +701,7 @@ export function loadRuntimeConfiguration(
   const configuration = values as RuntimeConfiguration;
   validateCustomerWebUrl(configuration, problems);
   validateHostBindings(configuration, problems);
+  validateTraceEndpoint(configuration, problems);
   if (problems.length > 0) throw new RuntimeConfigurationError(problems);
   return Object.freeze(configuration);
 }
@@ -809,6 +810,21 @@ function validateCustomerWebUrl(
     undefined
   ) {
     problems.push('CUSTOMER_WEB_BASE_URL');
+  }
+}
+
+function validateTraceEndpoint(
+  config: RuntimeConfiguration,
+  problems: string[],
+): void {
+  const value = config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+  if (
+    value !== undefined &&
+    value.length > 0 &&
+    isProductionLike(config.NODE_ENV) &&
+    !value.startsWith('https:')
+  ) {
+    problems.push('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT');
   }
 }
 

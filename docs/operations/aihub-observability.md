@@ -4,11 +4,11 @@ This runbook covers the host, container, shared PostgreSQL, Redis, and TLS signa
 
 ## Monitoring stack recovery policy
 
-The shared stack's non-secret source of truth is the private [aihub-monitoring-config repository](https://github.com/AiHub-Ecosystem/aihub-monitoring-config). The host's environment and mounted secret files are restored from Vault and stay outside that checkout. The clean-host runbook is below; its four-hour recovery objective remains unverified until the rehearsal is completed.
+The shared stack's non-secret source of truth is the private [aihub-monitoring-config repository](https://github.com/AiHub-Ecosystem/aihub-monitoring-config). The host's environment and mounted secret files are restored from Vault and stay outside that checkout. The clean-host runbook is below. On 2026-11-05 the owner confirmed that its rehearsal met the four-hour objective; attach the dated start/finish log and measured RTO to #237 as closure evidence.
 
 The monitoring data volumes are local. A lost monitoring host means complete loss of retained Prometheus and Tempo history; this recovery plan does not restore history. The tracked settings and 2026-10-27 deployment evidence show 30 days for the shared Prometheus, 14 days/512 MB for AIHUB Prometheus, and 48 hours for Tempo. These are retention limits, not backups.
 
-The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means expected targets are healthy, rules are loaded and evaluating, Grafana and OTLP HTTPS are ready, Grafana login works, Tempo is ready, and a controlled Sandbox alert reaches its configured route. The objective excludes history restoration. No clean-host rehearsal has yet established the measured RTO. #826 separately owns the monitoring-host reboot drill. The monitoring-host owner register is tracked in [#362](https://github.com/AiHub-Ecosystem/aihub-be/issues/362); the linked joint-host-loss recovery work is tracked in [#454](https://github.com/AiHub-Ecosystem/aihub-be/issues/454).
+The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means expected targets are healthy, rules are loaded and evaluating, Grafana and OTLP HTTPS are ready, Grafana login works, Tempo is ready, and a controlled Sandbox alert reaches its configured route. The objective excludes history restoration. The owner confirmed on 2026-11-05 that the rehearsal met the objective; the dated log and measured RTO still need to be attached to #237. #826 separately owns the monitoring-host reboot drill. The monitoring-host owner register is tracked in [#362](https://github.com/AiHub-Ecosystem/aihub-be/issues/362); the linked joint-host-loss recovery work is tracked in [#454](https://github.com/AiHub-Ecosystem/aihub-be/issues/454).
 
 ## Clean-host recovery runbook
 
@@ -22,7 +22,7 @@ Use the Compose files, Nginx sites, Tempo configuration, dashboards, and AIHUB P
 6. From the repository's `aihub/` directory, validate and start `exporters.compose.yml` with the protected AIHUB environment file and `--profile monitoring`. This restores AIHUB Prometheus, exporters, and the restricted Production SSH tunnel. Restore its host-job cron entries and scheduled drift check from the tracked operations instructions.
 7. Verify both HTTPS routes, Grafana authentication, Tempo readiness, all expected Prometheus targets, loaded rule health and fingerprint, certificate probes, and a searchable real AIHUB trace. Run the controlled Sandbox L.4 alert drill and confirm the configured notification route receives it before stopping the timer.
 
-Record the start/end time, restored configuration commit, checks, and any gaps in #237 and link this section from #454. This procedure is not evidence that the recovery has been rehearsed.
+Record the start/end time, restored configuration commit, checks, and any gaps in #237 and link this section from #454. The procedure itself is not evidence that the recovery has been rehearsed; use the dated rehearsal record.
 
 ## Grafana and OTLP HTTPS routes
 
@@ -32,6 +32,8 @@ The deployed HTTPS routes are `https://grafana.aihubproduction.com` and `https:/
 - `otel.aihubproduction.com/v1/traces` terminates TLS and proxies only the OTLP/HTTP traces route to Tempo's private receiver. Allow only the fixed Production egress IP, which also carries Sandbox traffic; deny other sources. Do not publish Tempo's receiver port directly.
 
 Keep these virtual hosts, TLS renewal, source-IP allowlists, and both certificate probes in the dedicated monitoring configuration repository. The fixed Production/Sandbox egress is `76.13.218.96`; update the allowlist if that source changes. A real Sandbox trace has been verified through the HTTPS OTLP endpoint.
+
+Production and staging refuse a non-empty `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` whose scheme is not `https:`. Local development and tests can still use an HTTP collector. If the deployed egress address changes, update the allowlist before recreating `app` and `app-sandbox`; a valid URL alone does not prove receiver delivery.
 
 ## Trace delivery
 
@@ -278,10 +280,18 @@ A `403 FORBIDDEN` means the key's Organization left `AIHUB_SANDBOX_ORG_IDS`; a `
 
 ### Alert rule changes
 
-CD deploys the application, not the monitoring stack: a change to
-`ops/monitoring/alert.rules.yml` merged to `main` reaches the monitoring
-Prometheus only when an operator copies it. Do that after every merge that
-touches the rules or their tests:
+CD deploys the application, not the monitoring stack. The AIHUB overlay in
+`ops/monitoring/` is the source of truth. The private monitoring repository's
+`aihub/` snapshot is the deployment source, and the monitoring host's
+bind-mounted rule file is what Prometheus loads. Publishing a change in the
+monitoring configuration repository is a separate deployment authorization.
+After the source change is on `origin/main`, an operator copies the changed
+`ops/monitoring/alert.rules.yml` and `alert.rules.test.yml` (and any changed
+Prometheus, Compose, or blackbox files) byte-for-byte into the monitoring
+repository's `aihub/` directory, commits that snapshot, and then performs these
+steps on the monitoring host. The hourly drift check compares the host file
+with this application repository's `main`, so a source-only or canonical-repo-only
+update leaves the drift alert firing until all three copies match:
 
 1. Copy `alert.rules.yml` and `alert.rules.test.yml` to a new staging directory
    under `~/aihub-monitoring` on the monitoring host (mode `0755`, so the

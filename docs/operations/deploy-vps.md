@@ -1550,16 +1550,18 @@ reached the application; its access record therefore has an empty `request_id`.
 
 ### Optional request tracing
 
-After #237 deploys the restricted trace path, set
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to
-`https://otel.<approved-domain>/v1/traces`. The monitoring host's TLS reverse
-proxy forwards that route to Tempo's loopback OTLP/HTTP receiver and accepts
-only the fixed Production egress IP, shared by Production and Sandbox. It does
-not accept OTLP from arbitrary Internet clients. Until the DNS name, TLS route,
-and source-IP allowlist are deployed and verified, leave the value blank;
-`otel-collector` is not a running service. `app` and `app-sandbox` use the same
-endpoint setting. The Grafana UI uses a separate HTTPS hostname and still
-requires Grafana login.
+The restricted trace path is deployed at
+`https://otel.aihubproduction.com/v1/traces`. Set
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` in `.env.production` to that HTTPS URL.
+The monitoring host's TLS reverse proxy forwards that route to Tempo's
+loopback OTLP/HTTP receiver and accepts only the fixed Production egress IP,
+shared by Production and Sandbox. It does not accept OTLP from arbitrary
+Internet clients. Production and staging reject a non-empty endpoint whose
+scheme is not `https:`; local development and tests may still use HTTP. Verify
+DNS, the TLS route, and the source-IP allowlist before enabling the value, and
+leave it blank while any of those are unverified. `otel-collector` is not a
+running service. `app` and `app-sandbox` use the same endpoint setting. The
+Grafana UI uses a separate HTTPS hostname and still requires Grafana login.
 
 Each trace contains a Fastify request span and child spans for ioredis, Postgres,
 and Undici downstream calls. The root span records the route template, generated

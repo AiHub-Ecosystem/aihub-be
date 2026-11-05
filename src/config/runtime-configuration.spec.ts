@@ -9,6 +9,28 @@ import {
 } from './runtime-configuration';
 
 describe('runtime configuration', () => {
+  const deployedEnvironment = {
+    AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+    AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+    AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+    AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+    DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
+    REDIS_URL: 'redis://redis.test.invalid/0',
+    AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
+    AIHUB_EMAIL_SEND_RATE_LIMIT: '2',
+    AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
+    AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
+      'postgres://budget:fake@db.test.invalid/aihub',
+    AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
+    AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+    AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+    AIHUB_PRODUCTION_HOST: 'api.test.invalid',
+    DOWNSTREAM_AI_WRITING_URL: 'https://writing.test.invalid',
+    DOWNSTREAM_AI_SPEAKING_URL: 'https://speaking.test.invalid',
+    RESEND_FROM: 'no-reply@test.invalid',
+    CUSTOMER_WEB_BASE_URL: 'https://customer.test.invalid',
+  } as const;
+
   it('applies declared defaults and parses scalar values', () => {
     const config = loadRuntimeConfiguration({
       NODE_ENV: 'test',
@@ -414,4 +436,48 @@ describe('runtime configuration', () => {
     );
     expect(configuration).not.toHaveProperty('AIHUB_WEB_SESSION_CLIENT_SECRET');
   });
+
+  it.each(['production', 'staging'] as const)(
+    'requires an HTTPS OTLP trace endpoint in %s',
+    (mode) => {
+      let caught: unknown;
+      try {
+        loadRuntimeConfiguration({
+          ...deployedEnvironment,
+          NODE_ENV: mode,
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:
+            'http://otel.test.invalid/v1/traces',
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+      expect((caught as RuntimeConfigurationError).variableNames).toContain(
+        'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+      );
+      expect((caught as Error).message).not.toContain('otel.test.invalid');
+      expect(
+        loadRuntimeConfiguration({
+          ...deployedEnvironment,
+          NODE_ENV: mode,
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:
+            'https://otel.test.invalid/v1/traces',
+        }).OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      ).toBe('https://otel.test.invalid/v1/traces');
+    },
+  );
+
+  it.each(['development', 'test'] as const)(
+    'allows a local HTTP OTLP trace endpoint in %s',
+    (mode) => {
+      expect(
+        loadRuntimeConfiguration({
+          ...deployedEnvironment,
+          NODE_ENV: mode,
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:4318/v1/traces',
+        }).OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      ).toBe('http://127.0.0.1:4318/v1/traces');
+    },
+  );
 });
