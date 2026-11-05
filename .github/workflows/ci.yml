@@ -536,11 +536,8 @@ jobs:
           DEFAULT_POOL_SIZE: "20"
           MAX_DB_CONNECTIONS: "2"
           MAX_PREPARED_STATEMENTS: "100"
+          QUERY_WAIT_TIMEOUT: "0.25"
           LISTEN_PORT: "5432"
-        # edoburu's env bridge omits query_wait_timeout; append it after its
-        # entrypoint renders the config and before PgBouncer starts.
-        command: >-
-          /bin/sh -ec 'printf "\nquery_wait_timeout = 0.25\n" >> /etc/pgbouncer/pgbouncer.ini && exec /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini'
         ports:
           - 6432:5432
         options: >-
