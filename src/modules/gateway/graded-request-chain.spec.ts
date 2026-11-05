@@ -40,7 +40,11 @@ import { REFRESH_TOKEN_ISSUER } from '@/modules/auth/web-sessions/application/re
 import { USER_ACCESS_TOKEN_ISSUER } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
-import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
+import {
+  GRADED_ADMISSION,
+  type GradedAdmissionDecision,
+  type GradedAdmissionRequest,
+} from '@/modules/gateway/application/graded-admission.port';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
@@ -203,6 +207,10 @@ describe('graded request chain', () => {
   let mockAgent: MockAgent;
   let authState: InMemoryAuthState;
   const executed: string[] = [];
+  const retryBudgetCounts = new Map<
+    string,
+    { readonly firstAttempts: number; repeats: number }
+  >();
 
   beforeAll(async () => {
     useTestRuntimeConfiguration({
@@ -283,8 +291,21 @@ describe('graded request chain', () => {
       .useValue({ resolve: () => 'test-bff-client-secret' })
       .overrideProvider(GRADED_ADMISSION)
       .useValue({
-        consume: async () => {
+        consume: async (
+          request: GradedAdmissionRequest,
+        ): Promise<GradedAdmissionDecision> => {
           executed.push('GradedAdmission');
+          const key = request.idempotencyKey;
+          if (key !== undefined) {
+            const state = retryBudgetCounts.get(key);
+            if (state === undefined) {
+              retryBudgetCounts.set(key, { firstAttempts: 1, repeats: 0 });
+            } else if (state.repeats >= 1) {
+              return { stage: 'retry_budget', retryAfterMs: 60_000 };
+            } else {
+              state.repeats += 1;
+            }
+          }
           return { stage: 'admitted' };
         },
       })
@@ -317,6 +338,7 @@ describe('graded request chain', () => {
 
   beforeEach(() => {
     executed.length = 0;
+    retryBudgetCounts.clear();
     authState.reset();
   });
 
@@ -335,6 +357,50 @@ describe('graded request chain', () => {
 
     expect(response.statusCode).toBe(200);
     expect(executed).toEqual([...EXPECTED_ORDER]);
+  });
+
+  it('lets a client correct one invalid body within the low-volume retry allowance', async () => {
+    const idempotencyKey = 'body-correction-retry-budget';
+    const validPayload = {
+      question: task1Request.question,
+      chart_type: task1Request.topic,
+      essay: task1Request.essay,
+      image_url: task1Request.url,
+    };
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { 'idempotency-key': idempotencyKey },
+      payload: {
+        question: task1Request.question,
+        chart_type: task1Request.topic,
+        essay: 7,
+        image_url: task1Request.url,
+      },
+    });
+
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
+
+    const corrected = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { 'idempotency-key': idempotencyKey },
+      payload: validPayload,
+    });
+
+    expect(corrected.statusCode).toBe(200);
+    const limited = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/writing/task1/grade',
+      headers: { 'idempotency-key': idempotencyKey },
+      payload: validPayload,
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ error: { code: 'RATE_LIMITED' } });
+    expect(limited.headers['retry-after']).toBeDefined();
   });
 
   it('keeps Core Auth and Writing grading responsive while AI Speaking hangs', async () => {

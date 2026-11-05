@@ -328,19 +328,19 @@ export class HttpOperationTransport implements OperationTransportPort {
         const retryEnabled = this.retryBudget?.isEnabled(operation) ?? false;
         try {
           while (true) {
-            if (
-              retryEnabled &&
-              this.retryBudget !== undefined &&
-              !retryState.firstAttemptCounted
-            ) {
-              retryState.firstAttemptCounted = await this.retryBudget
-                .recordFirstAttempt(operation, context.requestId)
-                .catch(() => false);
-            }
             try {
               response = await this.circuitBreakers.execute(
                 operation,
                 async () => {
+                  if (
+                    retryEnabled &&
+                    this.retryBudget !== undefined &&
+                    !retryState.firstAttemptCounted
+                  ) {
+                    retryState.firstAttemptCounted = await this.retryBudget
+                      .recordFirstAttempt(operation, context.requestId)
+                      .catch(() => false);
+                  }
                   const received = await this.httpClient.request(
                     downstreamRequest,
                     {

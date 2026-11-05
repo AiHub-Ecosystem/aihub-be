@@ -13,6 +13,7 @@ class FakeRedis implements RedisDownstreamRetryBudgetClient {
     string,
     { tokens: number; updatedAt: number }
   >();
+  private readonly hashExpirations = new Map<string, number>();
   now = 0;
 
   async eval(
@@ -29,6 +30,9 @@ class FakeRedis implements RedisDownstreamRetryBudgetClient {
       if (key === undefined || Number(ttlRaw) <= 0) {
         throw new Error('invalid service bucket arguments');
       }
+      if ((this.hashExpirations.get(key) ?? Infinity) <= this.now) {
+        this.hashes.delete(key);
+      }
       const state = this.hashes.get(key) ?? {
         tokens: burst,
         updatedAt: this.now,
@@ -41,6 +45,7 @@ class FakeRedis implements RedisDownstreamRetryBudgetClient {
         tokens: tokens < 1 ? tokens : tokens - 1,
         updatedAt: this.now,
       });
+      this.hashExpirations.set(key, this.now + Number(ttlRaw) * 1_000);
       return tokens < 1 ? 0 : 1;
     }
     if (numberOfKeys !== 2) throw new Error('unexpected key count');
@@ -178,6 +183,66 @@ describe('RedisDownstreamRetryBudget', () => {
     expect(decisions.sort()).toEqual(['admitted', 'exhausted']);
   });
 
+  it('does not restore a slow service bucket before its natural refill', async () => {
+    const redis = new FakeRedis();
+    const slowBuckets = {
+      'ai-writing': {
+        ratePerSecond: 0.001,
+        burst: 2,
+        expectedAttemptMs: 100,
+      },
+    } as const;
+    const task1 = new RedisDownstreamRetryBudget(redis, slowBuckets);
+    const task2 = new RedisDownstreamRetryBudget(redis, slowBuckets);
+    const task2Operation: OperationId = 'writing.task2.grade';
+
+    for (let index = 0; index < 10; index += 1) {
+      await task1.recordFirstAttempt(operation, `task1-first-old-${index}`);
+      await task2.recordFirstAttempt(
+        task2Operation,
+        `task2-first-old-${index}`,
+      );
+    }
+    await expect(
+      task1.reserveRetry(operation, 'task1-retry-old', 1),
+    ).resolves.toBe('admitted');
+    await expect(
+      task2.reserveRetry(task2Operation, 'task2-retry-old', 1),
+    ).resolves.toBe('admitted');
+
+    redis.now = 121_000;
+    for (let index = 0; index < 10; index += 1) {
+      await task1.recordFirstAttempt(operation, `task1-first-new-${index}`);
+    }
+
+    await expect(
+      task1.reserveRetry(operation, 'task1-retry-new', 1),
+    ).resolves.toBe('exhausted');
+  });
+
+  it('allows an idle fast service bucket after it has naturally refilled', async () => {
+    const redis = new FakeRedis();
+    const fastBudget = new RedisDownstreamRetryBudget(redis, {
+      'ai-writing': { ratePerSecond: 1, burst: 2, expectedAttemptMs: 100 },
+    });
+
+    for (let index = 0; index < 10; index += 1) {
+      await fastBudget.recordFirstAttempt(operation, `first-old-${index}`);
+    }
+    await expect(
+      fastBudget.reserveRetry(operation, 'retry-old', 1),
+    ).resolves.toBe('admitted');
+
+    redis.now = 121_000;
+    for (let index = 0; index < 10; index += 1) {
+      await fastBudget.recordFirstAttempt(operation, `first-new-${index}`);
+    }
+
+    await expect(
+      fastBudget.reserveRetry(operation, 'retry-new', 1),
+    ).resolves.toBe('admitted');
+  });
+
   it('keeps retries disabled until a service capacity bucket is configured', async () => {
     const redis = new FakeRedis();
     const budget = new RedisDownstreamRetryBudget(redis);
@@ -186,5 +251,17 @@ describe('RedisDownstreamRetryBudget', () => {
     await expect(budget.recordFirstAttempt(operation, 'request')).resolves.toBe(
       false,
     );
+  });
+
+  it('disables a bucket whose refill horizon exceeds Redis TTL precision', () => {
+    const budget = new RedisDownstreamRetryBudget(new FakeRedis(), {
+      'ai-writing': {
+        ratePerSecond: 1e-13,
+        burst: 1,
+        expectedAttemptMs: 100,
+      },
+    });
+
+    expect(budget.isEnabled(operation)).toBe(false);
   });
 });

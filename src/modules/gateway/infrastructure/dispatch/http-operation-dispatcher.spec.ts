@@ -674,6 +674,55 @@ describe('HttpOperationDispatcher', () => {
     mockAgent.assertNoPendingInterceptors();
   });
 
+  it('counts only breaker-admitted HTTP actions as downstream first attempts', async () => {
+    const attempts = fakeDispatchAttempts();
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request').mockResolvedValue({
+      status: 500,
+      headers: {},
+      body: {},
+    });
+    const retryBudget = fakeDownstreamRetryBudget();
+    const circuitBreakers = (activeCircuitBreakers =
+      new DownstreamCircuitBreakers());
+    const dispatcher = createHttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      attempts.recorder,
+      undefined,
+      retryBudget.port,
+      () => 0,
+      circuitBreakers,
+    );
+
+    for (let index = 0; index < 20; index += 1) {
+      await dispatcher
+        .dispatch('writing.task1.grade', gradeInput, {
+          ...context(),
+          requestId: `first-${index}`,
+        })
+        .catch(() => undefined);
+    }
+    for (let index = 0; index < 100; index += 1) {
+      await dispatcher
+        .dispatch('writing.task1.grade', gradeInput, {
+          ...context(),
+          requestId: `breaker-refused-${index}`,
+        })
+        .catch(() => undefined);
+    }
+
+    expect(request).toHaveBeenCalledTimes(20);
+    expect(retryBudget.recordFirstAttempt).toHaveBeenCalledTimes(20);
+    expect(await getMetrics()).toContain(
+      'aihub_breaker_state{operation="writing.task1.grade"} 1',
+    );
+  });
+
   it('checks the breaker again after retry admission and stops before a second send', async () => {
     const attempts = fakeDispatchAttempts();
     const refused = Object.assign(new Error('connection refused'), {

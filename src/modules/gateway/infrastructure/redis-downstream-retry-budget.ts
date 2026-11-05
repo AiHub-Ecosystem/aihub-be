@@ -11,6 +11,7 @@ import type { RedisGatewayClient } from './redis-gateway.client';
 
 const WINDOW_MS = 60_000;
 const KEY_TTL_SECONDS = 120;
+const MAX_REDIS_TTL_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
 const OPERATION_RETRY_RATIO = 0.1;
 
 export interface DownstreamRetryServiceBucket {
@@ -84,8 +85,8 @@ export class RedisDownstreamRetryBudget implements DownstreamRetryBudgetPort {
   ) {}
 
   isEnabled(operation: OperationId): boolean {
-    return (
-      this.serviceBuckets[OPERATION_CATALOG[operation].downstream] !== undefined
+    return validBucket(
+      this.serviceBuckets[OPERATION_CATALOG[operation].downstream],
     );
   }
 
@@ -150,7 +151,7 @@ export class RedisDownstreamRetryBudget implements DownstreamRetryBudgetPort {
         this.serviceKey(downstream),
         String(bucket.ratePerSecond),
         String(bucket.burst),
-        String(KEY_TTL_SECONDS),
+        String(serviceBucketTtlSeconds(bucket)),
       );
       if (serviceResult === 1) return 'admitted';
       return serviceResult === 0 ? 'exhausted' : 'unavailable';
@@ -172,13 +173,26 @@ export class RedisDownstreamRetryBudget implements DownstreamRetryBudgetPort {
 function validBucket(
   bucket: DownstreamRetryServiceBucket | undefined,
 ): bucket is DownstreamRetryServiceBucket {
+  if (
+    bucket === undefined ||
+    !Number.isFinite(bucket.ratePerSecond) ||
+    bucket.ratePerSecond <= 0 ||
+    !Number.isSafeInteger(bucket.burst) ||
+    bucket.burst <= 0 ||
+    !Number.isSafeInteger(bucket.expectedAttemptMs) ||
+    bucket.expectedAttemptMs <= 0
+  ) {
+    return false;
+  }
+  const ttlSeconds = serviceBucketTtlSeconds(bucket);
   return (
-    bucket !== undefined &&
-    Number.isFinite(bucket.ratePerSecond) &&
-    bucket.ratePerSecond > 0 &&
-    Number.isSafeInteger(bucket.burst) &&
-    bucket.burst > 0 &&
-    Number.isSafeInteger(bucket.expectedAttemptMs) &&
-    bucket.expectedAttemptMs > 0
+    Number.isSafeInteger(ttlSeconds) && ttlSeconds <= MAX_REDIS_TTL_SECONDS
+  );
+}
+
+function serviceBucketTtlSeconds(bucket: DownstreamRetryServiceBucket): number {
+  return Math.max(
+    KEY_TTL_SECONDS,
+    Math.ceil(bucket.burst / bucket.ratePerSecond),
   );
 }

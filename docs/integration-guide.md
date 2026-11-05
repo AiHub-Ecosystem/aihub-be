@@ -1426,7 +1426,12 @@ attempt is returned as a replay. A different body is never retryable and carries
 no hint.
 
 Client errors are not stored. If a request fails validation, you may fix the
-body and reuse the same key.
+body and reuse the same key. Retry admission runs before body validation, so a
+validation error can count as a keyed first attempt or a same-key repeat. The
+low-volume allowance still permits one repeat; further same-key corrections
+can receive `429 RATE_LIMITED`. A same-key request admitted before a later
+`QUOTA_EXCEEDED` or `CONCURRENCY_LIMIT` refusal also consumes its repeat slot.
+Honor `Retry-After` before repeating.
 
 An API key is checked once, when a request arrives. A request admitted before
 its key expired or was revoked runs to completion and is billed once; it is not
