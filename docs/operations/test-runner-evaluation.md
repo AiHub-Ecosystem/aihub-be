@@ -8,7 +8,7 @@ The prototype ran Vitest 5.0.5 alongside the then-current Jest 29 + `@swc/jest` 
 
 At that time `pnpm test` and the coverage lanes used Jest. The Vitest output went to `coverage/runner-evaluation/vitest` and did not overwrite `coverage/unit`.
 
-The Vitest prototype, its Jest-versus-Vitest benchmark harness, and their `test:vitest:spike`, `test:runner-benchmark`, and `benchmark:test-runners` scripts were removed in [#1577](https://github.com/AiHub-Ecosystem/aihub-be/issues/1577), after #1019 decided to keep Jest. The measurements below are the record. To repeat the comparison, recover the harness from commit `ea060fc7`, the last one that has it. `pnpm test:node-runner-probe` still runs.
+The Vitest prototype, its Jest-versus-Vitest benchmark harness, and their `test:vitest:spike`, `test:runner-benchmark`, and `benchmark:test-runners` scripts were removed in [#1577](https://github.com/AiHub-Ecosystem/aihub-be/issues/1577), after #1019 decided to keep Jest. The measurements below are the record. To repeat the comparison, recover the harness from commit `ea060fc7`, the last one that has it. The Node runner probe described below and its `test:node-runner-probe` script were removed afterwards; recover them from commit `d3ed2576`, the last one that has them.
 
 ## Compatibility
 
@@ -46,7 +46,7 @@ Vitest's [coverage guide](https://vitest.dev/guide/coverage) describes its V8 an
 
 ## Node built-in runner probe
 
-`pnpm test:node-runner-probe` runs the same two pure Writing domain assertions as `writing-chart-upload.spec.ts`, using Node's built-in `node:test` and TypeScript type stripping. Measured on Node 24.21.0 / Windows x64 after one warm-up per runner, with five alternating samples. Jest ran in-band; RSS is the sampled sum of the process tree working sets at 50 ms intervals.
+The probe (`test:node-runner-probe`, removed; see above) ran the same two pure Writing domain assertions as `writing-chart-upload.spec.ts`, using Node's built-in `node:test` and TypeScript type stripping. Measured on Node 24.21.0 / Windows x64 after one warm-up per runner, with five alternating samples. Jest ran in-band; RSS is the sampled sum of the process tree working sets at 50 ms intervals.
 
 | Runner           | Total median |       Range | Peak RSS median | Peak RSS range |
 | ---------------- | -----------: | ----------: | --------------: | -------------: |
