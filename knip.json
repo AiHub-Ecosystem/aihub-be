@@ -85,12 +85,6 @@
     // Hand-written types for scripts/checks/jest-worker-cap.cjs — same reason:
     // Jest reaches it through jest.config.cjs, outside the TypeScript graph.
     "scripts/checks/jest-worker-cap.d.cts",
-    // The runner benchmark resolves this evaluation config dynamically at
-    // runtime, so Knip cannot see the edge from the benchmark harness.
-    "scripts/ops/test-runner-benchmark/jest.config.cjs",
-    // Type declaration for the shared ESM target list; Knip does not follow
-    // TypeScript's adjacent-declaration lookup from the .mjs import.
-    "scripts/ops/test-runner-benchmark/targets.d.mts",
     // Hand-written types for Vault's PgBouncer budget module; Knip does not
     // follow TypeScript's adjacent-declaration lookup from the .mjs import.
     "ops/vault/pgbouncer-budget.d.mts",
