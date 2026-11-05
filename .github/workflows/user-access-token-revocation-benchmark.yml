@@ -52,7 +52,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test percentile summary
-        run: node --import tsx --test scripts/ops/user-access-token-revocation-benchmark/summary.spec.ts
+        run: node --import tsx --test scripts/ops/user-access-token-revocation-benchmark/summary.spec.mjs
 
       - name: Generate runtime Prisma client
         run: node scripts/generate/generate-prisma-client.mjs --runtime

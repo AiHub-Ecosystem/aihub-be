@@ -167,23 +167,30 @@ interface DatabaseSnapshot {
 }
 
 async function snapshotDatabase(pool: Pool): Promise<DatabaseSnapshot> {
-  const [indexes, database] = await Promise.all([
-    pool.query<{ index_scans: string }>(`
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_stat_clear_snapshot()');
+    const indexes = await client.query<{ index_scans: string }>(`
       SELECT COALESCE(sum(idx_scan), 0)::text AS index_scans
       FROM pg_stat_user_indexes
       WHERE relname IN ('user_accounts', 'user_access_token_revocations')
-    `),
-    pool.query<{ blocks_hit: string; blocks_read: string }>(`
+    `);
+    const database = await client.query<{
+      blocks_hit: string;
+      blocks_read: string;
+    }>(`
       SELECT blks_hit::text AS blocks_hit, blks_read::text AS blocks_read
       FROM pg_stat_database
       WHERE datname = current_database()
-    `),
-  ]);
-  return {
-    indexScans: Number(indexes.rows[0]?.index_scans ?? 0),
-    blocksHit: Number(database.rows[0]?.blocks_hit ?? 0),
-    blocksRead: Number(database.rows[0]?.blocks_read ?? 0),
-  };
+    `);
+    return {
+      indexScans: Number(indexes.rows[0]?.index_scans ?? 0),
+      blocksHit: Number(database.rows[0]?.blocks_hit ?? 0),
+      blocksRead: Number(database.rows[0]?.blocks_read ?? 0),
+    };
+  } finally {
+    client.release();
+  }
 }
 
 function databaseDelta(before: DatabaseSnapshot, after: DatabaseSnapshot) {
@@ -346,6 +353,7 @@ async function main(): Promise<void> {
       [ISSUER, 'unrevoked-plan-sample', new Date()],
     );
     const queryPlan = queryPlanResult.rows[0]?.['QUERY PLAN']?.[0] ?? null;
+    await pool.query('SELECT pg_stat_reset()');
     const modes = [
       ['baseline', 'account-status guard; revocation read omitted'],
       ['exact', 'current guard; indexed exact revocation lookup'],
@@ -370,8 +378,10 @@ async function main(): Promise<void> {
       if (warmup.errorCount > 0) {
         throw new Error(`${route} warmup had request errors`);
       }
+      await sleep(1_100);
       const before = await snapshotDatabase(pool);
       const latency = await runLoad(probe.baseUrl, route, DURATION_SECONDS);
+      await sleep(1_100);
       const after = await snapshotDatabase(pool);
       if (latency.errorCount > 0) {
         throw new Error(
@@ -407,6 +417,8 @@ async function main(): Promise<void> {
         database: {
           version: databaseVersion,
           host: 'isolated local PostgreSQL service',
+          statsSampling:
+            'counters reset after seed and query plan; waited 1.1 seconds before each snapshot to flush backend statistics',
           queryPlan,
         },
         runner: {

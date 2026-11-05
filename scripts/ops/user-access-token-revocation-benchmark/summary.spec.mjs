@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { percentile, summarizeLatency } from './summary';
+import { percentile, summarizeLatency } from './summary.ts';
 
 void test('percentile uses nearest-rank without mutating the sample order', () => {
   const samples = [9, 1, 4, 2, 7];

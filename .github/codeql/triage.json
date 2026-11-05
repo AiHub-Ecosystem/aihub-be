@@ -137,6 +137,12 @@
       "path": "scripts/generate/refresh-provider-contract.mjs",
       "fingerprint": "fffe73e28af19e40:1",
       "reason": "Developer script writes a fetched provider contract to a fixed repository path for review before commit."
+    },
+    {
+      "ruleId": "js/missing-rate-limiting",
+      "path": "scripts/ops/user-access-token-revocation-benchmark/benchmark.ts",
+      "fingerprint": "9ca133322ec2dbc0:1",
+      "reason": "The authenticated probe binds to an ephemeral loopback port in the isolated benchmark workflow; it accepts only synthetic tokens and is unreachable from network clients."
     }
   ]
 }
