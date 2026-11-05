@@ -171,6 +171,26 @@ const microGradeRequest = {
  * budget also precedes quota so its refusal takes priority over a replay; these
  * checks and concurrency admission now run inside GradedPipelineEngine.
  */
+// Only a deadline to fail fast: a request blocked behind the hanging provider
+// would otherwise wait out the 30 s provider deadline. It is far above any
+// runner slowdown, so it never decides the outcome of a healthy run.
+const BLOCKED_AFTER_MS = 5_000;
+
+async function completesWhileSpeakingHangs<T>(work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const blocked = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('blocked while AI Speaking hangs')),
+      BLOCKED_AFTER_MS,
+    );
+  });
+  try {
+    return await Promise.race([work, blocked]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const EXPECTED_ORDER = [
   'ApiKeyGuard',
   'UserIdentityGuard',
@@ -320,18 +340,24 @@ describe('graded request chain', () => {
   it('keeps Core Auth and Writing grading responsive while AI Speaking hangs', async () => {
     const client = app.get(DownstreamHttpClient);
     const controllers = Array.from({ length: 10 }, () => new AbortController());
+    let speakingSettled = 0;
+    const markSettled = (): void => {
+      speakingSettled += 1;
+    };
     const stalled = controllers.map((controller, index) =>
-      client.request(
-        { method: 'POST', path: '/simulate-provider-hang', body: {} },
-        {
-          downstream: 'ai-speaking',
-          requestId: `req_slow_speaking_${index}`,
-          deadlineMs: 30_000,
-          signal: controller.signal,
-        },
-      ),
+      client
+        .request(
+          { method: 'POST', path: '/simulate-provider-hang', body: {} },
+          {
+            downstream: 'ai-speaking',
+            requestId: `req_slow_speaking_${index}`,
+            deadlineMs: 30_000,
+            signal: controller.signal,
+          },
+        )
+        .then(markSettled, markSettled),
     );
-    const settled = Promise.allSettled(stalled);
+    const settled = Promise.all(stalled);
 
     try {
       seedAccount(authState, {
@@ -340,39 +366,43 @@ describe('graded request chain', () => {
         username: 'student',
         passwordHash: 'stored-password-hash',
       });
-      const authStartedAt = performance.now();
-      const auth = await app.inject({
-        method: 'POST',
-        url: '/v1/auth/login',
-        headers: { 'content-type': 'application/json' },
-        payload: {
-          email: 'student@example.test',
-          password: 'correct-password',
-        },
-      });
+      const auth = await completesWhileSpeakingHangs(
+        app.inject({
+          method: 'POST',
+          url: '/v1/auth/login',
+          headers: { 'content-type': 'application/json' },
+          payload: {
+            email: 'student@example.test',
+            password: 'correct-password',
+          },
+        }),
+      );
       expect(auth.statusCode).toBe(200);
       expect(auth.headers['set-cookie']).toBeDefined();
-      expect(performance.now() - authStartedAt).toBeLessThan(20);
 
-      const writingStartedAt = performance.now();
-      const writing = await app.inject({
-        method: 'POST',
-        url: '/v1/ielts/writing/task1/grade',
-        headers: { 'idempotency-key': 'slow-speaking-isolation' },
-        payload: {
-          question: task1Request.question,
-          chart_type: task1Request.topic,
-          essay: task1Request.essay,
-          image_url: task1Request.url,
-        },
-      });
+      const writing = await completesWhileSpeakingHangs(
+        app.inject({
+          method: 'POST',
+          url: '/v1/ielts/writing/task1/grade',
+          headers: { 'idempotency-key': 'slow-speaking-isolation' },
+          payload: {
+            question: task1Request.question,
+            chart_type: task1Request.topic,
+            essay: task1Request.essay,
+            image_url: task1Request.url,
+          },
+        }),
+      );
       expect(writing.statusCode).toBe(200);
-      expect(performance.now() - writingStartedAt).toBeLessThan(20);
+
+      // Both finished while every Speaking request was still hanging.
+      expect(speakingSettled).toBe(0);
     } finally {
       controllers.forEach((controller) => controller.abort());
       await settled;
     }
-  });
+    expect(speakingSettled).toBe(controllers.length);
+  }, 15_000);
 
   it('authenticates BFF grading requests with the shared client secret', async () => {
     const response = await app.inject({
