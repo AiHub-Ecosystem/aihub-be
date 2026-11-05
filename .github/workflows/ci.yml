@@ -903,11 +903,13 @@ jobs:
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
             | node scripts/ci/check-production-compose-logs.cjs
 
-      - name: Check trusted proxy matches the pinned backend gateway
+      - name: Validate production Compose defaults and trusted proxy
         env:
           AIHUB_EMAIL_SEND_RATE_LIMIT: "1"
           AIHUB_EMAIL_SEND_RATE_DURATION_MS: "1000"
           AIHUB_EMAIL_DAILY_SEND_BUDGET: "80"
+          # Existing production env files may predate the optional pooler role ID.
+          AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE: ""
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \

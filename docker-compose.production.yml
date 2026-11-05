@@ -177,7 +177,7 @@ services:
       SKIP_CHOWN: "true"
       SKIP_SETCAP: "true"
     volumes:
-      - ${AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE:?AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE is required}:/run/secrets/vault/role_id:ro
+      - ${AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE:-/srv/aihub/secrets/vault-role-id-pgbouncer}:/run/secrets/vault/role_id:ro
       - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
       - ./ops/vault/agent/aihub-pgbouncer.hcl:/etc/aihub/vault/agent.hcl:ro
       - ./ops/vault/templates/pgbouncer.ini.ctmpl:/etc/aihub/vault/pgbouncer.ini.ctmpl:ro

@@ -92,6 +92,10 @@ Vault; the PgBouncer Agent renders its configuration and per-app credentials to
 `AIHUB_PGBOUNCER_SECRETS_HOST_DIR`, separate from the application secret mount.
 Create that host directory with owner UID/GID `10001` and mode `0700`. Never
 place backend credentials in Compose or source.
+The PgBouncer Vault role-ID path defaults to
+`/srv/aihub/secrets/vault-role-id-pgbouncer`, so existing `.env.production`
+files can continue loading Compose with the pooler profile disabled. Set
+`AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE` when the host stores that file elsewhere.
 
 After the rollout gate is met, start and verify the pooler profile before
 enabling it for app containers:
