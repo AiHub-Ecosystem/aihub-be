@@ -29,11 +29,33 @@ class PgBouncerProbeController {
   ) {}
 
   @Get('prepared/:value')
-  async prepared(@Param('value') value: string): Promise<{ value: string }> {
-    const rows = await this.runtime.prisma.$queryRaw<{ value: string }[]>`
-      SELECT ${value}::text AS value
-    `;
-    return { value: rows[0]?.value ?? '' };
+  async prepared(@Param('value') value: string): Promise<{
+    value: string;
+    prepared: boolean;
+    timeouts: { statement: string; lock: string; idleTransaction: string };
+  }> {
+    return this.runtime.prisma.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRaw<{ value: string }[]>`
+        SELECT ${value}::text AS value
+      `;
+      const statements = await transaction.$queryRaw<{ statement: string }[]>`
+        SELECT statement
+        FROM pg_prepared_statements
+        WHERE statement LIKE '%SELECT $1::text AS value%'
+      `;
+      const [timeouts] = await transaction.$queryRaw<
+        { statement: string; lock: string; idleTransaction: string }[]
+      >`
+        SELECT current_setting('statement_timeout') AS statement,
+               current_setting('lock_timeout') AS lock,
+               current_setting('idle_in_transaction_session_timeout') AS "idleTransaction"
+      `;
+      return {
+        value: rows[0]?.value ?? '',
+        prepared: statements.length > 0,
+        timeouts: timeouts!,
+      };
+    });
   }
 
   @Post('write/:id')
@@ -46,10 +68,16 @@ class PgBouncerProbeController {
 
   @Post('sleep-and-write/:id')
   async sleepAndWrite(@Param('id') id: string): Promise<{ saved: true }> {
-    await this.runtime.prisma.$queryRaw`
-      SELECT pg_sleep(${SLEEP_SECONDS}) /* aihub_pgbouncer_http_probe */
-    `;
-    return this.write(id);
+    return this.runtime.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT true AS waited
+        FROM pg_sleep(${SLEEP_SECONDS}) /* aihub_pgbouncer_http_probe */
+      `;
+      await transaction.$executeRaw`
+        INSERT INTO aihub_pgbouncer_http_probe (id) VALUES (${id})
+      `;
+      return { saved: true };
+    });
   }
 }
 
@@ -60,6 +88,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
   let app: NestFastifyApplication;
   let adminPool: Pool;
   let holderPool: Pool;
+  let runtimePool: PrismaClientHolder['pool'];
   let restoreEnvironment: () => void;
 
   beforeAll(async () => {
@@ -72,15 +101,12 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
       max: 2,
       connectionTimeoutMillis: 1_000,
       query_timeout: 3_000,
-      statement_timeout: 2_500,
     });
     await adminPool.query(`
       CREATE TABLE IF NOT EXISTS aihub_pgbouncer_http_probe (
         id text PRIMARY KEY
       )
     `);
-    await adminPool.query('TRUNCATE aihub_pgbouncer_http_probe');
-
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [PgBouncerProbeController],
@@ -90,6 +116,12 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
     );
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    runtimePool = app.get<PrismaClientHolder>(RUNTIME_PRISMA_CLIENT).pool;
+  });
+
+  beforeEach(async () => {
+    if (PGBOUNCER_URL === undefined) return;
+    await adminPool.query('TRUNCATE aihub_pgbouncer_http_probe');
   });
 
   afterAll(async () => {
@@ -101,6 +133,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
   });
 
   it('uses prepared parameters and rejects app-pool waiters within one second', async () => {
+    expect(runtimePool.options.max).toBe(1);
     const preparedOne = await app.inject({
       method: 'GET',
       url: '/__test/pgbouncer/prepared/first',
@@ -109,8 +142,16 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
       method: 'GET',
       url: '/__test/pgbouncer/prepared/second',
     });
-    expect(preparedOne.json()).toEqual({ value: 'first' });
-    expect(preparedTwo.json()).toEqual({ value: 'second' });
+    expect(preparedOne.json()).toEqual({
+      value: 'first',
+      prepared: true,
+      timeouts: { statement: '4s', lock: '1s', idleTransaction: '10s' },
+    });
+    expect(preparedTwo.json()).toEqual({
+      value: 'second',
+      prepared: true,
+      timeouts: { statement: '4s', lock: '1s', idleTransaction: '10s' },
+    });
 
     const holderId = ulid();
     const waiterId = ulid();
@@ -127,7 +168,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
     });
     expect(performance.now() - startedAt).toBeLessThan(1_000);
     expectUnavailable(response);
-    await holder;
+    expect((await holder).json()).toEqual({ saved: true });
 
     expect(await storedIds(adminPool)).toEqual([holderId]);
     await expectNoActiveQuery(adminPool, HTTP_PROBE_SQL);
@@ -137,7 +178,10 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
       url: '/__test/pgbouncer/prepared/recovered',
     });
     expect(recovered.statusCode).toBe(200);
-    expect(recovered.json()).toEqual({ value: 'recovered' });
+    expect(recovered.json()).toMatchObject({
+      value: 'recovered',
+      prepared: true,
+    });
   });
 
   it('returns retryable unavailability while PgBouncer has no backend slots', async () => {
@@ -166,7 +210,40 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
       url: '/__test/pgbouncer/prepared/backend-recovered',
     });
     expect(recovered.statusCode).toBe(200);
-    expect(recovered.json()).toEqual({ value: 'backend-recovered' });
+    expect(recovered.json()).toMatchObject({
+      value: 'backend-recovered',
+      prepared: true,
+    });
+  });
+
+  it('keeps combined app-checkout and PgBouncer wait within one second', async () => {
+    const holders = [1, 2].map(() =>
+      holderPool.query(
+        `SELECT pg_sleep(${SLEEP_SECONDS}) /* ${BACKEND_HOLDER_SQL} */`,
+      ),
+    );
+    await waitForActiveQuery(adminPool, BACKEND_HOLDER_SQL, 2);
+
+    const first = app.inject({
+      method: 'POST',
+      url: `/__test/pgbouncer/write/${ulid()}`,
+    });
+    await waitForApplicationPoolBorrow(runtimePool);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const startedAt = performance.now();
+    const second = await app.inject({
+      method: 'POST',
+      url: `/__test/pgbouncer/write/${ulid()}`,
+    });
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+    expectUnavailable(second);
+    expectUnavailable(await first);
+
+    await Promise.all(holders);
+    expect(await storedIds(adminPool)).toEqual([]);
+    await expectNoActiveQuery(adminPool, BACKEND_HOLDER_SQL);
+    await expectNoOrphanBackends(adminPool);
   });
 });
 
@@ -201,6 +278,17 @@ function withApplicationName(databaseUrl: string): string {
   const url = new URL(databaseUrl);
   url.searchParams.set('application_name', POOLER_APPLICATION_NAME);
   return url.toString();
+}
+
+async function waitForApplicationPoolBorrow(
+  pool: PrismaClientHolder['pool'],
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (pool.totalCount === 1 && pool.idleCount === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('the first HTTP request did not acquire its app pool client');
 }
 
 async function waitForActiveQuery(

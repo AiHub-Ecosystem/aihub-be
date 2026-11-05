@@ -88,7 +88,7 @@ describe('createSharedPrismaClients', () => {
     });
 
     const pool = clients.runtime.pool;
-    expect(pool.options.connectionTimeoutMillis).toBe(750);
+    expect(pool.options.connectionTimeoutMillis).toBe(250);
     expect(pool.options.idleTimeoutMillis).toBe(30_000);
 
     await clients.close();
@@ -115,6 +115,27 @@ describe('createSharedPrismaClients', () => {
           10_000,
         );
       }
+    } finally {
+      await clients.close();
+    }
+  });
+
+  it('leaves timeout enforcement to PgBouncer for transaction-pooled clients', async () => {
+    const clients = createSharedPrismaClients({
+      databaseUrl: equal,
+      controlPlaneDatabaseUrl: equal,
+      controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
+      databasePoolerEnabled: true,
+    });
+
+    try {
+      expect(clients.runtime.pool.options.statement_timeout).toBeUndefined();
+      expect(clients.runtime.pool.options.lock_timeout).toBeUndefined();
+      expect(
+        clients.runtime.pool.options.idle_in_transaction_session_timeout,
+      ).toBeUndefined();
+      expect(clients.runtime.pool.options.connectionTimeoutMillis).toBe(250);
     } finally {
       await clients.close();
     }

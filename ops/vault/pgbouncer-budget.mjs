@@ -9,6 +9,10 @@ const BUDGET_FIELDS = [
   'headroom_approved_by',
   'headroom_evidence',
   'headroom_approved_at',
+  'cluster_client_inventory_approved_by',
+  'cluster_client_inventory_evidence',
+  'cluster_client_inventory_approved_at',
+  'capacity_evidence_valid_through',
   'max_client_conn',
   'admin_password',
   'stats_password',
@@ -17,6 +21,7 @@ const BUDGET_FIELDS = [
 ];
 
 const DATABASE_FIELDS = [
+  'application',
   'host',
   'port',
   'database',
@@ -31,10 +36,17 @@ const DATABASE_FIELDS = [
 ];
 
 const APPROVAL_FIELDS = ['approved_by', 'evidence', 'approved_at'];
+const REQUIRED_APPLICATIONS = [
+  'aihub-be',
+  'ai-writing',
+  'ai-speaking',
+  'ai-portal',
+];
 
 /** @param {unknown} value @returns {asserts value is Record<string, unknown>} */
-export function validatePgBouncerBundle(value) {
+export function validatePgBouncerBundle(value, aihubRuntimePoolMax) {
   requireFields(value, BUDGET_FIELDS);
+  requirePositiveInteger(aihubRuntimePoolMax);
   requirePositiveInteger(value.max_connections);
   if (value.max_connections !== 100) {
     throw new Error(
@@ -53,6 +65,13 @@ export function validatePgBouncerBundle(value) {
     'headroom_evidence',
     'headroom_approved_at',
   );
+  requireApproval(
+    value,
+    'cluster_client_inventory_approved_by',
+    'cluster_client_inventory_evidence',
+    'cluster_client_inventory_approved_at',
+  );
+  requireCurrentDate(value.capacity_evidence_valid_through);
   requirePositiveInteger(value.max_client_conn);
   requirePassword(value.admin_password);
   requirePassword(value.stats_password);
@@ -92,13 +111,23 @@ export function validatePgBouncerBundle(value) {
 
   let backendConnections = 0;
   let clientConnections = 0;
-  const usernames = new Set([
+  let aihubRuntimeClientConnections = 0;
+  /** @type {Map<string, { application: string, password: string }>} */
+  const credentialsByUsername = new Map();
+  /** @type {Set<string>} */
+  const applications = new Set();
+  const adminUsers = new Set([
     'aihub_pgbouncer_admin',
     'aihub_pgbouncer_metrics',
   ]);
   for (const [alias, database] of databaseEntries) {
     requireIdentifier(alias);
     requireFields(database, DATABASE_FIELDS);
+    requireIdentifier(database.application);
+    if (!REQUIRED_APPLICATIONS.includes(database.application)) {
+      throw new Error('PgBouncer alias application is invalid');
+    }
+    applications.add(database.application);
     requireAddress(database.host);
     requirePositiveInteger(database.port);
     if (database.port > 65_535) throw new Error('database port is invalid');
@@ -109,6 +138,9 @@ export function validatePgBouncerBundle(value) {
       throw new Error('alias client cap cannot be lower than its backend cap');
     }
     requirePositiveInteger(database.client_pool_max);
+    if (database.application === 'aihub-be') {
+      aihubRuntimeClientConnections += database.client_pool_max;
+    }
     requirePositiveInteger(database.max_process_overlap);
     requireApproval(database, 'approved_by', 'evidence', 'approved_at');
     if (
@@ -126,13 +158,44 @@ export function validatePgBouncerBundle(value) {
       requireFields(user, ['username', 'password']);
       requireIdentifier(user.username);
       requirePassword(user.password);
-      if (usernames.has(user.username)) {
-        throw new Error('database aliases must use separate credentials');
+      if (adminUsers.has(user.username)) {
+        throw new Error(
+          'application credentials cannot use pooler admin users',
+        );
       }
-      usernames.add(user.username);
+      const existingCredential = credentialsByUsername.get(user.username);
+      if (
+        existingCredential !== undefined &&
+        existingCredential.application !== database.application
+      ) {
+        throw new Error('PgBouncer application credentials must be separate');
+      }
+      if (
+        existingCredential !== undefined &&
+        existingCredential.password !== user.password
+      ) {
+        throw new Error(
+          'PgBouncer aliases must reuse the same application credential',
+        );
+      }
+      credentialsByUsername.set(user.username, {
+        application: database.application,
+        password: user.password,
+      });
     }
     backendConnections += database.max_db_connections;
     clientConnections += database.max_db_client_connections;
+  }
+
+  if (
+    REQUIRED_APPLICATIONS.some((application) => !applications.has(application))
+  ) {
+    throw new Error('all four AIHUB application budgets are required');
+  }
+  if (aihubRuntimeClientConnections !== aihubRuntimePoolMax) {
+    throw new Error(
+      'AIHUB runtime pool caps must match the approved PgBouncer aliases',
+    );
   }
 
   if (clientConnections + 2 !== value.max_client_conn) {
@@ -238,6 +301,14 @@ function requireDate(value) {
     date.toISOString().slice(0, 10) !== value
   ) {
     throw new Error('capacity approval date is invalid');
+  }
+}
+
+/** @param {unknown} value @returns {asserts value is string} */
+function requireCurrentDate(value) {
+  requireDate(value);
+  if (value < new Date().toISOString().slice(0, 10)) {
+    throw new Error('capacity evidence is expired');
   }
 }
 

@@ -198,7 +198,19 @@ if (existsSync(poolerBundlePath)) {
     fail('credential bundle cannot be read: database-pooler.json');
   }
   try {
-    validatePgBouncerBundle(poolerBundle);
+    const runtimePoolMax = [
+      'AIHUB_POSTGRES_POOL_MAX_RUNTIME',
+      'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE',
+      'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ',
+      'AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET',
+    ].reduce((sum, name) => {
+      const value = Number(process.env[name]);
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`${name} is required when provisioning PgBouncer`);
+      }
+      return sum + value;
+    }, 0);
+    validatePgBouncerBundle(poolerBundle, runtimePoolMax);
   } catch (error) {
     fail(
       `credential bundle has an invalid schema: database-pooler.json (${error instanceof Error ? error.message : 'invalid budget'})`,

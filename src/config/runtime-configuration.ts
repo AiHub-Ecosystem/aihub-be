@@ -418,6 +418,7 @@ interface RuntimeLoadStep {
 
 export interface RuntimeConnectionConfiguration {
   readonly databaseUrl: string | undefined;
+  readonly databasePoolerEnabled: boolean;
   readonly poolConnections: {
     readonly runtime: number | undefined;
     readonly 'control-plane': number | undefined;
@@ -771,6 +772,7 @@ export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfigurat
   const configuration = getRuntimeConfiguration();
   return Object.freeze({
     databaseUrl: configuration.DATABASE_URL,
+    databasePoolerEnabled: configuration.AIHUB_DATABASE_POOLER_ENABLED,
     poolConnections: {
       runtime: configuration.AIHUB_POSTGRES_POOL_MAX_RUNTIME,
       'control-plane': configuration.AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE,

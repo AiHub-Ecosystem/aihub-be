@@ -146,17 +146,26 @@ missing. The operator CLI and migration entrypoint always select direct URLs.
 `database-pooler.json` is a separate strict bundle. It contains the measured
 `max_connections` (currently held at 100), dated evidence for reserved slots,
 owner-approved operational headroom, a `max_client_conn` cap, separate
-PgBouncer admin/stats credentials, every direct client's owner-approved pool
-maximum and process overlap, and at least four database aliases. Each alias
-records its target host/database, `max_db_connections`, approved client pool
-maximum and process overlap, a per-alias client cap, owner evidence, and its
-own database users/passwords. The validator checks that alias client caps equal
-pool maximum times overlap, `max_client_conn` includes all alias caps plus the
-admin/stats slots, and backend caps plus direct clients and headroom fit under
-the PostgreSQL connection budget after reserved slots. No target cap is implied
-by historical measurements; owner evidence is required before this bundle can
-be provisioned. The separate `aihub-{environment}-pgbouncer` AppRole can read
-only this bundle; the application runtime identity cannot read it.
+PgBouncer admin/stats credentials, an owner-approved attestation that the direct
+clients and aliases cover the complete cluster-client inventory, an
+owner-approved `capacity_evidence_valid_through` date, and every direct client's
+approved pool maximum and process overlap. Expired capacity evidence blocks
+provisioning. Each alias names one
+of `aihub-be`, `ai-writing`, `ai-speaking`, or `ai-portal` and records its target host/database,
+`max_db_connections`, approved client pool maximum and process overlap, a
+per-alias client cap, owner evidence, and its database users/passwords. All four
+AIHUB application budgets must be present. One app may reuse its existing
+credential across its aliases; different apps must use separate existing
+credentials. This does not create or change PostgreSQL roles. The validator
+checks that the sum of the four configured `AIHUB_POSTGRES_POOL_MAX_*` values
+matches the AIHUB BE aliases' `client_pool_max` values, that alias client caps
+equal pool maximum times overlap,
+`max_client_conn` includes all alias caps plus admin/stats slots, and backend
+caps plus direct clients and headroom fit under the PostgreSQL connection
+budget after reserved slots. No target cap is implied by historical
+measurements; owner evidence is required before this bundle can be provisioned.
+The separate `aihub-{environment}-pgbouncer` AppRole can read only this bundle;
+the application runtime identity cannot read it.
 
 Use a dedicated Redis ACL user limited to the two keys the limiter touches: the
 pacing key `aihub:resend:email-send-rate:last-reservation-ms` and the

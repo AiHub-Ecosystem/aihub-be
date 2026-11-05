@@ -57,12 +57,12 @@ Keep client and backend limits separate:
 
 - Sum app-to-PgBouncer client pool caps across maximum replica overlap and keep the total within instance `max_client_conn`. Bound per-alias client queues with `max_db_client_connections`.
 - Set `max_db_connections` on each app-specific logical database alias. This is a hard cap per alias, not a cluster-wide cap; statically verify the sum of every alias cap plus direct-client pool maxima and approved operational headroom fits under measured `max_connections` after PostgreSQL reserved slots.
-- Bound app-side checkout wait, client connection establishment, and PgBouncer backend wait so a saturated request returns retryable `DATABASE_UNAVAILABLE` within one second end to end. `connectionTimeoutMillis` covers new client connection establishment only; it does not bound the PgBouncer server queue or an app pool's full checkout queue. Set `query_wait_timeout` below one second with room for the complete response deadline, and prove timed-out work does not execute later.
+- Bound app-side checkout and connection establishment to 250 ms, and PgBouncer backend wait to 250 ms, so their sequential worst case leaves time for a saturated request to return retryable `DATABASE_UNAVAILABLE` within one second end to end. `connectionTimeoutMillis` alone does not bound both queues. PgBouncer applies the request `statement_timeout`, `lock_timeout`, and `idle_in_transaction_session_timeout` on each backend; the transaction-pooled client must not send those as startup parameters. Prove the combined queue case returns within one second and timed-out work does not execute later.
 
 Before production rollout:
 
-1. Record fresh dated PostgreSQL settings and host CPU, RAM, swap, and available memory. Keep `max_connections = 100` and other server settings unchanged unless workload evidence and written shared-cluster-owner approval justify a change.
-2. Obtain written, dated budgets from the owners of all four AIHUB applications and every other client of the cluster, plus a newly agreed operational/monitoring reserve. Record approver, amount, evidence, and date. Unknown or unbounded direct clients block rollout.
+1. Record fresh dated PostgreSQL settings and host CPU, RAM, swap, and available memory. The shared-cluster owner must set `capacity_evidence_valid_through` in the pooler bundle; provisioning rejects it after that date. Keep `max_connections = 100` and other server settings unchanged unless workload evidence and written shared-cluster-owner approval justify a change.
+2. Obtain written, dated budgets from the owners of all four AIHUB applications and every other client of the cluster, plus a newly agreed operational/monitoring reserve. Have the shared-cluster owner attest that the enumerated aliases and direct clients cover the complete client inventory; record approver, amount, evidence, and date. Unknown or unbounded direct clients block rollout.
 3. Derive each application's cap from configured pool maxima and the largest supported process overlap. Include up to three AIHUB application containers during cutover; include a migration connection and any backup still running if they can overlap; include a scheduled CLI connection when it can overlap. Keep migration and CLI pools at `max = 1`; only one CLI operator command may run at a time. Do not assume suspending scheduled jobs drains a backup already in progress.
 4. Sum each PgBouncer alias `max_db_connections`, direct-client pool maxima across their own process overlaps, configured PostgreSQL reserved slots, and approved headroom against the fresh `max_connections` measurement. Separately verify the sum of app client caps against `max_client_conn` and set bounded `max_db_client_connections` queues.
 5. Route the four AIHUB runtime applications through one PgBouncer endpoint in the production Compose topology with `pool_mode = transaction`; PostgreSQL remains external to that Compose project. Keep migration and administrative clients on direct URLs with explicit `max = 1`. Use existing Vault secret delivery and do not add a shared static credential to Compose or source. PgBouncer aliases enforce quotas only; PostgreSQL role isolation remains in #298.
@@ -900,6 +900,10 @@ must not contain `sandbox-assertion.json`. Keep the directory mode `0700` and
 remove it after installing the helper-generated `vault-role-id` at
 `VAULT_ROLE_ID_FILE`. When the optional PgBouncer role is provisioned, read its
 role ID directly to the protected host path without printing it:
+
+Before provisioning `database-pooler.json`, export the four approved
+`AIHUB_POSTGRES_POOL_MAX_*` values used by Compose. The helper checks that their
+sum matches the AIHUB BE aliases' approved client pool maxima.
 
 ```sh
 umask 077

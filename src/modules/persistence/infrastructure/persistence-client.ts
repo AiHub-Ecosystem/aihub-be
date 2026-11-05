@@ -65,6 +65,7 @@ export interface PrismaClientHolder {
 
 export interface PrismaClientUrls {
   readonly poolConnections?: Partial<Record<PostgresConnectionRole, number>>;
+  readonly databasePoolerEnabled?: boolean;
   readonly databaseUrl: string | undefined;
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;

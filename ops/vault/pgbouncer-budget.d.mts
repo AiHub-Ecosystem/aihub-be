@@ -1,1 +1,4 @@
-export function validatePgBouncerBundle(value: unknown): void;
+export function validatePgBouncerBundle(
+  value: unknown,
+  aihubRuntimePoolMax: number,
+): void;

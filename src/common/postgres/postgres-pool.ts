@@ -29,7 +29,7 @@ export const REQUEST_POSTGRES_TIMEOUTS = {
 export const QUERY_TIMEOUT_MARGIN_MS = 1_000;
 
 /** Leaves time for PgBouncer's queue timeout and the HTTP error response. */
-export const POSTGRES_ACQUISITION_TIMEOUT_MS = 750;
+export const POSTGRES_ACQUISITION_TIMEOUT_MS = 250;
 
 export const OPERATOR_POSTGRES_TIMEOUTS = {
   statement_timeout: 300_000,
@@ -206,15 +206,17 @@ class TransactionSafePool extends Pool {
   private guard(client: PoolClient, onRelease: () => void): PoolClient {
     const release = client.release.bind(client);
     let released = false;
+    const releaseSlot = () => {
+      if (released) return;
+      released = true;
+      onRelease();
+    };
     client.release = (error?: Error | boolean): void => {
       if (error !== undefined && error !== false) {
         try {
           release(error);
         } finally {
-          if (!released) {
-            released = true;
-            onRelease();
-          }
+          releaseSlot();
         }
         return;
       }
@@ -223,10 +225,7 @@ class TransactionSafePool extends Pool {
         try {
           release();
         } finally {
-          if (!released) {
-            released = true;
-            onRelease();
-          }
+          releaseSlot();
         }
         return;
       }
@@ -234,10 +233,7 @@ class TransactionSafePool extends Pool {
       try {
         release(internalError('PostgreSQL connection left a transaction open'));
       } finally {
-        if (!released) {
-          released = true;
-          onRelease();
-        }
+        releaseSlot();
       }
     };
     return client;
@@ -339,6 +335,7 @@ export function postgresPoolOptions(
   databaseUrl: string,
   max: number,
   timeouts: PostgresTimeouts = REQUEST_POSTGRES_TIMEOUTS,
+  transactionPoolerEnabled = false,
 ): PoolConfig {
   const statementTimeoutMs = timeouts.statement_timeout;
   return {
@@ -346,7 +343,7 @@ export function postgresPoolOptions(
     max,
     connectionTimeoutMillis: POSTGRES_ACQUISITION_TIMEOUT_MS,
     idleTimeoutMillis: 30_000,
-    ...timeouts,
+    ...(!transactionPoolerEnabled ? timeouts : {}),
     // statement_timeout is enforced by the server, so a server that stops
     // answering on an open connection would hold the query forever.
     ...(typeof statementTimeoutMs === 'number'

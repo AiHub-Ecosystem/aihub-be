@@ -513,7 +513,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1' >/dev/null"
+          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1; ALTER ROLE aihub SET statement_timeout TO 4000; ALTER ROLE aihub SET lock_timeout TO 1000; ALTER ROLE aihub SET idle_in_transaction_session_timeout TO 10000' >/dev/null"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -536,8 +536,11 @@ jobs:
           DEFAULT_POOL_SIZE: "20"
           MAX_DB_CONNECTIONS: "2"
           MAX_PREPARED_STATEMENTS: "100"
-          QUERY_WAIT_TIMEOUT: "0.5"
           LISTEN_PORT: "5432"
+        # edoburu's env bridge omits query_wait_timeout; append it after its
+        # entrypoint renders the config and before PgBouncer starts.
+        command: >-
+          /bin/sh -ec 'printf "\nquery_wait_timeout = 0.25\n" >> /etc/pgbouncer/pgbouncer.ini && exec /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini'
         ports:
           - 6432:5432
         options: >-
