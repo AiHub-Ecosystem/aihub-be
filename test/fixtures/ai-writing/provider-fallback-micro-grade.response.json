@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "message": "Lỗi parse JSON hoặc validate từ AI. Trả về kết quả mặc định rỗng.",
+  "data": {
+    "score": 0,
+    "comment": ""
+  },
+  "usage": {
+    "input_tokens": 650,
+    "output_tokens": 80,
+    "total_tokens": 730,
+    "cost": 0.00045
+  },
+  "metrics": {
+    "ai_processing_ms": 1120
+  }
+}

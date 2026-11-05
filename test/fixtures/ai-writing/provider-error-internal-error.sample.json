@@ -1,0 +1,13 @@
+{
+  "source": "AI Writing team response on issue #1489; scrubbed example, not a live capture.",
+  "status": 500,
+  "headers": {},
+  "body": {
+    "success": false,
+    "status_code": 500,
+    "error_code": "internal_error",
+    "message": "Failed to communicate with OpenRouter upstream LLM provider.",
+    "detail": "Failed to communicate with OpenRouter upstream LLM provider.",
+    "details": null
+  }
+}

@@ -17,7 +17,10 @@ import {
 } from '@/contracts/writing/v2/exercises';
 import { contractViolation } from '@/downstream/contract-violation';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
-import type { DownstreamRequest } from '@/downstream/downstream.types';
+import type {
+  DownstreamErrorHint,
+  DownstreamRequest,
+} from '@/downstream/downstream.types';
 import { requiredSpeakingIdentityHeaders } from '@/downstream/speaking/speaking-grading.adapter';
 
 function jsonRequest(
@@ -114,7 +117,14 @@ function parseLongWritingExerciseResponse(
 function parseWritingExerciseError(
   status: number,
   body: unknown,
-): { code: 'INVALID_REQUEST'; message: string; retryable: false } | undefined {
+): DownstreamErrorHint | undefined {
+  if (status === 504) {
+    return {
+      code: 'AI_SERVICE_TIMEOUT',
+      message: 'AI service request timed out',
+      retryable: true,
+    };
+  }
   return status === 400 &&
     isRecord(body) &&
     body.error_code === 'invalid_request'

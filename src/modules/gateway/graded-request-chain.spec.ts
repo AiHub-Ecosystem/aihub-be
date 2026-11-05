@@ -88,6 +88,29 @@ function fixture(name: string): Record<string, unknown> {
   >;
 }
 
+function providerFailureSample(name: string) {
+  const sample = fixture(name);
+  if (
+    typeof sample.status !== 'number' ||
+    typeof sample.headers !== 'object' ||
+    sample.headers === null ||
+    Array.isArray(sample.headers) ||
+    typeof sample.body !== 'object' ||
+    sample.body === null ||
+    Array.isArray(sample.body)
+  ) {
+    throw new Error('provider failure sample is incomplete');
+  }
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(sample.headers)) {
+    if (typeof value !== 'string') {
+      throw new Error('provider failure sample has an invalid header');
+    }
+    headers[key] = value;
+  }
+  return { status: sample.status, headers, body: sample.body };
+}
+
 const task1Request = fixture('grade-task1.request.json') as {
   question: string;
   url: string;
@@ -103,6 +126,39 @@ const microExerciseRequest = {
   prompt: 'Use the target form.',
   question_type: 'grammar',
   comments: [{ quote: 'She go.', explanation: 'Use agreement.' }],
+};
+
+const longWritingExerciseRequest = {
+  topic: 'education',
+  writing_task: 2,
+  errors: [
+    {
+      criterion: 'grammatical_range_accuracy',
+      error_code: 'GRA01',
+      prompt: 'Use the target form.',
+      question_type: 'grammar',
+      comments: [{ quote: 'She go.', explanation: 'Use agreement.' }],
+    },
+    {
+      criterion: 'coherence_cohesion',
+      error_code: 'CC01',
+      prompt: 'Connect the ideas.',
+      question_type: 'cohesion',
+      comments: [{ quote: 'Also,', explanation: 'Link the clauses.' }],
+    },
+  ],
+};
+
+const microGradeRequest = {
+  exercise_type: 'short_writing',
+  instruction: 'Write one sentence.',
+  question_no: 1,
+  question_text: 'Use a conjunction.',
+  question_image: null,
+  hint: [],
+  sample_answer: 'I stayed home because it rained.',
+  ai_grading_rubric: 'Uses a correct conjunction.',
+  user_answer: 'I stayed home because it rained.',
 };
 
 /**
@@ -374,6 +430,80 @@ describe('graded request chain', () => {
     });
     expect(response.body).not.toContain('Dữ liệu yêu cầu');
     expect(response.body).not.toContain('provider-added-code');
+  });
+
+  it('maps provider failures on every exercise route to sanitized public errors', async () => {
+    const routes = [
+      {
+        key: 'micro',
+        publicPath: '/v2/ielts/writing/micro-exercises',
+        providerPath: '/v2/create-micro-exercise',
+        payload: microExerciseRequest,
+      },
+      {
+        key: 'long-writing',
+        publicPath: '/v2/ielts/writing/long-writing-exercises',
+        providerPath: '/v2/create-longwriting-exercise',
+        payload: longWritingExerciseRequest,
+      },
+      {
+        key: 'micro-grade',
+        publicPath: '/v2/ielts/writing/micro-exercises/grade',
+        providerPath: '/v2/grading-micro-exercise',
+        payload: microGradeRequest,
+      },
+    ] as const;
+    const failures = [
+      {
+        fixture: 'provider-error-rate-limited.sample.json',
+        status: 503,
+        code: 'AI_SERVICE_THROTTLED',
+        providerMessage: 'Too many requests. Please wait before retrying.',
+        retryAfter: '30',
+      },
+      {
+        fixture: 'provider-error-internal-error.sample.json',
+        status: 502,
+        code: 'AI_SERVICE_ERROR',
+        providerMessage:
+          'Failed to communicate with OpenRouter upstream LLM provider.',
+        retryAfter: undefined,
+      },
+      {
+        fixture: 'provider-error-timeout.sample.json',
+        status: 504,
+        code: 'AI_SERVICE_TIMEOUT',
+        providerMessage:
+          'Operation timed out after 60 seconds. Please try again.',
+        retryAfter: undefined,
+      },
+    ] as const;
+
+    let requestNumber = 0;
+    for (const route of routes) {
+      for (const failure of failures) {
+        const sample = providerFailureSample(failure.fixture);
+        mockAgent
+          .get('https://ai-writing.test')
+          .intercept({ method: 'POST', path: route.providerPath })
+          .reply(sample.status, sample.body, { headers: sample.headers });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: route.publicPath,
+          headers: { 'idempotency-key': `exercise-error-${requestNumber}` },
+          payload: route.payload,
+        });
+
+        expect(response.statusCode).toBe(failure.status);
+        expect(response.json()).toMatchObject({
+          error: { code: failure.code, retryable: true },
+        });
+        expect(response.body).not.toContain(failure.providerMessage);
+        expect(response.headers['retry-after']).toBe(failure.retryAfter);
+        requestNumber += 1;
+      }
+    }
   });
 
   it('returns the public timeout error when exercise creation exceeds its deadline', async () => {

@@ -1,0 +1,17 @@
+{
+  "source": "AI Writing team response on issue #1489; scrubbed example, not a live capture.",
+  "status": 429,
+  "headers": {
+    "retry-after": "30"
+  },
+  "body": {
+    "success": false,
+    "status_code": 429,
+    "error_code": "rate_limited",
+    "message": "Too many requests. Please wait before retrying.",
+    "detail": "Too many requests. Please wait before retrying.",
+    "details": {
+      "retry_after_seconds": 30
+    }
+  }
+}
