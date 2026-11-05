@@ -88,17 +88,15 @@ export class SandboxAssertionController {
     // Identifies who minted what, without the assertion itself: the token is a
     // credential, and one in a log file outlives the request that made it. The
     // request id is what joins this line to the rest of the request's trail.
-    this.logger.log(
-      JSON.stringify({
-        event: 'sandbox_assertion_minted',
-        requestId: context.requestId,
-        organizationId: authenticated.organizationId,
-        apiKeyId: authenticated.apiKeyId,
-        userId: minted.userId,
-        jti: minted.jti,
-        expiresAt: minted.expiresAt,
-      }),
-    );
+    this.logger.log({
+      event: 'sandbox_assertion_minted',
+      requestId: context.requestId,
+      organizationId: authenticated.organizationId,
+      apiKeyId: authenticated.apiKeyId,
+      userId: minted.userId,
+      jti: minted.jti,
+      expiresAt: minted.expiresAt,
+    });
 
     // The proxy operations report downstream and gateway timings for a call
     // that reached an AI service. This one reaches none, and zeroed downstream

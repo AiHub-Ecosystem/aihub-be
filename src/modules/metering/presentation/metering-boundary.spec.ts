@@ -121,12 +121,10 @@ describe('metering request boundary', () => {
             retry_after_ms: expect.closeTo(1_499.5, -3) as unknown,
           },
         });
-        expect(logger).toHaveBeenCalledWith(
-          JSON.stringify({
-            event: 'postgres_timeout',
-            timeout,
-          }),
-        );
+        expect(logger).toHaveBeenCalledWith({
+          event: 'postgres_timeout',
+          timeout,
+        });
         const logged = JSON.stringify(logger.mock.calls);
         expect(logged).not.toContain('UPDATE organizations');
         expect(logged).not.toContain('secret-sql-param');
@@ -174,9 +172,7 @@ describe('metering request boundary', () => {
           retry_after_ms: expect.closeTo(1_499.5, -3) as unknown,
         },
       });
-      expect(logger).toHaveBeenCalledWith(
-        JSON.stringify({ event: 'postgres_unavailable' }),
-      );
+      expect(logger).toHaveBeenCalledWith({ event: 'postgres_unavailable' });
       expect(JSON.stringify(send.mock.calls)).not.toContain('db.internal');
       expect(JSON.stringify(logger.mock.calls)).not.toContain('db.internal');
     } finally {

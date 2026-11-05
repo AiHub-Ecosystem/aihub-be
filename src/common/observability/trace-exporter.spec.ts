@@ -42,9 +42,9 @@ describe('trace exporter outage signals', () => {
     fail();
 
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]?.[0])).not.toContain(
-      'sensitive receiver response',
-    );
+    expect(warn.mock.calls[0]?.[0]).toEqual({
+      event: 'otlp_trace_export_failed',
+    });
     const after = await getMetrics();
     expect(metricValue(after, 'aihub_otel_export_failures_total')).toBe(
       failuresBefore + 2,

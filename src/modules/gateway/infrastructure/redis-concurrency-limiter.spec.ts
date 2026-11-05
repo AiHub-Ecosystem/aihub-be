@@ -54,15 +54,15 @@ class FailingRedis implements RedisConcurrencyClient {
 }
 
 class FakeLogger {
-  readonly warnings: string[] = [];
-  readonly logs: string[] = [];
+  readonly warnings: Record<string, unknown>[] = [];
+  readonly logs: Record<string, unknown>[] = [];
 
-  warn(message: string): void {
-    this.warnings.push(message);
+  warn(fields: Record<string, unknown>): void {
+    this.warnings.push(fields);
   }
 
-  log(message: string): void {
-    this.logs.push(message);
+  log(fields: Record<string, unknown>): void {
+    this.logs.push(fields);
   }
 }
 
@@ -333,8 +333,8 @@ describe('RedisConcurrencyLimiter', () => {
       }),
     ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
     expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).not.toContain('org_secret');
-    expect(logger.warnings[0]).not.toContain('req_secret');
+    expect(JSON.stringify(logger.warnings[0])).not.toContain('org_secret');
+    expect(JSON.stringify(logger.warnings[0])).not.toContain('req_secret');
 
     current = healthy;
     await limiter.acquire({

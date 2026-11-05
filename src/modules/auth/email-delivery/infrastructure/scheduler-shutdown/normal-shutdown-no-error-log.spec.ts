@@ -17,8 +17,8 @@ describe('EmailOutboxPollerScheduler during normal shutdown', () => {
       await closing;
     });
 
-    expect(error).not.toHaveBeenCalledWith(
-      expect.stringContaining('email outbox pass failed'),
-    );
+    expect(error).not.toHaveBeenCalledWith({
+      event: 'email_outbox_pass_failed',
+    });
   });
 });

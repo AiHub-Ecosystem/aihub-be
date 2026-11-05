@@ -20,8 +20,8 @@ export type RedisQuotaCounterClient = Pick<
 >;
 
 interface LoggerLike {
-  warn(message: string): void;
-  log(message: string): void;
+  warn(fields: Record<string, unknown>): void;
+  log(fields: Record<string, unknown>): void;
 }
 
 export function quotaKeyForMonth(

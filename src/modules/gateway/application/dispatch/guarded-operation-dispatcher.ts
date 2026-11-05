@@ -77,7 +77,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     private readonly attempts: DispatchAttemptRecordPort,
     private readonly sandbox: SandboxAdmission,
     private readonly observer: DispatchObserverPort,
-    private readonly warn: (message: string) => void,
+    private readonly warn: (event: string) => void,
   ) {}
 
   async dispatch<O extends OperationId>(
@@ -197,7 +197,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     try {
       await this.attempts.recordOutcome(attemptId, outcome);
     } catch {
-      this.warn('Dispatch attempt outcome could not be recorded');
+      this.warn('dispatch_attempt_outcome_not_recorded');
     }
   }
 }

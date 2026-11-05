@@ -30,7 +30,7 @@ function sandboxBudgetUnavailable(): AppError {
 export class SandboxAdmission {
   constructor(
     private readonly budget: SandboxDispatchBudgetPort | undefined,
-    private readonly warn: (message: string) => void,
+    private readonly warn: (event: string) => void,
   ) {}
 
   async admit(context: RequestContext): Promise<SandboxReservation> {
@@ -78,9 +78,7 @@ export class SandboxAdmission {
     requestId: string,
   ): Promise<void> {
     await budget.release(requestId).catch(() => {
-      this.warn(
-        'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
-      );
+      this.warn('sandbox_dispatch_reservation_release_failed');
     });
   }
 }

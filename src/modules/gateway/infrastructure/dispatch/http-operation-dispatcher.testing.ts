@@ -31,7 +31,7 @@ export function createHttpOperationDispatcher(
   circuitBreakers = new DownstreamCircuitBreakers(),
 ): OperationDispatcherPort {
   const logger = new Logger(DISPATCHER_LOG_CONTEXT);
-  const warn = (message: string): void => logger.warn(message);
+  const warn = (event: string): void => logger.warn({ event });
   return new GuardedOperationDispatcher(
     new HttpOperationTransport(
       httpClient,

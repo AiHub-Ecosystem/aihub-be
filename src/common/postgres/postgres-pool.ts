@@ -151,13 +151,11 @@ export function createPostgresPool(
       // An observability failure must not keep the connection in the pool.
     }
     try {
-      logger.warn(
-        JSON.stringify({
-          event: 'postgres_connection_discarded',
-          pool: name,
-          transaction_status: transactionStatus,
-        }),
-      );
+      logger.warn({
+        event: 'postgres_connection_discarded',
+        pool: name,
+        transaction_status: transactionStatus,
+      });
     } catch {
       // An observability failure must not keep the connection in the pool.
     }
@@ -182,13 +180,11 @@ export function createPostgresPool(
       // An observability failure must not make a database error unhandled.
     }
     try {
-      logger.error(
-        JSON.stringify({
-          event: 'postgres_pool_error',
-          pool: name,
-          sqlstate_class: sqlstateClass,
-        }),
-      );
+      logger.error({
+        event: 'postgres_pool_error',
+        pool: name,
+        sqlstate_class: sqlstateClass,
+      });
     } catch {
       // An observability failure must not make a database error unhandled.
     }

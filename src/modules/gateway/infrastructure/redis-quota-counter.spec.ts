@@ -49,15 +49,15 @@ class FailingRedis implements RedisQuotaCounterClient {
 }
 
 class FakeLogger {
-  readonly warnings: string[] = [];
-  readonly logs: string[] = [];
+  readonly warnings: Record<string, unknown>[] = [];
+  readonly logs: Record<string, unknown>[] = [];
 
-  warn(message: string): void {
-    this.warnings.push(message);
+  warn(fields: Record<string, unknown>): void {
+    this.warnings.push(fields);
   }
 
-  log(message: string): void {
-    this.logs.push(message);
+  log(fields: Record<string, unknown>): void {
+    this.logs.push(fields);
   }
 }
 

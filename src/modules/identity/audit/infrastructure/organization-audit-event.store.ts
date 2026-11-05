@@ -127,10 +127,10 @@ export async function recordOrganizationAuditDenial(
     await recordOrganizationAuditEvent(client, stamp, draft);
   } catch {
     logger.error({
-      message: 'Organization audit denial was not recorded',
-      organizationId: stamp.organizationId,
+      event: 'organization_audit_denial_not_recorded',
+      organization_id: stamp.organizationId,
       action: draft.action,
-      requestId: stamp.requestId,
+      request_id: stamp.requestId,
     });
   }
 }

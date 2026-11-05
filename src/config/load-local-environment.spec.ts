@@ -57,10 +57,14 @@ describe('loadLocalEnvironment', () => {
 
       expect(loadSpy).not.toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Refusing to load'),
-      );
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(mode));
+      const [loggedLine] = (errorSpy.mock.calls as unknown[][])[0] ?? [];
+      expect(typeof loggedLine).toBe('string');
+      expect(JSON.parse(loggedLine as string)).toMatchObject({
+        level: 'error',
+        event: 'local_env_file_refused',
+        mode,
+        env_file: join(directory, '.env'),
+      });
     }
   });
 

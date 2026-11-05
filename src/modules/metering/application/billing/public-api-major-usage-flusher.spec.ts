@@ -115,7 +115,7 @@ describe('PublicApiMajorUsageFlusher', () => {
     buffer.record(sample('2026-10-28T10:00:06Z'));
     await flusher.flush();
 
-    expect(reports).toEqual(['public API major usage flush failed']);
+    expect(reports).toEqual(['public_api_major_usage_flush_failed']);
     expect(
       repository.writes.map(({ write }) => [
         write.batch,
@@ -229,7 +229,7 @@ describe('PublicApiMajorUsageFlusher', () => {
     await flusher.finish(1_000);
 
     expect(repository.writes).toEqual([]);
-    expect(reports).toEqual(['public API major usage flush failed']);
+    expect(reports).toEqual(['public_api_major_usage_flush_failed']);
   });
 
   it('stops waiting for a last write that does not settle in time', async () => {
@@ -244,7 +244,7 @@ describe('PublicApiMajorUsageFlusher', () => {
       await finishing;
 
       expect(repository.writes).toEqual([]);
-      expect(reports).toEqual(['public API major usage final flush timed out']);
+      expect(reports).toEqual(['public_api_major_usage_final_flush_timed_out']);
     } finally {
       jest.useRealTimers();
     }
