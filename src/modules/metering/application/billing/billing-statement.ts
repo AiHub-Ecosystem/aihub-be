@@ -26,7 +26,7 @@ export type BillingStatementErrorCode =
 /**
  * How far a multi-Organization close got before it failed (#1618). Closing is
  * one transaction per Organization, so the ones before the failure stay closed
- * and a re-run closes the rest. Organization ids only.
+ * and a re-run closes the rest. It holds ids only, no totals.
  */
 export interface BillingCloseProgress {
   readonly closed: readonly string[];
