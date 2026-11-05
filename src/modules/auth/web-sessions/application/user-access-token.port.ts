@@ -11,7 +11,6 @@ export interface VerifiedUserAccessToken {
   readonly userId: string;
   readonly issuer: string;
   readonly jti: string;
-  readonly expiresAt: Date;
   readonly validUntil: Date;
 }
 

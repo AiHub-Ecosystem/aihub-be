@@ -2,6 +2,7 @@ import { type KeyObject, generateKeyPairSync, randomUUID } from 'node:crypto';
 
 import { SignJWT } from 'jose';
 
+import type { RequestLogStream } from '@/common/observability/request-logger';
 import { seedAccount } from '@/modules/auth/testing/in-memory-auth.state';
 import {
   type LocalAuthTestContext,
@@ -9,11 +10,28 @@ import {
   createLocalAuthTestContext,
 } from '@/modules/auth/testing/local-auth.controller.spec-support';
 import { JoseUserAccessTokenService } from '@/modules/auth/web-sessions/infrastructure/jose-user-access-token.service';
+import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const ISSUER = 'https://api.test.aihub.example.com';
 const AUDIENCE = 'aihub-user-api';
 const KEY_ID = 'user-access-test';
 const OTHER_USER_ID = 'usr_01J00000000000000000000001';
+
+class CapturedLog implements RequestLogStream {
+  private readonly lines: string[] = [];
+
+  write(line: string): void {
+    this.lines.push(line);
+  }
+
+  reset(): void {
+    this.lines.length = 0;
+  }
+
+  text(): string {
+    return this.lines.join('');
+  }
+}
 
 async function signedToken(
   privateKey: KeyObject,
@@ -54,6 +72,7 @@ describe('User Access JWT revocation HTTP boundary', () => {
   let context: LocalAuthTestContext;
   let verifier: JoseUserAccessTokenService;
   let privateKey: KeyObject;
+  const requestLogs = new CapturedLog();
 
   beforeAll(async () => {
     const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -68,7 +87,11 @@ describe('User Access JWT revocation HTTP boundary', () => {
       expiresInSeconds: 900,
       clockSkewSeconds: 60,
     });
-    context = await createLocalAuthTestContext(verifier);
+    context = await createLocalAuthTestContext(
+      verifier,
+      requestLogs,
+      registerRequestCompletionLog,
+    );
   });
 
   afterAll(async () => {
@@ -77,6 +100,7 @@ describe('User Access JWT revocation HTTP boundary', () => {
 
   beforeEach(() => {
     context.reset();
+    requestLogs.reset();
     seedAccount(context.state, {
       userId: USER_ID,
       email: 'person@example.com',
@@ -133,6 +157,8 @@ describe('User Access JWT revocation HTTP boundary', () => {
       },
     ]);
     expect(JSON.stringify(records)).not.toContain(target);
+    expect(requestLogs.text()).toContain('"event":"request_completed"');
+    expect(requestLogs.text()).not.toContain(target);
   });
 
   it('allows revoking the current Bearer JWT once, then rejects that JWT normally', async () => {

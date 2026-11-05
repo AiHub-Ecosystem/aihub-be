@@ -29,7 +29,6 @@ describe('UserAccessJwtGuard', () => {
     userId: 'usr_01J00000000000000000000000',
     issuer: 'https://api.test.aihub.example.com',
     jti: 'jti_01',
-    expiresAt: new Date(Date.now() + 900_000),
     validUntil: new Date(Date.now() + 960_000),
   };
 

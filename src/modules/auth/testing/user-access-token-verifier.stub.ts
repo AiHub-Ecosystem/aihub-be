@@ -11,12 +11,10 @@ export function verifiedUserAccessToken(
   userId: string,
   jti: string,
 ): VerifiedUserAccessToken {
-  const expiresAt = new Date(Date.now() + 900_000);
   return {
     userId,
     issuer: 'https://api.test.aihub.example.com',
     jti,
-    expiresAt,
-    validUntil: new Date(expiresAt.getTime() + 60_000),
+    validUntil: new Date(Date.now() + 960_000),
   };
 }

@@ -4,10 +4,15 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import type { FastifyInstance } from 'fastify';
 
 import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import {
+  type RequestLogStream,
+  createRequestLogging,
+} from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import type {
@@ -284,6 +289,8 @@ export interface LocalAuthTestContext {
 
 export async function createLocalAuthTestContext(
   accessTokenVerifierOverride?: UserAccessTokenVerifierPort,
+  requestLogStream?: RequestLogStream,
+  configureFastify?: (fastify: FastifyInstance) => void,
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -358,12 +365,16 @@ export async function createLocalAuthTestContext(
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({
       ...createAppFastifyProxyOptions('172.16.7.1'),
+      ...(requestLogStream === undefined
+        ? {}
+        : createRequestLogging(requestLogStream)),
       genReqId: () => generateRequestId(),
     }),
   );
   const fastify = app.getHttpAdapter().getInstance();
   await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
   registerSecurityHeaders(fastify);
+  configureFastify?.(fastify);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 

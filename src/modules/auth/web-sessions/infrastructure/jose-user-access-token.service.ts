@@ -151,7 +151,6 @@ export class JoseUserAccessTokenService
         userId: payload.sub,
         issuer: payload.iss,
         jti: payload.jti,
-        expiresAt: new Date(payload.exp * 1000),
         validUntil: new Date(
           (payload.exp + this.config.clockSkewSeconds) * 1000,
         ),
