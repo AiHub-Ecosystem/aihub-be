@@ -931,3 +931,37 @@ tests:
               summary: "AIHUB process CPU use is near its 1.5 CPU limit"
               description: "aihub-production-app instance prod used at least 1.2 CPU for five minutes."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#process-cpu
+
+  # L.4 disk condition: 85% used fires after five minutes, 70% and tmpfs do not.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{job="aihub-production-node",host="production",mountpoint="/",fstype="ext4"}'
+        values: "100x10"
+      - series: 'node_filesystem_avail_bytes{job="aihub-production-node",host="production",mountpoint="/",fstype="ext4"}'
+        values: "15x10"
+      - series: 'node_filesystem_size_bytes{job="aihub-production-node",host="production",mountpoint="/data",fstype="ext4"}'
+        values: "100x10"
+      - series: 'node_filesystem_avail_bytes{job="aihub-production-node",host="production",mountpoint="/data",fstype="ext4"}'
+        values: "30x10"
+      - series: 'node_filesystem_size_bytes{job="aihub-production-node",host="production",mountpoint="/run",fstype="tmpfs"}'
+        values: "100x10"
+      - series: 'node_filesystem_avail_bytes{job="aihub-production-node",host="production",mountpoint="/run",fstype="tmpfs"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AIHUBHostDiskAbove80Percent
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AIHUBHostDiskAbove80Percent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-production-node
+              host: production
+              mountpoint: /
+              fstype: ext4
+            exp_annotations:
+              summary: "AIHUB host disk use is above 80%"
+              description: "production filesystem / is above the 80% disk threshold."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#host-disk
