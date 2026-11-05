@@ -106,6 +106,13 @@ out.
   exercise requests can use the existing authenticated chart upload flow.
   `writing.grade` remains supported.
 
+## [1.8.0] - 2026-11-05
+
+### Added
+
+- `POST /v1/auth/user-access-tokens/revoke` lets an authenticated user revoke
+  one of their User Access JWTs before expiry.
+
 ## [1.5.0] - 2026-10-30
 
 ### Changed

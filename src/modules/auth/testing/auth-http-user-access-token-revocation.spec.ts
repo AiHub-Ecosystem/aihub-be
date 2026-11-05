@@ -207,36 +207,35 @@ describe('User Access JWT revocation HTTP boundary', () => {
   });
 
   it('keeps a revocation active through the verifier skew boundary', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
-    try {
-      const target = await accessToken();
-      const sibling = await accessToken();
-      const claims = await verifier.verify(target);
-      await revoke(sibling, target);
+    const target = await accessToken();
+    const sibling = await accessToken();
+    const claims = await verifier.verify(target);
+    await revoke(sibling, target);
 
-      const beforeBoundary = new Date(claims.validUntil.getTime() - 1);
-      jest.setSystemTime(beforeBoundary);
-      expect((await me(target)).statusCode).toBe(401);
-      await expect(
-        context.revocations.isRevoked({
-          issuer: claims.issuer,
-          jti: claims.jti,
-          now: beforeBoundary,
-        }),
-      ).resolves.toBe(true);
+    expect((await me(target)).statusCode).toBe(401);
 
-      jest.setSystemTime(claims.validUntil);
-      await expect(
-        context.revocations.isRevoked({
-          issuer: claims.issuer,
-          jti: claims.jti,
-          now: claims.validUntil,
-        }),
-      ).resolves.toBe(true);
-      expect((await me(target)).statusCode).toBe(401);
-    } finally {
-      jest.useRealTimers();
-    }
+    const beforeBoundary = new Date(claims.validUntil.getTime() - 1);
+    await expect(
+      context.revocations.isRevoked({
+        issuer: claims.issuer,
+        jti: claims.jti,
+        now: beforeBoundary,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      context.revocations.isRevoked({
+        issuer: claims.issuer,
+        jti: claims.jti,
+        now: claims.validUntil,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      context.revocations.isRevoked({
+        issuer: claims.issuer,
+        jti: claims.jti,
+        now: new Date(claims.validUntil.getTime() + 1),
+      }),
+    ).resolves.toBe(false);
   });
 
   it('returns a retryable 503 and fails closed when revocation storage fails', async () => {
