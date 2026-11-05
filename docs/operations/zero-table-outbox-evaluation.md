@@ -56,7 +56,7 @@ An abrupt kill can leave a slot behind; the recovery steps below cover it.
 $env:AIHUB_EVAL_DB_PASSWORD = [guid]::NewGuid().ToString('N')
 docker run --rm -d --name aihub-outbox-eval `
   -e "POSTGRES_PASSWORD=$env:AIHUB_EVAL_DB_PASSWORD" -e POSTGRES_DB=aihub_outbox_eval `
-  -p 5442:5432 postgres:16-alpine `
+  -p 127.0.0.1:5442:5432 postgres:16-alpine `
   -c wal_level=logical -c max_replication_slots=5 -c max_wal_senders=5 `
   -c max_slot_wal_keep_size=256MB
 
@@ -70,10 +70,10 @@ container on a Windows host. Each used 10,000 synthetic events, a 1,000/s target
 and 32 producer connections. The table shows medians; host CPU ranged from
 98.7% to 100% across both modes.
 
-| Mode            | Committed events/s | Commit P50/P95/P99 (ms) | WAL bytes/event | Dead-tuple estimate | Relation bytes |
-| --------------- | -----------------: | ----------------------: | --------------: | ------------------: | -------------: |
-| Table polling   |                653 |    38.5 / 103.2 / 163.0 |           567.3 |               8,521 |        466,944 |
-| Logical message |                581 |    40.1 / 119.0 / 257.2 |           361.1 |                   — |              — |
+| Mode            | Committed events/s | Commit P50/P95/P99 (ms) | WAL bytes/s | WAL bytes/event | Dead-tuple estimate | Relation bytes |
+| --------------- | -----------------: | ----------------------: | ----------: | --------------: | ------------------: | -------------: |
+| Table polling   |                653 |    38.5 / 103.2 / 163.0 |     368,859 |           567.3 |               8,521 |        466,944 |
+| Logical message |                581 |    40.1 / 119.0 / 257.2 |     208,245 |           361.1 |                   — |              — |
 
 Neither mode sustained the 1,000/s target on this host. The logical path used
 about 36% fewer WAL bytes per event, but committed fewer events/s and had a

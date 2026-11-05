@@ -229,6 +229,7 @@ async function runScenario(
       latencies.map((value) => Number(value.toFixed(3))),
     ),
     walBytes,
+    walBytesPerSecond: Number(((walBytes * 1_000) / elapsedMs).toFixed(1)),
     walBytesPerEvent: Number((walBytes / consumed).toFixed(1)),
     deadTupleEstimate: tableStats ? Number(tableStats.n_dead_tup) : null,
     relationBytes: tableStats ? Number(tableStats.relation_bytes) : null,
