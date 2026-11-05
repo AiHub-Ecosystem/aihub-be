@@ -168,7 +168,10 @@ describe('JoseUserAccessTokenService', () => {
 
     await expect(service.verify(nextRelease)).resolves.toEqual({
       userId: 'usr_01J00000000000000000000000',
+      issuer: 'https://api.test.aihub.example.com',
       jti: 'jti',
+      expiresAt: new Date(1_800_000_900_000),
+      validUntil: new Date(1_800_000_960_000),
     });
   });
 

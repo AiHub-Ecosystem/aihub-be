@@ -12,7 +12,10 @@ import {
 } from '@/config/runtime-configuration';
 import { CreateOrganizationResponseSchema } from '@/contracts/organization/organization';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { NO_USER_ACCESS_TOKEN_REVOCATIONS } from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -143,13 +146,13 @@ describe('Self-serve Organization creation over HTTP', () => {
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         if (token === OWNER_TOKEN) {
-          return { userId: OWNER_ID, jti: 'jti_owner' };
+          return verifiedUserAccessToken(OWNER_ID, 'jti_owner');
         }
         if (token === OTHER_TOKEN) {
-          return { userId: OTHER_ID, jti: 'jti_other' };
+          return verifiedUserAccessToken(OTHER_ID, 'jti_other');
         }
         if (token === DISABLED_TOKEN) {
-          return { userId: DISABLED_ID, jti: 'jti_disabled' };
+          return verifiedUserAccessToken(DISABLED_ID, 'jti_disabled');
         }
         throw new Error('invalid token');
       },
@@ -167,6 +170,8 @@ describe('Self-serve Organization creation over HTTP', () => {
       .useValue(idempotency)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccounts)
       .compile();
@@ -346,7 +351,7 @@ describe('Self-serve Organization terms from injected configuration', () => {
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         if (token === OWNER_TOKEN) {
-          return { userId: OWNER_ID, jti: 'jti_owner' };
+          return verifiedUserAccessToken(OWNER_ID, 'jti_owner');
         }
         throw new Error('invalid token');
       },
@@ -365,6 +370,8 @@ describe('Self-serve Organization terms from injected configuration', () => {
       .useValue(idempotency)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccountStatus(() => 'active'))
       .compile();

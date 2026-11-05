@@ -26,6 +26,7 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -146,7 +147,7 @@ beforeAll(async () => {
       if (token !== 'valid.token.value') {
         throw new Error('invalid token');
       }
-      return { userId: ownerId, jti: 'jti_01' };
+      return verifiedUserAccessToken(ownerId, 'jti_01');
     },
   };
 

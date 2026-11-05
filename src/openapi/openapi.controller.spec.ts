@@ -9,6 +9,11 @@ import {
   latestPublicApiMajor,
 } from '@/catalog/public-api-majors';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import {
+  NO_USER_ACCESS_TOKEN_REVOCATIONS,
+  verifiedUserAccessToken,
+} from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { USER_ACCESS_TOKEN_VERIFIER } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import { registerRequestHooks } from '@/register-request-hooks';
@@ -30,8 +35,13 @@ describe('OpenApiController', () => {
         {
           provide: USER_ACCESS_TOKEN_VERIFIER,
           useValue: {
-            verify: async () => ({ userId: 'active-user', jti: 'test-token' }),
+            verify: async () =>
+              verifiedUserAccessToken('active-user', 'test-token'),
           },
+        },
+        {
+          provide: USER_ACCESS_TOKEN_REVOCATION_RECORD,
+          useValue: NO_USER_ACCESS_TOKEN_REVOCATIONS,
         },
         {
           provide: USER_ACCOUNT_REPOSITORY,

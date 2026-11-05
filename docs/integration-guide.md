@@ -125,6 +125,30 @@ queue is full or your request waits too long, AIHUB returns retryable
 `503 AUTH_ARGON2_CAPACITY` with `Retry-After` and `error.retry_after_ms`; wait
 for that interval before retrying the password operation.
 
+### Revoke one User Access JWT
+
+An active account can revoke one User Access JWT without ending its Refresh or
+Web Session. Send the target compact JWT in the body of
+`POST /v1/auth/user-access-tokens/revoke` with a valid User Access JWT as the
+Bearer credential:
+
+```http
+POST /v1/auth/user-access-tokens/revoke
+Authorization: Bearer <caller-user-access-jwt>
+Content-Type: application/json
+
+{"token":"<target-user-access-jwt>"}
+```
+
+AIHUB returns a bodyless `204`; only the target token is revoked, and a repeat
+also returns `204` while the caller remains authorized. The target may be the
+current Bearer token: that action succeeds, then later requests using that JWT
+receive the usual `401`. Invalid targets and tokens for another account share
+the generic invalid-token `401`. A Postgres outage returns retryable
+`503 DATABASE_UNAVAILABLE`. AIHUB stores only verified issuer and token-ID
+claims, never the compact JWT. Do not put either JWT in a URL, browser storage,
+telemetry, or logs.
+
 ## AIHUB account registration and email verification
 
 `POST /v1/auth/register` creates an AIHUB User Account that stays pending until

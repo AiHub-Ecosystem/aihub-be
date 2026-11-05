@@ -19,6 +19,11 @@ import { AppError } from './common/errors/app-error';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
 import { generateRequestId } from './common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from './modules/auth/accounts/application/user-account.port';
+import {
+  NO_USER_ACCESS_TOKEN_REVOCATIONS,
+  verifiedUserAccessToken,
+} from './modules/auth/testing/user-access-token-verifier.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from './modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { USER_ACCESS_TOKEN_VERIFIER } from './modules/auth/web-sessions/application/user-access-token.port';
 import { RUNTIME_CONNECTION_CONFIGURATION } from './modules/secrets/application/runtime-connection-configuration.port';
 import { buildOpenApiDocument } from './openapi/build-openapi-document';
@@ -129,7 +134,7 @@ describe('AppModule wiring', () => {
           ['disabled.payload.signature', 'disabled-user'],
         ]).get(token);
         if (!userId) throw new Error('invalid token');
-        return { userId, jti: 'test-token' };
+        return verifiedUserAccessToken(userId, 'test-token');
       }),
     });
     moduleBuilder.overrideProvider(USER_ACCOUNT_REPOSITORY).useValue({
@@ -137,6 +142,9 @@ describe('AppModule wiring', () => {
         userId === 'active-user' ? 'active' : 'disabled',
       ),
     });
+    moduleBuilder
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS);
     const moduleRef = await moduleBuilder.compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

@@ -22,6 +22,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | Organization                       | identity    | 21      |
 | PasswordResetToken                 | auth        | 7       |
 | RefreshToken                       | auth        | 9       |
+| UserAccessTokenRevocation          | auth        | 3       |
 | SandboxDispatchReservation         | gateway     | 6       |
 | SandboxAllowanceDefault            | gateway     | 2       |
 | SandboxAllowanceOverride           | gateway     | 3       |
@@ -320,6 +321,16 @@ Owner: `auth`
 | usedAt        | DateTime?   | @map("used_at") @db.Timestamptz(6)                                       |
 | revokedAt     | DateTime?   | @map("revoked_at") @db.Timestamptz(6)                                    |
 | userAccount   | UserAccount | @relation(fields: [userAccountId], references: [id], onUpdate: NoAction) |
+
+## UserAccessTokenRevocation
+
+Owner: `auth`
+
+| Column             | Type     | Attributes                                      |
+| ------------------ | -------- | ----------------------------------------------- |
+| issuer             | String   |                                                 |
+| jti                | String   |                                                 |
+| effectiveExpiresAt | DateTime | @map("effective_expires_at") @db.Timestamptz(6) |
 
 ## SandboxDispatchReservation
 

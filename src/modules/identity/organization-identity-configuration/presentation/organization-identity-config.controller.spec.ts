@@ -9,7 +9,12 @@ import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { ReadOrganizationIdentityConfigResponseSchema } from '@/contracts/organization/identity-config';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import {
+  NO_USER_ACCESS_TOKEN_REVOCATIONS,
+  verifiedUserAccessToken,
+} from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
@@ -172,7 +177,7 @@ describe('Organization identity configuration HTTP flow', () => {
         if (token !== 'valid.token.value') {
           throw new Error('invalid token');
         }
-        return { userId: USER_ID, jti: 'jti_01' };
+        return verifiedUserAccessToken(USER_ID, 'jti_01');
       },
     };
     const userAccounts = userAccountStatus();
@@ -202,6 +207,8 @@ describe('Organization identity configuration HTTP flow', () => {
       .useValue(tokenIssuer)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccounts)
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

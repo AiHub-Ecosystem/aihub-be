@@ -397,6 +397,20 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+/// One verified User Access JWT that is no longer accepted.
+///
+/// The record contains only verified identity claims and the accepted expiry.
+/// @owner auth
+model UserAccessTokenRevocation {
+  issuer               String
+  jti                  String
+  effectiveExpiresAt   DateTime @map("effective_expires_at") @db.Timestamptz(6)
+
+  @@id([issuer, jti], map: "user_access_token_revocations_pkey")
+  @@index([effectiveExpiresAt], map: "user_access_token_revocations_expiry_idx")
+  @@map("user_access_token_revocations")
+}
+
 /// One Sandbox dispatch reservation; the advisory lock on this table's month
 /// serialises the budget.
 ///

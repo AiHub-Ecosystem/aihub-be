@@ -15,7 +15,10 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { NO_USER_ACCESS_TOKEN_REVOCATIONS } from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -97,7 +100,7 @@ describe('organization invitation HTTP/application integration', () => {
         if (token !== 'valid.token.value') {
           throw new Error('invalid token');
         }
-        return { userId: USER_ID, jti: 'jti_01' };
+        return verifiedUserAccessToken(USER_ID, 'jti_01');
       },
     };
 
@@ -112,6 +115,8 @@ describe('organization invitation HTTP/application integration', () => {
       .useValue(emailSender)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccountStatus())
       .overrideProvider(ORGANIZATION_MEMBERSHIP)

@@ -16,7 +16,12 @@ import {
 } from '@/contracts/avatar/avatar';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
+import {
+  NO_USER_ACCESS_TOKEN_REVOCATIONS,
+  verifiedUserAccessToken,
+} from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -109,9 +114,9 @@ describe('Avatar upload HTTP flow', () => {
     const verifier: UserAccessTokenVerifierPort = {
       verify: async (token: string) => {
         if (token === 'valid.token.value')
-          return { userId: USER_ID, jti: 'jti_01' };
+          return verifiedUserAccessToken(USER_ID, 'jti_01');
         if (token === 'other.token.value')
-          return { userId: OTHER_USER_ID, jti: 'jti_02' };
+          return verifiedUserAccessToken(OTHER_USER_ID, 'jti_02');
         throw new Error('invalid token');
       },
     };
@@ -125,6 +130,8 @@ describe('Avatar upload HTTP flow', () => {
       .useValue(verifier)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccountStatus(() => accountStatus))
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

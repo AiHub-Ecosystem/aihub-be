@@ -6,7 +6,12 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import {
+  NO_USER_ACCESS_TOKEN_REVOCATIONS,
+  verifiedUserAccessToken,
+} from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -44,7 +49,7 @@ describe('Organization create replay', () => {
       execute: jest.fn(),
     } as jest.Mocked<IdempotencyServicePort>;
     const verifier: UserAccessTokenVerifierPort = {
-      verify: async () => ({ userId: USER_ID, jti: 'jti_01' }),
+      verify: async () => verifiedUserAccessToken(USER_ID, 'jti_01'),
     };
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(CREATE_ORGANIZATION)
@@ -55,6 +60,8 @@ describe('Organization create replay', () => {
       .useValue(verifier)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccountStatus())
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => REQUEST_ID }),

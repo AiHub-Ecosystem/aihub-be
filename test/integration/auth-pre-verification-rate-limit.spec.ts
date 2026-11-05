@@ -22,6 +22,9 @@ import {
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { InMemoryWebSessionAdapter } from '@/modules/auth/testing/in-memory-web-session.adapter';
+import { NO_USER_ACCESS_TOKEN_REVOCATIONS } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
@@ -99,10 +102,11 @@ describe('auth pre-verification rate limits over HTTP with Redis unavailable', (
       .useValue({ resolve: () => SECRET })
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue({
-        verify: async (): ReturnType<
-          UserAccessTokenVerifierPort['verify']
-        > => ({ userId: USER_ID, jti: 'test-token' }),
+        verify: async (): ReturnType<UserAccessTokenVerifierPort['verify']> =>
+          verifiedUserAccessToken(USER_ID, 'test-token'),
       })
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .overrideProvider(PASSWORD_HASHER)
       .useValue({
         hash: async () => '$argon2id$fake',

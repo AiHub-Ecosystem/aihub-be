@@ -43,8 +43,11 @@ import {
 } from '@/modules/auth/testing/in-memory-auth.state';
 import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-memory-password-reset-token.adapter';
 import { InMemoryRefreshSessionAdapter } from '@/modules/auth/testing/in-memory-refresh-session.adapter';
+import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing/in-memory-user-access-token-revocation.adapter';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import {
   type IssuedVerificationToken,
@@ -274,11 +277,14 @@ export interface LocalAuthTestContext {
   passwordResetTokenIssuer: PasswordResetTokenFake;
   refreshTokenIssuer: RefreshTokenIssuerFake;
   accessTokenIssuer: AccessTokenIssuerFake;
+  revocations: InMemoryUserAccessTokenRevocationAdapter;
   mfa: MfaFake;
   reset: () => void;
 }
 
-export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext> {
+export async function createLocalAuthTestContext(
+  accessTokenVerifierOverride?: UserAccessTokenVerifierPort,
+): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
   const verificationTokens = new InMemoryVerificationTokenAdapter(state);
@@ -291,11 +297,12 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
   const passwordResetTokenIssuer = new PasswordResetTokenFake();
   const refreshTokenIssuer = new RefreshTokenIssuerFake();
   const accessTokenIssuer = new AccessTokenIssuerFake();
+  const revocations = new InMemoryUserAccessTokenRevocationAdapter();
   const mfa = new MfaFake();
   const accessTokenVerifier: UserAccessTokenVerifierPort = {
     verify: async (token) => {
       if (token === 'valid.user.access') {
-        return { userId: USER_ID, jti: 'jti_current_user' };
+        return verifiedUserAccessToken(USER_ID, 'jti_current_user');
       }
       throw new Error('invalid token');
     },
@@ -339,7 +346,9 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
     .useValue(accessTokenIssuer)
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-    .useValue(accessTokenVerifier)
+    .useValue(accessTokenVerifierOverride ?? accessTokenVerifier)
+    .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+    .useValue(revocations)
     .overrideProvider(REFRESH_TOKEN_ISSUER)
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)
@@ -365,6 +374,7 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     limiter.reset();
     queueAge.reset();
     accessTokenIssuer.fail = false;
+    revocations.reset();
     refreshSessions.failCreateRefreshSession = false;
     refreshSessions.failFindRefreshToken = false;
     tokenIssuer.reset();
@@ -387,6 +397,7 @@ export async function createLocalAuthTestContext(): Promise<LocalAuthTestContext
     passwordResetTokenIssuer,
     refreshTokenIssuer,
     accessTokenIssuer,
+    revocations,
     mfa,
     reset,
   };

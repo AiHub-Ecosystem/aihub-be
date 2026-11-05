@@ -8583,6 +8583,69 @@
         }
       }
     },
+    "/v1/auth/user-access-tokens/revoke": {
+      "post": {
+        "operationId": "auth.user_access_tokens.revoke",
+        "summary": "Revoke a User Access JWT",
+        "description": "Revokes one User Access JWT owned by the authenticated active account. The target may be this request’s Bearer JWT; that request succeeds, and later requests using it are rejected. Only verified issuer and token ID claims are stored.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The compact User Access JWT to revoke.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The User Access JWT was revoked.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/v1/auth/register": {
       "post": {
         "operationId": "auth.register",

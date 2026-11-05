@@ -72,6 +72,14 @@ import {
 } from './rate-limit/application/auth-rate-limiter.port';
 import { RedisAuthRateLimiter } from './rate-limit/infrastructure/redis-auth-rate-limiter';
 import { AUTH_CLOCK, type AuthClock } from './shared/application/auth-clock';
+import {
+  REVOKE_USER_ACCESS_TOKEN,
+  type RevokeUserAccessTokenPort,
+} from './user-access-tokens/application/revoke-user-access-token.port';
+import { RevokeUserAccessTokenService } from './user-access-tokens/application/revoke-user-access-token.service';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from './user-access-tokens/application/user-access-token-revocation-record.port';
+import { PostgresUserAccessTokenRevocationRepository } from './user-access-tokens/infrastructure/postgres-user-access-token-revocation.repository';
+import { UserAccessTokenController } from './user-access-tokens/presentation/user-access-token.controller';
 import { VERIFICATION_TOKEN_REPOSITORY } from './verification/application/verification-token-repository.port';
 import {
   VERIFICATION_TOKEN,
@@ -135,6 +143,7 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
     PasswordResetController,
     VerificationController,
     WebSessionController,
+    UserAccessTokenController,
   ],
   providers: [
     {
@@ -185,6 +194,14 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
         new PostgresRefreshSessionRepository(runtime.prisma),
     },
     {
+      provide: PostgresUserAccessTokenRevocationRepository,
+      inject: [RUNTIME_PRISMA_CLIENT],
+      useFactory: (
+        runtime: PrismaClientHolder,
+      ): PostgresUserAccessTokenRevocationRepository =>
+        new PostgresUserAccessTokenRevocationRepository(runtime.prisma),
+    },
+    {
       provide: AUTH_MFA_REPOSITORY,
       inject: [RUNTIME_PRISMA_CLIENT, EMAIL_OUTBOX],
       useFactory: (
@@ -233,6 +250,10 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
     {
       provide: REFRESH_SESSION_REPOSITORY,
       useExisting: PostgresRefreshSessionRepository,
+    },
+    {
+      provide: USER_ACCESS_TOKEN_REVOCATION_RECORD,
+      useExisting: PostgresUserAccessTokenRevocationRepository,
     },
     {
       // Web Sessions live in their own table beside the four refresh tables, so
@@ -355,6 +376,14 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
       useExisting: USER_ACCESS_TOKEN_CRYPTO,
     },
     {
+      provide: REVOKE_USER_ACCESS_TOKEN,
+      useFactory: (
+        ...ports: ConstructorParameters<typeof RevokeUserAccessTokenService>
+      ): RevokeUserAccessTokenPort =>
+        new RevokeUserAccessTokenService(...ports),
+      inject: [USER_ACCESS_TOKEN_VERIFIER, USER_ACCESS_TOKEN_REVOCATION_RECORD],
+    },
+    {
       provide: EMAIL_VERIFICATION_REQUIRES_PASSWORD,
       inject: [appConfig.KEY],
       useFactory: (configuration: ConfigType<typeof appConfig>): boolean =>
@@ -436,6 +465,7 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
     PASSWORD_RESET_TOKEN_REPOSITORY,
     REFRESH_SESSION_REPOSITORY,
     USER_ACCESS_TOKEN_VERIFIER,
+    USER_ACCESS_TOKEN_REVOCATION_RECORD,
     WEB_SESSION_CLIENT_SECRET,
     UserAccessJwtGuard,
     WebSessionClientGuard,

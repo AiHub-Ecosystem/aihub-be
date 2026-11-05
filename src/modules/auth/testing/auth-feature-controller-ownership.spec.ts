@@ -4,6 +4,7 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import { LocalAuthController } from '@/modules/auth/local-credentials/presentation/local-auth.controller';
 import { MfaController } from '@/modules/auth/mfa/presentation/mfa.controller';
 import { PasswordResetController } from '@/modules/auth/password-reset/presentation/password-reset.controller';
+import { UserAccessTokenController } from '@/modules/auth/user-access-tokens/presentation/user-access-token.controller';
 import { VerificationController } from '@/modules/auth/verification/presentation/verification.controller';
 import { RequestMethod } from '@nestjs/common';
 import {
@@ -35,6 +36,10 @@ const FEATURE_ROUTE_OWNERS: readonly {
     routeIds: ['auth.verify_email', 'auth.resend_verification'],
   },
   { controller: AccountsController, routeIds: ['me.profile.read'] },
+  {
+    controller: UserAccessTokenController,
+    routeIds: ['auth.user_access_tokens.revoke'],
+  },
 ];
 
 function routeIdsOf(controller: Controller): string[] {

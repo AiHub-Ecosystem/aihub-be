@@ -6,7 +6,10 @@ import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import { NO_USER_ACCESS_TOKEN_REVOCATIONS } from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -84,7 +87,7 @@ describe('Organization rename over HTTP', () => {
         if (userId === undefined) {
           throw new Error('invalid token');
         }
-        return { userId, jti: `jti_${userId}` };
+        return verifiedUserAccessToken(userId, `jti_${userId}`);
       },
     };
     const userAccounts = userAccountStatus();
@@ -96,6 +99,8 @@ describe('Organization rename over HTTP', () => {
       .useValue(rename)
       .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
       .useValue(verifier)
+      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
       .overrideProvider(USER_ACCOUNT_REPOSITORY)
       .useValue(userAccounts)
       .compile();

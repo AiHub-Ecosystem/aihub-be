@@ -9,10 +9,16 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '@/common/errors/app-error';
 import {
+  databaseUnavailableError,
+  isPostgresUnavailable,
+} from '@/common/postgres/postgres-unavailable-error';
+import {
   USER_ACCOUNT_REPOSITORY,
   type UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
 import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
+import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
@@ -80,6 +86,8 @@ export class UserAccessJwtGuard implements CanActivate {
       UserAccountRepositoryPort,
       'findUserAccountStatus'
     >,
+    @Inject(USER_ACCESS_TOKEN_REVOCATION_RECORD)
+    private readonly revocations: UserAccessTokenRevocationRecordPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -123,9 +131,26 @@ export class UserAccessJwtGuard implements CanActivate {
     try {
       status = await this.userAccounts.findUserAccountStatus(verified.userId);
     } catch (error) {
+      if (error instanceof AppError && error.code === 'DATABASE_UNAVAILABLE') {
+        throw error;
+      }
+      if (isPostgresUnavailable(error)) {
+        throw databaseUnavailableError(error);
+      }
       throw configurationError(error);
     }
     if (status !== 'active') {
+      challenge(context);
+      throw invalidUserAccessToken();
+    }
+
+    if (
+      await this.revocations.isRevoked({
+        issuer: verified.issuer,
+        jti: verified.jti,
+        now: new Date(),
+      })
+    ) {
       challenge(context);
       throw invalidUserAccessToken();
     }

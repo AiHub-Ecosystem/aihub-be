@@ -4,6 +4,7 @@ import {
   createInMemoryAuthState,
   seedAccount,
 } from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing/in-memory-user-access-token-revocation.adapter';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import type {
   UserAccessTokenVerifierPort,
@@ -26,13 +27,17 @@ function context(
 describe('UserAccessJwtGuard', () => {
   const verified: VerifiedUserAccessToken = {
     userId: 'usr_01J00000000000000000000000',
+    issuer: 'https://api.test.aihub.example.com',
     jti: 'jti_01',
+    expiresAt: new Date(Date.now() + 900_000),
+    validUntil: new Date(Date.now() + 960_000),
   };
 
   /** The guard reads the account status, so the case composes that adapter. */
   function makeGuard(
     verifier: UserAccessTokenVerifierPort = { verify: async () => verified },
     status: 'active' | 'disabled' = 'active',
+    revocations = new InMemoryUserAccessTokenRevocationAdapter(),
   ): UserAccessJwtGuard {
     const state = createInMemoryAuthState();
     seedAccount(state, {
@@ -44,6 +49,7 @@ describe('UserAccessJwtGuard', () => {
     return new UserAccessJwtGuard(
       verifier,
       new InMemoryUserAccountAdapter(state),
+      revocations,
     );
   }
 
@@ -126,6 +132,7 @@ describe('UserAccessJwtGuard', () => {
     const guard = new UserAccessJwtGuard(
       { verify: async () => verified },
       new InMemoryUserAccountAdapter(state),
+      new InMemoryUserAccessTokenRevocationAdapter(),
     );
 
     await expect(
@@ -135,6 +142,41 @@ describe('UserAccessJwtGuard', () => {
     ).rejects.toMatchObject({
       code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
       httpStatus: 401,
+    });
+  });
+
+  it('rejects a JWT found in durable revocation state', async () => {
+    const revocations = new InMemoryUserAccessTokenRevocationAdapter();
+    await revocations.revoke({
+      issuer: verified.issuer,
+      jti: verified.jti,
+      effectiveExpiresAt: verified.validUntil,
+    });
+    const guard = makeGuard(undefined, 'active', revocations);
+
+    await expect(
+      guard.canActivate(
+        context({ headers: { authorization: 'Bearer compact.token.value' } }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+      httpStatus: 401,
+    });
+  });
+
+  it('fails closed with a retryable database error when revocation state is unavailable', async () => {
+    const revocations = new InMemoryUserAccessTokenRevocationAdapter();
+    revocations.failLookup = true;
+    const guard = makeGuard(undefined, 'active', revocations);
+
+    await expect(
+      guard.canActivate(
+        context({ headers: { authorization: 'Bearer compact.token.value' } }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'DATABASE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
     });
   });
 });

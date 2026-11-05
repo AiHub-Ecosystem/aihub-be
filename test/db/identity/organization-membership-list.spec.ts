@@ -9,6 +9,7 @@ import type { Pool } from 'pg';
 
 import { AppModule } from '@/app.module';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
+import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
@@ -91,10 +92,8 @@ beforeAll(async () => {
     identityClient.asPrisma(),
   );
   const verifier: UserAccessTokenVerifierPort = {
-    verify: async (token) => ({
-      userId: token.split('.')[0] ?? '',
-      jti: 'jti_01',
-    }),
+    verify: async (token) =>
+      verifiedUserAccessToken(token.split('.')[0] ?? '', 'jti_01'),
   };
   const userAccounts = userAccountStatus(async (userId) => {
     const result = await pool.query<{ status: 'active' | 'disabled' }>(

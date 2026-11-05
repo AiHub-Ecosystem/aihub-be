@@ -24,6 +24,7 @@ import {
   ConfirmMfaEnrollmentResponseSchema,
   RemoveMfaFactorRequestSchema,
 } from '@/contracts/auth/mfa';
+import { RevokeUserAccessTokenRequestSchema } from '@/contracts/auth/user-access-token';
 import {
   CreateWebSessionFromVerificationRequestSchema,
   CreateWebSessionRequestSchema,
@@ -1399,6 +1400,25 @@ export const PUBLIC_ROUTES = {
     requestSchema: EmptyAuthRequestSchema,
     responseSchema: null,
     errorStatuses: [400, 500],
+  },
+  'auth.user_access_tokens.revoke': {
+    openApi: {
+      summary: 'Revoke a User Access JWT',
+      description:
+        'Revokes one User Access JWT owned by the authenticated active account. The target may be this request’s Bearer JWT; that request succeeds, and later requests using it are rejected. Only verified issuer and token ID claims are stored.',
+      successDescription: 'The User Access JWT was revoked.',
+    },
+    cacheControl: { value: 'no-store' },
+    method: 'POST',
+    path: '/v1/auth/user-access-tokens/revoke',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: RevokeUserAccessTokenRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 401, 500, 503],
   },
   'me.profile.read': {
     cacheControl: { value: 'no-store' },
