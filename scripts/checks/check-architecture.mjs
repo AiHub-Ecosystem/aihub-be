@@ -402,6 +402,29 @@ for (const file of sourceFiles) {
   }
 }
 
+// #1018: the Kysely evaluation must not leak its query builder or generated
+// types beyond an infrastructure adapter. Specs beside those adapters may
+// assert the compiled query.
+const KYSELY_SPECIFIER =
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"](?:kysely(?:\/[^'"]*)?|@kysely-types\/)/;
+
+for (const file of sourceFiles) {
+  const segments = file.split(sep);
+  if (
+    segments.includes('infrastructure') ||
+    segments.includes('testing') ||
+    file.endsWith('.spec.ts')
+  ) {
+    continue;
+  }
+
+  if (KYSELY_SPECIFIER.test(sourceText(file))) {
+    fail(
+      `${relative(root, file)} imports Kysely outside infrastructure; keep the #1018 query builder behind an infrastructure adapter (ADR-0090)`,
+    );
+  }
+}
+
 const secretsInfrastructureDirectory = join(
   srcDirectory,
   'modules',

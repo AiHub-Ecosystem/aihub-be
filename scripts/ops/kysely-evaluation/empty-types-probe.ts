@@ -1,0 +1,3 @@
+export function probe(value: number): number {
+  return value + 1;
+}
