@@ -16,9 +16,11 @@ FROM dependencies AS build
 
 COPY . .
 RUN bun run build
-# A production reinstall, not a prune: Bun has no prune, and the reinstall keeps the
-# `prisma` CLI out of the image because it is a devDependency (ADR-0088).
-RUN rm -rf node_modules && HUSKY=0 bun install --frozen-lockfile --production --ignore-scripts
+# A production reinstall, not a prune: Bun has no prune. Remove Prisma's optional
+# peer as well; Bun links the dev-only CLI into this production install.
+RUN rm -rf node_modules \
+  && HUSKY=0 bun install --frozen-lockfile --production --ignore-scripts \
+  && rm -rf node_modules/prisma node_modules/.bin/prisma
 
 FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
 
