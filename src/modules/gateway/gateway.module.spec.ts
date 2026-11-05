@@ -13,6 +13,7 @@ import {
   RUNTIME_SECRET_PROVIDER,
   type RuntimeSecretProvider,
 } from '@/modules/secrets/application/runtime-secret-provider.port';
+import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
 import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
@@ -46,10 +47,6 @@ describe('Gateway runtime-secret wiring', () => {
   let origin: string;
   let moduleRef: TestingModule;
   let requests: ObservedRequest[];
-  const originalUrls = {
-    writing: process.env.DOWNSTREAM_AI_WRITING_URL,
-    speaking: process.env.DOWNSTREAM_AI_SPEAKING_URL,
-  };
 
   const snapshot = {
     aiSpeaking: {
@@ -98,8 +95,10 @@ describe('Gateway runtime-secret wiring', () => {
       throw new Error('gateway test server did not expose a port');
     }
     origin = `http://127.0.0.1:${address.port}`;
-    process.env.DOWNSTREAM_AI_WRITING_URL = origin;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = origin;
+    useTestRuntimeConfiguration({
+      DOWNSTREAM_AI_WRITING_URL: origin,
+      DOWNSTREAM_AI_SPEAKING_URL: origin,
+    });
 
     moduleRef = await Test.createTestingModule({
       imports: [GatewayModule],
@@ -118,8 +117,6 @@ describe('Gateway runtime-secret wiring', () => {
         error === undefined ? resolve() : reject(error),
       );
     });
-    process.env.DOWNSTREAM_AI_WRITING_URL = originalUrls.writing;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalUrls.speaking;
   });
 
   it('dispatches Writing and Speaking with the same startup snapshot', async () => {

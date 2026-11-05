@@ -30,6 +30,7 @@ import type {
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 function uploadUrlBody(response: { json(): unknown }) {
   return Value.Parse(SpeakingAudioUploadUrlResponseSchema, response.json());
@@ -260,10 +261,9 @@ describe('Speaking Audio upload HTTP flow', () => {
   let repository: FakeAudioUploadRepository;
   let storage: FakeAudioAssetStorage;
   let currentTime = new Date('2026-10-03T04:00:00.000Z');
-  const originalSandboxHost = process.env.AIHUB_SANDBOX_HOST;
 
   beforeAll(async () => {
-    process.env.AIHUB_SANDBOX_HOST = 'sandbox.test';
+    useTestRuntimeConfiguration({ AIHUB_SANDBOX_HOST: 'sandbox.test' });
     const apiKeys: ApiKeyAuthenticatorPort = {
       authenticate: async ({ environment, value }) => {
         if (value === 'aihub_sk_revoked') {
@@ -345,11 +345,6 @@ describe('Speaking Audio upload HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    if (originalSandboxHost === undefined) {
-      delete process.env.AIHUB_SANDBOX_HOST;
-    } else {
-      process.env.AIHUB_SANDBOX_HOST = originalSandboxHost;
-    }
   });
 
   beforeEach(() => {

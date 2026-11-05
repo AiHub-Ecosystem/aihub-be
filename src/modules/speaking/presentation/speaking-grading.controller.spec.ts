@@ -35,6 +35,7 @@ import {
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 const speakingResponseSchema = Type.Object({
@@ -149,20 +150,14 @@ describe('Speaking grading HTTP flow', () => {
   let outboundBody: UndiciFormData | undefined;
   let outboundJson: Record<string, unknown> | undefined;
   let abortJsonRequest = false;
-  const originalEnv = {
-    allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
-    nodeEnv: process.env.NODE_ENV,
-    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
-    speakingClientId: process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID,
-    speakingSecret: process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY,
-  };
 
   beforeAll(async () => {
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
-    process.env.NODE_ENV = 'test';
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = 'https://ai-speaking.test';
-    process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID = 'speaking-client';
-    process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = 'speaking-secret';
+    useTestRuntimeConfiguration({
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+      DOWNSTREAM_AI_SPEAKING_URL: 'https://ai-speaking.test',
+      DOWNSTREAM_AI_SPEAKING_CLIENT_ID: 'speaking-client',
+      DOWNSTREAM_AI_SPEAKING_SECRET_KEY: 'speaking-secret',
+    });
     providerResponse = {
       statusCode: 200,
       body: fixture('grading.response.json'),
@@ -269,12 +264,6 @@ describe('Speaking grading HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
-    process.env.NODE_ENV = originalEnv.nodeEnv;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
-    process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID = originalEnv.speakingClientId;
-    process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = originalEnv.speakingSecret;
   });
 
   it('forwards a valid multipart request and normalizes the scoring response', async () => {

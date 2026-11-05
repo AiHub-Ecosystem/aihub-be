@@ -752,6 +752,19 @@ export function initializeRuntimeConfiguration(
   return singleton;
 }
 
+/**
+ * Installs the snapshot loaded from an explicit environment, validated like the
+ * process one. Only a test composition root calls it, through
+ * `test/support/test-runtime-configuration.ts` (#1551); boot keeps
+ * `initializeRuntimeConfiguration`.
+ */
+export function replaceRuntimeConfiguration(
+  raw: Readonly<Record<string, string | undefined>>,
+): RuntimeConfiguration {
+  singleton = loadRuntimeConfiguration(raw);
+  return singleton;
+}
+
 export function getRuntimeConfiguration(): RuntimeConfiguration {
   return initializeRuntimeConfiguration();
 }

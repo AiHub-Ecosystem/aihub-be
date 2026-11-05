@@ -53,6 +53,7 @@ import {
   WritingGradingController,
   WritingV2GradingController,
 } from '@/modules/writing/public/grading';
+import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 import {
   GRADED_REQUEST_GUARDS,
@@ -182,22 +183,15 @@ describe('graded request chain', () => {
   let mockAgent: MockAgent;
   let authState: InMemoryAuthState;
   const executed: string[] = [];
-  const originalEnv = {
-    allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
-    nodeEnv: process.env.NODE_ENV,
-    token: process.env.DOWNSTREAM_AI_WRITING_TOKEN,
-    url: process.env.DOWNSTREAM_AI_WRITING_URL,
-    speakingToken: process.env.DOWNSTREAM_AI_SPEAKING_TOKEN,
-    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
-  };
 
   beforeAll(async () => {
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
-    process.env.NODE_ENV = 'test';
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
-    process.env.DOWNSTREAM_AI_WRITING_URL = 'https://ai-writing.test';
-    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = 'speaking-token';
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = 'https://ai-speaking.test';
+    useTestRuntimeConfiguration({
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+      DOWNSTREAM_AI_WRITING_TOKEN: 'writing-token',
+      DOWNSTREAM_AI_WRITING_URL: 'https://ai-writing.test',
+      DOWNSTREAM_AI_SPEAKING_TOKEN: 'speaking-token',
+      DOWNSTREAM_AI_SPEAKING_URL: 'https://ai-speaking.test',
+    });
 
     // Record the real authentication guards; admission and concurrency are
     // observed at their application ports below.
@@ -299,12 +293,6 @@ describe('graded request chain', () => {
   afterAll(async () => {
     jest.restoreAllMocks();
     await app.close();
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
-    process.env.NODE_ENV = originalEnv.nodeEnv;
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = originalEnv.token;
-    process.env.DOWNSTREAM_AI_WRITING_URL = originalEnv.url;
-    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = originalEnv.speakingToken;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
   });
 
   beforeEach(() => {

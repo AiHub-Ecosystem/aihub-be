@@ -24,6 +24,7 @@ import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-
 import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
 const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 const PROVIDER_URL = 'https://ai-writing.test';
@@ -75,12 +76,6 @@ describe('Writing /v2 grading HTTP flow', () => {
   let mockAgent: MockAgent;
   let downstreamCalls = 0;
   let keySequence = 0;
-  const originalEnv = {
-    allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
-    nodeEnv: process.env.NODE_ENV,
-    token: process.env.DOWNSTREAM_AI_WRITING_TOKEN,
-    url: process.env.DOWNSTREAM_AI_WRITING_URL,
-  };
 
   const post = (path: 'task1' | 'task2', payload: Record<string, unknown>) =>
     app.inject({
@@ -116,10 +111,11 @@ describe('Writing /v2 grading HTTP flow', () => {
   }
 
   beforeAll(async () => {
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
-    process.env.NODE_ENV = 'test';
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
-    process.env.DOWNSTREAM_AI_WRITING_URL = PROVIDER_URL;
+    useTestRuntimeConfiguration({
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+      DOWNSTREAM_AI_WRITING_TOKEN: 'writing-token',
+      DOWNSTREAM_AI_WRITING_URL: PROVIDER_URL,
+    });
 
     mockAgent = new MockAgent();
     mockAgent.disableNetConnect();
@@ -184,10 +180,6 @@ describe('Writing /v2 grading HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
-    process.env.NODE_ENV = originalEnv.nodeEnv;
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = originalEnv.token;
-    process.env.DOWNSTREAM_AI_WRITING_URL = originalEnv.url;
   });
 
   beforeEach(() => {
