@@ -8,11 +8,23 @@ The spike reproduces the quota reconciliation aggregate in `src/modules/metering
 
 `prisma-kysely@3.2.1` is a second generator in `prisma/schema.prisma`. It writes `dist/generated/kysely/types.ts` during the existing `prisma generate` step. The generated `DB` type contains the schema's tables and columns; no hand-written table definition or second schema exists. `bun run arch-check` rejects `kysely` and `@kysely-types/*` imports outside `infrastructure/`, matching ADR-0090. The focused spec asserts that the typed query uses the expected tables, joins, filters, aggregate, and bound date parameters, and that its execution borrows a connection from `createPostgresPool`.
 
-Run the prototype and measurement with `bun run benchmark:kysely-spike`. The benchmark uses a stub pool that returns the same 100 rows for both modes; the two modes are verified to return equal rows before timing. It measures query construction plus driver handoff, alternating mode order across five passes of 5,000 queries. Peak RSS is sampled during the same workload in a fresh process for each mode. Type-check measurements spawn `tsc6` five times per scope.
+Run the stub measurement with `bun run benchmark:kysely-spike` and the PostgreSQL 16 measurement with `DB_LANE_ADMIN_URL=<disposable local admin URL> bun run benchmark:kysely-database`. The stub benchmark returns the same 100 rows for both modes; the database benchmark creates a disposable database from all 60 repository migrations and seeds 100 organizations with 100,000 usage rows. Both benchmarks verify equal rows before timing and alternate mode order. The database benchmark compares Prisma raw SQL, raw `pg`, and Kysely on one `createPostgresPool` with `max: 10`, five passes of 30 queries per mode. The stub benchmark measures query construction plus driver handoff across five passes of 5,000 queries and samples peak RSS in a fresh process per mode. Type-check measurements spawn `tsc6` five times per scope.
 
 ## Findings
 
-Measured 2026-11-05 on Node 24.21.0, Windows x64. The Docker daemon and a disposable PostgreSQL 16 instance were unavailable, so query latency excludes PostgreSQL execution time. The measurements describe client overhead on one developer machine, not a production capacity estimate.
+Measured 2026-11-05 on Node 24.21.0, Windows x64, with PostgreSQL 16.15 in a disposable local container. The measurements describe one developer machine, not a production capacity estimate.
+
+PostgreSQL 16.15, 100 organizations, 100,000 usage rows, shared pool of 10, equal rows across all modes. Two independent runs with the same fixture:
+
+| Mode       | Run 1 p50 / p95 (ms) | Run 1 pass p50 range (ms) | Run 2 p50 / p95 (ms) | Run 2 pass p50 range (ms) |
+| ---------- | -------------------: | ------------------------: | -------------------: | ------------------------: |
+| Prisma raw |        34.31 / 56.32 |               32.19–40.79 |        47.41 / 88.98 |               43.05–51.65 |
+| Raw `pg`   |        34.87 / 57.28 |               32.00–36.95 |        42.95 / 79.17 |               39.92–49.54 |
+| Kysely     |        35.68 / 47.78 |               34.49–37.45 |        45.63 / 77.64 |               40.71–54.03 |
+
+In run 1 the three end-to-end p50 values are within 1.37 ms; in run 2 the order changes and all pass-p50 ranges overlap between 32.00 ms and 54.03 ms. Query execution dominates client overhead on this dataset, so neither run establishes a Kysely latency advantage or a Prisma bottleneck.
+
+Stub-pool client overhead, sampled peak RSS, and type-check timings:
 
 | Mode               | Query p50 / p95 (ms) | p50 across passes (ms) | Peak RSS (MiB) |
 | ------------------ | -------------------: | ---------------------: | -------------: |
@@ -42,13 +54,13 @@ The generator also required a small change to `scripts/generate/generate-prisma-
 
 ## Recommendation
 
-Retain Prisma generated-client queries and the existing reviewed `$queryRawUnsafe` statements for production. Do not adopt Kysely for the measured analytical query: the typed builder costs about 0.015 ms at p50 on the stub path and about 21 MiB peak RSS in its workload process, while the current raw SQL statement is already one parameterized round trip with a fixed, tested row contract. Neither the client overhead nor the developer-experience gain addresses a measured database bottleneck.
+Retain Prisma generated-client queries and the existing reviewed `$queryRawUnsafe` statements for production. Do not adopt Kysely for the measured analytical query: PostgreSQL 16.15 shows overlapping p50 ranges for Prisma raw SQL, raw `pg`, and Kysely, while the typed builder adds about 0.015 ms of construction overhead and about 21 MiB sampled peak RSS in the stub workload. The existing raw SQL statement is already one parameterized round trip with a fixed, tested row contract. Neither the type-safety gain nor the measured client overhead addresses a database bottleneck.
 
-Revisit only when a PostgreSQL 16 benchmark on a production-sized dataset shows a real query bottleneck attributable to Prisma or raw `pg`, and when a follow-up issue owns an ADR amendment with explicit generator, transaction, timeout, and row-mapping rules. That follow-up must compare end-to-end database latency and peak RSS under the shared pool budget in #560 and ADR-0103. The prototype files remain a bounded evaluation seam and are not wired into a module composition root or CLI.
+Revisit only when a production-sized, concurrent workload shows a repeatable query bottleneck attributable to Prisma or raw `pg`, and when a follow-up issue owns an ADR amendment with explicit generator, transaction, timeout, and row-mapping rules. That follow-up must compare end-to-end latency and peak RSS under the shared pool budget in #560 and ADR-0103. The prototype files remain a bounded evaluation seam and are not wired into a module composition root or CLI.
 
 ## Conflicts and limits
 
 - The issue asks for `pnpm verify`; the repository now uses Bun ([ADR-0139](../adr/0139-bun-is-the-package-manager-node-stays-the-runtime.md)), so `bun run verify` is the equivalent gate.
 - The issue references raw `pg` production queries; ADR-0088 states that no production repository has a separate raw `pg` query path. Complex SQL currently runs through Prisma's raw path on the shared `pg` pool.
-- The Docker daemon was unavailable, so no PostgreSQL 16 end-to-end latency or query-plan comparison was measured. The stub benchmark holds row delivery constant and cannot estimate database-side cost.
+- The database benchmarks are two single-host runs with 100,000 usage rows and 30 sequential queries per pass; they are not production-sized or concurrent-load benchmarks. No query-plan comparison was recorded.
 - The RSS probes sample each process every 100 queries rather than tracing the whole process tree continuously; treat them as sampled process peaks, not a complete memory profile.
