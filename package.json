@@ -7,7 +7,7 @@
     "node": ">=22.22.3"
   },
   "scripts": {
-    "build": "node scripts/generate/compile-auth-email-template.mjs && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
+    "build": "node scripts/generate/compile-auth-email-template.mjs && node scripts/generate/clean-dist.cjs && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
     "generate:prisma-client": "node scripts/generate/generate-prisma-client.mjs",
     "generate:migration": "node scripts/generate/generate-migration.mjs",
     "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && nest start --watch",
