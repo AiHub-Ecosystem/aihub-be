@@ -18,15 +18,6 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const { compileKyselyQuotaReconciliation, createKyselyQuotaClient } =
-  /** @type {KyselyBenchmarkModule} */ (
-    require(
-      join(
-        root,
-        'dist/modules/metering/infrastructure/billing/kysely-quota-reconciliation.js',
-      ),
-    )
-  );
 const { QUOTA_RECONCILIATION_SQL } = /** @type {PrismaBenchmarkModule} */ (
   require(
     join(
@@ -35,6 +26,18 @@ const { QUOTA_RECONCILIATION_SQL } = /** @type {PrismaBenchmarkModule} */ (
     ),
   )
 );
+
+/** @returns {KyselyBenchmarkModule} */
+function loadKyselyBenchmarkModule() {
+  return /** @type {KyselyBenchmarkModule} */ (
+    require(
+      join(
+        root,
+        'dist/modules/metering/infrastructure/billing/kysely-quota-reconciliation.js',
+      ),
+    )
+  );
+}
 
 const ORGANIZATION_COUNT = 100;
 const QUERY_COUNT = 5_000;
@@ -125,6 +128,8 @@ function typeCheckSample(label, args) {
 }
 
 async function main() {
+  const { compileKyselyQuotaReconciliation, createKyselyQuotaClient } =
+    loadKyselyBenchmarkModule();
   let statements = 0;
   const pool = stubPool(() => {
     statements += 1;
@@ -223,6 +228,18 @@ async function rssProbe(mode) {
   const sampleRss = () => {
     peakRss = Math.max(peakRss, process.memoryUsage.rss());
   };
+  if (mode === 'prismaRaw') {
+    const pool = stubPool(() => {});
+    for (let index = 0; index < QUERY_COUNT; index += 1) {
+      await pool.query(QUOTA_RECONCILIATION_SQL, [from, to]);
+      if (index % 100 === 0) sampleRss();
+    }
+    sampleRss();
+    process.stdout.write(String(peakRss));
+    return;
+  }
+  const { compileKyselyQuotaReconciliation, createKyselyQuotaClient } =
+    loadKyselyBenchmarkModule();
   if (mode === 'kyselyImport') {
     const pool = stubPool(() => {});
     await createKyselyQuotaClient(pool).destroy();
@@ -232,13 +249,8 @@ async function rssProbe(mode) {
   }
   const pool = stubPool(() => {});
   const database = createKyselyQuotaClient(pool);
-  const operation =
-    mode === 'kysely'
-      ? () =>
-          database.executeQuery(
-            compileKyselyQuotaReconciliation(database, from, to),
-          )
-      : () => pool.query(QUOTA_RECONCILIATION_SQL, [from, to]);
+  const operation = () =>
+    database.executeQuery(compileKyselyQuotaReconciliation(database, from, to));
   for (let index = 0; index < QUERY_COUNT; index += 1) {
     await operation();
     if (index % 100 === 0) sampleRss();
@@ -249,7 +261,18 @@ async function rssProbe(mode) {
 }
 
 if (process.argv.includes('--rss')) {
-  await rssProbe(process.argv[process.argv.indexOf('--rss') + 1]);
+  const mode = process.argv[process.argv.indexOf('--rss') + 1];
+  await rssProbe(mode);
+  if (process.argv.includes('--assert-no-kysely')) {
+    const loaded = require.cache;
+    const hasKysely = Object.keys(loaded).some((path) =>
+      path.split(/[\\/]/).includes('kysely'),
+    );
+    if (hasKysely) {
+      throw new Error(`${mode} RSS process loaded a Kysely module`);
+    }
+    process.stderr.write('no Kysely modules loaded\n');
+  }
 } else {
   await main();
 }

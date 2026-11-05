@@ -8,7 +8,7 @@ The spike reproduces the quota reconciliation aggregate in `src/modules/metering
 
 `prisma-kysely@3.2.1` is a second generator in `prisma/schema.prisma`. It writes `dist/generated/kysely/types.ts` during the existing `prisma generate` step. The generated `DB` type contains the schema's tables and columns; no hand-written table definition or second schema exists. `bun run arch-check` rejects `kysely` and `@kysely-types/*` imports outside `infrastructure/`, matching ADR-0090. The focused spec asserts that the typed query uses the expected tables, joins, filters, aggregate, and bound date parameters, and that its execution borrows a connection from `createPostgresPool`.
 
-Run the stub measurement with `bun run benchmark:kysely-spike` and the PostgreSQL 16 measurement with `DB_LANE_ADMIN_URL=<disposable local admin URL> bun run benchmark:kysely-database`. The stub benchmark returns the same 100 rows for both modes; the database benchmark creates a disposable database from all 60 repository migrations and seeds 100 organizations with 100,000 usage rows. Both benchmarks verify equal rows before timing and alternate mode order. The database benchmark compares Prisma raw SQL, raw `pg`, and Kysely on one `createPostgresPool` with `max: 10`, five passes of 30 queries per mode. The stub benchmark measures query construction plus driver handoff across five passes of 5,000 queries and samples peak RSS in a fresh process per mode. Type-check measurements spawn `tsc6` five times per scope.
+Run the stub measurement with `bun run benchmark:kysely-spike` and the PostgreSQL 16 measurement with `DB_LANE_ADMIN_URL=<disposable local admin URL> bun run benchmark:kysely-database`. The stub benchmark returns the same 100 rows for both modes; the database benchmark creates a disposable database from all 60 repository migrations and seeds 100 organizations with 100,000 usage rows. Both benchmarks verify equal rows before timing and alternate mode order. The database benchmark compares Prisma raw SQL, raw `pg`, and Kysely on one `createPostgresPool` with `max: 10`, five passes of 30 queries per mode. The stub benchmark measures query construction plus driver handoff across five passes of 5,000 queries and samples peak RSS in a fresh process per mode. Its Prisma baseline child never imports or constructs Kysely, so the RSS comparison has a genuine baseline. Type-check measurements spawn `tsc6` five times per scope.
 
 ## Findings
 
@@ -28,21 +28,21 @@ Stub-pool client overhead, sampled peak RSS, and type-check timings:
 
 | Mode               | Query p50 / p95 (ms) | p50 across passes (ms) | Peak RSS (MiB) |
 | ------------------ | -------------------: | ---------------------: | -------------: |
-| Prisma raw SQL     |      0.0001 / 0.0003 |          0.0001–0.0002 |           63.1 |
-| Kysely             |      0.0151 / 0.0264 |          0.0133–0.0156 |           84.4 |
-| Kysely import only |                  n/a |                    n/a |           62.4 |
+| Prisma raw SQL     |      0.0001 / 0.0004 |          0.0001–0.0003 |           50.3 |
+| Kysely             |      0.0165 / 0.0348 |          0.0305–0.0371 |           79.8 |
+| Kysely import only |                  n/a |                    n/a |           62.2 |
 
 | Type-check scope                         | Median (s) |                       Samples (s) |
 | ---------------------------------------- | ---------: | --------------------------------: |
-| Whole project with Kysely                |      10.60 |   9.88, 9.96, 10.62, 10.60, 11.59 |
-| Whole project without Kysely spike files |      11.44 | 10.71, 11.44, 10.14, 13.53, 12.84 |
+| Whole project with Kysely                |      17.91 | 92.35, 17.91, 16.52, 18.35, 14.10 |
+| Whole project without Kysely spike files |      14.79 | 14.79, 10.94, 13.98, 15.64, 24.96 |
 
-| Focused type-check        | Median (ms) |            Samples (ms) |
-| ------------------------- | ----------: | ----------------------: |
-| Generated Kysely DB types |         693 | 693, 705, 685, 726, 682 |
-| Empty type-check baseline |         438 | 432, 438, 439, 437, 447 |
+| Focused type-check        | Median (ms) |                Samples (ms) |
+| ------------------------- | ----------: | --------------------------: |
+| Generated Kysely DB types |         994 | 1,662, 1,115, 925, 880, 994 |
+| Empty type-check baseline |         536 |     532, 536, 568, 537, 526 |
 
-The focused median is about 255 ms above an empty `tsc6` invocation. Whole-project samples overlap between 9.88 s and 13.53 s across both scopes, so they do not show a repeatable type-check regression. Kysely's import alone adds about 1 MiB RSS; about 21 MiB more follows repeated query construction and execution in the stub workload.
+The focused median is about 458 ms above an empty `tsc6` invocation. One whole-project sample took 92.35 s on this host; the remaining samples overlap across both scopes, so whole-project timing does not show a repeatable type-check regression. With Kysely loaded only in its own RSS child processes, importing and constructing it adds about 12 MiB, and repeated query construction and execution reaches about 30 MiB above the Prisma baseline.
 
 ## Compatibility and developer experience
 
@@ -54,7 +54,7 @@ The generator also required a small change to `scripts/generate/generate-prisma-
 
 ## Recommendation
 
-Retain Prisma generated-client queries and the existing reviewed `$queryRawUnsafe` statements for production. Do not adopt Kysely for the measured analytical query: PostgreSQL 16.15 shows overlapping p50 ranges for Prisma raw SQL, raw `pg`, and Kysely, while the typed builder adds about 0.015 ms of construction overhead and about 21 MiB sampled peak RSS in the stub workload. The existing raw SQL statement is already one parameterized round trip with a fixed, tested row contract. Neither the type-safety gain nor the measured client overhead addresses a database bottleneck.
+Retain Prisma generated-client queries and the existing reviewed `$queryRawUnsafe` statements for production. Do not adopt Kysely for the measured analytical query: PostgreSQL 16.15 shows overlapping p50 ranges for Prisma raw SQL, raw `pg`, and Kysely, while the typed builder adds about 0.017 ms of construction overhead and about 30 MiB sampled peak RSS above the isolated baseline in the stub workload. The existing raw SQL statement is already one parameterized round trip with a fixed, tested row contract. Neither the type-safety gain nor the measured client overhead addresses a database bottleneck.
 
 Revisit only when a production-sized, concurrent workload shows a repeatable query bottleneck attributable to Prisma or raw `pg`, and when a follow-up issue owns an ADR amendment with explicit generator, transaction, timeout, and row-mapping rules. That follow-up must compare end-to-end latency and peak RSS under the shared pool budget in #560 and ADR-0103. The prototype files remain a bounded evaluation seam and are not wired into a module composition root or CLI.
 
