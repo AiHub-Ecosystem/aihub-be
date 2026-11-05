@@ -11,6 +11,7 @@ type ReadFile = (path: string) => string;
 
 export interface RuntimeConnectionEnvironmentOptions {
   readonly env: NodeJS.ProcessEnv;
+  readonly target?: 'runtime' | 'operator';
   readonly readFile?: ReadFile;
 }
 
@@ -77,6 +78,14 @@ export function loadRuntimeConnectionEnvironment(
       'sandbox_url',
       'sandbox_control_plane_read_url',
       'email_send_budget_url',
+      'pooler_url',
+      'sandbox_pooler_url',
+      'control_plane_pooler_url',
+      'sandbox_control_plane_pooler_url',
+      'control_plane_read_pooler_url',
+      'sandbox_control_plane_read_pooler_url',
+      'email_send_budget_pooler_url',
+      'sandbox_email_send_budget_pooler_url',
     ],
     'database runtime secret bundle',
   );
@@ -86,24 +95,64 @@ export function loadRuntimeConnectionEnvironment(
     'Redis runtime secret bundle',
   );
 
-  env.DATABASE_URL = requiredRecordString(
+  const directDatabaseUrl = requiredRecordString(
     database,
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox database URL' : 'database URL',
   );
-  env.CONTROL_PLANE_READ_DATABASE_URL =
+  const directControlPlaneDatabaseUrl =
+    env.CONTROL_PLANE_DATABASE_URL?.trim() || directDatabaseUrl;
+  const directControlPlaneReadDatabaseUrl =
     scope === 'sandbox'
       ? requiredRecordString(
           database,
           'sandbox_control_plane_read_url',
           'sandbox control-plane read URL',
         )
-      : (env.CONTROL_PLANE_DATABASE_URL ?? env.DATABASE_URL);
-  env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL = requiredRecordString(
+      : env.CONTROL_PLANE_READ_DATABASE_URL?.trim() ||
+        directControlPlaneDatabaseUrl;
+  const directEmailBudgetDatabaseUrl = requiredRecordString(
     database,
     'email_send_budget_url',
     'shared email daily budget database URL',
   );
+  const poolerEnabled = parsePoolerEnabled(env.AIHUB_DATABASE_POOLER_ENABLED);
+  const usePooler = poolerEnabled && options.target !== 'operator';
+
+  env.DATABASE_URL = usePooler
+    ? requiredRecordString(
+        database,
+        scope === 'sandbox' ? 'sandbox_pooler_url' : 'pooler_url',
+        'PgBouncer runtime URL',
+      )
+    : directDatabaseUrl;
+  env.CONTROL_PLANE_DATABASE_URL = usePooler
+    ? requiredRecordString(
+        database,
+        scope === 'sandbox'
+          ? 'sandbox_control_plane_pooler_url'
+          : 'control_plane_pooler_url',
+        'PgBouncer control-plane URL',
+      )
+    : directControlPlaneDatabaseUrl;
+  env.CONTROL_PLANE_READ_DATABASE_URL = usePooler
+    ? requiredRecordString(
+        database,
+        scope === 'sandbox'
+          ? 'sandbox_control_plane_read_pooler_url'
+          : 'control_plane_read_pooler_url',
+        'PgBouncer control-plane read URL',
+      )
+    : directControlPlaneReadDatabaseUrl;
+  env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL = usePooler
+    ? requiredRecordString(
+        database,
+        scope === 'sandbox'
+          ? 'sandbox_email_send_budget_pooler_url'
+          : 'email_send_budget_pooler_url',
+        'PgBouncer email budget URL',
+      )
+    : directEmailBudgetDatabaseUrl;
   env.REDIS_URL = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',
@@ -150,6 +199,13 @@ function resolveScope(value: string | undefined): RuntimeConnectionScope {
     throw configurationError('AIHUB_RUNTIME_DATABASE_SCOPE is invalid');
   }
   return scope;
+}
+
+function parsePoolerEnabled(value: string | undefined): boolean {
+  const normalized = value?.trim() || 'false';
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw configurationError('AIHUB_DATABASE_POOLER_ENABLED is invalid');
 }
 
 function configurationError(

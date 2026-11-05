@@ -15,6 +15,7 @@ secret/aihub/{environment}/seaweedfs
 secret/aihub/{environment}/resend
 secret/aihub/{environment}/user-access-jwt
 secret/aihub/{environment}/database
+secret/aihub/{environment}/database-pooler
 secret/aihub/{environment}/redis
 secret/aihub/{environment}/sandbox-assertion
 secret/aihub/{environment}/email-outbox
@@ -114,7 +115,11 @@ or a revoked token. `bound_cidr_list` is the constraint Vault requires when
 `bind_secret_id` is off.
 
 The helper writes the selected policy, creates an AppRole with a short token
-TTL and bounded maximum TTL, and writes all eleven KV bundles. The credential
+TTL and bounded maximum TTL, and writes the runtime KV bundles. If the
+operator-only directory also contains `database-pooler.json`, the helper
+validates its capacity evidence and approvals, then writes the separate
+`database-pooler` bundle. Pooler provisioning is optional until the rollout
+gate in the deployment runbook is met. The credential
 directory must also contain `database.json`, `redis.json`, and
 `sandbox-assertion.json` with the flat keys used by the connection template.
 `database.json` contains `url`, `sandbox_url`, and
@@ -131,6 +136,27 @@ same Production database through a dedicated login with access only to
 email_daily_send_budgets. The daily counter is shared by every deployment using
 the Resend account; provision the same URL in Production and Sandbox, separate
 from the outbox database URLs.
+
+When approved, `database.json` may additionally include distinct pooler URLs
+for the runtime, control-plane, read, and email-budget connection roles. The
+connection template renders these optional keys; a runtime with
+`AIHUB_DATABASE_POOLER_ENABLED=true` fails closed if any required role URL is
+missing. The operator CLI and migration entrypoint always select direct URLs.
+
+`database-pooler.json` is a separate strict bundle. It contains the measured
+`max_connections` (currently held at 100), dated evidence for reserved slots,
+owner-approved operational headroom, a `max_client_conn` cap, separate
+PgBouncer admin/stats credentials, every direct client's owner-approved pool
+maximum and process overlap, and at least four database aliases. Each alias
+records its target host/database, `max_db_connections`, approved client pool
+maximum and process overlap, a per-alias client cap, owner evidence, and its
+own database users/passwords. The validator checks that alias client caps equal
+pool maximum times overlap, `max_client_conn` includes all alias caps plus the
+admin/stats slots, and backend caps plus direct clients and headroom fit under
+the PostgreSQL connection budget after reserved slots. No target cap is implied
+by historical measurements; owner evidence is required before this bundle can
+be provisioned. The separate `aihub-{environment}-pgbouncer` AppRole can read
+only this bundle; the application runtime identity cannot read it.
 
 Use a dedicated Redis ACL user limited to the two keys the limiter touches: the
 pacing key `aihub:resend:email-send-rate:last-reservation-ms` and the
@@ -165,9 +191,12 @@ smoke test.
 `templates/runtime-secrets.json.ctmpl` renders the JSON shape consumed by the
 AIHUB runtime-secret provider. `templates/auth-mfa-secrets.json.ctmpl` renders
 the separate MFA keyring. `templates/connection-secrets.json.ctmpl` renders
-database, Redis, and sandbox bootstrap material. Set
-`AIHUB_VAULT_ENVIRONMENT` in the Agent process; all three files are rendered under
-the shared runtime directory.
+database, Redis, and sandbox bootstrap material. `agent/aihub-pgbouncer.hcl`
+and its three templates render PgBouncer config, per-app userlist credentials,
+and the dedicated exporter credential into a separate host directory. Set
+`AIHUB_VAULT_ENVIRONMENT` in each Agent. The three runtime templates render to
+the shared runtime directory; the pooler templates render to the separate
+PgBouncer directory.
 
 The rendered file must be readable only by the AIHUB service account. Its
 directory must not be world-readable, and the file must not be copied into

@@ -338,6 +338,12 @@ function createConnectionConfiguration(
   controlPlaneReadDatabaseUrl: string,
 ): MutableConnectionConfiguration {
   return {
+    poolConnections: {
+      runtime: undefined,
+      'control-plane': undefined,
+      'control-plane-read': undefined,
+      'email-daily-budget': undefined,
+    },
     databaseUrl,
     controlPlaneDatabaseUrl: testDatabaseUrl(),
     controlPlaneReadDatabaseUrl,

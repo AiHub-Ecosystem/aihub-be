@@ -501,6 +501,7 @@ jobs:
     timeout-minutes: 15
     env:
       REDIS_URL: redis://localhost:6379/14
+      AIHUB_PGBOUNCER_TEST_URL: postgres://aihub:change-me@localhost:6432/aihub_db_lane
 
     services:
       postgres:
@@ -522,6 +523,25 @@ jobs:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli SET aihub:test-lane:owner aihub-db-lane-v1 >/dev/null && redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+      pgbouncer:
+        image: edoburu/pgbouncer:v1.26.1-p0
+        env:
+          DATABASE_URL: postgres://aihub:change-me@postgres:5432/aihub_db_lane
+          AUTH_TYPE: scram-sha-256
+          POOL_MODE: transaction
+          MAX_CLIENT_CONN: "64"
+          DEFAULT_POOL_SIZE: "20"
+          MAX_DB_CONNECTIONS: "2"
+          MAX_PREPARED_STATEMENTS: "100"
+          QUERY_WAIT_TIMEOUT: "0.5"
+          LISTEN_PORT: "5432"
+        ports:
+          - 6432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -p 5432 -U aihub -d aihub_db_lane"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20

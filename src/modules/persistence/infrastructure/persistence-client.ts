@@ -1,3 +1,4 @@
+import type { PostgresConnectionRole } from '@/common/observability/metrics';
 import type { PrismaClient } from '@prisma-client/client';
 
 /**
@@ -63,6 +64,7 @@ export interface PrismaClientHolder {
 }
 
 export interface PrismaClientUrls {
+  readonly poolConnections?: Partial<Record<PostgresConnectionRole, number>>;
   readonly databaseUrl: string | undefined;
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;

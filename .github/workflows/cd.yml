@@ -372,11 +372,15 @@ jobs:
             "$target:$VPS_APP_DIR/ops/nginx/"
           scp "${scp_opts[@]}" \
             ops/vault/agent/aihub-runtime.hcl \
+            ops/vault/agent/aihub-pgbouncer.hcl \
             "$target:$VPS_APP_DIR/ops/vault/agent/"
           scp "${scp_opts[@]}" \
             ops/vault/templates/runtime-secrets.json.ctmpl \
             ops/vault/templates/auth-mfa-secrets.json.ctmpl \
             ops/vault/templates/connection-secrets.json.ctmpl \
+            ops/vault/templates/pgbouncer.ini.ctmpl \
+            ops/vault/templates/pgbouncer-userlist.txt.ctmpl \
+            ops/vault/templates/pgbouncer-metrics-credentials.json.ctmpl \
             "$target:$VPS_APP_DIR/ops/vault/templates/"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
@@ -398,9 +402,13 @@ jobs:
           test -s "$APP_DIR/ops/nginx/00-aihub-log-format.conf"
           test -s "$APP_DIR/ops/nginx/aihub-access-logrotate"
           test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
+          test -s "$APP_DIR/ops/vault/agent/aihub-pgbouncer.hcl"
           test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/pgbouncer.ini.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/pgbouncer-userlist.txt.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/pgbouncer-metrics-credentials.json.ctmpl"
           compose_next="$(mktemp "$APP_DIR/.aihub-compose.XXXXXX")"
           helper_next="$(mktemp "$APP_DIR/scripts/ops/.blue-green-host.XXXXXX")"
           installer_next="$(mktemp "$APP_DIR/scripts/ops/.install-host-jobs.XXXXXX")"

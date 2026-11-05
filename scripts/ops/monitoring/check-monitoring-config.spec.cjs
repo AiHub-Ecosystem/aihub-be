@@ -94,6 +94,7 @@ function validExporterCompose() {
       command: [
         '172.27.0.1:19103:127.0.0.1:19103',
         '172.27.0.1:19104:127.0.0.1:19104',
+        '172.27.0.1:19105:127.0.0.1:19105',
       ],
       mem_limit: '32m',
       cpus: 0.05,
@@ -226,6 +227,19 @@ void test('scrapes both application metrics endpoints through private forwards',
   assert.match(
     prometheus,
     /job_name: aihub-sandbox-app\s+metrics_path: \/metrics\s+file_sd_configs:\s+- files: \[\/etc\/prometheus\/sandbox-targets\/targets\.yml\]/,
+  );
+  assert.match(
+    prometheus,
+    /job_name: aihub-pgbouncer\s+metrics_path: \/metrics\s+static_configs:\s+- targets: \[172\.27\.0\.1:19105\]/,
+  );
+  const alertRules = readFileSync(
+    path.resolve(__dirname, '../../../ops/monitoring/alert.rules.yml'),
+    'utf8',
+  );
+  assert.match(alertRules, /alert: AIHUBPgBouncerMetricsUnavailable/);
+  assert.match(
+    alertRules,
+    /aihub_pgbouncer_scrape_success\{job="aihub-pgbouncer"\} == 0/,
   );
   const sandboxTargets = readFileSync(
     path.resolve(

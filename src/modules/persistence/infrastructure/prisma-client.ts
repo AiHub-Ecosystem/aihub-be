@@ -57,6 +57,8 @@ const POOL_CONNECTIONS: Readonly<Record<PostgresPoolName, number>> = {
 };
 
 interface PrismaClientOptions {
+  readonly max?: number;
+  readonly poolConnections?: Partial<Record<PostgresConnectionRole, number>>;
   readonly roles?: readonly PostgresConnectionRole[];
   readonly timeouts?: PostgresTimeouts;
 }
@@ -72,9 +74,15 @@ export function createPrismaClient(
 
   const roles = options.roles ?? (role === 'integration-test' ? [] : [role]);
   const connections =
-    roles.length === 0
+    options.max ??
+    (roles.length === 0
       ? POOL_CONNECTIONS[role]
-      : roles.reduce((sum, served) => sum + POOL_CONNECTIONS[served], 0);
+      : roles.reduce(
+          (sum, served) =>
+            sum +
+            (options.poolConnections?.[served] ?? POOL_CONNECTIONS[served]),
+          0,
+        ));
   const pool = createPostgresPool(
     role,
     postgresPoolOptions(databaseUrl, connections, options.timeouts),
@@ -99,6 +107,7 @@ export function createOperatorPrismaClient(
   databaseUrl: string,
 ): PrismaClientHolder {
   return createPrismaClient(role, databaseUrl, {
+    max: 1,
     timeouts: OPERATOR_POSTGRES_TIMEOUTS,
   });
 }
@@ -195,6 +204,9 @@ export function createSharedPrismaClients(
 
     const created = createPrismaClient(role, databaseUrl, {
       roles: rolesFor(databaseUrl),
+      ...(urls.poolConnections === undefined
+        ? {}
+        : { poolConnections: urls.poolConnections }),
     });
     pools.set(databaseUrl, created);
     return created;

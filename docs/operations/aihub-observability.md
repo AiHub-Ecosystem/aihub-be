@@ -173,6 +173,18 @@ Compare `connections_total` with `max_connections`; investigate the shared clust
 
 The L.4 PostgreSQL disk alert is still blocked: the current exporter reports each AIHUB database's size, but not the shared cluster's storage capacity or free space. The host disk rule covers the AIHUB VPS filesystems, not the managed PostgreSQL volume. Do not infer an 80% storage threshold from database size alone; add a capacity signal after the database owner provides an authoritative denominator.
 
+### PgBouncer
+
+`aihub-pgbouncer` scrapes the restricted loopback metrics endpoint through SSH
+forward `19105`. The exporter exposes client and PostgreSQL backend connections
+by database alias/state, waiting clients, oldest wait duration, and whether the
+administrative stats scrape succeeded. `AIHUBPgBouncerMetricsUnavailable`
+fires when the endpoint or stats scrape stays unavailable for two minutes.
+Investigate the PgBouncer Agent, container health, Vault-rendered files, and the
+restricted tunnel. Client/backend utilization and queue alert thresholds remain
+pending staging measurements and #412 approval; do not treat the old
+PostgreSQL connection alert threshold as a PgBouncer target.
+
 #### Statement statistics and privacy gate
 
 The read-only production check on 2026-10-16 found PostgreSQL 16.15 with an empty `shared_preload_libraries`, `compute_query_id=auto`, and `pg_stat_statements` 1.10 available but not installed in any connectable database. PostgreSQL last started at `2026-10-12 08:11:15 UTC`. The `aihub_monitoring` login exists, is a non-superuser, and is not a member of `pg_monitor` or `pg_read_all_stats`. The database container belongs to the separate Compose project `/home/VietHXQ/aihub`; #362 has not recorded its owner contact or a change-notification agreement. Do not change or restart it without a maintenance window coordinated with every affected application owner.
