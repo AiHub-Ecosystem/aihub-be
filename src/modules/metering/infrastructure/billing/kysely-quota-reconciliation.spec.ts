@@ -1,6 +1,6 @@
 import { createPostgresPool } from '@/common/postgres/postgres-pool';
 import type { CompiledQuery } from 'kysely';
-import { Pool as PgPool, type Pool } from 'pg';
+import type { Pool } from 'pg';
 import {
   compileKyselyQuotaReconciliation,
   createKyselyQuotaClient,
@@ -45,12 +45,12 @@ describe('Kysely quota reconciliation spike', () => {
       rowCount: 0,
     });
     const release = jest.fn();
-    jest.spyOn(PgPool.prototype, 'connect').mockResolvedValue({
+    const pool = createPostgresPool('integration-test', { max: 1 });
+    jest.spyOn(pool, 'connect').mockResolvedValue({
       query,
       release,
       getTransactionStatus: () => 'I',
     } as never);
-    const pool = createPostgresPool('integration-test', { max: 1 });
     const database = createKyselyQuotaClient(pool);
 
     try {
