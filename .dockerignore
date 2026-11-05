@@ -32,6 +32,7 @@ scripts/runtime/*
 !scripts/ops/
 scripts/ops/*
 !scripts/ops/monitoring/probe-runtime-dependencies.cjs
+!scripts/ops/monitoring/pgbouncer-exporter.mjs
 !scripts/ops/capacity-benchmark/capacity-benchmark-seed.mjs
 !scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs
 *.runtime-secrets.json

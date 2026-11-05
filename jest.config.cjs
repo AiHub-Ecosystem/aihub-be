@@ -41,7 +41,13 @@ module.exports = {
   ],
   // The database lane has its own config and needs a live PostgreSQL; this
   // lane must keep running with none.
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/test/db/'],
+  // These tests run in Bun's unit lane; Jest's CommonJS runtime cannot load
+  // their native ESM dependencies, and they contribute no src coverage.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/test/db/',
+    '<rootDir>/test/cli/pgbouncer-(budget|exporter)\\.spec\\.ts',
+  ],
   // NestJS 12 and @nestjs/config ship ESM packages. Node loads them through
   // own module loader does not, so SWC compiles it to CommonJS here. The two
   // alternatives cover the `.pnpm` store path and the linked path (ADR-0047);

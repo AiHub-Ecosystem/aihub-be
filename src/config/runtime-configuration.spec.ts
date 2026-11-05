@@ -50,6 +50,34 @@ describe('runtime configuration', () => {
     expect(config.LOG_LEVEL).toBe('info');
     expect(config.SEAWEEDFS_ENDPOINT_URL).toBe('https://s3.wispace.app');
     expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
+    expect(config.AIHUB_DATABASE_POOLER_ENABLED).toBe(false);
+  });
+
+  it('requires approved per-role pool caps when PgBouncer runtime routing is enabled', () => {
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        NODE_ENV: 'test',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+        AIHUB_DATABASE_POOLER_ENABLED: 'true',
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    expect((caught as RuntimeConfigurationError).variableNames).toEqual(
+      expect.arrayContaining([
+        'AIHUB_POSTGRES_POOL_MAX_RUNTIME',
+        'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE',
+        'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ',
+        'AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET',
+      ]),
+    );
   });
 
   it.each([
@@ -287,6 +315,9 @@ describe('runtime configuration', () => {
       type: 'number',
       defaultValue: 3000,
     });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_DATABASE_POOLER_ENABLED,
+    ).toMatchObject({ type: 'boolean', defaultValue: false });
     expect(runtimeEnvironmentMetadata.SEAWEEDFS_ACCESS_KEY_ID?.secret).toBe(
       true,
     );

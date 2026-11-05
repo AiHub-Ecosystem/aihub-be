@@ -7,6 +7,27 @@ evaluation_interval: 1m
 tests:
   - interval: 1m
     input_series:
+      - series: 'up{job="aihub-pgbouncer",instance="172.27.0.1:19105"}'
+        values: "0x4"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AIHUBPgBouncerMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AIHUBPgBouncerMetricsUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              job: aihub-pgbouncer
+              instance: 172.27.0.1:19105
+            exp_annotations:
+              summary: "AIHUB PgBouncer monitoring is unavailable"
+              description: "The PgBouncer metrics endpoint or its administrative stats scrape has failed for two minutes. Capacity thresholds remain pending staging evidence and #412."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#pgbouncer
+
+  - interval: 1m
+    input_series:
       - series: 'probe_success{job="aihub-edge-health",instance="https://api.aihubproduction.com/health"}'
         values: "1 0 0 0 0"
       # report succeeded at t=0 with an 8400 s window; never again.

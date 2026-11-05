@@ -73,6 +73,17 @@ groups:
 
   - name: aihub-postgres-and-redis
     rules:
+      - alert: AIHUBPgBouncerMetricsUnavailable
+        expr: up{job="aihub-pgbouncer"} == 0 or aihub_pgbouncer_scrape_success{job="aihub-pgbouncer"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB PgBouncer monitoring is unavailable"
+          description: "The PgBouncer metrics endpoint or its administrative stats scrape has failed for two minutes. Capacity thresholds remain pending staging evidence and #412."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#pgbouncer
+
       - alert: AIHUBPostgresConnectionsAboveBudget
         expr: aihub_postgres_snapshot_value{job="aihub-postgres",metric="connections_total"} / on (instance, job) aihub_postgres_snapshot_value{job="aihub-postgres",metric="max_connections"} >= 0.80
         for: 5m
@@ -196,7 +207,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "7457005c8c6635e7a46c58ada714b0f0d4940c1b8ad28bda9423f6d545fa1d82"
+          rules_sha256: "a3d7a822424dc0924276dac2541c9b577f815346c0a81a6e3166570a16b5ea9b"
 
   - name: aihub-email-outbox
     rules:

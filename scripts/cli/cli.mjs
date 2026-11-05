@@ -324,7 +324,7 @@ if (existsSync(runtimeConnectionModule)) {
   if (typeof loadRuntimeConnectionEnvironment !== 'function') {
     throw new Error('runtime connection loader is unavailable');
   }
-  loadRuntimeConnectionEnvironment({ env: process.env });
+  loadRuntimeConnectionEnvironment({ env: process.env, target: 'operator' });
   runtimeConnectionLoaded = Boolean(
     process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE?.trim(),
   );
@@ -642,6 +642,7 @@ async function databasePool({ controlPlane = false } = {}) {
   const pg = /** @type {typeof import('pg')} */ (await import('pg'));
   return new pg.Pool({
     connectionString: databaseUrl,
+    max: 1,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 30_000,
     statement_timeout: 300_000,

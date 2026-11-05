@@ -43,68 +43,82 @@ each hostname to its matching loopback port. See
 
 Do not reuse the development AppRole or the development rendered snapshot.
 
-## Shared PostgreSQL connection budget (#560)
+## Shared PostgreSQL connection budget (#560, #1589)
 
-The production cluster was measured read-only on 2026-10-15 over SSH with
-`nproc`, `free -h`, `swapon --show`, and `sudo docker exec aihub-db psql`:
-PostgreSQL 16.15; `max_connections = 100`; `superuser_reserved_connections = 3`;
-`reserved_connections = 0`; `shared_buffers = 128MB`; `effective_cache_size = 4GB`;
-and `work_mem = 4MB`. The host reported 2 vCPUs, 7.7 GiB RAM, no swap, and
-3.3 GiB available. Remeasure before changing a pool or cluster setting because
-host availability can change.
+The last full PostgreSQL/host measurement recorded here was read-only on 2026-10-15 over SSH with `nproc`, `free -h`, `swapon --show`, and `sudo docker exec aihub-db psql`: PostgreSQL 16.15; `max_connections = 100`; `superuser_reserved_connections = 3`; `reserved_connections = 0`; `shared_buffers = 128MB`; `effective_cache_size = 4GB`; and `work_mem = 4MB`. The host reported 2 vCPUs, 7.7 GiB RAM, no swap, and 3.3 GiB available. A 2026-10-28 connection-setting check in #560 still reported 100 maximum connections, 3 superuser-reserved slots, and 0 additional reserved slots. Remeasure all server and host values before rollout; do not treat these snapshots as current capacity evidence.
 
-The same `pg_stat_activity` snapshot contained 8 rows, including the inspection
-query: one idle connection to each of `aihub` and `aihub_sandbox`, plus five
-background entries without a database. A connection snapshot is not a capacity
-budget. The current source configures up to 74 pool connections per application
-process when the three roles share a database URL. ADR-0085 permits three
-application containers during a blue-green cutover, making 222 the theoretical
-source maximum for that overlap. This is configuration math, not observed
-usage or an approved target.
+The 2026-10-15 `pg_stat_activity` snapshot had 8 rows including its own query. A later #560 snapshot on 2026-10-28 had 10 client backends, one active for the inspection and nine idle. Neither is a workload peak or an application allocation.
 
-AIHUB owner `@lengocanh2005it` accepted 20 connections of
-operational/monitoring headroom on 2026-10-15. At the measured settings, this
-leaves an aggregate application budget ceiling of 77 connections
-(`100 - 3 superuser-reserved - 0 reserved - 20 headroom`) across all four
-applications. This is a policy reserve, not a workload measurement. Allocate
-each application's share from its measured peak and owner approval; do not split
-the 77 equally or assign the unused remainder.
+AIHUB owner `@lengocanh2005it` accepted 20 connections of operational/monitoring headroom on 2026-10-15. Treat that and the derived 77-connection ceiling (`100 - 3 - 0 - 20`) as historical only; neither is a target under #1589. New headroom and per-app budgets remain TBD until fresh measurement and written owner approval.
 
-Before changing pool maxima or shared PostgreSQL settings:
+Connection budgets cover every client of the shared PostgreSQL cluster. Four AIHUB applications are planned to use PgBouncer; other clients may remain direct only when each has an explicit pool maximum and an owner-approved budget. #298 documents additional cluster clients, including `speaking_app`.
 
-1. Record the measurement date, PostgreSQL version, `max_connections`, all
-   configured reserved-connection settings, `shared_buffers`,
-   `effective_cache_size`, `work_mem`, and host CPU, RAM, swap, and available
-   memory. Do not tune the memory settings without workload evidence and written
-   approval from the shared-cluster owner.
-2. Obtain written, dated budgets from the owner of each of the four applications.
-   The AIHUB owner approved 20 connections of operational/monitoring headroom on
-   2026-10-15. Record each app owner, amount, and evidence source in
-   [#560](https://github.com/AiHub-Ecosystem/aihub-be/issues/560).
-   The application budgets plus that headroom must not exceed measured
-   `max_connections` after configured reserved slots are removed. Never infer a
-   share from an equal split or a connection snapshot.
-3. Calculate AIHUB's maximum by summing the pool maxima for every process and
-   database URL that reaches this cluster in each supported overlap: three app
-   containers; two app containers plus one migration connection; or two app
-   containers plus one scheduled CLI connection. Enforce a one-connection pool
-   cap in `scripts/cli/cli.mjs`, the Operator CLI clients in
-   `src/cli/operator-*.ts` through
-   `src/modules/persistence/infrastructure/prisma-client.ts`, and
-   `scripts/cli/migrate.mjs`; serial queries alone do not make a larger pool cap
-   equal one. Run only one CLI operator command at a time. Deployment suspends
-   scheduled jobs and runs migrations before starting the candidate. Do not add
-   migration or CLI connections to the three-container case.
-4. Set per-process pool maxima from the approved AIHUB allocation and record the
-   computed per-tier peaks and measurement date in #560 and [ADR-0103](../adr/0103-budget-postgresql-connections-on-shared-cluster.md).
-   Keep #588's numeric admission/general split unset until this budget is approved.
-5. Before closing #560, verify that #474's PostgreSQL connection metric is
-   deployed and that its alert fires at 80% of measured `max_connections`.
-   #456 is closed; #474 remains open pending its monitoring acceptance criteria.
+Keep client and backend limits separate:
 
-If #298 selects a dedicated PostgreSQL instance for AIHUB, repeat the sizing and
-approval against that instance instead of carrying over the shared-cluster
-budget.
+- Sum app-to-PgBouncer client pool caps across maximum replica overlap and keep the total within instance `max_client_conn`. Bound per-alias client queues with `max_db_client_connections`.
+- Set `max_db_connections` on each app-specific logical database alias. This is a hard cap per alias, not a cluster-wide cap; statically verify the sum of every alias cap plus direct-client pool maxima and approved operational headroom fits under measured `max_connections` after PostgreSQL reserved slots.
+- Bound app-side checkout and connection establishment to 250 ms, and PgBouncer backend wait to 250 ms, so their sequential worst case leaves time for a saturated request to return retryable `DATABASE_UNAVAILABLE` within one second end to end. `connectionTimeoutMillis` alone does not bound both queues. PgBouncer applies the request `statement_timeout`, `lock_timeout`, and `idle_in_transaction_session_timeout` on each backend; the transaction-pooled client must not send those as startup parameters. Prove the combined queue case returns within one second and timed-out work does not execute later.
+
+Before production rollout:
+
+1. Record fresh dated PostgreSQL settings and host CPU, RAM, swap, and available memory. The shared-cluster owner must set `capacity_evidence_valid_through` in the pooler bundle; provisioning rejects it after that date. Keep `max_connections = 100` and other server settings unchanged unless workload evidence and written shared-cluster-owner approval justify a change.
+2. Obtain written, dated budgets from the owners of all four AIHUB applications and every other client of the cluster, plus a newly agreed operational/monitoring reserve. Have the shared-cluster owner attest that the enumerated aliases and direct clients cover the complete client inventory; record approver, amount, evidence, and date. Unknown or unbounded direct clients block rollout.
+3. Derive each application's cap from configured pool maxima and the largest supported process overlap. Include up to three AIHUB application containers during cutover; include a migration connection and any backup still running if they can overlap; include a scheduled CLI connection when it can overlap. Keep migration and CLI pools at `max = 1`; only one CLI operator command may run at a time. Do not assume suspending scheduled jobs drains a backup already in progress.
+4. Sum each PgBouncer alias `max_db_connections`, direct-client pool maxima across their own process overlaps, configured PostgreSQL reserved slots, and approved headroom against the fresh `max_connections` measurement. Separately verify the sum of app client caps against `max_client_conn` and set bounded `max_db_client_connections` queues.
+5. Route the four AIHUB runtime applications through one PgBouncer endpoint in the production Compose topology with `pool_mode = transaction`; PostgreSQL remains external to that Compose project. Keep migration and administrative clients on direct URLs with explicit `max = 1`. Use existing Vault secret delivery and do not add a shared static credential to Compose or source. PgBouncer aliases enforce quotas only; PostgreSQL role isolation remains in #298.
+6. Keep the single PgBouncer endpoint's single-point-of-failure behavior, health check, restart/rollback procedure, and HA trigger documented. Fail closed with retryable `DATABASE_UNAVAILABLE`; do not fall back to direct PostgreSQL.
+7. Verify a CI integration probe with real PostgreSQL and PgBouncer, including app checkout and PgBouncer backend saturation, one-second end-to-end retry, prepared statements for Prisma 7.10.1 (`max_prepared_statements > 0`), no late query execution, and no orphan server session. Then prove approved caps, supported overlap, bounded queues, and recovery in staging before production rollout.
+8. Export PgBouncer client, backend, and waiting-queue metrics and alert on them. #412 settles the thresholds after staging evidence. Keep #474's PostgreSQL connection metric/alert, verify both monitoring layers, and update `docs/reliability-maturity.md` only from measured deployed topology.
+
+If #298 selects a dedicated PostgreSQL instance for AIHUB, repeat the measurements, owner approvals, and connection budget against that instance. A proposed cap is not approval to change PostgreSQL configuration or deploy the pooler.
+
+### PgBouncer runtime gate and recovery
+
+The Compose profile `database-pooler` contains one PgBouncer endpoint, its
+Vault Agent, and a metrics exporter. PostgreSQL remains on the existing
+external database network. The endpoint is a single point of failure: if it is
+unavailable, pooled requests fail with retryable `DATABASE_UNAVAILABLE`; the
+application does not fall back to PostgreSQL directly. Consider HA only if
+staging or production evidence shows this endpoint's outage or maintenance
+breaks the owner-approved availability objective, and record that decision
+before changing topology.
+
+Keep `AIHUB_DATABASE_POOLER_ENABLED=false` and the four application pool caps
+unset until the full connection budget, all four application integrations,
+direct-client budgets, staging overlap/load evidence, and owner approvals are
+recorded. `max_connections` stays at 100. The optional
+`database-pooler.json` operator bundle is validated before it is written to
+Vault; the PgBouncer Agent renders its configuration and per-app credentials to
+`AIHUB_PGBOUNCER_SECRETS_HOST_DIR`, separate from the application secret mount.
+Create that host directory with owner UID/GID `10001` and mode `0700`. Never
+place backend credentials in Compose or source.
+The PgBouncer Vault role-ID path defaults to
+`/srv/aihub/secrets/vault-role-id-pgbouncer`, so existing `.env.production`
+files can continue loading Compose with the pooler profile disabled. Set
+`AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE` when the host stores that file elsewhere.
+
+After the rollout gate is met, start and verify the pooler profile before
+enabling it for app containers:
+
+```sh
+docker compose --env-file .env.production --profile database-pooler -f docker-compose.production.yml config --quiet
+docker compose --env-file .env.production --profile database-pooler -f docker-compose.production.yml up -d pgbouncer-agent pgbouncer pgbouncer-metrics
+docker compose --env-file .env.production --profile database-pooler -f docker-compose.production.yml ps pgbouncer-agent pgbouncer pgbouncer-metrics
+```
+
+Confirm all three health checks pass and the PgBouncer metrics endpoint is
+reachable through the restricted monitoring tunnel before setting the feature
+flag and approved pool caps. Restart app containers so the runtime connection
+loader selects the separate PgBouncer URLs from Vault. Migrations and operator
+CLI commands continue to use direct URLs with pool maximum 1.
+
+To recover from a pooler outage, first set
+`AIHUB_DATABASE_POOLER_ENABLED=false` and restart every affected app container.
+The runtime loader then selects the direct URLs already present in Vault. Verify
+app health and PostgreSQL connection usage against the approved direct-client
+budget before stopping the pooler profile. This is an operator rollback
+procedure, not automatic fallback. Keep #1589 open until all four application
+owners and the staging/production evidence are complete.
 
 ## Prepare the host
 
@@ -115,6 +129,7 @@ both Vault Agent and the application run as that non-root identity.
 ```sh
 sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/runtime
 sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/runtime-sandbox
+sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/pgbouncer
 sudo install -d -m 0700 /srv/aihub/secrets
 sudo install -m 0600 -o 10001 -g 10001 vault-ca.pem /srv/aihub/secrets/vault-ca.pem
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id /srv/aihub/secrets/vault-role-id
@@ -870,7 +885,9 @@ password logins are refused. The first login with a new key raises
 ## Provision production Vault data
 
 Use the repository helper with the production operator workflow. It writes the
-ten production KV paths and never prints secret values:
+runtime KV paths and never prints secret values. When
+`database-pooler.json` is present, it also provisions a separate PgBouncer-only
+AppRole and the pooler credential path:
 
 ```sh
 AIHUB_VAULT_PROVISION_ALLOW=true \
@@ -885,7 +902,23 @@ The Production directory contains `ai-speaking.json`, `ai-writing.json`,
 `redis.json`, `email-outbox.json`, `web-session.json`, and `auth-mfa.json`. It
 must not contain `sandbox-assertion.json`. Keep the directory mode `0700` and
 remove it after installing the helper-generated `vault-role-id` at
-`VAULT_ROLE_ID_FILE`. The required flat bundle shapes, including the
+`VAULT_ROLE_ID_FILE`. When the optional PgBouncer role is provisioned, read its
+role ID directly to the protected host path without printing it:
+
+Before provisioning `database-pooler.json`, export the four approved
+`AIHUB_POSTGRES_POOL_MAX_*` values used by Compose. The helper checks that their
+sum matches the AIHUB BE aliases' approved client pool maxima.
+
+```sh
+umask 077
+vault read -field=role_id auth/approle/role/aihub-production-pgbouncer/role-id \
+  > /srv/aihub/secrets/vault-role-id-pgbouncer
+sudo chown 10001:10001 /srv/aihub/secrets/vault-role-id-pgbouncer
+sudo chmod 0600 /srv/aihub/secrets/vault-role-id-pgbouncer
+```
+
+The app runtime identity cannot read the PgBouncer bundle. The required flat
+bundle shapes, including the
 `client_secret` string in `web-session.json`, are documented in
 [Vault bootstrap](../../ops/vault/README.md#policy-bootstrap).
 

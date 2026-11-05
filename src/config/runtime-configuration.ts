@@ -83,6 +83,20 @@ const fields = {
     values: ['production', 'sandbox'],
     defaultValue: 'production',
   },
+  AIHUB_DATABASE_POOLER_ENABLED: {
+    kind: 'boolean',
+    defaultValue: false,
+  },
+  AIHUB_POSTGRES_POOL_MAX_RUNTIME: { kind: 'number', minValue: 1 },
+  AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE: { kind: 'number', minValue: 1 },
+  AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ: {
+    kind: 'number',
+    minValue: 1,
+  },
+  AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET: {
+    kind: 'number',
+    minValue: 1,
+  },
   /**
    * ADR-0123: verification tokens issued while this is true need the
    * registration password to verify. Leave it false until the Customer Web
@@ -324,6 +338,7 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'AIHUB_AUTH_MFA_SECRETS_FILE',
     'AIHUB_RUNTIME_CONNECTION_SECRETS_FILE',
     'AIHUB_RUNTIME_DATABASE_SCOPE',
+    'AIHUB_DATABASE_POOLER_ENABLED',
     'AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD',
     'AIHUB_USER_ACCESS_ISSUER',
     'AIHUB_PRODUCTION_HOST',
@@ -336,6 +351,10 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
   ],
   connections: [
     'AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA',
+    'AIHUB_POSTGRES_POOL_MAX_RUNTIME',
+    'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE',
+    'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ',
+    'AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET',
     'DATABASE_URL',
     'CONTROL_PLANE_DATABASE_URL',
     'CONTROL_PLANE_READ_DATABASE_URL',
@@ -399,6 +418,13 @@ interface RuntimeLoadStep {
 
 export interface RuntimeConnectionConfiguration {
   readonly databaseUrl: string | undefined;
+  readonly databasePoolerEnabled: boolean;
+  readonly poolConnections: {
+    readonly runtime: number | undefined;
+    readonly 'control-plane': number | undefined;
+    readonly 'control-plane-read': number | undefined;
+    readonly 'email-daily-budget': number | undefined;
+  };
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;
   readonly emailDailyBudgetDatabaseUrl: string | undefined;
@@ -620,7 +646,18 @@ function loadConnectionSettings(
   raw: Readonly<Record<string, string | undefined>>,
   context: RuntimeLoadContext,
 ): RuntimeLoadStep {
-  return loadRuntimeFieldGroup(raw, context, 'connections');
+  const step = loadRuntimeFieldGroup(raw, context, 'connections');
+  if (raw.AIHUB_DATABASE_POOLER_ENABLED === 'true') {
+    for (const name of [
+      'AIHUB_POSTGRES_POOL_MAX_RUNTIME',
+      'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE',
+      'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ',
+      'AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET',
+    ] as const) {
+      if (step.values[name] === undefined) step.problems.push(name);
+    }
+  }
+  return step;
 }
 
 function loadDeliverySettings(
@@ -736,6 +773,15 @@ export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfigurat
   const configuration = getRuntimeConfiguration();
   return Object.freeze({
     databaseUrl: configuration.DATABASE_URL,
+    databasePoolerEnabled: configuration.AIHUB_DATABASE_POOLER_ENABLED,
+    poolConnections: {
+      runtime: configuration.AIHUB_POSTGRES_POOL_MAX_RUNTIME,
+      'control-plane': configuration.AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE,
+      'control-plane-read':
+        configuration.AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ,
+      'email-daily-budget':
+        configuration.AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET,
+    },
     controlPlaneDatabaseUrl:
       configuration.CONTROL_PLANE_DATABASE_URL ?? configuration.DATABASE_URL,
     controlPlaneReadDatabaseUrl:

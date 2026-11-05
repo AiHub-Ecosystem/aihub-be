@@ -4,6 +4,12 @@ import { Pool, type PoolClient, type TransactionStatus } from 'pg';
 import { getMetrics } from '@/common/observability/metrics';
 import { createPostgresPool } from './postgres-pool';
 
+type ConnectCallback = (
+  error: Error | undefined,
+  client: PoolClient | undefined,
+  done: (release?: Error | boolean) => void,
+) => void;
+
 describe('Postgres pool connection reuse', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -16,7 +22,9 @@ describe('Postgres pool connection reuse', () => {
       release,
     } as unknown as PoolClient;
     const connect = jest.spyOn(Pool.prototype, 'connect');
-    connect.mockResolvedValue(client as never);
+    connect.mockImplementation(((callback: ConnectCallback) => {
+      callback(undefined, client, (error) => client.release(error));
+    }) as never);
     return { release, client, connect };
   }
 
@@ -85,6 +93,32 @@ describe('Postgres pool connection reuse', () => {
     (await pool.connect()).release(failure);
 
     expect(release).toHaveBeenCalledWith(failure);
+  });
+
+  it('expires a queued checkout without borrowing a connection later', async () => {
+    const callbacks: ConnectCallback[] = [];
+    const connect = jest.spyOn(Pool.prototype, 'connect');
+    connect.mockImplementation(((callback: ConnectCallback) => {
+      callbacks.push(callback);
+    }) as never);
+    const pool = createPostgresPool('integration-test', { max: 1 });
+    const first = pool.connect();
+    const second = pool.connect();
+    const release = jest.fn<undefined, [Error | boolean | undefined]>();
+    const client = {
+      getTransactionStatus: () => 'I',
+      release,
+    } as unknown as PoolClient;
+    callbacks[0]?.(undefined, client, (error) => client.release(error));
+    const borrowedClient = await first;
+
+    expect(pool.waitingCount).toBe(1);
+    await expect(second).rejects.toMatchObject({ code: 'P2024' });
+    expect(pool.waitingCount).toBe(0);
+    borrowedClient.release();
+
+    expect(callbacks).toHaveLength(1);
+    expect(release).toHaveBeenCalledWith();
   });
 });
 

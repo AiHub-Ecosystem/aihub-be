@@ -28,6 +28,9 @@ export const REQUEST_POSTGRES_TIMEOUTS = {
 /** How long past statement_timeout the client waits before giving up itself. */
 export const QUERY_TIMEOUT_MARGIN_MS = 1_000;
 
+/** Leaves time for PgBouncer's queue timeout and the HTTP error response. */
+export const POSTGRES_ACQUISITION_TIMEOUT_MS = 250;
+
 export const OPERATOR_POSTGRES_TIMEOUTS = {
   statement_timeout: 300_000,
   lock_timeout: 30_000,
@@ -80,6 +83,11 @@ type PoolConnectCallback = (
  * Nothing is retried; the caller already holds its error.
  */
 class TransactionSafePool extends Pool {
+  private readonly maxConnections: number;
+  private readonly maxWaiters: number;
+  private readonly waiting: PendingConnect[] = [];
+  private active = 0;
+
   constructor(
     config: PoolConfig,
     private readonly onDiscard: (
@@ -88,6 +96,11 @@ class TransactionSafePool extends Pool {
     ) => void,
   ) {
     super(config);
+    this.maxConnections = config.max ?? 10;
+    this.maxWaiters = this.maxConnections;
+    Object.defineProperty(this, 'waitingCount', {
+      get: () => this.waiting.length,
+    });
   }
 
   override connect(): Promise<PoolClient>;
@@ -95,40 +108,153 @@ class TransactionSafePool extends Pool {
   override connect(
     callback?: PoolConnectCallback,
   ): Promise<PoolClient> | undefined {
-    if (callback === undefined) {
-      return super.connect().then((client) => this.guard(client));
-    }
-    // pg-pool's own query() borrows through this callback form.
-    super.connect((error, client, done) => {
-      if (client === undefined) {
-        callback(error, client, done);
-        return;
-      }
-      const guarded = this.guard(client);
-      callback(error, guarded, (releaseError) => {
-        guarded.release(releaseError);
-      });
-    });
-    return undefined;
+    return this.requestConnection(callback);
   }
 
-  private guard(client: PoolClient): PoolClient {
+  private requestConnection(
+    callback?: PoolConnectCallback,
+  ): Promise<PoolClient> | undefined {
+    let resolvePromise: ((client: PoolClient) => void) | undefined;
+    let rejectPromise: ((error: Error) => void) | undefined;
+    const promise =
+      callback === undefined
+        ? new Promise<PoolClient>((resolve, reject) => {
+            resolvePromise = resolve;
+            rejectPromise = reject;
+          })
+        : undefined;
+    const request: PendingConnect = {
+      callback,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+      settled: false,
+      started: false,
+      timer: setTimeout(
+        () => this.expire(request),
+        POSTGRES_ACQUISITION_TIMEOUT_MS,
+      ),
+    };
+
+    if (this.active < this.maxConnections) {
+      this.start(request);
+    } else if (this.waiting.length < this.maxWaiters) {
+      this.waiting.push(request);
+    } else {
+      this.fail(request, poolAcquisitionTimeout());
+    }
+
+    return promise;
+  }
+
+  private start(request: PendingConnect): void {
+    if (request.settled) return;
+    request.started = true;
+    this.active += 1;
+
+    // pg-pool's own query() borrows through this callback form.
+    super.connect((error, client, done) => {
+      if (request.settled) {
+        if (client !== undefined) done(true);
+        this.releaseSlot();
+        return;
+      }
+      clearTimeout(request.timer);
+      request.settled = true;
+      if (error !== undefined || client === undefined) {
+        this.releaseSlot();
+        this.deliverError(request, error ?? poolAcquisitionTimeout());
+        return;
+      }
+      const guarded = this.guard(client, () => this.releaseSlot());
+      request.callback?.(undefined, guarded, (releaseError) => {
+        guarded.release(releaseError);
+      });
+      request.resolve?.(guarded);
+    });
+  }
+
+  private expire(request: PendingConnect): void {
+    if (request.settled) return;
+    request.settled = true;
+    if (!request.started) {
+      const index = this.waiting.indexOf(request);
+      if (index >= 0) this.waiting.splice(index, 1);
+    }
+    this.deliverError(request, poolAcquisitionTimeout());
+  }
+
+  private fail(request: PendingConnect, error: Error): void {
+    clearTimeout(request.timer);
+    request.settled = true;
+    this.deliverError(request, error);
+  }
+
+  private deliverError(request: PendingConnect, error: Error): void {
+    if (request.callback !== undefined) {
+      request.callback(error, undefined, () => undefined);
+    } else {
+      request.reject?.(error);
+    }
+  }
+
+  private releaseSlot(): void {
+    this.active -= 1;
+    const next = this.waiting.shift();
+    if (next !== undefined) this.start(next);
+  }
+
+  private guard(client: PoolClient, onRelease: () => void): PoolClient {
     const release = client.release.bind(client);
+    let released = false;
+    const releaseSlot = () => {
+      if (released) return;
+      released = true;
+      onRelease();
+    };
     client.release = (error?: Error | boolean): void => {
       if (error !== undefined && error !== false) {
-        release(error);
+        try {
+          release(error);
+        } finally {
+          releaseSlot();
+        }
         return;
       }
       const status = client.getTransactionStatus();
       if (status === 'I') {
-        release();
+        try {
+          release();
+        } finally {
+          releaseSlot();
+        }
         return;
       }
       this.onDiscard(client, status ?? 'unknown');
-      release(internalError('PostgreSQL connection left a transaction open'));
+      try {
+        release(internalError('PostgreSQL connection left a transaction open'));
+      } finally {
+        releaseSlot();
+      }
     };
     return client;
   }
+}
+
+interface PendingConnect {
+  readonly callback: PoolConnectCallback | undefined;
+  readonly resolve: ((client: PoolClient) => void) | undefined;
+  readonly reject: ((error: Error) => void) | undefined;
+  readonly timer: ReturnType<typeof setTimeout>;
+  settled: boolean;
+  started: boolean;
+}
+
+function poolAcquisitionTimeout(): Error {
+  const error =
+    // app-error-check: allow pg-pool acquisition timeout must carry Prisma's P2024 code
+    new Error('timeout exceeded when trying to connect');
+  Object.assign(error, { code: 'P2024' });
+  return error;
 }
 
 export function createPostgresPool(
@@ -209,14 +335,15 @@ export function postgresPoolOptions(
   databaseUrl: string,
   max: number,
   timeouts: PostgresTimeouts = REQUEST_POSTGRES_TIMEOUTS,
+  transactionPoolerEnabled = false,
 ): PoolConfig {
   const statementTimeoutMs = timeouts.statement_timeout;
   return {
     connectionString: databaseUrl,
     max,
-    connectionTimeoutMillis: 1_000,
+    connectionTimeoutMillis: POSTGRES_ACQUISITION_TIMEOUT_MS,
     idleTimeoutMillis: 30_000,
-    ...timeouts,
+    ...(!transactionPoolerEnabled ? timeouts : {}),
     // statement_timeout is enforced by the server, so a server that stops
     // answering on an open connection would hold the query forever.
     ...(typeof statementTimeoutMs === 'number'

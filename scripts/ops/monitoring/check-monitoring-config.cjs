@@ -225,7 +225,11 @@ function validateExporterCompose(compose) {
   if (services['redis-exporter'].user !== services['ssh-tunnel'].user) {
     throw new Error('redis-exporter must use the monitoring host account');
   }
-  for (const forward of [':19103:127.0.0.1:19103', ':19104:127.0.0.1:19104']) {
+  for (const forward of [
+    ':19103:127.0.0.1:19103',
+    ':19104:127.0.0.1:19104',
+    ':19105:127.0.0.1:19105',
+  ]) {
     if (
       !(services['ssh-tunnel'].command ?? []).some((arg) =>
         arg.endsWith(forward),
