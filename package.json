@@ -28,6 +28,8 @@
     "capacity:benchmark": "node scripts/ops/capacity-benchmark/capacity-benchmark.mjs",
     "benchmark:postgres-plans": "tsx scripts/ops/postgres-query-plan-baseline/run.ts",
     "test:capacity-benchmark": "node --test scripts/ops/capacity-benchmark/capacity-benchmark.spec.mjs",
+    "test:zero-table-outbox-run": "node --test scripts/ops/zero-table-outbox-run/runner.spec.mjs",
+    "outbox:evaluate": "node scripts/ops/zero-table-outbox-run/runner.mjs",
     "test:monitoring-config": "node --test scripts/ops/monitoring/check-monitoring-config.spec.cjs scripts/ops/monitoring/update-alert-rules-fingerprint.spec.mjs",
     "check:monitoring-config": "node scripts/ops/monitoring/check-monitoring-config.cjs",
     "benchmark:control-plane": "node scripts/ops/capacity-benchmark/benchmark-control-plane.mjs",
