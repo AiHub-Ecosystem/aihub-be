@@ -373,12 +373,14 @@ async function main(): Promise<void> {
       offeredRequests: number;
       databaseDelta: ReturnType<typeof databaseDelta>;
     }> = [];
-    for (const [route, description] of modes) {
+    for (const [route] of modes) {
       const warmup = await runLoad(probe.baseUrl, route, WARMUP_SECONDS);
       if (warmup.errorCount > 0) {
         throw new Error(`${route} warmup had request errors`);
       }
-      await sleep(1_100);
+    }
+    await sleep(1_100);
+    for (const [route, description] of modes) {
       const before = await snapshotDatabase(pool);
       const latency = await runLoad(probe.baseUrl, route, DURATION_SECONDS);
       await sleep(1_100);
@@ -418,7 +420,7 @@ async function main(): Promise<void> {
           version: databaseVersion,
           host: 'isolated local PostgreSQL service',
           statsSampling:
-            'counters reset after seed and query plan; waited 1.1 seconds before each snapshot to flush backend statistics',
+            'counters reset after seed and query plan; all modes warmed before timing; waited 1.1 seconds before each snapshot to flush backend statistics',
           queryPlan,
         },
         runner: {
