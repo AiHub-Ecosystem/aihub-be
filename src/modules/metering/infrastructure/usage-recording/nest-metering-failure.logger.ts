@@ -60,11 +60,9 @@ export class NestMeteringFailureLogger implements MeteringFailureLoggerPort {
   private readonly logger = new Logger(NestMeteringFailureLogger.name);
 
   writeFailed(record: UsageRecord): void {
-    this.logger.error(
-      JSON.stringify({
-        event: 'metering_write_failed',
-        record: safeRecord(record),
-      }),
-    );
+    this.logger.error({
+      event: 'metering_write_failed',
+      record: safeRecord(record),
+    });
   }
 }

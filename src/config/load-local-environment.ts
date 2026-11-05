@@ -23,7 +23,13 @@ export function loadLocalEnvironment(
   }
   if (mode !== undefined && DEPLOYED_MODES.has(mode)) {
     console.error(
-      `Refusing to load ${envFile} in ${mode} mode: a deployed process must take its configuration from the deployment, not a stray .env file.`,
+      JSON.stringify({
+        time: Date.now(),
+        level: 'error',
+        event: 'local_env_file_refused',
+        mode,
+        env_file: envFile,
+      }),
     );
     return;
   }

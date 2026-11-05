@@ -131,9 +131,10 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       );
 
       expect(claimed.map(({ id }) => id)).toEqual([knownId]);
-      expect(warn).toHaveBeenCalledWith(
-        'Skipped 1 email delivery requests with unrecognized kinds',
-      );
+      expect(warn).toHaveBeenCalledWith({
+        event: 'email_outbox_unrecognised_kind_rows_skipped',
+        count: 1,
+      });
       expect(JSON.stringify(warn.mock.calls)).not.toContain(
         'carrier_pigeon_email',
       );

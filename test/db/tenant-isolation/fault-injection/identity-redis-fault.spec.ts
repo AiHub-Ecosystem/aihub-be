@@ -80,9 +80,9 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
     // Each test builds fresh stores so no process-local cache answers for Redis.
     it('authenticates from Postgres and never grants an unknown key', async () => {
       const store = new RedisIdentityStore(proxiedRedisUrl);
-      const warnings: string[] = [];
+      const warnings: Record<string, unknown>[] = [];
       const failures = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
-        warn: (message: string) => warnings.push(message),
+        warn: (fields: Record<string, unknown>) => warnings.push(fields),
         log: () => undefined,
       });
       const authenticator = new ApiKeyAuthenticator(
@@ -132,7 +132,11 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
           await redisUnavailableCount('auth_failure_counter'),
         ).toBeGreaterThan(before.counter);
         expect(warnings).toEqual([
-          expect.stringContaining('brute-force protection is failing open'),
+          expect.objectContaining({
+            event: 'redis_degraded',
+            seam: 'auth_failure_counter',
+            policy: 'brute-force protection is failing open until it recovers',
+          }),
         ]);
       } finally {
         await proxy.setMode('normal');

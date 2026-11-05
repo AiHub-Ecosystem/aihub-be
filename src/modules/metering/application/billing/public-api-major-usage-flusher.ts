@@ -30,7 +30,7 @@ export class PublicApiMajorUsageFlusher {
     private readonly repository: PublicApiMajorUsageRepositoryPort,
     private readonly environment: string,
     private readonly collector: PublicApiMajorCollector,
-    private readonly report: (message: string) => void,
+    private readonly report: (event: string) => void,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -54,7 +54,7 @@ export class PublicApiMajorUsageFlusher {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<void>((resolve) => {
       timer = setTimeout(() => {
-        this.report('public API major usage final flush timed out');
+        this.report('public_api_major_usage_final_flush_timed_out');
         resolve();
       }, timeoutMs);
     });
@@ -87,7 +87,7 @@ export class PublicApiMajorUsageFlusher {
         await this.repository.add(this.environment, this.unconfirmed);
         this.unconfirmed = undefined;
       } catch {
-        this.report('public API major usage flush failed');
+        this.report('public_api_major_usage_flush_failed');
       }
     })();
     this.inFlight = pass;

@@ -1,15 +1,15 @@
 import { RedisHealthReporter } from './redis-health-reporter';
 
 class FakeLogger {
-  readonly warnings: string[] = [];
-  readonly logs: string[] = [];
+  readonly warnings: Record<string, unknown>[] = [];
+  readonly logs: Record<string, unknown>[] = [];
 
-  warn(message: string): void {
-    this.warnings.push(message);
+  warn(fields: Record<string, unknown>): void {
+    this.warnings.push(fields);
   }
 
-  log(message: string): void {
-    this.logs.push(message);
+  log(fields: Record<string, unknown>): void {
+    this.logs.push(fields);
   }
 }
 
@@ -31,12 +31,21 @@ describe('RedisHealthReporter', () => {
     reporter.reportDegraded();
     reporter.reportDegraded();
     expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toContain('Redis quota counter unavailable');
+    expect(logger.warnings[0]).toMatchObject({
+      event: 'redis_degraded',
+      seam: 'quota',
+      subject: 'quota counter',
+      policy: 'quota admission will use its configured outage policy',
+    });
 
     reporter.reportRecovered();
     reporter.reportRecovered();
     expect(logger.logs).toHaveLength(1);
-    expect(logger.logs[0]).toBe('Redis quota counter recovered');
+    expect(logger.logs[0]).toEqual({
+      event: 'redis_recovered',
+      seam: 'quota',
+      subject: 'quota counter',
+    });
 
     reporter.reportDegraded();
     expect(logger.warnings).toHaveLength(2);
@@ -69,7 +78,7 @@ describe('RedisHealthReporter', () => {
     expect(afterValue).toBe(beforeValue + 2);
   });
 
-  it('includes the failure reason in the degraded line without changing the message shape', () => {
+  it('includes the failure reason in the structured degraded event', () => {
     const logger = new FakeLogger();
     const reporter = new RedisHealthReporter(
       'concurrency',
@@ -80,9 +89,12 @@ describe('RedisHealthReporter', () => {
 
     reporter.reportDegraded(new Error('redis down'));
     expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toBe(
-      'Redis concurrency limiter unreachable (redis down); refusing requests until it recovers',
-    );
+    expect(logger.warnings[0]).toMatchObject({
+      event: 'redis_degraded',
+      seam: 'concurrency',
+      reason: 'redis down',
+      policy: 'refusing requests until it recovers',
+    });
 
     const stringReporter = new RedisHealthReporter(
       'concurrency',
@@ -91,8 +103,6 @@ describe('RedisHealthReporter', () => {
       'refusing requests until it recovers',
     );
     stringReporter.reportDegraded('timeout');
-    expect(logger.warnings[1]).toBe(
-      'Redis concurrency limiter unreachable (timeout); refusing requests until it recovers',
-    );
+    expect(logger.warnings[1]).toMatchObject({ reason: 'timeout' });
   });
 });

@@ -185,19 +185,23 @@ describe('Sandbox assertion HTTP flow', () => {
   // The assertion is a credential: one written to a log file outlives the
   // request that produced it.
   it('logs who minted what, and never the token itself', async () => {
-    const logged: string[] = [];
+    const logged: unknown[] = [];
     jest.spyOn(Logger.prototype, 'log').mockImplementation((message) => {
-      logged.push(String(message));
+      logged.push(message);
     });
 
     const response = await mint({ user_id: 'student_456' });
     const body = response.json<{ data: { assertion: string } }>();
-    const line = logged.find((entry) =>
-      entry.includes('sandbox_assertion_minted'),
+    const logPayload = logged.find(
+      (entry): entry is Record<string, unknown> =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        !Array.isArray(entry) &&
+        (entry as Record<string, unknown>)['event'] ===
+          'sandbox_assertion_minted',
     );
 
-    expect(line).toBeDefined();
-    const logPayload: unknown = JSON.parse(line ?? '{}');
+    expect(logPayload).toBeDefined();
     const log = Value.Parse(SandboxAssertionMintedLogSchema, logPayload);
     expect(log).toMatchObject({
       event: 'sandbox_assertion_minted',
@@ -207,8 +211,8 @@ describe('Sandbox assertion HTTP flow', () => {
     });
     expect(log.requestId).toMatch(/^req_/);
     expect(log.jti.length).toBeGreaterThan(0);
-    expect(line).not.toContain(body.data.assertion);
-    expect(line).not.toContain('PRIVATE KEY');
+    expect(JSON.stringify(logPayload)).not.toContain(body.data.assertion);
+    expect(JSON.stringify(logPayload)).not.toContain('PRIVATE KEY');
   });
 
   it('rejects a key outside the sandbox allowlist', async () => {

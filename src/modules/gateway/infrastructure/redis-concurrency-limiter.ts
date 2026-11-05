@@ -79,8 +79,8 @@ return 1
 `;
 
 interface LoggerLike {
-  warn(message: string): void;
-  log(message: string): void;
+  warn(fields: Record<string, unknown>): void;
+  log(fields: Record<string, unknown>): void;
 }
 
 export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {

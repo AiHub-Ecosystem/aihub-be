@@ -1,6 +1,8 @@
+import { type FastifyServerOptions, LogController } from 'fastify';
+import type { Params } from 'nestjs-pino';
+
 import { internalError } from '@/common/errors/app-error';
 import { getRuntimeConfiguration } from '@/config/runtime-configuration';
-import { type FastifyServerOptions, LogController } from 'fastify';
 
 const DEFAULT_LOG_LEVEL = 'info';
 const LOG_LEVELS = [
@@ -46,6 +48,33 @@ export type RequestLogging = Pick<
   'logger' | 'logController'
 >;
 
+function pinoOptions(logLevel: string | undefined) {
+  return {
+    level: configuredLogLevel(logLevel),
+    base: null,
+    formatters: { level: (label: string) => ({ level: label }) },
+    serializers: {
+      req: (request: { readonly id?: unknown }) => ({
+        request_id: String(request.id),
+      }),
+    },
+  };
+}
+
+/** Options for Nest's Pino logger; request-scoped logs share Fastify's stream. */
+export function createNestPinoOptions(
+  logLevel: string | undefined,
+  stream?: RequestLogStream,
+): Params {
+  return {
+    useExisting: true,
+    pinoHttp:
+      stream === undefined
+        ? pinoOptions(logLevel)
+        : [pinoOptions(logLevel), stream],
+  };
+}
+
 /**
  * Fastify's built-in Pino logger, with no logging dependency of its own.
  *
@@ -69,18 +98,15 @@ export function createRequestLogging(
     // `fastify` that `@nestjs/platform-fastify` loads. While the two resolve to
     // one module that holds; if they ever stop, the server refuses to boot.
     // `test/fastify-resolution.spec.ts` fails first and names the cause.
-    logController: new LogController({ disableRequestLogging: true }),
+    logController: new LogController({
+      disableRequestLogging: true,
+      requestIdLogLabel: 'request_id',
+    }),
     logger: {
       // Read here rather than passed in from the bootstrap because this file is
       // the explicit boundary adapter that builds the server's logging
       // configuration, the same way `open-telemetry.ts` reads its own.
-      level: configuredLogLevel(logLevel),
-      // `null` drops the pid and hostname bindings: lines stay identical
-      // across replicas and carry nothing that differs per process.
-      base: null,
-      // `info` rather than `30`, so a level written by hand in a log query
-      // matches what the line says.
-      formatters: { level: (label) => ({ level: label }) },
+      ...pinoOptions(logLevel),
       ...(stream === undefined ? {} : { stream }),
     },
   };

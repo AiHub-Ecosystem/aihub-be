@@ -13,6 +13,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace';
+import { PARAMS_PROVIDER_TOKEN, Logger as PinoNestLogger } from 'nestjs-pino';
 
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
@@ -20,7 +21,10 @@ import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import { METRICS_ROUTE_PATH, getMetrics } from '@/common/observability/metrics';
 import { registerMetricsRoute } from '@/common/observability/metrics.route';
-import { createRequestLogging } from '@/common/observability/request-logger';
+import {
+  createNestPinoOptions,
+  createRequestLogging,
+} from '@/common/observability/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
@@ -153,8 +157,15 @@ class ScriptedDispatcher {
   private behaviour: () => Promise<DispatchResult<unknown>> = () =>
     Promise.resolve(GRADED_RESPONSE);
 
-  failWith(error: unknown): void {
-    this.behaviour = () => Promise.reject(error);
+  failWith(error: unknown, logFailure = false): void {
+    this.behaviour = () => {
+      if (logFailure) {
+        new Logger('HttpOperationDispatcher').error({
+          event: 'downstream_failed',
+        });
+      }
+      return Promise.reject(error);
+    };
   }
 
   succeed(): void {
@@ -210,6 +221,7 @@ class ScriptedUsageRepository {
 }
 
 let idempotencyDelayMs = 0;
+let idempotencyReplay = false;
 let retryBudgetUnavailable = false;
 let admissionDelayMs = 0;
 let admissionRefusalDelayMs = 0;
@@ -232,7 +244,7 @@ const idempotency = {
         signal: input.signal,
         deadlineAt: input.deadlineAt,
       }),
-      replay: false,
+      replay: idempotencyReplay,
     };
   },
 } satisfies IdempotencyServicePort;
@@ -287,6 +299,8 @@ describe('request completion log over the HTTP boundary', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(PARAMS_PROVIDER_TOKEN)
+      .useValue(createNestPinoOptions('info', log))
       .overrideProvider(appConfig.KEY)
       .useValue(runtimeConfiguration)
       .overrideProvider(USAGE_REPOSITORY)
@@ -364,7 +378,9 @@ describe('request completion log over the HTTP boundary', () => {
         trustProxy: '127.0.0.1',
         genReqId: () => generateRequestId(),
       }),
+      { bufferLogs: true },
     );
+    app.useLogger(app.get(PinoNestLogger));
 
     // The same hooks, in the same order, as the application bootstrap.
     const fastify = app.getHttpAdapter().getInstance();
@@ -385,6 +401,7 @@ describe('request completion log over the HTTP boundary', () => {
     dispatcher.succeed();
     usageRepository.succeed();
     idempotencyDelayMs = 0;
+    idempotencyReplay = false;
     retryBudgetUnavailable = false;
     admissionDelayMs = 0;
     admissionRefusalDelayMs = 0;
@@ -416,6 +433,9 @@ describe('request completion log over the HTTP boundary', () => {
       total_ms,
       admission_ms,
       completion_ms,
+      request_bytes,
+      response_bytes,
+      idempotent_replay,
       ...event
     } = log.only();
     expect(event).toEqual({
@@ -439,6 +459,28 @@ describe('request completion log over the HTTP boundary', () => {
     expect(typeof total_ms).toBe('number');
     expect(typeof admission_ms).toBe('number');
     expect(typeof completion_ms).toBe('number');
+    expect(request_bytes).toBe(Buffer.byteLength(JSON.stringify(VALID_BODY)));
+    expect(response_bytes).toBe(Number(response.headers['content-length']));
+    expect(idempotent_replay).toBe(false);
+  });
+
+  it('marks an idempotent replay in the completion event', async () => {
+    idempotencyReplay = true;
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: GRADE_URL,
+        headers: { 'idempotency-key': 'completion-replay' },
+        payload: VALID_BODY,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['idempotent-replay']).toBe('true');
+      expect(log.only()['idempotent_replay']).toBe(true);
+    } finally {
+      idempotencyReplay = false;
+    }
   });
 
   it('records the authenticated API key id and address resolved through the proxy', async () => {
@@ -462,6 +504,9 @@ describe('request completion log over the HTTP boundary', () => {
       total_ms,
       admission_ms,
       completion_ms,
+      request_bytes,
+      response_bytes,
+      idempotent_replay,
       ...event
     } = log.only();
     expect(event).toEqual({
@@ -486,6 +531,9 @@ describe('request completion log over the HTTP boundary', () => {
     expect(typeof total_ms).toBe('number');
     expect(typeof admission_ms).toBe('number');
     expect(typeof completion_ms).toBe('number');
+    expect(typeof request_bytes).toBe('number');
+    expect(typeof response_bytes).toBe('number');
+    expect(idempotent_replay).toBe(false);
     expect(JSON.stringify(log.all())).not.toContain(API_KEY_VALUE);
   });
 
@@ -621,6 +669,7 @@ describe('request completion log over the HTTP boundary', () => {
         message: 'AI service request timed out',
         retryable: true,
       }),
+      true,
     );
     permitReleaseUnavailable = true;
     const dispatch = jest.spyOn(dispatcher, 'dispatch');
@@ -707,6 +756,7 @@ describe('request completion log over the HTTP boundary', () => {
 
       expect(response.statusCode).toBe(429);
       const event = log.only();
+      expect(event['level']).toBe('warn');
       expect(event['total_ms']).toBeGreaterThanOrEqual(delayMs - 10);
       expect(event['admission_ms']).toBeGreaterThanOrEqual(delayMs - 10);
       expect(
@@ -734,6 +784,7 @@ describe('request completion log over the HTTP boundary', () => {
     expect(log.only()).toEqual(
       expect.objectContaining({
         http_status: 400,
+        level: 'info',
         outcome: 'client_error',
         error_code: 'INVALID_REQUEST',
       }),
@@ -747,6 +798,7 @@ describe('request completion log over the HTTP boundary', () => {
         message: 'AI service request timed out',
         retryable: true,
       }),
+      true,
     );
 
     const response = await app.inject({
@@ -762,8 +814,19 @@ describe('request completion log over the HTTP boundary', () => {
         http_status: 504,
         outcome: 'downstream_error',
         error_code: 'AI_SERVICE_TIMEOUT',
+        level: 'error',
       }),
     );
+    const lines = log.all();
+    expect(lines).toHaveLength(2);
+    const downstreamFailure = lines.find(
+      (line) => line['event'] === 'downstream_failed',
+    );
+    expect(downstreamFailure).toMatchObject({
+      level: 'error',
+      request_id: log.only()['request_id'],
+    });
+    expect(typeof downstreamFailure?.['time']).toBe('number');
   });
 
   it('writes one internal-error event for an unexpected failure', async () => {
@@ -1021,6 +1084,7 @@ describe('request completion log over the HTTP boundary', () => {
 
       expect(response.statusCode).toBe(401);
       expect(response.headers['x-request-id']).toBe(log.only()['request_id']);
+      expect(log.only()['level']).toBe('warn');
     } finally {
       runtimeConfiguration.AIHUB_ALLOW_UNAUTHENTICATED_DEV = true;
       delayGuard.mockRestore();
@@ -1156,29 +1220,20 @@ describe('request completion log over the HTTP boundary', () => {
   });
 
   it('keeps a subsystem failure beside the one completion event', async () => {
-    const subsystemLines: unknown[] = [];
-    const operationalLog = jest
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation((message: unknown) => {
-        subsystemLines.push(message);
-      });
+    usageRepository.failInserts();
 
-    try {
-      usageRepository.failInserts();
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_URL,
+      headers: { 'idempotency-key': 'completion-subsystem' },
+      payload: VALID_BODY,
+    });
 
-      const response = await app.inject({
-        method: 'POST',
-        url: GRADE_URL,
-        headers: { 'idempotency-key': 'completion-subsystem' },
-        payload: VALID_BODY,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(log.completions()).toHaveLength(1);
-      expect(JSON.stringify(subsystemLines)).toContain('metering_write_failed');
-    } finally {
-      operationalLog.mockRestore();
-    }
+    expect(response.statusCode).toBe(200);
+    expect(log.completions()).toHaveLength(1);
+    expect(
+      log.all().some((line) => line['event'] === 'metering_write_failed'),
+    ).toBe(true);
   });
 
   it('keeps credentials, content, and exception detail out of every line', async () => {

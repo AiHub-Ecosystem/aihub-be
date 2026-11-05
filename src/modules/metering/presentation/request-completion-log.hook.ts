@@ -55,6 +55,16 @@ function operationForRoute(
   );
 }
 
+function contentLength(value: unknown): number | undefined {
+  const bytes =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^\d+$/.test(value)
+        ? Number(value)
+        : Number.NaN;
+  return Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : undefined;
+}
+
 /**
  * One response, as the log records it. A field with no value is left out
  * entirely, so a query on it means the request genuinely carried one.
@@ -67,6 +77,9 @@ interface RequestCompletionEvent {
   readonly method: string;
   readonly route: string;
   readonly http_status: number;
+  readonly request_bytes?: number;
+  readonly response_bytes?: number;
+  readonly idempotent_replay: boolean;
   readonly total_ms: number;
   readonly admission_ms?: number;
   readonly completion_ms?: number;
@@ -92,6 +105,8 @@ function completionEvent(
   const errorCode = request.aihubFailureCode;
   const traceId = request.aihubTraceId;
   const statusCode = reply.statusCode;
+  const requestBytes = contentLength(request.headers['content-length']);
+  const responseBytes = contentLength(reply.getHeader('content-length'));
   const admissionMs = requestAdmissionMs(request.raw);
   const completionMs = requestGradedCompletionMs(request);
   const dimensions = requestGradedDimensions(request);
@@ -104,6 +119,9 @@ function completionEvent(
     method: request.method,
     route: routeTemplate(request),
     http_status: statusCode,
+    ...(requestBytes === undefined ? {} : { request_bytes: requestBytes }),
+    ...(responseBytes === undefined ? {} : { response_bytes: responseBytes }),
+    idempotent_replay: reply.getHeader('Idempotent-Replay') === 'true',
     // Authenticated requests reuse the Metering value; requests without a
     // record use the same ingress clock directly.
     total_ms:
@@ -224,7 +242,16 @@ export function registerRequestCompletionLog(instance: FastifyInstance): void {
     const isProbe = isHealthProbe(request.url);
 
     if (request.url !== METRICS_ROUTE_PATH && !isProbe) {
-      log.info(event);
+      // 5xx are errors; throttling and authentication refusals are warnings; other responses are informational.
+      const level =
+        event.http_status >= 500
+          ? 'error'
+          : event.http_status === 429 ||
+              event.http_status === 401 ||
+              event.http_status === 403
+            ? 'warn'
+            : 'info';
+      log[level](event);
     }
 
     recordRequestMetrics(request, reply, event.total_ms);

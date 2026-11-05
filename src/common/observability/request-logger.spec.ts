@@ -17,6 +17,12 @@ describe('createRequestLogging', () => {
     expect(level(' warn ')).toBe('warn');
   });
 
+  it('uses the request id as the request log label', () => {
+    expect(createRequestLogging().logController?.requestIdLogLabel).toBe(
+      'request_id',
+    );
+  });
+
   it('names LOG_LEVEL when it receives an invalid value without echoing it', () => {
     expect(() => createRequestLogging(undefined, 'verbose')).toThrow(
       /LOG_LEVEL must be one of/,

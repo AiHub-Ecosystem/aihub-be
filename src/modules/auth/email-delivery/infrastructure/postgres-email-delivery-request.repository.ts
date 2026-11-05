@@ -101,9 +101,10 @@ function reportUnknownKindRows(count: number): void {
   if (count === lastReportedUnknownKindCount) return;
   lastReportedUnknownKindCount = count;
   if (count > 0) {
-    logger.warn(
-      `Skipped ${count} email delivery requests with unrecognized kinds`,
-    );
+    logger.warn({
+      event: 'email_outbox_unrecognised_kind_rows_skipped',
+      count,
+    });
   }
 }
 

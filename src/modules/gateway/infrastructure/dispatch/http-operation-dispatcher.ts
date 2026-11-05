@@ -512,26 +512,24 @@ export class HttpOperationTransport implements OperationTransportPort {
       );
     }
 
-    this.logger.error(
-      JSON.stringify({
-        event: credentialRejected
-          ? 'downstream_credential_rejected'
-          : 'downstream_failed',
-        request_id: failure.requestId,
-        operation: failure.operation,
-        ai_service: failure.downstream,
-        private_endpoint: failure.path,
-        downstream_status: failure.status,
-        downstream_error_code: null,
-        downstream_message: null,
-        downstream_ms: Math.max(0, Math.round(failure.elapsedMs)),
-        error_code: errorCode,
-        message: credentialRejected
-          ? `downstream status ${failure.status}`
-          : downstreamFailureMessage(errorCode, failure.status),
-        ...(reason === undefined ? {} : { reason }),
-      }),
-    );
+    this.logger.error({
+      event: credentialRejected
+        ? 'downstream_credential_rejected'
+        : 'downstream_failed',
+      request_id: failure.requestId,
+      operation: failure.operation,
+      ai_service: failure.downstream,
+      private_endpoint: failure.path,
+      downstream_status: failure.status,
+      downstream_error_code: null,
+      downstream_message: null,
+      downstream_ms: Math.max(0, Math.round(failure.elapsedMs)),
+      error_code: errorCode,
+      message: credentialRejected
+        ? `downstream status ${failure.status}`
+        : downstreamFailureMessage(errorCode, failure.status),
+      ...(reason === undefined ? {} : { reason }),
+    });
   }
 }
 
