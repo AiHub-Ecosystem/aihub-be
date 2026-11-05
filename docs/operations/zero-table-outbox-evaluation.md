@@ -51,6 +51,11 @@ Run only against a disposable local PostgreSQL 16 instance. The runner refuses
 non-loopback hosts and any database except `aihub_outbox_eval`. It creates a
 uniquely named table and replication slot, then removes both on normal exit.
 An abrupt kill can leave a slot behind; the recovery steps below cover it.
+The same fixed 10,000-event run can be repeated on an isolated GitHub-hosted
+Ubuntu runner by manually dispatching the
+[Zero-table Outbox Evaluation workflow](../../.github/workflows/zero-table-outbox-evaluation.yml).
+It uploads runner details and JSON results as a 30-day artifact; it does not
+connect to or modify a shared database.
 
 ```powershell
 $env:AIHUB_EVAL_DB_PASSWORD = [guid]::NewGuid().ToString('N')
