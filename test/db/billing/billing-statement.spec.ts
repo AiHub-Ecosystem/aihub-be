@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 import { runBillingAdjustCommand } from '@/cli/billing-statement';
 import {
@@ -185,12 +185,12 @@ describe('billing statement', () => {
       actorId: 'student-shared',
     });
 
-    await expect(repository.usage(OCTOBER, ORG)).resolves.toEqual([
-      expect.objectContaining({ organizationId: ORG }),
-    ]);
-    await expect(repository.usage(OCTOBER, OTHER)).resolves.toEqual([
-      expect.objectContaining({ organizationId: OTHER }),
-    ]);
+    await expect(repository.snapshot(OCTOBER, ORG)).resolves.toMatchObject({
+      usage: [expect.objectContaining({ organizationId: ORG })],
+    });
+    await expect(repository.snapshot(OCTOBER, OTHER)).resolves.toMatchObject({
+      usage: [expect.objectContaining({ organizationId: OTHER })],
+    });
     await expect(
       monthlyUsage.billableCount(ORG, OCTOBER.from, OCTOBER.to),
     ).resolves.toBe(1);
@@ -387,5 +387,174 @@ describe('billing statement', () => {
         actor: 'operator_b',
       }),
     ).rejects.toMatchObject({ code: 'BILLING_MONTH_CLOSED' });
+  });
+});
+
+/** A backend is waiting on a lock while running a query matching `pattern`. */
+async function waitForBlocked(pattern: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { rows } = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM pg_stat_activity
+       WHERE datname = current_database() AND wait_event_type = 'Lock'
+         AND pid <> pg_backend_pid() AND query LIKE $1`,
+      [pattern],
+    );
+    if ((rows[0]?.n ?? 0) > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`no backend blocked on ${pattern}`);
+}
+
+const openHolders = new Set<PoolClient>();
+
+/** Holds a table lock in an open transaction until the caller commits it. */
+async function holdTableLock(table: string, mode: string) {
+  const holder = await pool.connect();
+  openHolders.add(holder);
+  await holder.query('BEGIN');
+  await holder.query(`LOCK TABLE ${table} IN ${mode} MODE`);
+  return holder;
+}
+
+async function commitHolder(holder: PoolClient): Promise<void> {
+  await holder.query('COMMIT');
+  openHolders.delete(holder);
+  holder.release();
+}
+
+// A failing test must not leave a lock open for the next one.
+afterEach(async () => {
+  for (const holder of openHolders) {
+    await holder.query('ROLLBACK').catch(() => undefined);
+    holder.release();
+  }
+  openHolders.clear();
+});
+
+const ADVISORY_WAIT = 'SELECT pg_advisory_xact_lock%';
+const lateAdjustment = {
+  id: 'badj_01J00000000000000000000021',
+  organizationId: ORG,
+  month: OCTOBER,
+  operation: 'writing.task2.grade',
+  requests: -1,
+  reason: 'overlaps the close',
+  corrects: { requestIds: ['req_billing_x'] },
+  actor: 'operator_b',
+};
+
+describe('billing statement concurrency (#999)', () => {
+  it('closes a month with the adjustment that was in flight when the close started', async () => {
+    await usage({ at: '2026-10-05T00:00:00Z' });
+    // The adjustment has passed its closed-month check and waits to insert.
+    const holder = await holdTableLock('billing_adjustments', 'SHARE');
+    const adjusting = service.adjust(lateAdjustment);
+    await waitForBlocked('%billing_adjustments%');
+    const closing = service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      closeAs: 'operator_a',
+      now: AFTER_OCTOBER,
+    });
+    await waitForBlocked(ADVISORY_WAIT);
+    await commitHolder(holder);
+
+    await expect(adjusting).resolves.toBe('created');
+    const closed = await closing;
+    const stored = await pool.query(
+      `SELECT billable_requests, adjustment_requests, total_requests
+       FROM billing_month_closures WHERE organization_id = $1`,
+      [ORG],
+    );
+
+    expect(closed.differences).toEqual([]);
+    expect(stored.rows).toEqual([
+      { billable_requests: 1, adjustment_requests: -1, total_requests: 0 },
+    ]);
+  });
+
+  it('refuses an adjustment that arrives while the month close is in flight', async () => {
+    await usage({ at: '2026-10-05T00:00:00Z' });
+    // The close has read its totals and waits to write the closure.
+    const holder = await holdTableLock('billing_month_closures', 'SHARE');
+    const closing = service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      closeAs: 'operator_a',
+      now: AFTER_OCTOBER,
+    });
+    await waitForBlocked('%billing_month_closures%');
+    const refused = service
+      .adjust(lateAdjustment)
+      .catch((error: unknown) => error);
+    await waitForBlocked(ADVISORY_WAIT);
+    await commitHolder(holder);
+
+    const closed = await closing;
+    expect(await refused).toMatchObject({ code: 'BILLING_MONTH_CLOSED' });
+    expect(closed.differences).toEqual([]);
+    await expect(
+      pool.query('SELECT 1 FROM billing_adjustments'),
+    ).resolves.toMatchObject({ rowCount: 0 });
+  });
+
+  it('never combines usage from before a concurrent change with adjustments from after it', async () => {
+    await usage({ at: '2026-10-05T00:00:00Z' });
+    // The statement has read usage and waits on the adjustments read.
+    const holder = await holdTableLock(
+      'billing_adjustments',
+      'ACCESS EXCLUSIVE',
+    );
+    const reading = service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      now: AFTER_OCTOBER,
+    });
+    await waitForBlocked('%billing_adjustments%');
+    await usage({ at: '2026-10-06T00:00:00Z' });
+    await holder.query(
+      `INSERT INTO billing_adjustments (
+         id, organization_id, billing_month, operation, requests, reason,
+         corrects, actor)
+       VALUES ($1, $2, '2026-10-01', 'writing.task2.grade', -1, 'concurrent',
+         '{"request_ids":["req_billing_x"]}', 'operator_b')`,
+      [lateAdjustment.id, ORG],
+    );
+    await commitHolder(holder);
+
+    // Total 1 before the change, 1 after it (2 requests, one credit). A mix of
+    // old usage and the new credit would read 0, a total that never existed.
+    expect(lineFor(await reading)).toMatchObject({
+      billableRequests: 1,
+      adjustmentRequests: 0,
+      totalRequests: 1,
+    });
+  });
+
+  it('never combines usage and adjustments from before a concurrent close with its closure', async () => {
+    await usage({ at: '2026-10-05T00:00:00Z' });
+    // The statement has read usage and adjustments and waits on the closures.
+    const holder = await holdTableLock(
+      'billing_month_closures',
+      'ACCESS EXCLUSIVE',
+    );
+    const reading = service.statement({
+      month: OCTOBER,
+      organizationId: ORG,
+      now: AFTER_OCTOBER,
+    });
+    await waitForBlocked('%billing_month_closures%');
+    await holder.query(
+      `INSERT INTO billing_month_closures (
+         organization_id, billing_month, operation, billable_requests,
+         adjustment_requests, total_requests, closed_by)
+       VALUES ($1, '2026-10-01', 'writing.task2.grade', 5, 0, 5, 'operator_b')`,
+      [ORG],
+    );
+    await commitHolder(holder);
+
+    // The closure committed after the snapshot, so the statement shows an
+    // open month; a closure beside pre-close usage would report a difference.
+    expect(await reading).toMatchObject({ closed: [], differences: [] });
   });
 });

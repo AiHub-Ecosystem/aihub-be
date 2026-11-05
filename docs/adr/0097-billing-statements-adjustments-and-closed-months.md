@@ -1,6 +1,6 @@
 # ADR-0097: Billing statements, adjustments, closed months, and late Writing results
 
-- Status: Accepted; amended by ADR-0145
+- Status: Accepted; amended by ADR-0145 and ADR-0151
 - Date: 2026-10-14
 - Related issues: [#404](https://github.com/AiHub-Ecosystem/aihub-be/issues/404), [#405](https://github.com/AiHub-Ecosystem/aihub-be/issues/405), [#911](https://github.com/AiHub-Ecosystem/aihub-be/issues/911)
 - Amends: [ADR-0016](0016-metering-boundary-and-billing-evidence.md) for what a usage record bills and how a month is billed
@@ -24,7 +24,7 @@ Separately, a Writing grading that AIHUB finishes in the background after answer
 
 An adjustment's `badj_<ULID>` primary key is also its retry identity. `billing:adjust` requires the operator to provide it with `--id`; retrying the same ID with the same Organization, month, operation, count, reason, target, and actor returns the existing adjustment. Reusing the ID with any different value is refused, while a new ID records a distinct adjustment. The operator reuses the exact ID when the command's output or acknowledgement is uncertain.
 
-**Closing a month.** `billing:statement --close true --actor <username>` stores the month's per-operation totals in the append-only `billing_month_closures` table, once the month has ended. Running the statement again for a closed month compares the current evidence with what was stored and reports each difference; it never overwrites. A closed month takes no further adjustments: late evidence or a later correction is recorded as an adjustment in the next open month, naming the period it corrects. An adjustment that races a close can land after the close read its totals; the next statement for that month reports it as a difference.
+**Closing a month.** `billing:statement --close true --actor <username>` stores the month's per-operation totals in the append-only `billing_month_closures` table, once the month has ended. Running the statement again for a closed month compares the current evidence with what was stored and reports each difference; it never overwrites. A closed month takes no further adjustments: late evidence or a later correction is recorded as an adjustment in the next open month, naming the period it corrects. An adjustment that races a close can land after the close read its totals; the next statement for that month reports it as a difference. _(Superseded by [ADR-0151](0151-serialize-month-close-and-adjustments.md): a close and an adjustment now serialize on one lock, so the adjustment is in the closed totals or refused.)_
 
 **A Writing grading completed after its `504`** is billed once, when the background work stores its result, whether or not the customer ever fetches it. AIHUB writes a second usage record for it under `<request id>:background`, with `billing_basis = 'background_completion'`, billable once and counted against the Organization's quota once at that moment. The `504` record stays non-billable and unchanged, and replays stay non-billable, so no number of retries charges again. A replay at an exhausted quota keeps its ADR-0018 behaviour. `billing_basis` lets a statement show these charges separately from ordinary responses.
 

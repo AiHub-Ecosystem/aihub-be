@@ -170,15 +170,15 @@ describe('tenant isolation for durable records', () => {
 
     const month = parseBillingMonth('2026-09');
     await expect(
-      billingStatement.usage(month, ORGANIZATION_A),
-    ).resolves.toEqual([
-      expect.objectContaining({ organizationId: ORGANIZATION_A }),
-    ]);
+      billingStatement.snapshot(month, ORGANIZATION_A),
+    ).resolves.toMatchObject({
+      usage: [expect.objectContaining({ organizationId: ORGANIZATION_A })],
+    });
     await expect(
-      billingStatement.usage(month, ORGANIZATION_B),
-    ).resolves.toEqual([
-      expect.objectContaining({ organizationId: ORGANIZATION_B }),
-    ]);
+      billingStatement.snapshot(month, ORGANIZATION_B),
+    ).resolves.toMatchObject({
+      usage: [expect.objectContaining({ organizationId: ORGANIZATION_B })],
+    });
     const foreignUsage = await pool.query<{ request_id: string }>(
       `SELECT request_id
        FROM usage_records

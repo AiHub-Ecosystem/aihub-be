@@ -7,6 +7,7 @@ import {
   type BillingAdjustmentWriteResult,
   type BillingClosureRecord,
   type BillingMonth,
+  type BillingSnapshot,
   type BillingStatementLine,
   type BillingStatementRepositoryPort,
   type BillingUsageRow,
@@ -16,6 +17,7 @@ import {
 import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import type { Prisma } from '@prisma-client/client';
 import { billableRequestSql } from './billable-request-sql';
 
 // Both month bounds, and every reason a request is not billed counted beside
@@ -158,87 +160,181 @@ function monthDate(month: BillingMonth): string {
   return month.from.toISOString().slice(0, 10);
 }
 
+type Reader = Pick<Prisma.TransactionClient, '$queryRawUnsafe'>;
+
+// Close and adjustment serialize on this lock per Organization and month
+// (#999). Both run READ COMMITTED: each statement after the lock sees what the
+// lock's previous holder committed. A REPEATABLE READ transaction would fix its
+// snapshot at the lock statement itself, before the wait, and read stale rows.
+// Prisma's query path cannot deserialize PostgreSQL's void result, hence
+// `$executeRawUnsafe`.
+export const BILLING_MONTH_LOCK_SQL =
+  'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+
+function billingMonthLockKey(
+  organizationId: string,
+  month: BillingMonth,
+): string {
+  return `${organizationId}:billing-month:${month.label}`;
+}
+
+async function lockBillingMonth(
+  transaction: Prisma.TransactionClient,
+  organizationId: string,
+  month: BillingMonth,
+): Promise<void> {
+  await transaction.$executeRawUnsafe(
+    BILLING_MONTH_LOCK_SQL,
+    billingMonthLockKey(organizationId, month),
+  );
+}
+
+const ADJUSTMENT_TRANSACTION_OPTIONS = {
+  ...CONTROL_PLANE_TRANSACTION_OPTIONS,
+  isolationLevel: 'ReadCommitted',
+} as const;
+
+// A close and a statement scan a month of usage, which a control-plane write
+// does not, so they get a longer timeout.
+const CLOSE_TRANSACTION_OPTIONS = {
+  maxWait: CONTROL_PLANE_TRANSACTION_OPTIONS.maxWait,
+  timeout: 120_000,
+  isolationLevel: 'ReadCommitted',
+} as const;
+
+// The default isolation level reads each statement from a fresh snapshot, so
+// the three reads of a statement need REPEATABLE READ to share one.
+const SNAPSHOT_TRANSACTION_OPTIONS = {
+  ...CLOSE_TRANSACTION_OPTIONS,
+  isolationLevel: 'RepeatableRead',
+} as const;
+
+async function readUsage(
+  reader: Reader,
+  month: BillingMonth,
+  organizationId: string | undefined,
+): Promise<readonly BillingUsageRow[]> {
+  const rows = await reader.$queryRawUnsafe<readonly Record<string, unknown>[]>(
+    BILLING_USAGE_SQL,
+    month.from,
+    month.to,
+    organizationId ?? null,
+  );
+  return rows.map((row) => ({
+    organizationId: text(row.organization_id, 'organization_id'),
+    operation: text(row.operation, 'operation'),
+    billableResponses: count(row.billable_responses, 'billable_responses'),
+    billableBackgroundCompletions: count(
+      row.billable_background,
+      'billable_background',
+    ),
+    quotaUnverified: count(row.quota_unverified, 'quota_unverified'),
+    excludedReplays: count(row.excluded_replays, 'excluded_replays'),
+    excludedFailures: count(row.excluded_failures, 'excluded_failures'),
+    excludedInternal: count(row.excluded_internal, 'excluded_internal'),
+    excludedNonProduction: count(
+      row.excluded_non_production,
+      'excluded_non_production',
+    ),
+  }));
+}
+
+async function readAdjustments(
+  reader: Reader,
+  month: BillingMonth,
+  organizationId: string | undefined,
+): Promise<readonly BillingAdjustmentRecord[]> {
+  const rows = await reader.$queryRawUnsafe<readonly Record<string, unknown>[]>(
+    ADJUSTMENTS_SQL,
+    monthDate(month),
+    organizationId ?? null,
+  );
+  return rows.map((row) => ({
+    id: text(row.id, 'id'),
+    organizationId: text(row.organization_id, 'organization_id'),
+    operation: text(row.operation, 'operation'),
+    requests: signedCount(row.requests, 'requests'),
+    reason: text(row.reason, 'reason'),
+    corrects: target(row.corrects),
+    actor: text(row.actor, 'actor'),
+    actorSource: actorSource(row.actor_source),
+    createdAt: date(row.created_at, 'created_at'),
+  }));
+}
+
+async function readClosures(
+  reader: Reader,
+  month: BillingMonth,
+  organizationId: string | undefined,
+): Promise<readonly BillingClosureRecord[]> {
+  const rows = await reader.$queryRawUnsafe<readonly Record<string, unknown>[]>(
+    CLOSURES_SQL,
+    monthDate(month),
+    organizationId ?? null,
+  );
+  return rows.map((row) => ({
+    organizationId: text(row.organization_id, 'organization_id'),
+    operation: text(row.operation, 'operation'),
+    billableRequests: count(row.billable_requests, 'billable_requests'),
+    adjustmentRequests: signedCount(
+      row.adjustment_requests,
+      'adjustment_requests',
+    ),
+    totalRequests: signedCount(row.total_requests, 'total_requests'),
+    closedBy: text(row.closed_by, 'closed_by'),
+    actorSource: actorSource(row.actor_source),
+    closedAt: date(row.closed_at, 'closed_at'),
+  }));
+}
+
+// One connection runs the reads in turn, so no `Promise.all` here.
+async function readSnapshot(
+  reader: Reader,
+  month: BillingMonth,
+  organizationId: string | undefined,
+): Promise<BillingSnapshot> {
+  const usage = await readUsage(reader, month, organizationId);
+  const adjustments = await readAdjustments(reader, month, organizationId);
+  const closures = await readClosures(reader, month, organizationId);
+  return { usage, adjustments, closures };
+}
+
 export class PostgresBillingStatementRepository
   implements BillingStatementRepositoryPort
 {
   constructor(private readonly client: PrismaMeteringClient) {}
 
-  async usage(
+  snapshot(
     month: BillingMonth,
     organizationId: string | undefined,
-  ): Promise<readonly BillingUsageRow[]> {
-    const rows = await this.client.$queryRawUnsafe<
-      readonly Record<string, unknown>[]
-    >(BILLING_USAGE_SQL, month.from, month.to, organizationId ?? null);
-    return rows.map((row) => ({
-      organizationId: text(row.organization_id, 'organization_id'),
-      operation: text(row.operation, 'operation'),
-      billableResponses: count(row.billable_responses, 'billable_responses'),
-      billableBackgroundCompletions: count(
-        row.billable_background,
-        'billable_background',
-      ),
-      quotaUnverified: count(row.quota_unverified, 'quota_unverified'),
-      excludedReplays: count(row.excluded_replays, 'excluded_replays'),
-      excludedFailures: count(row.excluded_failures, 'excluded_failures'),
-      excludedInternal: count(row.excluded_internal, 'excluded_internal'),
-      excludedNonProduction: count(
-        row.excluded_non_production,
-        'excluded_non_production',
-      ),
-    }));
-  }
-
-  async adjustments(
-    month: BillingMonth,
-    organizationId: string | undefined,
-  ): Promise<readonly BillingAdjustmentRecord[]> {
-    const rows = await this.client.$queryRawUnsafe<
-      readonly Record<string, unknown>[]
-    >(ADJUSTMENTS_SQL, monthDate(month), organizationId ?? null);
-    return rows.map((row) => ({
-      id: text(row.id, 'id'),
-      organizationId: text(row.organization_id, 'organization_id'),
-      operation: text(row.operation, 'operation'),
-      requests: signedCount(row.requests, 'requests'),
-      reason: text(row.reason, 'reason'),
-      corrects: target(row.corrects),
-      actor: text(row.actor, 'actor'),
-      actorSource: actorSource(row.actor_source),
-      createdAt: date(row.created_at, 'created_at'),
-    }));
-  }
-
-  async closures(
-    month: BillingMonth,
-    organizationId: string | undefined,
-  ): Promise<readonly BillingClosureRecord[]> {
-    const rows = await this.client.$queryRawUnsafe<
-      readonly Record<string, unknown>[]
-    >(CLOSURES_SQL, monthDate(month), organizationId ?? null);
-    return rows.map((row) => ({
-      organizationId: text(row.organization_id, 'organization_id'),
-      operation: text(row.operation, 'operation'),
-      billableRequests: count(row.billable_requests, 'billable_requests'),
-      adjustmentRequests: signedCount(
-        row.adjustment_requests,
-        'adjustment_requests',
-      ),
-      totalRequests: signedCount(row.total_requests, 'total_requests'),
-      closedBy: text(row.closed_by, 'closed_by'),
-      actorSource: actorSource(row.actor_source),
-      closedAt: date(row.closed_at, 'closed_at'),
-    }));
+  ): Promise<BillingSnapshot> {
+    return this.client.$transaction(
+      (transaction) => readSnapshot(transaction, month, organizationId),
+      SNAPSHOT_TRANSACTION_OPTIONS,
+    );
   }
 
   async closeMonth(
     month: BillingMonth,
-    lines: readonly BillingStatementLine[],
+    organizationId: string,
     actor: string,
+    decide: (snapshot: BillingSnapshot) => readonly BillingStatementLine[],
   ): Promise<void> {
     // One transaction: a month is closed for an Organization with all of its
-    // operations or not at all. The primary key refuses a second close.
+    // operations or not at all. The primary key refuses a second close. Under
+    // the lock, no adjustment or second close for this Organization and month
+    // can commit, so the adjustments and closures read here are the ones the
+    // closure is written beside. Usage writers take no lock and READ COMMITTED
+    // gives each read its own snapshot, so a usage row committed after the
+    // usage read is a later difference (ADR-0151, #759).
     await this.client.$transaction(async (transaction) => {
+      await lockBillingMonth(transaction, organizationId, month);
+      const lines = decide(
+        await readSnapshot(transaction, month, organizationId),
+      );
+      if (lines.length === 0) {
+        return;
+      }
       await transaction.billingMonthClosure.createMany({
         data: lines.map((line) => ({
           organizationId: line.organizationId,
@@ -251,15 +347,17 @@ export class PostgresBillingStatementRepository
           actorSource: 'self_declared_operator',
         })),
       });
-    }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+    }, CLOSE_TRANSACTION_OPTIONS);
   }
 
   async addAdjustment(
     input: NewBillingAdjustment,
   ): Promise<BillingAdjustmentWriteResult> {
-    // An adjustment racing a close can land after the close read its totals;
-    // the next statement for that month then reports the difference.
+    // The closed-month check and the insert hold the lock a close takes before
+    // it reads totals, so an adjustment is either in the closed totals or
+    // refused because the month is closed (#999).
     return this.client.$transaction(async (transaction) => {
+      await lockBillingMonth(transaction, input.organizationId, input.month);
       const existing = await transaction.billingAdjustment.findUnique({
         where: { id: input.id },
       });
@@ -309,7 +407,7 @@ export class PostgresBillingStatementRepository
         status: 'existing' as const,
         adjustment: existingAdjustment(duplicate),
       };
-    }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+    }, ADJUSTMENT_TRANSACTION_OPTIONS);
   }
 
   async close(): Promise<void> {

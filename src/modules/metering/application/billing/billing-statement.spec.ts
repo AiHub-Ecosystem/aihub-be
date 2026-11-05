@@ -93,6 +93,110 @@ describe('buildBillingStatement', () => {
   });
 });
 
+describe('BillingStatementService.statement close', () => {
+  const usageRow = (organizationId: string) => ({
+    organizationId,
+    operation: 'writing.task2.grade',
+    billableResponses: 2,
+    billableBackgroundCompletions: 0,
+    quotaUnverified: 0,
+    excludedReplays: 0,
+    excludedFailures: 0,
+    excludedInternal: 0,
+    excludedNonProduction: 0,
+  });
+  const closure = (organizationId: string) => ({
+    organizationId,
+    operation: 'writing.task2.grade',
+    billableRequests: 2,
+    adjustmentRequests: 0,
+    totalRequests: 2,
+    closedBy: 'op',
+    actorSource: 'legacy_unknown' as const,
+    closedAt: new Date(0),
+  });
+  const now = new Date('2026-11-02T00:00:00Z');
+
+  it('closes each open Organization once and skips a closed one', async () => {
+    const closeMonth = jest.fn(
+      async (
+        _month: unknown,
+        _organizationId: string,
+        _actor: string,
+        _decide: unknown,
+      ) => undefined,
+    );
+    const repository = {
+      snapshot: jest.fn(async () => ({
+        usage: [usageRow('org_a'), usageRow('org_b')],
+        adjustments: [],
+        closures: [closure('org_a')],
+      })),
+      closeMonth,
+    } as unknown as BillingStatementRepositoryPort;
+
+    await new BillingStatementService(repository).statement({
+      month: OCTOBER,
+      closeAs: 'op',
+      now,
+    });
+
+    expect(closeMonth.mock.calls.map((call) => call[1])).toEqual(['org_b']);
+  });
+
+  it('decides on the locked snapshot: lines to store unless a closure exists', async () => {
+    const closeMonth = jest.fn(
+      async (
+        _month: unknown,
+        _organizationId: string,
+        _actor: string,
+        _decide: (snapshot: {
+          usage: unknown[];
+          adjustments: unknown[];
+          closures: unknown[];
+        }) => readonly unknown[],
+      ) => undefined,
+    );
+    const repository = {
+      snapshot: jest.fn(async () => ({
+        usage: [usageRow('org_b')],
+        adjustments: [],
+        closures: [],
+      })),
+      closeMonth,
+    } as unknown as BillingStatementRepositoryPort;
+    await new BillingStatementService(repository).statement({
+      month: OCTOBER,
+      closeAs: 'op',
+      now,
+    });
+    const decide = closeMonth.mock.calls[0]?.[3];
+
+    expect(
+      decide?.({ usage: [usageRow('org_b')], adjustments: [], closures: [] }),
+    ).toMatchObject([{ organizationId: 'org_b', totalRequests: 2 }]);
+    expect(
+      decide?.({
+        usage: [usageRow('org_b')],
+        adjustments: [],
+        closures: [closure('org_b')],
+      }),
+    ).toEqual([]);
+  });
+
+  it('refuses to close a month that has not ended', async () => {
+    await expect(
+      new BillingStatementService(
+        {} as BillingStatementRepositoryPort,
+      ).statement({
+        month: OCTOBER,
+        closeAs: 'op',
+        now: new Date('2026-10-31T23:00:00Z'),
+      }),
+    ).rejects.toMatchObject({ code: 'BILLING_MONTH_NOT_ENDED' });
+  });
+});
+
 describe('BillingStatementService.adjust', () => {
   const repository = {
     addAdjustment: jest.fn(async (adjustment: NewBillingAdjustment) => ({

@@ -152,24 +152,30 @@ export type BillingAdjustmentWriteResult =
   | { readonly status: 'existing'; readonly adjustment: NewBillingAdjustment }
   | { readonly status: 'month_closed' };
 
+/** Usage, adjustments, and closures as one database snapshot read them. */
+export interface BillingSnapshot {
+  readonly usage: readonly BillingUsageRow[];
+  readonly adjustments: readonly BillingAdjustmentRecord[];
+  readonly closures: readonly BillingClosureRecord[];
+}
+
 export interface BillingStatementRepositoryPort {
-  usage(
+  /** Reads all three from one snapshot, so a statement never mixes states. */
+  snapshot(
     month: BillingMonth,
     organizationId: string | undefined,
-  ): Promise<readonly BillingUsageRow[]>;
-  adjustments(
-    month: BillingMonth,
-    organizationId: string | undefined,
-  ): Promise<readonly BillingAdjustmentRecord[]>;
-  closures(
-    month: BillingMonth,
-    organizationId: string | undefined,
-  ): Promise<readonly BillingClosureRecord[]>;
-  /** Stores the lines of Organizations not yet closed; never rewrites one. */
+  ): Promise<BillingSnapshot>;
+  /**
+   * Closes one Organization's month. The repository holds the month lock
+   * (shared with `addAdjustment`) before it reads the snapshot, passes that
+   * snapshot to `decide`, and stores the lines `decide` returns, still under
+   * the lock. No lines, no write; it never rewrites a closure.
+   */
   closeMonth(
     month: BillingMonth,
-    lines: readonly BillingStatementLine[],
+    organizationId: string,
     actor: string,
+    decide: (snapshot: BillingSnapshot) => readonly BillingStatementLine[],
   ): Promise<void>;
   /** Refuses a month already closed for the Organization. */
   addAdjustment(
@@ -310,35 +316,43 @@ export class BillingStatementService {
       );
     }
 
-    const [usage, adjustments, closures] = await Promise.all([
-      this.repository.usage(month, organizationId),
-      this.repository.adjustments(month, organizationId),
-      this.repository.closures(month, organizationId),
-    ]);
-    const statement = buildBillingStatement(
-      month,
-      usage,
-      adjustments,
-      closures,
-    );
+    const statement = await this.read(month, organizationId);
     if (request.closeAs === undefined) {
       return statement;
     }
 
-    // Already-closed Organizations are compared above, never rewritten.
+    // Already-closed Organizations are compared above, never rewritten. Each
+    // open one closes on its own under its month lock, which rereads its
+    // totals, so a run interrupted halfway resumes on the next one.
     const closed = new Set(statement.closed.map((c) => c.organizationId));
-    const open = statement.lines.filter(
-      (line) => !closed.has(line.organizationId),
+    const open = new Set(
+      statement.lines
+        .filter((line) => !closed.has(line.organizationId))
+        .map((line) => line.organizationId),
     );
-    if (open.length > 0) {
-      await this.repository.closeMonth(month, open, request.closeAs);
+    for (const id of open) {
+      await this.repository.closeMonth(month, id, request.closeAs, (locked) => {
+        const current = buildBillingStatement(
+          month,
+          locked.usage,
+          locked.adjustments,
+          locked.closures,
+        );
+        return current.closed.length > 0 ? [] : current.lines;
+      });
     }
-    return buildBillingStatement(
+    return open.size === 0 ? statement : this.read(month, organizationId);
+  }
+
+  private async read(
+    month: BillingMonth,
+    organizationId: string | undefined,
+  ): Promise<BillingStatement> {
+    const { usage, adjustments, closures } = await this.repository.snapshot(
       month,
-      usage,
-      adjustments,
-      await this.repository.closures(month, organizationId),
+      organizationId,
     );
+    return buildBillingStatement(month, usage, adjustments, closures);
   }
 
   async adjust(input: NewBillingAdjustment): Promise<'created' | 'reused'> {
