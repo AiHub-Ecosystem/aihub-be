@@ -1483,7 +1483,7 @@ describe('email outbox dispatch poller', () => {
         await poller(OWNER_B, new RecordingSender()).runOnce();
       });
 
-      expect(emitted).toContain('exhausted its attempts');
+      expect(emitted).toContain('email_delivery_request_terminal_failure');
       expect(await failedCountFor('verification_email')).toBe(before + 1);
       expect((await rowOf(seeded.id)).failure_reported_at).not.toBeNull();
 
@@ -1491,7 +1491,7 @@ describe('email outbox dispatch poller', () => {
       const again = await captureStderr(async () => {
         await poller(OWNER_B, new RecordingSender()).runOnce();
       });
-      expect(again).not.toContain('exhausted its attempts');
+      expect(again).not.toContain('email_delivery_request_terminal_failure');
       expect(await failedCountFor('verification_email')).toBe(before + 1);
     });
 
@@ -1620,7 +1620,9 @@ describe('email outbox dispatch poller', () => {
 
       // One event, not one per attempt: only the attempt that ended the request
       // is terminal, so paging once is the whole point of the counter.
-      expect(emitted.match(/exhausted its attempts/g)).toHaveLength(1);
+      expect(
+        emitted.match(/email_delivery_request_terminal_failure/g),
+      ).toHaveLength(1);
       expect(emitted).toContain('ERROR');
       expect(emitted).toContain('organization_invite_email');
       expect(emitted).toContain('provider_rejected');
@@ -1636,7 +1638,7 @@ describe('email outbox dispatch poller', () => {
         await poller(OWNER_A, sender).runOnce();
       });
 
-      expect(emitted).not.toContain('exhausted its attempts');
+      expect(emitted).not.toContain('email_delivery_request_terminal_failure');
       expect(await failedCountFor('verification_email')).toBe(before);
       expect((await rowOf(seeded.id)).status).toBe('queued');
     });
@@ -1673,7 +1675,9 @@ describe('email outbox dispatch poller', () => {
 
         // Cancellation is expected lifecycle handling (ADR-0074): paging on it
         // would train operators to ignore the event that does mean something.
-        expect(emitted).not.toContain('exhausted its attempts');
+        expect(emitted).not.toContain(
+          'email_delivery_request_terminal_failure',
+        );
         expect(emitted).not.toContain('ERROR');
         expect(await failedCountFor(kind)).toBe(before);
         expect(await rowOf(seeded.id)).toMatchObject({
@@ -1715,7 +1719,7 @@ describe('email outbox dispatch poller', () => {
       expect(emitted).not.toMatch(/token|\bto=|\btext=|\bbody=|\bpayload/i);
       // What is left is the bounded code, which is the only failure evidence the
       // dispatch path is allowed to keep.
-      expect(emitted).toContain('error=provider_rejected');
+      expect(emitted).toMatch(/error_code:[\s\S]*provider_rejected/);
     });
   });
 
