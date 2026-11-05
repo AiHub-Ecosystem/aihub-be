@@ -7,6 +7,12 @@ app.
 
 ## Customer API
 
+The table below lists the `/v1` grading operations. `/v2` is the latest Public
+API major and also serves Writing exercises, Speaking Part and Test grading, and
+stored-result reads; `/v1` is deprecated and has a published sunset date. Use
+the [integration guide](docs/integration-guide.md) and the generated `/docs`
+reference for each major's supported operations, limits, and lifecycle.
+
 | Capability                             | Endpoint                               | Request                     |
 | -------------------------------------- | -------------------------------------- | --------------------------- |
 | Grade IELTS Writing Task 1             | `POST /v1/ielts/writing/task1/grade`   | JSON essay request          |
@@ -14,8 +20,8 @@ app.
 | Grade IELTS Speaking audio             | `POST /v1/ielts/speaking/grading`      | Multipart audio upload      |
 | Grade IELTS Speaking from an audio URL | `POST /v1/ielts/speaking/grading-json` | JSON request with audio URL |
 
-For a customer-facing API docs UI, show these four downstream grading
-operations. The public Speaking question catalog at
+For a customer-facing API docs UI, show the `/v1` downstream grading operations
+listed above. The public Speaking question catalog at
 `GET /v1/ielts/speaking/questions` is a separate supporting endpoint, not an AI
 service proxy. Account, sign-in, and Organization-management routes are also
 outside that product docs scope. The backend's generated `/docs` reference
