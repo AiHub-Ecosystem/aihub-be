@@ -23,10 +23,22 @@ export type BillingStatementErrorCode =
   | 'BILLING_INVALID_ADJUSTMENT'
   | 'BILLING_DATABASE_FAILURE';
 
+/**
+ * How far a multi-Organization close got before it failed (#1618). Closing is
+ * one transaction per Organization, so the ones before the failure stay closed
+ * and a re-run closes the rest. Organization ids only.
+ */
+export interface BillingCloseProgress {
+  readonly closed: readonly string[];
+  /** Absent when every close succeeded and only the final re-read failed. */
+  readonly failed?: string;
+}
+
 export class BillingStatementError extends Error {
   constructor(
     readonly code: BillingStatementErrorCode,
     message: string,
+    readonly progress?: BillingCloseProgress,
   ) {
     super(message);
     this.name = 'BillingStatementError';
@@ -330,18 +342,50 @@ export class BillingStatementService {
         .filter((line) => !closed.has(line.organizationId))
         .map((line) => line.organizationId),
     );
+    const done: string[] = [];
     for (const id of open) {
-      await this.repository.closeMonth(month, id, request.closeAs, (locked) => {
-        const current = buildBillingStatement(
+      try {
+        await this.repository.closeMonth(
           month,
-          locked.usage,
-          locked.adjustments,
-          locked.closures,
+          id,
+          request.closeAs,
+          (locked) => {
+            const current = buildBillingStatement(
+              month,
+              locked.usage,
+              locked.adjustments,
+              locked.closures,
+            );
+            return current.closed.length > 0 ? [] : current.lines;
+          },
         );
-        return current.closed.length > 0 ? [] : current.lines;
-      });
+      } catch (error) {
+        // The cause stays out of the message: it can carry database text.
+        throw new BillingStatementError(
+          error instanceof BillingStatementError
+            ? error.code
+            : 'BILLING_DATABASE_FAILURE',
+          'month close stopped partway; re-run to close the rest',
+          { closed: [...done], failed: id },
+        );
+      }
+      done.push(id);
     }
-    return open.size === 0 ? statement : this.read(month, organizationId);
+    if (open.size === 0) {
+      return statement;
+    }
+    try {
+      return await this.read(month, organizationId);
+    } catch (error) {
+      // Every close committed; only the report failed. Say so.
+      throw new BillingStatementError(
+        error instanceof BillingStatementError
+          ? error.code
+          : 'BILLING_DATABASE_FAILURE',
+        'month closed but the statement could not be read; re-run to read it',
+        { closed: [...done] },
+      );
+    }
   }
 
   private async read(

@@ -1,4 +1,5 @@
 import {
+  BillingStatementError,
   type BillingStatementRepositoryPort,
   BillingStatementService,
   type NewBillingAdjustment,
@@ -182,6 +183,108 @@ describe('BillingStatementService.statement close', () => {
         closures: [closure('org_b')],
       }),
     ).toEqual([]);
+  });
+
+  describe('when a close fails partway (#1618)', () => {
+    let attempts: string[] = [];
+    beforeEach(() => {
+      attempts = [];
+    });
+    function repositoryFailingOn(failing: string, error: unknown) {
+      return {
+        snapshot: jest.fn(async () => ({
+          usage: [usageRow('org_a'), usageRow('org_b'), usageRow('org_c')],
+          adjustments: [],
+          closures: [],
+        })),
+        closeMonth: jest.fn(async (_month: unknown, organizationId: string) => {
+          attempts.push(organizationId);
+          if (organizationId === failing) throw error;
+        }),
+      } as unknown as BillingStatementRepositoryPort;
+    }
+    const close = (repository: BillingStatementRepositoryPort) =>
+      new BillingStatementService(repository).statement({
+        month: OCTOBER,
+        closeAs: 'op',
+        now,
+      });
+
+    it('names the Organizations already closed and the one that failed, and stops', async () => {
+      const repository = repositoryFailingOn(
+        'org_b',
+        new Error('connection terminated: secret-token-xyz'),
+      );
+
+      const error = await close(repository).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: 'BILLING_DATABASE_FAILURE',
+        progress: { closed: ['org_a'], failed: 'org_b' },
+      });
+      expect(attempts).toEqual(['org_a', 'org_b']);
+      expect(String((error as Error).message)).not.toContain(
+        'secret-token-xyz',
+      );
+    });
+
+    it('reports that none were closed when the first Organization fails', async () => {
+      const error = await close(
+        repositoryFailingOn('org_a', new Error('boom')),
+      ).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: 'BILLING_DATABASE_FAILURE',
+        progress: { closed: [], failed: 'org_a' },
+      });
+    });
+
+    it('keeps the code of an expected billing error', async () => {
+      const error = await close(
+        repositoryFailingOn(
+          'org_c',
+          new BillingStatementError('BILLING_MONTH_CLOSED', 'closed'),
+        ),
+      ).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: 'BILLING_MONTH_CLOSED',
+        progress: { closed: ['org_a', 'org_b'], failed: 'org_c' },
+      });
+    });
+
+    it('still names every closed Organization when only the final re-read fails', async () => {
+      const snapshot = jest
+        .fn()
+        .mockResolvedValueOnce({
+          usage: [usageRow('org_a'), usageRow('org_b')],
+          adjustments: [],
+          closures: [],
+        })
+        .mockRejectedValueOnce(new Error('connection terminated'));
+      const error = await close({
+        snapshot,
+        closeMonth: jest.fn(async () => undefined),
+      } as unknown as BillingStatementRepositoryPort).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: 'BILLING_DATABASE_FAILURE',
+        progress: { closed: ['org_a', 'org_b'] },
+      });
+      expect(error).not.toHaveProperty('progress.failed');
+    });
+
+    it('carries no progress when the failure precedes any close', async () => {
+      const error = await new BillingStatementService({
+        snapshot: jest.fn(async () => {
+          throw new Error('boom');
+        }),
+      } as unknown as BillingStatementRepositoryPort)
+        .statement({ month: OCTOBER, closeAs: 'op', now })
+        .catch((e: unknown) => e);
+
+      expect(error).not.toHaveProperty('progress');
+    });
   });
 
   it('refuses to close a month that has not ended', async () => {
