@@ -24,6 +24,7 @@ import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/orga
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 const FIXTURE_URL = 'https://ai-speaking.test';
 const multipartUrl = '/v1/ielts/speaking/grading';
@@ -102,24 +103,17 @@ describe('Speaking user identity HTTP flow', () => {
   let app: NestFastifyApplication;
   let mockAgent: MockAgent;
   let outboundRequests: CapturedOutboundRequest[];
-  const originalEnv = {
-    nodeEnv: process.env.NODE_ENV,
-    allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
-    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
-    speakingClientId: process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID,
-    speakingSecret: process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY,
-  };
-
   const authenticator: ApiKeyAuthenticatorPort = {
     authenticate: async () => authenticatedApiKey,
   };
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = FIXTURE_URL;
-    process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID = 'speaking-client';
-    process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = 'speaking-secret';
+    useTestRuntimeConfiguration({
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'false',
+      DOWNSTREAM_AI_SPEAKING_URL: FIXTURE_URL,
+      DOWNSTREAM_AI_SPEAKING_CLIENT_ID: 'speaking-client',
+      DOWNSTREAM_AI_SPEAKING_SECRET_KEY: 'speaking-secret',
+    });
     outboundRequests = [];
     mockAgent = new MockAgent();
     mockAgent.disableNetConnect();
@@ -220,11 +214,6 @@ describe('Speaking user identity HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    process.env.NODE_ENV = originalEnv.nodeEnv;
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
-    process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID = originalEnv.speakingClientId;
-    process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = originalEnv.speakingSecret;
   });
 
   beforeEach(() => {

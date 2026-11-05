@@ -120,6 +120,20 @@ function providerResponse(name: string) {
   };
 }
 
+function providerErrorSample(name: string) {
+  const sample = fixtureRecord(name);
+  if (typeof sample.status !== 'number' || !Object.hasOwn(sample, 'body')) {
+    throw new Error('provider error sample is incomplete');
+  }
+  return { status: sample.status, body: sample.body };
+}
+
+const exerciseAdapters = [
+  ['micro creation', createMicroExerciseAdapter],
+  ['long-writing creation', createLongWritingExerciseAdapter],
+  ['micro grading', gradeMicroExerciseAdapter],
+] as const;
+
 describe('createMicroExerciseAdapter', () => {
   it.each([
     'micro-multiple_choice_single.request.json',
@@ -173,19 +187,6 @@ describe('createMicroExerciseAdapter', () => {
     expect(Value.Check(MicroExerciseResponseSchema, result)).toBe(true);
     expect(result.meta.type).toBe(type);
     expect(JSON.stringify(result)).not.toMatch(/"(usage|metrics|message)"/);
-  });
-
-  it('rejects the captured empty annotation exercise list as a contract violation', () => {
-    let error: unknown;
-    try {
-      createMicroExerciseAdapter.parseResponse(
-        providerResponse('micro-annotation-empty.response.json'),
-      );
-    } catch (caught) {
-      error = caught;
-    }
-
-    expect(error).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
   });
 
   it('removes provider-only additions from the public response', () => {
@@ -307,6 +308,68 @@ describe('gradeMicroExerciseAdapter', () => {
 
       expect(Value.Check(MicroExerciseGradeResponseSchema, result)).toBe(true);
       expect(Object.keys(result).sort()).toEqual(['comment', 'score']);
+    },
+  );
+});
+
+describe('provider-confirmed Writing exercise failures', () => {
+  it.each(exerciseAdapters)(
+    'maps the provider timeout to AI_SERVICE_TIMEOUT for %s',
+    (_operation, adapter) => {
+      const sample = providerErrorSample('provider-error-timeout.sample.json');
+
+      expect(adapter.parseError?.(sample.status, sample.body)).toEqual({
+        code: 'AI_SERVICE_TIMEOUT',
+        message: 'AI service request timed out',
+        retryable: true,
+      });
+    },
+  );
+
+  it.each([
+    ['throttling', 'provider-error-rate-limited.sample.json'],
+    ['internal failure', 'provider-error-internal-error.sample.json'],
+  ])('leaves provider %s to the shared status mapping', (_kind, name) => {
+    const sample = providerErrorSample(name);
+
+    for (const [, adapter] of exerciseAdapters) {
+      expect(adapter.parseError?.(sample.status, sample.body)).toBeUndefined();
+    }
+  });
+});
+
+describe('provider-confirmed soft-failure fallbacks', () => {
+  it.each([
+    [
+      'empty micro exercise',
+      createMicroExerciseAdapter,
+      'micro-annotation-empty.response.json',
+    ],
+    [
+      'empty long-writing exercise',
+      createLongWritingExerciseAdapter,
+      'provider-fallback-longwriting.response.json',
+    ],
+    [
+      'empty micro grade',
+      gradeMicroExerciseAdapter,
+      'provider-fallback-micro-grade.response.json',
+    ],
+  ] as const)(
+    '%s is rejected as a provider contract violation',
+    (_kind, adapter, name) => {
+      let error: unknown;
+      try {
+        adapter.parseResponse(providerResponse(name));
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+      if (!(error instanceof Error)) {
+        throw new Error('expected a contract violation error');
+      }
+      expect(error.message).not.toContain('Lỗi parse JSON');
     },
   );
 });

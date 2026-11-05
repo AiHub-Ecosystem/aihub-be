@@ -1,20 +1,27 @@
 # AI Writing exercise provider contract v2
 
-Status: Captured from synthetic Production requests on 2026-11-02. Successful
-responses cover all seven micro exercise types, long-writing creation, and
-short- and long-writing grading. The AI Writing team has also answered
+Status: Successful responses were captured from synthetic Production requests
+on 2026-11-02. They cover all seven micro exercise types, long-writing
+creation, and short- and long-writing grading. The AI Writing team supplied
+scrubbed examples for non-400 failures and soft-fail responses in
+[issue #1489](https://github.com/AiHub-Ecosystem/aihub-be/issues/1489); those
+examples are not independently captured HTTP exchanges. The team also answered
 identity-header precedence and its stated storage, telemetry, and log policies
 in [issue #1454](https://github.com/AiHub-Ecosystem/aihub-be/issues/1454).
-Captures do not verify provider timeout behavior or non-400 failures. The team
-did not specify whether prompts or outputs appear in Uvicorn logs or how onward
-model providers retain data.
+The provider currently reports a 60-second timeout ceiling on all three
+operations and plans to enforce 30/20/10 seconds. AIHUB's current 45/35/20
+second operation budgets align with the planned limits, not the provider's
+current ceiling. Prompt/output logging and onward model-provider retention
+remain unspecified.
 
 Owner: AI Writing service. Consumer: AIHUB Public API `/v2` (ADR-0146).
 
 Fixtures: `test/fixtures/ai-writing/micro-*.{request,response,capture}.json` and
 `longwriting.{request,response,capture}.json`. Grade fixtures are
-`micro-grade-{short,long}-writing.{request,response,capture}.json`. They contain
-synthetic content; capture metadata contains no credentials.
+`micro-grade-{short,long}-writing.{request,response,capture}.json`. Provider
+examples are `provider-error-*.sample.json` and
+`provider-fallback-*.response.json`; their provenance is recorded in
+this contract and the sample metadata. These examples contain no credentials.
 
 ## 1. Operations
 
@@ -106,19 +113,46 @@ array length. One captured annotation response answered HTTP 200 with an empty
 array despite reporting ten questions; AIHUB rejects that response as a
 contract violation.
 
-## 5. Captured errors
+## 5. Provider-confirmed errors and soft failures
 
-The captured error envelope has `success`, `status_code`, `error_code`,
-`message`, `detail`, and `details`. AIHUB reads only `error_code` and maps a
-captured HTTP 400 `invalid_request` to `INVALID_REQUEST`; it never forwards
-provider text. An invalid error code and a `GRA02` + `reorder` combination both
-produced this refusal. Other provider errors have not been captured and use
-AIHUB's default status mapping.
+The provider confirms the same non-400 failure behavior on all three routes:
+
+| Provider response     | AIHUB error            | Notes                                                               |
+| --------------------- | ---------------------- | ------------------------------------------------------------------- |
+| `429 rate_limited`    | `AI_SERVICE_THROTTLED` | Provider sends `Retry-After: 30`; AIHUB preserves it.               |
+| `500 internal_error`  | `AI_SERVICE_ERROR`     | Uses the dispatcher's status mapping.                               |
+| `504 gateway_timeout` | `AI_SERVICE_TIMEOUT`   | The exercise adapter names the timeout; provider text is discarded. |
+
+The scrubbed response examples came from the provider's written answer rather
+than live error exchanges. Captured HTTP 400 error envelopes have `success`,
+`status_code`, `error_code`, `message`, `detail`, and `details`. AIHUB reads
+only provider error codes needed for safe mapping and never forwards provider
+text. An invalid error code and a `GRA02` + `reorder` combination were captured
+as HTTP 400 `invalid_request` and map to `INVALID_REQUEST`.
+
+The provider confirms all three operations can return HTTP 200 soft-fail
+fallbacks after parsing or schema validation fails. The micro annotation empty
+response is a Production capture; long-writing and grading examples were
+supplied in the provider's written answer. AIHUB rejects them at its response
+schema boundary: exercises require at least one question, and a micro grade
+requires a score from 1 through 10. These failures become
+`AI_SERVICE_CONTRACT_VIOLATION`, are not customer-billable, and do not increment
+customer quota. The provider says it absorbs the upstream model cost for these
+fallbacks.
+
+The provider currently reports a 60-second timeout ceiling for each route. It
+plans to enforce 30 seconds for micro creation, 20 seconds for long-writing
+creation, and 10 seconds for grading. AIHUB's 45/35/20 second operation
+budgets and nginx's 55/45/30 second edge budgets align with those planned
+ceilings. Until the provider deploys them, AIHUB may time out first and cannot
+rely on receiving the provider's own 504.
 
 Provider telemetry contains `usage.input_tokens`, `usage.output_tokens`,
 `usage.total_tokens`, `usage.cost`, and `metrics.ai_processing_ms`. The adapter
-does not expose cost or token counts to the customer; the gateway extracts
-approved usage and processing-time fields for metering.
+does not expose cost or token counts to the customer; for schema-valid
+responses, the gateway extracts approved usage and processing-time fields for
+metering. A soft-fail response rejected at the schema boundary does not reach
+the metering finalizer with provider usage or cost.
 
 The AI Writing team reports that it does not store exercise, answer, or grading
 data in Postgres or S3. Its telemetry contains the user ID, endpoint, token

@@ -188,6 +188,8 @@ services:
       - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19103:127.0.0.1:19103
       - -L
       - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19104:127.0.0.1:19104
+      - -L
+      - ${AIHUB_MONITORING_GATEWAY:?set the observed monitoring Docker gateway}:19105:127.0.0.1:19105
       - ${AIHUB_TUNNEL_USER:?set the restricted tunnel user}@${AIHUB_PRODUCTION_HOST:?set the Production host}
     volumes:
       - ${AIHUB_MONITORING_SSH_KEY_FILE:?set the restricted tunnel key}:/run/secrets/id_ed25519:ro

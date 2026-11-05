@@ -28,7 +28,7 @@ const { probeDependencyUrl, probeReadiness, probeRuntimeDependencies } =
   };
 
 describe('runtime dependency probe', () => {
-  it('ships the probe in the runtime image despite the scripts build-context ignore', () => {
+  it('ships runtime monitoring scripts despite the scripts build-context ignore', () => {
     const root = resolve(__dirname, '../..');
     const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
     const dockerignore = readFileSync(resolve(root, '.dockerignore'), 'utf8');
@@ -36,9 +36,15 @@ describe('runtime dependency probe', () => {
     expect(dockerfile).toContain(
       '/app/scripts/ops/monitoring/probe-runtime-dependencies.cjs ./scripts/ops/monitoring/probe-runtime-dependencies.cjs',
     );
+    expect(dockerfile).toContain(
+      '/app/scripts/ops/monitoring/pgbouncer-exporter.mjs ./scripts/ops/monitoring/pgbouncer-exporter.mjs',
+    );
     expect(dockerignore).toContain('!scripts/ops/');
     expect(dockerignore).toContain(
       '!scripts/ops/monitoring/probe-runtime-dependencies.cjs',
+    );
+    expect(dockerignore).toContain(
+      '!scripts/ops/monitoring/pgbouncer-exporter.mjs',
     );
   });
 

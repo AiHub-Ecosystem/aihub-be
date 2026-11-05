@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { internalError } from '@/common/errors/app-error';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -57,6 +59,9 @@ const POOL_CONNECTIONS: Readonly<Record<PostgresPoolName, number>> = {
 };
 
 interface PrismaClientOptions {
+  readonly max?: number;
+  readonly transactionPoolerEnabled?: boolean;
+  readonly poolConnections?: Partial<Record<PostgresConnectionRole, number>>;
   readonly roles?: readonly PostgresConnectionRole[];
   readonly timeouts?: PostgresTimeouts;
 }
@@ -72,15 +77,36 @@ export function createPrismaClient(
 
   const roles = options.roles ?? (role === 'integration-test' ? [] : [role]);
   const connections =
-    roles.length === 0
+    options.max ??
+    (roles.length === 0
       ? POOL_CONNECTIONS[role]
-      : roles.reduce((sum, served) => sum + POOL_CONNECTIONS[served], 0);
+      : roles.reduce(
+          (sum, served) =>
+            sum +
+            (options.poolConnections?.[served] ?? POOL_CONNECTIONS[served]),
+          0,
+        ));
   const pool = createPostgresPool(
     role,
-    postgresPoolOptions(databaseUrl, connections, options.timeouts),
+    postgresPoolOptions(
+      databaseUrl,
+      connections,
+      options.timeouts,
+      options.transactionPoolerEnabled,
+    ),
     roles,
   );
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+  const adapter = options.transactionPoolerEnabled
+    ? new PrismaPg(pool, {
+        statementNameGenerator: ({ sql, argTypes }) =>
+          `aihub_${createHash('sha256')
+            .update(sql)
+            .update(JSON.stringify(argTypes))
+            .digest('hex')
+            .slice(0, 32)}`,
+      })
+    : new PrismaPg(pool);
+  const prisma = new PrismaClient({ adapter });
 
   return {
     prisma,
@@ -99,6 +125,7 @@ export function createOperatorPrismaClient(
   databaseUrl: string,
 ): PrismaClientHolder {
   return createPrismaClient(role, databaseUrl, {
+    max: 1,
     timeouts: OPERATOR_POSTGRES_TIMEOUTS,
   });
 }
@@ -195,6 +222,12 @@ export function createSharedPrismaClients(
 
     const created = createPrismaClient(role, databaseUrl, {
       roles: rolesFor(databaseUrl),
+      ...(urls.poolConnections === undefined
+        ? {}
+        : { poolConnections: urls.poolConnections }),
+      ...(urls.databasePoolerEnabled === undefined
+        ? {}
+        : { transactionPoolerEnabled: urls.databasePoolerEnabled }),
     });
     pools.set(databaseUrl, created);
     return created;

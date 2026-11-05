@@ -7,7 +7,7 @@
     "node": ">=22.22.3"
   },
   "scripts": {
-    "build": "node scripts/generate/compile-auth-email-template.mjs && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
+    "build": "node scripts/generate/compile-auth-email-template.mjs && node scripts/generate/clean-dist.cjs && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
     "generate:prisma-client": "node scripts/generate/generate-prisma-client.mjs",
     "generate:migration": "node scripts/generate/generate-migration.mjs",
     "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && nest start --watch",
@@ -19,7 +19,6 @@
     "demo:bootstrap": "node scripts/cli/demo-bootstrap.mjs",
     "check:api-compatibility": "node scripts/ci/api-compatibility/check-release.mjs",
     "test:api-compatibility": "node --test --test-concurrency=1 test/cli/api-compatibility-check.spec.mjs test/cli/api-compatibility-release.spec.mjs",
-    "test:runner-benchmark": "tsx scripts/ops/test-runner-benchmark/benchmark-check.ts",
     "test:node-runner-probe": "node --test --test-concurrency=1 scripts/ops/test-runner-benchmark/node-test-probe.ts",
     "benchmark:dev-restart": "node scripts/ops/dev-restart-benchmark/benchmark.mjs",
     "generate:openapi": "tsx scripts/generate/generate-openapi.ts && biome format --write openapi.json openapi",
@@ -38,7 +37,6 @@
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault/vault-smoke.mjs",
     "test": "node scripts/generate/generate-prisma-client.mjs --runtime && node scripts/cli/run-bun-test.mjs",
-    "test:vitest:spike": "vitest run --config vitest.config.mts",
     "test:db": "node scripts/checks/db-lane/run-database-lane.cjs db",
     "test:tenant-isolation": "node scripts/checks/db-lane/run-database-lane.cjs tenant-isolation",
     "coverage:unit": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --coverage --coverageReporters=json --coverageDirectory=coverage/unit",
@@ -63,7 +61,6 @@
     "test:doc-drift": "node --test scripts/checks/check-doc-drift.spec.mjs",
     "knip": "bun run generate:prisma-client && node scripts/checks/knip.mjs",
     "verify:summary": "node scripts/checks/verify-summary.cjs",
-    "benchmark:test-runners": "tsx scripts/ops/test-runner-benchmark/run-benchmark.ts",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",
     "verify": "bun run knip && bun run lint && bun run format:check && bun run type-check && bun run arch-check && bun run check:app-errors && bun run check:batch && bun run check:nginx-headers && bun run test && bun run test:monitoring-config && bun run build && bun run check:imports:dist",
     "prepare": "husky",
@@ -137,7 +134,6 @@
     "@types/pg": "^8.23.1",
     "@types/postman-collection": "^3.5.11",
     "@typescript/native": "npm:typescript@7.0.2",
-    "@vitest/coverage-v8": "^5.0.5",
     "ajv": "^8.20.0",
     "dependency-cruiser": "^18.7.0",
     "husky": "^9.1.7",
@@ -156,8 +152,7 @@
     "prisma-kysely": "3.2.1",
     "squawk-cli": "2.70.0",
     "tsx": "^4.23.15",
-    "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "^5.0.5"
+    "typescript": "npm:@typescript/typescript6@6.0.2"
   },
   "overrides": {
     "js-yaml@>=4.0.0 <4.3.2": "^4.3.2",

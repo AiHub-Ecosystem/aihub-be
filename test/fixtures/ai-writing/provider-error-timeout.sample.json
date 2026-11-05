@@ -1,0 +1,13 @@
+{
+  "source": "AI Writing team response on issue #1489; scrubbed example, not a live capture.",
+  "status": 504,
+  "headers": {},
+  "body": {
+    "success": false,
+    "status_code": 504,
+    "error_code": "gateway_timeout",
+    "message": "Operation timed out after 60 seconds. Please try again.",
+    "detail": "Operation timed out after 60 seconds. Please try again.",
+    "details": null
+  }
+}

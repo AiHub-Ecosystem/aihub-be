@@ -28,6 +28,7 @@ import {
 } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from '@/modules/speaking/application/speaking-v2-workflow-engine';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 const PROVIDER = 'https://ai-speaking.test';
@@ -158,13 +159,6 @@ describe('Speaking v2 HTTP flow', () => {
   let providerCalls = 0;
   let ownership: FakeResultOwnership;
   const meteringFinalized: unknown[] = [];
-  const originalEnv = {
-    allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
-    nodeEnv: process.env.NODE_ENV,
-    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
-    speakingClientId: process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID,
-    speakingSecret: process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY,
-  };
 
   function provider(
     method: 'GET' | 'POST',
@@ -189,11 +183,12 @@ describe('Speaking v2 HTTP flow', () => {
   }
 
   beforeAll(async () => {
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
-    process.env.NODE_ENV = 'test';
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = PROVIDER;
-    process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID = 'speaking-client';
-    process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = 'speaking-secret';
+    useTestRuntimeConfiguration({
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+      DOWNSTREAM_AI_SPEAKING_URL: PROVIDER,
+      DOWNSTREAM_AI_SPEAKING_CLIENT_ID: 'speaking-client',
+      DOWNSTREAM_AI_SPEAKING_SECRET_KEY: 'speaking-secret',
+    });
 
     mockAgent = new MockAgent();
     ownership = new FakeResultOwnership();
@@ -300,11 +295,6 @@ describe('Speaking v2 HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
-    process.env.NODE_ENV = originalEnv.nodeEnv;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
-    process.env.DOWNSTREAM_AI_SPEAKING_CLIENT_ID = originalEnv.speakingClientId;
-    process.env.DOWNSTREAM_AI_SPEAKING_SECRET_KEY = originalEnv.speakingSecret;
   });
 
   it('grades a question: public test_type out, identity in headers, no user_id, no private fields back', async () => {

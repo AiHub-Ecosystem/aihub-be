@@ -1,0 +1,21 @@
+{{ $environment := env "AIHUB_VAULT_ENVIRONMENT" }}
+{{ with secret (printf "secret/data/aihub/%s/database-pooler" $environment) }}
+[databases]
+{{ range $alias, $database := .Data.data.databases }}
+{{ $alias }} = host={{ $database.host }} port={{ $database.port }} dbname={{ $database.database }} max_db_connections={{ $database.max_db_connections }} max_db_client_connections={{ $database.max_db_client_connections }} connect_query='SELECT set_config($$statement_timeout$$,$$4000$$,false),set_config($$lock_timeout$$,$$1000$$,false),set_config($$idle_in_transaction_session_timeout$$,$$10000$$,false)'
+{{ end }}
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 5432
+unix_socket_dir = /tmp
+pool_mode = transaction
+auth_type = scram-sha-256
+auth_file = /run/secrets/pgbouncer/userlist.txt
+admin_users = aihub_pgbouncer_admin
+stats_users = aihub_pgbouncer_metrics
+max_client_conn = {{ .Data.data.max_client_conn }}
+max_prepared_statements = 100
+query_wait_timeout = 0.25
+ignore_startup_parameters = extra_float_digits,statement_timeout,lock_timeout,idle_in_transaction_session_timeout
+{{ end }}

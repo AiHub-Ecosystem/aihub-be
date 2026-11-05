@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "message": "Lỗi parse JSON hoặc validate từ AI. Trả về kết quả mặc định rỗng.",
+  "data": {
+    "meta": {
+      "id": "lw_v2_1762341500_d4e5f6",
+      "type": "long_writing",
+      "error_code": ["CC01", "GRA01"],
+      "difficulty": "B2",
+      "topic": "Education",
+      "instruction": "Hệ thống đang quá tải hoặc AI sinh lỗi định dạng. Không thể khởi tạo bài tập.",
+      "number_of_questions": 0,
+      "ai_grading": "false"
+    },
+    "exercise": []
+  },
+  "usage": {
+    "input_tokens": 1150,
+    "output_tokens": 720,
+    "total_tokens": 1870,
+    "cost": 0.001122
+  },
+  "metrics": {
+    "ai_processing_ms": 5320
+  }
+}

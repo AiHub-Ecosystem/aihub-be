@@ -501,6 +501,7 @@ jobs:
     timeout-minutes: 15
     env:
       REDIS_URL: redis://localhost:6379/14
+      AIHUB_PGBOUNCER_TEST_URL: postgres://aihub:change-me@localhost:6432/aihub_db_lane
 
     services:
       postgres:
@@ -512,7 +513,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1' >/dev/null"
+          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1; ALTER ROLE aihub SET statement_timeout TO 4000; ALTER ROLE aihub SET lock_timeout TO 1000; ALTER ROLE aihub SET idle_in_transaction_session_timeout TO 10000' >/dev/null"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -522,6 +523,25 @@ jobs:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli SET aihub:test-lane:owner aihub-db-lane-v1 >/dev/null && redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+      pgbouncer:
+        image: edoburu/pgbouncer:v1.26.1-p0
+        env:
+          DATABASE_URL: postgres://aihub:change-me@postgres:5432/aihub_db_lane
+          AUTH_TYPE: scram-sha-256
+          POOL_MODE: transaction
+          MAX_CLIENT_CONN: "64"
+          DEFAULT_POOL_SIZE: "20"
+          MAX_DB_CONNECTIONS: "2"
+          MAX_PREPARED_STATEMENTS: "100"
+          QUERY_WAIT_TIMEOUT: "0.25"
+          LISTEN_PORT: "5432"
+        ports:
+          - 6432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -p 5432 -U aihub -d aihub_db_lane"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -880,11 +900,13 @@ jobs:
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
             | node scripts/ci/check-production-compose-logs.cjs
 
-      - name: Check trusted proxy matches the pinned backend gateway
+      - name: Validate production Compose defaults and trusted proxy
         env:
           AIHUB_EMAIL_SEND_RATE_LIMIT: "1"
           AIHUB_EMAIL_SEND_RATE_DURATION_MS: "1000"
           AIHUB_EMAIL_DAILY_SEND_BUDGET: "80"
+          # Existing production env files may predate the optional pooler role ID.
+          AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE: ""
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \

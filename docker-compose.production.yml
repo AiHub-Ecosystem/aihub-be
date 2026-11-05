@@ -43,6 +43,11 @@ x-app-environment: &app-environment
   # Deploy-time gate for the Web Session routes. The runtime value AIHUB
   # compares against comes from the Vault `web-session` bundle.
   AIHUB_RUNTIME_DATABASE_SCOPE: production
+  AIHUB_DATABASE_POOLER_ENABLED: ${AIHUB_DATABASE_POOLER_ENABLED:-false}
+  AIHUB_POSTGRES_POOL_MAX_RUNTIME: ${AIHUB_POSTGRES_POOL_MAX_RUNTIME:-}
+  AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE: ${AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE:-}
+  AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ: ${AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ:-}
+  AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET: ${AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET:-}
   AIHUB_EMAIL_SEND_RATE_LIMIT: ${AIHUB_EMAIL_SEND_RATE_LIMIT:?AIHUB_EMAIL_SEND_RATE_LIMIT is required}
   AIHUB_EMAIL_SEND_RATE_DURATION_MS: ${AIHUB_EMAIL_SEND_RATE_DURATION_MS:?AIHUB_EMAIL_SEND_RATE_DURATION_MS is required}
   AIHUB_EMAIL_DAILY_SEND_BUDGET: ${AIHUB_EMAIL_DAILY_SEND_BUDGET:?AIHUB_EMAIL_DAILY_SEND_BUDGET is required}
@@ -146,6 +151,133 @@ services:
       interval: 5s
       timeout: 3s
       start_period: 30s
+      retries: 3
+
+  pgbouncer-agent:
+    image: ${VAULT_IMAGE:-hashicorp/vault:1.21.4}
+    profiles: [database-pooler]
+    logging: *container-logging
+    restart: unless-stopped
+    command:
+      - agent
+      - -config=/etc/aihub/vault/agent.hcl
+      - -log-level=info
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 50
+    mem_limit: 256m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    environment:
+      AIHUB_VAULT_ENVIRONMENT: production
+      VAULT_ADDR: ${VAULT_ADDR:?VAULT_ADDR is required}
+      VAULT_CACERT: /etc/aihub/vault/ca.pem
+      SKIP_CHOWN: "true"
+      SKIP_SETCAP: "true"
+    volumes:
+      - ${AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE:-/srv/aihub/secrets/vault-role-id-pgbouncer}:/run/secrets/vault/role_id:ro
+      - ${VAULT_CA_CERT_FILE:?VAULT_CA_CERT_FILE is required}:/etc/aihub/vault/ca.pem:ro
+      - ./ops/vault/agent/aihub-pgbouncer.hcl:/etc/aihub/vault/agent.hcl:ro
+      - ./ops/vault/templates/pgbouncer.ini.ctmpl:/etc/aihub/vault/pgbouncer.ini.ctmpl:ro
+      - ./ops/vault/templates/pgbouncer-userlist.txt.ctmpl:/etc/aihub/vault/pgbouncer-userlist.txt.ctmpl:ro
+      - ./ops/vault/templates/pgbouncer-metrics-credentials.json.ctmpl:/etc/aihub/vault/pgbouncer-metrics-credentials.json.ctmpl:ro
+      - ${AIHUB_PGBOUNCER_SECRETS_HOST_DIR:-/srv/aihub/secrets/pgbouncer}:/run/secrets/pgbouncer
+    networks: [backend]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -s /run/secrets/pgbouncer/pgbouncer.ini &&
+          test -s /run/secrets/pgbouncer/userlist.txt &&
+          test -s /run/secrets/pgbouncer/metrics-credentials.json &&
+          wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus'
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.26.1-p0
+    profiles: [database-pooler]
+    logging: *container-logging
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      AUTH_FILE: /run/secrets/pgbouncer/userlist.txt
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/run/pgbouncer:rw,noexec,nosuid,size=4m
+    command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
+    volumes:
+      - ${AIHUB_PGBOUNCER_SECRETS_HOST_DIR:-/srv/aihub/secrets/pgbouncer}:/run/secrets/pgbouncer:ro
+      - ${AIHUB_PGBOUNCER_SECRETS_HOST_DIR:-/srv/aihub/secrets/pgbouncer}:/etc/pgbouncer:ro
+    networks: *app-database-networks
+    depends_on:
+      pgbouncer-agent:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-h",
+          "127.0.0.1",
+          "-p",
+          "5432",
+          "-d",
+          "pgbouncer",
+        ]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 6
+
+  pgbouncer-metrics:
+    image: ${AIHUB_IMAGE:-aihub-be:local}
+    profiles: [database-pooler]
+    logging: *container-logging
+    init: true
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 96m
+    cpus: 0.10
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    entrypoint: ["node", "scripts/ops/monitoring/pgbouncer-exporter.mjs"]
+    environment:
+      AIHUB_PGBOUNCER_METRICS_CREDENTIALS_FILE: /run/secrets/pgbouncer/metrics-credentials.json
+      AIHUB_PGBOUNCER_CONFIG_FILE: /run/secrets/pgbouncer/pgbouncer.ini
+      AIHUB_PGBOUNCER_METRICS_PORT: "9188"
+    volumes:
+      - ${AIHUB_PGBOUNCER_SECRETS_HOST_DIR:-/srv/aihub/secrets/pgbouncer}:/run/secrets/pgbouncer:ro
+    networks: [backend]
+    ports:
+      - "127.0.0.1:19105:9188"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9188/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
       retries: 3
 
   migrate:

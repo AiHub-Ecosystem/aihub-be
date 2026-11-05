@@ -4,17 +4,17 @@ Status: prototype evaluation for [#1019](https://github.com/AiHub-Ecosystem/aihu
 
 ## Scope
 
-The prototype runs Vitest 5.0.5 alongside the current Jest 29 + `@swc/jest` lane. It keeps the application CommonJS and transforms TypeScript tests and source to ESM with the repository's existing SWC dependency, including legacy decorators and decorator metadata. It runs seven representative suites: Writing domain, application, repository and Fastify injection tests, architecture checks, a timer-fake suite, and a suite using Jest mock functions.
+The prototype ran Vitest 5.0.5 alongside the then-current Jest 29 + `@swc/jest` lane. It kept the application CommonJS and transformed TypeScript tests and source to ESM with the repository's existing SWC dependency, including legacy decorators and decorator metadata. It ran seven representative suites: Writing domain, application, repository and Fastify injection tests, architecture checks, a timer-fake suite, and a suite using Jest mock functions.
 
-`pnpm test` and the existing coverage lanes still use Jest. The Vitest output goes to `coverage/runner-evaluation/vitest`; it does not overwrite `coverage/unit`.
+At that time `pnpm test` and the coverage lanes used Jest. The Vitest output went to `coverage/runner-evaluation/vitest` and did not overwrite `coverage/unit`.
 
-Run the prototype with `pnpm test:vitest:spike`, repeat the performance comparison with `pnpm benchmark:test-runners -- --samples=3`, or compare coverage alone with `pnpm benchmark:test-runners -- --coverage-only`. The coverage comparison exits nonzero while the reports differ.
+The Vitest prototype, its Jest-versus-Vitest benchmark harness, and their `test:vitest:spike`, `test:runner-benchmark`, and `benchmark:test-runners` scripts were removed in [#1577](https://github.com/AiHub-Ecosystem/aihub-be/issues/1577), after #1019 decided to keep Jest. The measurements below are the record. To repeat the comparison, recover the harness from commit `ea060fc7`, the last one that has it. `pnpm test:node-runner-probe` still runs.
 
 ## Compatibility
 
 The seven suites passed 98/98 tests on both runners. The prototype aliases runtime `jest` calls to Vitest's `vi`, and verifies `jest.fn`, mock implementations, modern fake timers, `advanceTimersByTimeAsync`, Nest decorator metadata, and Fastify injection.
 
-The benchmark config uses a 20-second per-test timeout on both runners because the architecture suite synchronously starts `pnpm arch-check` for many fixtures. Vitest exceeded the default five-second timeout in two fixtures during a combined run; the architecture suite passed 39/39 when run alone. The repository's default Jest timeout and configs remain unchanged.
+The benchmark config used a 20-second per-test timeout on both runners because the architecture suite synchronously starts `pnpm arch-check` for many fixtures. Vitest exceeded the default five-second timeout in two fixtures during a combined run; the architecture suite passed 39/39 when run alone. The repository's default Jest timeout and configs remain unchanged.
 
 The sample does not exercise top-level `jest.mock` hoisting or `jest.isolateModulesAsync`, both of which occur elsewhere in the repository. Vitest's [Jest migration guide](https://vitest.dev/guide/migration/jest) documents API differences; a broader migration must explicitly handle those call sites and the `jest` type namespace.
 

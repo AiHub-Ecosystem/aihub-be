@@ -11,6 +11,7 @@ import {
   type ApiKeyAuthenticatorPort,
   type AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
 const authenticatedApiKey: AuthenticatedApiKey = {
   organizationId: 'org_acme',
@@ -34,40 +35,54 @@ const authenticatedApiKey: AuthenticatedApiKey = {
  * construction, and only a cold start with nothing configured proves the
  * module graph assembles without it.
  */
+const SANDBOX_UNSET = {
+  AIHUB_SANDBOX_ORG_IDS: undefined,
+  AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: undefined,
+  AIHUB_SANDBOX_ASSERTION_KID: undefined,
+};
+
+/** Boots the application from an explicit runtime configuration. */
+async function bootApp(
+  overrides: Readonly<Record<string, string | undefined>>,
+): Promise<NestFastifyApplication> {
+  useTestRuntimeConfiguration({
+    AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'false',
+    ...SANDBOX_UNSET,
+    ...overrides,
+  });
+  const authenticator: ApiKeyAuthenticatorPort = {
+    authenticate: async () => authenticatedApiKey,
+  };
+
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(API_KEY_AUTHENTICATOR)
+    .useValue(authenticator)
+    .compile();
+
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(
+    new FastifyAdapter({ genReqId: () => generateRequestId() }),
+  );
+  await app.init();
+  await app.getHttpAdapter().getInstance().ready();
+  return app;
+}
+
+const mintRoute = {
+  method: 'POST',
+  url: '/v1/sandbox/assertions',
+  headers: { host: 'localhost', 'x-api-key': 'test-api-key' },
+  payload: { user_id: 'student_456' },
+} as const;
+
 describe('Sandbox assertions on a deployment with none configured', () => {
   let app: NestFastifyApplication;
-  const originalEnv = { ...process.env };
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
-    for (const name of [
-      'AIHUB_SANDBOX_ORG_IDS',
-      'AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY',
-      'AIHUB_SANDBOX_ASSERTION_KID',
-    ]) {
-      Reflect.deleteProperty(process.env, name);
-    }
-
-    const authenticator: ApiKeyAuthenticatorPort = {
-      authenticate: async () => authenticatedApiKey,
-    };
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(API_KEY_AUTHENTICATOR)
-      .useValue(authenticator)
-      .compile();
-
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => generateRequestId() }),
-    );
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    app = await bootApp({});
   });
 
   afterAll(async () => {
     await app.close();
-    process.env = originalEnv;
   });
 
   it('starts and serves the rest of the application', async () => {
@@ -77,33 +92,31 @@ describe('Sandbox assertions on a deployment with none configured', () => {
   });
 
   it('answers 404 on the mint route', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/v1/sandbox/assertions',
-      headers: { host: 'localhost', 'x-api-key': 'test-api-key' },
-      payload: { user_id: 'student_456' },
-    });
+    const response = await app.inject(mintRoute);
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
+});
 
-  // Half a configuration cannot sign anything, so it must not open the route
-  // and then fail at the last step.
-  it('still answers 404 when only the allowlist is set', async () => {
-    process.env.AIHUB_SANDBOX_ORG_IDS = 'org_acme';
+// Half a configuration cannot sign anything, so it must not open the route
+// and then fail at the last step. The application boots from that half
+// configuration: the runtime snapshot is fixed at boot, so setting the
+// variable on a running application would test nothing.
+describe('Sandbox assertions with only the allowlist configured', () => {
+  let app: NestFastifyApplication;
 
-    try {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/v1/sandbox/assertions',
-        headers: { host: 'localhost', 'x-api-key': 'test-api-key' },
-        payload: { user_id: 'student_456' },
-      });
+  beforeAll(async () => {
+    app = await bootApp({ AIHUB_SANDBOX_ORG_IDS: 'org_acme' });
+  });
 
-      expect(response.statusCode).toBe(404);
-    } finally {
-      Reflect.deleteProperty(process.env, 'AIHUB_SANDBOX_ORG_IDS');
-    }
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('still answers 404 on the mint route', async () => {
+    const response = await app.inject(mintRoute);
+
+    expect(response.statusCode).toBe(404);
   });
 });

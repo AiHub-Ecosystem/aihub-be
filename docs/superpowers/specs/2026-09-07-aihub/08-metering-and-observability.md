@@ -33,6 +33,9 @@ The complete record payload is logged as JSON → reconstructible manually from 
 Request-based pricing is not computed by hand: `billing:statement` states what
 an Organization is billed for one UTC month, with what it excluded and why, its
 adjustments, and whether the month is closed ([ADR-0097](../../../adr/0097-billing-statements-adjustments-and-closed-months.md)).
+`--close true` closes one Organization per transaction; if it stops partway, its
+`billing_statement_failed` line lists the closed Organizations and the failed
+one, and re-running the command closes the rest ([ADR-0151](../../../adr/0151-serialize-month-close-and-adjustments.md)).
 Its query is `BILLING_USAGE_SQL` in
 `src/modules/metering/infrastructure/postgres-billing-statement.repository.ts`,
 and it bounds the month on both sides. An earlier version of this section gave

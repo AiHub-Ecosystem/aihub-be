@@ -49,6 +49,7 @@ COPY --from=build --chown=10001:10001 /app/package.json ./package.json
 COPY --from=build --chown=10001:10001 /app/scripts/cli/cli.mjs /app/scripts/cli/cli-options.cjs /app/scripts/cli/load-cli-runner.cjs /app/scripts/cli/operator-safety.cjs ./scripts/cli/
 COPY --from=build --chown=10001:10001 /app/scripts/cli/migrate.mjs ./scripts/cli/migrate.mjs
 COPY --from=build --chown=10001:10001 /app/scripts/ops/monitoring/probe-runtime-dependencies.cjs ./scripts/ops/monitoring/probe-runtime-dependencies.cjs
+COPY --from=build --chown=10001:10001 /app/scripts/ops/monitoring/pgbouncer-exporter.mjs ./scripts/ops/monitoring/pgbouncer-exporter.mjs
 COPY --from=build --chown=10001:10001 /app/scripts/runtime/runtime-entrypoint.mjs ./scripts/runtime/runtime-entrypoint.mjs
 COPY --from=build --chown=10001:10001 /app/prisma/migrations ./prisma/migrations
 

@@ -11,7 +11,7 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null;
 }
 
-/** @param {unknown} value @returns {value is (options: {env: NodeJS.ProcessEnv}) => void} */
+/** @param {unknown} value @returns {value is (options: {env: NodeJS.ProcessEnv, target?: 'runtime' | 'operator'}) => void} */
 function isRuntimeConnectionLoader(value) {
   return typeof value === 'function';
 }
@@ -41,6 +41,12 @@ async function main() {
     timeout.unref();
   }
 
+  const target = args[0] ?? 'dist/main.js';
+  const connectionTarget =
+    target === 'scripts/cli/migrate.mjs' || target === 'scripts/cli/cli.mjs'
+      ? 'operator'
+      : 'runtime';
+
   if (!existsSync(runtimeConnectionModule)) {
     throw new Error('runtime connection loader is unavailable');
   }
@@ -67,9 +73,12 @@ async function main() {
   if (loadRuntimeConnectionEnvironment === undefined) {
     throw new Error('runtime connection loader is unavailable');
   }
-  loadRuntimeConnectionEnvironment({ env: process.env });
+  loadRuntimeConnectionEnvironment({
+    env: process.env,
+    target: connectionTarget,
+  });
 
-  const target = args.shift() ?? 'dist/main.js';
+  args.shift();
   // The target sees its own arguments: `runtime-entrypoint.mjs scripts/cli/cli.mjs
   // avatar:sweep` must reach the CLI as `avatar:sweep`, not as the path of the
   // script being run. Nothing else forwards arguments, so this is how an

@@ -60,7 +60,26 @@ describe('createSharedPrismaClients', () => {
     await split.close();
   });
 
-  it('carries the connection and idle timeouts every control-plane pool already used', async () => {
+  it('uses explicitly approved role caps when the pooler is enabled', async () => {
+    const clients = createSharedPrismaClients({
+      databaseUrl: equal,
+      controlPlaneDatabaseUrl: equal,
+      controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
+      poolConnections: {
+        runtime: 3,
+        'control-plane': 2,
+        'control-plane-read': 4,
+        'email-daily-budget': 1,
+      },
+    });
+
+    expect(clients.runtime.pool.options.max).toBe(10);
+
+    await clients.close();
+  });
+
+  it('uses the bounded acquisition and idle timeouts for shared pools', async () => {
     const clients = createSharedPrismaClients({
       databaseUrl: equal,
       controlPlaneDatabaseUrl: equal,
@@ -69,7 +88,7 @@ describe('createSharedPrismaClients', () => {
     });
 
     const pool = clients.runtime.pool;
-    expect(pool.options.connectionTimeoutMillis).toBe(1_000);
+    expect(pool.options.connectionTimeoutMillis).toBe(250);
     expect(pool.options.idleTimeoutMillis).toBe(30_000);
 
     await clients.close();
@@ -96,6 +115,27 @@ describe('createSharedPrismaClients', () => {
           10_000,
         );
       }
+    } finally {
+      await clients.close();
+    }
+  });
+
+  it('leaves timeout enforcement to PgBouncer for transaction-pooled clients', async () => {
+    const clients = createSharedPrismaClients({
+      databaseUrl: equal,
+      controlPlaneDatabaseUrl: equal,
+      controlPlaneReadDatabaseUrl: equal,
+      emailDailyBudgetDatabaseUrl: equal,
+      databasePoolerEnabled: true,
+    });
+
+    try {
+      expect(clients.runtime.pool.options.statement_timeout).toBeUndefined();
+      expect(clients.runtime.pool.options.lock_timeout).toBeUndefined();
+      expect(
+        clients.runtime.pool.options.idle_in_transaction_session_timeout,
+      ).toBeUndefined();
+      expect(clients.runtime.pool.options.connectionTimeoutMillis).toBe(250);
     } finally {
       await clients.close();
     }
@@ -170,6 +210,7 @@ describe('createOperatorPrismaClient', () => {
       expect(client.pool.options.idle_in_transaction_session_timeout).toBe(
         60_000,
       );
+      expect(client.pool.options.max).toBe(1);
     } finally {
       await client.close();
     }

@@ -24,6 +24,7 @@ scripts/cli/*
 scripts/generate/*
 !scripts/generate/generate-prisma-client.mjs
 !scripts/generate/prisma-client-stamp.cjs
+!scripts/generate/clean-dist.cjs
 !scripts/generate/compile-auth-email-template.mjs
 !scripts/runtime/
 scripts/runtime/*
@@ -31,6 +32,7 @@ scripts/runtime/*
 !scripts/ops/
 scripts/ops/*
 !scripts/ops/monitoring/probe-runtime-dependencies.cjs
+!scripts/ops/monitoring/pgbouncer-exporter.mjs
 !scripts/ops/capacity-benchmark/capacity-benchmark-seed.mjs
 !scripts/ops/capacity-benchmark/capacity-benchmark-reset-refresh-tokens.mjs
 *.runtime-secrets.json

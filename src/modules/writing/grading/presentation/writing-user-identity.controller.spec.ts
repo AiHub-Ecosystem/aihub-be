@@ -36,6 +36,7 @@ import type { OrganizationIdentityConfig } from '@/modules/identity/organization
 import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import { JWKS_KEY_PROVIDER } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
 const RequestIdEnvelopeSchema = Type.Object({
   error: Type.Object({ request_id: Type.String({ pattern: '^req_' }) }),
@@ -69,8 +70,6 @@ describe('Writing user identity HTTP flow', () => {
   let identityConfigMissing = false;
   let providerUnavailable = false;
   let configStoreDown = false;
-  const originalNodeEnv = process.env.NODE_ENV;
-  const originalBypass = process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV;
 
   const configRepository = {
     findActiveByOrganizationId: async () => {
@@ -129,8 +128,7 @@ describe('Writing user identity HTTP flow', () => {
   };
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'false';
+    useTestRuntimeConfiguration({ AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'false' });
     const generated = await generateKeyPair('RS256', { extractable: true });
     privateKey = generated.privateKey;
     publicJwk = {
@@ -182,8 +180,6 @@ describe('Writing user identity HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalBypass;
   });
 
   beforeEach(() => {

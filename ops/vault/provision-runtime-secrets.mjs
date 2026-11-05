@@ -1,7 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
+
+import { validatePgBouncerBundle } from './pgbouncer-budget.mjs';
 
 const environment = process.env.AIHUB_VAULT_ENVIRONMENT;
 const credentialsDirectory = process.env.AIHUB_VAULT_CREDENTIALS_DIR;
@@ -60,8 +62,8 @@ function runVault(args, label) {
   return result.stdout;
 }
 
-/** @param {string} fileName @param {string[]} keys @returns {string} */
-function readBundle(fileName, keys) {
+/** @param {string} fileName @param {string[]} keys @param {string[]} [optionalKeys] @returns {string} */
+function readBundle(fileName, keys, optionalKeys = []) {
   const path = join(credentialsDirectory, fileName);
   /** @type {unknown} */
   let value;
@@ -73,9 +75,16 @@ function readBundle(fileName, keys) {
 
   if (
     !isRecord(value) ||
-    Object.keys(value).some((key) => !keys.includes(key)) ||
+    Object.keys(value).some(
+      (key) => !keys.includes(key) && !optionalKeys.includes(key),
+    ) ||
     keys.some(
       (key) => typeof value[key] !== 'string' || value[key].trim().length === 0,
+    ) ||
+    optionalKeys.some(
+      (key) =>
+        value[key] !== undefined &&
+        (typeof value[key] !== 'string' || value[key].trim().length === 0),
     )
   ) {
     fail(`credential bundle has an invalid schema: ${fileName}`);
@@ -133,7 +142,7 @@ runVault(
   'AppRole provision',
 );
 
-/** @type {Array<[string, string[], string]>} */
+/** @type {Array<[string, string[], string, string[]?]>} */
 const bundles = [
   ['ai-speaking.json', ['client_id', 'secret_key'], 'ai-speaking'],
   ['ai-writing.json', ['token'], 'ai-writing'],
@@ -149,6 +158,16 @@ const bundles = [
       'email_send_budget_url',
     ],
     'database',
+    [
+      'pooler_url',
+      'sandbox_pooler_url',
+      'control_plane_pooler_url',
+      'sandbox_control_plane_pooler_url',
+      'control_plane_read_pooler_url',
+      'sandbox_control_plane_read_pooler_url',
+      'email_send_budget_pooler_url',
+      'sandbox_email_send_budget_pooler_url',
+    ],
   ],
   ['redis.json', ['url', 'sandbox_url', 'email_send_rate_url'], 'redis'],
   [
@@ -161,14 +180,79 @@ const bundles = [
   ['auth-mfa.json', ['current_key_id', 'keys'], 'auth-mfa'],
 ];
 
-for (const [fileName, keys, bundleName] of bundles) {
-  const path = readBundle(fileName, keys);
+for (const [fileName, keys, bundleName, optionalKeys = []] of bundles) {
+  const path = readBundle(fileName, keys, optionalKeys);
   runVault(
     ['kv', 'put', `secret/aihub/${environment}/${bundleName}`, `@${path}`],
     `KV bundle write (${bundleName})`,
   );
 }
 
-console.log(
-  `Vault provisioning completed for ${environment}: policy, AppRole, and eleven KV bundles updated`,
-);
+const poolerBundlePath = join(credentialsDirectory, 'database-pooler.json');
+if (existsSync(poolerBundlePath)) {
+  /** @type {unknown} */
+  let poolerBundle;
+  try {
+    poolerBundle = JSON.parse(readFileSync(poolerBundlePath, 'utf8'));
+  } catch {
+    fail('credential bundle cannot be read: database-pooler.json');
+  }
+  try {
+    const runtimePoolMax = [
+      'AIHUB_POSTGRES_POOL_MAX_RUNTIME',
+      'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE',
+      'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE_READ',
+      'AIHUB_POSTGRES_POOL_MAX_EMAIL_DAILY_BUDGET',
+    ].reduce((sum, name) => {
+      const value = Number(process.env[name]);
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`${name} is required when provisioning PgBouncer`);
+      }
+      return sum + value;
+    }, 0);
+    validatePgBouncerBundle(poolerBundle, runtimePoolMax);
+  } catch (error) {
+    fail(
+      `credential bundle has an invalid schema: database-pooler.json (${error instanceof Error ? error.message : 'invalid budget'})`,
+    );
+  }
+  runVault(
+    [
+      'kv',
+      'put',
+      `secret/aihub/${environment}/database-pooler`,
+      `@${poolerBundlePath}`,
+    ],
+    'KV bundle write (database-pooler)',
+  );
+
+  const poolerPolicyName = `aihub-${environment}-pgbouncer`;
+  const poolerPolicyPath = join(
+    process.cwd(),
+    'ops',
+    'vault',
+    'policies',
+    `${poolerPolicyName}.hcl`,
+  );
+  runVault(
+    ['policy', 'write', poolerPolicyName, poolerPolicyPath],
+    'PgBouncer policy write',
+  );
+  runVault(
+    [
+      'write',
+      `auth/approle/role/${poolerPolicyName}`,
+      `token_policies=${poolerPolicyName}`,
+      'token_type=service',
+      'secret_id_ttl=10m',
+      'secret_id_num_uses=1',
+      'token_ttl=1h',
+      'token_max_ttl=24h',
+      'bind_secret_id=false',
+      `bound_cidr_list=${agentCidr}`,
+    ],
+    'PgBouncer AppRole provision',
+  );
+}
+
+console.log(`Vault provisioning completed for ${environment}`);

@@ -10,13 +10,14 @@
  * picks up `client.ts`, Node picks up `client.js`.
  *
  * `@swc/cli` cannot write beside its own input, so it compiles into a staging
- * directory that is then moved into place. It runs after `nest build` because
- * that builder deletes `dist/`.
+ * directory that is then moved into place. It runs after `nest build` so the
+ * build output and the client end up in the same `dist/`.
  *
  * Fast path: when the inputs (schema, pinned prisma/@prisma/client versions)
  * are unchanged and the expected outputs exist, skip regeneration. The stamp
- * lives inside the generated directory so that a `bun run build` (which deletes
- * `dist/`) naturally invalidates it. It also records the strongest mode that
+ * lives inside the generated directory, so deleting `dist/` or that directory
+ * invalidates it, while `bun run build` keeps it (`clean-dist.cjs`, #1619) and
+ * only a changed input regenerates. It also records the strongest mode that
  * produced the outputs: a plain request accepts runtime outputs, and a runtime
  * request over plain outputs only compiles, without `prisma generate`
  * (`prisma-client-stamp.cjs`, #1611).

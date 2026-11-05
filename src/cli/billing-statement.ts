@@ -201,6 +201,16 @@ export async function runBillingStatementCommand(
         event: 'billing_statement_failed',
         month: input.month,
         error_code: safe.code,
+        // A close that stopped partway: closed Organizations stay closed and
+        // re-running the command closes the rest (#1618, ADR-0151).
+        ...(safe.progress === undefined
+          ? {}
+          : {
+              closed_organizations: safe.progress.closed,
+              ...(safe.progress.failed === undefined
+                ? {}
+                : { failed_organization: safe.progress.failed }),
+            }),
       }),
     );
     throw safe;

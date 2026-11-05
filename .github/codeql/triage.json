@@ -99,7 +99,7 @@
     {
       "ruleId": "js/file-system-race",
       "path": "scripts/generate/generate-prisma-client.mjs",
-      "fingerprint": "e92912ae87c676ca:1",
+      "fingerprint": "a3d23c713c46b94d:1",
       "reason": "Generator writes into the repository working tree; no other principal shares the path."
     },
     {

@@ -30,8 +30,14 @@ its snapshot at the lock statement, before the wait.
 Organizations in one snapshot, then closes each in its own transaction under its
 own lock, rereading that Organization's totals after the lock. A run interrupted
 halfway leaves the finished Organizations closed and closes the rest on the
-next run, which skips a closed one. An Organization that first appears after the
-list was read is closed by the next run.
+next run, which skips a closed one. When a close fails partway, the command
+prints `billing_statement_failed` with `closed_organizations` and
+`failed_organization` (Organization ids only, no database text), stops at the
+first failure, and exits non-zero with the same error code. If every close
+committed and only the final statement read failed, `failed_organization` is
+absent. Later Organizations are not attempted. Re-running it is safe ([#1618](https://github.com/AiHub-Ecosystem/aihub-be/issues/1618)). An
+Organization that first appears after the list was read is closed by the next
+run.
 
 **A statement reads one snapshot.** Usage, adjustments, and closures are read in
 one `REPEATABLE READ` transaction. The default isolation level gives each

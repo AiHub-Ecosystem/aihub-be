@@ -47,7 +47,7 @@ if (existsSync(runtimeConnectionModule)) {
   if (loadRuntimeConnectionEnvironment === undefined) {
     throw new Error('runtime connection loader is unavailable');
   }
-  loadRuntimeConnectionEnvironment({ env: process.env });
+  loadRuntimeConnectionEnvironment({ env: process.env, target: 'operator' });
 }
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -79,6 +79,7 @@ async function pendingMigrations(pool) {
 
 const pool = new Pool({
   connectionString: databaseUrl,
+  max: 1,
   connectionTimeoutMillis: 1_000,
   idleTimeoutMillis: 30_000,
   statement_timeout: 300_000,

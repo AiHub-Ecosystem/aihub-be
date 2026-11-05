@@ -53,6 +53,7 @@ import {
   WritingGradingController,
   WritingV2GradingController,
 } from '@/modules/writing/public/grading';
+import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 import {
   GRADED_REQUEST_GUARDS,
@@ -88,6 +89,29 @@ function fixture(name: string): Record<string, unknown> {
   >;
 }
 
+function providerFailureSample(name: string) {
+  const sample = fixture(name);
+  if (
+    typeof sample.status !== 'number' ||
+    typeof sample.headers !== 'object' ||
+    sample.headers === null ||
+    Array.isArray(sample.headers) ||
+    typeof sample.body !== 'object' ||
+    sample.body === null ||
+    Array.isArray(sample.body)
+  ) {
+    throw new Error('provider failure sample is incomplete');
+  }
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(sample.headers)) {
+    if (typeof value !== 'string') {
+      throw new Error('provider failure sample has an invalid header');
+    }
+    headers[key] = value;
+  }
+  return { status: sample.status, headers, body: sample.body };
+}
+
 const task1Request = fixture('grade-task1.request.json') as {
   question: string;
   url: string;
@@ -105,6 +129,39 @@ const microExerciseRequest = {
   comments: [{ quote: 'She go.', explanation: 'Use agreement.' }],
 };
 
+const longWritingExerciseRequest = {
+  topic: 'education',
+  writing_task: 2,
+  errors: [
+    {
+      criterion: 'grammatical_range_accuracy',
+      error_code: 'GRA01',
+      prompt: 'Use the target form.',
+      question_type: 'grammar',
+      comments: [{ quote: 'She go.', explanation: 'Use agreement.' }],
+    },
+    {
+      criterion: 'coherence_cohesion',
+      error_code: 'CC01',
+      prompt: 'Connect the ideas.',
+      question_type: 'cohesion',
+      comments: [{ quote: 'Also,', explanation: 'Link the clauses.' }],
+    },
+  ],
+};
+
+const microGradeRequest = {
+  exercise_type: 'short_writing',
+  instruction: 'Write one sentence.',
+  question_no: 1,
+  question_text: 'Use a conjunction.',
+  question_image: null,
+  hint: [],
+  sample_answer: 'I stayed home because it rained.',
+  ai_grading_rubric: 'Uses a correct conjunction.',
+  user_answer: 'I stayed home because it rained.',
+};
+
 /**
  * The known-good order, written out literally rather than derived from the
  * declarations. This is deliberate: if the executing chain were compared against
@@ -114,6 +171,26 @@ const microExerciseRequest = {
  * budget also precedes quota so its refusal takes priority over a replay; these
  * checks and concurrency admission now run inside GradedPipelineEngine.
  */
+// Only a deadline to fail fast: a request blocked behind the hanging provider
+// would otherwise wait out the 30 s provider deadline. It is far above any
+// runner slowdown, so it never decides the outcome of a healthy run.
+const BLOCKED_AFTER_MS = 5_000;
+
+async function completesWhileSpeakingHangs<T>(work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const blocked = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('blocked while AI Speaking hangs')),
+      BLOCKED_AFTER_MS,
+    );
+  });
+  try {
+    return await Promise.race([work, blocked]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const EXPECTED_ORDER = [
   'ApiKeyGuard',
   'UserIdentityGuard',
@@ -126,22 +203,15 @@ describe('graded request chain', () => {
   let mockAgent: MockAgent;
   let authState: InMemoryAuthState;
   const executed: string[] = [];
-  const originalEnv = {
-    allowDev: process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV,
-    nodeEnv: process.env.NODE_ENV,
-    token: process.env.DOWNSTREAM_AI_WRITING_TOKEN,
-    url: process.env.DOWNSTREAM_AI_WRITING_URL,
-    speakingToken: process.env.DOWNSTREAM_AI_SPEAKING_TOKEN,
-    speakingUrl: process.env.DOWNSTREAM_AI_SPEAKING_URL,
-  };
 
   beforeAll(async () => {
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = 'true';
-    process.env.NODE_ENV = 'test';
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
-    process.env.DOWNSTREAM_AI_WRITING_URL = 'https://ai-writing.test';
-    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = 'speaking-token';
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = 'https://ai-speaking.test';
+    useTestRuntimeConfiguration({
+      AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+      DOWNSTREAM_AI_WRITING_TOKEN: 'writing-token',
+      DOWNSTREAM_AI_WRITING_URL: 'https://ai-writing.test',
+      DOWNSTREAM_AI_SPEAKING_TOKEN: 'speaking-token',
+      DOWNSTREAM_AI_SPEAKING_URL: 'https://ai-speaking.test',
+    });
 
     // Record the real authentication guards; admission and concurrency are
     // observed at their application ports below.
@@ -243,12 +313,6 @@ describe('graded request chain', () => {
   afterAll(async () => {
     jest.restoreAllMocks();
     await app.close();
-    process.env.AIHUB_ALLOW_UNAUTHENTICATED_DEV = originalEnv.allowDev;
-    process.env.NODE_ENV = originalEnv.nodeEnv;
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = originalEnv.token;
-    process.env.DOWNSTREAM_AI_WRITING_URL = originalEnv.url;
-    process.env.DOWNSTREAM_AI_SPEAKING_TOKEN = originalEnv.speakingToken;
-    process.env.DOWNSTREAM_AI_SPEAKING_URL = originalEnv.speakingUrl;
   });
 
   beforeEach(() => {
@@ -276,21 +340,24 @@ describe('graded request chain', () => {
   it('keeps Core Auth and Writing grading responsive while AI Speaking hangs', async () => {
     const client = app.get(DownstreamHttpClient);
     const controllers = Array.from({ length: 10 }, () => new AbortController());
+    let speakingSettled = 0;
+    const markSettled = (): void => {
+      speakingSettled += 1;
+    };
     const stalled = controllers.map((controller, index) =>
-      client.request(
-        { method: 'POST', path: '/simulate-provider-hang', body: {} },
-        {
-          downstream: 'ai-speaking',
-          requestId: `req_slow_speaking_${index}`,
-          deadlineMs: 30_000,
-          signal: controller.signal,
-        },
-      ),
+      client
+        .request(
+          { method: 'POST', path: '/simulate-provider-hang', body: {} },
+          {
+            downstream: 'ai-speaking',
+            requestId: `req_slow_speaking_${index}`,
+            deadlineMs: 30_000,
+            signal: controller.signal,
+          },
+        )
+        .then(markSettled, markSettled),
     );
-    let speakingSettled = false;
-    const settled = Promise.allSettled(stalled).then(
-      () => (speakingSettled = true),
-    );
+    const settled = Promise.all(stalled);
 
     try {
       seedAccount(authState, {
@@ -299,37 +366,43 @@ describe('graded request chain', () => {
         username: 'student',
         passwordHash: 'stored-password-hash',
       });
-      const auth = await app.inject({
-        method: 'POST',
-        url: '/v1/auth/login',
-        headers: { 'content-type': 'application/json' },
-        payload: {
-          email: 'student@example.test',
-          password: 'correct-password',
-        },
-      });
+      const auth = await completesWhileSpeakingHangs(
+        app.inject({
+          method: 'POST',
+          url: '/v1/auth/login',
+          headers: { 'content-type': 'application/json' },
+          payload: {
+            email: 'student@example.test',
+            password: 'correct-password',
+          },
+        }),
+      );
       expect(auth.statusCode).toBe(200);
       expect(auth.headers['set-cookie']).toBeDefined();
-      expect(speakingSettled).toBe(false);
 
-      const writing = await app.inject({
-        method: 'POST',
-        url: '/v1/ielts/writing/task1/grade',
-        headers: { 'idempotency-key': 'slow-speaking-isolation' },
-        payload: {
-          question: task1Request.question,
-          chart_type: task1Request.topic,
-          essay: task1Request.essay,
-          image_url: task1Request.url,
-        },
-      });
+      const writing = await completesWhileSpeakingHangs(
+        app.inject({
+          method: 'POST',
+          url: '/v1/ielts/writing/task1/grade',
+          headers: { 'idempotency-key': 'slow-speaking-isolation' },
+          payload: {
+            question: task1Request.question,
+            chart_type: task1Request.topic,
+            essay: task1Request.essay,
+            image_url: task1Request.url,
+          },
+        }),
+      );
       expect(writing.statusCode).toBe(200);
-      expect(speakingSettled).toBe(false);
+
+      // Both finished while every Speaking request was still hanging.
+      expect(speakingSettled).toBe(0);
     } finally {
       controllers.forEach((controller) => controller.abort());
       await settled;
     }
-  });
+    expect(speakingSettled).toBe(controllers.length);
+  }, 15_000);
 
   it('authenticates BFF grading requests with the shared client secret', async () => {
     const response = await app.inject({
@@ -375,6 +448,80 @@ describe('graded request chain', () => {
     });
     expect(response.body).not.toContain('Dữ liệu yêu cầu');
     expect(response.body).not.toContain('provider-added-code');
+  });
+
+  it('maps provider failures on every exercise route to sanitized public errors', async () => {
+    const routes = [
+      {
+        key: 'micro',
+        publicPath: '/v2/ielts/writing/micro-exercises',
+        providerPath: '/v2/create-micro-exercise',
+        payload: microExerciseRequest,
+      },
+      {
+        key: 'long-writing',
+        publicPath: '/v2/ielts/writing/long-writing-exercises',
+        providerPath: '/v2/create-longwriting-exercise',
+        payload: longWritingExerciseRequest,
+      },
+      {
+        key: 'micro-grade',
+        publicPath: '/v2/ielts/writing/micro-exercises/grade',
+        providerPath: '/v2/grading-micro-exercise',
+        payload: microGradeRequest,
+      },
+    ] as const;
+    const failures = [
+      {
+        fixture: 'provider-error-rate-limited.sample.json',
+        status: 503,
+        code: 'AI_SERVICE_THROTTLED',
+        providerMessage: 'Too many requests. Please wait before retrying.',
+        retryAfter: '30',
+      },
+      {
+        fixture: 'provider-error-internal-error.sample.json',
+        status: 502,
+        code: 'AI_SERVICE_ERROR',
+        providerMessage:
+          'Failed to communicate with OpenRouter upstream LLM provider.',
+        retryAfter: undefined,
+      },
+      {
+        fixture: 'provider-error-timeout.sample.json',
+        status: 504,
+        code: 'AI_SERVICE_TIMEOUT',
+        providerMessage:
+          'Operation timed out after 60 seconds. Please try again.',
+        retryAfter: undefined,
+      },
+    ] as const;
+
+    let requestNumber = 0;
+    for (const route of routes) {
+      for (const failure of failures) {
+        const sample = providerFailureSample(failure.fixture);
+        mockAgent
+          .get('https://ai-writing.test')
+          .intercept({ method: 'POST', path: route.providerPath })
+          .reply(sample.status, sample.body, { headers: sample.headers });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: route.publicPath,
+          headers: { 'idempotency-key': `exercise-error-${requestNumber}` },
+          payload: route.payload,
+        });
+
+        expect(response.statusCode).toBe(failure.status);
+        expect(response.json()).toMatchObject({
+          error: { code: failure.code, retryable: true },
+        });
+        expect(response.body).not.toContain(failure.providerMessage);
+        expect(response.headers['retry-after']).toBe(failure.retryAfter);
+        requestNumber += 1;
+      }
+    }
   });
 
   it('returns the public timeout error when exercise creation exceeds its deadline', async () => {
