@@ -39,6 +39,7 @@ const runtimeFiles = [
   'prisma.config.ts',
   'prisma/schema.prisma',
   'scripts/generate/generate-prisma-client.mjs',
+  'scripts/generate/prisma-client-stamp.cjs',
 ];
 const probeName = 'dev-restart-budget-probe';
 const readyMessage = 'Nest application successfully started';

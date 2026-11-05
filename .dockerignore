@@ -23,6 +23,7 @@ scripts/cli/*
 !scripts/generate/
 scripts/generate/*
 !scripts/generate/generate-prisma-client.mjs
+!scripts/generate/prisma-client-stamp.cjs
 !scripts/generate/compile-auth-email-template.mjs
 !scripts/runtime/
 scripts/runtime/*

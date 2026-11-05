@@ -13,10 +13,13 @@
  * directory that is then moved into place. It runs after `nest build` because
  * that builder deletes `dist/`.
  *
- * Fast path: when the inputs (schema, pinned prisma/@prisma/client versions,
- * and the --runtime mode) are unchanged and the expected outputs exist, skip
- * regeneration. The stamp lives inside the generated directory so that a
- * `bun run build` (which deletes `dist/`) naturally invalidates it.
+ * Fast path: when the inputs (schema, pinned prisma/@prisma/client versions)
+ * are unchanged and the expected outputs exist, skip regeneration. The stamp
+ * lives inside the generated directory so that a `bun run build` (which deletes
+ * `dist/`) naturally invalidates it. It also records the strongest mode that
+ * produced the outputs: a plain request accepts runtime outputs, and a runtime
+ * request over plain outputs only compiles, without `prisma generate`
+ * (`prisma-client-stamp.cjs`, #1611).
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -30,6 +33,12 @@ import {
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import {
+  formatStamp,
+  nextStamp,
+  parseStamp,
+  planGeneration,
+} from './prisma-client-stamp.cjs';
 
 const GENERATED = join('dist', 'generated', 'prisma');
 const STAGING = join('dist', 'generated', '.staging');
@@ -59,7 +68,7 @@ function run(command, args, phase) {
 }
 
 /** @returns {string} */
-function computeStamp() {
+function computeInputHash() {
   const schema = readFileSync('prisma/schema.prisma');
   const parsed = /** @type {unknown} */ (
     JSON.parse(readFileSync('package.json', 'utf8'))
@@ -80,22 +89,21 @@ function computeStamp() {
     .update(schema)
     .update(prismaVersion)
     .update(clientVersion)
-    .update(runtime ? 'runtime' : 'plain')
     .digest('hex');
 }
 
-function expectedOutputsExist() {
-  if (!existsSync(join(GENERATED, 'client.ts'))) return false;
-  if (runtime && !existsSync(join(GENERATED, 'client.js'))) return false;
-  return true;
-}
-
-const stamp = computeStamp();
-if (
-  existsSync(STAMP) &&
-  readFileSync(STAMP, 'utf8').trim() === stamp &&
-  expectedOutputsExist()
-) {
+const hash = computeInputHash();
+const stamp = existsSync(STAMP)
+  ? parseStamp(readFileSync(STAMP, 'utf8'))
+  : undefined;
+const plan = planGeneration({
+  runtime,
+  hash,
+  stamp,
+  hasClientTs: existsSync(join(GENERATED, 'client.ts')),
+  hasClientJs: existsSync(join(GENERATED, 'client.js')),
+});
+if (plan === 'skip') {
   console.log('[prisma-generate] inputs unchanged; skipping regeneration.');
   process.exit(0);
 }
@@ -104,12 +112,14 @@ if (
 // differently (Bun writes `swc.exe`, which `npx` does not resolve on Windows),
 // and a shell would split a repository path at a space.
 const require = createRequire(import.meta.url);
-rmSync(GENERATED, { force: true, recursive: true });
-run(
-  process.execPath,
-  [require.resolve('prisma/build/index.js'), 'generate'],
-  'Prisma client generation',
-);
+if (plan === 'generate') {
+  rmSync(GENERATED, { force: true, recursive: true });
+  run(
+    process.execPath,
+    [require.resolve('prisma/build/index.js'), 'generate'],
+    'Prisma client generation',
+  );
+}
 
 if (runtime) {
   rmSync(STAGING, { force: true, recursive: true });
@@ -120,6 +130,10 @@ if (runtime) {
       GENERATED,
       '--out-dir',
       STAGING,
+      // A compile-only run finds `.js` from an earlier compile beside the
+      // sources; compiling those too would collide with the new output.
+      '--extensions',
+      '.ts',
       '-C',
       'module.type=commonjs',
     ],
@@ -148,4 +162,7 @@ if (runtime) {
   rmSync(STAGING, { force: true, recursive: true });
 }
 
-writeFileSync(STAMP, stamp + '\n');
+const written = nextStamp(plan, runtime, hash, stamp);
+if (written !== undefined) {
+  writeFileSync(STAMP, formatStamp(written));
+}
