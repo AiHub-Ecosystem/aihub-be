@@ -111,8 +111,8 @@ export type RedisGradedAdmissionClient = Pick<
 >;
 
 interface LoggerLike {
-  warn(message: string): void;
-  log(message: string): void;
+  warn(fields: Record<string, unknown>): void;
+  log(fields: Record<string, unknown>): void;
 }
 
 function digest(value: string): string {

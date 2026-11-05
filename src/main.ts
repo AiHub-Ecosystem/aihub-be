@@ -9,6 +9,7 @@ import {
 import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Logger as PinoNestLogger } from 'nestjs-pino';
 
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
 import { AppModule } from './app.module';
@@ -50,7 +51,9 @@ export async function bootstrap(): Promise<void> {
       },
       shutdownOpenTelemetry,
     ),
+    { bufferLogs: true },
   );
+  app.useLogger(app.get(PinoNestLogger));
 
   app.enableShutdownHooks();
 

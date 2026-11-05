@@ -188,40 +188,34 @@ function fakeDownstreamRetryBudget(
   return { port, recordFirstAttempt, reserveRetry };
 }
 
-function readLogLine(loggerError: jest.SpiedFunction<Logger['error']>): string {
+function readLogLine(
+  loggerError: jest.SpiedFunction<Logger['error']>,
+): Record<string, unknown> {
   expect(loggerError).toHaveBeenCalledTimes(1);
   const call = loggerError.mock.calls[0];
   expect(call).toHaveLength(1);
-  const line: unknown = call?.[0];
-  if (typeof line !== 'string') {
-    throw new Error('the dispatcher failure log is not a string');
-  }
-  return line;
-}
-
-function isLogPayload(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function logPayload(logLine: string): Record<string, unknown> {
-  const payload: unknown = JSON.parse(logLine);
+  const payload: unknown = call?.[0];
   if (!isLogPayload(payload)) {
     throw new Error('the dispatcher failure log is not an object');
   }
   return payload;
 }
 
+function isLogPayload(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function expectFailureLogLine(
-  logLine: string,
+  payload: Record<string, unknown>,
   expected: Record<string, unknown>,
 ): void {
-  const { downstream_ms, ...fields } = logPayload(logLine);
+  const { downstream_ms, ...fields } = payload;
   expect(fields).toEqual(expected);
   expect(typeof downstream_ms).toBe('number');
 }
 
-function downstreamMs(logLine: string): number {
-  const downstreamMs = logPayload(logLine).downstream_ms;
+function downstreamMs(payload: Record<string, unknown>): number {
+  const downstreamMs = payload.downstream_ms;
   if (typeof downstreamMs !== 'number') {
     throw new Error('downstream_ms is missing from the failure log');
   }
@@ -1475,9 +1469,7 @@ describe('HttpOperationDispatcher', () => {
         },
       );
 
-      expect(logPayload(readLogLine(loggerError)).event).toBe(
-        'downstream_failed',
-      );
+      expect(readLogLine(loggerError)['event']).toBe('downstream_failed');
       expect(await credentialFailureCount()).toBe(before);
     },
   );
@@ -1576,7 +1568,7 @@ describe('HttpOperationDispatcher', () => {
       error_code: 'AI_SERVICE_UNAVAILABLE',
       message: 'downstream unreachable',
     });
-    expect(logLine).not.toContain(transportMarker);
+    expect(JSON.stringify(logLine)).not.toContain(transportMarker);
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'outcome_unknown' },
@@ -1606,7 +1598,7 @@ describe('HttpOperationDispatcher', () => {
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'response_received' },
     ]);
-    expect(JSON.parse(readLogLine(loggerError))).toMatchObject({
+    expect(readLogLine(loggerError)).toMatchObject({
       downstream_status: 200,
       error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
     });
@@ -1665,14 +1657,16 @@ describe('HttpOperationDispatcher', () => {
       error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
       message: 'downstream response failed contract validation',
     });
-    expect(logLine).not.toContain(essayMarker);
-    expect(logLine).not.toContain(tokenMarker);
-    expect(logLine).not.toContain(responseMarker);
+    expect(JSON.stringify(logLine)).not.toContain(essayMarker);
+    expect(JSON.stringify(logLine)).not.toContain(tokenMarker);
+    expect(JSON.stringify(logLine)).not.toContain(responseMarker);
     expect(downstreamMs(logLine)).toBeGreaterThanOrEqual(0);
   });
 
   describe('a contract violation that carries a diagnostic', () => {
-    async function dispatchViolation(error: AppError): Promise<string> {
+    async function dispatchViolation(
+      error: AppError,
+    ): Promise<Record<string, unknown>> {
       mockAgent
         .get('https://ai-writing.test')
         .intercept({ method: 'POST', path: '/grade' })
@@ -1712,12 +1706,12 @@ describe('HttpOperationDispatcher', () => {
         }),
       );
 
-      expect(logPayload(logLine)).toMatchObject({
+      expect(logLine).toMatchObject({
         error_code: 'AI_SERVICE_CONTRACT_VIOLATION',
         reason:
           '/pronunciation_detail/words/3/syllables/1/predicted_stress (Integer)',
       });
-      expect(logLine).not.toContain(causeMarker);
+      expect(JSON.stringify(logLine)).not.toContain(causeMarker);
     });
 
     it('caps the reason, so an adapter cannot flood the log', async () => {
@@ -1730,7 +1724,7 @@ describe('HttpOperationDispatcher', () => {
         }),
       );
 
-      expect(logPayload(logLine).reason).toHaveLength(400);
+      expect(logLine['reason']).toHaveLength(400);
     });
 
     it('omits the reason when the error carries none', async () => {
@@ -1742,7 +1736,7 @@ describe('HttpOperationDispatcher', () => {
         }),
       );
 
-      expect(logPayload(logLine)).not.toHaveProperty('reason');
+      expect(logLine).not.toHaveProperty('reason');
     });
   });
 });

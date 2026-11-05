@@ -141,9 +141,10 @@ describe('EmailOutboxPollerScheduler', () => {
       await subject.onModuleInit();
 
       expect(readMissingKeyVersions).toHaveBeenCalledTimes(1);
-      expect(error).toHaveBeenCalledWith(
-        'email outbox queued requests reference unavailable key versions: retired-v1',
-      );
+      expect(error).toHaveBeenCalledWith({
+        event: 'email_outbox_key_versions_unavailable',
+        missing_key_version_count: 1,
+      });
       expect(poller.calls).toBe(0);
 
       await delay(INTERVAL_MS * 3);
@@ -195,9 +196,9 @@ describe('EmailOutboxPollerScheduler', () => {
       await delay(INTERVAL_MS * 12);
       // The gate has not passed: no pass may run, so no ceiling can reset.
       expect(poller.calls).toBe(0);
-      expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('email outbox keyring gate not passed'),
-      );
+      expect(error).toHaveBeenCalledWith({
+        event: 'email_outbox_keyring_gate_not_passed',
+      });
 
       // The table becomes readable: the next tick passes the gate and the
       // outbox resumes, with the deferral logged exactly once.
@@ -309,37 +310,6 @@ describe('EmailOutboxPollerScheduler', () => {
 });
 
 describe('reportTerminalEmailDeliveryFailure', () => {
-  /**
-   * Nest's own framing (timestamp, context, colour codes) is not the payload;
-   * what an alert channel forwards is the message after the context tag.
-   */
-  function payloadOf(written: string): string {
-    return (
-      written
-        .replace(/\[\d+m/g, '')
-        .split('[EmailOutboxDispatch] ')[1]
-        ?.trim() ?? ''
-    );
-  }
-
-  async function emit(
-    failure: Parameters<typeof reportTerminalEmailDeliveryFailure>[0],
-  ): Promise<string> {
-    const written: string[] = [];
-    const spy = jest
-      .spyOn(process.stderr, 'write')
-      .mockImplementation((chunk: unknown) => {
-        written.push(String(chunk));
-        return true;
-      });
-    try {
-      reportTerminalEmailDeliveryFailure(failure);
-    } finally {
-      spy.mockRestore();
-    }
-    return payloadOf(written.join(''));
-  }
-
   it('counts the failure under its email kind', async () => {
     reportTerminalEmailDeliveryFailure({
       id: 'edr_01J00000000000000000000000',
@@ -352,31 +322,35 @@ describe('reportTerminalEmailDeliveryFailure', () => {
     );
   });
 
-  /**
-   * The alert payload is pinned whole rather than field by field: equality is
-   * what proves an address, a token, a message body, or a provider response
-   * cannot appear in it, now or after a future edit to the format.
-   */
   it.each([
     ['verification_email', 'provider_rejected'],
     ['password_reset_email', 'timeout'],
     ['organization_invite_email', 'key_unavailable'],
   ] as const)(
     'emits only the request, kind=%s, and error=%s',
-    async (kind, errorCode) => {
-      expect(
-        await emit({
+    (kind, errorCode) => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      try {
+        reportTerminalEmailDeliveryFailure({
           id: 'edr_01J00000000000000000000000',
           kind,
           errorCode,
-        }),
-      ).toBe(
-        `email delivery request edr_01J00000000000000000000000 exhausted its attempts kind=${kind} error=${errorCode}`,
-      );
+        });
+        expect(error).toHaveBeenCalledWith({
+          event: 'email_delivery_request_terminal_failure',
+          delivery_request_id: 'edr_01J00000000000000000000000',
+          kind,
+          error_code: errorCode,
+        });
+      } finally {
+        error.mockRestore();
+      }
     },
   );
 });
-
 describe('reportUnrecognisedEmailPayload', () => {
   it('counts the request under its kind and logs the kind alone', async () => {
     const warn = jest
@@ -389,9 +363,10 @@ describe('reportUnrecognisedEmailPayload', () => {
       expect(await getMetrics()).toContain(
         'aihub_email_outbox_unrecognised_payload_total{kind="organization_invite_email"} 1',
       );
-      expect(warn).toHaveBeenCalledWith(
-        'email delivery request handed back: payload holds a value this release does not know kind=organization_invite_email',
-      );
+      expect(warn).toHaveBeenCalledWith({
+        event: 'email_delivery_payload_unrecognised',
+        kind: 'organization_invite_email',
+      });
     } finally {
       warn.mockRestore();
     }
@@ -408,9 +383,10 @@ describe('reportEmailProviderConfigurationFailure', () => {
 
       try {
         reportEmailProviderConfigurationFailure({ status });
-        expect(error).toHaveBeenCalledWith(
-          `email provider credentials rejected status=${status}; dispatch paused`,
-        );
+        expect(error).toHaveBeenCalledWith({
+          event: 'email_provider_credentials_rejected',
+          status,
+        });
         expect(JSON.stringify(error.mock.calls)).not.toMatch(
           /person@example\.com|token|body|response/i,
         );

@@ -4,8 +4,8 @@ import {
 } from '@/common/observability/redis-unavailable-metric';
 
 interface LoggerLike {
-  warn(message: string): void;
-  log(message: string): void;
+  warn(fields: Record<string, unknown>): void;
+  log(fields: Record<string, unknown>): void;
 }
 
 /**
@@ -44,11 +44,13 @@ export class RedisHealthReporter {
         : typeof reason === 'string'
           ? reason
           : undefined;
-    this.logger.warn(
-      cause === undefined
-        ? `Redis ${this.subject} unavailable; ${this.policy}`
-        : `Redis ${this.subject} unreachable (${cause}); ${this.policy}`,
-    );
+    this.logger.warn({
+      event: 'redis_degraded',
+      seam: this.seam,
+      subject: this.subject,
+      ...(cause === undefined ? {} : { reason: cause }),
+      policy: this.policy,
+    });
   }
 
   /** Logs on the degraded → healthy transition only. */
@@ -56,6 +58,10 @@ export class RedisHealthReporter {
     if (!this.degraded) return;
 
     this.degraded = false;
-    this.logger.log(`Redis ${this.subject} recovered`);
+    this.logger.log({
+      event: 'redis_recovered',
+      seam: this.seam,
+      subject: this.subject,
+    });
   }
 }

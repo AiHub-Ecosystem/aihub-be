@@ -99,7 +99,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
             // Built before the HTTP server listens, so the process's coverage
             // starts no later than the first request it serves.
             { processId: randomUUID(), startedAt: new Date() },
-            (message) => new Logger('PublicApiMajorUsage').warn(message),
+            (event) => new Logger('PublicApiMajorUsage').warn({ event }),
           ),
           configuration.NODE_ENV !== 'test',
         ),

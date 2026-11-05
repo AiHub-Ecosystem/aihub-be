@@ -107,18 +107,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const postgresTimeout = postgresTimeoutKind(exception);
     if (postgresTimeout !== undefined) {
-      this.logger.error(
-        JSON.stringify({
-          event: 'postgres_timeout',
-          timeout: postgresTimeout,
-        }),
-      );
+      this.logger.error({
+        event: 'postgres_timeout',
+        timeout: postgresTimeout,
+      });
       exception = databaseUnavailableError();
     } else if (
       !(exception instanceof AppError) &&
       isPostgresUnavailable(exception)
     ) {
-      this.logger.error(JSON.stringify({ event: 'postgres_unavailable' }));
+      this.logger.error({ event: 'postgres_unavailable' });
       exception = databaseUnavailableError();
     } else if (
       exception instanceof HttpException &&
@@ -148,16 +146,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     recordRequestFailure(request, envelope.error.code);
 
     if (envelope.error.code === 'INVALID_REQUEST') {
-      this.logger.warn(
-        JSON.stringify({
-          event: 'invalid_request',
-          request_id: requestId,
-          ...(exception instanceof AppError &&
-          exception.diagnostic !== undefined
-            ? { diagnostic: exception.diagnostic }
-            : {}),
-        }),
-      );
+      this.logger.warn({
+        event: 'invalid_request',
+        request_id: requestId,
+        ...(exception instanceof AppError && exception.diagnostic !== undefined
+          ? { diagnostic: exception.diagnostic }
+          : {}),
+      });
     }
 
     // A request whose id never validated cannot be identified, so there is

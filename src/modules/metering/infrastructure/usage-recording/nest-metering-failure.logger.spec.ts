@@ -34,13 +34,15 @@ describe('NestMeteringFailureLogger', () => {
     try {
       new NestMeteringFailureLogger().writeFailed(record);
 
-      const message: unknown = error.mock.calls[0]?.[0];
-      if (typeof message !== 'string') {
-        throw new Error('Expected a string log message');
-      }
-      expect(message).toContain(record.requestId);
-      expect(message).toContain('inputTokens');
-      expect(message).not.toContain(forbiddenEssay);
+      const fields: unknown = error.mock.calls[0]?.[0];
+      expect(fields).toMatchObject({
+        event: 'metering_write_failed',
+        record: {
+          requestId: record.requestId,
+          usage: { inputTokens: 10 },
+        },
+      });
+      expect(JSON.stringify(fields)).not.toContain(forbiddenEssay);
     } finally {
       error.mockRestore();
     }

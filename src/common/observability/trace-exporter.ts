@@ -22,9 +22,7 @@ export function withTraceExportSignals(exporter: SpanExporter): SpanExporter {
         } else {
           recordTraceExportFailure(spans.length);
           if (!outageLogged) {
-            logger.warn(
-              'OTLP trace export failed; the current batch was dropped',
-            );
+            logger.warn({ event: 'otlp_trace_export_failed' });
             outageLogged = true;
           }
         }

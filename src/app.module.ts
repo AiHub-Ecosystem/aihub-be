@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
 
 import { RejectUnstorableTextPipe } from './common/http/reject-unstorable-text.pipe';
+import { RequestLogContextInterceptor } from './common/observability/request-log-context.interceptor';
+import { createNestPinoOptions } from './common/observability/request-logger';
+import type { RuntimeConfiguration } from './config/runtime-configuration';
 import { RuntimeConfigurationModule } from './config/runtime-configuration.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -17,6 +22,12 @@ import { OpenApiModule } from './openapi/openapi.module';
 
 @Module({
   imports: [
+    LoggerModule.forRootAsync({
+      imports: [RuntimeConfigurationModule],
+      inject: [ConfigService],
+      useFactory: (configuration: ConfigService<RuntimeConfiguration>) =>
+        createNestPinoOptions(configuration.get('LOG_LEVEL', { infer: true })),
+    }),
     RuntimeConfigurationModule,
     PersistenceModule,
     HealthModule,
@@ -30,6 +41,7 @@ import { OpenApiModule } from './openapi/openapi.module';
     OpenApiModule,
   ],
   providers: [
+    { provide: APP_INTERCEPTOR, useClass: RequestLogContextInterceptor },
     // Bound through APP_FILTER rather than `useGlobalFilters` in main.ts so the
     // filter is also active in tests built with Nest's testing module.
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

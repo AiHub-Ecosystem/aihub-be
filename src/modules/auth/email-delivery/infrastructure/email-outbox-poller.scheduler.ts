@@ -173,9 +173,7 @@ export class EmailOutboxPollerScheduler
       }
       if (!this.recipientKeyGateReported) {
         this.recipientKeyGateReported = true;
-        this.logger.error(
-          `email outbox keyring gate not passed: ${error instanceof Error ? error.message : 'unknown error'}`,
-        );
+        this.logger.error({ event: 'email_outbox_keyring_gate_not_passed' });
       }
       return false;
     }
@@ -186,14 +184,13 @@ export class EmailOutboxPollerScheduler
     try {
       const versions = await this.readMissingQueuedKeyVersions();
       if (versions.length > 0) {
-        this.logger.error(
-          `email outbox queued requests reference unavailable key versions: ${versions.join(',')}`,
-        );
+        this.logger.error({
+          event: 'email_outbox_key_versions_unavailable',
+          missing_key_version_count: versions.length,
+        });
       }
-    } catch (error) {
-      this.logger.error(
-        `email outbox queued key version check failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
+    } catch {
+      this.logger.error({ event: 'email_outbox_key_version_check_failed' });
     }
   }
 
@@ -237,14 +234,17 @@ export class EmailOutboxPollerScheduler
     try {
       const summary = await this.poller.runOnce();
       if (summary.claimed > 0 || summary.cancelled > 0 || summary.failed > 0) {
-        this.logger.log(
-          `email outbox pass claimed=${summary.claimed} provider_accepted=${summary.providerAccepted} cancelled=${summary.cancelled} failed=${summary.failed} deferred=${summary.deferred}`,
-        );
+        this.logger.log({
+          event: 'email_outbox_pass_completed',
+          claimed: summary.claimed,
+          provider_accepted: summary.providerAccepted,
+          cancelled: summary.cancelled,
+          failed: summary.failed,
+          deferred: summary.deferred,
+        });
       }
-    } catch (error) {
-      this.logger.error(
-        `email outbox pass failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
+    } catch {
+      this.logger.error({ event: 'email_outbox_pass_failed' });
     } finally {
       this.running = false;
       backgroundWorkSettled();
@@ -264,9 +264,9 @@ export class EmailOutboxPollerScheduler
     try {
       await this.pruneExpiredRecipientLimits?.();
     } catch {
-      this.logger.error(
-        'authentication email recipient counter cleanup failed',
-      );
+      this.logger.error({
+        event: 'authentication_email_recipient_counter_cleanup_failed',
+      });
     } finally {
       this.pruning = false;
       backgroundWorkSettled();
@@ -285,9 +285,12 @@ export function reportTerminalEmailDeliveryFailure(failure: {
   readonly errorCode: string;
 }): void {
   recordEmailDeliveryFailed(failure.kind);
-  new Logger('EmailOutboxDispatch').error(
-    `email delivery request ${failure.id} exhausted its attempts kind=${failure.kind} error=${failure.errorCode}`,
-  );
+  new Logger('EmailOutboxDispatch').error({
+    event: 'email_delivery_request_terminal_failure',
+    delivery_request_id: failure.id,
+    kind: failure.kind,
+    error_code: failure.errorCode,
+  });
 }
 
 /**
@@ -298,18 +301,20 @@ export function reportUnrecognisedEmailPayload(request: {
   readonly kind: EmailDeliveryKindLabel;
 }): void {
   recordEmailOutboxUnrecognisedPayload(request.kind);
-  new Logger('EmailOutboxDispatch').warn(
-    `email delivery request handed back: payload holds a value this release does not know kind=${request.kind}`,
-  );
+  new Logger('EmailOutboxDispatch').warn({
+    event: 'email_delivery_payload_unrecognised',
+    kind: request.kind,
+  });
 }
 
 /** Emits one bounded signal when the provider rejects its configured credentials. */
 export function reportEmailProviderConfigurationFailure(failure: {
   readonly status: 401 | 403;
 }): void {
-  new Logger('EmailOutboxDispatch').error(
-    `email provider credentials rejected status=${failure.status}; dispatch paused`,
-  );
+  new Logger('EmailOutboxDispatch').error({
+    event: 'email_provider_credentials_rejected',
+    status: failure.status,
+  });
 }
 
 /** Distinguishes two instances of the same deployment in the lease column. */

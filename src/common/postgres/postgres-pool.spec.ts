@@ -41,13 +41,11 @@ describe('Postgres pool connection reuse', () => {
       (await pool.connect()).release();
 
       expect(release).toHaveBeenCalledWith(expect.any(Error));
-      expect(warn).toHaveBeenCalledWith(
-        JSON.stringify({
-          event: 'postgres_connection_discarded',
-          pool: 'integration-test',
-          transaction_status: status ?? 'unknown',
-        }),
-      );
+      expect(warn).toHaveBeenCalledWith({
+        event: 'postgres_connection_discarded',
+        pool: 'integration-test',
+        transaction_status: status ?? 'unknown',
+      });
     },
   );
 

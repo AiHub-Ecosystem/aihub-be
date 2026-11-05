@@ -8,15 +8,15 @@ import {
 } from './redis-identity.store';
 
 class FakeLogger {
-  readonly warnings: string[] = [];
-  readonly logs: string[] = [];
+  readonly warnings: Record<string, unknown>[] = [];
+  readonly logs: Record<string, unknown>[] = [];
 
-  warn(message: string): void {
-    this.warnings.push(message);
+  warn(event: Record<string, unknown>): void {
+    this.warnings.push(event);
   }
 
-  log(message: string): void {
-    this.logs.push(message);
+  log(event: Record<string, unknown>): void {
+    this.logs.push(event);
   }
 }
 
@@ -325,7 +325,7 @@ describe('RedisIdentityStore', () => {
       expect(redis.values.get(key)).toBe(kind === 'legacy' ? '4' : undefined);
       expect(redis.expirations.has(key)).toBe(false);
       expect(logger.warnings).toHaveLength(1);
-      expect(logger.warnings[0]).not.toContain('203.0.113.10');
+      expect(JSON.stringify(logger.warnings[0])).not.toContain('203.0.113.10');
 
       await counter.recordFailure('203.0.113.10');
       expect(logger.warnings).toHaveLength(1);

@@ -327,7 +327,7 @@ describe('GuardedOperationDispatcher', () => {
 
       expect(error.code).toBe('AI_SERVICE_TIMEOUT');
       expect(warn).toHaveBeenCalledWith(
-        'Sandbox dispatch reservation could not be released after a pre-dispatch failure',
+        'sandbox_dispatch_reservation_release_failed',
       );
     });
   });
