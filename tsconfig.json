@@ -6,7 +6,8 @@
     "lib": ["ES2022"],
     "paths": {
       "@/*": ["./src/*"],
-      "@prisma-client/*": ["./dist/generated/prisma/*"]
+      "@prisma-client/*": ["./dist/generated/prisma/*"],
+      "@kysely-types/*": ["./dist/generated/kysely/*"]
     },
     "rootDir": ".",
     "outDir": "dist",

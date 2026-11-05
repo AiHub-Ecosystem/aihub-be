@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node"]
+  },
+  "include": ["kysely-types-probe.ts"],
+  "exclude": ["node_modules", "dist", "coverage", "temp"]
+}

@@ -38,6 +38,14 @@ generator client {
   previewFeatures = ["partialIndexes"]
 }
 
+// Prototype for #1018. Types are generated from this schema into dist/ beside
+// the Prisma client; no second schema or runtime query path is introduced.
+generator kysely {
+  provider = "prisma-kysely"
+  output   = "../dist/generated/kysely"
+  fileName = "types.ts"
+}
+
 /// API keys, one per Organization.
 ///
 /// `CHECK` constraints `api_keys_key_hash_check` and `api_keys_status_check`

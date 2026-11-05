@@ -53,7 +53,7 @@ module.exports = {
   // alternatives cover the `.pnpm` store path and the linked path (ADR-0047);
   // Bun's flat `node_modules` matches the plain package names.
   transformIgnorePatterns: [
-    '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|@nestjs/|@fastify/|jose/|.pnpm/cookie|cookie/)',
+    '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|\\.pnpm/kysely|@nestjs/|@fastify/|jose/|kysely/|.pnpm/cookie|cookie/)',
   ],
   collectCoverageFrom: ['<rootDir>/src/**/*.ts'],
   // Freeze today's measured coverage as the floor so a regression in the unit

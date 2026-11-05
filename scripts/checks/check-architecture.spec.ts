@@ -1166,6 +1166,78 @@ describe('the generated Prisma client stays inside infrastructure', () => {
   }, 30_000);
 });
 
+describe('the Kysely evaluation stays inside infrastructure', () => {
+  const srcRoot = join(__dirname, '..', '..', 'src');
+
+  function runArchCheck(): { status: number | null; output: string } {
+    const result = spawnSync(
+      process.execPath,
+      ['scripts/checks/check-architecture.mjs'],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      },
+    );
+
+    return {
+      status: result.status,
+      output: `${result.stdout}\n${result.stderr}`,
+    };
+  }
+
+  it('fails an application file that imports Kysely', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'metering', '.tmp-kysely-boundary-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import { Kysely } from 'kysely';\n\nexport type Probe = Kysely<unknown>;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('imports Kysely outside infrastructure');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('fails an application file that imports generated Kysely types', () => {
+    const fixtureRoot = mkdtempSync(
+      join(srcRoot, 'modules', 'metering', '.tmp-kysely-types-boundary-'),
+    );
+    const offending = join(fixtureRoot, 'application', 'probe.port.ts');
+
+    try {
+      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
+      writeFileSync(
+        offending,
+        `import type { DB } from '@kysely-types/types';\n\nexport type Probe = DB;\n`,
+      );
+      writeFileSync(
+        join(fixtureRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
+      );
+
+      const { status, output } = runArchCheck();
+
+      expect(status).not.toBe(0);
+      expect(output).toContain('imports Kysely outside infrastructure');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
 describe('source-text architecture rules fail arch-check', () => {
   const srcRoot = join(__dirname, '..', '..', 'src');
 

@@ -54,7 +54,7 @@ const parallelismFactor = `p=${ARGON2ID_PARAMETERS.parallelism}`;
  * them, because an argon2 upgrade once changed the order and rejected every hash
  * the application had written.
  */
-export const ARGON2ID_WORK_FACTOR = `${memoryFactor},${parallelismFactor},${timeFactor}`;
+export const ARGON2ID_WORK_FACTOR = `${memoryFactor},${timeFactor},${parallelismFactor}`;
 
 /** Everything up to and including the salt separator of an encoded hash. */
 export const ARGON2ID_ENCODED_PREFIX = `$${ARGON2ID_ALGORITHM}$v=${ARGON2ID_VERSION}$${ARGON2ID_WORK_FACTOR}$`;
