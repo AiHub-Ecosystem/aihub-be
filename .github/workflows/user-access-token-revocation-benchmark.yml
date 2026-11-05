@@ -1,0 +1,80 @@
+name: User Access JWT revocation benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: user-access-token-revocation-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: 64 RPS stress scenario (repetition ${{ matrix.repetition }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: [1, 2, 3]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aihub_revocation_benchmark
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aihub_revocation_benchmark && psql -U postgres -d aihub_revocation_benchmark -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub_revocation_benchmark SET aihub.test_lane_marker TO user_access_token_revocation_benchmark' >/dev/null"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test percentile summary
+        run: node --import tsx --test scripts/ops/user-access-token-revocation-benchmark/summary.spec.ts
+
+      - name: Generate runtime Prisma client
+        run: node scripts/generate/generate-prisma-client.mjs --runtime
+
+      - name: Measure guard latency and database counters
+        env:
+          BENCHMARK_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/aihub_revocation_benchmark
+          BENCHMARK_REPETITION: ${{ matrix.repetition }}
+        run: node --import tsx scripts/ops/user-access-token-revocation-benchmark/benchmark.ts
+
+      - name: Add measured result to run summary
+        if: always()
+        run: |
+          if [ -f "temp/user-access-token-revocation-benchmark-${{ matrix.repetition }}.json" ]; then
+            cat "temp/user-access-token-revocation-benchmark-${{ matrix.repetition }}.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: user-access-token-revocation-benchmark-${{ github.run_id }}-repetition-${{ matrix.repetition }}
+          path: temp/user-access-token-revocation-benchmark-${{ matrix.repetition }}.json
+          if-no-files-found: warn
+          retention-days: 30
