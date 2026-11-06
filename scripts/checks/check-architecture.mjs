@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import tsModule from 'typescript';
 import cacheHelpers from './dependency-cruiser-cache.cjs';
 
@@ -1116,7 +1117,14 @@ const dependencyCruiserCachePath = cacheHelpers.dependencyCruiserCacheDirectory(
 const result = spawnSync(
   process.execPath,
   [
-    join(root, 'node_modules/dependency-cruiser/bin/dependency-cruiser.mjs'),
+    // The tool comes from this repository, not from the scanned root, so the
+    // spec can scan an isolated copy of the tree (#1636).
+    fileURLToPath(
+      new URL(
+        '../../node_modules/dependency-cruiser/bin/dependency-cruiser.mjs',
+        import.meta.url,
+      ),
+    ),
     '--cache',
     dependencyCruiserCachePath,
     '--cache-strategy',

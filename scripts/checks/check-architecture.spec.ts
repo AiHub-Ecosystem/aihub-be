@@ -1,10 +1,14 @@
 import { spawnSync } from 'node:child_process';
 import {
+  copyFileSync,
+  cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  rmdirSync,
   writeFileSync,
 } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -73,6 +77,77 @@ function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
   return patterns.some((entry) => new RegExp(entry).test(path));
 }
+
+const repoRoot = process.cwd();
+const archCheckScript = join(
+  repoRoot,
+  'scripts',
+  'checks',
+  'check-architecture.mjs',
+);
+let workspace: string | undefined;
+
+/**
+ * A throwaway copy of the files `check-architecture.mjs` reads, built once per
+ * spec file. Every fixture is written here and the script runs with this
+ * directory as its root, so a probe file never exists in the real `src/` tree:
+ * a killed run cannot leave one behind, and a gate that reads `src/` while this
+ * spec runs never sees it (#1636). The copy sits under `temp/` so module
+ * resolution still walks up to the repository's `node_modules`.
+ */
+function workspaceRoot(): string {
+  if (workspace) return workspace;
+
+  const temp = join(repoRoot, 'temp');
+  mkdirSync(temp, { recursive: true });
+  const root = mkdtempSync(join(temp, 'arch-spec-'));
+  cpSync(join(repoRoot, 'src'), join(root, 'src'), { recursive: true });
+  // `tsconfig.json` maps the generated clients to `dist/generated`.
+  const generated = join(repoRoot, 'dist', 'generated');
+  if (existsSync(generated)) {
+    cpSync(generated, join(root, 'dist', 'generated'), { recursive: true });
+  }
+  for (const name of [
+    '.dependency-cruiser.cjs',
+    'tsconfig.json',
+    'package.json',
+    'bun.lock',
+  ]) {
+    copyFileSync(join(repoRoot, name), join(root, name));
+  }
+  // The script scans these roots too, and specs under `src/` import from them.
+  for (const name of ['scripts', 'test']) {
+    cpSync(join(repoRoot, name), join(root, name), { recursive: true });
+  }
+  workspace = root;
+  return root;
+}
+
+function spawnArchCheck(cwd: string = workspaceRoot()) {
+  return spawnSync(process.execPath, [archCheckScript], {
+    cwd,
+    encoding: 'utf8',
+  });
+}
+
+function runArchCheck(): { status: number | null; output: string } {
+  const result = spawnArchCheck();
+
+  return {
+    status: result.status,
+    output: `${result.stdout}\n${result.stderr}`,
+  };
+}
+
+afterAll(() => {
+  if (workspace) rmSync(workspace, { recursive: true, force: true });
+  try {
+    // Only an empty `temp/` goes; another run's directory keeps it.
+    rmdirSync(join(repoRoot, 'temp'));
+  } catch {
+    // not empty or already gone
+  }
+});
 
 describe('dependency-cruiser cache inputs', () => {
   it('changes the cache directory when a policy or resolver input changes', () => {
@@ -187,7 +262,7 @@ describe('cross-module import rules', () => {
 
 describe('dependency-cruiser cache policy', () => {
   it('rechecks imports when the rules file changes', () => {
-    const projectRoot = process.cwd();
+    const projectRoot = workspaceRoot();
     const configPath = join(projectRoot, '.dependency-cruiser.cjs');
     const fixtureRoot = mkdtempSync(
       join(projectRoot, 'src', 'modules', 'identity', '.tmp-policy-cache-'),
@@ -214,15 +289,9 @@ describe('dependency-cruiser cache policy', () => {
         "import { organizationName } from '@/modules/identity/domain/organization-name';\nexport const probe = organizationName('probe');\n",
       );
 
-      const runArchCheck = () =>
-        spawnSync(process.execPath, ['scripts/checks/check-architecture.mjs'], {
-          cwd: projectRoot,
-          encoding: 'utf8',
-        });
-
-      expect(runArchCheck().status).toBe(0);
+      expect(spawnArchCheck(projectRoot).status).toBe(0);
       writeFileSync(configPath, changedConfig);
-      const result = runArchCheck();
+      const result = spawnArchCheck(projectRoot);
       expect(result.status).not.toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toContain(
         'temporary-policy-cache-check',
@@ -231,7 +300,9 @@ describe('dependency-cruiser cache policy', () => {
       writeFileSync(configPath, originalConfig);
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
-  });
+    // Two cruises of the whole tree: the isolated workspace has no
+    // dependency-cruiser cache of its own, so the first one starts cold.
+  }, 120_000);
 });
 
 describe('layer rules on feature-first Identity paths', () => {
@@ -256,7 +327,7 @@ describe('layer rules on feature-first Identity paths', () => {
     ({ fromLayer, toLayer, rule }) => {
       const fixtureRoot = mkdtempSync(
         join(
-          process.cwd(),
+          workspaceRoot(),
           'src',
           'modules',
           'identity',
@@ -280,14 +351,7 @@ describe('layer rules on feature-first Identity paths', () => {
           JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
         );
 
-        const result = spawnSync(
-          process.execPath,
-          ['scripts/checks/check-architecture.mjs'],
-          {
-            cwd: process.cwd(),
-            encoding: 'utf8',
-          },
-        );
+        const result = spawnArchCheck();
 
         expect(result.status).not.toBe(0);
         expect(
@@ -316,7 +380,7 @@ describe('domain layer purity', () => {
     (_name, importLine) => {
       const fixtureRoot = mkdtempSync(
         join(
-          process.cwd(),
+          workspaceRoot(),
           'src',
           'modules',
           'identity',
@@ -331,14 +395,7 @@ describe('domain layer purity', () => {
           `${importLine}\nexport const probe = 1;\n`,
         );
 
-        const result = spawnSync(
-          process.execPath,
-          ['scripts/checks/check-architecture.mjs'],
-          {
-            cwd: process.cwd(),
-            encoding: 'utf8',
-          },
-        );
+        const result = spawnArchCheck();
 
         expect(result.status).not.toBe(0);
         expect(
@@ -821,7 +878,13 @@ describe('request bodies reach their contract through parseRequestBody', () => {
 
   it('fails a controller that validates a body itself', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'identity', '.tmp-body-validation-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'identity',
+        '.tmp-body-validation-',
+      ),
     );
     const offending = join(fixtureRoot, 'presentation', 'probe.controller.ts');
 
@@ -836,14 +899,7 @@ describe('request bodies reach their contract through parseRequestBody', () => {
         JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
       );
 
-      const result = spawnSync(
-        process.execPath,
-        ['scripts/checks/check-architecture.mjs'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-        },
-      );
+      const result = spawnArchCheck();
 
       expect(result.status).not.toBe(0);
       expect(
@@ -858,7 +914,7 @@ describe('request bodies reach their contract through parseRequestBody', () => {
 describe('isRecord has one declaration', () => {
   it('fails a file that declares its own', () => {
     const fixtureRoot = mkdtempSync(
-      join(process.cwd(), 'src', 'modules', 'identity', '.tmp-is-record-'),
+      join(workspaceRoot(), 'src', 'modules', 'identity', '.tmp-is-record-'),
     );
 
     try {
@@ -876,14 +932,7 @@ export const probe = isRecord({});
         JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
       );
 
-      const result = spawnSync(
-        process.execPath,
-        ['scripts/checks/check-architecture.mjs'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-        },
-      );
+      const result = spawnArchCheck();
 
       expect(result.status).not.toBe(0);
       expect(
@@ -899,20 +948,13 @@ ${result.stderr.toString()}`,
 describe('the request-id pattern has one declaration', () => {
   function runWithContract(source: string): string {
     const fixtureRoot = mkdtempSync(
-      join(process.cwd(), 'src', 'contracts', '.tmp-request-id-'),
+      join(workspaceRoot(), 'src', 'contracts', '.tmp-request-id-'),
     );
 
     try {
       writeFileSync(join(fixtureRoot, 'probe.ts'), source);
 
-      const result = spawnSync(
-        process.execPath,
-        ['scripts/checks/check-architecture.mjs'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-        },
-      );
+      const result = spawnArchCheck();
 
       return `${result.stdout}\n${result.stderr}`;
     } finally {
@@ -940,7 +982,13 @@ describe('the request-id pattern has one declaration', () => {
 describe('a session is stored only with the second-factor check', () => {
   it('fails a file that continues a session without it', () => {
     const fixtureRoot = mkdtempSync(
-      join(process.cwd(), 'src', 'modules', 'auth', '.tmp-session-admission-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'auth',
+        '.tmp-session-admission-',
+      ),
     );
 
     try {
@@ -954,14 +1002,7 @@ describe('a session is stored only with the second-factor check', () => {
         JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
       );
 
-      const result = spawnSync(
-        process.execPath,
-        ['scripts/checks/check-architecture.mjs'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-        },
-      );
+      const result = spawnArchCheck();
 
       expect(result.status).not.toBe(0);
       expect(
@@ -974,14 +1015,18 @@ describe('a session is stored only with the second-factor check', () => {
 });
 
 describe('query parameters reach parseRequestQuery at the controller boundary', () => {
-  const srcRoot = join(__dirname, '..', '..', 'src');
-
   function withControllerFixture(
     source: string,
     assertion: (result: ReturnType<typeof spawnSync>) => void,
   ): void {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'identity', '.tmp-query-validation-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'identity',
+        '.tmp-query-validation-',
+      ),
     );
     const controller = join(fixtureRoot, 'presentation', 'probe.controller.ts');
 
@@ -993,14 +1038,7 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
         JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
       );
 
-      const result = spawnSync(
-        process.execPath,
-        ['scripts/checks/check-architecture.mjs'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-        },
-      );
+      const result = spawnArchCheck();
 
       assertion(result);
     } finally {
@@ -1043,27 +1081,15 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
 });
 
 describe('the generated Prisma client stays inside infrastructure', () => {
-  const srcRoot = join(__dirname, '..', '..', 'src');
-
-  function runArchCheck(): { status: number | null; output: string } {
-    const result = spawnSync(
-      process.execPath,
-      ['scripts/checks/check-architecture.mjs'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-      },
-    );
-
-    return {
-      status: result.status,
-      output: `${result.stdout}\n${result.stderr}`,
-    };
-  }
-
   it('fails an application file that imports the generated client', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'identity',
+        '.tmp-prisma-boundary-',
+      ),
     );
     const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
 
@@ -1089,7 +1115,13 @@ describe('the generated Prisma client stays inside infrastructure', () => {
 
   it('fails an application file of the persistence module itself', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'persistence', '.tmp-prisma-boundary-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'persistence',
+        '.tmp-prisma-boundary-',
+      ),
     );
     const offending = join(fixtureRoot, 'application', 'probe.port.ts');
 
@@ -1115,7 +1147,13 @@ describe('the generated Prisma client stays inside infrastructure', () => {
 
   it('fails a dynamic import of the generated client outside infrastructure', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-dynamic-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'identity',
+        '.tmp-prisma-boundary-dynamic-',
+      ),
     );
     const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
 
@@ -1141,7 +1179,13 @@ describe('the generated Prisma client stays inside infrastructure', () => {
 
   it('accepts the same import inside infrastructure', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'identity', '.tmp-prisma-boundary-ok-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'identity',
+        '.tmp-prisma-boundary-ok-',
+      ),
     );
     const allowed = join(fixtureRoot, 'infrastructure', 'probe.repository.ts');
 
@@ -1167,27 +1211,15 @@ describe('the generated Prisma client stays inside infrastructure', () => {
 });
 
 describe('the Kysely evaluation stays inside infrastructure', () => {
-  const srcRoot = join(__dirname, '..', '..', 'src');
-
-  function runArchCheck(): { status: number | null; output: string } {
-    const result = spawnSync(
-      process.execPath,
-      ['scripts/checks/check-architecture.mjs'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-      },
-    );
-
-    return {
-      status: result.status,
-      output: `${result.stdout}\n${result.stderr}`,
-    };
-  }
-
   it('fails an application file that imports Kysely', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'metering', '.tmp-kysely-boundary-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'metering',
+        '.tmp-kysely-boundary-',
+      ),
     );
     const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
 
@@ -1213,7 +1245,13 @@ describe('the Kysely evaluation stays inside infrastructure', () => {
 
   it('fails an application file that imports generated Kysely types', () => {
     const fixtureRoot = mkdtempSync(
-      join(srcRoot, 'modules', 'metering', '.tmp-kysely-types-boundary-'),
+      join(
+        workspaceRoot(),
+        'src',
+        'modules',
+        'metering',
+        '.tmp-kysely-types-boundary-',
+      ),
     );
     const offending = join(fixtureRoot, 'application', 'probe.port.ts');
 
@@ -1239,14 +1277,13 @@ describe('the Kysely evaluation stays inside infrastructure', () => {
 });
 
 describe('source-text architecture rules fail arch-check', () => {
-  const srcRoot = join(__dirname, '..', '..', 'src');
-
+  /** `fixtureDirectory` is relative to the isolated workspace root. */
   function runWithFixtures(
     fixtures: Array<{ layer: string; name: string; source: string }>,
-    fixtureDirectory = join(srcRoot, 'modules', 'identity'),
+    fixtureDirectory = 'src/modules/identity',
   ): { status: number | null; output: string } {
     const fixtureRoot = mkdtempSync(
-      join(fixtureDirectory, '.tmp-source-text-'),
+      join(workspaceRoot(), fixtureDirectory, '.tmp-source-text-'),
     );
 
     try {
@@ -1260,14 +1297,7 @@ describe('source-text architecture rules fail arch-check', () => {
         JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
       );
 
-      const result = spawnSync(
-        process.execPath,
-        ['scripts/checks/check-architecture.mjs'],
-        {
-          cwd: process.cwd(),
-          encoding: 'utf8',
-        },
-      );
+      const result = spawnArchCheck();
 
       return {
         status: result.status,
@@ -1407,7 +1437,7 @@ describe('source-text architecture rules fail arch-check', () => {
           source: "export const endpoint = 'https://api.example.test';\n",
         },
       ],
-      join(srcRoot, 'downstream'),
+      'src/downstream',
     );
 
     expect(result.output).toContain('contains a host literal');
@@ -1420,7 +1450,7 @@ describe('source-text architecture rules fail arch-check', () => {
   } {
     return runWithFixtures(
       [{ layer: '.', name: 'probe.ts', source }],
-      join(srcRoot, 'downstream'),
+      'src/downstream',
     );
   }
 
@@ -1564,7 +1594,7 @@ describe('source-text architecture rules fail arch-check', () => {
           source: `spawn('${packageManager}', ['dev']);\n`,
         },
       ],
-      join(process.cwd(), 'scripts'),
+      'scripts',
     );
 
     expect(result.output).toContain('spawns pnpm');
@@ -1580,7 +1610,7 @@ describe('source-text architecture rules fail arch-check', () => {
           source: 'export const environment = process.env.NODE_ENV;\n',
         },
       ],
-      join(srcRoot, 'config'),
+      'src/config',
     );
     const secrets = runWithFixtures(
       [
@@ -1590,7 +1620,7 @@ describe('source-text architecture rules fail arch-check', () => {
           source: "export const provider = 'vault';\n",
         },
       ],
-      join(srcRoot, 'modules', 'secrets', 'infrastructure'),
+      'src/modules/secrets/infrastructure',
     );
 
     expect(configuration.status).toBe(0);
@@ -1627,4 +1657,21 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.output).toContain('casts an application-declared type');
     expect(result.status).not.toBe(0);
   }, 30_000);
+});
+
+/**
+ * Declared last, so it sees what every fixture above left behind. It also
+ * catches a probe directory from an earlier run that was killed mid-test.
+ */
+describe('fixture isolation (#1636)', () => {
+  it('leaves no fixture directory in the real source tree', () => {
+    const leftovers = readdirSync(join(repoRoot, 'src'), {
+      recursive: true,
+      withFileTypes: true,
+    })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('.tmp-'))
+      .map((entry) => relative(repoRoot, join(entry.parentPath, entry.name)));
+
+    expect(leftovers).toEqual([]);
+  });
 });
