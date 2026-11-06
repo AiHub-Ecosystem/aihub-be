@@ -26,6 +26,8 @@ interface Violation {
 
 const SOURCE_TREES = ['src', 'test', 'scripts'] as const;
 const ALIAS_IN_OUTPUT = /(['"])@\/([^'"]*)\1/g;
+const PARENT_PATH_OR_ESCAPE =
+  /\.\.|\\\r?\n|\\(?:x0*2[eE]|u0*2[eE]|u\{0*2[eE]\}|0*56)/;
 
 /**
  * A specifier reaches a parent directory when any segment is `..`, which is not
@@ -34,6 +36,14 @@ const ALIAS_IN_OUTPUT = /(['"])@\/([^'"]*)\1/g;
  */
 function reachesParent(specifier: string): boolean {
   return specifier.split(/[\\/]/).includes('..');
+}
+
+/**
+ * A literal `..` or an escape/line continuation can decode into a parent
+ * segment in a string specifier, and only the compiler reads those positions.
+ */
+export function canSkipAst(text: string): boolean {
+  return !PARENT_PATH_OR_ESCAPE.test(text);
 }
 
 function collectFiles(directory: string, extension: string): string[] {
@@ -105,12 +115,13 @@ function resolvesUnder(
 }
 
 export function collectViolations(file: string, srcRoot: string): Violation[] {
-  const source = ts.createSourceFile(
-    file,
-    readFileSync(file, 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  const text = readFileSync(file, 'utf8');
+
+  if (canSkipAst(text)) {
+    return [];
+  }
+
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
 
   return importSpecifiers(source)
     .filter(

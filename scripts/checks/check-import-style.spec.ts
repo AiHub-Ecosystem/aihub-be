@@ -1,8 +1,18 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { collectDistViolations, collectViolations } from './check-import-style';
+import {
+  canSkipAst,
+  collectDistViolations,
+  collectViolations,
+} from './check-import-style';
 
 let root: string;
 let srcRoot: string;
@@ -134,6 +144,61 @@ describe('parent-relative import resolution', () => {
     );
 
     expect(collectViolations(file, srcRoot)).toEqual([]);
+  });
+});
+
+describe('fast path', () => {
+  it('skips AST creation for content with no parent-relative specifier', () => {
+    const file = sourceFixture("import { clock } from './clock';\n");
+
+    expect(canSkipAst(readFileSync(file, 'utf8'))).toBe(true);
+    expect(collectViolations(file, srcRoot)).toEqual([]);
+  });
+
+  it('reports an escaped parent segment in a static import', () => {
+    const file = sourceFixture(
+      "import { AppError } from '\\x2e\\x2e/\\x2e\\x2e/common/errors/app-error';\n",
+    );
+
+    expect(canSkipAst(readFileSync(file, 'utf8'))).toBe(false);
+    expect(collectViolations(file, srcRoot)).toEqual([
+      {
+        file,
+        line: 1,
+        specifier: '../../common/errors/app-error',
+      },
+    ]);
+  });
+
+  it.each([
+    'unicode',
+    'line continuation',
+    'dynamic import',
+    'Windows separator',
+  ] as const)('reports an escaped parent segment via %s', (variant) => {
+    const contents = {
+      unicode:
+        "import { AppError } from '\\u{2e}\\u{2e}/\\u{2e}\\u{2e}/common/errors/app-error';\n",
+      'line continuation':
+        "import { AppError } from '.\\\n./../common/errors/app-error';\n",
+      'dynamic import':
+        "const { AppError } = await import('\\x2e\\x2e/\\x2e\\x2e/common/errors/app-error');\n",
+      'Windows separator':
+        "import { AppError } from '\\x2e\\x2e\\x5c\\x2e\\x2e\\x5ccommon\\x5cerrors\\x5capp-error';\n",
+    } as const;
+    const file = sourceFixture(contents[variant]);
+
+    expect(canSkipAst(readFileSync(file, 'utf8'))).toBe(false);
+    expect(collectViolations(file, srcRoot)).toEqual([
+      {
+        file,
+        line: 1,
+        specifier:
+          variant === 'Windows separator'
+            ? '..\\..\\common\\errors\\app-error'
+            : '../../common/errors/app-error',
+      },
+    ]);
   });
 });
 
