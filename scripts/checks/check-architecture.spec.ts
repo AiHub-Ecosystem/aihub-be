@@ -194,6 +194,56 @@ describe('dependency-cruiser cache inputs', () => {
   });
 });
 
+describe('dependency-cruiser module discovery', () => {
+  it('sweeps src/modules once and reads each source file at most once', () => {
+    const probe = `
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const modules = path.join(process.cwd(), 'src', 'modules');
+      const reads = new Map();
+      let enumerations = 0;
+      const originalReaddir = fs.readdirSync;
+      const originalReadFile = fs.readFileSync;
+      fs.readdirSync = function (directory, ...args) {
+        if (typeof directory === 'string' && directory.startsWith(modules)) {
+          enumerations += 1;
+        }
+        return originalReaddir.call(this, directory, ...args);
+      };
+      fs.readFileSync = function (file, ...args) {
+        if (typeof file === 'string' && file.startsWith(modules)) {
+          reads.set(file, (reads.get(file) ?? 0) + 1);
+        }
+        return originalReadFile.call(this, file, ...args);
+      };
+      const config = require(path.join(process.cwd(), '.dependency-cruiser.cjs'));
+      const rule = config.forbidden.find(
+        (entry) => entry.name === 'no-cross-module-internal-import',
+      );
+      console.log(JSON.stringify({
+        enumerations,
+        reads: reads.size,
+        maxReads: Math.max(...reads.values()),
+        pathNot: rule.to.pathNot,
+      }));
+    `;
+    const result = spawnSync(process.execPath, ['-e', probe], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    const counts = JSON.parse(result.stdout.trim()) as {
+      enumerations: number;
+      maxReads: number;
+      pathNot: string[];
+    };
+    expect(counts.enumerations).toBe(1);
+    expect(counts.maxReads).toBeLessThanOrEqual(1);
+    expect(counts.pathNot).toEqual(crossModuleRule?.to.pathNot);
+  });
+});
+
 /**
  * The rule matches any module on the `to` side and exempts the seam through
  * `to.pathNot`. Getting that wrong is silent in both directions: a `pathNot`

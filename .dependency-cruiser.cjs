@@ -4,16 +4,138 @@ const process = require('node:process');
 
 const modulesDirectory = path.join(__dirname, 'src', 'modules');
 
+/** @typedef {{relative: string, parentPath: string, source: string}} ModuleFile */
+/** @type {ReturnType<typeof discoverModuleSeams> | undefined} */
+let moduleDiscovery;
+
 /**
- * Reading file contents is deliberate: a guard or decorator is a Nest object
- * owned by its module, not a shared primitive, so matching on its shape would
- * silently exempt every internal guard too. Declaring `module 'fastify'` is the
- * one signal that says "this file extends the shared request contract", and a
- * file that does not say it stays private by default.
+ * One config load defines several rules from the same source tree; cache the
+ * single discovery pass so each source file is read once for all of them.
  */
-/** @param {string} file @returns {boolean} */
-function isSharedPrimitive(file) {
-  return /declare module ['"]fastify['"]/.test(readFileSync(file, 'utf8'));
+
+/** @param {string} file @returns {string} */
+function seamPattern(file) {
+  return `^${path
+    .relative(process.cwd(), file)
+    .split(/[\\/]/)
+    .join('/')
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
+}
+
+/** @returns {{seams: {decorators: string[], publicApis: string[], exports: string[], sharedPrimitives: string[]}}} */
+function discoverModuleSeams() {
+  if (moduleDiscovery) return moduleDiscovery;
+
+  const entries = readdirSync(modulesDirectory, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  /** @type {ModuleFile[]} */
+  const files = [];
+  /** @type {Map<string, string>} */
+  const sourcesByPath = new Map();
+  for (const entry of entries) {
+    if (
+      !entry.isFile() ||
+      !entry.name.endsWith('.ts') ||
+      entry.name.endsWith('.spec.ts')
+    ) {
+      continue;
+    }
+    const file = path.join(entry.parentPath, entry.name);
+    const source = readFileSync(file, 'utf8');
+    sourcesByPath.set(file, source);
+    files.push({
+      parentPath: entry.parentPath,
+      relative: seamPattern(file),
+      source,
+    });
+  }
+
+  const decorators = files
+    .filter(({ source }) =>
+      /export function \w+\([^)]*\):\s*(Class|Method)Decorator\b/.test(source),
+    )
+    .map(({ relative }) => relative);
+  const publicApis = files
+    .filter(({ parentPath }) => parentPath.split(/[\\/]/).includes('public'))
+    .map(({ relative }) => relative);
+  const sharedPrimitives = files
+    .filter(
+      ({ parentPath, source }) =>
+        parentPath.split(/[\\/]/).includes('presentation') &&
+        /declare module ['"]fastify['"]/.test(source),
+    )
+    .map(({ relative }) => relative);
+
+  /** @type {Map<string, Set<string>>} */
+  const exported = new Map();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.parentPath !== modulesDirectory) continue;
+    const name = entry.name;
+    const source = sourcesByPath.get(
+      path.join(modulesDirectory, name, `${name}.module.ts`),
+    );
+    if (!source) continue;
+    const at = source.indexOf('exports:');
+    const open = at < 0 ? -1 : source.indexOf('[', at);
+    if (open < 0) continue;
+    let depth = 0;
+    let end = open;
+    for (let index = open; index < source.length; index++) {
+      if (source[index] === '[') depth++;
+      else if (source[index] === ']') {
+        depth--;
+        if (depth === 0) {
+          end = index;
+          break;
+        }
+      }
+    }
+    exported.set(
+      name,
+      new Set(
+        source
+          .slice(open + 1, end)
+          .split(',')
+          .map(
+            (part) =>
+              part
+                .trim()
+                .replace(/\/\/.*$/gm, '')
+                .trim()
+                .match(/^(?:type\s+)?([A-Za-z_$][\w$]*)/)?.[1],
+          )
+          .filter((symbol) => typeof symbol === 'string'),
+      ),
+    );
+  }
+
+  const exportsByFile = [];
+  for (const [module, symbols] of exported) {
+    for (const item of files) {
+      if (!item.parentPath.startsWith(path.join(modulesDirectory, module))) {
+        continue;
+      }
+      const declaresExported = [...symbols].some((symbol) =>
+        new RegExp(
+          `^(?:export\\s+(?:abstract\\s+)?(?:class|const|function|interface|type|enum)\\s+${symbol}\\b|export\\s*\\{[^}]*\\b${symbol}\\b)`,
+          'm',
+        ).test(item.source),
+      );
+      if (declaresExported) exportsByFile.push(item.relative);
+    }
+  }
+
+  moduleDiscovery = {
+    seams: {
+      decorators,
+      publicApis,
+      exports: exportsByFile,
+      sharedPrimitives,
+    },
+  };
+  return moduleDiscovery;
 }
 
 /**
@@ -113,24 +235,7 @@ function cliRule() {
  */
 /** @returns {string[]} */
 function nestDecoratorPaths() {
-  return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith('.ts') &&
-        !entry.name.endsWith('.spec.ts') &&
-        /export function \w+\([^)]*\):\s*(Class|Method)Decorator\b/.test(
-          readFileSync(path.join(entry.parentPath, entry.name), 'utf8'),
-        ),
-    )
-    .map(
-      (entry) =>
-        `^${path
-          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
-          .split(/[\\/]/)
-          .join('/')
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-    );
+  return discoverModuleSeams().seams.decorators;
 }
 
 /**
@@ -140,22 +245,7 @@ function nestDecoratorPaths() {
  */
 /** @returns {string[]} */
 function publicModuleApiPaths() {
-  return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith('.ts') &&
-        !entry.name.endsWith('.spec.ts') &&
-        entry.parentPath.split(/[\\/]/).includes('public'),
-    )
-    .map(
-      (entry) =>
-        `^${path
-          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
-          .split(/[\\/]/)
-          .join('/')
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-    );
+  return discoverModuleSeams().seams.publicApis;
 }
 
 /**
@@ -166,102 +256,7 @@ function publicModuleApiPaths() {
  */
 /** @returns {string[]} */
 function nestExportPaths() {
-  /** @type {Map<string, Set<string>>} */
-  const exported = new Map();
-
-  for (const entry of readdirSync(modulesDirectory, {
-    withFileTypes: true,
-  })) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-
-    const name = entry.name;
-    let source;
-    try {
-      source = readFileSync(
-        path.join(modulesDirectory, name, `${name}.module.ts`),
-        'utf8',
-      );
-    } catch {
-      continue;
-    }
-
-    const at = source.indexOf('exports:');
-    const open = at < 0 ? -1 : source.indexOf('[', at);
-    if (open < 0) {
-      continue;
-    }
-
-    let depth = 0;
-    let end = open;
-    for (let index = open; index < source.length; index++) {
-      if (source[index] === '[') {
-        depth++;
-      } else if (source[index] === ']') {
-        depth--;
-        if (depth === 0) {
-          end = index;
-          break;
-        }
-      }
-    }
-
-    exported.set(
-      name,
-      new Set(
-        source
-          .slice(open + 1, end)
-          .split(',')
-          .map(
-            (part) =>
-              part
-                .trim()
-                .replace(/\/\/.*$/gm, '')
-                .trim()
-                .match(/^(?:type\s+)?([A-Za-z_$][\w$]*)/)?.[1],
-          )
-          .filter((symbol) => typeof symbol === 'string'),
-      ),
-    );
-  }
-
-  const paths = [];
-
-  for (const [module, symbols] of exported) {
-    for (const entry of readdirSync(path.join(modulesDirectory, module), {
-      recursive: true,
-      withFileTypes: true,
-    })) {
-      if (
-        !entry.isFile() ||
-        !entry.name.endsWith('.ts') ||
-        entry.name.endsWith('.spec.ts')
-      ) {
-        continue;
-      }
-
-      const file = path.join(entry.parentPath, entry.name);
-      const declaresExported = [...symbols].some((symbol) =>
-        new RegExp(
-          `^(?:export\\s+(?:abstract\\s+)?(?:class|const|function|interface|type|enum)\\s+${symbol}\\b|export\\s*\\{[^}]*\\b${symbol}\\b)`,
-          'm',
-        ).test(readFileSync(file, 'utf8')),
-      );
-
-      if (declaresExported) {
-        paths.push(
-          `^${path
-            .relative(process.cwd(), file)
-            .split(/[\\/]/)
-            .join('/')
-            .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-        );
-      }
-    }
-  }
-
-  return paths;
+  return discoverModuleSeams().seams.exports;
 }
 
 /**
@@ -273,28 +268,7 @@ function nestExportPaths() {
  */
 /** @returns {string[]} */
 function sharedPrimitivePaths() {
-  return readdirSync(modulesDirectory, { recursive: true, withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith('.ts') &&
-        !entry.name.endsWith('.spec.ts') &&
-        path
-          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
-          .split(/[\\/]/)
-          .includes('presentation') &&
-        isSharedPrimitive(path.join(entry.parentPath, entry.name)),
-    )
-    .map(
-      (entry) =>
-        // depcruise matches these against paths relative to the cruise root,
-        // so an absolute path from readdirSync would never match.
-        `^${path
-          .relative(process.cwd(), path.join(entry.parentPath, entry.name))
-          .split(/[\\/]/)
-          .join('/')
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-    );
+  return discoverModuleSeams().seams.sharedPrimitives;
 }
 
 module.exports = {
