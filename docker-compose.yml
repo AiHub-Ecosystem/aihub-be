@@ -16,7 +16,7 @@ services:
       - -c
       - max_wal_senders=10
       - -c
-      - max_slot_wal_keep_size=512MB
+      - max_slot_wal_keep_size=1GB
     volumes:
       - aihub-postgres-data:/var/lib/postgresql/data
     healthcheck:

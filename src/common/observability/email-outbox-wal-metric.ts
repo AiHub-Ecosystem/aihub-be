@@ -18,6 +18,7 @@ export function registerEmailOutboxWalMetric(registry: Registry) {
     pending ??= (async () => {
       try {
         const sample = await source();
+        readFailed.set(0);
         present.set(sample === null ? 0 : 1);
         active.set(sample?.active === true ? 1 : 0);
         retainedBytes.set(sample?.retainedBytes ?? 0);
@@ -28,6 +29,7 @@ export function registerEmailOutboxWalMetric(registry: Registry) {
         if (sample?.safeBytes === null || sample === null) safeBytes.reset();
         else safeBytes.set(sample.safeBytes);
       } catch {
+        readFailed.set(1);
         present.reset();
         active.reset();
         retainedBytes.reset();
@@ -70,6 +72,12 @@ export function registerEmailOutboxWalMetric(registry: Registry) {
     registers: [registry],
     collect,
   });
+  const readFailed = new Gauge({
+    name: 'aihub_email_outbox_wal_health_read_failed',
+    help: 'Whether the latest email WAL slot health read failed.',
+    registers: [registry],
+    collect,
+  });
 
   return {
     setSource(next: typeof source): void {
@@ -80,6 +88,7 @@ export function registerEmailOutboxWalMetric(registry: Registry) {
         retainedBytes.reset();
         safeBytes.reset();
         slotStatus.reset();
+        readFailed.reset();
       }
     },
   };

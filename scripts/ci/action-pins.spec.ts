@@ -7,8 +7,8 @@ const WORKFLOW_DIR = '.github/workflows';
 // comment is what Dependabot rewrites alongside the SHA.
 const PINNED_USE =
   /^(\s*-?\s*)uses: [\w.-]+\/[\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/;
-const LOCAL_REUSABLE_WORKFLOW =
-  /^\s*-?\s*uses: \.\/\.github\/workflows\/[\w.-]+\.ya?ml$/;
+const LOCAL_WORKFLOW_OR_ACTION =
+  /^\s*-?\s*uses: \.\/\.github\/(?:workflows\/[\w.-]+\.ya?ml|actions\/[\w.-]+)$/;
 
 function workflowLines(): { file: string; line: string; index: number }[] {
   return readdirSync(WORKFLOW_DIR)
@@ -26,7 +26,7 @@ describe('workflow actions', () => {
       .filter(({ line }) => /^\s*-?\s*uses: /.test(line))
       .filter(
         ({ line }) =>
-          !PINNED_USE.test(line) && !LOCAL_REUSABLE_WORKFLOW.test(line),
+          !PINNED_USE.test(line) && !LOCAL_WORKFLOW_OR_ACTION.test(line),
       )
       .map(({ file, line, index }) => `${file}:${index + 1}: ${line.trim()}`);
 

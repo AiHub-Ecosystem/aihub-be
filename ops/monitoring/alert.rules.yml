@@ -207,10 +207,21 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "fb23236fbea0fe10f537a73cc90f6b96992a2b33b9d6bce8e9fea9cb02ca230a"
+          rules_sha256: "72d076091adc400a64ac46450737366674fd0f009fb3cc6f6e1605f7211187fc"
 
   - name: aihub-email-outbox
     rules:
+      - alert: EmailOutboxWalHealthReadFailed
+        expr: max by (job) (aihub_email_outbox_wal_health_read_failed) == 1
+        for: 1m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB cannot read the email WAL slot health"
+          description: "The email WAL health query is failing while the application remains scrapeable. Check the direct database connection and pg_monitor permission before slot state becomes unknown."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#logical-wal-consumer
+
       - alert: EmailOutboxWalSlotUnavailable
         expr: max by (job) (aihub_email_outbox_wal_slot_status{status=~"unreserved|lost|missing"}) > 0 or min by (job) (aihub_email_outbox_wal_slot_active) == 0
         for: 2m

@@ -6,9 +6,9 @@ import type {
 export function claimEmailDeliveryBatch(
   store: EmailDispatchStorePort,
   input: ClaimEmailDeliveryRequestsInput & { readonly batchSize: number },
-  held: boolean,
+  claimSuppressed: boolean,
 ) {
-  if (held) return Promise.resolve([]);
+  if (claimSuppressed) return Promise.resolve([]);
   const { batchSize, ...claim } = input;
   return store.claim({
     ...claim,

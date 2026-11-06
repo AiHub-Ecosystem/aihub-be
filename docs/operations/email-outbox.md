@@ -577,7 +577,9 @@ the `aihub_email_delivery` logical slot with `pgoutput`. The slot acknowledges
 a transaction only after its request reaches a durable terminal state. A row
 that is still queued for a retry keeps its WAL commit unacknowledged. Restart
 replays that work; the request ID, database lease, and stable Resend idempotency
-key make the replay safe.
+key suppress duplicates within Resend's 24-hour idempotency retention. An
+ambiguous outcome replayed after that window may duplicate a send; see the
+provider idempotency limit above and ADR-0122.
 
 ### PostgreSQL and Vault setup
 
@@ -622,7 +624,8 @@ the slot automatically.
    when its replication connection starts, covering requests committed before
    the slot existed. After that startup reconciliation, committed WAL messages
    drive dispatch; there is no periodic queued-row claim.
-3. Check `aihub_email_outbox_wal_slot_present = 1`,
+3. Check `aihub_email_outbox_wal_health_read_failed = 0`,
+   `aihub_email_outbox_wal_slot_present = 1`,
    `aihub_email_outbox_wal_slot_active = 1`, and that
    `aihub_email_outbox_wal_retained_bytes` stays below 805,306,368 bytes. Check
    that `aihub_email_outbox_queued` drains and no
@@ -633,7 +636,9 @@ the slot automatically.
 
 ### Inactive, missing, or lost slot
 
-The `EmailOutboxWalSlotUnavailable` alert fires when the slot is absent, lost,
+The `EmailOutboxWalHealthReadFailed` alert fires when the app cannot read slot
+health for one minute; check the direct database connection and `pg_monitor`
+permission. The `EmailOutboxWalSlotUnavailable` alert fires when the slot is absent, lost,
 unreserved, or has no active consumer. The WAL retention alert fires below 256
 MiB of safe space or above 768 MiB retained. Act before the 1 GiB cap is
 reached; PostgreSQL can invalidate a slot whose required WAL was removed.

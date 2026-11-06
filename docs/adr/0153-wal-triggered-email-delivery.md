@@ -30,8 +30,10 @@ The slot acknowledges a commit only after every referenced request has reached
 a durable terminal state. A retry leaves its commit unacknowledged. The
 consumer continues to process later commits, but advances the slot only across
 the contiguous prefix whose outcomes are durable. On restart, PostgreSQL
-replays unacknowledged messages; the stable request ID, lease, terminal row,
-and provider idempotency key make replay safe. A one-time queued-row
+replays unacknowledged messages. The stable request ID, lease, terminal row,
+and provider idempotency key suppress duplicate sends while Resend retains the
+key for 24 hours; an ambiguous outcome replayed after that window can duplicate
+a send, as recorded in ADR-0122. A one-time queued-row
 reconciliation after a replication connection starts covers requests that
 predate a newly created or recovered slot. No periodic queued-row claim drives
 delivery.
@@ -47,8 +49,9 @@ dispatch.
 The logical consumer uses a dedicated direct PostgreSQL URL, never PgBouncer.
 The database runs with `wal_level=logical`, a least-privilege `REPLICATION`
 login, an empty publication used for message decoding, one named logical slot,
-and a bounded `max_slot_wal_keep_size`. Alert on inactive or invalid slots and
-when less than 256 MiB of the 1 GiB slot budget remains. Slot loss is an
+and a bounded `max_slot_wal_keep_size`. Alert when the health read fails, the
+slot is inactive or invalid, or less than 256 MiB of the 1 GiB slot budget
+remains. Slot loss is an
 operator recovery: restore the publication and slot, then let startup
 reconciliation dispatch durable queued rows before acknowledging new WAL.
 Never advance or drop a slot to clear retained WAL without that reconciliation.

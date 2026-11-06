@@ -1,0 +1,19 @@
+name: Enable bounded logical WAL
+description: Configure and restart the PostgreSQL service for logical replication tests.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        container_id="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+        test -n "$container_id"
+        docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET wal_level = 'logical'"
+        docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_replication_slots = '10'"
+        docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_wal_senders = '10'"
+        docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_slot_wal_keep_size = '512MB'"
+        docker exec --user postgres "$container_id" pg_ctl -D /var/lib/postgresql/data restart --mode fast
+        for attempt in {1..30}; do
+          if docker exec "$container_id" pg_isready -U aihub -d aihub; then exit 0; fi
+          sleep 1
+        done
+        exit 1
