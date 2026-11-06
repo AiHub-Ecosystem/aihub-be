@@ -253,7 +253,8 @@ has run against Production.
 The `email_wal_url` and `sandbox_email_wal_url` fields use separate direct
 PostgreSQL replication logins (`LOGIN REPLICATION`, `CONNECT`, and `pg_monitor`)
 and bypass PgBouncer. Provision PostgreSQL logical decoding, the empty
-publication, and the slot before deploying an image that emits WAL messages;
+publication, and the scope-specific slot before deploying an image that emits
+WAL messages;
 follow [email-outbox](email-outbox.md#logical-wal-consumer) for the exact setup
 and lost-slot recovery steps.
 

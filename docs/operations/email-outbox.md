@@ -602,14 +602,18 @@ its URL in the Vault database bundle as `email_wal_url` or
 connects directly, bypassing PgBouncer. Do not use a shared Production WAL URL
 for Sandbox.
 
-Create an empty publication and the fixed slot on each database after settings
-are active:
+Create an empty publication and a database-scope-specific slot after settings
+are active. Production and Sandbox share a PostgreSQL cluster, so slot names
+must differ even though the databases do not:
 
 ```sql
 CREATE PUBLICATION aihub_email_delivery;
 SELECT *
-FROM pg_create_logical_replication_slot('aihub_email_delivery', 'pgoutput');
+FROM pg_create_logical_replication_slot('<scope>_email_delivery', 'pgoutput');
 ```
+
+Use `aihub_email_delivery` for Production and
+`aihub_sandbox_email_delivery` for Sandbox.
 
 The publication has no table members; `messages=true` streams logical
 messages. Keep the publication and slot on the same database as
@@ -623,7 +627,9 @@ the slot automatically.
 2. Deploy the application. The active slot consumer reconciles queued rows once
    when its replication connection starts, covering requests committed before
    the slot existed. After that startup reconciliation, committed WAL messages
-   drive dispatch; there is no periodic queued-row claim.
+   drive Production and Sandbox dispatch; there is no periodic queued-row claim.
+   Development without `AIHUB_EMAIL_WAL_DATABASE_URL` keeps polling dispatch so
+   local email delivery continues to work.
 3. Check `aihub_email_outbox_wal_health_read_failed = 0`,
    `aihub_email_outbox_wal_slot_present = 1`,
    `aihub_email_outbox_wal_slot_active = 1`, and that

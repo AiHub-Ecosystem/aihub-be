@@ -13,6 +13,7 @@ import type {
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import type { EmailDeliveryBacklogRow } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import { authQueryRows } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import type { claimEmailDeliveryRequests } from './email-delivery-claim';
 import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';
 import { readEmailOutboxWalSlotHealth } from './postgres-email-outbox-wal-slot-health';
@@ -25,6 +26,7 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   constructor(
     private readonly client: Parameters<typeof claimEmailDeliveryRequests>[0],
     private readonly requests = new PostgresEmailDeliveryRequestRepository(),
+    private readonly walSlotName = 'aihub_email_delivery',
   ) {}
 
   claim(
@@ -65,7 +67,18 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
   }
 
   readWalSlotHealth(): Promise<EmailOutboxWalSlotHealth | null> {
-    return readEmailOutboxWalSlotHealth(this.client);
+    return readEmailOutboxWalSlotHealth(this.client, this.walSlotName);
+  }
+
+  async readWalConfirmedLsn(): Promise<string | null> {
+    const rows = await authQueryRows<{ confirmed_flush_lsn: string | null }>(
+      this.client,
+      `SELECT confirmed_flush_lsn::text AS confirmed_flush_lsn
+       FROM pg_replication_slots
+       WHERE slot_name = $1 AND slot_type = 'logical'`,
+      [this.walSlotName],
+    );
+    return rows[0]?.confirmed_flush_lsn ?? null;
   }
 
   async markProviderAccepted(input: {

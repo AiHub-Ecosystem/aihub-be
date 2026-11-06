@@ -34,6 +34,7 @@ export interface EmailOutboxPollerSchedulerOptions {
   readonly poller: EmailDeliveryPoller;
   readonly intervalMs?: number;
   readonly enabled?: boolean;
+  readonly walDispatchEnabled?: boolean;
   readonly backlog?: () => Promise<readonly EmailOutboxBacklogSample[]>;
   readonly pruneExpiredRecipientLimits?: () => Promise<number>;
   readonly cancellations?: () => Promise<
@@ -72,6 +73,7 @@ export class EmailOutboxPollerScheduler
   private readonly poller: EmailDeliveryPoller;
   private readonly intervalMs: number;
   private readonly enabled: boolean;
+  private readonly walDispatchEnabled: boolean;
   private readonly backlog?:
     | (() => Promise<readonly EmailOutboxBacklogSample[]>)
     | undefined;
@@ -108,6 +110,7 @@ export class EmailOutboxPollerScheduler
     this.poller = options.poller;
     this.intervalMs = options.intervalMs ?? EMAIL_OUTBOX_RECONCILE_INTERVAL_MS;
     this.enabled = options.enabled ?? true;
+    this.walDispatchEnabled = options.walDispatchEnabled ?? true;
     this.backlog = options.backlog;
     this.pruneExpiredRecipientLimits = options.pruneExpiredRecipientLimits;
     this.cancellations = options.cancellations;
@@ -256,7 +259,9 @@ export class EmailOutboxPollerScheduler
     this.running = true;
     backgroundWorkStarted();
     try {
-      const summary = await this.poller.reconcile();
+      const summary = this.walDispatchEnabled
+        ? await this.poller.reconcile()
+        : await this.poller.runOnce();
       if (summary.cancelled > 0 || summary.failed > 0) {
         this.logger.log({
           event: 'email_outbox_reconciliation_completed',

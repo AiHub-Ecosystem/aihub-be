@@ -8,6 +8,7 @@ import { oneOf } from '@/modules/auth/shared/infrastructure/auth-row';
 
 export async function readEmailOutboxWalSlotHealth(
   client: AuthSqlClient,
+  slotName: string,
 ): Promise<EmailOutboxWalSlotHealth | null> {
   const rows = await authQueryRows<{
     active: boolean;
@@ -22,7 +23,7 @@ export async function readEmailOutboxWalSlotHealth(
             wal_status AS status
      FROM pg_replication_slots
      WHERE slot_name = $1 AND slot_type = 'logical'`,
-    ['aihub_email_delivery'],
+    [slotName],
   );
   const row = rows[0];
   if (row === undefined) return null;

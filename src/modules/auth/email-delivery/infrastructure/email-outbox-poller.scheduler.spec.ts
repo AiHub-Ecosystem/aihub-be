@@ -18,6 +18,7 @@ const INTERVAL_MS = 5;
 
 class ControllablePoller {
   calls = 0;
+  dispatchCalls = 0;
   private release: (() => void) | undefined;
 
   constructor(private readonly holdOpen = false) {}
@@ -29,6 +30,7 @@ class ControllablePoller {
     failed: number;
     deferred: number;
   }> {
+    this.dispatchCalls += 1;
     await this.reconcile();
     return {
       claimed: 1,
@@ -72,6 +74,22 @@ function delay(ms: number): Promise<void> {
 
 describe('EmailOutboxPollerScheduler', () => {
   const subjects: EmailOutboxPollerScheduler[] = [];
+
+  it('polls queued rows when WAL dispatch is not configured', async () => {
+    const poller = new ControllablePoller();
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      walDispatchEnabled: false,
+    });
+    subjects.push(subject);
+
+    await subject.onModuleInit();
+    await delay(20);
+    subject.onApplicationShutdown();
+
+    expect(poller.dispatchCalls).toBeGreaterThan(0);
+  });
 
   afterEach(() => {
     for (const subject of subjects.splice(0)) {

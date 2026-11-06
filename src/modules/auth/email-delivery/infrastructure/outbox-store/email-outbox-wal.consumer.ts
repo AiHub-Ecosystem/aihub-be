@@ -22,7 +22,6 @@ import { EmailOutboxPollerScheduler } from '@/modules/auth/email-delivery/infras
 import {
   EMAIL_DELIVERY_WAL_MESSAGE_PREFIX,
   EMAIL_DELIVERY_WAL_PUBLICATION,
-  EMAIL_DELIVERY_WAL_SLOT,
 } from './email-delivery-wal.constants';
 
 const RECONNECT_DELAY_MS = 5_000;
@@ -43,6 +42,8 @@ export interface EmailOutboxWalConsumerOptions {
   readonly replicationUrl: string;
   readonly store: EmailDispatchStorePort;
   readonly scheduler: EmailOutboxPollerScheduler;
+  readonly slotName: string;
+  readonly readConfirmedLsn: () => Promise<string | null>;
 }
 
 @Injectable()
@@ -59,6 +60,7 @@ export class EmailOutboxWalConsumer
   private running: Promise<void> | undefined;
   private service: LogicalReplicationService | undefined;
   private acknowledging: Promise<void> = Promise.resolve();
+  private lastAcknowledgedLsn: string | undefined;
   private connectionFailureReported = false;
   private dispatchTimer: NodeJS.Timeout | undefined;
 
@@ -87,7 +89,7 @@ export class EmailOutboxWalConsumer
         keepAlive: true,
       };
       const service = new LogicalReplicationService(clientConfig, {
-        acknowledge: { auto: false, timeoutSeconds: 10 },
+        acknowledge: { auto: false, timeoutSeconds: 0 },
         flowControl: { enabled: true },
       });
       this.service = service;
@@ -102,6 +104,12 @@ export class EmailOutboxWalConsumer
         if (this.connectionFailureReported) return;
         this.connectionFailureReported = true;
         this.logger.error({ event: 'email_outbox_wal_connection_failed' });
+      });
+      service.on('heartbeat', (_lsn, _timestamp, shouldRespond) => {
+        const acknowledgedLsn = this.lastAcknowledgedLsn;
+        if (shouldRespond && acknowledgedLsn !== undefined) {
+          void this.acknowledgeKeepalive(service, acknowledgedLsn);
+        }
       });
       service.on('data', async (_lsn, message: Pgoutput.Message) => {
         if (initialize === undefined) return;
@@ -170,13 +178,15 @@ export class EmailOutboxWalConsumer
       });
 
       try {
+        this.lastAcknowledgedLsn =
+          (await this.options.readConfirmedLsn()) ?? '0/00000000';
         await service.subscribe(
           new PgoutputPlugin({
             protoVersion: 1,
             publicationNames: [EMAIL_DELIVERY_WAL_PUBLICATION],
             messages: true,
           }),
-          EMAIL_DELIVERY_WAL_SLOT,
+          this.options.slotName,
         );
       } catch {
         // Reconnect below; never log a connection string or provider detail.
@@ -331,12 +341,27 @@ export class EmailOutboxWalConsumer
     await this.acknowledging;
   }
 
+  private async acknowledgeKeepalive(
+    service: LogicalReplicationService,
+    lsn: string,
+  ): Promise<void> {
+    this.acknowledging = this.acknowledging
+      .then(() =>
+        this.service === service
+          ? service.acknowledge(lsn).then(() => undefined)
+          : undefined,
+      )
+      .catch(() => undefined);
+    await this.acknowledging;
+  }
+
   private async flushAcknowledgements(): Promise<void> {
     const service = this.service;
     if (service === undefined) return;
     while (this.checkpoints[0]?.complete === true) {
       const checkpoint = this.checkpoints[0];
       if (!(await service.acknowledge(checkpoint.lsn))) return;
+      this.lastAcknowledgedLsn = checkpoint.lsn;
       this.checkpoints.shift();
     }
   }
