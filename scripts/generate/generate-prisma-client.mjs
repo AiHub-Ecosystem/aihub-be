@@ -106,6 +106,7 @@ const plan = planGeneration({
   stamp,
   hasClientTs: existsSync(join(GENERATED, 'client.ts')),
   hasClientJs: existsSync(join(GENERATED, 'client.js')),
+  hasKyselyTs: existsSync(join('dist', 'generated', 'kysely', 'types.ts')),
 });
 if (plan === 'skip') {
   console.log('[prisma-generate] inputs unchanged; skipping regeneration.');

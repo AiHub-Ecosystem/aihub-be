@@ -12,7 +12,10 @@
 const { existsSync, readdirSync, rmSync } = require('node:fs');
 const path = require('node:path');
 
-const KEPT = path.join('generated', 'prisma');
+const KEPT = new Set([
+  path.join('generated', 'prisma'),
+  path.join('generated', 'kysely'),
+]);
 
 /** @param {string} distDirectory */
 function cleanDist(distDirectory) {
@@ -25,7 +28,7 @@ function cleanDist(distDirectory) {
   const generated = path.join(distDirectory, 'generated');
   if (!existsSync(generated)) return;
   for (const entry of readdirSync(generated)) {
-    if (path.join('generated', entry) !== KEPT) {
+    if (!KEPT.has(path.join('generated', entry))) {
       rmSync(path.join(generated, entry), { force: true, recursive: true });
     }
   }
