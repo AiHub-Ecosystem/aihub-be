@@ -45,27 +45,6 @@ const cert = Buffer.from(
   'base64',
 ).toString('utf8');
 
-function sendResetFrame(
-  socket: TLSSocket,
-  streamId: number,
-  errorCode: number,
-): void {
-  const frame = Buffer.alloc(13);
-  frame.writeUIntBE(4, 0, 3);
-  frame[3] = 0x3;
-  frame.writeUInt32BE(streamId, 5);
-  frame.writeUInt32BE(errorCode, 9);
-  socket.write(frame);
-}
-
-function sendGoAwayFrame(socket: TLSSocket, lastStreamId: number): void {
-  const frame = Buffer.alloc(17);
-  frame.writeUIntBE(8, 0, 3);
-  frame[3] = 0x7;
-  frame.writeUInt32BE(lastStreamId, 9);
-  socket.write(frame);
-}
-
 function streamIdOf(stream: ServerHttp2Stream): number {
   if (typeof stream.id !== 'number') {
     throw new Error('HTTP/2 server stream has no assigned ID');
@@ -79,41 +58,25 @@ function createHttp2Harness(actions: readonly AttemptAction[]) {
   const executions: string[] = [];
   const protocols: string[] = [];
   const sessions: Http2Session[] = [];
-  const pendingSessions: Http2Session[] = [];
-  const pendingSockets: TLSSocket[] = [];
-  const sessionSockets = new WeakMap<Http2Session, TLSSocket>();
+  let goawayCount = 0;
   const streamWaiters: Array<{ count: number; resolve: () => void }> = [];
   const goawayResponses: Array<{
     stream: ServerHttp2Stream;
     body: string;
   }> = [];
   const server = createSecureServer({ key, cert, allowHTTP1: false });
-  const attachSocket = (session: Http2Session, socket: TLSSocket) => {
-    sessionSockets.set(session, socket);
+  server.on('secureConnection', (socket: TLSSocket) => {
     protocols.push(
       typeof socket.alpnProtocol === 'string' ? socket.alpnProtocol : '',
     );
-  };
-  const socketForStream = (stream: ServerHttp2Stream): TLSSocket => {
-    const session = stream.session;
-    const socket =
-      session === undefined ? undefined : sessionSockets.get(session);
-    if (socket === undefined) {
-      throw new Error('HTTP/2 stream has no associated TLS socket');
-    }
-    return socket;
-  };
-  server.on('secureConnection', (socket: TLSSocket) => {
-    const session = pendingSessions.shift();
-    if (session === undefined) pendingSockets.push(socket);
-    else attachSocket(session, socket);
   });
   server.on('session', (session) => {
     sessions.push(session);
-    const socket = pendingSockets.shift();
-    if (socket === undefined) pendingSessions.push(session);
-    else attachSocket(session, socket);
     session.on('error', () => undefined);
+    if (actions[attempts.length] === 'goaway-below') {
+      goawayCount += 1;
+      session.goaway(http2Constants.NGHTTP2_NO_ERROR, 0);
+    }
   });
   server.on('stream', (stream, headers) => {
     const attempt = attempts.length + 1;
@@ -125,20 +88,21 @@ function createHttp2Harness(actions: readonly AttemptAction[]) {
       else streamWaiters.push(waiter);
     }
 
+    stream.on('error', () => undefined);
+    if (action === 'goaway-below') {
+      stream.resume();
+      return;
+    }
+    if (action === 'refused') {
+      stream.close(http2Constants.NGHTTP2_REFUSED_STREAM);
+      return;
+    }
+
     const chunks: Buffer[] = [];
     stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-    stream.on('error', () => undefined);
     stream.on('end', () => {
       const body = Buffer.concat(chunks).toString();
-      if (action === 'refused') {
-        sendResetFrame(
-          socketForStream(stream),
-          streamIdOf(stream),
-          http2Constants.NGHTTP2_REFUSED_STREAM,
-        );
-      } else if (action === 'goaway-below') {
-        sendGoAwayFrame(socketForStream(stream), 0);
-      } else if (action === 'goaway-above') {
+      if (action === 'goaway-above') {
         goawayResponses.push({ stream, body });
         if (goawayResponses.length === 2) {
           executions.push(
@@ -197,6 +161,9 @@ function createHttp2Harness(actions: readonly AttemptAction[]) {
     streamIds,
     executions,
     protocols,
+    get goawayCount() {
+      return goawayCount;
+    },
     ready,
     get client() {
       return client;
@@ -271,68 +238,74 @@ const retryBudget: DownstreamRetryBudgetPort = {
   reserveRetry: async () => 'admitted',
 };
 
-describe('Undici HTTP/2 protocol replays', () => {
-  it('replays one refused JSON stream inside one gateway attempt', async () => {
-    const harness = createHttp2Harness(['refused', 'success']);
-    await harness.ready;
-    const budget: DownstreamRetryBudgetPort = {
-      ...retryBudget,
-      recordFirstAttempt: async () => true,
-      reserveRetry: async () => 'admitted',
-    };
-    const recordFirstAttempt = jest.spyOn(budget, 'recordFirstAttempt');
-    const reserveRetry = jest.spyOn(budget, 'reserveRetry');
-    const breakers = new DownstreamCircuitBreakers();
-    const breakerExecute = jest.spyOn(breakers, 'execute');
-    const dispatcher = createHttpOperationDispatcher(
-      harness.client,
-      { mint: async () => 'internal-token' },
-      [adapter],
-      noOpDispatchAttemptRecord,
-      undefined,
-      budget,
-      () => 0,
-      breakers,
-    );
-    const logicalCalls = jest.spyOn(harness.client, 'request');
-    try {
-      const outcome = await dispatcher
-        .dispatch(
-          'writing.task1.grade',
-          {
-            question: 'Describe the chart.',
-            chart_type: 'Bar Chart',
-            essay: 'A clear essay.',
-            image_url: 'https://example.com/chart.png',
-          },
-          createRequestContext({
-            requestId: 'req_http2_replay',
-            receivedAt: new Date(),
-            deadlineMs: 5_000,
-            organizationId: 'org_http2_test',
-            scopes: [],
-          }),
-        )
-        .then(
-          (value) => value,
-          (error: unknown) => ({ error }),
-        );
-      expect(outcome).toMatchObject({ data: { ok: true } });
+// Bun's HTTP/2 server shim does not deliver REFUSED_STREAM resets to Undici.
+const describeWithNativeHttp2RefusedStream =
+  process.versions.bun === undefined ? describe : describe.skip;
 
-      expect(logicalCalls).toHaveBeenCalledTimes(1);
-      expect(harness.attempts).toHaveLength(2);
-      expect(harness.executions).toEqual([serializedBody]);
-      expect(harness.protocols).toEqual(['h2']);
-      expect(recordFirstAttempt).toHaveBeenCalledTimes(1);
-      expect(reserveRetry).not.toHaveBeenCalled();
-      expect(breakerExecute).toHaveBeenCalledTimes(1);
-      expect(await getMetrics()).toContain(
-        'aihub_breaker_state{operation="writing.task1.grade"} 0',
+describe('Undici HTTP/2 protocol replays', () => {
+  describeWithNativeHttp2RefusedStream('REFUSED_STREAM replay', () => {
+    it('replays one refused JSON stream inside one gateway attempt', async () => {
+      const harness = createHttp2Harness(['refused', 'success']);
+      await harness.ready;
+      const budget: DownstreamRetryBudgetPort = {
+        ...retryBudget,
+        recordFirstAttempt: async () => true,
+        reserveRetry: async () => 'admitted',
+      };
+      const recordFirstAttempt = jest.spyOn(budget, 'recordFirstAttempt');
+      const reserveRetry = jest.spyOn(budget, 'reserveRetry');
+      const breakers = new DownstreamCircuitBreakers();
+      const breakerExecute = jest.spyOn(breakers, 'execute');
+      const dispatcher = createHttpOperationDispatcher(
+        harness.client,
+        { mint: async () => 'internal-token' },
+        [adapter],
+        noOpDispatchAttemptRecord,
+        undefined,
+        budget,
+        () => 0,
+        breakers,
       );
-    } finally {
-      breakers.onModuleDestroy();
-      await harness.close();
-    }
+      const logicalCalls = jest.spyOn(harness.client, 'request');
+      try {
+        const outcome = await dispatcher
+          .dispatch(
+            'writing.task1.grade',
+            {
+              question: 'Describe the chart.',
+              chart_type: 'Bar Chart',
+              essay: 'A clear essay.',
+              image_url: 'https://example.com/chart.png',
+            },
+            createRequestContext({
+              requestId: 'req_http2_replay',
+              receivedAt: new Date(),
+              deadlineMs: 5_000,
+              organizationId: 'org_http2_test',
+              scopes: [],
+            }),
+          )
+          .then(
+            (value) => value,
+            (error: unknown) => ({ error }),
+          );
+        expect(outcome).toMatchObject({ data: { ok: true } });
+
+        expect(logicalCalls).toHaveBeenCalledTimes(1);
+        expect(harness.attempts).toHaveLength(2);
+        expect(harness.executions).toEqual([serializedBody]);
+        expect(harness.protocols).toEqual(['h2']);
+        expect(recordFirstAttempt).toHaveBeenCalledTimes(1);
+        expect(reserveRetry).not.toHaveBeenCalled();
+        expect(breakerExecute).toHaveBeenCalledTimes(1);
+        expect(await getMetrics()).toContain(
+          'aihub_breaker_state{operation="writing.task1.grade"} 0',
+        );
+      } finally {
+        breakers.onModuleDestroy();
+        await harness.close();
+      }
+    });
   });
 
   it('replays a GOAWAY-excluded stream and serves a stream at or below lastStreamID', async () => {
@@ -346,6 +319,7 @@ describe('Undici HTTP/2 protocol replays', () => {
       expect(excluded.attempts).toHaveLength(2);
       expect(excluded.executions).toEqual([serializedBody]);
       expect(excluded.protocols).toEqual(['h2', 'h2']);
+      expect(excluded.goawayCount).toBe(1);
     } finally {
       await excluded.close();
     }
@@ -366,47 +340,49 @@ describe('Undici HTTP/2 protocol replays', () => {
     }
   });
 
-  it('bounds repeated and mixed protocol refusals', async () => {
-    const repeated = createHttp2Harness(['refused', 'refused', 'success']);
-    await repeated.ready;
-    try {
-      await expect(jsonRequest(repeated.client)).rejects.toMatchObject({
-        code: 'AI_SERVICE_UNAVAILABLE',
-      });
-      expect(repeated.attempts).toHaveLength(2);
-      expect(repeated.executions).toEqual([]);
-    } finally {
-      await repeated.close();
-    }
+  describeWithNativeHttp2RefusedStream('REFUSED_STREAM replay bounds', () => {
+    it('bounds repeated and mixed protocol refusals', async () => {
+      const repeated = createHttp2Harness(['refused', 'refused', 'success']);
+      await repeated.ready;
+      try {
+        await expect(jsonRequest(repeated.client)).rejects.toMatchObject({
+          code: 'AI_SERVICE_UNAVAILABLE',
+        });
+        expect(repeated.attempts).toHaveLength(2);
+        expect(repeated.executions).toEqual([]);
+      } finally {
+        await repeated.close();
+      }
 
-    const goaway = createHttp2Harness([
-      'goaway-below',
-      'goaway-below',
-      'success',
-    ]);
-    await goaway.ready;
-    try {
-      await expect(jsonRequest(goaway.client)).rejects.toMatchObject({
-        code: 'AI_SERVICE_UNAVAILABLE',
-      });
-      expect(goaway.attempts).toHaveLength(2);
-      expect(goaway.executions).toEqual([]);
-    } finally {
-      await goaway.close();
-    }
+      const goaway = createHttp2Harness([
+        'goaway-below',
+        'goaway-below',
+        'success',
+      ]);
+      await goaway.ready;
+      try {
+        await expect(jsonRequest(goaway.client)).rejects.toMatchObject({
+          code: 'AI_SERVICE_UNAVAILABLE',
+        });
+        expect(goaway.goawayCount).toBe(2);
+        expect(goaway.executions).toEqual([]);
+      } finally {
+        await goaway.close();
+      }
 
-    const mixed = createHttp2Harness(['goaway-below', 'refused', 'success']);
-    await mixed.ready;
-    try {
-      await expect(jsonRequest(mixed.client)).resolves.toMatchObject({
-        status: 200,
-        body: { ok: true },
-      });
-      expect(mixed.attempts).toHaveLength(3);
-      expect(mixed.executions).toEqual([serializedBody]);
-    } finally {
-      await mixed.close();
-    }
+      const mixed = createHttp2Harness(['goaway-below', 'refused', 'success']);
+      await mixed.ready;
+      try {
+        await expect(jsonRequest(mixed.client)).resolves.toMatchObject({
+          status: 200,
+          body: { ok: true },
+        });
+        expect(mixed.attempts).toHaveLength(3);
+        expect(mixed.executions).toEqual([serializedBody]);
+      } finally {
+        await mixed.close();
+      }
+    });
   });
 
   it('does not replay a multipart body and cancels a held replay within its deadline', async () => {
