@@ -83,7 +83,7 @@ A reviewer reads `AGENTS.md`, the `.claude/rules/` files whose `paths` match the
 
 ### Required verification
 
-After each batch of edits run `bun run check:changed`: it reads the changed files from git and runs the gates they can break (`oxlint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, and `prettier` for docs). Run `bun run verify` once, at the end, before handoff. `bun run test -- ./path/to/focused-file.spec.ts` runs one spec.
+After each batch of edits run `bun run check:changed`: it reads the changed files from git and runs the gates they can break (`oxlint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, each changed `*.spec.ts` under Jest, and `prettier` for docs). Run `bun run verify` once, at the end, before handoff. `bun run test -- ./path/to/focused-file.spec.ts` runs one spec.
 
 `bun run build` is a pure SWC transform; type ownership lives in `type-check` (via `bun run verify`).
 

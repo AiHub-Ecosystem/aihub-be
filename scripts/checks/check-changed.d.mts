@@ -14,6 +14,11 @@ export type ChangedFilePlan =
 
 export function planChangedFiles(files: readonly string[]): ChangedFilePlan;
 export function resolveChangedFiles(git?: (args: string[]) => string): string[];
+export function gateInvocation(
+  gate: string,
+  files: readonly string[],
+  exists?: (path: string) => boolean,
+): { readonly script: string; readonly args: string[] } | undefined;
 export function runCheckChanged(options: {
   readonly resolveFiles: () => string[];
   readonly runGate: (gate: string) => number;

@@ -76,6 +76,7 @@
     "ci:n-minus-one-stubs": "node scripts/ci/n-minus-one/n-minus-one-stubs.mjs",
     "check:domain-globals": "node scripts/checks/check-domain-globals.mjs",
     "test:related": "bun run test -- --changed=origin/main",
+    "test:jest-specs": "node scripts/generate/generate-prisma-client.mjs --runtime && jest --coverage=false --passWithNoTests --runTestsByPath",
     "check:changed": "node scripts/checks/check-changed.mjs",
     "check:batch": "node scripts/checks/check-batch.cjs",
     "test:check-app-errors": "jest --runTestsByPath scripts/checks/check-app-errors.spec.ts",

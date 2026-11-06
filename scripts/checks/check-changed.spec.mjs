@@ -7,6 +7,7 @@ import { buildBunTestArgs } from '../cli/run-bun-test.mjs';
 import { BATCHED_GATES } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
+  gateInvocation,
   isEntryPoint,
   planChangedFiles,
   resolveChangedFiles,
@@ -49,6 +50,26 @@ const pathCases = [
       'check:tenant-global',
       'knip',
       'lint',
+      'test:related',
+      'type-check',
+    ],
+  },
+  {
+    path: 'src/modules/example/application/use-case.spec.ts',
+    gates: [
+      'arch-check',
+      'build',
+      'check:app-errors',
+      'check:data-ownership',
+      'check:deprecation',
+      'check:doc-drift',
+      'check:file-size',
+      'check:imports',
+      'check:imports:dist',
+      'check:tenant-global',
+      'knip',
+      'lint',
+      'test:jest-specs',
       'test:related',
       'type-check',
     ],
@@ -155,6 +176,55 @@ for (const { path, gates } of pathCases) {
     assert.deepEqual(planChangedFiles([path]).gates, gates);
   });
 }
+
+await test('a changed non-TypeScript spec does not select the Jest gate (#1631)', () => {
+  const { gates } = planChangedFiles(['scripts/checks/check-changed.spec.mjs']);
+  assert.ok(!gates.includes('test:jest-specs'));
+});
+
+await test('the Jest gate gets the changed specs that still exist, normalized and sorted (#1631)', () => {
+  const files = [
+    'src/b.spec.ts',
+    'src\\a.spec.ts',
+    'src/gone.spec.ts',
+    'scripts/x.spec.mjs',
+    'src/c.ts',
+  ];
+  assert.deepEqual(
+    gateInvocation('test:jest-specs', files, (p) => p !== 'src/gone.spec.ts'),
+    {
+      script: 'test:jest-specs',
+      args: ['src/a.spec.ts', 'src/b.spec.ts'],
+    },
+  );
+});
+
+await test('the Jest gate has nothing to run when every changed spec was deleted (#1631)', () => {
+  assert.equal(
+    gateInvocation('test:jest-specs', ['src/gone.spec.ts'], () => false),
+    undefined,
+  );
+});
+
+await test('other gates run with no arguments (#1631)', () => {
+  assert.deepEqual(gateInvocation('lint', ['src/a.spec.ts']), {
+    script: 'lint',
+    args: [],
+  });
+});
+
+await test('the Jest gate script takes paths last, runs no coverage and passes on ignored specs (#1631)', () => {
+  const packageJson = /** @type {{scripts: Record<string, string>}} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
+  const command = packageJson.scripts[GATE_COMMANDS['test:jest-specs']] ?? '';
+  // A spec in `testPathIgnorePatterns` is "no tests found" to Jest; the flag
+  // keeps that from failing the gate.
+  assert.ok(command.includes('--passWithNoTests'));
+  assert.ok(command.includes('--coverage=false'));
+  // `bun run` appends the paths to the end of the command.
+  assert.ok(command.endsWith('--runTestsByPath'));
+});
 
 await test('a domain source file still runs type-check and related specs', () => {
   const plan = planChangedFiles(['src/modules/example/domain/policy.ts']);

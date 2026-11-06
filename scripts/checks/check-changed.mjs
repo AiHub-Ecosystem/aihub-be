@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
@@ -64,12 +65,16 @@ export const GATE_COMMANDS = {
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
   'test:issue-triage': 'test:issue-triage',
+  'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
   'test:monitoring-config': 'test:monitoring-config',
   'test:related': 'test:related',
   'type-check': 'type-check',
   'validate:openapi': 'validate:openapi',
 };
+
+/** The one gate that takes the changed spec files as arguments (#1631). */
+const JEST_SPECS_GATE = 'test:jest-specs';
 
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -112,6 +117,9 @@ function classifyPathGates(p) {
     if (/(^|\/)domain\//.test(path)) gates.add('check:domain-globals');
     gates.add('check:tenant-global');
     if (/(^|\/)src\/contracts\//.test(path)) gates.add('validate:openapi');
+    // CI also loads every spec under Jest (`coverage:unit`), and a spec can pass
+    // under Bun yet fail to load there (#1631).
+    if (path.endsWith('.spec.ts')) gates.add(JEST_SPECS_GATE);
     return sorted(gates);
   }
 
@@ -221,6 +229,32 @@ export function planChangedFiles(files) {
   return { gates: sorted(gates) };
 }
 
+/**
+ * The package script and arguments one gate runs. The Jest gate gets the
+ * changed `*.spec.ts` files that still exist: Jest itself decides which of them
+ * `jest.config.cjs` matches or ignores, so this list is not a second copy of
+ * that policy. `undefined` means the gate has nothing to run, because every
+ * changed spec was deleted.
+ * ponytail: the list travels on the command line; a change touching hundreds of
+ * specs can exceed the Windows limit and then fails loudly, not silently.
+ *
+ * @param {string} gate
+ * @param {readonly string[]} files
+ * @param {(path: string) => boolean} [exists]
+ * @returns {{ script: string, args: string[] } | undefined}
+ */
+export function gateInvocation(gate, files, exists = existsSync) {
+  const script = GATE_COMMANDS[gate];
+  if (gate !== JEST_SPECS_GATE) return { script, args: [] };
+
+  const specs = files
+    .map(norm)
+    .filter((file) => file.endsWith('.spec.ts') && exists(file));
+  return specs.length === 0
+    ? undefined
+    : { script, args: sorted(new Set(specs)) };
+}
+
 /** @param {string[]} args @returns {string} */
 function defaultGit(args) {
   // execFileSync, not a shell string: a path or ref is an argument, never
@@ -320,9 +354,17 @@ function main() {
       return files;
     },
     runGate: (gate) => {
-      const script = GATE_COMMANDS[gate];
-      console.log(`[check:changed] bun run ${script}`);
-      return runScript(script, []);
+      const invocation = gateInvocation(gate, files);
+      if (!invocation) {
+        console.log(
+          `[check:changed] skip ${gate}: no changed spec file exists`,
+        );
+        return 0;
+      }
+      console.log(
+        `[check:changed] bun run ${[invocation.script, ...invocation.args].join(' ')}`,
+      );
+      return runScript(invocation.script, invocation.args);
     },
     runFullVerify: () => {
       fullVerifyStatus = runScript('verify', []);
