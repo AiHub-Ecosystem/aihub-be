@@ -88,6 +88,21 @@ attribution, so these local measurements do not support an adoption decision.
 They satisfy the reproducible synthetic comparison; production triggers still
 require metrics from the actual relay under exam workload.
 
+One [GitHub-hosted run](https://github.com/AiHub-Ecosystem/aihub-be/actions/runs/42143599850)
+used PostgreSQL 16.15 on `ubuntu-24.04` with a four-vCPU AMD EPYC 7763 runner.
+It reached the 1,000/s target in both modes:
+
+| Mode            | Committed events/s | Commit P50/P95/P99 (ms) | WAL bytes/s | WAL bytes/event | Dead-tuple estimate | Relation bytes | Host CPU avg/max % |
+| --------------- | -----------------: | ----------------------: | ----------: | --------------: | ------------------: | -------------: | -----------------: |
+| Table polling   |              1,000 |   0.760 / 1.346 / 3.860 |     569,254 |             572 |               8,583 |        385,024 |        16.3 / 31.8 |
+| Logical message |              1,000 |   0.765 / 1.218 / 3.138 |     359,218 |           361.1 |                   — |              — |        22.3 / 28.2 |
+
+In this single runner sample, the logical path generated 36.9% fewer WAL bytes
+per event and had lower P95/P99 commit latency, while P50 was effectively even.
+These host-wide CPU samples are not PostgreSQL-only attribution. One synthetic
+run does not establish production performance or replace measurements from the
+actual relay under exam workload.
+
 ## Compatibility matrix
 
 | Environment                                   | Compatibility                                                              | Configuration and operational gate                                                                                                                                                                                                                  |
