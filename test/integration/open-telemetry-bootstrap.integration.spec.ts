@@ -24,6 +24,11 @@ function listenForTraces(received: Received[]): Promise<Server> {
   });
 }
 
+// The probe takes 1.3-1.9 s on an idle workstation, cold or warm. In a full
+// local coverage run on a memory-starved machine it once ran past 20 s and was
+// killed (#1637). The limit only has to tell a slow child from a hung one.
+const PROBE_TIMEOUT_MS = 60_000;
+
 function runProbe(endpoint: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     execFile(
@@ -35,12 +40,23 @@ function runProbe(endpoint: string): Promise<void> {
       ],
       {
         env: { ...process.env, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: endpoint },
-        timeout: 20_000,
+        timeout: PROBE_TIMEOUT_MS,
       },
-      (error, _stdout, stderr) =>
-        error === null
-          ? resolvePromise()
-          : reject(new Error(`probe failed: ${stderr}`)),
+      (error, _stdout, stderr) => {
+        if (error === null) {
+          resolvePromise();
+          return;
+        }
+        // `execFile` kills a child that outlives `timeout`, and a killed child
+        // writes nothing, so the message must say it was the clock.
+        reject(
+          new Error(
+            error.killed
+              ? `probe exceeded ${PROBE_TIMEOUT_MS} ms and was killed (${error.signal ?? 'no signal'}): ${stderr}`
+              : `probe failed: ${stderr}`,
+          ),
+        );
+      },
     );
   });
 }
@@ -51,26 +67,31 @@ function runProbe(endpoint: string): Promise<void> {
 // OTLP. The probe runs in a child process because the OTLP exporter loads its
 // HTTP agent with a dynamic `import()`, which Jest's CommonJS sandbox refuses.
 describe('OpenTelemetry bootstrap', () => {
-  it('starts the SDK from the configured endpoint and exports a span on shutdown', async () => {
-    const received: Received[] = [];
-    const server = await listenForTraces(received);
-    const { port } = server.address() as AddressInfo;
+  it(
+    'starts the SDK from the configured endpoint and exports a span on shutdown',
+    async () => {
+      const received: Received[] = [];
+      const server = await listenForTraces(received);
+      const { port } = server.address() as AddressInfo;
 
-    try {
-      await runProbe(`http://127.0.0.1:${port}/v1/traces`);
+      try {
+        await runProbe(`http://127.0.0.1:${port}/v1/traces`);
 
-      const traces = received.filter(({ path }) => path === '/v1/traces');
-      expect(traces.length).toBeGreaterThan(0);
-      // JSON and protobuf OTLP both carry the span name as plain bytes.
-      expect(
-        traces.some(({ body }) =>
-          body.toString('latin1').includes('otel-bootstrap-probe'),
-        ),
-      ).toBe(true);
-    } finally {
-      await new Promise<void>((resolvePromise) =>
-        server.close(() => resolvePromise()),
-      );
-    }
-  }, 30_000);
+        const traces = received.filter(({ path }) => path === '/v1/traces');
+        expect(traces.length).toBeGreaterThan(0);
+        // JSON and protobuf OTLP both carry the span name as plain bytes.
+        expect(
+          traces.some(({ body }) =>
+            body.toString('latin1').includes('otel-bootstrap-probe'),
+          ),
+        ).toBe(true);
+      } finally {
+        await new Promise<void>((resolvePromise) =>
+          server.close(() => resolvePromise()),
+        );
+      }
+    },
+    // Above the probe limit, so the child's own error surfaces first.
+    PROBE_TIMEOUT_MS + 15_000,
+  );
 });
