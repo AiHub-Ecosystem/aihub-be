@@ -148,6 +148,10 @@ async function main(): Promise<void> {
     );
 
     runMigration(candidateImage, candidateDirectory);
+    await database.query('CREATE PUBLICATION aihub_email_delivery');
+    await database.query(
+      "SELECT pg_create_logical_replication_slot('aihub_email_delivery', 'pgoutput')",
+    );
     await database.query(
       `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
        VALUES ($1, $2, 'active', now(), now())`,
