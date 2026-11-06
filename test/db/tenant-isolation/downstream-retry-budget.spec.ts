@@ -21,15 +21,20 @@ const operationKeys = (operation: OperationId) => [
 ];
 
 let redis: Redis;
+let replicaRedis: Redis;
 let gateway: ReturnType<typeof createTenantIsolationRedisClients>['gateway'];
+let replicaGateway: ReturnType<
+  typeof createTenantIsolationRedisClients
+>['gateway'];
 let pool: ReturnType<typeof createTestPool>;
 
 async function recordFirstAttempts(
   budget: RedisDownstreamRetryBudget,
   operation: OperationId,
   prefix: string,
+  count = 10,
 ): Promise<void> {
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < count; index += 1) {
     await budget.recordFirstAttempt(operation, `${prefix}-${index}`);
   }
 }
@@ -47,9 +52,13 @@ async function clearBudgetState(): Promise<void> {
 beforeAll(async () => {
   pool = createTestPool();
   const clients = createTenantIsolationRedisClients();
+  const replicaClients = createTenantIsolationRedisClients();
   redis = clients.raw;
   gateway = clients.gateway;
+  replicaRedis = replicaClients.raw;
+  replicaGateway = replicaClients.gateway;
   if (redis.status !== 'ready') await once(redis, 'ready');
+  if (replicaRedis.status !== 'ready') await once(replicaRedis, 'ready');
 });
 
 beforeEach(async () => {
@@ -59,10 +68,52 @@ beforeEach(async () => {
 afterAll(async () => {
   await clearBudgetState();
   await pool?.end();
-  await redis?.quit();
+  await Promise.all([redis?.quit(), replicaRedis?.quit()]);
 });
 
 describe('RedisDownstreamRetryBudget service bucket Lua', () => {
+  it('bounds concurrent retries across operations, clients, and both budgets', async () => {
+    const buckets = {
+      'ai-writing': {
+        ratePerSecond: 0.001,
+        burst: 3,
+        expectedAttemptMs: 100,
+      },
+    } as const;
+    const instanceA = new RedisDownstreamRetryBudget(gateway, buckets);
+    const instanceB = new RedisDownstreamRetryBudget(replicaGateway, buckets);
+    await Promise.all([
+      recordFirstAttempts(instanceA, task1, 'instance-a-task1', 20),
+      recordFirstAttempts(instanceB, task2, 'instance-b-task2', 20),
+    ]);
+
+    const reservations = Array.from({ length: 20 }, (_, index) => {
+      const operation = index % 2 === 0 ? task1 : task2;
+      const budget = index % 2 === 0 ? instanceA : instanceB;
+      return { operation, budget, requestId: `concurrent-retry-${index}` };
+    });
+    const decisions = await Promise.all(
+      reservations.map(({ operation, budget, requestId }) =>
+        budget.reserveRetry(operation, requestId, 1),
+      ),
+    );
+    const admittedByOperation = [task1, task2].map(
+      (operation) =>
+        decisions.filter(
+          (decision, index) =>
+            decision === 'admitted' &&
+            reservations[index]?.operation === operation,
+        ).length,
+    );
+
+    expect(
+      decisions.filter((decision) => decision === 'admitted'),
+    ).toHaveLength(3);
+    expect(admittedByOperation.sort((left, right) => left - right)).toEqual([
+      1, 2,
+    ]);
+  });
+
   it('retains a slow bucket through its refill horizon and preserves fast-bucket expiry', async () => {
     const slow = new RedisDownstreamRetryBudget(gateway, {
       'ai-writing': {
