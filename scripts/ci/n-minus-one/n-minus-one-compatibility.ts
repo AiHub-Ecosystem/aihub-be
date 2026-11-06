@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import Redis from 'ioredis';
@@ -291,8 +291,6 @@ async function main(): Promise<void> {
     '',
   ].join('\n');
   process.stdout.write(summary.replaceAll(/\x60/g, ''));
-  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-  if (summaryPath) writeFileSync(summaryPath, summary, { flag: 'a' });
   assertNMinusOneGatePasses(failures);
 }
 

@@ -13,72 +13,6 @@
       "reason": "Developer script prints the message of its own caught error; it serves no request."
     },
     {
-      "ruleId": "js/clear-text-logging",
-      "path": "scripts/cli/cli.mjs",
-      "fingerprint": "ec0ffe5689c2dd2b:1",
-      "reason": "The operator CLI prints a newly issued key once by design; that output is the issuance."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "scripts/cli/demo-bootstrap.mjs",
-      "fingerprint": "8d463767d982814d:1",
-      "reason": "Local demo bootstrap prints the demo key it just created for the developer running it."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "scripts/cli/demo-bootstrap.mjs",
-      "fingerprint": "d9f97861da553823:1",
-      "reason": "Local demo bootstrap prints the demo key it just created for the developer running it."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "scripts/cli/dev-sign-assertion.mjs",
-      "fingerprint": "46632850f0b6f5fa:1",
-      "reason": "Local development helper prints the assertion it signed for the developer running it."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "src/cli/organization-api-key.ts",
-      "fingerprint": "441f75c8cbe1e849:1",
-      "reason": "Logs apiKeyId, the public key identifier, never the key secret; the name matches the sensitive-data heuristic."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "src/cli/organization-api-key.ts",
-      "fingerprint": "2bbe37d2eaaa331a:1",
-      "reason": "Logs apiKeyId, the public key identifier, never the key secret; the name matches the sensitive-data heuristic."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "src/cli/organization-api-key.ts",
-      "fingerprint": "9138d0ffb5b5325d:1",
-      "reason": "Logs apiKeyId, the public key identifier, never the key secret; the name matches the sensitive-data heuristic."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "src/cli/organization-api-key.ts",
-      "fingerprint": "2642b5968eda5950:1",
-      "reason": "Logs apiKeyId, the public key identifier, never the key secret; the name matches the sensitive-data heuristic."
-    },
-    {
-      "ruleId": "js/insufficient-password-hash",
-      "path": "scripts/ci/n-minus-one/n-minus-one-api-key-cache-probe.ts",
-      "fingerprint": "a8a72e7eae237567:1",
-      "reason": "Probe hashes a 256-bit random API key the way the runtime does; it is not a password."
-    },
-    {
-      "ruleId": "js/insufficient-password-hash",
-      "path": "src/modules/gateway/application/stable-offset.ts",
-      "fingerprint": "b5e87e26937e9486:1",
-      "reason": "Derives a stable scheduling offset from a key id; no secret is stored or compared."
-    },
-    {
-      "ruleId": "js/insufficient-password-hash",
-      "path": "src/modules/identity/api-keys/application/organization-api-key-generator.ts",
-      "fingerprint": "c7cbfae55707f9c1:1",
-      "reason": "SHA-256 of a 256-bit random API key, not a user-chosen password; a slow password hash adds nothing to a high-entropy secret."
-    },
-    {
       "ruleId": "js/file-system-race",
       "path": "scripts/cli/demo-bootstrap.mjs",
       "fingerprint": "6bcc2d49f01eeb94:1",
@@ -103,12 +37,6 @@
       "reason": "Generator writes into the repository working tree; no other principal shares the path."
     },
     {
-      "ruleId": "js/insecure-temporary-file",
-      "path": "scripts/checks/verify-summary.cjs",
-      "fingerprint": "97ee09b50099a7cd:1",
-      "reason": "Developer verify log under the OS temp dir; holds no secret and its path is printed for the same user."
-    },
-    {
       "ruleId": "js/user-controlled-bypass",
       "path": "scripts/ops/capacity-benchmark/argon2-contention-probe.mjs",
       "fingerprint": "19eb00630cfa3a02:1",
@@ -131,12 +59,6 @@
       "path": "src/modules/identity/shared/presentation/user-identity.guard.ts",
       "fingerprint": "4c65496952cea22f:1",
       "reason": "Local auth bypass requires isLocalAuthBypassEnabled configuration and the local-development organization; a missing header alone grants nothing in production."
-    },
-    {
-      "ruleId": "js/http-to-file-access",
-      "path": "scripts/generate/refresh-provider-contract.mjs",
-      "fingerprint": "fffe73e28af19e40:1",
-      "reason": "Developer script writes a fetched provider contract to a fixed repository path for review before commit."
     },
     {
       "ruleId": "js/missing-rate-limiting",
