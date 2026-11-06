@@ -5,6 +5,7 @@ import {
   API_HOST,
   assertNMinusOneGatePasses,
   request,
+  waitReady,
 } from './n-minus-one-runtime';
 
 it('passes the N-1 gate when no release hold is recorded', () => {
@@ -29,6 +30,33 @@ it('sends the configured production host to the isolated image', async () => {
       status: 200,
       body: { host: API_HOST },
     });
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it('reports dependency state when an image never becomes ready', async () => {
+  const server = createServer((incoming, outgoing) => {
+    if (incoming.url === '/health') {
+      outgoing.writeHead(200).end();
+      return;
+    }
+    outgoing.writeHead(503, { 'content-type': 'application/json' });
+    outgoing.end(
+      JSON.stringify({
+        status: 'error',
+        dependencies: { 'runtime-postgres': 'down' },
+      }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const port = (server.address() as AddressInfo).port;
+    await expect(waitReady(port, 'previous image', 1)).rejects.toThrow(
+      'dependencies":{"runtime-postgres":"down"}',
+    );
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),

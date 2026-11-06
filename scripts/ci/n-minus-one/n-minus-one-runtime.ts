@@ -404,15 +404,30 @@ export async function stubState(): Promise<StubState> {
   return (await response.json()) as StubState;
 }
 
-export async function waitReady(port: number, label: string): Promise<void> {
-  await waitFor(
-    async () => {
-      const health = await fetch(`http://127.0.0.1:${port}/health`);
-      const readiness = await fetch(`http://127.0.0.1:${port}/ready`);
-      return [health.status, readiness.status] as const;
-    },
-    ([health, readiness]) => health === 200 && readiness === 200,
-    `${label} did not become ready`,
-    90_000,
-  );
+export async function waitReady(
+  port: number,
+  label: string,
+  timeoutMs = 90_000,
+): Promise<void> {
+  let lastProbe = 'no response';
+  try {
+    await waitFor(
+      async () => {
+        const health = await fetch(`http://127.0.0.1:${port}/health`);
+        const readiness = await fetch(`http://127.0.0.1:${port}/ready`);
+        lastProbe = JSON.stringify({
+          healthStatus: health.status,
+          readinessStatus: readiness.status,
+          readiness: await readiness.json().catch(() => undefined),
+        });
+        return [health.status, readiness.status] as const;
+      },
+      ([health, readiness]) => health === 200 && readiness === 200,
+      `${label} did not become ready`,
+      timeoutMs,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message}; last probe: ${lastProbe}`);
+  }
 }
