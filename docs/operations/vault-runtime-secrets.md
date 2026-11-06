@@ -14,6 +14,9 @@ AIHUB supports two explicit sources:
 - `AIHUB_RUNTIME_CONNECTION_SECRETS_FILE=<agent-rendered JSON path>` —
   database, Redis, and sandbox signing material. The process bootstrap selects
   the production or sandbox connection before Nest wiring.
+- `AIHUB_EMAIL_WAL_SECRETS_FILE=<agent-rendered JSON path>` — the direct
+  replication login for email delivery WAL. It stays in a separate document so
+  previous images can ignore this newly added secret.
 - `AIHUB_AUTH_MFA_SECRETS_FILE=<agent-rendered JSON path>` — the separately
   rendered TOTP secret keyring. It stays outside the existing strict runtime
   JSON document so an N-1 image can keep reading its unchanged schema.
@@ -32,7 +35,7 @@ during a temporary Vault/Agent outage; it does not read Vault per request.
    and `auth-mfa`; the latter contains `current_key_id` and a JSON string of
    key IDs mapped to 32-byte base64 keys.
 3. Provision the environment AppRole and configure Vault Agent to render all
-   three files under the AIHUB service account.
+   four files under the AIHUB service account.
 4. Set the rendered-file paths in the deployment config channel. Do not put
    runtime credential values in `.env.production`.
 5. Start one instance and run the opt-in AppRole smoke test. Verify health,

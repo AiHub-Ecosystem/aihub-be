@@ -5,6 +5,23 @@ const PREVIOUS_ATTEMPT_AT = new Date('2026-10-05T12:00:00.000Z');
 const RETRY_AT = new Date('2026-10-05T12:01:00.000Z');
 
 describe('PostgresEmailDispatchStore', () => {
+  it('reads the confirmed WAL checkpoint for its configured slot', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValue([{ confirmed_flush_lsn: '0/42' }]);
+    const store = new PostgresEmailDispatchStore(
+      { $queryRawUnsafe: query } as never,
+      undefined,
+      'aihub_sandbox_email_delivery',
+    );
+
+    await expect(store.readWalConfirmedLsn()).resolves.toBe('0/42');
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('confirmed_flush_lsn'),
+      'aihub_sandbox_email_delivery',
+    );
+  });
+
   it('releases the reserved attempt and defers without a follow-up read', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const findUnique = jest.fn();

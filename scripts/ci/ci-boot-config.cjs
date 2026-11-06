@@ -6,7 +6,7 @@
  *   node scripts/ci/ci-boot-config.cjs <directory>
  *
  * Produces, in <directory>:
- * - runtime-secrets.json and connection-secrets.json, in the shapes the Vault
+ * - runtime-secrets.json, connection-secrets.json, and email-wal-secrets.json, in the shapes the Vault
  *   templates under ops/vault/templates render, mounted read-only at
  *   /run/secrets/aihub as in production;
  * - boot.env, the non-secret variables docker-compose.production.yml sets for
@@ -25,6 +25,7 @@ const path = require('node:path');
 
 const SECRETS_MOUNT = '/run/secrets/aihub';
 const FAKE = 'ci-boot-fake';
+const DATABASE_URL = 'postgres://ci-boot:ci-boot@database.invalid:5432/aihub';
 
 /** @param {import('node:crypto').KeyObject} key */
 function privateKeyPem(key) {
@@ -54,14 +55,13 @@ function runtimeSecrets() {
 function connectionSecrets() {
   // Unresolvable on purpose: the boot opens no connection, and a check that
   // needed one would stop answering only "does this artifact start".
-  const database = 'postgres://ci-boot:ci-boot@database.invalid:5432/aihub';
   const redis = 'redis://cache.invalid:6379';
   return {
     database: {
-      url: database,
-      sandbox_url: database,
-      sandbox_control_plane_read_url: database,
-      email_send_budget_url: database,
+      url: DATABASE_URL,
+      sandbox_url: DATABASE_URL,
+      sandbox_control_plane_read_url: DATABASE_URL,
+      email_send_budget_url: DATABASE_URL,
     },
     redis: {
       url: redis,
@@ -97,6 +97,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_RUNTIME_SECRETS_FILE: `${SECRETS_MOUNT}/runtime-secrets.json`,
   AIHUB_AUTH_MFA_SECRETS_FILE: `${SECRETS_MOUNT}/auth-mfa-secrets.json`,
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: `${SECRETS_MOUNT}/connection-secrets.json`,
+  AIHUB_EMAIL_WAL_SECRETS_FILE: `${SECRETS_MOUNT}/email-wal-secrets.json`,
   AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
   AIHUB_DATABASE_POOLER_ENABLED: 'false',
   AIHUB_POSTGRES_POOL_MAX_RUNTIME: '',
@@ -134,6 +135,13 @@ function writeBootConfig(directory) {
   writeFileSync(
     path.join(directory, 'connection-secrets.json'),
     JSON.stringify(connectionSecrets()),
+  );
+  writeFileSync(
+    path.join(directory, 'email-wal-secrets.json'),
+    JSON.stringify({
+      email_wal_url: DATABASE_URL,
+      sandbox_email_wal_url: DATABASE_URL,
+    }),
   );
   writeFileSync(
     path.join(directory, 'auth-mfa-secrets.json'),

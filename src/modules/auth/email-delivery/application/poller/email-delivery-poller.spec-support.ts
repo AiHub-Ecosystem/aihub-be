@@ -66,11 +66,26 @@ export class FakeStore implements EmailDispatchStorePort {
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     this.claims.push(input);
     return this.claimResult.filter((request) => {
+      if (input.ids !== undefined && !input.ids.includes(request.id)) {
+        return false;
+      }
       const deferredAt = this.deferred.lastIndexOf(request.id);
       const retryAt =
         deferredAt < 0 ? undefined : this.deferredUntil[deferredAt];
       return retryAt === undefined || retryAt.getTime() <= input.now.getTime();
     });
+  }
+
+  async readDispatchState() {
+    return null;
+  }
+
+  async queuedIds() {
+    return [];
+  }
+
+  async readWalSlotHealth() {
+    return null;
   }
 
   async markProviderAccepted(input: { id: string }): Promise<void> {

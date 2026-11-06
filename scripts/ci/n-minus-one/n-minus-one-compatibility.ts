@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import Redis from 'ioredis';
@@ -148,6 +148,10 @@ async function main(): Promise<void> {
     );
 
     runMigration(candidateImage, candidateDirectory);
+    await database.query('CREATE PUBLICATION aihub_email_delivery');
+    await database.query(
+      "SELECT pg_create_logical_replication_slot('aihub_email_delivery', 'pgoutput')",
+    );
     await database.query(
       `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
        VALUES ($1, $2, 'active', now(), now())`,
@@ -287,8 +291,6 @@ async function main(): Promise<void> {
     '',
   ].join('\n');
   process.stdout.write(summary.replaceAll(/\x60/g, ''));
-  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-  if (summaryPath) writeFileSync(summaryPath, summary, { flag: 'a' });
   assertNMinusOneGatePasses(failures);
 }
 

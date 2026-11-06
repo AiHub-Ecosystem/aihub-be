@@ -576,6 +576,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Enable bounded logical WAL for the database lane
+        uses: ./.github/actions/enable-bounded-logical-wal
+
       # The operator CLI smoke test spawns `scripts/cli/cli.mjs`, which loads its
       # API-key generator and command runners from the build.
       - name: Build application
@@ -670,6 +673,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Enable bounded logical WAL for the tenant-isolation lane
+        uses: ./.github/actions/enable-bounded-logical-wal
 
       - name: Run the cross-tenant isolation lane
         run: bun run test:tenant-isolation
@@ -844,6 +850,9 @@ jobs:
     services:
       postgres:
         image: postgres:16.10-alpine
+        command: >-
+          postgres -c wal_level=logical -c max_replication_slots=10
+          -c max_wal_senders=10 -c max_slot_wal_keep_size=512MB
         env:
           POSTGRES_DB: aihub
           POSTGRES_PASSWORD: postgres

@@ -29,6 +29,7 @@ const CLAIM_SQL = `
     WHERE status = 'queued'
       AND kind = ANY($5::text[])
       AND attempts < 3
+      AND ($6::text[] IS NULL OR id = ANY($6::text[]))
       AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
       AND (
         last_attempt_at IS NULL
@@ -143,6 +144,7 @@ async function claimEmailDeliveryRequestsInTransaction(
     input.owner,
     String(input.leaseMs),
     EMAIL_DELIVERY_KINDS,
+    input.ids ?? null,
   ]);
   return [...toKnownRecords(rows)].sort(
     (left, right) =>

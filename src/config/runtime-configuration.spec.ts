@@ -14,6 +14,7 @@ describe('runtime configuration', () => {
     AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
     AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
     AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+    AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-secrets.json',
     DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
     REDIS_URL: 'redis://redis.test.invalid/0',
     AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
@@ -21,6 +22,8 @@ describe('runtime configuration', () => {
     AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
     AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
       'postgres://budget:fake@db.test.invalid/aihub',
+    AIHUB_EMAIL_WAL_DATABASE_URL:
+      'postgres://email-wal:fake@db.test.invalid/aihub',
     AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
     AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
     AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
@@ -403,6 +406,7 @@ describe('runtime configuration', () => {
         AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
         AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
         AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+        AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-secrets.json',
         DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
         REDIS_URL: 'redis://redis.test.invalid/0',
         AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
@@ -410,6 +414,8 @@ describe('runtime configuration', () => {
         AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
         AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
           'postgres://budget:fake@db.test.invalid/aihub',
+        AIHUB_EMAIL_WAL_DATABASE_URL:
+          'postgres://email-wal:fake@db.test.invalid/aihub',
         AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
         AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
         AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
@@ -436,6 +442,7 @@ describe('runtime configuration', () => {
           AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
           AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
           AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+          AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-secrets.json',
         });
       } catch (error) {
         names = (error as RuntimeConfigurationError).variableNames;

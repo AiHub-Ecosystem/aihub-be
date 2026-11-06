@@ -5,6 +5,8 @@ import {
   API_HOST,
   assertNMinusOneGatePasses,
   request,
+  safeContainerError,
+  waitReady,
 } from './n-minus-one-runtime';
 
 it('passes the N-1 gate when no release hold is recorded', () => {
@@ -15,6 +17,16 @@ it('fails the N-1 gate when a release hold is recorded', () => {
   expect(() =>
     assertNMinusOneGatePasses(['RELEASE HOLD: incompatible JWKS']),
   ).toThrow('N-1 release compatibility failed (1 finding(s))');
+});
+
+it('redacts credentials from a container startup error', () => {
+  expect(
+    safeContainerError(
+      'FATAL failed to connect postgres://user:secret@db:5432/app with Bearer abc and api_key=xyz',
+    ),
+  ).toBe(
+    'FATAL failed to connect [database URL] with Bearer [redacted] and api_key=[redacted]',
+  );
 });
 
 it('sends the configured production host to the isolated image', async () => {
@@ -29,6 +41,33 @@ it('sends the configured production host to the isolated image', async () => {
       status: 200,
       body: { host: API_HOST },
     });
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it('reports dependency state when an image never becomes ready', async () => {
+  const server = createServer((incoming, outgoing) => {
+    if (incoming.url === '/health') {
+      outgoing.writeHead(200).end();
+      return;
+    }
+    outgoing.writeHead(503, { 'content-type': 'application/json' });
+    outgoing.end(
+      JSON.stringify({
+        status: 'error',
+        dependencies: { 'runtime-postgres': 'down' },
+      }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const port = (server.address() as AddressInfo).port;
+    await expect(waitReady(port, 'previous image', 1)).rejects.toThrow(
+      'dependencies":{"runtime-postgres":"down"}',
+    );
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),

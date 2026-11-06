@@ -1,10 +1,13 @@
 # Zero-table outbox evaluation
 
-Status: evaluation only. This report does not change a production path.
+Status: evaluation completed. [ADR-0153](../adr/0153-wal-triggered-email-delivery.md)
+and issue [#1630](https://github.com/AiHub-Ecosystem/aihub-be/issues/1630)
+later authorize WAL-triggered dispatch for `email_delivery_requests` only. The
+generic recommendation below remains applicable to other outboxes and relays.
 
 ## Recommendation
 
-Keep the current durable table outbox unless one of the measured triggers in
+Keep a durable table outbox unless one of the measured triggers in
 [#1596](https://github.com/AiHub-Ecosystem/aihub-be/issues/1596) is observed:
 
 - outbox dead tuples exceed 30% between vacuum passes under sustained 50 RPS;
@@ -158,10 +161,11 @@ unlimited `-1` without an explicit capacity decision.
 
 ### Rollout gate
 
-Do not replace the email outbox or introduce a generic event bus from this
-evaluation alone. First measure one of the stated triggers, then design the
-consumer protocol, durable idempotency, event retention/reconciliation, slot
-failover and production resource budget as a separate accepted change.
+The measurements alone did not authorize replacing the email dispatch path.
+Issue #1630 separately accepts that email-only change, with its protocol,
+startup reconciliation, durable idempotency, slot failover, and bounded WAL
+budget recorded in [ADR-0153](../adr/0153-wal-triggered-email-delivery.md).
+This evaluation still does not authorize a generic event bus.
 
 ## References
 

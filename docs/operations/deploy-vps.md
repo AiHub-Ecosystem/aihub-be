@@ -216,9 +216,9 @@ directories, then provision each directory to its own Vault path:
 
 ```json
 // production/database.json
-{"url":"postgresql://<production-login>:<password>@aihub-db:5432/aihub","email_send_budget_url":"postgresql://<email-budget-login>:<password>@aihub-db:5432/aihub"}
+{"url":"postgresql://<production-login>:<password>@aihub-db:5432/aihub","email_send_budget_url":"postgresql://<email-budget-login>:<password>@aihub-db:5432/aihub","email_wal_url":"postgresql://<email-wal-production>:<password>@aihub-db:5432/aihub"}
 // sandbox/database.json
-{"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub","email_send_budget_url":"postgresql://<email-budget-login>:<password>@aihub-db:5432/aihub"}
+{"url":"postgresql://<sandbox-only-login>:<password>@aihub-db:5432/aihub_sandbox","sandbox_control_plane_read_url":"postgresql://aihub_sandbox_reader:<password>@aihub-db:5432/aihub","email_send_budget_url":"postgresql://<email-budget-login>:<password>@aihub-db:5432/aihub","sandbox_email_wal_url":"postgresql://<email-wal-sandbox>:<password>@aihub-db:5432/aihub_sandbox"}
 // production/redis.json
 {"url":"redis://<production-user>:<password>@redis.aihubproduction.com:6379/0","email_send_rate_url":"redis://<shared-limiter-user>:<password>@redis.aihubproduction.com:6379/2"}
 // sandbox/redis.json
@@ -249,6 +249,14 @@ AIHUB_EMAIL_DAILY_SEND_BUDGET in both app deployments after checking the account
 daily and monthly limits in the email-outbox runbook. Keep deployment held
 until both Vault bundles point to the shared budget database and migration 0044
 has run against Production.
+
+The `email_wal_url` and `sandbox_email_wal_url` fields use separate direct
+PostgreSQL replication logins (`LOGIN REPLICATION`, `CONNECT`, and `pg_monitor`)
+and bypass PgBouncer. Provision PostgreSQL logical decoding, the empty
+publication, and the scope-specific slot before deploying an image that emits
+WAL messages;
+follow [email-outbox](email-outbox.md#logical-wal-consumer) for the exact setup
+and lost-slot recovery steps.
 
 Speaking sample audio is stored in SeaweedFS. Keep `SEAWEEDFS_ENDPOINT_URL`
 (`https://s3.wispace.app`), `SEAWEEDFS_BUCKET` (`aihub-speaking-samples`), and
@@ -1198,6 +1206,7 @@ sudo -n docker exec "$vault_container_id" sh -ec \
   "test -s /run/secrets/aihub/runtime-secrets.json && \
    test -s /run/secrets/aihub/auth-mfa-secrets.json && \
    test -s /run/secrets/aihub/connection-secrets.json && \
+   test -s /run/secrets/aihub/email-wal-secrets.json && \
    wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus'"
 ```
 

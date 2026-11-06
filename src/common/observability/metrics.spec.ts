@@ -20,6 +20,7 @@ import {
   setDownstreamPoolQueuedSource,
   setEmailOutboxBacklogSource,
   setEmailOutboxCancellationSource,
+  setEmailOutboxWalHealthSource,
   setEmailProviderOutageDurationSource,
   setPostgresPoolStatsSource,
 } from './metrics';
@@ -477,6 +478,27 @@ describe('email outbox backlog metrics', () => {
     healthy = false;
 
     expect(await getMetrics()).not.toContain('aihub_email_outbox_queued{');
+  });
+});
+
+describe('email outbox WAL health metrics', () => {
+  afterEach(() => {
+    setEmailOutboxWalHealthSource(undefined);
+  });
+
+  it('exposes health-read failures and clears the signal after recovery', async () => {
+    setEmailOutboxWalHealthSource(async () => {
+      throw new Error('database unavailable');
+    });
+    expect(await sample('aihub_email_outbox_wal_health_read_failed')).toBe('1');
+
+    setEmailOutboxWalHealthSource(async () => ({
+      active: true,
+      retainedBytes: 100,
+      safeBytes: 1_000,
+      status: 'reserved',
+    }));
+    expect(await sample('aihub_email_outbox_wal_health_read_failed')).toBe('0');
   });
 });
 

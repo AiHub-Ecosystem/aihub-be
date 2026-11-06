@@ -98,6 +98,7 @@ describe('CI boot configuration', () => {
         directory,
         'connection-secrets.json',
       ),
+      AIHUB_EMAIL_WAL_SECRETS_FILE: join(directory, 'email-wal-secrets.json'),
     };
 
     loadRuntimeConnectionEnvironment({ env });
@@ -105,6 +106,7 @@ describe('CI boot configuration', () => {
     expect(() => loadRuntimeConfiguration(env)).not.toThrow();
     expect(env.DATABASE_URL).toMatch(/^postgres:\/\//);
     expect(env.REDIS_URL).toMatch(/^redis:\/\//);
+    expect(env.AIHUB_EMAIL_WAL_DATABASE_URL).toMatch(/^postgres:\/\//);
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBeUndefined();
   });
 

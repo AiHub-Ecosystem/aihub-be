@@ -70,14 +70,16 @@ import {
   pruneExpiredAuthEmailRecipientLimits,
 } from './infrastructure/auth-email-recipient-limit';
 import {
-  EMAIL_OUTBOX_POLL_INTERVAL_MS,
+  EMAIL_OUTBOX_RECONCILE_INTERVAL_MS,
   EmailOutboxPollerScheduler,
   emailOutboxLeaseOwner,
   reportEmailProviderConfigurationFailure,
   reportTerminalEmailDeliveryFailure,
   reportUnrecognisedEmailPayload,
 } from './infrastructure/email-outbox-poller.scheduler';
+import { emailDeliveryWalSlot } from './infrastructure/outbox-store/email-delivery-wal.constants';
 import { missingQueuedEmailPayloadKeyVersions } from './infrastructure/outbox-store/email-outbox-key-retention';
+import { EmailOutboxWalConsumer } from './infrastructure/outbox-store/email-outbox-wal.consumer';
 import { PostgresEmailDispatchStore } from './infrastructure/outbox-store/postgres-email-dispatch-store';
 import { PostgresEmailOutboxQueueAge } from './infrastructure/outbox-store/postgres-email-outbox-queue-age';
 import { createEmailPayloadCipher } from './infrastructure/payload-cipher/email-payload-cipher';
@@ -251,17 +253,27 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         dailyBudget: EmailDailySendBudgetPort,
         providerOutageCircuit: EmailProviderOutageCircuitPort,
         secrets: RuntimeSecretProvider,
+        connections: RuntimeConnectionConfigurationPort,
       ): EmailOutboxPollerScheduler => {
-        const store = new PostgresEmailDispatchStore(runtime.prisma);
+        const walSlotName = emailDeliveryWalSlot(
+          configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+        );
+        const store = new PostgresEmailDispatchStore(
+          runtime.prisma,
+          undefined,
+          walSlotName,
+        );
         return new EmailOutboxPollerScheduler({
           poller,
-          intervalMs: EMAIL_OUTBOX_POLL_INTERVAL_MS,
+          intervalMs: EMAIL_OUTBOX_RECONCILE_INTERVAL_MS,
           backlog: () => store.backlog({ now: new Date() }),
           enabled: configuration.NODE_ENV !== 'test',
+          walDispatchEnabled: connections.emailWalDatabaseUrl !== undefined,
           pruneExpiredRecipientLimits: () =>
             pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
           cancellations: () => store.cancellationTimestamps(),
           dailyBudget: () => dailyBudget.usage(),
+          walSlotHealth: () => store.readWalSlotHealth(),
           providerOutageDuration: () =>
             providerOutageCircuit.readOutageDurationMs(),
           verifyRecipientKeyVersions: () =>
@@ -284,7 +296,40 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         EMAIL_DAILY_SEND_BUDGET,
         EMAIL_PROVIDER_OUTAGE_CIRCUIT,
         RUNTIME_SECRET_PROVIDER,
+        RUNTIME_CONNECTION_CONFIGURATION,
       ],
+    },
+    {
+      provide: EmailOutboxWalConsumer,
+      inject: [
+        RUNTIME_PRISMA_CLIENT,
+        EmailOutboxPollerScheduler,
+        RUNTIME_CONNECTION_CONFIGURATION,
+        appConfig.KEY,
+      ],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        scheduler: EmailOutboxPollerScheduler,
+        connections: RuntimeConnectionConfigurationPort,
+        configuration: ConfigType<typeof appConfig>,
+      ): EmailOutboxWalConsumer => {
+        const walSlotName = emailDeliveryWalSlot(
+          configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+        );
+        const store = new PostgresEmailDispatchStore(
+          runtime.prisma,
+          undefined,
+          walSlotName,
+        );
+        return new EmailOutboxWalConsumer({
+          enabled: connections.emailWalDatabaseUrl !== undefined,
+          replicationUrl: connections.emailWalDatabaseUrl ?? '',
+          store,
+          scheduler,
+          slotName: walSlotName,
+          readConfirmedLsn: () => store.readWalConfirmedLsn(),
+        });
+      },
     },
   ],
   exports: [EMAIL_OUTBOX, EMAIL_NOTICE_RESOLVERS, EMAIL_SENDER],
