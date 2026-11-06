@@ -14,6 +14,7 @@ describe('runtime configuration', () => {
     AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
     AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
     AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+    AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-secrets.json',
     DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
     REDIS_URL: 'redis://redis.test.invalid/0',
     AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
@@ -405,6 +406,7 @@ describe('runtime configuration', () => {
         AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
         AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
         AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+        AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-secrets.json',
         DATABASE_URL: 'postgres://fake:fake@db.test.invalid/aihub',
         REDIS_URL: 'redis://redis.test.invalid/0',
         AIHUB_EMAIL_SEND_RATE_REDIS_URL: 'redis://redis.test.invalid/2',
@@ -440,6 +442,7 @@ describe('runtime configuration', () => {
           AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
           AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
           AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connection-secrets.json',
+          AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-secrets.json',
         });
       } catch (error) {
         names = (error as RuntimeConfigurationError).variableNames;

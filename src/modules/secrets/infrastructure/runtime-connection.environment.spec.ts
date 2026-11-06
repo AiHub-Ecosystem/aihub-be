@@ -10,8 +10,6 @@ function document(): string {
       sandbox_url: 'postgresql://sandbox',
       sandbox_control_plane_read_url: 'postgresql://sandbox-control-read',
       email_send_budget_url: 'postgresql://shared-email-budget',
-      email_wal_url: 'postgresql://email-wal',
-      sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
       pooler_url: 'postgresql://app@pooler/aihub',
       sandbox_pooler_url: 'postgresql://app@pooler/aihub_sandbox',
       control_plane_pooler_url: 'postgresql://app@pooler/aihub_control',
@@ -38,10 +36,27 @@ function document(): string {
   });
 }
 
+function readRuntimeSecret(path: string): string {
+  if (path === 'email-wal-sandbox.json') {
+    return JSON.stringify({
+      email_wal_url: 'postgresql://email-wal',
+      sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
+    });
+  }
+  if (path === 'email-wal.json') {
+    return JSON.stringify({
+      email_wal_url: 'postgresql://email-wal',
+      sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
+    });
+  }
+  return document();
+}
+
 describe('loadRuntimeConnectionEnvironment', () => {
   it('loads production connections without sandbox signing material', () => {
     const env: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal.json',
       AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
       AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: 'stale-key',
       AIHUB_SANDBOX_ASSERTION_KID: 'stale-id',
@@ -49,7 +64,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
 
     loadRuntimeConnectionEnvironment({
       env,
-      readFile: () => document(),
+      readFile: readRuntimeSecret,
     });
 
     expect(env.DATABASE_URL).toBe('postgresql://production');
@@ -67,12 +82,13 @@ describe('loadRuntimeConnectionEnvironment', () => {
   it('selects sandbox connections for the sandbox container', () => {
     const env: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal-sandbox.json',
       AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
     };
 
     loadRuntimeConnectionEnvironment({
       env,
-      readFile: () => document(),
+      readFile: readRuntimeSecret,
     });
 
     expect(env.DATABASE_URL).toBe('postgresql://sandbox');
@@ -94,11 +110,12 @@ describe('loadRuntimeConnectionEnvironment', () => {
   it('uses Vault-provided PgBouncer URLs for runtime and direct URLs for operators', () => {
     const runtimeEnv: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal.json',
       AIHUB_DATABASE_POOLER_ENABLED: 'true',
     };
     loadRuntimeConnectionEnvironment({
       env: runtimeEnv,
-      readFile: () => document(),
+      readFile: readRuntimeSecret,
     });
 
     expect(runtimeEnv).toMatchObject({
@@ -113,12 +130,13 @@ describe('loadRuntimeConnectionEnvironment', () => {
 
     const operatorEnv: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal.json',
       AIHUB_DATABASE_POOLER_ENABLED: 'true',
     };
     loadRuntimeConnectionEnvironment({
       env: operatorEnv,
       target: 'operator',
-      readFile: () => document(),
+      readFile: readRuntimeSecret,
     });
 
     expect(operatorEnv.DATABASE_URL).toBe('postgresql://production');
@@ -139,6 +157,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
   it('fails closed when PgBouncer is enabled but a role URL is missing', () => {
     const env: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      AIHUB_EMAIL_WAL_SECRETS_FILE: 'email-wal.json',
       AIHUB_DATABASE_POOLER_ENABLED: 'true',
     };
     const missingPoolerUrls = JSON.stringify({
@@ -147,8 +166,6 @@ describe('loadRuntimeConnectionEnvironment', () => {
         sandbox_url: 'postgresql://sandbox',
         sandbox_control_plane_read_url: 'postgresql://sandbox-control-read',
         email_send_budget_url: 'postgresql://shared-email-budget',
-        email_wal_url: 'postgresql://email-wal',
-        sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
       },
       redis: {
         url: 'redis://production/0',
@@ -160,7 +177,13 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(() =>
       loadRuntimeConnectionEnvironment({
         env,
-        readFile: () => missingPoolerUrls,
+        readFile: (path) =>
+          path === 'email-wal.json'
+            ? JSON.stringify({
+                email_wal_url: 'postgresql://email-wal',
+                sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
+              })
+            : missingPoolerUrls,
       }),
     ).toThrow('PgBouncer runtime URL');
   });

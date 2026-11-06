@@ -78,7 +78,8 @@ Git Bash on Windows as well as in CI.
 
 `scripts/ci/ci-boot-config.cjs` is the source of truth. It writes:
 
-- `runtime-secrets.json` and `connection-secrets.json`, in the shapes the
+- `runtime-secrets.json`, `connection-secrets.json`, and
+  `email-wal-secrets.json`, in the shapes the
   Vault templates under `ops/vault/templates` render, mounted read-only at
   `/run/secrets/aihub` as in production;
 - `boot.env`, the non-secret variables `docker-compose.production.yml` sets

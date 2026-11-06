@@ -78,6 +78,10 @@ const fields = {
     requiredIn: PROD_MODES,
   },
   AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: { kind: 'string' },
+  AIHUB_EMAIL_WAL_SECRETS_FILE: {
+    kind: 'string',
+    requiredIn: PROD_MODES,
+  },
   AIHUB_RUNTIME_DATABASE_SCOPE: {
     kind: 'enum',
     values: ['production', 'sandbox'],
@@ -366,6 +370,7 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'CONTROL_PLANE_READ_DATABASE_URL',
     'AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL',
     'AIHUB_EMAIL_WAL_DATABASE_URL',
+    'AIHUB_EMAIL_WAL_SECRETS_FILE',
     'REDIS_URL',
     'AIHUB_EMAIL_SEND_RATE_REDIS_URL',
     'AIHUB_EMAIL_SEND_RATE_LIMIT',

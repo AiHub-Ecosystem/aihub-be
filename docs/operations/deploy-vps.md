@@ -1206,6 +1206,7 @@ sudo -n docker exec "$vault_container_id" sh -ec \
   "test -s /run/secrets/aihub/runtime-secrets.json && \
    test -s /run/secrets/aihub/auth-mfa-secrets.json && \
    test -s /run/secrets/aihub/connection-secrets.json && \
+   test -s /run/secrets/aihub/email-wal-secrets.json && \
    wget -q -T 2 -O /dev/null 'http://127.0.0.1:8220/agent/v1/metrics?format=prometheus'"
 ```
 

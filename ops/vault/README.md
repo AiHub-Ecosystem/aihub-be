@@ -205,10 +205,12 @@ smoke test.
 `templates/runtime-secrets.json.ctmpl` renders the JSON shape consumed by the
 AIHUB runtime-secret provider. `templates/auth-mfa-secrets.json.ctmpl` renders
 the separate MFA keyring. `templates/connection-secrets.json.ctmpl` renders
-database, Redis, and sandbox bootstrap material. `agent/aihub-pgbouncer.hcl`
+database, Redis, and sandbox bootstrap material. The email WAL login is rendered
+to its own `email-wal-secrets.json` file so N-1 images can ignore its new fields.
+`agent/aihub-pgbouncer.hcl`
 and its three templates render PgBouncer config, per-app userlist credentials,
 and the dedicated exporter credential into a separate host directory. Set
-`AIHUB_VAULT_ENVIRONMENT` in each Agent. The three runtime templates render to
+`AIHUB_VAULT_ENVIRONMENT` in each Agent. The four runtime templates render to
 the shared runtime directory; the pooler templates render to the separate
 PgBouncer directory.
 

@@ -78,8 +78,6 @@ export function loadRuntimeConnectionEnvironment(
       'sandbox_url',
       'sandbox_control_plane_read_url',
       'email_send_budget_url',
-      'email_wal_url',
-      'sandbox_email_wal_url',
       'pooler_url',
       'sandbox_pooler_url',
       'control_plane_pooler_url',
@@ -155,11 +153,32 @@ export function loadRuntimeConnectionEnvironment(
         'PgBouncer email budget URL',
       )
     : directEmailBudgetDatabaseUrl;
-  env.AIHUB_EMAIL_WAL_DATABASE_URL = requiredRecordString(
-    database,
-    scope === 'sandbox' ? 'sandbox_email_wal_url' : 'email_wal_url',
-    scope === 'sandbox' ? 'sandbox email WAL URL' : 'email WAL URL',
-  );
+  const emailWalPath = env.AIHUB_EMAIL_WAL_SECRETS_FILE?.trim();
+  if (emailWalPath) {
+    let emailWalRaw: string;
+    try {
+      emailWalRaw = (options.readFile ?? readUtf8File)(emailWalPath);
+    } catch {
+      throw configurationError('email WAL secret file cannot be read');
+    }
+    let emailWalParsed: unknown;
+    try {
+      emailWalParsed = JSON.parse(emailWalRaw);
+    } catch {
+      throw configurationError('email WAL secret file is not valid JSON');
+    }
+    const emailWal = asRecord(emailWalParsed, 'email WAL secret bundle');
+    assertAllowedKeys(
+      emailWal,
+      ['email_wal_url', 'sandbox_email_wal_url'],
+      'email WAL secret bundle',
+    );
+    env.AIHUB_EMAIL_WAL_DATABASE_URL = requiredRecordString(
+      emailWal,
+      scope === 'sandbox' ? 'sandbox_email_wal_url' : 'email_wal_url',
+      scope === 'sandbox' ? 'sandbox email WAL URL' : 'email WAL URL',
+    );
+  }
   env.REDIS_URL = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',

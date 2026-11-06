@@ -598,9 +598,11 @@ restart. Keep the 1 GiB slot cap aligned with the alert thresholds below.
 Create one direct PostgreSQL login per database with `LOGIN REPLICATION`,
 `CONNECT`, and permission to read replication slot health (`pg_monitor`). Put
 its URL in the Vault database bundle as `email_wal_url` or
-`sandbox_email_wal_url`; the app reads it as `AIHUB_EMAIL_WAL_DATABASE_URL` and
-connects directly, bypassing PgBouncer. Do not use a shared Production WAL URL
-for Sandbox.
+`sandbox_email_wal_url`. Vault Agent renders those values into the standalone
+`email-wal-secrets.json`; keeping them outside `connection-secrets.json` lets
+N-1 images ignore the new credentials. The app reads the selected URL as
+`AIHUB_EMAIL_WAL_DATABASE_URL` and connects directly, bypassing PgBouncer.
+Do not use a shared Production WAL URL for Sandbox.
 
 Create an empty publication and a database-scope-specific slot after settings
 are active. Production and Sandbox share a PostgreSQL cluster, so slot names

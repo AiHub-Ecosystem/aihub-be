@@ -92,6 +92,7 @@ export function imageConfig(
     for (const file of [
       'runtime-secrets.json',
       'connection-secrets.json',
+      'email-wal-secrets.json',
       'auth-mfa-secrets.json',
       'boot.env',
     ]) {
@@ -124,6 +125,13 @@ export function imageConfig(
   connection.redis.sandbox_url = 'redis://127.0.0.1:6379/0';
   connection.redis.email_send_rate_url = 'redis://127.0.0.1:6379/2';
   writeFileSync(connectionPath, JSON.stringify(connection));
+  writeFileSync(
+    resolve(directory, 'email-wal-secrets.json'),
+    JSON.stringify({
+      email_wal_url: DATABASE_URL,
+      sandbox_email_wal_url: DATABASE_URL,
+    }),
+  );
 
   copyFileSync(
     resolve(COMPAT_DIR, 'resend.crt'),
