@@ -24,6 +24,11 @@ export function parseOptions(args) {
   return options;
 }
 
+/** @param {boolean} stop @param {number} consumed @param {number} events */
+export function shouldContinueConsuming(stop, consumed, events) {
+  return !stop && consumed < events;
+}
+
 /** @param {string} connectionString */
 export function assertSafeDatabaseUrl(connectionString) {
   let url;

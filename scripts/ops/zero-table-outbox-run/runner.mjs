@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import {
   assertSafeDatabaseUrl,
   parseOptions,
+  shouldContinueConsuming,
   summarize,
 } from './runner-utils.mjs';
 
@@ -97,7 +98,6 @@ async function runScenario(
   let consumerError;
   /** @type {number[]} */
   const latencies = [];
-  const hostCpu = watchHostCpu();
   const startLsn = (
     await query(
       pool,
@@ -107,48 +107,50 @@ async function runScenario(
     )
   ).rows[0].lsn;
   const start = performance.now();
-  const consume = async () => {
-    while (!stop || consumed < events) {
-      try {
-        if (mode === 'polling-table') {
-          const result = await pool.query(
-            `WITH claimed AS (
+  const hostCpu = watchHostCpu();
+  let consumer;
+  try {
+    const consume = async () => {
+      while (shouldContinueConsuming(stop, consumed, events)) {
+        try {
+          if (mode === 'polling-table') {
+            const result = await pool.query(
+              `WITH claimed AS (
                SELECT id FROM ${table} ORDER BY id LIMIT 128 FOR UPDATE SKIP LOCKED
              ) DELETE FROM ${table} AS event USING claimed WHERE event.id = claimed.id`,
-          );
-          consumed += result.rowCount ?? 0;
-        } else {
-          const result = await query(
-            pool,
-            /** @type {import('pg').QueryConfig<{data: string | null}>} */ ({
-              text: 'SELECT data FROM pg_logical_slot_get_changes($1, NULL, 1_000)',
-              values: [slot ?? ''],
-            }),
-          );
-          const rows = /** @type {unknown[]} */ (result.rows);
-          consumed += rows.filter(
-            (row) =>
-              typeof row === 'object' &&
-              row !== null &&
-              'data' in row &&
-              typeof row.data === 'string' &&
-              row.data.includes('prefix: aihub_outbox'),
-          ).length;
+            );
+            consumed += result.rowCount ?? 0;
+          } else {
+            const result = await query(
+              pool,
+              /** @type {import('pg').QueryConfig<{data: string | null}>} */ ({
+                text: 'SELECT data FROM pg_logical_slot_get_changes($1, NULL, 1_000)',
+                values: [slot ?? ''],
+              }),
+            );
+            const rows = /** @type {unknown[]} */ (result.rows);
+            consumed += rows.filter(
+              (row) =>
+                typeof row === 'object' &&
+                row !== null &&
+                'data' in row &&
+                typeof row.data === 'string' &&
+                row.data.includes('prefix: aihub_outbox'),
+            ).length;
+          }
+          if (consumed < events) await delay(5);
+        } catch (error) {
+          consumerError = error;
+          stop = true;
+          return;
         }
-        if (consumed < events) await delay(5);
-      } catch (error) {
-        consumerError = error;
-        stop = true;
-        return;
       }
-    }
-  };
-  const consumer = consume();
-  /** @type {Set<Promise<number>>} */
-  const pending = new Set();
-  let produced = 0;
-  let productionDurationMs = 0;
-  try {
+    };
+    consumer = consume();
+    /** @type {Set<Promise<number>>} */
+    const pending = new Set();
+    let produced = 0;
+    let productionDurationMs = 0;
     while (produced < events) {
       if (consumerError) throw consumerError;
       if (pending.size >= concurrency) await Promise.race(pending);
@@ -179,62 +181,63 @@ async function runScenario(
       throw new Error(
         `${mode} consumed ${consumed} of ${events} events before timeout`,
       );
+    const elapsedMs = performance.now() - start;
+    const endLsn = (
+      await query(
+        pool,
+        /** @type {import('pg').QueryConfig<{lsn: string}>} */ ({
+          text: 'SELECT pg_current_wal_lsn() AS lsn',
+        }),
+      )
+    ).rows[0].lsn;
+    const walBytes = Number(
+      (
+        await query(
+          pool,
+          /** @type {import('pg').QueryConfig<{bytes: string}>} */ ({
+            text: 'SELECT pg_wal_lsn_diff($1, $2) AS bytes',
+            values: [endLsn, startLsn],
+          }),
+        )
+      ).rows[0].bytes,
+    );
+    const tableStats =
+      mode === 'polling-table'
+        ? (
+            await query(
+              pool,
+              /** @type {import('pg').QueryConfig<{n_dead_tup: string | number, relation_bytes: string}>} */ ({
+                text: 'SELECT n_dead_tup, pg_total_relation_size($1::regclass) AS relation_bytes FROM pg_stat_user_tables WHERE relname = $1::text',
+                values: [tableName],
+              }),
+            )
+          ).rows[0]
+        : undefined;
+    return {
+      mode,
+      events: consumed,
+      targetEventsPerSecond: rate,
+      committedEventsPerSecond: Number(
+        ((produced * 1_000) / productionDurationMs).toFixed(1),
+      ),
+      productionDurationMs: Number(productionDurationMs.toFixed(1)),
+      endToEndDurationMs: Number(elapsedMs.toFixed(1)),
+      drainDurationMs: Number((elapsedMs - productionDurationMs).toFixed(1)),
+      commitLatencyMs: summarize(
+        latencies.map((value) => Number(value.toFixed(3))),
+      ),
+      walBytes,
+      walBytesPerSecond: Number(((walBytes * 1_000) / elapsedMs).toFixed(1)),
+      walBytesPerEvent: Number((walBytes / consumed).toFixed(1)),
+      deadTupleEstimate: tableStats ? Number(tableStats.n_dead_tup) : null,
+      relationBytes: tableStats ? Number(tableStats.relation_bytes) : null,
+      hostCpuPercent: hostCpu(),
+    };
   } finally {
     stop = true;
     await consumer;
+    hostCpu();
   }
-  const elapsedMs = performance.now() - start;
-  const endLsn = (
-    await query(
-      pool,
-      /** @type {import('pg').QueryConfig<{lsn: string}>} */ ({
-        text: 'SELECT pg_current_wal_lsn() AS lsn',
-      }),
-    )
-  ).rows[0].lsn;
-  const walBytes = Number(
-    (
-      await query(
-        pool,
-        /** @type {import('pg').QueryConfig<{bytes: string}>} */ ({
-          text: 'SELECT pg_wal_lsn_diff($1, $2) AS bytes',
-          values: [endLsn, startLsn],
-        }),
-      )
-    ).rows[0].bytes,
-  );
-  const tableStats =
-    mode === 'polling-table'
-      ? (
-          await query(
-            pool,
-            /** @type {import('pg').QueryConfig<{n_dead_tup: string | number, relation_bytes: string}>} */ ({
-              text: 'SELECT n_dead_tup, pg_total_relation_size($1::regclass) AS relation_bytes FROM pg_stat_user_tables WHERE relname = $1::text',
-              values: [tableName],
-            }),
-          )
-        ).rows[0]
-      : undefined;
-  return {
-    mode,
-    events: consumed,
-    targetEventsPerSecond: rate,
-    committedEventsPerSecond: Number(
-      ((produced * 1_000) / productionDurationMs).toFixed(1),
-    ),
-    productionDurationMs: Number(productionDurationMs.toFixed(1)),
-    endToEndDurationMs: Number(elapsedMs.toFixed(1)),
-    drainDurationMs: Number((elapsedMs - productionDurationMs).toFixed(1)),
-    commitLatencyMs: summarize(
-      latencies.map((value) => Number(value.toFixed(3))),
-    ),
-    walBytes,
-    walBytesPerSecond: Number(((walBytes * 1_000) / elapsedMs).toFixed(1)),
-    walBytesPerEvent: Number((walBytes / consumed).toFixed(1)),
-    deadTupleEstimate: tableStats ? Number(tableStats.n_dead_tup) : null,
-    relationBytes: tableStats ? Number(tableStats.relation_bytes) : null,
-    hostCpuPercent: hostCpu(),
-  };
 }
 
 async function main() {

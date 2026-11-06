@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   assertSafeDatabaseUrl,
   parseOptions,
+  shouldContinueConsuming,
   summarize,
 } from './runner-utils.mjs';
 
@@ -17,6 +18,12 @@ void test('defaults to 1,000 events per second with a bounded pool', () => {
 void test('rejects malformed and non-positive options', () => {
   assert.throws(() => parseOptions(['--rate', '0']), /positive integer/);
   assert.throws(() => parseOptions(['--unknown', '1']), /Unknown option/);
+});
+
+void test('stopping the consumer does not wait for the expected event count', () => {
+  assert.equal(shouldContinueConsuming(false, 0, 1), true);
+  assert.equal(shouldContinueConsuming(false, 1, 1), false);
+  assert.equal(shouldContinueConsuming(true, 0, 1), false);
 });
 
 void test('only accepts localhost aihub_outbox_eval URLs', () => {
