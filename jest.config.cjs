@@ -47,6 +47,7 @@ module.exports = {
     '/node_modules/',
     '<rootDir>/test/db/',
     '<rootDir>/test/cli/pgbouncer-(budget|exporter)\\.spec\\.ts',
+    '<rootDir>/scripts/runtime/dev-runner\\.spec\\.ts',
   ],
   // NestJS 12 and @nestjs/config ship ESM packages. Node loads them through
   // own module loader does not, so SWC compiles it to CommonJS here. The two
