@@ -235,8 +235,8 @@ async function runScenario(
     };
   } finally {
     stop = true;
-    await consumer;
     hostCpu();
+    await consumer;
   }
 }
 
