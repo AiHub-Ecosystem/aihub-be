@@ -1,0 +1,94 @@
+name: Zero-table Outbox Evaluation
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zero-table-outbox-evaluation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: Isolated PostgreSQL comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check benchmark runner
+        run: bun run test:zero-table-outbox-run
+
+      - name: Record runner hardware
+        run: |
+          mkdir -p temp/zero-table-outbox-evaluation
+          {
+            lscpu
+            free -b
+            df -h /
+            docker version
+          } > temp/zero-table-outbox-evaluation/runner-info.txt
+
+      - name: Start isolated PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach \
+            --name aihub-zero-table-outbox-eval \
+            --publish 127.0.0.1:5442:5432 \
+            --env POSTGRES_DB=aihub_outbox_eval \
+            --env POSTGRES_USER=postgres \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            postgres:16.15 -c wal_level=logical
+          for attempt in {1..30}; do
+            if docker exec aihub-zero-table-outbox-eval \
+              pg_isready -U postgres -d aihub_outbox_eval; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs aihub-zero-table-outbox-eval
+          exit 1
+
+      - name: Run table and logical-message comparison
+        env:
+          AIHUB_OUTBOX_EVAL_DATABASE_URL: postgresql://postgres@127.0.0.1:5442/aihub_outbox_eval
+        run: node scripts/ops/zero-table-outbox-run/runner.mjs --events 10000 --rate 1000 --concurrency 32 > temp/zero-table-outbox-evaluation/result.json
+
+      - name: Add results to run summary
+        if: always()
+        run: |
+          if [ -f temp/zero-table-outbox-evaluation/result.json ]; then
+            cat temp/zero-table-outbox-evaluation/result.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zero-table-outbox-evaluation-${{ github.run_id }}
+          path: temp/zero-table-outbox-evaluation/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Stop isolated PostgreSQL
+        if: always()
+        run: docker rm --force aihub-zero-table-outbox-eval 2>/dev/null || true
