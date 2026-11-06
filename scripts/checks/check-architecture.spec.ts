@@ -11,9 +11,10 @@ import {
   rmdirSync,
   writeFileSync,
 } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 import architectureConfig from '../../.dependency-cruiser.cjs';
+import { collectSourceTextFailures } from './check-architecture.mjs';
 import cacheHelpers from './dependency-cruiser-cache.cjs';
 
 type DependencyCruiserConfig = typeof architectureConfig;
@@ -130,12 +131,32 @@ function spawnArchCheck(cwd: string = workspaceRoot()) {
   });
 }
 
-function runArchCheck(): { status: number | null; output: string } {
-  const result = spawnArchCheck();
+/**
+ * Runs the source-text rules over fixture files held in memory (#1484). `path`
+ * is relative to the repository root; nothing is written to disk and nothing
+ * else is read, so one call costs a few milliseconds where a spawned CLI cost
+ * seconds. `status` and `output` mirror what the CLI would have answered.
+ */
+function checkFixtures(fixtures: ReadonlyArray<readonly [string, string]>): {
+  status: number;
+  output: string;
+  failures: string[];
+} {
+  const sources = new Map(
+    fixtures.map(([path, source]) => [join(repoRoot, path), source]),
+  );
+  const { failures } = collectSourceTextFailures({
+    root: repoRoot,
+    files: [...sources.keys()],
+    readSource: (file) => sources.get(file) ?? '',
+  });
 
   return {
-    status: result.status,
-    output: `${result.stdout}\n${result.stderr}`,
+    status: failures.length > 0 ? 1 : 0,
+    output: failures
+      .map((message) => `Architecture check failed: ${message}\n`)
+      .join(''),
+    failures,
   };
 }
 
@@ -305,8 +326,14 @@ describe('dependency-cruiser cache policy', () => {
   }, 120_000);
 });
 
-describe('layer rules on feature-first Identity paths', () => {
-  it.each([
+/**
+ * The layer and domain-purity rules belong to dependency-cruiser, which only a
+ * run of the whole CLI exercises (about six seconds each). One run covers every
+ * case: each fixture sits in its own folder, and a case passes when a reported
+ * violation names both its rule and its folder (#1484).
+ */
+const dependencyRuleCases = [
+  ...[
     {
       fromLayer: 'application',
       toLayer: 'infrastructure',
@@ -322,90 +349,65 @@ describe('layer rules on feature-first Identity paths', () => {
       toLayer: 'presentation',
       rule: 'infrastructure-no-presentation',
     },
-  ])(
-    'rejects an import from $fromLayer into $toLayer',
-    ({ fromLayer, toLayer, rule }) => {
-      const fixtureRoot = mkdtempSync(
-        join(
-          workspaceRoot(),
-          'src',
-          'modules',
-          'identity',
-          '.tmp-identity-architecture-',
-        ),
-      );
-      const featureRoot = fixtureRoot;
-      const sourceFile = join(featureRoot, fromLayer, 'probe.ts');
-      const dependencyFile = join(featureRoot, toLayer, 'dependency.ts');
-
-      try {
-        mkdirSync(join(featureRoot, fromLayer), { recursive: true });
-        mkdirSync(join(featureRoot, toLayer), { recursive: true });
-        writeFileSync(
-          sourceFile,
-          `import { dependency } from '../${toLayer}/dependency';\nvoid dependency;\n`,
-        );
-        writeFileSync(dependencyFile, 'export const dependency = true;\n');
-        writeFileSync(
-          join(fixtureRoot, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-        );
-
-        const result = spawnArchCheck();
-
-        expect(result.status).not.toBe(0);
-        expect(
-          `${result.stdout.toString()}\n${result.stderr.toString()}`,
-        ).toContain(rule);
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
-      }
+  ].map(({ fromLayer, toLayer, rule }) => ({
+    name: `an import from ${fromLayer} into ${toLayer}`,
+    folder: `.tmp-layer-${fromLayer}-${toLayer}`,
+    rule,
+    files: {
+      [`${fromLayer}/probe.ts`]: `import { dependency } from '../${toLayer}/dependency';\nvoid dependency;\n`,
+      [`${toLayer}/dependency.ts`]: 'export const dependency = true;\n',
     },
-    30_000,
-  );
-});
-
-/**
- * dependency-cruiser reports a Node built-in as `url` or `fs`, never as
- * `node:url`, so a rule that lists `^node:` as a path never matches. Domain code
- * used to be able to import a runtime module and pass this check; the rule has
- * to name the dependency type, and only a run over a real file proves it does.
- */
-describe('domain layer purity', () => {
-  it.each([
+  })),
+  ...[
     ['a node: prefixed built-in', "import { domainToASCII } from 'node:url';"],
     ['an unprefixed built-in', "import { readFileSync } from 'fs';"],
-  ])(
-    'rejects %s imported into a domain file',
-    (_name, importLine) => {
-      const fixtureRoot = mkdtempSync(
-        join(
-          workspaceRoot(),
-          'src',
-          'modules',
-          'identity',
-          '.tmp-domain-purity-',
-        ),
-      );
-      try {
-        const domainDirectory = join(fixtureRoot, 'domain');
-        mkdirSync(domainDirectory, { recursive: true });
-        writeFileSync(
-          join(domainDirectory, 'probe.ts'),
-          `${importLine}\nexport const probe = 1;\n`,
-        );
+  ].map(([name, importLine], index) => ({
+    name: `${name} imported into a domain file`,
+    folder: `.tmp-domain-purity-${index}`,
+    rule: 'domain-no-runtime-modules',
+    files: { 'domain/probe.ts': `${importLine}\nexport const probe = 1;\n` },
+  })),
+];
 
-        const result = spawnArchCheck();
+let dependencyRuleRun: { status: number | null; lines: string[] } | undefined;
 
-        expect(result.status).not.toBe(0);
-        expect(
-          `${result.stdout.toString()}\n${result.stderr.toString()}`,
-        ).toContain('domain-no-runtime-modules');
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
+function runDependencyRuleCases() {
+  if (dependencyRuleRun) return dependencyRuleRun;
+
+  const identity = join(workspaceRoot(), 'src', 'modules', 'identity');
+  try {
+    for (const { folder, files } of dependencyRuleCases) {
+      for (const [file, source] of Object.entries(files)) {
+        const target = join(identity, folder, file);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, source);
       }
+    }
+    const result = spawnArchCheck();
+    dependencyRuleRun = {
+      status: result.status,
+      lines: `${result.stdout}\n${result.stderr}`.split(/\r?\n/),
+    };
+  } finally {
+    for (const { folder } of dependencyRuleCases) {
+      rmSync(join(identity, folder), { recursive: true, force: true });
+    }
+  }
+  return dependencyRuleRun;
+}
+
+describe('dependency-cruiser layer and domain purity rules', () => {
+  it.each(dependencyRuleCases)(
+    'rejects $name',
+    ({ folder, rule }) => {
+      const run = runDependencyRuleCases();
+
+      expect(run.status).not.toBe(0);
+      expect(
+        run.lines.some((line) => line.includes(rule) && line.includes(folder)),
+      ).toBe(true);
     },
-    30_000,
+    120_000,
   );
 });
 
@@ -877,89 +879,41 @@ describe('request bodies reach their contract through parseRequestBody', () => {
   });
 
   it('fails a controller that validates a body itself', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'identity',
-        '.tmp-body-validation-',
-      ),
-    );
-    const offending = join(fixtureRoot, 'presentation', 'probe.controller.ts');
-
-    try {
-      mkdirSync(join(fixtureRoot, 'presentation'), { recursive: true });
-      writeFileSync(
-        offending,
+    const result = checkFixtures([
+      [
+        'src/modules/identity/probe/presentation/probe.controller.ts',
         `import { Value } from '@sinclair/typebox/value';\nexport function probe(body: unknown): boolean {\n  return Value.Check({}, body);\n}\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
+      ],
+    ]);
 
-      const result = spawnArchCheck();
-
-      expect(result.status).not.toBe(0);
-      expect(
-        `${result.stdout.toString()}\n${result.stderr.toString()}`,
-      ).toContain('route a request body through parseRequestBody');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(
+      'route a request body through parseRequestBody',
+    );
   });
 });
 
 describe('isRecord has one declaration', () => {
   it('fails a file that declares its own', () => {
-    const fixtureRoot = mkdtempSync(
-      join(workspaceRoot(), 'src', 'modules', 'identity', '.tmp-is-record-'),
-    );
-
-    try {
-      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
-      writeFileSync(
-        join(fixtureRoot, 'infrastructure', 'probe.ts'),
+    const result = checkFixtures([
+      [
+        'src/modules/identity/probe/infrastructure/probe.ts',
         `function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 export const probe = isRecord({});
 `,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
+      ],
+    ]);
 
-      const result = spawnArchCheck();
-
-      expect(result.status).not.toBe(0);
-      expect(
-        `${result.stdout.toString()}
-${result.stderr.toString()}`,
-      ).toContain("import it from '@/common/is-record'");
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("import it from '@/common/is-record'");
   });
 });
 
 describe('the request-id pattern has one declaration', () => {
   function runWithContract(source: string): string {
-    const fixtureRoot = mkdtempSync(
-      join(workspaceRoot(), 'src', 'contracts', '.tmp-request-id-'),
-    );
-
-    try {
-      writeFileSync(join(fixtureRoot, 'probe.ts'), source);
-
-      const result = spawnArchCheck();
-
-      return `${result.stdout}\n${result.stderr}`;
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    return checkFixtures([['src/contracts/probe/probe.ts', source]]).output;
   }
 
   it('fails a contract that restates the pattern', () => {
@@ -981,69 +935,30 @@ describe('the request-id pattern has one declaration', () => {
 
 describe('a session is stored only with the second-factor check', () => {
   it('fails a file that continues a session without it', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'auth',
-        '.tmp-session-admission-',
-      ),
-    );
-
-    try {
-      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
-      writeFileSync(
-        join(fixtureRoot, 'infrastructure', 'probe.ts'),
+    const result = checkFixtures([
+      [
+        'src/modules/auth/probe/infrastructure/probe.ts',
         `import { admitSessionContinuation } from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';\nexport const admission = admitSessionContinuation('usr_1');\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
+      ],
+    ]);
 
-      const result = spawnArchCheck();
-
-      expect(result.status).not.toBe(0);
-      expect(
-        `${result.stdout.toString()}\n${result.stderr.toString()}`,
-      ).toContain('only the Refresh Token rotation may continue a session');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(
+      'only the Refresh Token rotation may continue a session',
+    );
   });
 });
 
 describe('query parameters reach parseRequestQuery at the controller boundary', () => {
   function withControllerFixture(
     source: string,
-    assertion: (result: ReturnType<typeof spawnSync>) => void,
+    assertion: (result: ReturnType<typeof checkFixtures>) => void,
   ): void {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'identity',
-        '.tmp-query-validation-',
-      ),
+    assertion(
+      checkFixtures([
+        ['src/modules/identity/probe/presentation/probe.controller.ts', source],
+      ]),
     );
-    const controller = join(fixtureRoot, 'presentation', 'probe.controller.ts');
-
-    try {
-      mkdirSync(join(fixtureRoot, 'presentation'), { recursive: true });
-      writeFileSync(controller, source);
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
-
-      const result = spawnArchCheck();
-
-      assertion(result);
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
   }
 
   it('fails a controller that reads request.query outside the helper', () => {
@@ -1051,24 +966,20 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
       `export class ProbeController {\n  list(request: { query: unknown }) {\n    return request.query;\n  }\n}\n`,
       (result) => {
         expect(result.status).not.toBe(0);
-        expect(
-          `${result.stdout.toString()}\n${result.stderr.toString()}`,
-        ).toContain('parseRequestQuery');
+        expect(result.output).toContain('parseRequestQuery');
       },
     );
-  }, 30_000);
+  });
 
   it('fails a controller that reads a named @Query parameter', () => {
     withControllerFixture(
       `export class ProbeController {\n  list(@Query('part') part: unknown) {\n    return part;\n  }\n}\n`,
       (result) => {
         expect(result.status).not.toBe(0);
-        expect(
-          `${result.stdout.toString()}\n${result.stderr.toString()}`,
-        ).toContain('parseRequestQuery');
+        expect(result.output).toContain('parseRequestQuery');
       },
     );
-  }, 30_000);
+  });
 
   it('allows whole-query validation and an explicit per-access reason', () => {
     withControllerFixture(
@@ -1077,235 +988,106 @@ describe('query parameters reach parseRequestQuery at the controller boundary', 
         expect(result.status).toBe(0);
       },
     );
-  }, 30_000);
+  });
 });
 
 describe('the generated Prisma client stays inside infrastructure', () => {
+  const importClient = (typeAnnotation: string) =>
+    `import ${typeAnnotation} from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`;
+
   it('fails an application file that imports the generated client', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'identity',
-        '.tmp-prisma-boundary-',
-      ),
-    );
-    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
+    const { status, output } = checkFixtures([
+      [
+        'src/modules/identity/probe/application/probe.use-case.ts',
+        importClient('{ PrismaClient }'),
+      ],
+    ]);
 
-    try {
-      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
-      writeFileSync(
-        offending,
-        `import { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
-
-      const { status, output } = runArchCheck();
-
-      expect(status).not.toBe(0);
-      expect(output).toContain('only infrastructure may');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    expect(status).not.toBe(0);
+    expect(output).toContain('only infrastructure may');
   });
 
   it('fails an application file of the persistence module itself', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'persistence',
-        '.tmp-prisma-boundary-',
-      ),
-    );
-    const offending = join(fixtureRoot, 'application', 'probe.port.ts');
+    const { status, output } = checkFixtures([
+      [
+        'src/modules/persistence/probe/application/probe.port.ts',
+        importClient('type { PrismaClient }'),
+      ],
+    ]);
 
-    try {
-      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
-      writeFileSync(
-        offending,
-        `import type { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
-
-      const { status, output } = runArchCheck();
-
-      expect(status).not.toBe(0);
-      expect(output).toContain('only infrastructure may');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    expect(status).not.toBe(0);
+    expect(output).toContain('only infrastructure may');
   });
 
   it('fails a dynamic import of the generated client outside infrastructure', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'identity',
-        '.tmp-prisma-boundary-dynamic-',
-      ),
-    );
-    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
-
-    try {
-      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
-      writeFileSync(
-        offending,
+    const { status, output } = checkFixtures([
+      [
+        'src/modules/identity/probe/application/probe.use-case.ts',
         `export async function probe(): Promise<unknown> {\n  return import('@prisma-client/client');\n}\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
+      ],
+    ]);
 
-      const { status, output } = runArchCheck();
-
-      expect(status).not.toBe(0);
-      expect(output).toContain('only infrastructure may');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    expect(status).not.toBe(0);
+    expect(output).toContain('only infrastructure may');
   });
 
   it('accepts the same import inside infrastructure', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'identity',
-        '.tmp-prisma-boundary-ok-',
-      ),
-    );
-    const allowed = join(fixtureRoot, 'infrastructure', 'probe.repository.ts');
+    const { status, output } = checkFixtures([
+      [
+        'src/modules/identity/probe/infrastructure/probe.repository.ts',
+        importClient('{ PrismaClient }'),
+      ],
+    ]);
 
-    try {
-      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
-      writeFileSync(
-        allowed,
-        `import { PrismaClient } from '@prisma-client/client';\n\nexport type Probe = PrismaClient;\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
-
-      const { status, output } = runArchCheck();
-
-      expect(output).not.toContain('only infrastructure may');
-      expect(status).toBe(0);
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  }, 30_000);
+    expect(output).not.toContain('only infrastructure may');
+    expect(status).toBe(0);
+  });
 });
 
 describe('the Kysely evaluation stays inside infrastructure', () => {
   it('fails an application file that imports Kysely', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'metering',
-        '.tmp-kysely-boundary-',
-      ),
-    );
-    const offending = join(fixtureRoot, 'application', 'probe.use-case.ts');
-
-    try {
-      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
-      writeFileSync(
-        offending,
+    const { status, output } = checkFixtures([
+      [
+        'src/modules/metering/probe/application/probe.use-case.ts',
         `import { Kysely } from 'kysely';\n\nexport type Probe = Kysely<unknown>;\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
+      ],
+    ]);
 
-      const { status, output } = runArchCheck();
-
-      expect(status).not.toBe(0);
-      expect(output).toContain('imports Kysely outside infrastructure');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  }, 30_000);
+    expect(status).not.toBe(0);
+    expect(output).toContain('imports Kysely outside infrastructure');
+  });
 
   it('fails an application file that imports generated Kysely types', () => {
-    const fixtureRoot = mkdtempSync(
-      join(
-        workspaceRoot(),
-        'src',
-        'modules',
-        'metering',
-        '.tmp-kysely-types-boundary-',
-      ),
-    );
-    const offending = join(fixtureRoot, 'application', 'probe.port.ts');
-
-    try {
-      mkdirSync(join(fixtureRoot, 'application'), { recursive: true });
-      writeFileSync(
-        offending,
+    const { status, output } = checkFixtures([
+      [
+        'src/modules/metering/probe/application/probe.port.ts',
         `import type { DB } from '@kysely-types/types';\n\nexport type Probe = DB;\n`,
-      );
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
+      ],
+    ]);
 
-      const { status, output } = runArchCheck();
-
-      expect(status).not.toBe(0);
-      expect(output).toContain('imports Kysely outside infrastructure');
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  }, 30_000);
+    expect(status).not.toBe(0);
+    expect(output).toContain('imports Kysely outside infrastructure');
+  });
 });
 
 describe('source-text architecture rules fail arch-check', () => {
-  /** `fixtureDirectory` is relative to the isolated workspace root. */
+  /**
+   * `fixtureDirectory` is relative to the repository root. The files live only
+   * in memory (#1484), under a fixture folder so that a layer segment such as
+   * `infrastructure` still decides which rules apply to them.
+   */
   function runWithFixtures(
     fixtures: Array<{ layer: string; name: string; source: string }>,
     fixtureDirectory = 'src/modules/identity',
   ): { status: number | null; output: string } {
-    const fixtureRoot = mkdtempSync(
-      join(workspaceRoot(), fixtureDirectory, '.tmp-source-text-'),
+    const { status, output } = checkFixtures(
+      fixtures.map(({ layer, name, source }) => [
+        join(fixtureDirectory, '.tmp-source-text-fixture', layer, name),
+        source,
+      ]),
     );
 
-    try {
-      for (const { layer, name, source } of fixtures) {
-        const layerRoot = join(fixtureRoot, layer);
-        mkdirSync(layerRoot, { recursive: true });
-        writeFileSync(join(layerRoot, name), source);
-      }
-      writeFileSync(
-        join(fixtureRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { target: 'ES2022' } }),
-      );
-
-      const result = spawnArchCheck();
-
-      return {
-        status: result.status,
-        output: `${result.stdout}\n${result.stderr}`,
-      };
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+    return { status, output };
   }
 
   function rawSqlProbe(source: string): {
@@ -1657,6 +1439,68 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.output).toContain('casts an application-declared type');
     expect(result.status).not.toBe(0);
   }, 30_000);
+});
+
+describe('collectSourceTextFailures and the CLI agree (#1484)', () => {
+  it('finds no source-text failure in the real tree', () => {
+    expect(collectSourceTextFailures({ root: repoRoot })).toEqual({
+      failures: [],
+      stoppedEarly: false,
+    });
+  });
+
+  it('stops after the first group of rules, as the CLI always did', () => {
+    const firstGroup = checkFixtures([
+      [
+        'src/modules/identity/probe/infrastructure/probe.ts',
+        'export const isRecord = (value: unknown) => value !== null;\n',
+      ],
+    ]);
+    const secondGroupOnly = collectSourceTextFailures({
+      root: repoRoot,
+      files: [join(repoRoot, 'src/modules/identity/probe/application/p.ts')],
+      readSource: () => "declare module 'fastify' {}\n",
+    });
+
+    expect(firstGroup.failures).toHaveLength(1);
+    expect(secondGroupOnly.failures).toHaveLength(1);
+    expect(secondGroupOnly.stoppedEarly).toBe(false);
+    expect(
+      collectSourceTextFailures({
+        root: repoRoot,
+        files: [
+          join(repoRoot, 'src/modules/identity/probe/infrastructure/p.ts'),
+        ],
+        readSource: () => 'export const isRecord = () => true;\n',
+      }).stoppedEarly,
+    ).toBe(true);
+  });
+
+  it('exits 1 with the message and skips dependency-cruiser on a failure', () => {
+    const fixtureRoot = join(
+      workspaceRoot(),
+      'src',
+      'modules',
+      'identity',
+      '.tmp-cli-smoke',
+    );
+    try {
+      mkdirSync(join(fixtureRoot, 'infrastructure'), { recursive: true });
+      writeFileSync(
+        join(fixtureRoot, 'infrastructure', 'probe.ts'),
+        'export const isRecord = () => true;\n',
+      );
+
+      const result = spawnArchCheck();
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Architecture check failed: ');
+      expect(result.stderr).toContain('probe.ts:1 declares its own isRecord');
+      expect(result.stdout).not.toContain('dependency violations');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
 
 /**

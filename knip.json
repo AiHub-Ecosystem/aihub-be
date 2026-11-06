@@ -85,6 +85,9 @@
     // reach the runtime modules through TypeScript declaration boundaries.
     "scripts/checks/check-changed.d.mts",
     "scripts/checks/check-batch.d.cts",
+    // Hand-written types for check-architecture.mjs; the spec reaches the .mjs
+    // through TypeScript, so without this knip reports a live file as unused.
+    "scripts/checks/check-architecture.d.mts",
     // Hand-written types for scripts/checks/jest-worker-cap.cjs — same reason:
     // Jest reaches it through jest.config.cjs, outside the TypeScript graph.
     "scripts/checks/jest-worker-cap.d.cts",
