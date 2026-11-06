@@ -41,11 +41,24 @@ function parseStamp(text) {
  *   stamp: Stamp | undefined,
  *   hasClientTs: boolean,
  *   hasClientJs: boolean,
+ *   hasKyselyTs?: boolean,
  * }} input
  * @returns {Plan}
  */
-function planGeneration({ runtime, hash, stamp, hasClientTs, hasClientJs }) {
-  if (stamp === undefined || stamp.hash !== hash || !hasClientTs) {
+function planGeneration({
+  runtime,
+  hash,
+  stamp,
+  hasClientTs,
+  hasClientJs,
+  hasKyselyTs = true,
+}) {
+  if (
+    stamp === undefined ||
+    stamp.hash !== hash ||
+    !hasClientTs ||
+    !hasKyselyTs
+  ) {
     return 'generate';
   }
   if (!runtime) return 'skip';

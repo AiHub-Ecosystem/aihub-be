@@ -30,7 +30,7 @@ describe('clean-dist', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('removes a previous build but keeps the generated Prisma client', () => {
+  it('removes a previous build but keeps the generated Prisma client and Kysely types', () => {
     const dist = join(root, 'dist');
     write(dist, 'main.js');
     write(dist, 'src/modules/app.js');
@@ -38,6 +38,7 @@ describe('clean-dist', () => {
     write(dist, 'generated/prisma/client.js');
     write(dist, 'generated/prisma/models/User.js');
     write(dist, 'generated/prisma/.stamp');
+    write(dist, 'generated/kysely/types.ts');
 
     cleanDist(dist);
 
@@ -47,12 +48,14 @@ describe('clean-dist', () => {
       client: existsSync(join(dist, 'generated/prisma/client.js')),
       model: existsSync(join(dist, 'generated/prisma/models/User.js')),
       stamp: readFileSync(join(dist, 'generated/prisma/.stamp'), 'utf8'),
+      kysely: existsSync(join(dist, 'generated/kysely/types.ts')),
     }).toEqual({
       main: false,
       modules: false,
       client: true,
       model: true,
       stamp: 'generated/prisma/.stamp',
+      kysely: true,
     });
   });
 

@@ -9,6 +9,8 @@ const BASE_ARGS = [
   '--smol',
   '--dots',
   '--timeout=30000',
+  // Bun auto-loads .env; keep the lane hermetic (#1627).
+  '--no-env-file',
   '--preload',
   './test/runtime-secret-env.ts',
   '--preload',

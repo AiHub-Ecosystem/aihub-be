@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "temp",
+    "../../../src/modules/metering/infrastructure/billing/kysely-quota-reconciliation.ts",
+    "../../../src/modules/metering/infrastructure/billing/kysely-quota-reconciliation.spec.ts"
+  ]
+}

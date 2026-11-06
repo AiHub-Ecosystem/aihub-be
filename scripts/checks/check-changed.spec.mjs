@@ -177,6 +177,12 @@ await test('the Bun runner defaults to TypeScript unit specs', () => {
   assert.equal(buildBunTestArgs([]).at(-1), '.spec.ts');
 });
 
+await test('the Bun runner never loads a local .env file (#1627)', () => {
+  for (const args of [[], ['--', 'test/example.spec.ts'], ['--', '--watch']]) {
+    assert.ok(buildBunTestArgs(args).includes('--no-env-file'));
+  }
+});
+
 await test('the Bun runner accepts a focused spec path', () => {
   assert.equal(
     buildBunTestArgs(['--', 'test/example.spec.ts']).at(-1),

@@ -32,7 +32,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import {
   formatStamp,
@@ -52,10 +52,13 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** @param {string} command @param {string[]} args @param {string} phase */
-function run(command, args, phase) {
+/** @param {string} command @param {string[]} args @param {string} phase @param {NodeJS.ProcessEnv} [env] */
+function run(command, args, phase, env) {
   const startedAt = performance.now();
-  const result = spawnSync(command, args, { stdio: 'inherit' });
+  const result = spawnSync(command, args, {
+    stdio: 'inherit',
+    ...(env ? { env } : {}),
+  });
   if (reportTimings) {
     console.info(
       `[db-lane] ${phase}: ${((performance.now() - startedAt) / 1_000).toFixed(2)}s`,
@@ -103,6 +106,7 @@ const plan = planGeneration({
   stamp,
   hasClientTs: existsSync(join(GENERATED, 'client.ts')),
   hasClientJs: existsSync(join(GENERATED, 'client.js')),
+  hasKyselyTs: existsSync(join('dist', 'generated', 'kysely', 'types.ts')),
 });
 if (plan === 'skip') {
   console.log('[prisma-generate] inputs unchanged; skipping regeneration.');
@@ -115,10 +119,16 @@ if (plan === 'skip') {
 const require = createRequire(import.meta.url);
 if (plan === 'generate') {
   rmSync(GENERATED, { force: true, recursive: true });
+  // Prisma resolves generator providers from PATH; Bun lays its shims here.
+  const generatorPath = join(process.cwd(), 'node_modules', '.bin');
   run(
     process.execPath,
     [require.resolve('prisma/build/index.js'), 'generate'],
     'Prisma client generation',
+    {
+      ...process.env,
+      PATH: `${generatorPath}${delimiter}${process.env.PATH ?? ''}`,
+    },
   );
 }
 

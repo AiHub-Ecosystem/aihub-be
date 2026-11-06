@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   copyFileSync,
   cpSync,
@@ -40,6 +40,7 @@ const runtimeFiles = [
   'prisma/schema.prisma',
   'scripts/generate/generate-prisma-client.mjs',
   'scripts/generate/prisma-client-stamp.cjs',
+  'scripts/runtime/dev-runner.mjs',
 ];
 const probeName = 'dev-restart-budget-probe';
 const readyMessage = 'Nest application successfully started';
@@ -129,20 +130,49 @@ async function cleanupBenchmark({ child, workspaceRoot, tempParent }) {
   /** @type {unknown} */
   let cleanupError;
   try {
+    if (workspaceRoot) {
+      const runnerPidFile = path.join(workspaceRoot, '.dev-runner.pid');
+      if (existsSync(runnerPidFile)) {
+        try {
+          const runnerPid = Number(readFileSync(runnerPidFile, 'utf8').trim());
+          if (runnerPid && !Number.isNaN(runnerPid)) {
+            process.kill(runnerPid);
+          }
+        } catch {
+          // ignore
+        }
+      }
+      const markersPath = path.join(workspaceRoot, 'app-processes.log');
+      for (const { pid } of appStarts(markersPath)) {
+        try {
+          process.kill(pid);
+        } catch {
+          // ignore
+        }
+      }
+    }
     await stopProcessTree(child);
   } catch (error) {
     cleanupError = error;
   }
   if (workspaceRoot) {
-    try {
-      rmSync(workspaceRoot, { recursive: true, force: true });
-    } catch (error) {
-      cleanupError = cleanupError
-        ? new AggregateError(
-            [cleanupError, error],
-            'Could not remove benchmark files.',
-          )
-        : error;
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      try {
+        rmSync(workspaceRoot, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if (Date.now() >= deadline - 200) {
+          cleanupError = cleanupError
+            ? new AggregateError(
+                [cleanupError, error],
+                'Could not remove benchmark files.',
+              )
+            : error;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
     }
   }
   if (tempParent) {
@@ -168,7 +198,11 @@ function childExited(child) {
   return !child || child.exitCode !== null || child.signalCode !== null;
 }
 
-/** @param {ChildProcess} child @param {number} timeoutMs */
+/**
+ * @param {ChildProcess} child
+ * @param {number} timeoutMs
+ * @returns {Promise<boolean>}
+ */
 function waitForChildExit(child, timeoutMs) {
   if (childExited(child)) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -222,16 +256,21 @@ async function stopProcessTree(child) {
   if (!child || child.pid === undefined) return;
   if (process.platform === 'win32') {
     if (!childExited(child)) {
-      const result = spawnSync(
-        'taskkill',
-        ['/pid', String(child.pid), '/T', '/F'],
-        {
-          stdio: 'ignore',
-        },
-      );
-      if (result.error) throw result.error;
-      if (result.status !== 0 && result.status !== 128) {
-        throw new Error(`taskkill failed with status ${result.status}.`);
+      if (child.stdin && !child.stdin.destroyed) {
+        try {
+          child.stdin.end();
+        } catch {
+          // ignore
+        }
+      }
+      const exited = await waitForChildExit(child, 2000);
+      if (!exited && !childExited(child)) {
+        try {
+          child.kill();
+        } catch {
+          // ignore
+        }
+        await waitForChildExit(child, 1000);
       }
     }
   } else {
@@ -291,10 +330,13 @@ function createRuntimeEnvironment(workspaceRoot, markersPath) {
     ),
     AIHUB_RESTART_BENCHMARK_MARKERS: markersPath,
     PNPM_CONFIG_PM_ON_FAIL: 'ignore',
+    PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: 'false',
+    pnpm_config_verify_deps_before_run: 'false',
+    pnpm_config_pm_on_fail: 'ignore',
   };
   writeFileSync(
     path.join(workspaceRoot, '.npmrc'),
-    'verify-deps-before-run=warn\nconfirm-modules-purge=false\n',
+    'verify-deps-before-run=false\nconfirm-modules-purge=false\npm-on-fail=ignore\n',
   );
   const preload = '--require=./.restart-benchmark-process.cjs';
   env.NODE_OPTIONS = [env.NODE_OPTIONS, preload].filter(Boolean).join(' ');
@@ -315,7 +357,7 @@ function startDev(workspaceRoot, env) {
   const windows = process.platform === 'win32';
   const configArgs = [
     '--config.pm-on-fail=ignore',
-    '--config.verify-deps-before-run=warn',
+    '--config.verify-deps-before-run=false',
     '--config.confirm-modules-purge=false',
   ];
   const child = spawn(
@@ -330,7 +372,7 @@ function startDev(workspaceRoot, env) {
       env,
       detached: !windows,
       shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     },
   );

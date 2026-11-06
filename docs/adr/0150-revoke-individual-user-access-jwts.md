@@ -1,6 +1,6 @@
 # ADR-0150: Durably revoke individual User Access JWTs
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR-0152](0152-evaluate-in-process-bloom-filter-revocation-cache.md)
 - Date: 2026-11-05
 - Amends: [ADR-0022](0022-aihub-local-user-authentication.md) — the clause that authorization checks account status rather than a `jti` revocation list; [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md) — the statement that AIHUB keeps no User Access JWT revocation list. Logout's existing session behavior and its post-logout token tail remain unchanged.
 - Related: [#518](https://github.com/AiHub-Ecosystem/aihub-be/issues/518), [#488](https://github.com/AiHub-Ecosystem/aihub-be/issues/488), [ADR-0118](0118-postgres-outage-answers-retryable-503.md)

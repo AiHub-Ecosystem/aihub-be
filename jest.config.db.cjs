@@ -25,7 +25,7 @@ module.exports = {
   ],
   // Same reason as the unit lane: NestJS 12 is ESM only (ADR-0047).
   transformIgnorePatterns: [
-    '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|@nestjs/|@fastify/|jose/|.pnpm/cookie|cookie/)',
+    '/node_modules/(?!\\.pnpm/@nestjs\\+|\\.pnpm/@fastify\\+|\\.pnpm/jose|\\.pnpm/kysely|@nestjs/|@fastify/|jose/|kysely/|.pnpm/cookie|cookie/)',
   ],
   testTimeout: 30_000,
   clearMocks: true,
