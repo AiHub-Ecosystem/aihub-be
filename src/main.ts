@@ -55,7 +55,20 @@ export async function bootstrap(): Promise<void> {
   );
   app.useLogger(app.get(PinoNestLogger));
 
-  app.enableShutdownHooks();
+  app.enableShutdownHooks(undefined, { useProcessExit: true });
+
+  if (process.send) {
+    process.on('message', (message) => {
+      if (
+        message === 'shutdown' ||
+        (typeof message === 'object' &&
+          message !== null &&
+          (message as { type?: string }).type === 'shutdown')
+      ) {
+        process.emit('SIGTERM');
+      }
+    });
+  }
 
   const fastify = app.getHttpAdapter().getInstance();
 

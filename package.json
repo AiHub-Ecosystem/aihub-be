@@ -10,7 +10,7 @@
     "build": "node scripts/generate/compile-auth-email-template.mjs && node scripts/generate/clean-dist.cjs && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
     "generate:prisma-client": "node scripts/generate/generate-prisma-client.mjs",
     "generate:migration": "node scripts/generate/generate-migration.mjs",
-    "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && nest start --watch",
+    "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && node scripts/runtime/dev-runner.mjs",
     "start": "node dist/main.js",
     "migrate": "node scripts/cli/migrate.mjs",
     "db:seed": "bun run generate:prisma-client && prisma db seed",
