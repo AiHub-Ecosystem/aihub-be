@@ -28,6 +28,12 @@ on:
       - "ops/vault/README.md"
 
   workflow_dispatch:
+    inputs:
+      run_outbox_evaluation:
+        description: Run the isolated zero-table outbox comparison
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -1136,6 +1142,11 @@ jobs:
           name: image-digest
           path: image-digest.txt
 
+  outbox-evaluation:
+    name: Zero-table Outbox Evaluation
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_outbox_evaluation }}
+    uses: ./.github/workflows/zero-table-outbox-evaluation.yml
+
   # The artifact CD deploys has to be published as well as booted before CI is
   # green. The publisher is intentionally skipped for PRs and manual runs.
 
@@ -1155,6 +1166,7 @@ jobs:
       - coverage
       - image
       - publish-image
+      - outbox-evaluation
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -1173,6 +1185,8 @@ jobs:
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
           PUBLISH_IMAGE_RESULT: ${{ needs.publish-image.result }}
+          OUTBOX_EVALUATION_RESULT: ${{ needs.outbox-evaluation.result }}
+          RUN_OUTBOX_EVALUATION: ${{ inputs.run_outbox_evaluation }}
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
         run: |
@@ -1191,4 +1205,9 @@ jobs:
             test "$PUBLISH_IMAGE_RESULT" = success
           else
             test "$PUBLISH_IMAGE_RESULT" = skipped
+          fi
+          if [ "$RUN_OUTBOX_EVALUATION" = true ]; then
+            test "$OUTBOX_EVALUATION_RESULT" = success
+          else
+            test "$OUTBOX_EVALUATION_RESULT" = skipped
           fi
