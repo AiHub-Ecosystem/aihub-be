@@ -66,3 +66,15 @@ The Organization edge budget shipped at the gateway idempotency boundary, and #8
 The edge policy gives retry-capable operations a measurable Organization-level ceiling while preserving a minimal recovery path for low-volume Organizations. The minimum allowance means the high-volume 1.1x factor is not a universal per-window bound. Speaking and fresh-key retries are not covered by this classifier, and provider-owned retries remain an external unknown.
 
 The numeric per-service retry rate cannot be stated yet without inventing capacity. The accepted implementation target is 10% of the lower confirmed sustainable throughput at the bucket's deployment scope; closing #632 before those measurements would leave its tokens-per-second criterion unverified.
+
+## Implementation update: HTTP/2 protocol replays (#632, 2026-11-06)
+
+Undici 8.12.4 can replay an eligible HTTP/2 stream inside one gateway dispatch.
+These library-owned replays do not reserve another application retry token and
+are not covered by the 10% application retry budget. The locked version bounds
+each request to one GOAWAY replay and one `REFUSED_STREAM` replay; a mixed
+sequence can therefore create two extra streams. The real-client regression
+records gateway calls, stream attempts, service executions, breaker state, and
+retry-budget calls, and covers cancellation and a non-replayable multipart
+request. Keep this as a separate transport bound and rerun the regression when
+Undici changes.
