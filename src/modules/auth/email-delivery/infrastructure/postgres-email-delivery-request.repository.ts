@@ -259,11 +259,11 @@ export class PostgresEmailDeliveryRequestRepository
           : {}),
       },
     });
-    await authQueryRows(client, 'SELECT pg_logical_emit_message($1, $2, $3)', [
-      true,
-      EMAIL_DELIVERY_WAL_MESSAGE_PREFIX,
-      input.id,
-    ]);
+    await authQueryRows(
+      client,
+      'SELECT pg_logical_emit_message($1, $2, $3)::text',
+      [true, EMAIL_DELIVERY_WAL_MESSAGE_PREFIX, input.id],
+    );
   }
 
   async queuedPayloadCiphertexts(

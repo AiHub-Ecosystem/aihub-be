@@ -84,7 +84,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
         transaction: 0,
       },
       {
-        name: 'SELECT pg_logical_emit_message($1, $2, $3)',
+        name: 'SELECT pg_logical_emit_message($1, $2, $3)::text',
         args: [true, 'aihub_email_delivery', input.id],
         transaction: 0,
       },
