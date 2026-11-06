@@ -31,7 +31,8 @@ export function ensureSwcBindingCache(cwd = process.cwd()) {
 
 /**
  * Stops a child application process gracefully by sending an IPC shutdown
- * message (or SIGTERM on POSIX) and awaiting exit before forcing termination.
+ * message (SIGTERM on POSIX only when the child has no IPC channel) and
+ * awaiting exit before forcing termination.
  *
  * @param {ChildProcess | undefined} child
  * @param {number} [timeoutMs=5000]
@@ -50,19 +51,29 @@ export async function stopApp(child, timeoutMs = 5000) {
     child.once('exit', (code, signal) => resolve({ code, signal }));
   });
 
-  if (child.connected) {
-    try {
-      child.send('shutdown');
-    } catch {
-      // IPC channel may already be closing
-    }
-  }
-  if (process.platform !== 'win32') {
+  const signalTerm = () => {
+    if (process.platform === 'win32') return;
     try {
       child.kill('SIGTERM');
     } catch {
       // process may already have exited
     }
+  };
+
+  // A signal sent beside the message pre-empts the child's own shutdown path
+  // (#1629), so SIGTERM is only the way in when IPC cannot carry the request.
+  // ponytail: a connected child that ignores 'shutdown' waits for the SIGKILL
+  // fallback below; add a SIGTERM grace period if such a child appears.
+  if (child.connected) {
+    try {
+      child.send('shutdown', (error) => {
+        if (error) signalTerm();
+      });
+    } catch {
+      signalTerm();
+    }
+  } else {
+    signalTerm();
   }
 
   const fallbackTimer = setTimeout(() => {
