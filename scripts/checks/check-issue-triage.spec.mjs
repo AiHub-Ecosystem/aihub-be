@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { findViolations, parseOpenIssues } from './check-issue-triage.mjs';
+import {
+  findViolations,
+  parseOpenIssues,
+  parseTarget,
+  parseTrackerPages,
+  trackerQuery,
+} from './check-issue-triage.mjs';
 
 /**
  * @param {{labels?: string[], milestone?: {id: number, title: string} | null, pull_request?: object}} [options]
@@ -84,4 +90,51 @@ await test('pull requests are skipped', () => {
     findViolations([issue({ pull_request: {}, labels: [] })]),
     [],
   );
+});
+
+await test('reads a --target issue number', () => {
+  assert.equal(parseTarget(['--target', '1613']), 1613);
+  assert.equal(parseTarget([]), undefined);
+  assert.throws(() => parseTarget(['--target', '0']), /positive issue number/);
+});
+
+await test('queries only the four fields the audit reads', () => {
+  assert.match(trackerQuery, /number/);
+  assert.match(trackerQuery, /title/);
+  assert.match(trackerQuery, /labels\(first:100\)\{nodes\{name\}\}/);
+  assert.match(trackerQuery, /milestone\{number\}/);
+  assert.doesNotMatch(
+    trackerQuery,
+    /\bbody\b|\bcomments\b|\buser\b|\bauthor\b/,
+  );
+  assert.match(trackerQuery, /\$endCursor:String/);
+});
+
+await test('parses narrow paginated GraphQL pages', () => {
+  const page = JSON.stringify({
+    data: {
+      repository: {
+        issues: {
+          nodes: [
+            {
+              number: 1,
+              title: 't',
+              labels: { nodes: [{ name: 'ready-for-agent' }] },
+              milestone: { number: 12 },
+            },
+          ],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(parseTrackerPages(`[${page}]`), [
+    {
+      number: 1,
+      title: 't',
+      labels: [{ name: 'ready-for-agent' }],
+      milestone: { number: 12 },
+    },
+  ]);
 });

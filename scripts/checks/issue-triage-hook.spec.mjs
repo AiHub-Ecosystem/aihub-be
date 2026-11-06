@@ -3,7 +3,12 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { commandFromInput, touchesIssue } from './issue-triage-hook.mjs';
+import {
+  auditArgs,
+  commandFromInput,
+  targetFromInput,
+  touchesIssue,
+} from './issue-triage-hook.mjs';
 
 await test('fires on commands that file or edit an issue', () => {
   assert.equal(
@@ -27,6 +32,40 @@ await test('reads only string commands from the hook input', () => {
   assert.equal(commandFromInput(null), '');
 });
 
+await test('extracts the mutated issue number from command or stdout', () => {
+  assert.equal(
+    targetFromInput({
+      tool_input: { command: 'gh issue edit 1613 --add-label P3' },
+    }),
+    1613,
+  );
+  assert.equal(
+    targetFromInput({
+      tool_input: {
+        command:
+          'gh issue edit https://github.com/AiHub-Ecosystem/aihub-be/issues/1613 --milestone M',
+      },
+    }),
+    1613,
+  );
+  assert.equal(
+    targetFromInput({
+      tool_input: { command: 'gh issue create --title x --body-file b.md' },
+      tool_response: {
+        stdout:
+          'Creating issue in AiHub-Ecosystem/aihub-be\n\nhttps://github.com/AiHub-Ecosystem/aihub-be/issues/1613\n',
+      },
+    }),
+    1613,
+  );
+  assert.equal(
+    targetFromInput({
+      tool_input: { command: 'gh issue create --title x' },
+    }),
+    undefined,
+  );
+});
+
 await test('exits silently for any other command without calling GitHub', () => {
   const result = spawnSync(
     process.execPath,
@@ -39,4 +78,9 @@ await test('exits silently for any other command without calling GitHub', () => 
 
   assert.equal(result.status, 0);
   assert.equal(result.stdout, '');
+});
+
+await test('passes the mutated issue number to a targeted audit', () => {
+  assert.deepEqual(auditArgs(1613), ['--target', '1613']);
+  assert.deepEqual(auditArgs(undefined), []);
 });

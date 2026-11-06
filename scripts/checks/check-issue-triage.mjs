@@ -20,8 +20,8 @@
  *   and unambiguous. A mis-prioritised issue still passes.
  * - Label vocabulary drift: if the role/priority label strings change in the
  *   tracker, CANONICAL_ROLES and the P regex below must be updated to match.
- * - Closed issues, and pull requests (the /issues endpoint returns both; PRs
- *   are filtered out).
+ * - Closed issues, and pull requests (the full audit reads only open issues;
+ *   the targeted audit skips a closed issue).
  *
  * Requires `gh` with a token able to read the repository's issues. On a GitHub
  * runner that is the workflow's GITHUB_TOKEN; locally it is your `gh auth`.
@@ -39,11 +39,15 @@ export const CANONICAL_ROLES = [
 
 const PRIORITY_RE = /^P[0-3]$/;
 const READY_ROLES = new Set(['ready-for-agent', 'ready-for-human']);
+const TARGET_RE = /(?:^|\s)--target\s+([1-9]\d*)(?:\s|$)/;
+
+export const trackerQuery =
+  'query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(states:OPEN,first:100,after:$endCursor){nodes{number title labels(first:100){nodes{name}} milestone{number}} pageInfo{hasNextPage endCursor}}}}';
 
 /** @typedef {{name: string}} GitHubIssueLabel */
 /** @typedef {{number: number, title: string, pull_request?: unknown, milestone?: unknown, labels?: readonly GitHubIssueLabel[] | null}} GitHubIssue */
 /** @typedef {{number: number, title: string, reasons: string[]}} IssueViolation */
-
+/** @typedef {{data?: {repository?: {issues?: {nodes?: readonly Record<string, unknown>[]}}}}} GraphQLPage */
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isRecord(value) {
   return typeof value === 'object' && value !== null;
@@ -52,6 +56,18 @@ function isRecord(value) {
 /** @param {unknown} value @returns {value is GitHubIssueLabel} */
 function isIssueLabel(value) {
   return isRecord(value) && typeof value.name === 'string';
+}
+
+/** @param {readonly string[]} args @returns {number | undefined} */
+export function parseTarget(args) {
+  const match = TARGET_RE.exec(args.join(' '));
+  if (!match) {
+    if (args.includes('--target')) {
+      throw new Error('--target needs a positive issue number');
+    }
+    return undefined;
+  }
+  return Number(match[1]);
 }
 
 /** @param {unknown} value @returns {value is GitHubIssue} */
@@ -80,6 +96,45 @@ export function parseOpenIssues(raw) {
     throw new Error('GitHub issue response contains an invalid issue');
   }
   return issues;
+}
+
+/**
+ * `--paginate --slurp` returns one GraphQL response per page; concatenate
+ * their narrow issue nodes before the existing validation runs.
+ * @param {string} raw
+ * @returns {GitHubIssue[]}
+ */
+export function parseTrackerPages(raw) {
+  const pages = /** @type {unknown} */ (JSON.parse(raw));
+  if (
+    !Array.isArray(pages) ||
+    !pages.every((page) => isRecord(page) && isRecord(page.data))
+  ) {
+    throw new Error('GitHub tracker response must contain issue pages');
+  }
+  const typedPages = /** @type {GraphQLPage[]} */ (pages);
+  /** @type {unknown[]} */
+  const nodes = [];
+  for (const page of typedPages) {
+    const issues = page.data?.repository?.issues;
+    if (!issues || !Array.isArray(issues.nodes)) {
+      throw new Error('GitHub tracker response contains an invalid page');
+    }
+    for (const node of issues.nodes ?? []) nodes.push(node);
+  }
+  return parseOpenIssues(JSON.stringify(normalizeNodes(nodes)));
+}
+
+/** @param {readonly unknown[]} nodes @returns {unknown[]} */
+function normalizeNodes(nodes) {
+  return nodes.map((node) => {
+    const record = isRecord(node) ? node : {};
+    const labels = isRecord(record.labels) ? record.labels : undefined;
+    return {
+      ...record,
+      labels: labels?.nodes,
+    };
+  });
 }
 
 /**
@@ -123,18 +178,53 @@ function repository() {
 }
 
 /** @param {string} repo @returns {GitHubIssue[]} */
-function openIssues(repo) {
+function fullIssues(repo) {
   const raw = execFileSync(
     'gh',
-    ['api', `repos/${repo}/issues?state=open&per_page=100`, '--paginate'],
+    [
+      'api',
+      'graphql',
+      ...repoVariables(repo),
+      '-F',
+      `query=${trackerQuery}`,
+      '--paginate',
+      '--slurp',
+      '--cache',
+      '1h',
+    ],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
-  return parseOpenIssues(raw);
+  return parseTrackerPages(raw);
+}
+
+/** @param {number} number @returns {GitHubIssue[]} */
+function targetIssue(number) {
+  const raw = execFileSync(
+    'gh',
+    [
+      'api',
+      `repos/:owner/:repo/issues/${number}`,
+      '--jq',
+      '{number,title,labels,milestone,state}',
+      // shortcut: a 5s cache may reuse metadata after back-to-back edits; remove it when gh startup drops below 1s.
+      '--cache',
+      '5s',
+    ],
+    { encoding: 'utf8', maxBuffer: 1024 * 1024 },
+  );
+  const issue = /** @type {{state?: string}} */ (JSON.parse(raw));
+  return issue.state === 'open' ? parseOpenIssues(`[${raw.trim()}]`) : [];
+}
+
+/** @param {string} repo @returns {string[]} */
+function repoVariables(repo) {
+  const [owner, name] = repo.split('/');
+  return ['-F', `owner=${owner}`, '-F', `name=${name}`];
 }
 
 async function main() {
-  const repo = repository();
-  const issues = openIssues(repo);
+  const target = parseTarget(process.argv.slice(2));
+  const issues = target ? targetIssue(target) : fullIssues(repository());
   const violations = findViolations(issues);
   if (violations.length === 0) {
     const count = issues.filter((i) => !i.pull_request).length;

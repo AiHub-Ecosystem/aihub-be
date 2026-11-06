@@ -24,16 +24,56 @@ export function commandFromInput(input) {
   return typeof command === 'string' ? command : '';
 }
 
+/** @param {unknown} input @returns {number | undefined} */
+export function targetFromInput(input) {
+  const record =
+    typeof input === 'object' && input !== null
+      ? /** @type {Record<string, unknown>} */ (input)
+      : {};
+  const toolInput = record.tool_input;
+  const command =
+    typeof toolInput === 'object' &&
+    toolInput !== null &&
+    typeof Reflect.get(toolInput, 'command') === 'string'
+      ? /** @type {string} */ (Reflect.get(toolInput, 'command'))
+      : '';
+  const response = record.tool_response;
+  const stdout =
+    typeof response === 'object' &&
+    response !== null &&
+    typeof Reflect.get(response, 'stdout') === 'string'
+      ? /** @type {string} */ (Reflect.get(response, 'stdout'))
+      : '';
+  const edit =
+    /\bgh\s+issue\s+edit\s+(?:[^\s]*\/)?(?:issues\/)?(?:#?)([1-9]\d*)/.exec(
+      command,
+    );
+  const created =
+    /\bgh\s+issue\s+create\b/.test(command) &&
+    /(?:github\.com\/[^\s]+\/issues\/|\bissues\/|#)([1-9]\d*)/.exec(stdout);
+  const match = edit ?? created;
+  return match ? Number(match[1]) : undefined;
+}
+
+/** @param {number | undefined} target @returns {string[]} */
+export function auditArgs(target) {
+  return target ? ['--target', String(target)] : [];
+}
+
 async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
   const parsed = /** @type {unknown} */ (JSON.parse(input || '{}'));
   const command = commandFromInput(parsed);
   if (!touchesIssue(command)) return;
+  const target = targetFromInput(parsed);
 
   const audit = spawnSync(
     process.execPath,
-    [join(dirname(fileURLToPath(import.meta.url)), 'check-issue-triage.mjs')],
+    [
+      join(dirname(fileURLToPath(import.meta.url)), 'check-issue-triage.mjs'),
+      ...auditArgs(target),
+    ],
     { encoding: 'utf8' },
   );
   if (audit.status === 0) return;
