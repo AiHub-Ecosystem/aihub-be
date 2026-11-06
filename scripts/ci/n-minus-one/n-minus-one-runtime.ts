@@ -198,7 +198,11 @@ export function startImage(
       'host',
       '--no-healthcheck',
       '--log-driver',
-      'none',
+      'json-file',
+      '--log-opt',
+      'max-size=5m',
+      '--log-opt',
+      'max-file=1',
       '--name',
       name,
       '--add-host',
@@ -404,6 +408,25 @@ export async function stubState(): Promise<StubState> {
   return (await response.json()) as StubState;
 }
 
+export function safeContainerError(logs: string): string {
+  const line = logs
+    .split(/\r?\n/u)
+    .find((entry) => /\b(error|fatal|exception)\b/iu.test(entry));
+  return (
+    line
+      ?.replace(/(?:postgres|postgresql):\/\/[^\s"']+/giu, '[database URL]')
+      .replace(/\bBearer\s+[^\s,;]+/giu, 'Bearer [redacted]')
+      .replace(
+        /\b(api[_-]?key|token|password|secret|authorization)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;}]+)/giu,
+        '$1=[redacted]',
+      )
+      .replace(
+        /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu,
+        '[JWT]',
+      ) ?? 'no error line in the last 40 log lines'
+  );
+}
+
 export async function waitReady(
   port: number,
   label: string,
@@ -441,7 +464,7 @@ export async function waitReady(
           ['inspect', '--format', '{{json .State}}', containerName],
           true,
         );
-        containerDetails = `container state: ${state}`;
+        containerDetails = `container state: ${state}; startup error: ${safeContainerError(docker(['logs', '--tail', '40', containerName], true))}`;
       } catch {
         // The image can exit before Docker keeps a container to inspect.
       }

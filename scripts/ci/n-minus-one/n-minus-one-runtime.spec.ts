@@ -5,6 +5,7 @@ import {
   API_HOST,
   assertNMinusOneGatePasses,
   request,
+  safeContainerError,
   waitReady,
 } from './n-minus-one-runtime';
 
@@ -16,6 +17,16 @@ it('fails the N-1 gate when a release hold is recorded', () => {
   expect(() =>
     assertNMinusOneGatePasses(['RELEASE HOLD: incompatible JWKS']),
   ).toThrow('N-1 release compatibility failed (1 finding(s))');
+});
+
+it('redacts credentials from a container startup error', () => {
+  expect(
+    safeContainerError(
+      'FATAL failed to connect postgres://user:secret@db:5432/app with Bearer abc and api_key=xyz',
+    ),
+  ).toBe(
+    'FATAL failed to connect [database URL] with Bearer [redacted] and api_key=[redacted]',
+  );
 });
 
 it('sends the configured production host to the isolated image', async () => {
