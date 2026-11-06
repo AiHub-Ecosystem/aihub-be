@@ -428,6 +428,26 @@ export async function waitReady(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${message}; last probe: ${lastProbe}`);
+    const containerName =
+      port === CANDIDATE_PORT
+        ? 'aihub-compat-candidate'
+        : port === PREVIOUS_PORT
+          ? 'aihub-compat-previous'
+          : undefined;
+    let containerDetails = 'container details unavailable';
+    if (containerName !== undefined) {
+      try {
+        const state = docker(
+          ['inspect', '--format', '{{json .State}}', containerName],
+          true,
+        );
+        containerDetails = `container state: ${state}`;
+      } catch {
+        // The image can exit before Docker keeps a container to inspect.
+      }
+    }
+    throw new Error(
+      `${message}; last probe: ${lastProbe}; ${containerDetails}`,
+    );
   }
 }
