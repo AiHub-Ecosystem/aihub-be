@@ -576,6 +576,22 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Enable bounded logical WAL for the database lane
+        shell: bash
+        run: |
+          container_id="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$container_id"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET wal_level = 'logical'"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_replication_slots = '10'"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_wal_senders = '10'"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_slot_wal_keep_size = '512MB'"
+          docker exec --user postgres "$container_id" pg_ctl -D /var/lib/postgresql/data restart --mode fast
+          for attempt in {1..30}; do
+            if docker exec "$container_id" pg_isready -U aihub -d aihub; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+
       # The operator CLI smoke test spawns `scripts/cli/cli.mjs`, which loads its
       # API-key generator and command runners from the build.
       - name: Build application
@@ -670,6 +686,22 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Enable bounded logical WAL for the tenant-isolation lane
+        shell: bash
+        run: |
+          container_id="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$container_id"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET wal_level = 'logical'"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_replication_slots = '10'"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_wal_senders = '10'"
+          docker exec "$container_id" psql -U aihub -d aihub -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_slot_wal_keep_size = '512MB'"
+          docker exec --user postgres "$container_id" pg_ctl -D /var/lib/postgresql/data restart --mode fast
+          for attempt in {1..30}; do
+            if docker exec "$container_id" pg_isready -U aihub -d aihub; then exit 0; fi
+            sleep 1
+          done
+          exit 1
 
       - name: Run the cross-tenant isolation lane
         run: bun run test:tenant-isolation

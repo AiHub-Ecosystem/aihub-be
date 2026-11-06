@@ -1300,6 +1300,9 @@ describe('email outbox dispatch poller', () => {
       // the reservation taken before the call can bound the provider.
       const unreachable: EmailDispatchStorePort = {
         claim: (input) => store.claim(input),
+        readDispatchState: (id) => store.readDispatchState(id),
+        queuedIds: (input) => store.queuedIds(input),
+        readWalSlotHealth: () => store.readWalSlotHealth(),
         reserveAttempt: (input) => store.reserveAttempt(input),
         releaseUnspentAttempt: (input) => store.releaseUnspentAttempt(input),
         markProviderAccepted: async () => {

@@ -1,8 +1,5 @@
 import type {
   EmailCredentialActionabilityPort,
-  EmailCredentialState,
-  EmailDeliveryCancelReason,
-  EmailDeliveryErrorCode,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
   EmailNoticeResolvers,
@@ -26,8 +23,14 @@ import type {
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { EmailProviderTransportError } from '@/modules/auth/email-delivery/application/email-sender.port';
+import {
+  cancelReasonOf,
+  errorCodeOf,
+  isCredentialExpired,
+} from '@/modules/auth/email-delivery/application/send-policy/email-delivery-outcome.policy';
 import { emailProviderRetryAfterMs } from '@/modules/auth/email-delivery/application/send-policy/email-provider-retry-after.policy';
 import { emailDailySendBudgetCategory } from '@/modules/auth/email-delivery/application/send-policy/email-send-daily-budget.policy';
+import { claimEmailDeliveryBatch } from './email-delivery-poller-claim';
 
 /**
  * How long a request this instance could not open waits before any instance
@@ -74,34 +77,6 @@ export interface EmailDeliveryPollerOptions
   readonly onUnrecognisedPayload?: (request: {
     readonly kind: EmailDeliveryRequestRecord['kind'];
   }) => void;
-}
-
-function isTimeout(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'TimeoutError'
-  );
-}
-
-/**
- * Transport errors get one bounded code. HTTP rejection classes are mapped
- * from response metadata separately; provider details stay in the adapter.
- */
-function errorCodeOf(error: unknown): EmailDeliveryErrorCode {
-  return isTimeout(error) ? 'timeout' : 'provider_rejected';
-}
-
-function isCredentialExpired(expiresAt: string, at: Date): boolean {
-  const expiry = Date.parse(expiresAt);
-  return !Number.isFinite(expiry) || expiry <= at.getTime();
-}
-
-function cancelReasonOf(
-  state: Exclude<EmailCredentialState, 'actionable'>,
-): EmailDeliveryCancelReason {
-  return state === 'expired' ? 'credential_expired' : 'not_actionable';
 }
 
 /**
@@ -176,20 +151,25 @@ export class EmailDeliveryPoller {
     );
   }
 
-  async runOnce(): Promise<EmailDispatchSummary> {
+  async runOnce(
+    input: { readonly requestIds?: readonly string[] } = {},
+  ): Promise<EmailDispatchSummary> {
     const maintenance = await this.maintenance.reconcile();
     const claimAt = this.now();
-    const claimed =
+    const claimed = await claimEmailDeliveryBatch(
+      this.store,
+      {
+        owner: this.options.owner,
+        limit: this.batchSize,
+        leaseMs: this.leaseMs,
+        now: claimAt,
+        batchSize: this.batchSize,
+        ...(input.requestIds === undefined ? {} : { ids: input.requestIds }),
+      },
       this.maintenance.hasPendingAttemptReleases ||
-      this.options.shouldStop?.() === true ||
-      claimAt.getTime() < this.providerPausedUntil
-        ? []
-        : await this.store.claim({
-            owner: this.options.owner,
-            limit: this.batchSize,
-            leaseMs: this.leaseMs,
-            now: claimAt,
-          });
+        this.options.shouldStop?.() === true ||
+        claimAt.getTime() < this.providerPausedUntil,
+    );
 
     const summary = {
       claimed: claimed.length,
@@ -241,6 +221,15 @@ export class EmailDeliveryPoller {
     }
     await this.maintenance.reportUnreportedFailures();
     return summary;
+  }
+
+  async reconcile(): Promise<{
+    readonly cancelled: number;
+    readonly failed: number;
+  }> {
+    const result = await this.maintenance.reconcile();
+    await this.maintenance.reportUnreportedFailures();
+    return result;
   }
 
   private async dispatch(

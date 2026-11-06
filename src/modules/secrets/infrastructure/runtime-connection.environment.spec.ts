@@ -10,6 +10,8 @@ function document(): string {
       sandbox_url: 'postgresql://sandbox',
       sandbox_control_plane_read_url: 'postgresql://sandbox-control-read',
       email_send_budget_url: 'postgresql://shared-email-budget',
+      email_wal_url: 'postgresql://email-wal',
+      sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
       pooler_url: 'postgresql://app@pooler/aihub',
       sandbox_pooler_url: 'postgresql://app@pooler/aihub_sandbox',
       control_plane_pooler_url: 'postgresql://app@pooler/aihub_control',
@@ -55,6 +57,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL).toBe(
       'postgresql://shared-email-budget',
     );
+    expect(env.AIHUB_EMAIL_WAL_DATABASE_URL).toBe('postgresql://email-wal');
     expect(env.REDIS_URL).toBe('redis://production/0');
     expect(env.AIHUB_EMAIL_SEND_RATE_REDIS_URL).toBe('redis://shared/2');
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBeUndefined();
@@ -79,6 +82,9 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL).toBe(
       'postgresql://shared-email-budget',
     );
+    expect(env.AIHUB_EMAIL_WAL_DATABASE_URL).toBe(
+      'postgresql://sandbox-email-wal',
+    );
     expect(env.REDIS_URL).toBe('redis://sandbox/1');
     expect(env.AIHUB_EMAIL_SEND_RATE_REDIS_URL).toBe('redis://shared/2');
     expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBe('private-key');
@@ -102,6 +108,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
         'postgresql://app@pooler/aihub_control_read',
       AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
         'postgresql://app@pooler/aihub_email_budget',
+      AIHUB_EMAIL_WAL_DATABASE_URL: 'postgresql://email-wal',
     });
 
     const operatorEnv: NodeJS.ProcessEnv = {
@@ -124,6 +131,9 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(operatorEnv.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL).toBe(
       'postgresql://shared-email-budget',
     );
+    expect(operatorEnv.AIHUB_EMAIL_WAL_DATABASE_URL).toBe(
+      'postgresql://email-wal',
+    );
   });
 
   it('fails closed when PgBouncer is enabled but a role URL is missing', () => {
@@ -137,6 +147,8 @@ describe('loadRuntimeConnectionEnvironment', () => {
         sandbox_url: 'postgresql://sandbox',
         sandbox_control_plane_read_url: 'postgresql://sandbox-control-read',
         email_send_budget_url: 'postgresql://shared-email-budget',
+        email_wal_url: 'postgresql://email-wal',
+        sandbox_email_wal_url: 'postgresql://sandbox-email-wal',
       },
       redis: {
         url: 'redis://production/0',

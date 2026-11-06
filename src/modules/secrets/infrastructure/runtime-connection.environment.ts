@@ -78,6 +78,8 @@ export function loadRuntimeConnectionEnvironment(
       'sandbox_url',
       'sandbox_control_plane_read_url',
       'email_send_budget_url',
+      'email_wal_url',
+      'sandbox_email_wal_url',
       'pooler_url',
       'sandbox_pooler_url',
       'control_plane_pooler_url',
@@ -153,6 +155,11 @@ export function loadRuntimeConnectionEnvironment(
         'PgBouncer email budget URL',
       )
     : directEmailBudgetDatabaseUrl;
+  env.AIHUB_EMAIL_WAL_DATABASE_URL = requiredRecordString(
+    database,
+    scope === 'sandbox' ? 'sandbox_email_wal_url' : 'email_wal_url',
+    scope === 'sandbox' ? 'sandbox email WAL URL' : 'email WAL URL',
+  );
   env.REDIS_URL = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',

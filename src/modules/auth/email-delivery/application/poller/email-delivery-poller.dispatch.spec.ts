@@ -31,6 +31,15 @@ import {
 } from './email-delivery-poller.spec-support';
 
 describe('EmailDeliveryPoller', () => {
+  it('claims only request IDs from committed WAL messages', async () => {
+    const { poller, store } = harness();
+    store.claimResult = [claimed(), claimed({ id: 'edr_other' })];
+
+    await poller.runOnce({ requestIds: [ROW_ID] });
+
+    expect(store.claims[0]?.ids).toEqual([ROW_ID]);
+  });
+
   it('dispatches MFA security notices without checking credential actionability', async () => {
     const payload: EmailDeliveryPayload = { email: 'person@example.com' };
     const { poller, store, sender, credentials } = harness({ payload });

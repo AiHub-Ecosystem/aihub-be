@@ -70,7 +70,7 @@ import {
   pruneExpiredAuthEmailRecipientLimits,
 } from './infrastructure/auth-email-recipient-limit';
 import {
-  EMAIL_OUTBOX_POLL_INTERVAL_MS,
+  EMAIL_OUTBOX_RECONCILE_INTERVAL_MS,
   EmailOutboxPollerScheduler,
   emailOutboxLeaseOwner,
   reportEmailProviderConfigurationFailure,
@@ -78,6 +78,7 @@ import {
   reportUnrecognisedEmailPayload,
 } from './infrastructure/email-outbox-poller.scheduler';
 import { missingQueuedEmailPayloadKeyVersions } from './infrastructure/outbox-store/email-outbox-key-retention';
+import { EmailOutboxWalConsumer } from './infrastructure/outbox-store/email-outbox-wal.consumer';
 import { PostgresEmailDispatchStore } from './infrastructure/outbox-store/postgres-email-dispatch-store';
 import { PostgresEmailOutboxQueueAge } from './infrastructure/outbox-store/postgres-email-outbox-queue-age';
 import { createEmailPayloadCipher } from './infrastructure/payload-cipher/email-payload-cipher';
@@ -255,13 +256,14 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         const store = new PostgresEmailDispatchStore(runtime.prisma);
         return new EmailOutboxPollerScheduler({
           poller,
-          intervalMs: EMAIL_OUTBOX_POLL_INTERVAL_MS,
+          intervalMs: EMAIL_OUTBOX_RECONCILE_INTERVAL_MS,
           backlog: () => store.backlog({ now: new Date() }),
           enabled: configuration.NODE_ENV !== 'test',
           pruneExpiredRecipientLimits: () =>
             pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
           cancellations: () => store.cancellationTimestamps(),
           dailyBudget: () => dailyBudget.usage(),
+          walSlotHealth: () => store.readWalSlotHealth(),
           providerOutageDuration: () =>
             providerOutageCircuit.readOutageDurationMs(),
           verifyRecipientKeyVersions: () =>
@@ -285,6 +287,25 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         EMAIL_PROVIDER_OUTAGE_CIRCUIT,
         RUNTIME_SECRET_PROVIDER,
       ],
+    },
+    {
+      provide: EmailOutboxWalConsumer,
+      inject: [
+        RUNTIME_PRISMA_CLIENT,
+        EmailOutboxPollerScheduler,
+        RUNTIME_CONNECTION_CONFIGURATION,
+      ],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        scheduler: EmailOutboxPollerScheduler,
+        connections: RuntimeConnectionConfigurationPort,
+      ): EmailOutboxWalConsumer =>
+        new EmailOutboxWalConsumer({
+          enabled: connections.emailWalDatabaseUrl !== undefined,
+          replicationUrl: connections.emailWalDatabaseUrl ?? '',
+          store: new PostgresEmailDispatchStore(runtime.prisma),
+          scheduler,
+        }),
     },
   ],
   exports: [EMAIL_OUTBOX, EMAIL_NOTICE_RESOLVERS, EMAIL_SENDER],

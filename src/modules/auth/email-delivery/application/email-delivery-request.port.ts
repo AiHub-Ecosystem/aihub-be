@@ -221,6 +221,21 @@ export interface ClaimEmailDeliveryRequestsInput {
   readonly limit: number;
   readonly leaseMs: number;
   readonly now: Date;
+  readonly ids?: readonly string[];
+}
+
+export interface EmailDeliveryDispatchState {
+  readonly status: EmailDeliveryRequestStatus;
+  readonly attempts: number;
+  readonly lastAttemptAt: Date | null;
+  readonly leaseExpiresAt: Date | null;
+}
+
+export interface EmailOutboxWalSlotHealth {
+  readonly active: boolean;
+  readonly retainedBytes: number;
+  readonly safeBytes: number | null;
+  readonly status: 'reserved' | 'extended' | 'unreserved' | 'lost';
 }
 
 export interface ReleaseUnspentEmailAttemptInput {
@@ -240,6 +255,12 @@ export interface EmailDispatchStorePort {
   claim(
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]>;
+  readDispatchState(id: string): Promise<EmailDeliveryDispatchState | null>;
+  queuedIds(input: {
+    readonly afterId?: string;
+    readonly limit: number;
+  }): Promise<readonly string[]>;
+  readWalSlotHealth(): Promise<EmailOutboxWalSlotHealth | null>;
   /**
    * Counts the attempt before the provider is called, durably, and refuses a row
    * that has used its three. Counting it here rather than in the transition that

@@ -4,15 +4,18 @@ import type {
   ClaimEmailDeliveryRequestsInput,
   ClaimedFailureReport,
   EmailDeliveryCancelReason,
+  EmailDeliveryDispatchState,
   EmailDeliveryErrorCode,
   EmailDeliveryRequestRecord,
   EmailDispatchStorePort,
+  EmailOutboxWalSlotHealth,
   ReleaseUnspentEmailAttemptInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import type { EmailDeliveryBacklogRow } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import type { claimEmailDeliveryRequests } from './email-delivery-claim';
 import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';
+import { readEmailOutboxWalSlotHealth } from './postgres-email-outbox-wal-slot-health';
 
 /**
  * Claims run in a short transaction; dispatch runs outside it, so no database
@@ -28,6 +31,41 @@ export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
     input: ClaimEmailDeliveryRequestsInput,
   ): Promise<readonly EmailDeliveryRequestRecord[]> {
     return this.requests.claim(this.client, input);
+  }
+
+  async readDispatchState(
+    id: string,
+  ): Promise<EmailDeliveryDispatchState | null> {
+    const row = await this.client.emailDeliveryRequest.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        attempts: true,
+        lastAttemptAt: true,
+        leaseExpiresAt: true,
+      },
+    });
+    return row as EmailDeliveryDispatchState | null;
+  }
+
+  async queuedIds(input: {
+    readonly afterId?: string;
+    readonly limit: number;
+  }): Promise<readonly string[]> {
+    const rows = await this.client.emailDeliveryRequest.findMany({
+      where: {
+        status: 'queued',
+        ...(input.afterId === undefined ? {} : { id: { gt: input.afterId } }),
+      },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+      take: input.limit,
+    });
+    return rows.map(({ id }) => id);
+  }
+
+  readWalSlotHealth(): Promise<EmailOutboxWalSlotHealth | null> {
+    return readEmailOutboxWalSlotHealth(this.client);
   }
 
   async markProviderAccepted(input: {

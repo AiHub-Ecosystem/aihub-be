@@ -332,9 +332,8 @@ Credential expiry is different: an increase in queued credentials expiring
 before dispatch is an operational failure signal. The bounded cancellation
 metric labeled by `kind` and `reason` reads durable outbox state, and the alert
 selects only `reason="credential_expired"`. A process restart after the
-database transition does not lose the signal. `summary.cancelled` in the per-pass log line
-(`email outbox pass claimed=... cancelled=N failed=N deferred=N`) remains the
-visibility for routine cancellations.
+database transition does not lose the signal. Routine cancellations remain in
+the durable request status and the bounded cancellation metric.
 
 A credential-bearing request older than the longest credential lifetime (24
 hours) is also cancelled as `credential_expired`, at the start of every pass
@@ -345,8 +344,9 @@ without opening it.
 ## Queue backlog: when dispatch stops
 
 The terminal-failure counter only moves when a request gives up. If no instance
-dispatches at all — the poller is not running or every claim errors — nothing
-gives up, and that counter stays flat. Two gauges cover that case:
+dispatches at all — the WAL consumer is not connected or every targeted claim
+errors — nothing gives up, and that counter stays flat. Queue age and WAL slot
+health cover that case:
 
 | Signal                                                     | Meaning                                              |
 | ---------------------------------------------------------- | ---------------------------------------------------- |
@@ -411,25 +411,22 @@ or expires.
 
 ## Shutdown (#833)
 
-Every instance that serves requests also runs the outbox poller, so a deploy
-stops pollers while they may be mid-pass. Shutdown is ordered so that nothing is
-sent after the connections it needs have closed:
+Every serving instance runs the WAL consumer and may have one targeted dispatch
+in flight. Shutdown stops the replication connection and retry timers while
+the request's provider call finishes before its database clients close:
 
-1. The server begins closing and marks shutdown as begun, before it waits for
-   anything. No new pass starts, and a pass that has claimed nothing yet claims
-   nothing.
-2. A pass in flight finishes the request it has with the provider, records that
-   outcome, and hands the rest of its batch back without spending an attempt
-   (they are claimable again in about five seconds, by this or another instance).
-   The pass counts as background work, so closing the server waits for it inside
-   the background drain of the shutdown budget (the largest request timeout plus 15 seconds) in
-   [deploy-vps.md](deploy-vps.md).
-3. Only then do the Redis clients and the Postgres pools close.
+1. The server marks shutdown as begun. The consumer closes its replication
+   connection and cancels retry timers, so no new targeted claim starts.
+2. A provider call already in flight records its outcome. That work counts
+   toward the background drain in [deploy-vps.md](deploy-vps.md), so the database
+   pool stays open until its durable transition finishes.
+3. Any message without a durable terminal outcome remains unacknowledged and
+   replays from the slot after restart. Only then do Redis and Postgres clients
+   close.
 
-A normal shutdown therefore logs no `email outbox pass failed` line and spends
-no attempt. The pass is bounded: one request with the provider takes at most the
-five-second attempt timeout, plus a few short writes, and handing back the rest of
-the batch is one write per remaining request (at most nine).
+A normal shutdown spends no extra attempt for a message it did not start. One
+provider call takes at most the five-second attempt timeout, plus its short
+durable state writes.
 
 The drain itself has a limit. If background work outlasts that background drain, closing
 the server fails, the process exits with status 1, and the Redis and Postgres close
@@ -572,15 +569,107 @@ protected recovery capacity is first held back. The daily metric reports both
 the shared day's reserved sends and its configured cap. The rule is in
 ops/monitoring/alert.rules.yml and follows the #369 alert receiver routes.
 
+## Logical WAL consumer
+
+The queued request row remains the durable delivery record. The production
+dispatch trigger is a transactional `pg_logical_emit_message` consumed from
+the `aihub_email_delivery` logical slot with `pgoutput`. The slot acknowledges
+a transaction only after its request reaches a durable terminal state. A row
+that is still queued for a retry keeps its WAL commit unacknowledged. Restart
+replays that work; the request ID, database lease, and stable Resend idempotency
+key make the replay safe.
+
+### PostgreSQL and Vault setup
+
+Provision these settings on both the Production and Sandbox databases before
+deploying an image that emits WAL messages:
+
+```sql
+ALTER SYSTEM SET wal_level = 'logical';
+ALTER SYSTEM SET max_replication_slots = '10';
+ALTER SYSTEM SET max_wal_senders = '10';
+ALTER SYSTEM SET max_slot_wal_keep_size = '1GB';
+```
+
+`wal_level`, `max_replication_slots`, and `max_wal_senders` require a PostgreSQL
+restart. Keep the 1 GiB slot cap aligned with the alert thresholds below.
+Create one direct PostgreSQL login per database with `LOGIN REPLICATION`,
+`CONNECT`, and permission to read replication slot health (`pg_monitor`). Put
+its URL in the Vault database bundle as `email_wal_url` or
+`sandbox_email_wal_url`; the app reads it as `AIHUB_EMAIL_WAL_DATABASE_URL` and
+connects directly, bypassing PgBouncer. Do not use a shared Production WAL URL
+for Sandbox.
+
+Create an empty publication and the fixed slot on each database after settings
+are active:
+
+```sql
+CREATE PUBLICATION aihub_email_delivery;
+SELECT *
+FROM pg_create_logical_replication_slot('aihub_email_delivery', 'pgoutput');
+```
+
+The publication has no table members; `messages=true` streams logical
+messages. Keep the publication and slot on the same database as
+`email_delivery_requests`. The application does not create, advance, or drop
+the slot automatically.
+
+### Rollout and normal restart
+
+1. Apply PostgreSQL settings and restart the database. Create the replication
+   login, Vault URLs, publication, and slot.
+2. Deploy the application. The active slot consumer reconciles queued rows once
+   when its replication connection starts, covering requests committed before
+   the slot existed. After that startup reconciliation, committed WAL messages
+   drive dispatch; there is no periodic queued-row claim.
+3. Check `aihub_email_outbox_wal_slot_present = 1`,
+   `aihub_email_outbox_wal_slot_active = 1`, and that
+   `aihub_email_outbox_wal_retained_bytes` stays below 805,306,368 bytes. Check
+   that `aihub_email_outbox_queued` drains and no
+   `EmailOutboxWalSlotUnavailable` alert fires.
+4. On a normal app restart, keep the existing slot. The confirmed LSN replays
+   messages without a durable terminal outcome. Never manually advance the
+   confirmed LSN to clear a backlog.
+
+### Inactive, missing, or lost slot
+
+The `EmailOutboxWalSlotUnavailable` alert fires when the slot is absent, lost,
+unreserved, or has no active consumer. The WAL retention alert fires below 256
+MiB of safe space or above 768 MiB retained. Act before the 1 GiB cap is
+reached; PostgreSQL can invalidate a slot whose required WAL was removed.
+
+1. Check the direct connection URL, the replication role, `wal_level`, and the
+   active replication connection. Use `pg_replication_slots` to inspect
+   `active`, `wal_status`, `restart_lsn`, `confirmed_flush_lsn`, and
+   `safe_wal_size`.
+2. If the same valid slot exists, restore the consumer and let it replay. Do not
+   drop or advance it.
+3. If PostgreSQL reports the slot as `lost`, or the slot is missing, preserve
+   the `email_delivery_requests` table and confirm the application is still
+   emitting transactional messages. Recreate the empty publication if needed,
+   drop only the invalid slot, then create a fresh `pgoutput` slot with the SQL
+   above. When the consumer connects, its startup reconciliation dispatches all
+   still-queued rows; newly committed requests are also present in the new
+   slot. Leases and the stable provider idempotency key protect requests whose
+   prior provider outcome was uncertain.
+4. Verify the new slot is active, the queued-row gauge is falling, and retained
+   WAL is below the warning threshold before closing the incident.
+
+Do not delete queued rows, change their status, run
+`pg_replication_slot_advance`, or raise the WAL cap as a substitute for
+restoring the consumer. Keep the cap finite so an outage cannot consume the
+whole PostgreSQL volume.
+
 ## What never appears in a signal
 
 The dispatch path cannot emit an email address, a token, a message body, a raw
 request body, or a raw provider response. This is structural rather than a matter
 of care at each call site:
 
-- **The event carries three fields**, and a test pins the payload whole rather
-  than field by field, so an address appearing in it fails whether it came from a
-  new field or an edit to the format.
+- **The WAL message carries only the opaque request ID** under a fixed prefix.
+  The repository spec pins the complete transactional message and the database
+  integration spec checks its committed contents, so email data cannot be added
+  to the dispatch signal unnoticed.
 - **The counter has one bounded label**, `kind`, whose five values are fixed in
   `src/common/observability/metrics.ts`. A recipient cannot become a series.
 - **`last_error_code` and `cancel_reason` are CHECK-constrained** to

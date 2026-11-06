@@ -207,10 +207,32 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "a3d7a822424dc0924276dac2541c9b577f815346c0a81a6e3166570a16b5ea9b"
+          rules_sha256: "fb23236fbea0fe10f537a73cc90f6b96992a2b33b9d6bce8e9fea9cb02ca230a"
 
   - name: aihub-email-outbox
     rules:
+      - alert: EmailOutboxWalSlotUnavailable
+        expr: max by (job) (aihub_email_outbox_wal_slot_status{status=~"unreserved|lost|missing"}) > 0 or min by (job) (aihub_email_outbox_wal_slot_active) == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: aihub-operations
+        annotations:
+          summary: "The email logical replication slot cannot advance"
+          description: "The email WAL slot is missing, lost, unreserved, or has no active consumer. Queued rows remain durable; follow the email-outbox slot recovery runbook before recreating the slot."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#logical-wal-consumer
+
+      - alert: EmailOutboxWalRetentionNearLimit
+        expr: aihub_email_outbox_wal_safe_bytes < 268435456 or aihub_email_outbox_wal_retained_bytes > 805306368
+        for: 2m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "The email WAL slot is approaching its retention cap"
+          description: "The slot is close to the configured 1 GiB retention cap. Restore the consumer or pause WAL production using the email-outbox runbook before PostgreSQL invalidates the slot."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/email-outbox.md#logical-wal-consumer
+
       - alert: EmailProviderOutage
         expr: max(aihub_email_provider_outage_duration_seconds) > 300 and on() (sum(aihub_email_outbox_queued) > 0)
         for: 0m

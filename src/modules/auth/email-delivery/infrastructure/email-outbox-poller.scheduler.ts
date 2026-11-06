@@ -20,13 +20,14 @@ import {
   setEmailDailySendBudgetSource,
   setEmailOutboxBacklogSource,
   setEmailOutboxCancellationSource,
+  setEmailOutboxWalHealthSource,
   setEmailProviderOutageDurationSource,
 } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 
-/** How often an instance looks for work. The lease, not this, bounds overlap. */
-export const EMAIL_OUTBOX_POLL_INTERVAL_MS = 5_000;
+/** How often an instance reconciles stale and terminal delivery rows. */
+export const EMAIL_OUTBOX_RECONCILE_INTERVAL_MS = 5_000;
 export const AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface EmailOutboxPollerSchedulerOptions {
@@ -45,6 +46,12 @@ export interface EmailOutboxPollerSchedulerOptions {
   readonly providerOutageDuration?: () => Promise<number>;
   readonly verifyRecipientKeyVersions?: () => Promise<void>;
   readonly readMissingQueuedKeyVersions?: () => Promise<readonly string[]>;
+  readonly walSlotHealth?: () => Promise<{
+    readonly active: boolean;
+    readonly retainedBytes: number;
+    readonly safeBytes: number | null;
+    readonly status: 'reserved' | 'extended' | 'unreserved' | 'lost';
+  } | null>;
 }
 
 /**
@@ -84,6 +91,7 @@ export class EmailOutboxPollerScheduler
   private readonly readMissingQueuedKeyVersions?:
     | (() => Promise<readonly string[]>)
     | undefined;
+  private readonly walSlotHealth?: EmailOutboxPollerSchedulerOptions['walSlotHealth'];
   private timer: NodeJS.Timeout | undefined;
   private cleanupTimer: NodeJS.Timeout | undefined;
   private running = false;
@@ -98,7 +106,7 @@ export class EmailOutboxPollerScheduler
    */
   constructor(options: EmailOutboxPollerSchedulerOptions) {
     this.poller = options.poller;
-    this.intervalMs = options.intervalMs ?? EMAIL_OUTBOX_POLL_INTERVAL_MS;
+    this.intervalMs = options.intervalMs ?? EMAIL_OUTBOX_RECONCILE_INTERVAL_MS;
     this.enabled = options.enabled ?? true;
     this.backlog = options.backlog;
     this.pruneExpiredRecipientLimits = options.pruneExpiredRecipientLimits;
@@ -107,6 +115,7 @@ export class EmailOutboxPollerScheduler
     this.providerOutageDuration = options.providerOutageDuration;
     this.verifyRecipientKeyVersions = options.verifyRecipientKeyVersions;
     this.readMissingQueuedKeyVersions = options.readMissingQueuedKeyVersions;
+    this.walSlotHealth = options.walSlotHealth;
   }
 
   /**
@@ -131,6 +140,9 @@ export class EmailOutboxPollerScheduler
     }
     if (this.providerOutageDuration !== undefined) {
       setEmailProviderOutageDurationSource(this.providerOutageDuration);
+    }
+    if (this.walSlotHealth !== undefined) {
+      setEmailOutboxWalHealthSource(this.walSlotHealth);
     }
     await this.reportMissingQueuedKeyVersions();
     await this.runRecipientKeyGate(true);
@@ -215,6 +227,18 @@ export class EmailOutboxPollerScheduler
     if (this.providerOutageDuration !== undefined) {
       setEmailProviderOutageDurationSource(undefined);
     }
+    if (this.walSlotHealth !== undefined)
+      setEmailOutboxWalHealthSource(undefined);
+  }
+
+  async dispatchRequests(requestIds: readonly string[]): Promise<void> {
+    if (isShuttingDown() || !(await this.runRecipientKeyGate(false))) return;
+    backgroundWorkStarted();
+    try {
+      await this.poller.runOnce({ requestIds });
+    } finally {
+      backgroundWorkSettled();
+    }
   }
 
   /**
@@ -232,19 +256,16 @@ export class EmailOutboxPollerScheduler
     this.running = true;
     backgroundWorkStarted();
     try {
-      const summary = await this.poller.runOnce();
-      if (summary.claimed > 0 || summary.cancelled > 0 || summary.failed > 0) {
+      const summary = await this.poller.reconcile();
+      if (summary.cancelled > 0 || summary.failed > 0) {
         this.logger.log({
-          event: 'email_outbox_pass_completed',
-          claimed: summary.claimed,
-          provider_accepted: summary.providerAccepted,
+          event: 'email_outbox_reconciliation_completed',
           cancelled: summary.cancelled,
           failed: summary.failed,
-          deferred: summary.deferred,
         });
       }
     } catch {
-      this.logger.error({ event: 'email_outbox_pass_failed' });
+      this.logger.error({ event: 'email_outbox_reconciliation_failed' });
     } finally {
       this.running = false;
       backgroundWorkSettled();

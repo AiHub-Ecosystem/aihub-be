@@ -42,6 +42,7 @@ import {
 } from '@/modules/auth/shared/infrastructure/auth-row';
 import { claimEmailDeliveryRequests } from './outbox-store/email-delivery-claim';
 import { CANCEL_STALE_EMAIL_DELIVERY_REQUESTS_SQL } from './outbox-store/email-delivery-stale-cancellation';
+import { EMAIL_DELIVERY_WAL_MESSAGE_PREFIX } from './outbox-store/email-delivery-wal.constants';
 
 /**
  * A request that spent its last attempt but whose outcome was never written:
@@ -258,6 +259,11 @@ export class PostgresEmailDeliveryRequestRepository
           : {}),
       },
     });
+    await authQueryRows(client, 'SELECT pg_logical_emit_message($1, $2, $3)', [
+      true,
+      EMAIL_DELIVERY_WAL_MESSAGE_PREFIX,
+      input.id,
+    ]);
   }
 
   async queuedPayloadCiphertexts(

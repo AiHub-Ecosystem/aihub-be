@@ -156,6 +156,8 @@ const bundles = [
       'sandbox_url',
       'sandbox_control_plane_read_url',
       'email_send_budget_url',
+      'email_wal_url',
+      'sandbox_email_wal_url',
     ],
     'database',
     [

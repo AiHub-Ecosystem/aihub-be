@@ -122,7 +122,8 @@ validates its capacity evidence and approvals, then writes the separate
 gate in the deployment runbook is met. The credential
 directory must also contain `database.json`, `redis.json`, and
 `sandbox-assertion.json` with the flat keys used by the connection template.
-`database.json` contains `url`, `sandbox_url`, and
+`database.json` contains `url`, `sandbox_url`, `email_wal_url`,
+`sandbox_email_wal_url`, and
 `sandbox_control_plane_read_url`. The last value is a separate least-privilege
 Postgres login for the sandbox process: it can select the Organization,
 API-key, and identity-configuration columns used for request authentication,
@@ -136,6 +137,10 @@ same Production database through a dedicated login with access only to
 email_daily_send_budgets. The daily counter is shared by every deployment using
 the Resend account; provision the same URL in Production and Sandbox, separate
 from the outbox database URLs.
+The WAL URLs are direct PostgreSQL connections for dedicated `LOGIN
+REPLICATION` users with `pg_monitor` access, one per environment database.
+They bypass PgBouncer and are not pooler credentials; `email_wal_url` belongs
+to Production and `sandbox_email_wal_url` belongs to Sandbox.
 
 When approved, `database.json` may additionally include distinct pooler URLs
 for the runtime, control-plane, read, and email-budget connection roles. The

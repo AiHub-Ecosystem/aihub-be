@@ -154,6 +154,12 @@ const fields = {
     format: 'uri',
     requiredIn: PROD_MODES,
   },
+  AIHUB_EMAIL_WAL_DATABASE_URL: {
+    kind: 'string',
+    secret: true,
+    format: 'uri',
+    requiredIn: PROD_MODES,
+  },
   REDIS_URL: {
     kind: 'string',
     secret: true,
@@ -359,6 +365,7 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'CONTROL_PLANE_DATABASE_URL',
     'CONTROL_PLANE_READ_DATABASE_URL',
     'AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL',
+    'AIHUB_EMAIL_WAL_DATABASE_URL',
     'REDIS_URL',
     'AIHUB_EMAIL_SEND_RATE_REDIS_URL',
     'AIHUB_EMAIL_SEND_RATE_LIMIT',
@@ -428,6 +435,7 @@ export interface RuntimeConnectionConfiguration {
   readonly controlPlaneDatabaseUrl: string | undefined;
   readonly controlPlaneReadDatabaseUrl: string | undefined;
   readonly emailDailyBudgetDatabaseUrl: string | undefined;
+  readonly emailWalDatabaseUrl: string | undefined;
   readonly redisUrl: string | undefined;
   readonly emailSendRateRedisUrl: string | undefined;
   readonly sandboxAssertionPrivateKey: string | undefined;
@@ -803,6 +811,7 @@ export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfigurat
       configuration.DATABASE_URL,
     emailDailyBudgetDatabaseUrl:
       configuration.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL,
+    emailWalDatabaseUrl: configuration.AIHUB_EMAIL_WAL_DATABASE_URL,
     redisUrl: configuration.REDIS_URL,
     emailSendRateRedisUrl: configuration.AIHUB_EMAIL_SEND_RATE_REDIS_URL,
     sandboxAssertionPrivateKey:

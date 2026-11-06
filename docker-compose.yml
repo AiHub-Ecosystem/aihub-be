@@ -7,6 +7,16 @@ services:
       POSTGRES_DB: aihub
     ports:
       - "5432:5432"
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_slot_wal_keep_size=512MB
     volumes:
       - aihub-postgres-data:/var/lib/postgresql/data
     healthcheck:

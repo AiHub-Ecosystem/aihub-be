@@ -62,6 +62,8 @@ function connectionSecrets() {
       sandbox_url: database,
       sandbox_control_plane_read_url: database,
       email_send_budget_url: database,
+      email_wal_url: database,
+      sandbox_email_wal_url: database,
     },
     redis: {
       url: redis,

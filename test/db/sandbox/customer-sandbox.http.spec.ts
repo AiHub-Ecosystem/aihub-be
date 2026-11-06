@@ -349,6 +349,7 @@ function createConnectionConfiguration(
     controlPlaneDatabaseUrl: testDatabaseUrl(),
     controlPlaneReadDatabaseUrl,
     emailDailyBudgetDatabaseUrl: testDatabaseUrl(),
+    emailWalDatabaseUrl: testDatabaseUrl(),
     redisUrl: sandboxTestRedisUrl(),
     emailSendRateRedisUrl: sandboxTestRedisUrl(),
     sandboxAssertionPrivateKey: undefined,

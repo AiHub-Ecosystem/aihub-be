@@ -6,14 +6,24 @@ import {
   secondsOf,
 } from './critical-journey-metrics';
 import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
+import {
+  type EmailOutboxBacklogSample,
+  registerEmailOutboxBacklogMetric,
+} from './email-outbox-backlog-metric';
 import { registerEmailOutboxBackpressureMetric } from './email-outbox-backpressure-metric';
 import {
   type EmailDeliveryKindLabel,
   registerEmailOutboxCancellationMetric,
 } from './email-outbox-cancellation-metric';
+import {
+  type EmailOutboxWalSlotHealthSample,
+  registerEmailOutboxWalMetric,
+} from './email-outbox-wal-metric';
 import { registerEmailProviderOutageMetric } from './email-provider-outage-metric';
 import { registerProcessRuntimeMetrics } from './process-runtime-metrics';
 
+export type { EmailOutboxWalSlotHealthSample } from './email-outbox-wal-metric';
+export type { EmailOutboxBacklogSample } from './email-outbox-backlog-metric';
 export type {
   EmailDeliveryKindLabel,
   EmailOutboxCancellationSample,
@@ -28,6 +38,8 @@ export const METRICS_ROUTE_PATH = '/metrics';
 export const registry = new Registry();
 const recordCriticalJourneyMetrics = registerCriticalJourneyMetrics(registry);
 registerProcessRuntimeMetrics(registry);
+const emailOutboxWalMetric = registerEmailOutboxWalMetric(registry);
+const emailOutboxBacklogMetric = registerEmailOutboxBacklogMetric(registry);
 
 let objectStorageQueueSource: (() => number) | undefined;
 
@@ -424,83 +436,20 @@ export function recordEmailOutboxUnrecognisedPayload(
   emailOutboxUnrecognisedPayloadTotal.inc({ kind });
 }
 
-let emailOutboxBacklogKindLabels: readonly EmailDeliveryKindLabel[] = [
-  'unknown',
-];
-
-// A series that first appears at 1 has no earlier sample, so Prometheus'
-// `increase()` reads the first failure of a kind after a restart as 0 and the
-// terminal-failure alert would stay silent. Exposing every kind at 0 avoids that.
-export interface EmailOutboxBacklogSample {
-  readonly kind: EmailDeliveryKindLabel;
-  readonly queued: number;
-  readonly oldestAgeSeconds: number;
+export function setEmailOutboxWalHealthSource(
+  source: (() => Promise<EmailOutboxWalSlotHealthSample | null>) | undefined,
+): void {
+  emailOutboxWalMetric.setSource(source);
 }
-
-type EmailOutboxBacklogSource = () => Promise<
-  readonly EmailOutboxBacklogSample[]
->;
-
-let emailOutboxBacklogSource: EmailOutboxBacklogSource | undefined;
-let pendingBacklogRead: Promise<void> | undefined;
-
-/**
- * Reads the queue once per scrape for both gauges. The terminal-failure
- * counter only moves when a request gives up, so it cannot see dispatch that
- * has stopped altogether; these are read from the table at scrape time for
- * exactly that reason. A failed read drops the series rather than repeating the
- * last value, because a stale "nothing waiting" is the reading that hides an
- * outage.
- */
-function readEmailOutboxBacklog(): Promise<void> {
-  const source = emailOutboxBacklogSource;
-  if (source === undefined) return Promise.resolve();
-  pendingBacklogRead ??= (async () => {
-    try {
-      const samples = await source();
-      for (const kind of emailOutboxBacklogKindLabels) {
-        const sample = samples.find((entry) => entry.kind === kind);
-        emailOutboxQueued.set({ kind }, sample?.queued ?? 0);
-        emailOutboxOldestAge.set({ kind }, sample?.oldestAgeSeconds ?? 0);
-      }
-    } catch {
-      emailOutboxQueued.reset();
-      emailOutboxOldestAge.reset();
-    } finally {
-      pendingBacklogRead = undefined;
-    }
-  })();
-  return pendingBacklogRead;
-}
-
-const emailOutboxQueued = new Gauge({
-  name: 'aihub_email_outbox_queued',
-  help: 'Email Delivery Requests queued, including rows with unknown kinds.',
-  labelNames: ['kind'],
-  registers: [registry],
-  collect: readEmailOutboxBacklog,
-});
-
-const emailOutboxOldestAge = new Gauge({
-  name: 'aihub_email_outbox_oldest_queued_age_seconds',
-  help: 'Age of the oldest Email Delivery Request still waiting for dispatch.',
-  labelNames: ['kind'],
-  registers: [registry],
-  collect: readEmailOutboxBacklog,
-});
 
 /**
  * Registers where the backlog gauges read from. Only the process that owns an
  * outbox registers one; until then the gauges expose no series.
  */
 export function setEmailOutboxBacklogSource(
-  source: EmailOutboxBacklogSource | undefined,
+  source: (() => Promise<readonly EmailOutboxBacklogSample[]>) | undefined,
 ): void {
-  emailOutboxBacklogSource = source;
-  if (source === undefined) {
-    emailOutboxQueued.reset();
-    emailOutboxOldestAge.reset();
-  }
+  emailOutboxBacklogMetric.setSource(source);
 }
 
 export const setEmailOutboxCancellationSource =
@@ -519,7 +468,7 @@ export function registerEmailDeliveryMetrics(
   kinds: readonly EmailDeliveryKindLabel[],
   backpressureKinds: readonly EmailDeliveryKindLabel[],
 ): void {
-  emailOutboxBacklogKindLabels = [...kinds, 'unknown'];
+  emailOutboxBacklogMetric.setLabels(kinds);
   for (const kind of kinds) {
     emailDeliveryFailedTotal.inc({ kind }, 0);
     emailOutboxUnrecognisedPayloadTotal.inc({ kind }, 0);

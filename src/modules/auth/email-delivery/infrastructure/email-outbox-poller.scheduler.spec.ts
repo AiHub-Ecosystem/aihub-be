@@ -29,12 +29,7 @@ class ControllablePoller {
     failed: number;
     deferred: number;
   }> {
-    this.calls += 1;
-    if (this.holdOpen) {
-      await new Promise<void>((resolve) => {
-        this.release = resolve;
-      });
-    }
+    await this.reconcile();
     return {
       claimed: 1,
       providerAccepted: 1,
@@ -42,6 +37,16 @@ class ControllablePoller {
       failed: 0,
       deferred: 0,
     };
+  }
+
+  async reconcile(): Promise<{ cancelled: number; failed: number }> {
+    this.calls += 1;
+    if (this.holdOpen) {
+      await new Promise<void>((resolve) => {
+        this.release = resolve;
+      });
+    }
+    return { cancelled: 0, failed: 0 };
   }
 
   finish(): void {

@@ -21,6 +21,8 @@ describe('runtime configuration', () => {
     AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
     AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
       'postgres://budget:fake@db.test.invalid/aihub',
+    AIHUB_EMAIL_WAL_DATABASE_URL:
+      'postgres://email-wal:fake@db.test.invalid/aihub',
     AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
     AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
     AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
@@ -410,6 +412,8 @@ describe('runtime configuration', () => {
         AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
         AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL:
           'postgres://budget:fake@db.test.invalid/aihub',
+        AIHUB_EMAIL_WAL_DATABASE_URL:
+          'postgres://email-wal:fake@db.test.invalid/aihub',
         AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
         AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
         AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',

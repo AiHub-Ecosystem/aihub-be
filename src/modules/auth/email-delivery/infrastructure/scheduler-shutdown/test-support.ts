@@ -40,6 +40,14 @@ export class HeldPoller {
     return SUMMARY;
   }
 
+  async reconcile(): Promise<{
+    readonly cancelled: number;
+    readonly failed: number;
+  }> {
+    const { cancelled, failed } = await this.runOnce();
+    return { cancelled, failed };
+  }
+
   finish(): void {
     this.release?.();
   }
