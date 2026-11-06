@@ -1,4 +1,4 @@
-import './config/load-local-environment';
+import './config/bootstrap-local-environment';
 import './config/bootstrap-runtime-configuration';
 import { GracefulFastifyAdapter } from './common/http/graceful-fastify-adapter';
 import {

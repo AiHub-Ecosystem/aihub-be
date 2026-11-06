@@ -35,7 +35,3 @@ export function loadLocalEnvironment(
   }
   process.loadEnvFile(envFile);
 }
-
-// This entrypoint import runs before telemetry and application modules read
-// their environment.
-loadLocalEnvironment();
