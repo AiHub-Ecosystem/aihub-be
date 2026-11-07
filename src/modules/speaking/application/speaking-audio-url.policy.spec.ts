@@ -15,7 +15,6 @@ describe('Speaking audio URL policy', () => {
     `${ownAsset}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abc%2Fdef`,
     'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
     'https://s3.wispace.app/aihub-speaking-samples/speaking-samples/part-1/sample.webm?X-Amz-Signature=abc%2Fdef',
-    ownAsset.replace('s3.wispace.app', 'S3.WISPACE.APP'),
   ])('accepts approved URL family %s', (url) => {
     expect(isApprovedSpeakingAudioUrl(url, options)).toEqual({
       approved: true,
@@ -65,6 +64,18 @@ describe('Speaking audio URL policy', () => {
     ],
     [
       'https://s3.wispace.app:8443/aihub-speaking-recordings/orgs/org_acme/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original',
+      'malformed',
+    ],
+    [
+      'https://s3.wispace.app:443/aihub-speaking-recordings/orgs/org_acme/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original',
+      'malformed',
+    ],
+    [
+      'https://S3.WISPACE.APP/aihub-speaking-recordings/orgs/org_acme/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original',
+      'malformed',
+    ],
+    [
+      'https://s3.wispace.app\\\\prefix/aihub-speaking-recordings/orgs/org_acme/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original',
       'malformed',
     ],
     [

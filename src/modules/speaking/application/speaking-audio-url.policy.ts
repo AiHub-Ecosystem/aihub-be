@@ -46,8 +46,13 @@ export function isApprovedSpeakingAudioUrl(
     return rejected('malformed');
   }
 
-  const raw = /^https:\/\/[^/?#]*(?<path>\/[^?#]*)?(?:\?[^#]*)?$/i.exec(value);
-  if (raw === null) return rejected('malformed');
+  const raw =
+    /^https:\/\/(?<authority>[^/?#]*)(?<path>\/[^?#]*)?(?:\?[^#]*)?$/i.exec(
+      value,
+    );
+  if (raw === null || raw.groups?.authority !== SPEAKING_AUDIO_URL_HOST) {
+    return rejected('malformed');
+  }
   const rawPath = raw.groups?.path ?? '';
   if (
     /[%\\]/.test(rawPath) ||

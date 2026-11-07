@@ -40,7 +40,7 @@ export type PublicApiMajorDef =
 export const PUBLIC_API_MAJORS: readonly PublicApiMajorDef[] = [
   {
     major: 1,
-    contractVersion: '1.8.0',
+    contractVersion: '1.8.1',
     status: 'supported',
     releasedAt: '2026-11-02',
     // ADR-0127: the successor release publishes the predecessor's sunset, at
@@ -53,7 +53,7 @@ export const PUBLIC_API_MAJORS: readonly PublicApiMajorDef[] = [
   },
   {
     major: 2,
-    contractVersion: '2.5.1',
+    contractVersion: '2.5.0',
     status: 'supported',
     releasedAt: '2026-11-02',
   },
