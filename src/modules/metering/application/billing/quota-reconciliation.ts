@@ -266,7 +266,12 @@ export class QuotaReconciliationService {
         (options.driftThresholdFraction ?? 0) * snapshot.billableCount,
       );
       const needsCorrection = drift > threshold;
-      if (needsCorrection && options.dryRun !== true) {
+      // Without a threshold the run is the exact operator/nightly overwrite: it
+      // rewrites every key, which also materialises zero counters and renews TTL.
+      const exactOverwrite =
+        options.driftThresholdAbs === undefined &&
+        options.driftThresholdFraction === undefined;
+      if ((exactOverwrite || needsCorrection) && options.dryRun !== true) {
         try {
           await this.counterPort.overwrite({
             organizationId: snapshot.organizationId,

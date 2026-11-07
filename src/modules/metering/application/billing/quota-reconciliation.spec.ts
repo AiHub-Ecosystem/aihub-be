@@ -180,6 +180,7 @@ describe('QuotaReconciliationService', () => {
     await service.reconcile('2026-09', (event) => events.push(event));
 
     expect(counter.writes).toEqual([
+      { organizationId: 'org_alpha', month: '2026-09', count: 0 },
       { organizationId: 'org_zulu', month: '2026-09', count: 3 },
     ]);
     expect(events).toEqual([
@@ -301,7 +302,28 @@ describe('QuotaReconciliationService', () => {
     });
 
     expect(counter.values.get('org_alpha:2026-09')).toBe(4);
-    expect(counter.writes).toHaveLength(1);
+    expect(counter.writes).toHaveLength(2);
+    expect(counter.writes[0]).toEqual(counter.writes[1]);
+  });
+
+  it('skips the write below the threshold but still rewrites every key without one', async () => {
+    const source = new FakeSnapshotPort([
+      {
+        organizationId: 'org_alpha',
+        monthlyRequestQuota: 100,
+        billableRequestCount: 0,
+      },
+    ]);
+    const counter = new FakeCounter();
+    const service = new QuotaReconciliationService(source, counter, now);
+
+    await service.reconcile('2026-09', undefined, { driftThresholdAbs: 0 });
+    expect(counter.writes).toHaveLength(0);
+
+    await service.reconcile('2026-09');
+    expect(counter.writes).toEqual([
+      { organizationId: 'org_alpha', month: '2026-09', count: 0 },
+    ]);
   });
 
   it('reports and repairs an overcount as request-unit drift', async () => {

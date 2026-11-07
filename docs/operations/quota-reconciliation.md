@@ -85,8 +85,9 @@ and overwrite can be lost temporarily; the next pass repairs it from durable
 usage.
 
 The background scrubber uses the configured drift threshold before writing.
-The manual `quota:reconcile` command repairs any nonzero difference, making it
-the operator path for exact reconciliation and retained-month backfills.
+The manual `quota:reconcile` command has no threshold: it rewrites every key,
+including zero counters and the 40-day TTL, making it the operator path for
+exact reconciliation and retained-month backfills.
 
 ## Rerun and backfill
 
