@@ -191,8 +191,11 @@ function orderedSnapshots(
         throw new QuotaReconciliationSnapshotError();
       }
 
+      // Graded admission refuses at `count >= quota`, so a count equal to the
+      // quota is over the allowance here too (#1747): the report must agree
+      // with enforcement at the boundary.
       const overQuota =
-        snapshot.billableRequestCount > snapshot.monthlyRequestQuota;
+        snapshot.billableRequestCount >= snapshot.monthlyRequestQuota;
       return {
         organizationId: snapshot.organizationId,
         billableCount: snapshot.billableRequestCount,

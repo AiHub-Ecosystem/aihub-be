@@ -229,6 +229,55 @@ describe('QuotaReconciliationService', () => {
     ]);
   });
 
+  it('reports an organization sitting exactly at its quota as over, matching admission', async () => {
+    const source = new FakeSnapshotPort([
+      {
+        organizationId: 'org_exact',
+        monthlyRequestQuota: 4,
+        billableRequestCount: 4,
+      },
+    ]);
+    const counter = new FakeCounter();
+    const events: QuotaReconciliationEvent[] = [];
+    const service = new QuotaReconciliationService(source, counter, now);
+
+    await service.reconcile('2026-09', (event) => events.push(event));
+
+    expect(events).toEqual([
+      {
+        type: 'reconciled',
+        result: {
+          organizationId: 'org_exact',
+          month: '2026-09',
+          billableCount: 4,
+          quota: 4,
+          overQuota: true,
+          excess: 0,
+        },
+      },
+      {
+        type: 'drift_corrected',
+        organizationId: 'org_exact',
+        month: '2026-09',
+        postgresCount: 4,
+        redisCount: 0,
+        driftRequests: 4,
+        thresholdRequests: 0,
+      },
+      {
+        type: 'summary',
+        month: '2026-09',
+        summary: {
+          reconciled: 1,
+          overQuota: 1,
+          driftedOrganizations: 1,
+          driftRequests: 4,
+          failed: 0,
+        },
+      },
+    ]);
+  });
+
   it('previews the affected counters and drift without overwriting Redis', async () => {
     const source = new FakeSnapshotPort([
       {
