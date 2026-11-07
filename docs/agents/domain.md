@@ -52,7 +52,8 @@ An ADR's statements about an external system (a host, a bucket, a vendor's behav
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts ADR-0007 (Postgres-backed idempotency without distributed
+> locks), but worth reopening because…_
 
 ## Release compatibility
 
