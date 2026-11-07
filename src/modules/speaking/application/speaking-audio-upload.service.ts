@@ -20,6 +20,7 @@ import {
   isSpeakingAudioAssetId,
   isSpeakingAudioContentType,
   speakingAudioObjectKey,
+  speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 
 import type {
@@ -131,7 +132,7 @@ export class SpeakingAudioUploadService
     );
     const signed = await this.storage.createUploadUrl({
       environment: owner.environment,
-      objectKey,
+      objectKey: speakingAudioStagingObjectKey(owner.organizationId, assetId),
       contentType: input.contentType,
       byteSize: input.byteSize,
     });
@@ -178,7 +179,10 @@ export class SpeakingAudioUploadService
 
     const signed = await this.storage.createUploadUrl({
       environment: found.intent.environment,
-      objectKey: found.intent.objectKey,
+      objectKey: speakingAudioStagingObjectKey(
+        found.intent.organizationId,
+        found.intent.assetId,
+      ),
       contentType: found.intent.contentType,
       byteSize: found.intent.byteSize,
     });
@@ -227,47 +231,65 @@ export class SpeakingAudioUploadService
       throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
-    const stored = await this.storage.describeObject(
+    const stagingKey = speakingAudioStagingObjectKey(
+      found.intent.organizationId,
+      found.intent.assetId,
+    );
+    const staging = await this.storage.describeObject(
+      { environment: found.intent.environment, objectKey: stagingKey },
+      input.context.signal,
+    );
+    if (staging === undefined) {
+      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
+    }
+
+    const stagingRefusal = invalidStoredObject(
+      staging.contentType,
+      staging.byteSize,
+      found.intent,
+    );
+    if (stagingRefusal !== undefined) {
+      const current = await this.rejectAndClean(
+        owner,
+        found.intent,
+        stagingKey,
+        input.context.signal,
+        stagingRefusal,
+      );
+      if (current !== undefined) return { asset: current, created: false };
+      throw stagingRefusal;
+    }
+
+    await this.storage.copyObject(
+      {
+        environment: found.intent.environment,
+        sourceObjectKey: stagingKey,
+        destinationObjectKey: found.intent.objectKey,
+      },
+      input.context.signal,
+    );
+    const finalObject = await this.storage.describeObject(
       {
         environment: found.intent.environment,
         objectKey: found.intent.objectKey,
       },
       input.context.signal,
     );
-    if (stored === undefined) {
-      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
-    }
-
-    const refusal = invalidStoredObject(
-      stored.contentType,
-      stored.byteSize,
+    const finalRefusal = invalidStoredObject(
+      finalObject?.contentType,
+      finalObject?.byteSize,
       found.intent,
     );
-    if (refusal !== undefined) {
-      const rejected = await this.repository.rejectIntent({
+    if (finalRefusal !== undefined) {
+      const current = await this.rejectAndClean(
         owner,
-        now: this.now(),
-      });
-      if (!rejected) {
-        const current = await this.repository.findUpload(owner);
-        if (current.kind === 'asset') {
-          return { asset: current.asset, created: false };
-        }
-      } else {
-        try {
-          await this.storage.deleteObject(
-            {
-              environment: found.intent.environment,
-              objectKey: found.intent.objectKey,
-            },
-            input.context.signal,
-          );
-          await this.repository.removeRejectedIntent(owner);
-        } catch {
-          // The rejected intent remains durable so a later sweep can retry.
-        }
-      }
-      throw refusal;
+        found.intent,
+        stagingKey,
+        input.context.signal,
+        finalRefusal,
+      );
+      if (current !== undefined) return { asset: current, created: false };
+      throw finalRefusal;
     }
 
     const acceptedAt = this.now();
@@ -292,14 +314,62 @@ export class SpeakingAudioUploadService
     if (result === 'missing') {
       const current = await this.repository.findUpload(owner);
       if (current.kind === 'asset') {
+        await this.deleteStagingBestEffort(found.intent, stagingKey);
         return { asset: current.asset, created: false };
       }
       throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
+    await this.deleteStagingBestEffort(found.intent, stagingKey);
     return {
       asset,
       created: result === 'created',
     };
+  }
+
+  private async rejectAndClean(
+    owner: SpeakingAudioUploadOwner,
+    intent: SpeakingAudioUploadIntent,
+    stagingKey: string,
+    signal: AbortSignal | undefined,
+    refusal: AppError,
+  ): Promise<SpeakingAudioAsset | undefined> {
+    if (!(await this.repository.rejectIntent({ owner, now: this.now() }))) {
+      const current = await this.repository.findUpload(owner);
+      return current.kind === 'asset' ? current.asset : undefined;
+    }
+
+    try {
+      const outcomes = await Promise.allSettled([
+        this.storage.deleteObject(
+          { environment: intent.environment, objectKey: intent.objectKey },
+          signal,
+        ),
+        this.storage.deleteObject(
+          { environment: intent.environment, objectKey: stagingKey },
+          signal,
+        ),
+      ]);
+      if (outcomes.every((outcome) => outcome.status === 'fulfilled')) {
+        await this.repository.removeRejectedIntent(owner);
+      }
+    } catch {
+      // The rejected intent remains durable so a later sweep can retry.
+    }
+    throw refusal;
+  }
+
+  private async deleteStagingBestEffort(
+    intent: SpeakingAudioUploadIntent,
+    stagingKey: string,
+  ): Promise<void> {
+    try {
+      await this.storage.deleteObject({
+        environment: intent.environment,
+        objectKey: stagingKey,
+      });
+    } catch {
+      // Completion is durable; staging cleanup is best effort.
+    }
   }
 }

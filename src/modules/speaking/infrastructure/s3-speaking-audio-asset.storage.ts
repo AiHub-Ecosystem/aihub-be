@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -16,6 +17,7 @@ import {
   SPEAKING_AUDIO_BUCKETS,
   SPEAKING_AUDIO_UPLOAD_URL_TTL_SECONDS,
   isSpeakingAudioObjectKey,
+  isSpeakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 
@@ -83,6 +85,12 @@ export class S3SpeakingAudioAssetStorage
     readonly byteSize: number;
   }): Promise<{ readonly url: string; readonly expiresAt: Date }> {
     const { signer, bucket } = this.require(input.environment, input.objectKey);
+    if (!isSpeakingAudioStagingObjectKey(input.objectKey)) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
+    }
     const expiresAt = new Date(
       this.now().getTime() + SPEAKING_AUDIO_UPLOAD_URL_TTL_SECONDS * 1_000,
     );
@@ -106,6 +114,46 @@ export class S3SpeakingAudioAssetStorage
         'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
         'Speaking audio storage is unavailable',
         error,
+      );
+    }
+  }
+
+  async copyObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly sourceObjectKey: string;
+      readonly destinationObjectKey: string;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<void> {
+    const { client, bucket } = this.require(
+      input.environment,
+      input.destinationObjectKey,
+    );
+    if (
+      !isSpeakingAudioStagingObjectKey(input.sourceObjectKey) ||
+      !isSpeakingAudioObjectKey(input.destinationObjectKey)
+    ) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
+    }
+    try {
+      await client.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          CopySource: `${bucket}/${input.sourceObjectKey}`,
+          Key: input.destinationObjectKey,
+        }),
+        { abortSignal: signal },
+      );
+    } catch (error) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+        error,
+        signal,
       );
     }
   }
@@ -186,7 +234,10 @@ export class S3SpeakingAudioAssetStorage
         'Speaking audio storage is unavailable',
       );
     }
-    if (!isSpeakingAudioObjectKey(objectKey)) {
+    if (
+      !isSpeakingAudioObjectKey(objectKey) &&
+      !isSpeakingAudioStagingObjectKey(objectKey)
+    ) {
       throw objectStorageUnavailable(
         'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
         'Speaking audio storage is unavailable',

@@ -21,6 +21,15 @@ describe('Speaking audio URL policy', () => {
     });
   });
 
+  it('refuses a staging upload key as a grading URL', () => {
+    expect(
+      isApprovedSpeakingAudioUrl(
+        'https://s3.wispace.app/aihub-speaking-recordings/orgs/org_acme/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/upload',
+        options,
+      ),
+    ).toEqual({ approved: false, reason: 'unapproved_bucket' });
+  });
+
   it.each([
     [
       'https://s3.wispace.app/aihub-speaking-recordings/orgs/org_other/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original',

@@ -68,6 +68,14 @@ export interface SpeakingAudioAssetStoragePort {
       }
     | undefined
   >;
+  copyObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly sourceObjectKey: string;
+      readonly destinationObjectKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
   deleteObject(
     input: {
       readonly environment: SpeakingAudioEnvironment;

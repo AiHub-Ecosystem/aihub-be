@@ -29,7 +29,10 @@ import type {
   SpeakingAudioAsset,
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
-import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import {
+  SPEAKING_AUDIO_MAX_BYTES,
+  speakingAudioStagingObjectKey,
+} from '@/modules/speaking/domain/speaking-audio-asset';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 function uploadUrlBody(response: { json(): unknown }) {
@@ -228,6 +231,16 @@ class FakeAudioAssetStorage implements SpeakingAudioAssetStoragePort {
     };
   }
 
+  async copyObject(input: {
+    readonly environment: 'production' | 'sandbox';
+    readonly sourceObjectKey: string;
+    readonly destinationObjectKey: string;
+  }): Promise<void> {
+    const object = this.objects.get(input.sourceObjectKey);
+    if (object !== undefined)
+      this.objects.set(input.destinationObjectKey, object);
+  }
+
   async describeObject(
     input: {
       readonly environment: 'production' | 'sandbox';
@@ -388,10 +401,13 @@ describe('Speaking Audio upload HTTP flow', () => {
       const intent = repository.intents.get(assetId);
       if (intent === undefined)
         throw new Error('upload intent was not persisted');
-      storage.objects.set(intent.objectKey, {
-        contentType: 'audio/wav',
-        byteSize: 1_024,
-      });
+      storage.objects.set(
+        speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+        {
+          contentType: 'audio/wav',
+          byteSize: 1_024,
+        },
+      );
 
       for (const endpoint of [
         {
@@ -522,7 +538,10 @@ describe('Speaking Audio upload HTTP flow', () => {
     expect(storage.signed).toEqual([
       {
         environment: 'sandbox',
-        objectKey: intent.objectKey,
+        objectKey: speakingAudioStagingObjectKey(
+          intent.organizationId,
+          intent.assetId,
+        ),
         contentType: 'audio/wav',
         byteSize: 1_024,
       },
@@ -674,10 +693,13 @@ describe('Speaking Audio upload HTTP flow', () => {
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
-    storage.objects.set(intent.objectKey, {
-      contentType: 'audio/wav',
-      byteSize: 1_024,
-    });
+    storage.objects.set(
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      {
+        contentType: 'audio/wav',
+        byteSize: 1_024,
+      },
+    );
 
     const first = await app.inject({
       method: 'POST',
@@ -712,7 +734,10 @@ describe('Speaking Audio upload HTTP flow', () => {
 
     expect(repeat.statusCode).toBe(200);
     expect(audioAssetBody(repeat).data).toEqual(firstBody.data);
-    expect(storage.described).toEqual([intent.objectKey]);
+    expect(storage.described).toEqual([
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      intent.objectKey,
+    ]);
     expect(repository.assets.size).toBe(1);
   });
 
@@ -755,10 +780,13 @@ describe('Speaking Audio upload HTTP flow', () => {
     expect(missing.statusCode).toBe(404);
     expect(repository.intents.get(assetId)?.status).toBe('open');
 
-    storage.objects.set(intent.objectKey, {
-      contentType: 'audio/ogg',
-      byteSize: 1_200,
-    });
+    storage.objects.set(
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      {
+        contentType: 'audio/ogg',
+        byteSize: 1_200,
+      },
+    );
     const retried = await app.inject({
       method: 'POST',
       url: `/v1/speaking/audio/uploads/${assetId}/complete`,
@@ -795,7 +823,10 @@ describe('Speaking Audio upload HTTP flow', () => {
       const intent = repository.intents.get(assetId);
       if (intent === undefined)
         throw new Error('upload intent was not persisted');
-      storage.objects.set(intent.objectKey, stored);
+      storage.objects.set(
+        speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+        stored,
+      );
 
       const response = await app.inject({
         method: 'POST',
@@ -804,7 +835,10 @@ describe('Speaking Audio upload HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(expectedStatus);
-      expect(storage.deleted).toEqual([intent.objectKey]);
+      expect(storage.deleted).toEqual([
+        intent.objectKey,
+        speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      ]);
       expect(repository.intents.has(assetId)).toBe(false);
       expect(repository.assets.has(assetId)).toBe(false);
     },
@@ -826,10 +860,13 @@ describe('Speaking Audio upload HTTP flow', () => {
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
-    storage.objects.set(intent.objectKey, {
-      contentType: 'audio/ogg',
-      byteSize: 1_024,
-    });
+    storage.objects.set(
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      {
+        contentType: 'audio/ogg',
+        byteSize: 1_024,
+      },
+    );
     storage.deleteFails = true;
 
     const rejected = await app.inject({

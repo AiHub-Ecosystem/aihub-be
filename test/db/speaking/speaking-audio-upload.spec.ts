@@ -34,7 +34,9 @@ const storage: SpeakingAudioAssetStoragePort = {
     url: 'https://example.test/upload',
     expiresAt: new Date('2026-10-03T04:30:00.000Z'),
   }),
+
   describeObject: async () => undefined,
+  copyObject: async () => undefined,
   deleteObject: async () => undefined,
 };
 

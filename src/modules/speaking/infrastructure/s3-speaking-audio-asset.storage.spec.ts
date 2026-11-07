@@ -3,6 +3,7 @@ import { S3SpeakingAudioAssetStorage } from './s3-speaking-audio-asset.storage';
 
 const KEY =
   'orgs/org_01J00000000000000000000001/speaking/aud_01J00000000000000000000001/original';
+const STAGING_KEY = KEY.replace(/original$/, 'upload');
 
 function storage(
   send: jest.Mock<Promise<unknown>, [unknown]> = jest
@@ -33,7 +34,7 @@ describe('S3SpeakingAudioAssetStorage', () => {
 
     const result = await adapter.createUploadUrl({
       environment: 'production',
-      objectKey: KEY,
+      objectKey: STAGING_KEY,
       contentType: 'audio/wav',
       byteSize: 1_024,
     });
@@ -42,7 +43,8 @@ describe('S3SpeakingAudioAssetStorage', () => {
     expect(url.protocol).toBe('https:');
     expect(url.hostname).toBe('s3.wispace.app');
     expect(url.pathname).toContain('/aihub-speaking-recordings/');
-    expect(url.pathname.endsWith(`/${KEY}`)).toBe(true);
+    expect(url.pathname.endsWith(`/${STAGING_KEY}`)).toBe(true);
+    expect(url.pathname.endsWith(`/${KEY}`)).toBe(false);
     expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
     expect(url.searchParams.get('X-Amz-SignedHeaders')).toContain(
       'content-type',
@@ -51,6 +53,37 @@ describe('S3SpeakingAudioAssetStorage', () => {
       'content-length',
     );
     expect(result.expiresAt).toEqual(new Date('2026-10-03T04:05:00.000Z'));
+  });
+
+  it('copies a staging object to the final key in the same private bucket', async () => {
+    const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({});
+    const adapter = storage(send);
+
+    await adapter.copyObject({
+      environment: 'production',
+      sourceObjectKey: STAGING_KEY,
+      destinationObjectKey: KEY,
+    });
+
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      input: {
+        Bucket: 'aihub-speaking-recordings',
+        CopySource: `aihub-speaking-recordings/${STAGING_KEY}`,
+        Key: KEY,
+      },
+    });
+  });
+
+  it('refuses to presign the final object key', async () => {
+    const adapter = storage();
+    await expect(
+      adapter.createUploadUrl({
+        environment: 'production',
+        objectKey: KEY,
+        contentType: 'audio/wav',
+        byteSize: 1_024,
+      }),
+    ).rejects.toMatchObject({ code: 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE' });
   });
 
   it('selects the isolated Sandbox bucket and returns HEAD metadata', async () => {

@@ -34,3 +34,7 @@ An Audio asset is created only after a client uploads directly to SeaweedFS and 
 - **Create the Audio asset when issuing the upload URL.** Rejected because a URL that is never used would leave a record for an object that does not exist.
 - **Complete without an upload intent.** Rejected because the End-User ID is supplied independently on each request and is not part of the required object key; completion could otherwise attribute the object to another user in the Organization.
 - **Route audio bytes through AIHUB.** Rejected because the client can upload directly, avoiding binary transit through the gateway.
+
+## Update (2026-11-07)
+
+Speaking upload URLs target `orgs/{organizationId}/speaking/{assetId}/upload` in the same private bucket; the durable asset key remains `/original`. Completion checks staging metadata, copies staging to final, checks final metadata, records the asset, then deletes staging best effort. Expired or rejected intent cleanup removes both keys, including a final object left by a crash before the asset row is written. At deploy time, an open intent whose client uploaded to the former `/original` URL has no staging object and receives the existing `NOT_FOUND`; the client requests a fresh URL and uploads again. Refreshed URLs also target staging.
