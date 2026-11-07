@@ -109,7 +109,7 @@ describe('formatQuotaReconciliationEvent', () => {
       }),
     ).toBe(
       JSON.stringify({
-        event: 'quota_reconcile_drift_corrected',
+        event: 'quota_reconciliation_drift_corrected',
         organization_id: 'org_alpha',
         month: '2026-09',
         postgres_count: 42,

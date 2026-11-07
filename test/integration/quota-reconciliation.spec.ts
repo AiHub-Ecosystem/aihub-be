@@ -34,6 +34,7 @@ class InMemoryRedis implements RedisQuotaReconciliationClient {
 }
 
 describe('quota reconciliation after Redis state reset', () => {
+  // Adapter paths have separate unit specs: redis-quota-reconciliation.counter.spec.ts and postgres-quota-reconciliation.repository.spec.ts.
   it('rebuilds a missing active-period counter from durable usage and stays idempotent', async () => {
     const redis = new InMemoryRedis();
     const counter: QuotaCounterOverwritePort =

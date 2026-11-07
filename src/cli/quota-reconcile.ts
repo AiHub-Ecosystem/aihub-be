@@ -45,8 +45,8 @@ export function formatQuotaReconciliationEvent(
     return JSON.stringify({
       event:
         event.type === 'drift_preview'
-          ? 'quota_reconcile_drift_preview'
-          : 'quota_reconcile_drift_corrected',
+          ? 'quota_reconciliation_drift_preview'
+          : 'quota_reconciliation_drift_corrected',
       organization_id: event.organizationId,
       month: event.month,
       postgres_count: event.postgresCount,
