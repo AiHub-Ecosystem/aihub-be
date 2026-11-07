@@ -211,11 +211,11 @@ describe('Postgres pool reconnect backoff (#1608)', () => {
     }) as never);
     const pool = createPostgresPool('integration-test', { max: 5 });
 
-    // Ten concurrent requests against a dead database: five hold slots and
-    // retry inside their acquisition budget, five wait, and every failure
-    // feeds the breaker until it opens.
+    // One hundred concurrent requests against a dead database: five hold
+    // slots and retry inside their acquisition budget, ninety-five wait, and
+    // every failure feeds the breaker until it opens.
     await Promise.all(
-      Array.from({ length: 10 }, () =>
+      Array.from({ length: 100 }, () =>
         expect(pool.connect()).rejects.toBeInstanceOf(Error),
       ),
     );
