@@ -1,5 +1,3 @@
-import { AppError } from '@/common/errors/app-error';
-import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
@@ -8,17 +6,13 @@ import type {
   OrganizationIdentityConfig,
   PublicJsonWebKeySet,
 } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
-import {
-  putBounded,
-  shortenedTtl,
-} from '@/modules/identity/shared/infrastructure/local-cache-policy';
+import { shortenedTtl } from '@/modules/identity/shared/infrastructure/local-cache-policy';
 import type {
   JwksCacheEntry,
   JwksCachePort,
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
-import { identityProviderUnavailable } from '@/modules/identity/user-assertions/application/user-identity-errors';
 
 import {
   type DnsResolverFactory,
@@ -29,8 +23,30 @@ import {
   defaultJwksFetcher,
   fetchRemoteJwks,
 } from './jwks-remote-fetch';
+import {
+  JWKS_COLD_FAILURE_TTL_MS,
+  JWKS_MAX_CONCURRENT_ORGANIZATIONS,
+  JwksCapacityError,
+  checkJwksCapacity,
+  checkJwksCooldown,
+  remainingCooldown,
+  resolveFreshCache,
+  resolveStaticKeySet,
+  setCooldown,
+  translateJwksFetchError,
+} from './jwks-resolution-steps';
 
 export { JWKS_MAX_RESPONSE_BYTES } from './jwks-remote-fetch';
+export {
+  JWKS_COLD_FAILURE_TTL_MS,
+  JWKS_MAX_CONCURRENT_ORGANIZATIONS,
+  JwksCapacityError,
+  checkJwksCapacity,
+  checkJwksCooldown,
+  resolveFreshCache,
+  resolveStaticKeySet,
+  translateJwksFetchError,
+} from './jwks-resolution-steps';
 
 export const JWKS_FRESH_TTL_MS = 15 * 60 * 1_000;
 
@@ -38,42 +54,16 @@ export const JWKS_STALE_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export const JWKS_REFRESH_COOLDOWN_MS = 5 * 60 * 1_000;
 
-export const JWKS_COLD_FAILURE_TTL_MS = 30 * 1_000;
-
-export const JWKS_MAX_CONCURRENT_ORGANIZATIONS = 8;
-
-const MAX_LOCAL_JWKS_COOLDOWNS = 256;
-
-function remainingCooldown(
-  cooldowns: Map<string, number>,
-  key: string,
-  now: number,
-): number {
-  const retryAt = cooldowns.get(key);
-  if (retryAt === undefined) return 0;
-  if (retryAt <= now) {
-    cooldowns.delete(key);
-    return 0;
-  }
-  return Math.ceil(retryAt - now);
-}
-
-function setCooldown(
-  cooldowns: Map<string, number>,
-  key: string,
-  retryAt: number,
-): void {
-  putBounded(cooldowns, key, retryAt, MAX_LOCAL_JWKS_COOLDOWNS);
-}
-
-class JwksCapacityError extends AppError {
-  constructor() {
-    super({
-      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
-      message: 'JWKS source is unavailable',
-      retryable: true,
-    });
-  }
+interface JwksResolutionContext {
+  readonly organizationId: string;
+  readonly configVersion: string;
+  readonly cacheGeneration: string;
+  readonly jwksUrl: string;
+  readonly flightKey: string;
+  readonly cooldownKey: string;
+  readonly cached?: JwksCacheEntry | undefined;
+  readonly forceRefresh?: boolean | undefined;
+  readonly now: number;
 }
 
 export class JwksKeyProvider implements JwksKeyProviderPort {
@@ -117,175 +107,232 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     readonly config: OrganizationIdentityConfig;
     readonly forceRefresh?: boolean;
   }): Promise<PublicJsonWebKeySet> {
-    if (input.config.jwksUrl === null) {
-      if (input.config.publicKeysJwks === null) {
-        throw identityProviderUnavailable();
-      }
-      return input.config.publicKeysJwks;
-    }
+    // 1. Static key-set case
+    const staticKeys = resolveStaticKeySet(input.config);
+    if (staticKeys !== undefined) return staticKeys;
 
     const configVersion = input.config.jwksCacheVersion ?? '1';
     const snapshot = await this.cache.getJwks(
       input.organizationId,
       configVersion,
     );
-    const cacheGeneration = snapshot.generation;
-    const cached = snapshot.entry;
     const now = this.now();
-    const cooldownKey = JSON.stringify([input.organizationId, configVersion]);
-
-    if (
-      !input.forceRefresh &&
-      cached !== undefined &&
-      cached.freshUntil > now
-    ) {
-      return cached.jwks;
-    }
-
-    const flightKey = JSON.stringify([
+    const jwksUrl = input.config.jwksUrl ?? '';
+    const ctx: JwksResolutionContext = {
+      organizationId: input.organizationId,
       configVersion,
-      cacheGeneration,
-      input.config.jwksUrl,
-    ]);
-    const activeFlight = this.flights.get(input.organizationId);
+      cacheGeneration: snapshot.generation,
+      jwksUrl,
+      flightKey: JSON.stringify([configVersion, snapshot.generation, jwksUrl]),
+      cooldownKey: JSON.stringify([input.organizationId, configVersion]),
+      cached: snapshot.entry,
+      forceRefresh: input.forceRefresh,
+      now,
+    };
 
+    // 2. Fresh cache hit
+    const fresh = resolveFreshCache(ctx.cached, ctx.forceRefresh, ctx.now);
+    if (fresh !== undefined) return fresh;
+
+    // 3. Stale-while-revalidate case
+    const stale = this.resolveStaleWhileRevalidate(ctx);
+    if (stale !== undefined) return stale;
+
+    // CRITICAL CHECK ORDER (#1339):
+    // 1) Cooldown check must precede capacity check: on cooldown, an org receives
+    //    an outage/retry hint rather than being rejected by concurrency exhaustion.
+    // 2) Capacity check must precede the forced-refresh lock: full capacity must
+    //    not acquire or block on cross-instance refresh locks.
+
+    // 4. Cooldown check
+    const cooldown = checkJwksCooldown({
+      refreshFailureCooldown: this.refreshFailureCooldown,
+      coldFailureCooldown: this.coldFailureCooldown,
+      cooldownKey: ctx.cooldownKey,
+      now: ctx.now,
+      cached: ctx.cached,
+    });
+    if (cooldown !== undefined) return cooldown;
+
+    // 5. Capacity check
+    const capacity = checkJwksCapacity({
+      organizationId: ctx.organizationId,
+      activeFlights: this.flights,
+      reservations: this.refreshReservations,
+      cached: ctx.cached,
+      now: ctx.now,
+    });
+    if (capacity !== undefined) return capacity;
+
+    // 6. Forced refresh under the refresh lock
+    const forced = await this.resolveForcedRefresh(ctx);
+    if (forced !== undefined) return forced;
+
+    // 7. Fetch-and-cache path with failure translation
+    return this.fetchAndCache(ctx);
+  }
+
+  private resolveStaleWhileRevalidate(
+    ctx: JwksResolutionContext,
+  ): PublicJsonWebKeySet | undefined {
     if (
-      cached !== undefined &&
-      cached.staleUntil > now &&
-      !input.forceRefresh
+      !ctx.forceRefresh &&
+      ctx.cached !== undefined &&
+      ctx.cached.staleUntil > ctx.now
     ) {
       if (
-        remainingCooldown(this.refreshFailureCooldown, cooldownKey, now) === 0
+        remainingCooldown(
+          this.refreshFailureCooldown,
+          ctx.cooldownKey,
+          ctx.now,
+        ) === 0
       ) {
         this.startBackgroundRefresh(
-          input.organizationId,
-          configVersion,
-          input.config.jwksUrl,
-          cacheGeneration,
-          cooldownKey,
+          ctx.organizationId,
+          ctx.configVersion,
+          ctx.jwksUrl,
+          ctx.cacheGeneration,
+          ctx.cooldownKey,
         );
       }
-      return cached.jwks;
+      return ctx.cached.jwks;
     }
+    return undefined;
+  }
 
-    const retryAfterMs = Math.max(
-      remainingCooldown(this.refreshFailureCooldown, cooldownKey, now),
-      remainingCooldown(this.coldFailureCooldown, cooldownKey, now),
-    );
-    if (retryAfterMs > 0) {
-      if (cached !== undefined && cached.staleUntil > now) return cached.jwks;
-      throw identityProviderUnavailable(
-        undefined,
-        outageRetryAfterMs(Math.random, retryAfterMs),
-      );
+  private async resolveForcedRefresh(
+    ctx: JwksResolutionContext,
+  ): Promise<PublicJsonWebKeySet | undefined> {
+    if (!ctx.forceRefresh) {
+      return undefined;
     }
-
+    const { organizationId, flightKey } = ctx;
     if (
-      activeFlight === undefined &&
-      !this.refreshReservations.has(input.organizationId) &&
-      new Set([...this.flights.keys(), ...this.refreshReservations.keys()])
-        .size >= JWKS_MAX_CONCURRENT_ORGANIZATIONS
+      this.flights.has(organizationId) ||
+      !this.reserveRefreshSlot(organizationId, flightKey)
     ) {
-      if (cached !== undefined && cached.staleUntil > now) return cached.jwks;
-      throw new JwksCapacityError();
-    }
-
-    if (
-      input.forceRefresh &&
-      activeFlight === undefined &&
-      this.reserveRefreshSlot(input.organizationId, flightKey)
-    ) {
-      try {
-        const lock = await this.acquireRefreshLock(input.organizationId);
-        if (!lock.available) {
-          if (!this.flights.has(input.organizationId)) {
-            if (
-              remainingCooldown(
-                this.localRefreshCooldown,
-                input.organizationId,
-                now,
-              ) > 0
-            ) {
-              return cached?.jwks ?? { keys: [] };
-            }
-            setCooldown(
-              this.localRefreshCooldown,
-              input.organizationId,
-              now + JWKS_REFRESH_COOLDOWN_MS,
-            );
-          }
-        } else if (!lock.acquired) {
-          const localFlight = this.flights.get(input.organizationId);
-          if (localFlight?.key === flightKey) {
-            return localFlight.promise;
-          }
-          const reread = await this.cache.getJwks(
-            input.organizationId,
-            configVersion,
-          );
-          return reread.generation === cacheGeneration
-            ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
-            : { keys: [] };
-        }
-      } finally {
-        this.releaseRefreshSlot(input.organizationId, flightKey);
-      }
+      return undefined;
     }
 
     try {
-      const jwks = await this.fetchRemoteForOrganization(
-        input.organizationId,
-        input.config.jwksUrl,
-        flightKey,
-      );
-      const refreshedAt = this.now();
-      const entry: JwksCacheEntry = {
-        jwks,
-        freshUntil: refreshedAt + shortenedTtl(JWKS_FRESH_TTL_MS),
-        staleUntil: refreshedAt + shortenedTtl(JWKS_STALE_TTL_MS),
-      };
-      await this.cache
-        .setJwks(input.organizationId, configVersion, cacheGeneration, entry)
-        .catch(() => undefined);
-      this.refreshFailureCooldown.delete(cooldownKey);
-      this.coldFailureCooldown.delete(cooldownKey);
-      return jwks;
-    } catch (error) {
-      if (!(error instanceof JwksCapacityError)) {
-        const hasUsableStale = cached !== undefined && cached.staleUntil > now;
-        setCooldown(
-          hasUsableStale
-            ? this.refreshFailureCooldown
-            : this.coldFailureCooldown,
-          cooldownKey,
-          now +
-            (hasUsableStale
-              ? JWKS_REFRESH_COOLDOWN_MS
-              : JWKS_COLD_FAILURE_TTL_MS),
+      const lock = await this.acquireRefreshLock(organizationId);
+      if (!lock.available) {
+        return this.handleUnavailableRefreshLock(
+          organizationId,
+          ctx.cached,
+          ctx.now,
         );
       }
-      if (cached !== undefined && cached.staleUntil > now) {
-        return cached.jwks;
+      if (!lock.acquired) {
+        return await this.handleUnacquiredRefreshLock(
+          organizationId,
+          ctx.configVersion,
+          ctx.cacheGeneration,
+          ctx.flightKey,
+          ctx.cached,
+        );
       }
-      // A typed refusal is a decision, not an outage: an unsafe address, an
-      // invalid document, or an unavailable source keeps its own code instead of
-      // being collapsed into IDENTITY_PROVIDER_UNAVAILABLE. Only an unexpected
-      // failure is reported as an outage.
-      if (
-        error instanceof AppError &&
-        (error.code === 'IDENTITY_JWKS_URL_UNSAFE' ||
-          error.code === 'IDENTITY_JWKS_INVALID' ||
-          error.code === 'IDENTITY_JWKS_SOURCE_UNAVAILABLE')
-      ) {
-        throw error;
-      }
-      throw identityProviderUnavailable(
-        error,
-        error instanceof JwksCapacityError
-          ? undefined
-          : outageRetryAfterMs(Math.random, JWKS_COLD_FAILURE_TTL_MS),
-      );
+      return undefined;
+    } finally {
+      this.releaseRefreshSlot(organizationId, flightKey);
     }
+  }
+
+  private handleUnavailableRefreshLock(
+    organizationId: string,
+    cached: JwksCacheEntry | undefined,
+    now: number,
+  ): PublicJsonWebKeySet | undefined {
+    if (this.flights.has(organizationId)) {
+      return undefined;
+    }
+    if (remainingCooldown(this.localRefreshCooldown, organizationId, now) > 0) {
+      return cached?.jwks ?? { keys: [] };
+    }
+    setCooldown(
+      this.localRefreshCooldown,
+      organizationId,
+      now + JWKS_REFRESH_COOLDOWN_MS,
+    );
+    return undefined;
+  }
+
+  private async handleUnacquiredRefreshLock(
+    organizationId: string,
+    configVersion: string,
+    cacheGeneration: string,
+    flightKey: string,
+    cached: JwksCacheEntry | undefined,
+  ): Promise<PublicJsonWebKeySet> {
+    const localFlight = this.flights.get(organizationId);
+    if (localFlight?.key === flightKey) {
+      return localFlight.promise;
+    }
+    const reread = await this.cache.getJwks(organizationId, configVersion);
+    return reread.generation === cacheGeneration
+      ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
+      : { keys: [] };
+  }
+
+  private async fetchAndCache(
+    ctx: JwksResolutionContext,
+  ): Promise<PublicJsonWebKeySet> {
+    try {
+      const jwks = await this.fetchRemoteForOrganization(
+        ctx.organizationId,
+        ctx.jwksUrl,
+        ctx.flightKey,
+      );
+      await this.cacheFetchedJwks(
+        ctx.organizationId,
+        ctx.configVersion,
+        ctx.cacheGeneration,
+        ctx.cooldownKey,
+        jwks,
+      );
+      return jwks;
+    } catch (error) {
+      this.recordFetchFailure(error, ctx.cooldownKey, ctx.cached, ctx.now);
+      return translateJwksFetchError(error, ctx.cached, ctx.now);
+    }
+  }
+
+  private async cacheFetchedJwks(
+    organizationId: string,
+    configVersion: string,
+    cacheGeneration: string,
+    cooldownKey: string,
+    jwks: PublicJsonWebKeySet,
+  ): Promise<void> {
+    const refreshedAt = this.now();
+    const entry: JwksCacheEntry = {
+      jwks,
+      freshUntil: refreshedAt + shortenedTtl(JWKS_FRESH_TTL_MS),
+      staleUntil: refreshedAt + shortenedTtl(JWKS_STALE_TTL_MS),
+    };
+    await this.cache
+      .setJwks(organizationId, configVersion, cacheGeneration, entry)
+      .catch(() => undefined);
+    this.refreshFailureCooldown.delete(cooldownKey);
+    this.coldFailureCooldown.delete(cooldownKey);
+  }
+
+  private recordFetchFailure(
+    error: unknown,
+    cooldownKey: string,
+    cached: JwksCacheEntry | undefined,
+    now: number,
+  ): void {
+    if (error instanceof JwksCapacityError) {
+      return;
+    }
+    const hasUsableStale = cached !== undefined && cached.staleUntil > now;
+    setCooldown(
+      hasUsableStale ? this.refreshFailureCooldown : this.coldFailureCooldown,
+      cooldownKey,
+      now +
+        (hasUsableStale ? JWKS_REFRESH_COOLDOWN_MS : JWKS_COLD_FAILURE_TTL_MS),
+    );
   }
 
   private startBackgroundRefresh(

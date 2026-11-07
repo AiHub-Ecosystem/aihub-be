@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import type { OrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type {
   JwksCacheEntry,
@@ -6,11 +7,19 @@ import type {
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import {
+  JWKS_COLD_FAILURE_TTL_MS,
   JWKS_FRESH_TTL_MS,
+  JWKS_MAX_CONCURRENT_ORGANIZATIONS,
   JWKS_MAX_RESPONSE_BYTES,
   JWKS_REFRESH_COOLDOWN_MS,
   JWKS_STALE_TTL_MS,
+  JwksCapacityError,
   JwksKeyProvider,
+  checkJwksCapacity,
+  checkJwksCooldown,
+  resolveFreshCache,
+  resolveStaticKeySet,
+  translateJwksFetchError,
 } from './jwks-key-provider';
 
 const jwks = {
@@ -1189,5 +1198,397 @@ describe('JwksKeyProvider', () => {
     ).resolves.toEqual(jwks);
     expect(fetcher).not.toHaveBeenCalled();
     expect(cache.setCount).toBe(0);
+  });
+
+  describe('check order invariance (#1339)', () => {
+    it('evaluates cooldown check before capacity check', async () => {
+      const cache = new FakeCache();
+      const clock = 10_000;
+      let fetches = 0;
+      let markHeldStarted: (() => void) | undefined;
+      const heldStarted = new Promise<void>((resolve) => {
+        markHeldStarted = resolve;
+      });
+
+      const provider = new JwksKeyProvider(
+        cache,
+        async (url) => {
+          if (url.includes('/held/')) {
+            fetches += 1;
+            if (fetches === JWKS_MAX_CONCURRENT_ORGANIZATIONS) {
+              markHeldStarted?.();
+            }
+            return new Promise<Response>(() => undefined);
+          }
+          return Promise.reject(new Error('provider down'));
+        },
+        publicLookup(),
+        () => clock,
+      );
+
+      // 1. Establish cold failure cooldown for org_cooldown
+      await expect(
+        provider.resolve({
+          organizationId: 'org_cooldown',
+          config: configWithUrl('https://id.acme.edu/cooldown/jwks.json'),
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 503,
+      });
+
+      // 2. Fill concurrent capacity to JWKS_MAX_CONCURRENT_ORGANIZATIONS
+      const held = Array.from(
+        { length: JWKS_MAX_CONCURRENT_ORGANIZATIONS },
+        (_, index) =>
+          provider.validateRemote({
+            organizationId: `org_held_${index}`,
+            url: `https://id.acme.edu/held/${index}`,
+          }),
+      );
+      await heldStarted;
+
+      // 3. Resolve org_cooldown while at full capacity.
+      // Because cooldown is evaluated before capacity, it must fail with IDENTITY_PROVIDER_UNAVAILABLE (cooldown),
+      // NOT with IDENTITY_JWKS_SOURCE_UNAVAILABLE (capacity).
+      await expect(
+        provider.resolve({
+          organizationId: 'org_cooldown',
+          config: configWithUrl('https://id.acme.edu/cooldown/jwks.json'),
+        }),
+      ).rejects.toMatchObject({
+        code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+        httpStatus: 503,
+      });
+
+      void held;
+    });
+
+    it('evaluates capacity check before acquiring forced-refresh lock', async () => {
+      const cache = new FakeCache();
+      const lockSpy = jest.spyOn(cache, 'tryAcquireRefresh');
+      let fetches = 0;
+      let markHeldStarted: (() => void) | undefined;
+      const heldStarted = new Promise<void>((resolve) => {
+        markHeldStarted = resolve;
+      });
+
+      const provider = new JwksKeyProvider(
+        cache,
+        async () => {
+          fetches += 1;
+          if (fetches === JWKS_MAX_CONCURRENT_ORGANIZATIONS) {
+            markHeldStarted?.();
+          }
+          return new Promise<Response>(() => undefined);
+        },
+        publicLookup(),
+      );
+
+      // Fill concurrent capacity to JWKS_MAX_CONCURRENT_ORGANIZATIONS
+      const held = Array.from(
+        { length: JWKS_MAX_CONCURRENT_ORGANIZATIONS },
+        (_, index) =>
+          provider.validateRemote({
+            organizationId: `org_held_${index}`,
+            url: `https://id.acme.edu/held/${index}`,
+          }),
+      );
+      await heldStarted;
+
+      // Forced refresh when at capacity must reject with capacity error BEFORE acquiring the refresh lock
+      await expect(
+        provider.resolve({
+          organizationId: 'org_forced_overflow',
+          config: configWithUrl('https://id.acme.edu/forced/jwks.json'),
+          forceRefresh: true,
+        }),
+      ).rejects.toMatchObject({
+        code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+        retryable: true,
+      });
+      expect(lockSpy).not.toHaveBeenCalled();
+      void held;
+    });
+  });
+});
+
+function expectThrows(action: () => unknown): unknown {
+  try {
+    action();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('expected action to throw');
+}
+
+describe('JwksKeyProvider named resolution step units (#1339)', () => {
+  describe('resolveStaticKeySet', () => {
+    it('returns undefined when jwksUrl is configured', () => {
+      expect(resolveStaticKeySet(remoteConfig)).toBeUndefined();
+    });
+
+    it('returns static keys when jwksUrl is null and publicKeysJwks is present', () => {
+      expect(
+        resolveStaticKeySet({
+          ...remoteConfig,
+          jwksUrl: null,
+          publicKeysJwks: jwks,
+        }),
+      ).toEqual(jwks);
+    });
+
+    it('throws IDENTITY_PROVIDER_UNAVAILABLE when both jwksUrl and publicKeysJwks are null', () => {
+      expect(
+        expectThrows(() =>
+          resolveStaticKeySet({
+            ...remoteConfig,
+            jwksUrl: null,
+            publicKeysJwks: null,
+          }),
+        ),
+      ).toMatchObject({ code: 'IDENTITY_PROVIDER_UNAVAILABLE' });
+    });
+  });
+
+  describe('resolveFreshCache', () => {
+    const cachedEntry: JwksCacheEntry = {
+      jwks,
+      freshUntil: 10_000,
+      staleUntil: 20_000,
+    };
+
+    it('returns cached jwks when fresh and forceRefresh is false', () => {
+      expect(resolveFreshCache(cachedEntry, false, 5_000)).toEqual(jwks);
+      expect(resolveFreshCache(cachedEntry, undefined, 5_000)).toEqual(jwks);
+    });
+
+    it('returns undefined when forceRefresh is true', () => {
+      expect(resolveFreshCache(cachedEntry, true, 5_000)).toBeUndefined();
+    });
+
+    it('returns undefined when freshUntil has passed', () => {
+      expect(resolveFreshCache(cachedEntry, false, 10_001)).toBeUndefined();
+    });
+
+    it('returns undefined when cached is undefined', () => {
+      expect(resolveFreshCache(undefined, false, 5_000)).toBeUndefined();
+    });
+  });
+
+  describe('checkJwksCooldown', () => {
+    const now = 5_000;
+    const cooldownKey = '["org_test","1"]';
+    const staleEntry: JwksCacheEntry = {
+      jwks,
+      freshUntil: 1_000,
+      staleUntil: 10_000,
+    };
+
+    it('returns undefined when no cooldowns are active', () => {
+      const refreshFailureCooldown = new Map<string, number>();
+      const coldFailureCooldown = new Map<string, number>();
+      expect(
+        checkJwksCooldown({
+          refreshFailureCooldown,
+          coldFailureCooldown,
+          cooldownKey,
+          now,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('returns undefined when cooldown timestamp is in the past', () => {
+      const refreshFailureCooldown = new Map([[cooldownKey, now - 10]]);
+      const coldFailureCooldown = new Map<string, number>();
+      expect(
+        checkJwksCooldown({
+          refreshFailureCooldown,
+          coldFailureCooldown,
+          cooldownKey,
+          now,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('serves usable stale keys when cooldown is active', () => {
+      const refreshFailureCooldown = new Map([[cooldownKey, now + 1_000]]);
+      const coldFailureCooldown = new Map<string, number>();
+      expect(
+        checkJwksCooldown({
+          refreshFailureCooldown,
+          coldFailureCooldown,
+          cooldownKey,
+          now,
+          cached: staleEntry,
+        }),
+      ).toEqual(jwks);
+    });
+
+    it('throws IDENTITY_PROVIDER_UNAVAILABLE with jittered hint when cooldown is active without stale keys', () => {
+      const coldFailureCooldown = new Map([[cooldownKey, now + 1_000]]);
+      const refreshFailureCooldown = new Map<string, number>();
+      expect(
+        expectThrows(() =>
+          checkJwksCooldown({
+            refreshFailureCooldown,
+            coldFailureCooldown,
+            cooldownKey,
+            now,
+            random: () => 0.5,
+          }),
+        ),
+      ).toMatchObject({
+        code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+        retryable: true,
+      });
+    });
+  });
+
+  describe('checkJwksCapacity', () => {
+    const now = 5_000;
+    const staleEntry: JwksCacheEntry = {
+      jwks,
+      freshUntil: 1_000,
+      staleUntil: 10_000,
+    };
+
+    it('returns undefined when capacity is below limit', () => {
+      const activeFlights = new Map([['org_1', {}]]);
+      const reservations = new Map<string, string>();
+      expect(
+        checkJwksCapacity({
+          organizationId: 'org_target',
+          activeFlights,
+          reservations,
+          now,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('returns undefined when capacity is at limit but organization already has active flight or reservation', () => {
+      const activeFlights = new Map(
+        Array.from({ length: JWKS_MAX_CONCURRENT_ORGANIZATIONS }, (_, i) => [
+          i === 0 ? 'org_target' : `org_${i}`,
+          {},
+        ]),
+      );
+      const reservations = new Map<string, string>();
+      expect(
+        checkJwksCapacity({
+          organizationId: 'org_target',
+          activeFlights,
+          reservations,
+          now,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('serves usable stale keys when capacity is exhausted', () => {
+      const activeFlights = new Map(
+        Array.from({ length: JWKS_MAX_CONCURRENT_ORGANIZATIONS }, (_, i) => [
+          `org_${i}`,
+          {},
+        ]),
+      );
+      const reservations = new Map<string, string>();
+      expect(
+        checkJwksCapacity({
+          organizationId: 'org_target',
+          activeFlights,
+          reservations,
+          cached: staleEntry,
+          now,
+        }),
+      ).toEqual(jwks);
+    });
+
+    it('throws JwksCapacityError when capacity is exhausted without usable stale keys', () => {
+      const activeFlights = new Map(
+        Array.from({ length: JWKS_MAX_CONCURRENT_ORGANIZATIONS }, (_, i) => [
+          `org_${i}`,
+          {},
+        ]),
+      );
+      const reservations = new Map<string, string>();
+      expect(() =>
+        checkJwksCapacity({
+          organizationId: 'org_target',
+          activeFlights,
+          reservations,
+          now,
+        }),
+      ).toThrow(JwksCapacityError);
+    });
+  });
+
+  describe('translateJwksFetchError', () => {
+    const now = 5_000;
+    const staleEntry: JwksCacheEntry = {
+      jwks,
+      freshUntil: 1_000,
+      staleUntil: 10_000,
+    };
+
+    it('serves usable stale keys regardless of error', () => {
+      expect(
+        translateJwksFetchError(new Error('upstream crash'), staleEntry, now),
+      ).toEqual(jwks);
+      expect(
+        translateJwksFetchError(
+          new AppError({
+            code: 'IDENTITY_JWKS_URL_UNSAFE',
+            message: 'unsafe',
+            retryable: false,
+          }),
+          staleEntry,
+          now,
+        ),
+      ).toEqual(jwks);
+    });
+
+    it.each([
+      'IDENTITY_JWKS_URL_UNSAFE',
+      'IDENTITY_JWKS_INVALID',
+      'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+    ] as const)(
+      'rethrows typed refusal %s unchanged when no usable stale keys',
+      (code) => {
+        const error = new AppError({
+          code,
+          message: 'typed error',
+          retryable: false,
+        });
+        expect(() => translateJwksFetchError(error, undefined, now)).toThrow(
+          error,
+        );
+      },
+    );
+
+    it('rethrows JwksCapacityError as IDENTITY_JWKS_SOURCE_UNAVAILABLE', () => {
+      expect(
+        expectThrows(() =>
+          translateJwksFetchError(new JwksCapacityError(), undefined, now),
+        ),
+      ).toMatchObject({
+        code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      });
+    });
+
+    it('maps unexpected error to IDENTITY_PROVIDER_UNAVAILABLE with retry hint', () => {
+      expect(
+        expectThrows(() =>
+          translateJwksFetchError(
+            new Error('upstream connection reset'),
+            undefined,
+            now,
+            () => 0,
+          ),
+        ),
+      ).toMatchObject({
+        code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+        retryable: true,
+        retryAfterMs: JWKS_COLD_FAILURE_TTL_MS,
+      });
+    });
   });
 });
