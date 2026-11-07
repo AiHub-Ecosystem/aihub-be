@@ -7,8 +7,20 @@ export interface QueryHandle {
 
 /** A fake that answers statements, and opens transactions when it can. */
 export interface QueryFake extends QueryHandle {
-  transaction?<T>(callback: (handle: QueryHandle) => Promise<T>): Promise<T>;
+  transaction?<T>(
+    callback: (handle: QueryHandle) => Promise<T>,
+    options?: unknown,
+  ): Promise<T>;
 }
+
+/**
+ * What a `$executeRawUnsafe` write answers on these two bridges when the
+ * caller did not script a count. Real Prisma returns the affected-row count;
+ * a fake has no engine to count with, so it answers `1` — one row affected,
+ * as if the single statement it stands in for hit. Keep this the only place
+ * the default is named: the two bridges must not drift apart again (#1135).
+ */
+export const DEFAULT_EXECUTE_RAW_COUNT = 1;
 
 function rawMethods(handle: QueryHandle) {
   return {
@@ -16,7 +28,7 @@ function rawMethods(handle: QueryHandle) {
       handle.query(text, values),
     $executeRawUnsafe: async (text: string, ...values: unknown[]) => {
       await handle.query(text, values);
-      return 0;
+      return DEFAULT_EXECUTE_RAW_COUNT;
     },
   };
 }
@@ -28,17 +40,28 @@ function rawMethods(handle: QueryHandle) {
  *
  * Only raw statements and `$transaction` exist on it. A repository that reads
  * through a model delegate needs a fake of its own.
+ *
+ * `$executeRawUnsafe` answers `DEFAULT_EXECUTE_RAW_COUNT`; callers that need
+ * an exact row count must run against the database lane, not a fake. A
+ * `$transaction` callback's `options` (`maxWait`, `timeout`, `isolationLevel`)
+ * are handed to the fake as they are — the fake records them, it does not
+ * enforce them — so a spec can assert a repository asked for a particular
+ * isolation level even though the fake cannot simulate one.
  */
 export function prismaFromQueryFake(fake: QueryFake): PrismaClient {
   return {
     ...rawMethods(fake),
     $transaction: async (
       callback: (transaction: unknown) => Promise<unknown>,
+      options?: unknown,
     ) => {
       if (fake.transaction === undefined) {
         throw new Error('This query fake does not open transactions');
       }
-      return fake.transaction((handle) => callback(rawMethods(handle)));
+      return fake.transaction(
+        (handle) => callback(rawMethods(handle)),
+        options,
+      );
     },
   } as unknown as PrismaClient;
 }
@@ -170,6 +193,8 @@ export class ScriptedPrisma {
   failure: unknown;
   /** How many transactions this client was asked to open. */
   opened = 0;
+  /** The options of each `$transaction` call in issue order. */
+  readonly transactionOptions: unknown[] = [];
 
   private answer(queue: unknown[], position: number, action: string): unknown {
     const scripted = queue[position];
@@ -177,7 +202,7 @@ export class ScriptedPrisma {
       return scripted;
     }
     if (action === '$queryRawUnsafe') return [];
-    if (action === '$executeRawUnsafe') return 1;
+    if (action === '$executeRawUnsafe') return DEFAULT_EXECUTE_RAW_COUNT;
     return action in DEFAULT_ANSWERS ? DEFAULT_ANSWERS[action] : {};
   }
 
@@ -225,10 +250,14 @@ export class ScriptedPrisma {
     return new Proxy(outside, {
       get: (target, property) => {
         if (property === '$transaction') {
-          return async (callback: (tx: unknown) => Promise<unknown>) => {
+          return async (
+            callback: (tx: unknown) => Promise<unknown>,
+            options?: unknown,
+          ) => {
             if (this.failure !== undefined) {
               throw this.failure;
             }
+            this.transactionOptions.push(options);
             const transaction = ++this.opened;
             const queue = this.inside;
             this.inside = [];
