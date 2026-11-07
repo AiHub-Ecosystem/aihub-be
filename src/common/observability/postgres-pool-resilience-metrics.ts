@@ -16,7 +16,7 @@ const backoffDelay = new Histogram({
   name: 'aihub_postgres_pool_backoff_delay_seconds',
   help: 'Decorrelated jittered wait chosen before each PostgreSQL connection retry.',
   labelNames: ['pool'],
-  buckets: [0.01, 0.02, 0.03, 0.045, 0.06, 0.08, 0.1],
+  buckets: [0.01, 0.02, 0.04, 0.07, 0.1],
   registers: [registry],
 });
 
