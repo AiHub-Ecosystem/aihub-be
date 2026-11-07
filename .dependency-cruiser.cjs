@@ -177,14 +177,7 @@ function crossModuleRule() {
     },
     to: {
       path: '^src/modules/(?!$1/)[^/]+/',
-      pathNot: [
-        '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
-        '^src/modules/[^/]+/(application/|.*/application/).*[.]port[.]ts$',
-        ...sharedPrimitivePaths(),
-        ...nestExportPaths(),
-        ...publicModuleApiPaths(),
-        ...nestDecoratorPaths(),
-      ],
+      pathNot: [...seamPathNots('[^/]+'), ...sharedPrimitivePaths()],
     },
   };
 }
@@ -214,12 +207,8 @@ function cliRule() {
       path: '^src/modules/[^/]+/',
       pathNot: [
         '^src/modules/[^/]+/(infrastructure/|.*/infrastructure/)',
-        '^src/modules/[^/]+/[^/]+[.]module[.]ts$',
-        '^src/modules/[^/]+/(application/|.*/application/).*[.]port[.]ts$',
+        ...seamPathNots('[^/]+'),
         ...sharedPrimitivePaths(),
-        ...nestExportPaths(),
-        ...publicModuleApiPaths(),
-        ...nestDecoratorPaths(),
       ],
     },
   };
@@ -269,6 +258,48 @@ function nestExportPaths() {
 /** @returns {string[]} */
 function sharedPrimitivePaths() {
   return discoverModuleSeams().seams.sharedPrimitives;
+}
+
+/**
+ * The seam `pathNot` entries every cross-module rule shares: the target's
+ * module file, its application `*.port.ts` contracts, its `public/` facades,
+ * the files its module publishes through Nest `exports:`, and its Nest
+ * decorators. `toModule` is the target's path prefix - a literal module name
+ * for the #1733 edges, `[^/]+` for the general rules that cover every pair.
+ *
+ * @param {string} toModule
+ * @returns {string[]}
+ */
+function seamPathNots(toModule) {
+  return [
+    `^src/modules/${toModule}/[^/]+[.]module[.]ts$`,
+    `^src/modules/${toModule}/(application/|.*/application/).*[.]port[.]ts$`,
+    ...nestExportPaths(),
+    ...publicModuleApiPaths(),
+    ...nestDecoratorPaths(),
+  ];
+}
+
+/**
+ * #1733: an edge that carries enough cross-module traffic gets its own rule
+ * pinned to the same seam set, so it cannot grow silently through the general
+ * rule's wider exemptions. The general rule's shared fastify-primitive seam is
+ * deliberately not offered on these edges.
+ *
+ * @param {{ name: string, fromPattern: string, toModule: string, comment: string }} options
+ * @returns {{ name: string, severity: string, comment: string, from: { path: string, pathNot: string }, to: { path: string, pathNot: string[] } }}
+ */
+function restrictedEdgeRule({ name, fromPattern, toModule, comment }) {
+  return {
+    name,
+    severity: 'error',
+    comment,
+    from: { path: fromPattern, pathNot: '[.]spec[.]ts$' },
+    to: {
+      path: `^src/modules/${toModule}/`,
+      pathNot: seamPathNots(toModule),
+    },
+  };
 }
 
 module.exports = {
@@ -425,6 +456,28 @@ module.exports = {
           ...nestExportPaths(),
         ],
       },
+    },
+    restrictedEdgeRule({
+      name: 'no-identity-auth-internal-import',
+      fromPattern: '^src/modules/identity/',
+      toModule: 'auth',
+      comment:
+        "Identity reaches Auth only through Auth's published seam, narrowed for this high-volume edge (#1733): the module file, application ports, public/ facades, Nest exports, and Nest decorators.",
+    }),
+    restrictedEdgeRule({
+      name: 'no-business-to-gateway-internal-import',
+      fromPattern: '^src/modules/(writing|speaking)/',
+      toModule: 'gateway',
+      comment:
+        "Writing and Speaking reach Gateway only through Gateway's published seam, narrowed for this high-volume edge (#1733): the module files, application ports, public/ facades, Nest exports, and Nest decorators.",
+    }),
+    {
+      name: 'no-avatar-gateway-import',
+      severity: 'error',
+      comment:
+        'Avatar holds no gateway import and this rule keeps it that way (#1733): every edge into Gateway, seam or not, is a violation.',
+      from: { path: '^src/modules/avatar/', pathNot: '[.]spec[.]ts$' },
+      to: { path: '^src/modules/gateway/' },
     },
     crossModuleRule(),
     cliRule(),

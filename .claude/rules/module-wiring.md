@@ -16,6 +16,7 @@ paths:
 - Import module public APIs, not another module's infrastructure classes or private files.
 - A pure function, constant, type, or interface cannot travel through a Nest `exports:` array, because that publishes providers. When another module needs one, the fix is to move the call behind a port, not to register the value as a provider to satisfy the architecture rule (ADR-0066).
 - The dependency-cruiser rules in [ADR-0066](../../docs/adr/0066-cross-module-imports-are-checked-not-yet-forbidden.md) fail the architecture check for every cross-module or CLI import outside a published seam. They read each module's `exports:` array from source and exempt the file declaring an exported symbol, so publishing a guard makes it reachable; they match by file path, so the exemption covers that file rather than one symbol.
+- The identity-to-auth edge and the writing/speaking-to-gateway edges are pinned to narrower rules (#1733): each crosses only through the module file, application ports, `public/` facades, Nest exports, and Nest decorators — the shared Fastify request primitive is not seam on these edges — and avatar holds no gateway import at all.
 - Keep the dependency direction `presentation -> application -> domain` and `infrastructure -> application`.
 - Avoid circular module imports. If two modules need a behavior, define one application port at the owning boundary.
 - Do not register speculative Speaking, Reading, billing, or async modules without an externally observable behavior.

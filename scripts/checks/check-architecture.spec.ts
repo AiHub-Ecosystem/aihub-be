@@ -73,6 +73,15 @@ const crossModuleRule = rules.find(
 const cliRule = rules.find(
   (rule) => rule.name === 'no-cli-module-internal-import',
 );
+const identityAuthRule = rules.find(
+  (rule) => rule.name === 'no-identity-auth-internal-import',
+);
+const businessGatewayRule = rules.find(
+  (rule) => rule.name === 'no-business-to-gateway-internal-import',
+);
+const avatarGatewayRule = rules.find(
+  (rule) => rule.name === 'no-avatar-gateway-import',
+);
 
 function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
@@ -331,6 +340,191 @@ describe('cross-module import rules', () => {
   });
 });
 
+/**
+ * #1733: two edges carry enough cross-module traffic that the general seam set
+ * is wider than they should be, so each is pinned to a narrower one, and one
+ * edge (avatar to gateway) is pinned to nothing at all. The unit tests here pin
+ * each rule's pattern shape against the real tree's known files; the real-tree
+ * block below pins that the rules stay silent while they match nothing.
+ */
+describe('restricted-edge import rules', () => {
+  it('reports the identity-to-auth edge as an error', () => {
+    expect(identityAuthRule?.severity).toBe('error');
+    expect(
+      matches(
+        identityAuthRule?.from.path ?? '',
+        'src/modules/identity/audit/presentation/audit-cursor.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        identityAuthRule?.to.path ?? '',
+        'src/modules/auth/accounts/application/user-account.port.ts',
+      ),
+    ).toBe(true);
+    // Other modules keep the general cross-module rule only.
+    expect(
+      matches(
+        identityAuthRule?.from.path ?? '',
+        'src/modules/writing/grading/presentation/writing-grading.controller.ts',
+      ),
+    ).toBe(false);
+  });
+
+  it('narrows the identity-to-auth seams and keeps the rest of auth private', () => {
+    const pathNot = identityAuthRule?.to.pathNot ?? [];
+
+    // An application port, as the issue states.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/auth/email-delivery/application/email-outbox.port.ts',
+      ),
+    ).toBe(true);
+    // A public/ facade.
+    expect(matches(pathNot, 'src/modules/auth/public/local-auth.ts')).toBe(
+      true,
+    );
+    // A Nest-exported provider: AuthModule exports UserAccessJwtGuard, so the
+    // file holding it is seam even though it sits under presentation/.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/auth/web-sessions/presentation/user-access-jwt.guard.ts',
+      ),
+    ).toBe(true);
+    // The module composition root, which composes AuthModule into Identity.
+    expect(matches(pathNot, 'src/modules/auth/auth.module.ts')).toBe(true);
+
+    // The general rule also treats a file declaring `module 'fastify'` as seam;
+    // this edge does not offer that exemption. No auth file declares it today
+    // (the one guard that does is seam through Nest exports above), so the
+    // narrowing is preventive: it holds when a future auth file declares the
+    // shared request primitive.
+    expect(
+      matches(pathNot, 'src/modules/auth/shared/presentation/auth-request.ts'),
+    ).toBe(false);
+    // Auth internals stay private to identity.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/auth/accounts/infrastructure/postgres-user-account.repository.ts',
+      ),
+    ).toBe(false);
+    expect(
+      matches(
+        pathNot,
+        'src/modules/auth/testing/user-access-token-verifier.stub.ts',
+      ),
+    ).toBe(false);
+  });
+
+  it('reports writing and speaking imports of gateway as an error, not other modules', () => {
+    expect(businessGatewayRule?.severity).toBe('error');
+    expect(
+      matches(
+        businessGatewayRule?.from.path ?? '',
+        'src/modules/writing/grading/presentation/writing-grading.controller.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        businessGatewayRule?.from.path ?? '',
+        'src/modules/speaking/presentation/speaking-grading.controller.ts',
+      ),
+    ).toBe(true);
+    // Identity owns its own restricted edge; metering's double edge is #1576's.
+    expect(
+      matches(
+        businessGatewayRule?.from.path ?? '',
+        'src/modules/identity/audit/presentation/audit-cursor.ts',
+      ),
+    ).toBe(false);
+    expect(
+      matches(
+        businessGatewayRule?.from.path ?? '',
+        'src/modules/metering/application/quota-reconciliation.ts',
+      ),
+    ).toBe(false);
+    expect(
+      matches(
+        businessGatewayRule?.to.path ?? '',
+        'src/modules/gateway/application/dispatch/operation-dispatcher.port.ts',
+      ),
+    ).toBe(true);
+  });
+
+  it('narrows the business-to-gateway seams and keeps the rest of gateway private', () => {
+    const pathNot = businessGatewayRule?.to.pathNot ?? [];
+
+    expect(
+      matches(pathNot, 'src/modules/gateway/public/graded-pipeline.ts'),
+    ).toBe(true);
+    expect(
+      matches(
+        pathNot,
+        'src/modules/gateway/application/dispatch/operation-dispatcher.port.ts',
+      ),
+    ).toBe(true);
+    // GatewayModule exports RateLimitGuard, so the guard file is seam.
+    expect(
+      matches(pathNot, 'src/modules/gateway/presentation/rate-limit.guard.ts'),
+    ).toBe(true);
+    // The GradedRequest decorator composes at import time.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/gateway/presentation/graded-request.decorator.ts',
+      ),
+    ).toBe(true);
+    // The composition roots writing.module and speaking.module import.
+    expect(matches(pathNot, 'src/modules/gateway/gateway.module.ts')).toBe(
+      true,
+    );
+    expect(
+      matches(pathNot, 'src/modules/gateway/gateway-graded-request.module.ts'),
+    ).toBe(true);
+
+    // Gateway internals stay private to writing and speaking.
+    expect(
+      matches(
+        pathNot,
+        'src/modules/gateway/presentation/graded-pipeline-context.ts',
+      ),
+    ).toBe(false);
+    expect(
+      matches(pathNot, 'src/modules/gateway/application/sandbox-admission.ts'),
+    ).toBe(false);
+  });
+
+  it('keeps avatar free of every gateway import', () => {
+    expect(avatarGatewayRule?.severity).toBe('error');
+    // No pathNot at all: avatar holds no gateway import today and every one of
+    // them, seam or not, is a violation.
+    expect(avatarGatewayRule?.to.pathNot).toBeUndefined();
+    expect(
+      matches(
+        avatarGatewayRule?.from.path ?? '',
+        'src/modules/avatar/presentation/avatar.controller.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        avatarGatewayRule?.to.path ?? '',
+        'src/modules/gateway/gateway.module.ts',
+      ),
+    ).toBe(true);
+    // Only the avatar-to-gateway direction; the general rule still covers the
+    // rest of the graph.
+    expect(
+      matches(
+        avatarGatewayRule?.from.path ?? '',
+        'src/modules/writing/grading/presentation/writing-grading.controller.ts',
+      ),
+    ).toBe(false);
+  });
+});
+
 describe('dependency-cruiser cache policy', () => {
   it('rechecks imports when the rules file changes', () => {
     const projectRoot = workspaceRoot();
@@ -382,7 +576,21 @@ describe('dependency-cruiser cache policy', () => {
  * case: each fixture sits in its own folder, and a case passes when a reported
  * violation names both its rule and its folder (#1484).
  */
-const dependencyRuleCases = [
+/**
+ * The module each fixture folder is created under; every case before #1733
+ * predates the field, so it defaults to identity.
+ */
+type FixtureModule = 'identity' | 'writing' | 'avatar';
+
+interface DependencyRuleCase {
+  readonly name: string;
+  readonly folder: string;
+  readonly rule: string;
+  readonly module: FixtureModule;
+  readonly files: Readonly<Record<string, string>>;
+}
+
+const dependencyRuleCases: ReadonlyArray<DependencyRuleCase> = [
   ...[
     {
       fromLayer: 'application',
@@ -403,6 +611,7 @@ const dependencyRuleCases = [
     name: `an import from ${fromLayer} into ${toLayer}`,
     folder: `.tmp-layer-${fromLayer}-${toLayer}`,
     rule,
+    module: 'identity' as const,
     files: {
       [`${fromLayer}/probe.ts`]: `import { dependency } from '../${toLayer}/dependency';\nvoid dependency;\n`,
       [`${toLayer}/dependency.ts`]: 'export const dependency = true;\n',
@@ -415,7 +624,46 @@ const dependencyRuleCases = [
     name: `${name} imported into a domain file`,
     folder: `.tmp-domain-purity-${index}`,
     rule: 'domain-no-runtime-modules',
+    module: 'identity' as const,
     files: { 'domain/probe.ts': `${importLine}\nexport const probe = 1;\n` },
+  })),
+  ...[
+    {
+      name: 'an identity file importing an auth internal file',
+      folder: '.tmp-identity-auth-edge',
+      rule: 'no-identity-auth-internal-import',
+      module: 'identity',
+      files: {
+        'application/probe.ts':
+          "import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';\nvoid PostgresUserAccountRepository;\n",
+      },
+    },
+    {
+      name: 'a writing file importing a gateway internal file',
+      folder: '.tmp-writing-gateway-edge',
+      rule: 'no-business-to-gateway-internal-import',
+      module: 'writing',
+      files: {
+        'application/probe.ts':
+          "import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';\nvoid SandboxAdmission;\n",
+      },
+    },
+    {
+      name: 'an avatar file importing a gateway seam file',
+      folder: '.tmp-avatar-gateway-edge',
+      rule: 'no-avatar-gateway-import',
+      module: 'avatar',
+      files: {
+        'application/probe.ts':
+          "import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';\nvoid OPERATION_DISPATCHER;\n",
+      },
+    },
+  ].map(({ name, folder, rule, module, files }) => ({
+    name,
+    folder,
+    rule,
+    module: module as FixtureModule,
+    files,
   })),
 ];
 
@@ -424,11 +672,15 @@ let dependencyRuleRun: { status: number | null; lines: string[] } | undefined;
 function runDependencyRuleCases() {
   if (dependencyRuleRun) return dependencyRuleRun;
 
-  const identity = join(workspaceRoot(), 'src', 'modules', 'identity');
+  const moduleRoots: Record<FixtureModule, string> = {
+    identity: join(workspaceRoot(), 'src', 'modules', 'identity'),
+    writing: join(workspaceRoot(), 'src', 'modules', 'writing'),
+    avatar: join(workspaceRoot(), 'src', 'modules', 'avatar'),
+  };
   try {
-    for (const { folder, files } of dependencyRuleCases) {
+    for (const { folder, files, module } of dependencyRuleCases) {
       for (const [file, source] of Object.entries(files)) {
-        const target = join(identity, folder, file);
+        const target = join(moduleRoots[module], folder, file);
         mkdirSync(dirname(target), { recursive: true });
         writeFileSync(target, source);
       }
@@ -439,8 +691,11 @@ function runDependencyRuleCases() {
       lines: `${result.stdout}\n${result.stderr}`.split(/\r?\n/),
     };
   } finally {
-    for (const { folder } of dependencyRuleCases) {
-      rmSync(join(identity, folder), { recursive: true, force: true });
+    for (const { folder, module } of dependencyRuleCases) {
+      rmSync(join(moduleRoots[module], folder), {
+        recursive: true,
+        force: true,
+      });
     }
   }
   return dependencyRuleRun;
@@ -471,6 +726,9 @@ describe('dependency-cruiser layer and domain purity rules', () => {
 describe('cross-module import rule over the real tree', () => {
   let violations: Array<{ from: string; to: string }>;
   let cliViolations: Array<{ from: string; to: string }>;
+  let identityAuthViolations: Array<{ from: string; to: string }>;
+  let businessGatewayViolations: Array<{ from: string; to: string }>;
+  let avatarGatewayViolations: Array<{ from: string; to: string }>;
 
   beforeAll(() => {
     const result = spawnSync(
@@ -499,18 +757,21 @@ describe('cross-module import rule over the real tree', () => {
 
     const parsedReport: unknown = JSON.parse(result.stdout);
     const reportViolations = parseDependencyCruiserViolations(parsedReport);
-    violations = reportViolations
-      .filter(({ rule }) => rule.name === 'no-cross-module-internal-import')
-      .map((violation: { from: string; to: string }) => ({
-        from: violation.from,
-        to: violation.to,
-      }));
-    cliViolations = reportViolations
-      .filter(({ rule }) => rule.name === 'no-cli-module-internal-import')
-      .map((violation: { from: string; to: string }) => ({
-        from: violation.from,
-        to: violation.to,
-      }));
+    /** @param {string} ruleName */
+    const violationsFor = (ruleName: string) =>
+      reportViolations
+        .filter(({ rule }) => rule.name === ruleName)
+        .map((violation: { from: string; to: string }) => ({
+          from: violation.from,
+          to: violation.to,
+        }));
+    violations = violationsFor('no-cross-module-internal-import');
+    cliViolations = violationsFor('no-cli-module-internal-import');
+    identityAuthViolations = violationsFor('no-identity-auth-internal-import');
+    businessGatewayViolations = violationsFor(
+      'no-business-to-gateway-internal-import',
+    );
+    avatarGatewayViolations = violationsFor('no-avatar-gateway-import');
   });
 
   it('reports no imports of another module internal files', () => {
@@ -655,6 +916,25 @@ describe('cross-module import rule over the real tree', () => {
       true,
     );
     expect(matches(cliRule?.from.path ?? '', 'src/common/foo.ts')).toBe(false);
+  });
+
+  /**
+   * The restricted edges (#1733) run beside the general rule over the same
+   * cruise. Each pinned to silence: the tree today crosses identity→auth and
+   * writing/speaking→gateway only through the stated seams, and avatar never
+   * reaches gateway, so a violation here means a new import arrived outside
+   * them.
+   */
+  it('reports no identity import of auth outside the stated seams', () => {
+    expect(identityAuthViolations).toEqual([]);
+  });
+
+  it('reports no writing or speaking import of gateway internals', () => {
+    expect(businessGatewayViolations).toEqual([]);
+  });
+
+  it('reports no avatar import of gateway code', () => {
+    expect(avatarGatewayViolations).toEqual([]);
   });
 });
 
