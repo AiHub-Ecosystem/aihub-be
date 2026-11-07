@@ -18,7 +18,9 @@ export interface SpeakingAudioUploadSweepCliInput {
   readonly databaseUrl: string;
   readonly dryRun: boolean;
   readonly repository?: ClosableUploadRepository;
-  readonly storage?: SpeakingAudioAssetStoragePort;
+  readonly storage?:
+    | (SpeakingAudioAssetStoragePort & { close(): Promise<void> })
+    | undefined;
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
   readonly clockSource?: 'process' | 'database';
@@ -47,6 +49,7 @@ export async function runSpeakingAudioUploadSweepCommand(
     repository,
     input.now,
     ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
+    storage,
   );
   (input.emit ?? console.log)(
     JSON.stringify({

@@ -12,7 +12,9 @@ export interface AvatarSweepCliInput {
   readonly databaseUrl: string;
   readonly dryRun: boolean;
   readonly repository?: AvatarRepositoryPort & { close(): Promise<void> };
-  readonly storage?: AvatarStoragePort;
+  readonly storage?:
+    | (AvatarStoragePort & { close(): Promise<void> })
+    | undefined;
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
   readonly clockSource?: 'process' | 'database';
@@ -48,6 +50,7 @@ export async function runAvatarSweepCommand(
     repository,
     input.now,
     ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
+    storage,
   );
 
   emit(

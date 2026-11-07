@@ -194,12 +194,11 @@ async function requestRevocation(
 }
 
 async function deletePublishedObject(
+  storage: WritingChartRevocationStoragePort,
   input: WritingChartRevokeCliInput,
   target: WritingChartRevokeTarget,
 ): Promise<'deleted' | 'already_absent' | 'failed'> {
   try {
-    const storage =
-      input.storage ?? createCliWritingChartStorage(input.environment);
     return await storage.deletePublishedObjectIfPresent({
       environment: input.environment,
       publishedKey: target.publishedKey,
@@ -248,6 +247,7 @@ async function revokeWritingChartTarget(
   input: WritingChartRevokeCliInput,
   target: WritingChartRevokeTarget,
   audit: WritingChartRevocationAuditRepositoryPort,
+  storage: WritingChartRevocationStoragePort,
 ): Promise<WritingChartRevokeResult> {
   const actorUserAccountId = await activeOperatorAccount(
     audit,
@@ -261,7 +261,7 @@ async function revokeWritingChartTarget(
     actorUserAccountId,
     occurredAt,
   );
-  const origin = await deletePublishedObject(input, target);
+  const origin = await deletePublishedObject(storage, input, target);
   const edge = await probePublicChart(input, target);
   const completedAt = currentTime(input);
   await appendCompletionAudit(
@@ -281,17 +281,35 @@ async function revokeWritingChartTarget(
   };
 }
 
+type ClosableRevocationStorage = WritingChartRevocationStoragePort & {
+  close?(): Promise<void>;
+};
+
 async function runAndCloseAudit(
   input: WritingChartRevokeCliInput,
   target: WritingChartRevokeTarget,
   audit: WritingChartRevocationAuditRepositoryPort,
 ): Promise<WritingChartRevokeResult> {
+  // The S3Client's keep-alive agents must release even when the revocation
+  // fails, so the storage is built once here and destroyed in the finally
+  // beside the audit close (#1523).
+  const storage: ClosableRevocationStorage =
+    input.storage ?? createCliWritingChartStorage(input.environment);
   let result: WritingChartRevokeResult | undefined;
   let operationError: unknown;
   try {
-    result = await revokeWritingChartTarget(input, target, audit);
+    result = await revokeWritingChartTarget(input, target, audit, storage);
   } catch (error) {
     operationError = error;
+  } finally {
+    const destroyed = storage.close?.();
+    if (destroyed !== undefined) {
+      try {
+        await destroyed;
+      } catch {
+        // A failed destroy must not mask the revocation's own error.
+      }
+    }
   }
   try {
     await audit.close?.();

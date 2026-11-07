@@ -89,6 +89,11 @@ class FakeRepository
 class FakeStorage implements SpeakingAudioAssetStoragePort {
   readonly deleted: string[] = [];
   readonly fail = new Set<string>();
+  closed = false;
+
+  async close(): Promise<void> {
+    this.closed = true;
+  }
 
   async createUploadUrl(): Promise<never> {
     throw new Error('not used by cleanup');
@@ -149,6 +154,7 @@ describe('Speaking Audio upload cleanup command', () => {
     expect(storage.deleted).toEqual([rejected.objectKey]);
     expect(repository.intents).toEqual([expired, tooYoung]);
     expect(repository.closed).toBe(true);
+    expect(storage.closed).toBe(true);
     expect(output).toEqual([
       JSON.stringify({
         scanned: 2,

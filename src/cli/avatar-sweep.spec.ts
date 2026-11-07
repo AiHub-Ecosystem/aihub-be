@@ -35,6 +35,11 @@ class FakeAvatarStorage implements AvatarStoragePort {
   readonly failDeleteOf = new Set<string>();
   listedPages = 0;
   unavailable = false;
+  closed = false;
+
+  async close(): Promise<void> {
+    this.closed = true;
+  }
 
   async createUploadUrl(): Promise<never> {
     throw new Error('not used by the sweep');
@@ -137,6 +142,7 @@ describe('runAvatarSweepCommand', () => {
       cutoff_source: 'process',
     });
     expect(closed.value).toBe(true);
+    expect(storage.closed).toBe(true);
   });
 
   it('keeps an unrecorded object that is still inside the grace', async () => {

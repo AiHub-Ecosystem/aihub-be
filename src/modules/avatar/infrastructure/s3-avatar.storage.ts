@@ -82,6 +82,16 @@ export class S3AvatarStorage implements AvatarStoragePort {
     };
   }
 
+  /**
+   * Destroys the shared S3Client, releasing its keep-alive agents. CLI sweep
+   * commands call this on completion so a cron-driven process drains instead
+   * of holding sockets open (#1523). Unconfigured storage has no client. The
+   * SDK destroy is synchronous.
+   */
+  async close(): Promise<void> {
+    this.configured?.signer?.destroy();
+  }
+
   async createUploadUrl(input: {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;

@@ -11,6 +11,18 @@ class Repository {
   }
 }
 
+class Storage {
+  closed = 0;
+  fails = false;
+
+  async close(): Promise<void> {
+    this.closed += 1;
+    if (this.fails) {
+      throw new Error('storage destroy failed');
+    }
+  }
+}
+
 describe('runOperatorCommand', () => {
   it('captures the request id and clock once and closes the repository', async () => {
     const repository = new Repository();
@@ -62,6 +74,96 @@ describe('runOperatorCommand', () => {
       ),
     ).rejects.toThrow('clock failed');
 
+    expect(repository.closed).toBe(true);
+  });
+
+  it('closes the storage before the repository on success', async () => {
+    const repository = new Repository();
+    const storage = new Storage();
+    const order: string[] = [];
+    const originalStorageClose = storage.close.bind(storage);
+    const originalRepositoryClose = repository.close.bind(repository);
+    storage.close = async () => {
+      order.push('storage');
+      await originalStorageClose();
+    };
+    repository.close = async () => {
+      order.push('repository');
+      await originalRepositoryClose();
+    };
+
+    await runOperatorCommand(
+      repository,
+      undefined,
+      async () => 'done',
+      storage,
+    );
+
+    expect(order).toEqual(['storage', 'repository']);
+    expect(storage.closed).toBe(1);
+  });
+
+  it('closes the storage when the operation fails', async () => {
+    const repository = new Repository();
+    const storage = new Storage();
+
+    await expect(
+      runOperatorCommand(
+        repository,
+        undefined,
+        async () => {
+          throw new Error('command failed');
+        },
+        storage,
+      ),
+    ).rejects.toThrow('command failed');
+
+    expect(repository.closed).toBe(true);
+    expect(storage.closed).toBe(1);
+  });
+
+  it('keeps the operation error when the storage close also fails', async () => {
+    const repository = new Repository();
+    const storage = new Storage();
+    storage.fails = true;
+
+    await expect(
+      runOperatorCommand(
+        repository,
+        undefined,
+        async () => {
+          throw new Error('command failed');
+        },
+        storage,
+      ),
+    ).rejects.toThrow('command failed');
+
+    // The failed destroy attempt still happened; the original error wins.
+    expect(repository.closed).toBe(true);
+  });
+
+  it('surfaces a storage destroy failure as the command error on success', async () => {
+    const repository = new Repository();
+    const storage = new Storage();
+    storage.fails = true;
+
+    await expect(
+      runOperatorCommand(repository, undefined, async () => 'done', storage),
+    ).rejects.toThrow('storage destroy failed');
+
+    expect(repository.closed).toBe(true);
+  });
+
+  it('runs without a closable storage', async () => {
+    const repository = new Repository();
+
+    const execution = await runOperatorCommand(
+      repository,
+      undefined,
+      async () => 'done',
+    );
+
+    expect(execution.result).toBe('done');
     expect(repository.closed).toBe(true);
   });
 });
