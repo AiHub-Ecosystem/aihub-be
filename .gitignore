@@ -39,3 +39,7 @@ bash.exe.stackdump
 # AGENTS.md "Working files" for the rule.
 temp/
 .serena/
+
+# 1DevTool Chrome panel writes Chromium's debug log into the launch
+# directory (repo root) on Windows; never part of the build or the repo.
+debug.log
