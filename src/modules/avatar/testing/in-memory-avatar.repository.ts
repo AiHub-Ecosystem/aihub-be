@@ -12,6 +12,26 @@ import type { Avatar } from '@/modules/avatar/domain/avatar';
 export class InMemoryAvatarRepository implements AvatarRepositoryPort {
   readonly avatars = new Map<string, Avatar>();
   beforeNextChange: (() => void) | undefined;
+  private readonly locks = new Map<string, Promise<void>>();
+
+  async withUserLock<T>(
+    userId: string,
+    operation: (repository: AvatarRepositoryPort) => Promise<T>,
+  ): Promise<T> {
+    const previous = this.locks.get(userId) ?? Promise.resolve();
+    let release = (): void => undefined;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.locks.set(userId, current);
+    await previous;
+    try {
+      return await operation(this);
+    } finally {
+      release();
+      if (this.locks.get(userId) === current) this.locks.delete(userId);
+    }
+  }
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
     return this.avatars.get(userId);

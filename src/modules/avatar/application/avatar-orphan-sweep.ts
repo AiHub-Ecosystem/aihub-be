@@ -17,6 +17,11 @@ export interface AvatarSweepSummary {
   readonly deleted: number;
   readonly failed: number;
   readonly dryRun: boolean;
+  readonly stagingScanned: number;
+  readonly stagingUnrecognised: number;
+  readonly stagingEligible: number;
+  readonly stagingDeleted: number;
+  readonly stagingFailed: number;
 }
 
 const BATCH_SIZE = 500;
@@ -36,7 +41,10 @@ export class AvatarOrphanSweep {
     private readonly avatars: Pick<AvatarRepositoryPort, 'recordedObjectKeys'>,
     private readonly storage: Pick<
       AvatarStoragePort,
-      'listObjects' | 'deleteObject'
+      | 'listObjects'
+      | 'deleteObject'
+      | 'listStagingObjects'
+      | 'deleteStagingObject'
     >,
   ) {}
 
@@ -51,6 +59,11 @@ export class AvatarOrphanSweep {
     let deleted = 0;
     let failed = 0;
     let batch: string[] = [];
+    let stagingScanned = 0;
+    let stagingUnrecognised = 0;
+    let stagingEligible = 0;
+    let stagingDeleted = 0;
+    let stagingFailed = 0;
 
     // The records are read before anything is deleted, so a database that
     // cannot be reached stops the run before it touches storage.
@@ -94,6 +107,29 @@ export class AvatarOrphanSweep {
     }
     await flush();
 
+    for await (const object of this.storage.listStagingObjects(
+      AVATAR_OBJECT_PREFIX,
+    )) {
+      stagingScanned += 1;
+      if (!isAvatarObjectKey(object.objectKey)) {
+        stagingUnrecognised += 1;
+        continue;
+      }
+      if (
+        object.lastModified === undefined ||
+        object.lastModified.getTime() > cutoff
+      )
+        continue;
+      stagingEligible += 1;
+      if (input.dryRun) continue;
+      try {
+        await this.storage.deleteStagingObject(object.objectKey);
+        stagingDeleted += 1;
+      } catch {
+        stagingFailed += 1;
+      }
+    }
+
     return {
       scanned,
       unrecognised,
@@ -101,6 +137,11 @@ export class AvatarOrphanSweep {
       deleted,
       failed,
       dryRun: input.dryRun,
+      stagingScanned,
+      stagingUnrecognised,
+      stagingEligible,
+      stagingDeleted,
+      stagingFailed,
     };
   }
 }
