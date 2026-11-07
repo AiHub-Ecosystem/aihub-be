@@ -68,8 +68,10 @@ for _ in $(seq 1 50); do
 done
 curl --silent --fail http://127.0.0.1:3021/ >/dev/null
 
-# Load the actual API server block with TLS-only paths removed and high local
-# ports substituted. The production locations and gzip directives stay intact.
+# Load the actual API and Sandbox server blocks with TLS-only paths removed and
+# high local ports substituted. The production locations and gzip directives
+# stay intact. Both tiers' private scrape listeners proxy to the same test
+# backend, so this proves the listener boundary, not backend routing.
 sed \
   -e '/ssl_certificate/d' \
   -e '/include \/etc\/letsencrypt\/options-ssl-nginx.conf/d' \
@@ -79,6 +81,17 @@ sed \
   -e 's/listen 80;/listen 127.0.0.1:18081;/' \
   -e 's/listen 127.0.0.1:19103;/listen 127.0.0.1:18082;/' \
   "$repo_root/ops/nginx/aihub-api.conf" > "$tmp/aihub-api.conf"
+
+sed \
+  -e '/ssl_certificate/d' \
+  -e '/include \/etc\/letsencrypt\/options-ssl-nginx.conf/d' \
+  -e '/ssl_dhparam/d' \
+  -e "s#/var/log/aihub-access.log#$tmp/aihub-access.log#g" \
+  -e 's/listen 443 ssl;/listen 127.0.0.1:18083;/' \
+  -e 's/listen 80;/listen 127.0.0.1:18084;/' \
+  -e 's/listen 127.0.0.1:19104;/listen 127.0.0.1:18085;/' \
+  -e 's#127.0.0.1:3022#127.0.0.1:3021#g' \
+  "$repo_root/ops/nginx/sandbox.conf" > "$tmp/sandbox.conf"
 
 cat > "$tmp/nginx.conf" <<EOF
 pid $tmp/nginx.pid;
@@ -93,6 +106,7 @@ http {
   access_log off;
   include $repo_root/ops/nginx/00-aihub-log-format.conf;
   include $tmp/aihub-api.conf;
+  include $tmp/sandbox.conf;
 }
 EOF
 
@@ -157,5 +171,18 @@ fi
 if curl --silent --show-error -o /dev/null -w '%{http_code}' \
   http://127.0.0.1:18082/health | grep -Fxq '200'; then
   printf 'The private scrape listener unexpectedly proxied a non-metrics path.\n' >&2
+  exit 1
+fi
+
+curl --silent --show-error --fail http://127.0.0.1:18085/metrics > "$tmp/sandbox-private-metrics.prom"
+grep -Fxq 'aihub_test_metric 1' "$tmp/sandbox-private-metrics.prom"
+if curl --silent --show-error -o /dev/null -w '%{http_code}' \
+  -H 'Host: sandbox.aihubproduction.com' http://127.0.0.1:18083/metrics | grep -Fxq '200'; then
+  printf 'The public Sandbox listener unexpectedly exposed /metrics.\n' >&2
+  exit 1
+fi
+if curl --silent --show-error -o /dev/null -w '%{http_code}' \
+  http://127.0.0.1:18085/health | grep -Fxq '200'; then
+  printf 'The private Sandbox scrape listener unexpectedly proxied a non-metrics path.\n' >&2
   exit 1
 fi
