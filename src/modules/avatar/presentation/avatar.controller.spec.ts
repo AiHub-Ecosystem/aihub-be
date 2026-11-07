@@ -61,11 +61,13 @@ function storageUnavailable(): AppError {
 
 class FakeAvatarStorage implements AvatarStoragePort {
   readonly objects = new Map<string, StoredAvatarObject>();
+  readonly stagingObjects = new Map<string, StoredAvatarObject>();
   readonly signed: Array<{
     objectKey: string;
     contentType: string;
   }> = [];
   readonly deleted: string[] = [];
+  readonly stagingDeleted: string[] = [];
   unavailable = false;
   deleteFails = false;
 
@@ -88,7 +90,31 @@ class FakeAvatarStorage implements AvatarStoragePort {
 
   async describeObject(objectKey: string, _signal?: AbortSignal) {
     if (this.unavailable) throw storageUnavailable();
+    return this.stagingObjects.get(objectKey);
+  }
+
+  async copyStagingToFinal(input: {
+    readonly objectKey: string;
+    readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+  }) {
+    if (this.unavailable) throw storageUnavailable();
+    const object = this.stagingObjects.get(input.objectKey);
+    if (object !== undefined)
+      this.objects.set(input.objectKey, {
+        ...object,
+        contentType: input.contentType,
+      });
+  }
+
+  async describeFinalObject(objectKey: string) {
+    if (this.unavailable) throw storageUnavailable();
     return this.objects.get(objectKey);
+  }
+
+  async deleteStagingObject(objectKey: string) {
+    if (this.deleteFails) throw storageUnavailable();
+    this.stagingDeleted.push(objectKey);
+    this.stagingObjects.delete(objectKey);
   }
 
   async deleteObject(objectKey: string, _signal?: AbortSignal) {
@@ -96,6 +122,8 @@ class FakeAvatarStorage implements AvatarStoragePort {
     this.deleted.push(objectKey);
     this.objects.delete(objectKey);
   }
+
+  async *listStagingObjects(): AsyncIterable<ListedAvatarObject> {}
 
   async *listObjects(): AsyncIterable<ListedAvatarObject> {
     // Not used over HTTP: only the operator sweep lists.
@@ -151,8 +179,10 @@ describe('Avatar upload HTTP flow', () => {
   beforeEach(() => {
     accountStatus = 'active';
     storage.objects.clear();
+    storage.stagingObjects.clear();
     storage.signed.length = 0;
     storage.deleted.length = 0;
+    storage.stagingDeleted.length = 0;
     storage.unavailable = false;
     storage.deleteFails = false;
     repository.avatars.clear();
@@ -188,7 +218,7 @@ describe('Avatar upload HTTP flow', () => {
       response.json<unknown>(),
     ).data.asset_id;
     const objectKey = `users/${USER_ID}/avatar/${assetId}/original`;
-    storage.objects.set(objectKey, {
+    storage.stagingObjects.set(objectKey, {
       contentType: 'image/png',
       byteSize: 1234,
       lastModified: new Date(),
@@ -392,7 +422,7 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(413);
       expectErrorCode(response, 'PAYLOAD_TOO_LARGE');
-      expect(storage.deleted).toEqual([objectKey]);
+      expect(storage.stagingDeleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
 
@@ -408,7 +438,7 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(400);
       expectErrorCode(response, 'INVALID_REQUEST');
-      expect(storage.deleted).toEqual([objectKey]);
+      expect(storage.stagingDeleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
 
@@ -489,7 +519,7 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(404);
       expectErrorCode(response, 'NOT_FOUND');
-      expect(storage.deleted).toEqual([objectKey]);
+      expect(storage.stagingDeleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
 
@@ -501,7 +531,7 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(404);
-      expect(storage.deleted).toEqual([objectKey]);
+      expect(storage.stagingDeleted).toEqual([objectKey]);
       expect(repository.avatars.size).toBe(0);
     });
 
@@ -523,13 +553,14 @@ describe('Avatar upload HTTP flow', () => {
         lastModified: new Date(Date.now() - 3 * 60 * MINUTE),
       });
       storage.deleted.length = 0;
+      storage.stagingDeleted.length = 0;
 
       const response = await complete(next.assetId);
 
       expect(response.statusCode).toBe(404);
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
       expect(storage.objects.has(previous.objectKey)).toBe(true);
-      expect(storage.deleted).toEqual([next.objectKey]);
+      expect(storage.stagingDeleted).toEqual([next.objectKey]);
     });
 
     it('still answers a repeated completion of a recorded asset, however old', async () => {
@@ -559,6 +590,7 @@ describe('Avatar upload HTTP flow', () => {
       const uploaded = await uploadedAsset();
       await complete(uploaded.assetId);
       storage.deleted.length = 0;
+      storage.stagingDeleted.length = 0;
       return uploaded;
     }
 
@@ -596,7 +628,7 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(400);
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
-      expect(storage.deleted).toEqual([next.objectKey]);
+      expect(storage.stagingDeleted).toEqual([next.objectKey]);
       expect(storage.objects.has(previous.objectKey)).toBe(true);
     });
 
@@ -637,6 +669,9 @@ describe('Avatar upload HTTP flow', () => {
       const next = await uploadedAsset();
       const winner = await uploadedAsset();
       repository.beforeNextChange = () => {
+        const winnerObject = storage.stagingObjects.get(winner.objectKey);
+        if (winnerObject !== undefined)
+          storage.objects.set(winner.objectKey, winnerObject);
         const current = repository.avatars.get(USER_ID);
         if (current !== undefined) {
           repository.avatars.set(USER_ID, {
@@ -682,6 +717,9 @@ describe('Avatar upload HTTP flow', () => {
       const mine = await uploadedAsset();
       const winner = await uploadedAsset();
       repository.beforeNextChange = () => {
+        const winnerObject = storage.stagingObjects.get(winner.objectKey);
+        if (winnerObject !== undefined)
+          storage.objects.set(winner.objectKey, winnerObject);
         repository.avatars.set(USER_ID, {
           assetId: winner.assetId,
           userId: USER_ID,
@@ -788,6 +826,9 @@ describe('Avatar upload HTTP flow', () => {
       await complete(assetId);
       const winner = await uploadedAsset();
       repository.beforeNextChange = () => {
+        const winnerObject = storage.stagingObjects.get(winner.objectKey);
+        if (winnerObject !== undefined)
+          storage.objects.set(winner.objectKey, winnerObject);
         const current = repository.avatars.get(USER_ID);
         if (current !== undefined) {
           repository.avatars.set(USER_ID, {

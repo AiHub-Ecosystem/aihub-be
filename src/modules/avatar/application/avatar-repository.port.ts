@@ -16,6 +16,11 @@ export type RecordAvatarResult =
  * changes cannot both apply.
  */
 export interface AvatarRepositoryPort {
+  /** Serializes completion's storage publication and record write per account. */
+  withUserLock<T>(
+    userId: string,
+    operation: (repository: AvatarRepositoryPort) => Promise<T>,
+  ): Promise<T>;
   findByUser(userId: string): Promise<Avatar | undefined>;
   /** Which of these object keys an Avatar record currently names. */
   recordedObjectKeys(
