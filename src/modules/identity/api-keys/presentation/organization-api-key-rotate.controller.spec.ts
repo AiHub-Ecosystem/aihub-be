@@ -33,6 +33,7 @@ import {
   type OrganizationApiKeyPort,
   type RotateOrganizationApiKeyRecordInput,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { RotateOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
@@ -40,6 +41,7 @@ import {
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
@@ -49,9 +51,6 @@ const ROTATE_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys/${RETIRED_KEY_
 const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
 const INHERITED_EXPIRY = new Date('2027-01-01T00:00:00.000Z');
 const RETIRED_HASH = 'a'.repeat(64);
-
-import { RotateOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function rotated() {
   return {
