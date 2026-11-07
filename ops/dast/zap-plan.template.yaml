@@ -1,0 +1,99 @@
+# The AIHUB DAST plan template (issue #319).
+#
+# ZAP never sees this file. `scripts/ci/dast-render-plan.ts` renders it before
+# every run: it substitutes the disposable CI target and the credentials minted
+# inside the job, injects the rules from `ops/dast/zap-rules.ts` at the
+# `@dast-rules` markers, and, for the passive pull-request run, strips the
+# `@dast-only` blocks that belong to the scheduled active scan.
+#
+# The target is always the CI-booted image on the runner's loopback. Neither
+# Sandbox nor Production is ever a target (#319): this template can only name
+# the placeholder the renderer fills with the loopback URL, and the job that
+# renders it declares no `environment` and references no production secret.
+env:
+  contexts:
+    - name: aihub-dast
+      urls:
+        - ${AIHUB_TARGET}
+      excludePaths:
+        # Destructive management operations stay out of scope (#319): API key
+        # withdraw and rotate, member removal and ownership transfer,
+        # invitation revoke, and avatar delete. The bearer user seeded for the
+        # scan belongs to no Organization, so these endpoints answer the safe
+        # authorization denial anyway; the exclusion keeps the active scanner
+        # from ever attacking them.
+        - ${AIHUB_TARGET}/.*/api-keys/[^/]+/rotate
+        - ${AIHUB_TARGET}/.*/api-keys/[^/]+$
+        - ${AIHUB_TARGET}/.*/members/[^/]+/transfer
+        - ${AIHUB_TARGET}/.*/members/[^/]+$
+        - ${AIHUB_TARGET}/.*/invitations/[^/]+
+        - ${AIHUB_TARGET}/me/avatar$
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # Import the generated OpenAPI document instead of spidering: the document
+  # is generated from source and covers every public operation, so the scan
+  # drives the real surface with no crawl.
+  - type: openapi
+    parameters:
+      apiUrl: ${AIHUB_TARGET}/openapi.json
+      targetUrl: ${AIHUB_TARGET}
+      context: aihub-dast
+
+  # Header-based authentication: the seeded gateway key and the bearer token
+  # minted at render time ride on every request ZAP makes, in either mode.
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: Seeded gateway API key
+        matchType: req_header
+        matchString: X-API-Key
+        replacementString: ${AIHUB_API_KEY}
+      - description: Seeded bearer token
+        matchType: req_header
+        matchString: Authorization
+        replacementString: Bearer ${AIHUB_BEARER}
+
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+      enableTags: false
+    rules:
+      # @dast-rules:passive
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 10
+
+  # @dast-only:start
+  # The scheduled active scan. The bearer token it authenticates with lives at
+  # most 900 seconds (the User Access JWT ceiling), so the whole plan has to
+  # finish inside that window: maxScanDurationInMins is 12, under the token's
+  # 15-minute ceiling, and the runbook records why.
+  - type: activeScan
+    parameters:
+      context: aihub-dast
+      maxRuleDurationInMins: 3
+      maxScanDurationInMins: 12
+      delayInMs: 100
+      threadPerHost: 2
+      scanHeadersAllRequests: true
+    policyDefinition:
+      defaultThreshold: medium
+      defaultStrength: medium
+      rules:
+        # @dast-rules:active
+  # @dast-only:end
+
+  - type: report
+    parameters:
+      template: sarif-json
+      reportDir: /zap/wrk
+      reportFile: zap-results.sarif
+      reportTitle: AIHUB DAST
+      reportDescription: Dynamic scan of the CI-booted AIHUB image, driven by its generated OpenAPI document.

@@ -1,0 +1,256 @@
+name: DAST
+
+# Dynamic scanning of the CI-booted AIHUB image, driven by the generated
+# OpenAPI document (issue #319). Every pull request gets a passive API scan
+# that reports without failing the build; the weekly scheduled run adds active
+# scanning, where the injection-class rules fail the job
+# (scripts/ci/dast-gate.ts).
+#
+# The scan never targets Sandbox or Production. Its only target is the image
+# this job builds and boots on the runner's loopback, against a disposable
+# PostgreSQL and Redis, with credentials minted inside the job. The job
+# declares no `environment` and references no secret, so it cannot enter the
+# deploy boundary (#314) even by accident.
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Scan mode
+        required: true
+        type: choice
+        default: passive
+        options:
+          - passive
+          - active
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zap:
+    name: ZAP scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+
+    services:
+      postgres:
+        image: postgres:16.10-alpine
+        env:
+          POSTGRES_DB: aihub
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aihub"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.4.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # The loopback name the scan target answers on; the job adds it to the
+      # runner's /etc/hosts and the rendered plan carries it as the target.
+      DAST_TARGET: http://dast.aihub.invalid:3000
+      DAST_DIR: temp/dast
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve scan mode
+        id: mode
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request)
+              echo "mode=passive" >> "$GITHUB_OUTPUT" ;;
+            schedule)
+              echo "mode=active" >> "$GITHUB_OUTPUT" ;;
+            workflow_dispatch)
+              case "${{ inputs.mode }}" in
+                passive|active) echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT" ;;
+                *) echo "unsupported mode: ${{ inputs.mode }}" >&2; exit 2 ;;
+              esac ;;
+            *) echo "unsupported event: ${{ github.event_name }}" >&2; exit 2 ;;
+          esac
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate the Prisma client
+        run: bun run generate:prisma-client
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The same image CD ships, built and loaded into this runner's daemon
+      # only. The gha cache is shared with the CI image job, so a PR whose
+      # image job already built this commit pays little here.
+      - name: Build production image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: aihub:dast
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VCS_REF=${{ github.sha }}
+
+      - name: Name the scan target on the runner
+        run: |
+          sudo sh -c 'echo "127.0.0.1 dast.aihub.invalid" >> /etc/hosts'
+          getent hosts dast.aihub.invalid
+
+      - name: Write the disposable boot configuration
+        env:
+          AIHUB_DAST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aihub
+          AIHUB_DAST_REDIS_URL: redis://127.0.0.1:6379
+        run: |
+          node scripts/ci/dast-boot-config.cjs "$DAST_DIR/config"
+          chmod 0755 "$DAST_DIR/config"
+          chmod 0644 "$DAST_DIR/config"/*
+
+      # The image's own migration entrypoint, pointed at the disposable
+      # database through the same connection secrets the app will read.
+      - name: Apply migrations to the disposable database
+        run: |
+          docker run --rm --network host \
+            --env-file "$DAST_DIR/config/boot.env" \
+            --volume "$PWD/$DAST_DIR/config:/run/secrets/aihub:ro" \
+            aihub:dast scripts/cli/migrate.mjs
+
+      # Seeds one Organization with a gateway key, and one User Account with no
+      # Organization membership, all minted inside this job. The key and the
+      # login credential land in the job's temp directory only.
+      - name: Seed the scan credentials
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aihub
+        run: |
+          node --import tsx scripts/ci/dast-seed.ts --out "$DAST_DIR"
+
+      - name: Boot the image for the scan
+        run: |
+          docker run --detach --name aihub-dast --network host \
+            --env-file "$DAST_DIR/config/boot.env" \
+            --volume "$PWD/$DAST_DIR/config:/run/secrets/aihub:ro" \
+            aihub:dast
+          started=$SECONDS
+          until curl --silent --show-error --fail "$DAST_TARGET/health" >/dev/null; do
+            if ((SECONDS - started >= 120)); then
+              echo "the scan target never became healthy" >&2
+              docker logs --tail 100 aihub-dast >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "scan target healthy after $((SECONDS - started))s"
+
+      - name: Log in as the seeded account
+        id: login
+        run: |
+          credentials="$DAST_DIR/dast-credentials.json"
+          body="$(jq -n \
+            --arg email "$(jq -r .email "$credentials")" \
+            --arg password "$(jq -r .password "$credentials")" \
+            '{email: $email, password: $password}')"
+          response="$(curl --silent --show-error --fail \
+            -X POST "$DAST_TARGET/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "$body")"
+          token="$(printf '%s' "$response" | jq -r '.data.access_token')"
+          test -n "$token" && test "$token" != null
+          printf 'bearer=%s\n' "$token" >> "$GITHUB_OUTPUT"
+
+      - name: Render the Automation Framework plan
+        env:
+          # Through the environment so the token never appears in an expanded
+          # command line in the job log.
+          AIHUB_DAST_BEARER: ${{ steps.login.outputs.bearer }}
+        run: |
+          api_key="$(jq -r .apiKey "$DAST_DIR/dast-credentials.json")"
+          node --import tsx scripts/ci/dast-render-plan.ts \
+            --mode "${{ steps.mode.outputs.mode }}" \
+            --target "$DAST_TARGET" \
+            --api-key "$api_key" \
+            --bearer "$AIHUB_DAST_BEARER" \
+            --out "$DAST_DIR/zap-plan.yaml"
+
+      # Pinned by digest (#315). The full stable image carries the OpenAPI,
+      # passive/active scanner, replacer, and report add-ons the plan needs.
+      - name: Run ZAP
+        run: |
+          chmod -R a+rwX "$DAST_DIR"
+          docker run --rm --network host \
+            --volume "$PWD/$DAST_DIR:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af \
+            zap.sh -cmd -autorun /zap/wrk/zap-plan.yaml
+
+      # Only the scheduled active scan gates: an injection-class alert fails
+      # the job. The pull-request passive scan is report-only at first; the
+      # runbook records when that changes.
+      - name: Gate the active scan on injection-class findings
+        if: steps.mode.outputs.mode == 'active'
+        run: node --import tsx scripts/ci/dast-gate.ts "$DAST_DIR/zap-results.sarif"
+
+      - name: Upload the SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dast-sarif-${{ steps.mode.outputs.mode }}
+          path: temp/dast/zap-results.sarif
+          if-no-files-found: warn
+
+      # ZAP's SARIF names findings by URL, which the Code Scanning ingestion
+      # has been known to reject; the artifact above is the durable publish
+      # and this upload is best-effort. Fork pull requests cannot write to
+      # Code Scanning at all.
+      - name: Upload SARIF to Code Scanning
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: temp/dast/zap-results.sarif
+          category: dast-${{ steps.mode.outputs.mode }}
+
+      - name: Stop the scan target
+        if: always()
+        run: docker rm -f aihub-dast >/dev/null 2>&1 || true
