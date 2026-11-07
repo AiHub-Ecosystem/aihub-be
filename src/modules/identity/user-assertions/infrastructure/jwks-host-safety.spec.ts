@@ -136,6 +136,8 @@ describe('assertSafeHost address check (#419)', () => {
       ['3fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'],
       ['2001:db7::1'],
       ['2001:db9::1'],
+      ['2003::1'],
+      ['3fff:1000::1'],
       ['2001:0200:0000:0000:0000:0000:0000:0001'],
       ['2001:200::2:68'],
       ['2606:4700::1111'],
@@ -146,7 +148,7 @@ describe('assertSafeHost address check (#419)', () => {
     });
   });
 
-  it('rejects a non-IP host string without reaching DNS', async () => {
+  it('sends a non-IP host string to the resolver path, not the address check', async () => {
     const failingFactory = () => {
       throw new Error('a non-IP host must not be resolved here');
     };
