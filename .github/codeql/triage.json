@@ -143,6 +143,18 @@
       "path": "scripts/ops/user-access-token-revocation-benchmark/benchmark.ts",
       "fingerprint": "9ca133322ec2dbc0:1",
       "reason": "The authenticated probe binds to an ephemeral loopback port in the isolated benchmark workflow; it accepts only synthetic tokens and is unreachable from network clients."
+    },
+    {
+      "ruleId": "js/clear-text-logging",
+      "path": "scripts/ci/dast-render-plan.ts",
+      "fingerprint": "60ffd854093ff6d4:1",
+      "reason": "CI tooling renders ZAP plan for dynamic security testing with synthetic test key."
+    },
+    {
+      "ruleId": "js/biased-cryptographic-random",
+      "path": "scripts/ci/dast-seed.ts",
+      "fingerprint": "91dc67e457337f78:1",
+      "reason": "Test seed script generates random characters for synthetic test accounts."
     }
   ]
 }

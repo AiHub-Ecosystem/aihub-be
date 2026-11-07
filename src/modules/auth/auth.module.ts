@@ -260,10 +260,10 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
         PostgresUserAccessTokenRevocationRepository,
         RUNTIME_CONNECTION_CONFIGURATION,
       ],
-      useFactory: async (
+      useFactory: (
         underlying: PostgresUserAccessTokenRevocationRepository,
         connectionConfig: RuntimeConnectionConfigurationPort,
-      ): Promise<BloomFilterUserAccessTokenRevocationAdapter> => {
+      ): BloomFilterUserAccessTokenRevocationAdapter => {
         const redisUrl = connectionConfig.redisUrl?.trim();
         let publisher: Redis | undefined;
         let subscriber: Redis | undefined;
@@ -272,20 +272,18 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
             commandTimeoutMs: 500,
           });
           subscriber = new Redis(redisUrl, {
-            lazyConnect: false,
+            lazyConnect: true,
             enableOfflineQueue: true,
             maxRetriesPerRequest: null,
             connectTimeout: 1_000,
           });
           subscriber.on('error', () => undefined);
         }
-        const adapter = new BloomFilterUserAccessTokenRevocationAdapter({
+        return new BloomFilterUserAccessTokenRevocationAdapter({
           underlying,
           redisPublisher: publisher,
           redisSubscriber: subscriber,
         });
-        await adapter.init();
-        return adapter;
       },
     },
     {
