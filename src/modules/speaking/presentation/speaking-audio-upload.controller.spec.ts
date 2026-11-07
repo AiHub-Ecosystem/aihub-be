@@ -99,29 +99,6 @@ class FakeAudioUploadRepository implements SpeakingAudioUploadRepositoryPort {
     );
   }
 
-  async rejectIntent(input: {
-    readonly owner: {
-      readonly assetId: string;
-      readonly organizationId: string;
-      readonly endUserId: string;
-      readonly environment: 'production' | 'sandbox';
-    };
-    readonly now: Date;
-  }): Promise<boolean> {
-    const found = await this.findUpload(input.owner);
-    if (
-      found.kind !== 'intent' ||
-      found.intent.status !== 'open' ||
-      found.intent.expiresAt <= input.now
-    )
-      return false;
-    this.intents.set(input.owner.assetId, {
-      ...found.intent,
-      status: 'rejected',
-    });
-    return true;
-  }
-
   async removeRejectedIntent(owner: {
     readonly assetId: string;
     readonly organizationId: string;
@@ -141,21 +118,42 @@ class FakeAudioUploadRepository implements SpeakingAudioUploadRepositoryPort {
       readonly endUserId: string;
       readonly environment: 'production' | 'sandbox';
     };
-    readonly now: Date;
-    readonly asset: SpeakingAudioAsset;
-  }): Promise<'created' | 'already_completed' | 'missing'> {
+    readonly now: () => Date;
+    readonly prepare: Parameters<
+      SpeakingAudioUploadRepositoryPort['completeIntent']
+    >[0]['prepare'];
+  }): Promise<
+    | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
+    | {
+        readonly kind: 'already_completed';
+        readonly asset: SpeakingAudioAsset;
+      }
+    | { readonly kind: 'missing' }
+    | { readonly kind: 'refused'; readonly refusal: AppError }
+  > {
     const found = await this.findUpload(input.owner);
-    if (found.kind === 'asset') return 'already_completed';
+    if (found.kind === 'asset') {
+      return { kind: 'already_completed', asset: found.asset };
+    }
     if (
       found.kind !== 'intent' ||
       found.intent.status !== 'open' ||
-      found.intent.expiresAt <= input.now
+      found.intent.expiresAt <= input.now()
     ) {
-      return 'missing';
+      return { kind: 'missing' };
     }
-    this.assets.set(input.asset.assetId, input.asset);
-    this.intents.delete(input.asset.assetId);
-    return 'created';
+    const prepared = await input.prepare(found.intent);
+    if (prepared.kind === 'refused') {
+      this.intents.set(input.owner.assetId, {
+        ...found.intent,
+        status: 'rejected',
+      });
+      return prepared;
+    }
+    if (found.intent.expiresAt <= input.now()) return { kind: 'missing' };
+    this.assets.set(prepared.asset.assetId, prepared.asset);
+    this.intents.delete(prepared.asset.assetId);
+    return { kind: 'created', asset: prepared.asset };
   }
 
   async listCleanupCandidates(input: {

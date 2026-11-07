@@ -20,8 +20,12 @@ type Stored = { contentType: string; byteSize: number; bytes: string };
 class Repository implements SpeakingAudioUploadRepositoryPort {
   intent: SpeakingAudioUploadIntent | undefined;
   asset: SpeakingAudioAsset | undefined;
-  rejectCalls = 0;
+  rejectedCount = 0;
   failCompletionOnce = false;
+  activeCompletions = 0;
+  completionTail: Promise<void> = Promise.resolve();
+  onSecondCompletionWaiting: (() => void) | undefined;
+  afterAssetRecorded: (() => Promise<void>) | undefined;
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
     this.intent = intent;
@@ -36,26 +40,53 @@ class Repository implements SpeakingAudioUploadRepositoryPort {
   async confirmRefreshableIntent(): Promise<boolean> {
     return true;
   }
-  async rejectIntent(): Promise<boolean> {
-    this.rejectCalls += 1;
-    if (this.intent === undefined || this.intent.status !== 'open')
-      return false;
-    this.intent = { ...this.intent, status: 'rejected' };
-    return true;
-  }
   async removeRejectedIntent(): Promise<void> {
     this.intent = undefined;
   }
-  async completeIntent(input: { readonly asset: SpeakingAudioAsset }): Promise<
-    'created' | 'already_completed' | 'missing'
+  async completeIntent(
+    input: Parameters<SpeakingAudioUploadRepositoryPort['completeIntent']>[0],
+  ): Promise<
+    Awaited<ReturnType<SpeakingAudioUploadRepositoryPort['completeIntent']>>
   > {
-    if (this.failCompletionOnce) {
-      this.failCompletionOnce = false;
-      throw new Error('simulated crash after copy');
+    const previous = this.completionTail;
+    let release = () => {};
+    this.completionTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    if (this.activeCompletions > 0) this.onSecondCompletionWaiting?.();
+    this.activeCompletions += 1;
+    await previous;
+    try {
+      if (this.asset !== undefined) {
+        return { kind: 'already_completed', asset: this.asset };
+      }
+      const intent = this.intent;
+      if (
+        intent === undefined ||
+        intent.status !== 'open' ||
+        intent.expiresAt <= input.now()
+      ) {
+        return { kind: 'missing' };
+      }
+      const prepared = await input.prepare(intent);
+      if (prepared.kind === 'refused') {
+        this.rejectedCount += 1;
+        this.intent = { ...intent, status: 'rejected' };
+        return { kind: 'refused', refusal: prepared.refusal };
+      }
+      if (intent.expiresAt <= input.now()) return { kind: 'missing' };
+      if (this.failCompletionOnce) {
+        this.failCompletionOnce = false;
+        throw new Error('simulated crash after copy');
+      }
+      this.asset = prepared.asset;
+      await this.afterAssetRecorded?.();
+      this.intent = undefined;
+      return { kind: 'created', asset: prepared.asset };
+    } finally {
+      this.activeCompletions -= 1;
+      release();
     }
-    this.asset = input.asset;
-    this.intent = undefined;
-    return 'created';
   }
   async listCleanupCandidates() {
     return [];
@@ -73,6 +104,9 @@ class Storage implements SpeakingAudioAssetStoragePort {
   readonly signed: string[] = [];
   corruptFinal = false;
   failStageDelete = false;
+  copyStarted: (() => void) | undefined;
+  beforeCopyComplete: (() => Promise<void>) | undefined;
+  copyCount = 0;
 
   async createUploadUrl(input: { readonly objectKey: string }) {
     this.signed.push(input.objectKey);
@@ -94,6 +128,9 @@ class Storage implements SpeakingAudioAssetStoragePort {
     readonly destinationObjectKey: string;
   }): Promise<void> {
     this.events.push('copy');
+    this.copyCount += 1;
+    this.copyStarted?.();
+    await this.beforeCopyComplete?.();
     const source = this.objects.get(input.sourceObjectKey);
     if (source !== undefined) {
       this.objects.set(
@@ -161,6 +198,20 @@ function stored(bytes = 'accepted bytes'): Stored {
   return { contentType: 'audio/wav', byteSize: 1_024, bytes };
 }
 
+function deferred() {
+  const state: { resolve?: () => void } = {};
+  const promise = new Promise<void>((resolve) => {
+    state.resolve = resolve;
+  });
+  return {
+    promise,
+    resolve: () => {
+      if (state.resolve === undefined) throw new Error('deferred is not ready');
+      state.resolve();
+    },
+  };
+}
+
 describe('SpeakingAudioUploadService staging completion', () => {
   it('publishes only the accepted copy when the still-live staging URL is reused', async () => {
     const h = setup();
@@ -179,6 +230,50 @@ describe('SpeakingAudioUploadService staging completion', () => {
     expect(h.storage.events).toEqual(['describe', 'copy', 'describe']);
   });
 
+  it('serializes concurrent completion across a staging re-PUT', async () => {
+    const h = setup();
+    const { stagingKey } = await openUpload(h);
+    const copyStarted = deferred();
+    const allowCopy = deferred();
+    const secondWaiting = deferred();
+    const assetRecorded = deferred();
+    const allowCommit = deferred();
+    h.storage.copyStarted = () => copyStarted.resolve();
+    h.storage.beforeCopyComplete = () => allowCopy.promise;
+    h.repository.onSecondCompletionWaiting = () => secondWaiting.resolve();
+    h.repository.afterAssetRecorded = async () => {
+      assetRecorded.resolve();
+      await allowCommit.promise;
+    };
+    h.storage.objects.set(stagingKey, stored());
+
+    const firstCompletion = h.service.completeUpload({
+      context: h.context,
+      assetId: ASSET_ID,
+    });
+    await copyStarted.promise;
+    const secondCompletion = h.service.completeUpload({
+      context: h.context,
+      assetId: ASSET_ID,
+    });
+    await secondWaiting.promise;
+    allowCopy.resolve();
+    await assetRecorded.promise;
+    h.storage.objects.set(stagingKey, stored('replacement bytes'));
+    allowCommit.resolve();
+
+    const [first, second] = await Promise.all([
+      firstCompletion,
+      secondCompletion,
+    ]);
+    expect(h.storage.copyCount).toBe(1);
+    expect(h.storage.objects.get(h.intent.objectKey)?.bytes).toBe(
+      'accepted bytes',
+    );
+    expect(second).toEqual({ asset: first.asset, created: false });
+    expect(h.repository.asset).toEqual(first.asset);
+  });
+
   it('checks the final copy after copying and deletes both keys on final refusal', async () => {
     const h = setup();
     const { stagingKey } = await openUpload(h);
@@ -191,7 +286,8 @@ describe('SpeakingAudioUploadService staging completion', () => {
 
     expect(h.storage.events).toEqual(['describe', 'copy', 'describe']);
     expect(h.storage.deleted).toEqual([h.intent.objectKey, stagingKey]);
-    expect(h.repository.rejectCalls).toBe(1);
+    expect(h.repository.rejectedCount).toBe(1);
+    expect(h.repository.intent).toBeUndefined();
     expect(h.repository.asset).toBeUndefined();
   });
 
@@ -206,7 +302,8 @@ describe('SpeakingAudioUploadService staging completion', () => {
 
     expect(h.storage.events).toEqual(['describe']);
     expect(h.storage.deleted).toEqual([h.intent.objectKey, stagingKey]);
-    expect(h.repository.rejectCalls).toBe(1);
+    expect(h.repository.rejectedCount).toBe(1);
+    expect(h.repository.intent).toBeUndefined();
   });
 
   it('retries a copy after a crash before the asset row and remains idempotent', async () => {

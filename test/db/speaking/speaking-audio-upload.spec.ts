@@ -130,9 +130,22 @@ function asset(upload: SpeakingAudioUploadIntent): SpeakingAudioAsset {
 }
 
 describe('Speaking Audio upload completion against PostgreSQL', () => {
-  it('atomically consumes one intent under concurrent completion retries', async () => {
+  it('holds the intent row lock across preparation and atomically accepts one completion', async () => {
     const upload = intent();
     await repository.createIntent(upload);
+    let releasePreparation = () => {};
+    const preparationBarrier = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    let announcePreparation = () => {};
+    const preparationStarted = new Promise<void>((resolve) => {
+      announcePreparation = resolve;
+    });
+    const prepare = jest.fn(async (lockedIntent: SpeakingAudioUploadIntent) => {
+      announcePreparation();
+      await preparationBarrier;
+      return { kind: 'accepted' as const, asset: asset(lockedIntent) };
+    });
     const input = {
       owner: {
         assetId: upload.assetId,
@@ -140,16 +153,45 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
         endUserId: upload.endUserId,
         environment: upload.environment,
       },
-      now: new Date('2026-10-03T04:05:00.000Z'),
-      asset: asset(upload),
+      now: () => new Date('2026-10-03T04:05:00.000Z'),
+      prepare,
     };
 
-    const results = await Promise.all([
-      repository.completeIntent(input),
-      repository.completeIntent(input),
-    ]);
+    let announceSecondCall = () => {};
+    const secondCallStarted = new Promise<void>((resolve) => {
+      announceSecondCall = resolve;
+    });
+    const originalCompleteIntent = repository.completeIntent.bind(repository);
+    let calls = 0;
+    const completeIntent = jest
+      .spyOn(repository, 'completeIntent')
+      .mockImplementation((completion) => {
+        calls += 1;
+        if (calls === 2) announceSecondCall();
+        return originalCompleteIntent(completion);
+      });
+    let results: Awaited<ReturnType<typeof originalCompleteIntent>>[] = [];
+    try {
+      const first = repository.completeIntent(input);
+      await preparationStarted;
+      const second = repository.completeIntent(input);
+      await secondCallStarted;
+      releasePreparation();
+      results = await Promise.all([first, second]);
+    } finally {
+      completeIntent.mockRestore();
+    }
 
-    expect(results.sort()).toEqual(['already_completed', 'created']);
+    expect(results.map((result) => result.kind).sort()).toEqual([
+      'already_completed',
+      'created',
+    ]);
+    const created = results.find((result) => result.kind === 'created');
+    const alreadyCompleted = results.find(
+      (result) => result.kind === 'already_completed',
+    );
+    expect(alreadyCompleted?.asset).toEqual(created?.asset);
+    expect(prepare).toHaveBeenCalledTimes(1);
     const rows = await pool.query(
       `SELECT
          (SELECT count(*)::int FROM speaking_audio_upload_intents WHERE id = $1) AS intents,
@@ -200,8 +242,11 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
           endUserId: upload.endUserId,
           environment: upload.environment,
         },
-        now: new Date('2026-10-03T04:05:00.000Z'),
-        asset: asset(upload),
+        now: () => new Date('2026-10-03T04:05:00.000Z'),
+        prepare: async (lockedIntent) => ({
+          kind: 'accepted',
+          asset: asset(lockedIntent),
+        }),
       }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
 
@@ -246,10 +291,13 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
           endUserId: upload.endUserId,
           environment: upload.environment,
         },
-        now: new Date('2026-10-03T04:05:00.000Z'),
-        asset: asset(upload),
+        now: () => new Date('2026-10-03T04:05:00.000Z'),
+        prepare: async (lockedIntent) => ({
+          kind: 'accepted',
+          asset: asset(lockedIntent),
+        }),
       }),
-    ).resolves.toBe('created');
+    ).resolves.toMatchObject({ kind: 'created' });
     await expect(
       service.completeUpload({
         context: context(otherOrganizationId),
@@ -275,11 +323,14 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
         endUserId: upload.endUserId,
         environment: upload.environment,
       },
-      now: new Date('2026-10-03T04:05:00.000Z'),
-      asset: asset(upload),
+      now: () => new Date('2026-10-03T04:05:00.000Z'),
+      prepare: async (lockedIntent) => ({
+        kind: 'accepted',
+        asset: asset(lockedIntent),
+      }),
     });
 
-    expect(result).toBe('created');
+    expect(result.kind).toBe('created');
     const rows = await sandboxPool.query(
       `SELECT
          (SELECT count(*)::int FROM organizations WHERE id = $1) AS organizations,
