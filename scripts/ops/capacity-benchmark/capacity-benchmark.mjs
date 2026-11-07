@@ -53,7 +53,7 @@ import {
 /** @typedef {{cpuPercent: number | null, usedMemoryBytes: number, freeMemoryBytes: number}} HostSample */
 /** @typedef {{exitCode: number | null, stdout: string, stderr: string, durationMs: number}} AppCommandResult */
 /** @typedef {{metrics: MetricSet}} K6Summary */
-/** @typedef {{errors: number, redisRoundTripDelayMs: number}} StubStats */
+/** @typedef {{errors: number | Record<string, number>, redisRoundTripDelayMs: number}} StubStats */
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), '../../..');
@@ -894,7 +894,11 @@ function isK6Summary(value) {
 function isStubStats(value) {
   return (
     isRecord(value) &&
-    typeof value.errors === 'number' &&
+    (typeof value.errors === 'number' ||
+      (isRecord(value.errors) &&
+        Object.values(value.errors).every(
+          (count) => typeof count === 'number',
+        ))) &&
     typeof value.redisRoundTripDelayMs === 'number'
   );
 }
