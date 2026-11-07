@@ -143,3 +143,111 @@ describe('Postgres pool metrics', () => {
     }
   });
 });
+
+describe('Postgres pool reconnect backoff (#1608)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('retries a failed attempt with a jittered delay and succeeds', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const connect = jest.spyOn(Pool.prototype, 'connect');
+    const refused = Object.assign(new Error('connect ECONNREFUSED'), {
+      code: 'ECONNREFUSED',
+    });
+    let calls = 0;
+    connect.mockImplementation(((callback: ConnectCallback) => {
+      calls += 1;
+      if (calls === 1) {
+        callback(refused, undefined, () => undefined);
+        return;
+      }
+      const client = {
+        getTransactionStatus: () => 'I',
+        release: jest.fn(),
+      } as unknown as PoolClient;
+      callback(undefined, client, (error) => client.release(error));
+    }) as never);
+    const pool = createPostgresPool('integration-test', { max: 1 });
+
+    const client = await pool.connect();
+    client.release();
+
+    expect(calls).toBe(2);
+    const payload = await getMetrics();
+    expect(payload).toContain(
+      'aihub_postgres_pool_backoff_delay_seconds_count{pool="integration-test"} 1',
+    );
+    expect(payload).toContain(
+      'aihub_postgres_pool_connect_retry_latency_seconds_count{pool="integration-test",outcome="success"} 1',
+    );
+  });
+
+  it('does not retry an error the server would repeat', async () => {
+    const connect = jest.spyOn(Pool.prototype, 'connect');
+    const badPassword = Object.assign(
+      new Error('password authentication failed'),
+      {
+        code: '28P01',
+      },
+    );
+    connect.mockImplementation(((callback: ConnectCallback) => {
+      callback(badPassword, undefined, () => undefined);
+    }) as never);
+    const pool = createPostgresPool('integration-test', { max: 1 });
+
+    await expect(pool.connect()).rejects.toBe(badPassword);
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the starvation breaker and sheds instead of queueing', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const connect = jest.spyOn(Pool.prototype, 'connect');
+    const refused = Object.assign(new Error('connect ECONNREFUSED'), {
+      code: 'ECONNREFUSED',
+    });
+    connect.mockImplementation(((callback: ConnectCallback) => {
+      callback(refused, undefined, () => undefined);
+    }) as never);
+    const pool = createPostgresPool('integration-test', { max: 5 });
+
+    // Ten concurrent requests against a dead database: five hold slots and
+    // retry inside their acquisition budget, five wait, and every failure
+    // feeds the breaker until it opens.
+    await Promise.all(
+      Array.from({ length: 10 }, () =>
+        expect(pool.connect()).rejects.toBeInstanceOf(Error),
+      ),
+    );
+    expect(pool.waitingCount).toBe(0);
+    expect(pool.totalCount).toBe(0);
+    const payloadBeforeShed = await getMetrics();
+    const shedPrefix =
+      'aihub_postgres_pool_shed_total{pool="integration-test"} ';
+    const shedBefore = Number(
+      payloadBeforeShed
+        .split('\n')
+        .find((line) => line.startsWith(shedPrefix))
+        ?.split(' ')
+        .at(-1) ?? 0,
+    );
+
+    // While open: refused at once, without another attempt.
+    const before = Date.now();
+    await expect(pool.connect()).rejects.toMatchObject({ code: 'P2024' });
+    expect(Date.now() - before).toBeLessThan(50);
+
+    const payload = await getMetrics();
+    const shedAfter = Number(
+      payload
+        .split('\n')
+        .find((line) => line.startsWith(shedPrefix))
+        ?.split(' ')
+        .at(-1) ?? 0,
+    );
+    expect(shedAfter).toBe(shedBefore + 1);
+    expect(payload).toContain(
+      'aihub_postgres_pool_breaker_transitions_total{pool="integration-test",state="open"} 1',
+    );
+  });
+});
