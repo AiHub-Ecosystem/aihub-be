@@ -60,6 +60,7 @@ import {
 } from './cli-options.cjs';
 import { loadCliRunner } from './load-cli-runner.cjs';
 import {
+  COMMAND_OPTIONS,
   CONTROL_PLANE_COMMANDS,
   NATIVE_DRY_RUN_COMMANDS,
   classifyDatabase,
@@ -354,8 +355,9 @@ function selectedDatabaseConfigurationSource(command) {
   return databaseConfigurationSource('DATABASE_URL');
 }
 
-/** @param {string[]} values */
+/** @param {string[]} values @returns {CliOptions} */
 function parseOptions(values) {
+  /** @type {CliOptions} */
   const options = new Map();
   for (let index = 0; index < values.length; index += 1) {
     const name = values[index];
@@ -972,9 +974,6 @@ async function setIdentity(options) {
 
 /** @param {CliOptions} options */
 async function cleanupIdempotency(options) {
-  for (const name of options.keys()) {
-    if (name !== 'target' && name !== 'dry-run') usageError();
-  }
   const safety = requireOperatorSafety(
     await prepareOperatorMutation('idempotency:cleanup', options),
   );
@@ -1041,12 +1040,6 @@ async function cleanupIdempotency(options) {
 
 /** @param {CliOptions} options */
 async function reconcileQuotaCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'month' && name !== 'dry-run' && name !== 'target') {
-      usageError();
-    }
-  }
-
   const requestedMonth = options.get('month');
   const now = new Date();
   await parseTargetMonth(requestedMonth, now);
@@ -1085,12 +1078,6 @@ async function auditRedisTtlCommand(options) {
 // scripts can tell a bad command from an operational failure.
 /** @param {CliOptions} options @param {'active' | 'suspended'} status */
 async function organizationStatusCommand(options, status) {
-  for (const name of options.keys()) {
-    if (!['org', 'actor', 'target', 'dry-run'].includes(name)) {
-      usageError();
-    }
-  }
-
   const organizationId = requiredOption(options, 'org');
   const actorUsername = requiredOption(options, 'actor');
   const safety = await prepareOperatorMutation(
@@ -1113,10 +1100,6 @@ async function organizationStatusCommand(options, status) {
 
 /** @param {CliOptions} options */
 async function organizationGrantEntitlementCommand(options) {
-  for (const name of options.keys()) {
-    if (!['org', 'actor', 'entitlement', 'target', 'dry-run'].includes(name))
-      usageError();
-  }
   const organizationId = requiredOption(options, 'org');
   const actorUsername = requiredOption(options, 'actor');
   const entitlement = requiredOption(options, 'entitlement');
@@ -1141,12 +1124,6 @@ async function organizationGrantEntitlementCommand(options) {
 // usage error, named by the command before it exits.
 /** @param {CliOptions} options */
 async function attachFirstOwnerCommand(options) {
-  for (const name of options.keys()) {
-    if (!['org', 'owner', 'actor', 'target', 'dry-run'].includes(name)) {
-      usageError();
-    }
-  }
-
   const organizationId = requiredOption(options, 'org');
   const ownerUsername = requiredOption(options, 'owner');
   const actorUsername = requiredOption(options, 'actor');
@@ -1170,11 +1147,6 @@ async function attachFirstOwnerCommand(options) {
 // alerts on a partial run. Run it once per deployment, like `usage:prune`.
 /** @param {CliOptions} options */
 async function sweepAvatarsCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'dry-run' && name !== 'target') {
-      usageError();
-    }
-  }
   const dryRun = booleanOption(options, 'dry-run');
   const safety = requireOperatorSafety(
     await prepareOperatorMutation('avatar:sweep', options),
@@ -1197,9 +1169,6 @@ async function sweepAvatarsCommand(options) {
 // failure leaves the exit status non-zero so cron alerts. Run it daily.
 /** @param {CliOptions} options */
 async function sweepRegistrationsCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'target' && name !== 'dry-run') usageError();
-  }
   booleanOption(options, 'dry-run');
   const safety = requireOperatorSafety(
     await prepareOperatorMutation('registrations:sweep', options),
@@ -1215,9 +1184,6 @@ async function sweepRegistrationsCommand(options) {
 
 /** @param {CliOptions} options */
 async function sweepNotificationsCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'target' && name !== 'dry-run') usageError();
-  }
   booleanOption(options, 'dry-run');
   const safety = await prepareOperatorMutation('notifications:sweep', options);
   if (safety?.previewed) return;
@@ -1229,11 +1195,6 @@ async function sweepNotificationsCommand(options) {
 
 /** @param {CliOptions} options */
 async function sweepSpeakingAudioUploadsCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'dry-run' && name !== 'target') {
-      usageError();
-    }
-  }
   const dryRun = booleanOption(options, 'dry-run');
   const safety = requireOperatorSafety(
     await prepareOperatorMutation('speaking:audio-upload-sweep', options),
@@ -1255,9 +1216,6 @@ async function sweepSpeakingAudioUploadsCommand(options) {
 
 /** @param {CliOptions} options */
 async function sweepWritingChartUploadsCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'dry-run' && name !== 'target') usageError();
-  }
   const dryRun = booleanOption(options, 'dry-run');
   const safety = requireOperatorSafety(
     await prepareOperatorMutation('writing:chart-upload-sweep', options),
@@ -1277,9 +1235,6 @@ async function sweepWritingChartUploadsCommand(options) {
 
 /** @param {CliOptions} options */
 async function revokeWritingChartCommand(options) {
-  for (const name of options.keys()) {
-    if (!['url', 'actor', 'target', 'dry-run'].includes(name)) usageError();
-  }
   const url = requiredOption(options, 'url');
   const actorUsername = requiredOption(options, 'actor');
   const safety = requireOperatorSafety(
@@ -1316,9 +1271,6 @@ async function revokeWritingChartCommand(options) {
 
 /** @param {CliOptions} options */
 async function pruneUsageCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'dry-run' && name !== 'target') usageError();
-  }
   const dryRun = booleanOption(options, 'dry-run');
   const databaseUrl = process.env.DATABASE_URL ?? '';
   if (databaseUrl.trim().length === 0) {
@@ -1340,12 +1292,6 @@ async function pruneUsageCommand(options) {
 
 /** @param {CliOptions} options */
 async function reportUsageCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'from' && name !== 'to') {
-      usageError();
-    }
-  }
-
   await runUsageReport({
     databaseUrl: process.env.DATABASE_URL ?? '',
     from: requiredOption(options, 'from'),
@@ -1355,12 +1301,6 @@ async function reportUsageCommand(options) {
 
 /** @param {CliOptions} options */
 async function reportPublicApiMajorCommand(options) {
-  for (const name of options.keys()) {
-    if (name !== 'from' && name !== 'to') {
-      usageError();
-    }
-  }
-
   try {
     await runCliCommand(publicApiMajorReportDescriptor, {
       databaseUrl: process.env.DATABASE_URL ?? '',
@@ -1410,13 +1350,6 @@ async function runBilling(descriptor, input) {
 // billing:statement --month YYYY-MM [--org <id>] [--close true --actor <username>]
 /** @param {CliOptions} options */
 async function billingStatementCommand(options) {
-  for (const name of options.keys()) {
-    if (
-      !['month', 'org', 'close', 'actor', 'target', 'dry-run'].includes(name)
-    ) {
-      usageError();
-    }
-  }
   const close = booleanOption(options, 'close');
   if (close !== options.has('actor')) {
     usageError();
@@ -1442,25 +1375,6 @@ async function billingStatementCommand(options) {
 //   (--request-ids <id,id> | --period-from <iso> --period-to <iso>)
 /** @param {CliOptions} options */
 async function billingAdjustCommand(options) {
-  const allowed = [
-    'id',
-    'org',
-    'month',
-    'operation',
-    'requests',
-    'reason',
-    'actor',
-    'request-ids',
-    'period-from',
-    'period-to',
-    'target',
-    'dry-run',
-  ];
-  for (const name of options.keys()) {
-    if (!allowed.includes(name)) {
-      usageError();
-    }
-  }
   const byIds = options.has('request-ids');
   const byPeriod = options.has('period-from') || options.has('period-to');
   if (byIds === byPeriod) {
@@ -1494,8 +1408,20 @@ async function billingAdjustCommand(options) {
 }
 
 async function main() {
-  const [command, ...values] = process.argv.slice(2);
+  const [/** @type {string | undefined} */ command, ...values] =
+    process.argv.slice(2);
   const options = parseOptions(values);
+  const /** @type {readonly string[] | undefined} */ declared =
+      command === undefined ? undefined : COMMAND_OPTIONS[command];
+  if (declared === undefined) {
+    usageError();
+  }
+  const accepted = new Set([...declared, 'target', 'dry-run']);
+  for (const name of options.keys()) {
+    if (!accepted.has(name)) {
+      usageError();
+    }
+  }
   if (
     !isMutatingCommand(command, options) &&
     (options.has('target') || options.has('dry-run'))

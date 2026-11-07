@@ -13,6 +13,7 @@ export interface OperatorMutationPreview {
   readonly target?: string;
 }
 
+export const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>>;
 export const CONTROL_PLANE_COMMANDS: ReadonlySet<string>;
 export const MUTATING_COMMANDS: ReadonlySet<string>;
 export const NATIVE_DRY_RUN_COMMANDS: ReadonlySet<string>;

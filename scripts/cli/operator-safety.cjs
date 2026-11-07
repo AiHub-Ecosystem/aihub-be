@@ -80,6 +80,62 @@ const MUTATION_PREVIEW_OPTIONS = {
   ],
   'billing:statement': ['month', 'org', 'close', 'actor'],
 };
+/**
+ * Options each Operator command accepts, beyond the `--target` / `--dry-run`
+ * pair that `prepareOperatorMutation` consumes. Unknown (including
+ * case-variant) names are usage errors, so a mistyped option never silently
+ * falls back to a default.
+ */
+const COMMAND_OPTIONS = {
+  'org:create': [
+    'name',
+    'entitlements',
+    'rate-limit-rpm',
+    'max-concurrent',
+    'monthly-quota',
+    'hard-stop',
+  ],
+  'key:create': ['org', 'actor', 'name', 'scopes', 'envs', 'internal'],
+  'key:revoke': ['key', 'actor'],
+  'identity:set': [
+    'org',
+    'status',
+    'issuer',
+    'jwks-url',
+    'public-keys-file',
+    'allowed-algorithms',
+    'max-assertion-ttl-seconds',
+  ],
+  'idempotency:cleanup': [],
+  'quota:reconcile': ['month'],
+  'redis:ttl-audit': [],
+  'org:suspend': ['org', 'actor'],
+  'org:restore': ['org', 'actor'],
+  'org:grant-entitlement': ['org', 'actor', 'entitlement'],
+  'org:attach-owner': ['org', 'owner', 'actor'],
+  'avatar:sweep': [],
+  'speaking:audio-upload-sweep': [],
+  'registrations:sweep': [],
+  'notifications:sweep': [],
+  'writing:chart-upload-sweep': [],
+  'writing:chart-revoke': ['url', 'actor'],
+  'usage:prune': [],
+  'usage:report': ['from', 'to'],
+  'usage:major-report': ['from', 'to'],
+  'billing:statement': ['month', 'org', 'close', 'actor'],
+  'billing:adjust': [
+    'id',
+    'org',
+    'month',
+    'operation',
+    'requests',
+    'reason',
+    'actor',
+    'request-ids',
+    'period-from',
+    'period-to',
+  ],
+};
 const MUTATING_COMMANDS = new Set(Object.keys(MUTATION_ACTIONS));
 const CONTROL_PLANE_COMMANDS = new Set([
   'org:create',
@@ -221,6 +277,7 @@ function previewOperatorMutation(command, options) {
 }
 
 module.exports = {
+  COMMAND_OPTIONS,
   CONTROL_PLANE_COMMANDS,
   MUTATING_COMMANDS,
   NATIVE_DRY_RUN_COMMANDS,

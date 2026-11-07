@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+
 import {
   CliUsageError,
   booleanOption,
@@ -5,6 +7,7 @@ import {
   quotaOption,
 } from './cli-options.cjs';
 import {
+  COMMAND_OPTIONS,
   CONTROL_PLANE_COMMANDS,
   MUTATING_COMMANDS,
   classifyDatabase,
@@ -22,6 +25,198 @@ function options(
   return new Map(Object.entries(entries));
 }
 
+interface CliResult {
+  readonly status: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+function runCli(
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: '' },
+): Promise<CliResult> {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      ['scripts/cli/cli.mjs', ...args],
+      { cwd: process.cwd(), env },
+      (error, stdout, stderr) => {
+        const code = error?.code;
+        resolve({
+          status: typeof code === 'number' ? code : error === null ? 0 : 1,
+          stdout,
+          stderr,
+        });
+      },
+    );
+  });
+}
+
+describe('COMMAND_OPTIONS', () => {
+  it('declares an allow-list for every routed command', () => {
+    const routed = [
+      'org:create',
+      'key:create',
+      'key:revoke',
+      'identity:set',
+      'idempotency:cleanup',
+      'quota:reconcile',
+      'redis:ttl-audit',
+      'org:suspend',
+      'org:restore',
+      'org:grant-entitlement',
+      'org:attach-owner',
+      'avatar:sweep',
+      'speaking:audio-upload-sweep',
+      'registrations:sweep',
+      'notifications:sweep',
+      'writing:chart-upload-sweep',
+      'writing:chart-revoke',
+      'usage:prune',
+      'usage:report',
+      'usage:major-report',
+      'billing:statement',
+      'billing:adjust',
+    ];
+    for (const command of routed) {
+      expect(COMMAND_OPTIONS[command]).toBeDefined();
+    }
+  });
+
+  it('keeps the shared safety pair out of command-specific lists', () => {
+    for (const options of Object.values(COMMAND_OPTIONS)) {
+      expect(options).not.toContain('target');
+      expect(options).not.toContain('dry-run');
+    }
+  });
+
+  it('names the operator-visibility options every mutating preview reads', () => {
+    expect(COMMAND_OPTIONS['org:create']).toContain('monthly-quota');
+    expect(COMMAND_OPTIONS['key:create']).toContain('envs');
+    expect(COMMAND_OPTIONS['identity:set']).toContain('public-keys-file');
+  });
+});
+
+// Every Operator command rejects an unknown or case-variant option before
+// touching the database (#925): the allow-list lives in operator-safety.cjs,
+// enforced once in cli.mjs `main()`, so a mistyped option can never silently
+// fall back to a default — e.g. `--env` on key:create issuing a Production
+// key the operator meant to scope to Sandbox.
+describe('operator CLI unknown options', () => {
+  it.each([
+    ['org:create', '--name', 'Acme', '--entitlement', 'writing'],
+    ['org:create', '--name', 'Acme', '--monthly-quotas', '100'],
+    [
+      'key:create',
+      '--org',
+      'org_x',
+      '--actor',
+      'op',
+      '--name',
+      'k',
+      '--env',
+      'sandbox',
+    ],
+    [
+      'key:create',
+      '--org',
+      'org_x',
+      '--actor',
+      'op',
+      '--name',
+      'k',
+      '--ENVS',
+      'sandbox',
+    ],
+    ['key:revoke', '--key', 'ak_x', '--actor', 'op', '--KEY', 'ak_y'],
+    [
+      'identity:set',
+      '--org',
+      'org_x',
+      '--issuer',
+      'https://issuer.example',
+      '--jwks-url',
+      'https://jwks.example',
+      '--ISSUER',
+      'https://other.example',
+    ],
+    [
+      'idempotency:cleanup',
+      '--target',
+      'sandbox',
+      '--dry-run',
+      'true',
+      '--unused',
+      'x',
+    ],
+    [
+      'billing:adjust',
+      '--id',
+      'badj_x',
+      '--org',
+      'org_x',
+      '--month',
+      '2026-01',
+      '--operation',
+      'op_x',
+      '--requests',
+      '5',
+      '--reason',
+      'correction',
+      '--actor',
+      'op',
+      '--request-ids',
+      'req_1',
+      '--reason ',
+      'correction',
+    ],
+    [
+      'usage:report',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-02-01',
+      '--FROM',
+      '2026-01-01',
+    ],
+    ['usage:prune', '--dry-run', 'true', '--target', 'sandbox', '--limt', '5'],
+    [
+      'quota:reconcile',
+      '--month',
+      '2026-01',
+      '--dry-run',
+      'true',
+      '--moonth',
+      '2026-01',
+    ],
+  ])('rejects %s with an unknown option', async (command, ...args) => {
+    const result = await runCli([command, ...args]);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Command failed');
+  });
+
+  it('rejects an unknown command name', async () => {
+    const result = await runCli(['bogus:command']);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Command failed');
+  });
+
+  it('still rejects an unknown option before any database work', async () => {
+    const result = await runCli([
+      'org:create',
+      '--name',
+      'Acme',
+      '--entitlements',
+      'writing',
+      '--unknown',
+      'yes',
+    ]);
+    expect(result.status).toBe(2);
+    expect(result.stderr).not.toContain('DATABASE_URL');
+  });
+});
 describe('quotaOption', () => {
   it('reads an absent quota as unlimited', () => {
     expect(quotaOption(options(), 'monthly-quota')).toBeNull();

@@ -10,6 +10,16 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
+import { usageError } from './cli-options.cjs';
+
+const UPLOAD_AUDIO_OPTIONS = new Set([
+  'source',
+  'endpoint',
+  'bucket',
+  'region',
+  'dry-run',
+]);
+
 const DEFAULT_SOURCE = 'E:\\audios';
 const DEFAULT_ENDPOINT = 'https://s3.wispace.app';
 const DEFAULT_BUCKET = 'aihub-speaking-samples';
@@ -19,10 +29,28 @@ const OBJECT_PREFIX = 'speaking-samples';
 /** @typedef {{part: number, filePath: string, fileName: string, bytes: number, key: string, contentType: string}} SourceObject */
 /** @typedef {{endpoint: string, bucket: string, region: string, accessKeyId: string, secretAccessKey: string}} StorageConfig */
 
+/** @param {string[]} values @returns {Map<string, string | undefined>} */
+function parseOptions(values) {
+  /** @type {Map<string, string | undefined>} */
+  const parsed = new Map();
+  for (let index = 0; index < values.length; index += 1) {
+    const name = values[index];
+    if (typeof name !== 'string' || !name.startsWith('--')) usageError();
+    const optionName = name.slice(2);
+    if (!UPLOAD_AUDIO_OPTIONS.has(optionName)) usageError();
+    const value = values[index + 1];
+    if (typeof value !== 'string' || value.startsWith('--')) usageError();
+    parsed.set(optionName, value);
+    index += 1;
+  }
+  return parsed;
+}
+
+const argumentsMap = parseOptions(process.argv.slice(2));
+
 /** @param {string} name @returns {string | undefined} */
 function option(name) {
-  const index = process.argv.indexOf(name);
-  return index === -1 ? undefined : process.argv[index + 1];
+  return argumentsMap.get(name);
 }
 
 /** @param {string} name @returns {string} */
@@ -48,17 +76,13 @@ function contentType(extension) {
 /** @returns {StorageConfig} */
 function storageConfig() {
   const endpoint =
-    option('--endpoint') ??
+    option('endpoint') ??
     process.env.SEAWEEDFS_ENDPOINT_URL?.trim() ??
     DEFAULT_ENDPOINT;
   const bucket =
-    option('--bucket') ??
-    process.env.SEAWEEDFS_BUCKET?.trim() ??
-    DEFAULT_BUCKET;
+    option('bucket') ?? process.env.SEAWEEDFS_BUCKET?.trim() ?? DEFAULT_BUCKET;
   const region =
-    option('--region') ??
-    process.env.SEAWEEDFS_REGION?.trim() ??
-    DEFAULT_REGION;
+    option('region') ?? process.env.SEAWEEDFS_REGION?.trim() ?? DEFAULT_REGION;
 
   const url = new URL(endpoint);
   if (
@@ -158,9 +182,14 @@ async function ensureBucket(client, bucket) {
 
 async function main() {
   const source = path.resolve(
-    option('--source') ?? process.env.SPEAKING_AUDIO_SOURCE ?? DEFAULT_SOURCE,
+    option('source') ?? process.env.SPEAKING_AUDIO_SOURCE ?? DEFAULT_SOURCE,
   );
-  const dryRun = process.argv.includes('--dry-run');
+  const rawDryRun = option('dry-run');
+  if (rawDryRun !== undefined) {
+    const value = rawDryRun.trim().toLowerCase();
+    if (value !== 'true' && value !== 'false') usageError();
+  }
+  const dryRun = rawDryRun?.trim().toLowerCase() === 'true';
   const objects = await sourceObjects(source);
 
   if (dryRun) {

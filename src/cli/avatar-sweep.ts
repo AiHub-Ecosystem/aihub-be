@@ -1,11 +1,10 @@
 import {
   AvatarOrphanSweep,
+  type AvatarRepositoryPort,
+  type AvatarStoragePort,
   type AvatarSweepSummary,
-} from '@/modules/avatar/application/avatar-orphan-sweep';
-import type { AvatarRepositoryPort } from '@/modules/avatar/application/avatar-repository.port';
-import type { AvatarStoragePort } from '@/modules/avatar/application/avatar-storage.port';
-import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
-import { createCliSeaweedFsClient } from './seaweedfs-client';
+} from '@/modules/avatar/public/avatar-sweep';
+import { createCliAvatarStorage } from './avatar-storage';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -42,15 +41,7 @@ export async function runAvatarSweepCommand(
 ): Promise<AvatarSweepSummary> {
   const emit = input.emit ?? console.log;
   const repository = await openRepository(input);
-  let storage = input.storage;
-  if (storage === undefined) {
-    storage = new S3AvatarStorage(
-      createCliSeaweedFsClient(),
-      process.env.SEAWEEDFS_USER_ASSET_BUCKET === undefined
-        ? {}
-        : { bucket: process.env.SEAWEEDFS_USER_ASSET_BUCKET },
-    );
-  }
+  const storage = input.storage ?? createCliAvatarStorage();
   const sweep = new AvatarOrphanSweep(repository, storage);
 
   const { result } = await runOperatorCommand(
@@ -67,4 +58,3 @@ export async function runAvatarSweepCommand(
   );
   return result;
 }
-import process from 'node:process';

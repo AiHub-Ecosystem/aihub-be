@@ -1,10 +1,9 @@
-import type {
-  SpeakingAudioAssetStoragePort,
-  SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
-import { SpeakingAudioUploadSweep } from '@/modules/speaking/application/speaking-audio-upload.sweep';
-import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';
-import { createCliSeaweedFsClient } from './seaweedfs-client';
+import {
+  type SpeakingAudioAssetStoragePort,
+  type SpeakingAudioUploadRepositoryPort,
+  SpeakingAudioUploadSweep,
+} from '@/modules/speaking/public/speaking-audio-upload-sweep';
+import { createCliSpeakingAudioAssetStorage } from './speaking-audio-storage';
 
 import { runOperatorCommand } from './operator-command-context';
 
@@ -42,20 +41,7 @@ export async function runSpeakingAudioUploadSweepCommand(
   input: SpeakingAudioUploadSweepCliInput,
 ) {
   const repository = await openRepository(input);
-  let storage = input.storage;
-  if (storage === undefined) {
-    const bucket = process.env.SEAWEEDFS_AUDIO_ASSET_BUCKET;
-    storage = new S3SpeakingAudioAssetStorage(
-      createCliSeaweedFsClient(),
-      process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
-        ? bucket === undefined
-          ? {}
-          : { sandboxBucket: bucket }
-        : bucket === undefined
-          ? {}
-          : { productionBucket: bucket },
-    );
-  }
+  const storage = input.storage ?? createCliSpeakingAudioAssetStorage();
   const sweep = new SpeakingAudioUploadSweep(repository, storage);
   const { result } = await runOperatorCommand(
     repository,
@@ -70,4 +56,3 @@ export async function runSpeakingAudioUploadSweepCommand(
   );
   return result;
 }
-import process from 'node:process';
