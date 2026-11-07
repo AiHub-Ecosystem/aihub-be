@@ -1,6 +1,7 @@
 import { AppError, internalError } from '@/common/errors/app-error';
 import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS } from '@/modules/speaking/application/speaking-audio-completion-timeouts';
 import type {
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
@@ -204,7 +205,7 @@ export class PostgresSpeakingAudioUploadRepository
     | { readonly kind: 'missing' }
     | { readonly kind: 'refused'; readonly refusal: AppError }
   > {
-    return this.transaction(async (client) => {
+    return this.completionTransaction(async (client) => {
       const [intentRow] = await client.$queryRawUnsafe<readonly IntentModel[]>(
         LOCK_INTENT_SQL,
         input.owner.assetId,
@@ -370,12 +371,13 @@ export class PostgresSpeakingAudioUploadRepository
 
   private async transaction<T>(
     run: (client: Prisma.TransactionClient) => Promise<T>,
+    options: {
+      readonly maxWait: number;
+      readonly timeout: number;
+    } = CONTROL_PLANE_TRANSACTION_OPTIONS,
   ): Promise<T> {
     try {
-      return await this.client.$transaction(
-        (client) => run(client),
-        CONTROL_PLANE_TRANSACTION_OPTIONS,
-      );
+      return await this.client.$transaction((client) => run(client), options);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -387,6 +389,15 @@ export class PostgresSpeakingAudioUploadRepository
         error,
       );
     }
+  }
+
+  private async completionTransaction<T>(
+    run: (client: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.transaction(run, {
+      ...CONTROL_PLANE_TRANSACTION_OPTIONS,
+      timeout: SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS,
+    });
   }
 
   private async run<T>(operation: () => Promise<T>): Promise<T> {

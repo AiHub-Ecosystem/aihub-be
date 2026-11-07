@@ -22,6 +22,7 @@ import {
   speakingAudioObjectKey,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+import { SPEAKING_AUDIO_COMPLETION_DEADLINE_MS } from './speaking-audio-completion-timeouts';
 
 import type {
   SpeakingAudioAssetStoragePort,
@@ -231,6 +232,10 @@ export class SpeakingAudioUploadService
       throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
+    const completionSignal = AbortSignal.any([
+      input.context.signal,
+      AbortSignal.timeout(SPEAKING_AUDIO_COMPLETION_DEADLINE_MS),
+    ]);
     const result = await this.repository.completeIntent({
       owner,
       now: this.now,
@@ -241,7 +246,7 @@ export class SpeakingAudioUploadService
         );
         const staging = await this.storage.describeObject(
           { environment: intent.environment, objectKey: stagingKey },
-          input.context.signal,
+          completionSignal,
         );
         if (staging === undefined) {
           throw uploadNotFound(
@@ -259,17 +264,23 @@ export class SpeakingAudioUploadService
           return { kind: 'refused', refusal: stagingRefusal };
         }
 
+        if (completionSignal.aborted) {
+          throw storageUnavailable(
+            'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+            'Speaking audio storage is unavailable',
+          );
+        }
         await this.storage.copyObject(
           {
             environment: intent.environment,
             sourceObjectKey: stagingKey,
             destinationObjectKey: intent.objectKey,
           },
-          input.context.signal,
+          completionSignal,
         );
         const finalObject = await this.storage.describeObject(
           { environment: intent.environment, objectKey: intent.objectKey },
-          input.context.signal,
+          completionSignal,
         );
         const finalRefusal = invalidStoredObject(
           finalObject?.contentType,

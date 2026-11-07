@@ -102,6 +102,7 @@ class Storage implements SpeakingAudioAssetStoragePort {
   readonly deleted: string[] = [];
   readonly events: string[] = [];
   readonly signed: string[] = [];
+  readonly operationSignals: (AbortSignal | undefined)[] = [];
   corruptFinal = false;
   failStageDelete = false;
   copyStarted: (() => void) | undefined;
@@ -115,7 +116,11 @@ class Storage implements SpeakingAudioAssetStoragePort {
       expiresAt: new Date(NOW.getTime() + 300_000),
     };
   }
-  async describeObject(input: { readonly objectKey: string }) {
+  async describeObject(
+    input: { readonly objectKey: string },
+    signal?: AbortSignal,
+  ) {
+    this.operationSignals.push(signal);
     this.events.push('describe');
     this.described.push(input.objectKey);
     const object = this.objects.get(input.objectKey);
@@ -123,10 +128,14 @@ class Storage implements SpeakingAudioAssetStoragePort {
       ? undefined
       : { contentType: object.contentType, byteSize: object.byteSize };
   }
-  async copyObject(input: {
-    readonly sourceObjectKey: string;
-    readonly destinationObjectKey: string;
-  }): Promise<void> {
+  async copyObject(
+    input: {
+      readonly sourceObjectKey: string;
+      readonly destinationObjectKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.operationSignals.push(signal);
     this.events.push('copy');
     this.copyCount += 1;
     this.copyStarted?.();
@@ -289,6 +298,45 @@ describe('SpeakingAudioUploadService staging completion', () => {
     expect(h.repository.rejectedCount).toBe(1);
     expect(h.repository.intent).toBeUndefined();
     expect(h.repository.asset).toBeUndefined();
+  });
+
+  it('uses one deadline signal for every storage call inside completion', async () => {
+    const h = setup();
+    const { stagingKey } = await openUpload(h);
+    h.storage.objects.set(stagingKey, stored());
+
+    await h.service.completeUpload({ context: h.context, assetId: ASSET_ID });
+
+    const [deadlineSignal] = h.storage.operationSignals;
+    expect(h.storage.operationSignals).toEqual([
+      deadlineSignal,
+      deadlineSignal,
+      deadlineSignal,
+    ]);
+    expect(deadlineSignal).toBeDefined();
+    expect(deadlineSignal).not.toBe(h.context.signal);
+  });
+
+  it('does not copy after the completion deadline has aborted', async () => {
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(AbortSignal.abort());
+    try {
+      const h = setup();
+      const { stagingKey } = await openUpload(h);
+      h.storage.objects.set(stagingKey, stored());
+
+      await expect(
+        h.service.completeUpload({ context: h.context, assetId: ASSET_ID }),
+      ).rejects.toMatchObject({
+        code: 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+      });
+      expect(h.storage.operationSignals).toHaveLength(1);
+      expect(h.storage.operationSignals[0]?.aborted).toBe(true);
+      expect(h.storage.copyCount).toBe(0);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it('does not copy when the early staging check refuses the object', async () => {
