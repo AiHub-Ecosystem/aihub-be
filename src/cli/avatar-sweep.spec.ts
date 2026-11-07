@@ -50,7 +50,7 @@ class FakeAvatarStorage implements AvatarStoragePort {
     throw new Error('not used by the sweep');
   }
 
-  async describeObject(): Promise<StoredAvatarObject | undefined> {
+  async describeStagingObject(): Promise<StoredAvatarObject | undefined> {
     throw new Error('not used by the sweep');
   }
 

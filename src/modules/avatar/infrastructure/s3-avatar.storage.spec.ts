@@ -173,7 +173,9 @@ describe('S3AvatarStorage', () => {
           code: 'AVATAR_STORAGE_UNAVAILABLE',
           retryable: true,
         });
-        await expect(unconfigured.describeObject(KEY)).rejects.toMatchObject({
+        await expect(
+          unconfigured.describeStagingObject(KEY),
+        ).rejects.toMatchObject({
           code: 'AVATAR_STORAGE_UNAVAILABLE',
         });
         await expect(unconfigured.deleteObject(KEY)).rejects.toMatchObject({
@@ -189,6 +191,56 @@ describe('S3AvatarStorage', () => {
             }
           })(),
         ).rejects.toMatchObject({ code: 'AVATAR_STORAGE_UNAVAILABLE' });
+      },
+    );
+
+    it.each([
+      ['override', { bucket: 'same-bucket', stagingBucket: 'same-bucket' }],
+      ['tier default', { bucket: 'aihub-user-asset-staging' }],
+    ])(
+      'refuses a staging bucket that is also the final bucket via %s without fallback',
+      async (_source, options) => {
+        const { client, send } = clientAnswering(async () => ({}));
+        const invalid = storage({ ...options, client });
+        const unavailable = { code: 'AVATAR_STORAGE_UNAVAILABLE' };
+
+        await expect(
+          invalid.createUploadUrl({ objectKey: KEY, contentType: 'image/png' }),
+        ).rejects.toMatchObject(unavailable);
+        await expect(invalid.describeStagingObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        await expect(invalid.describeFinalObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        await expect(
+          invalid.copyStagingToFinal({
+            objectKey: KEY,
+            contentType: 'image/png',
+          }),
+        ).rejects.toMatchObject(unavailable);
+        await expect(invalid.deleteObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        await expect(invalid.deleteStagingObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        expect(thrown(() => invalid.publicUrl(KEY))).toMatchObject(unavailable);
+        await expect(
+          (async () => {
+            for await (const _ of invalid.listObjects('users/')) {
+              // never reached
+            }
+          })(),
+        ).rejects.toMatchObject(unavailable);
+        await expect(
+          (async () => {
+            for await (const _ of invalid.listStagingObjects('users/')) {
+              // never reached
+            }
+          })(),
+        ).rejects.toMatchObject(unavailable);
+        expect(send).not.toHaveBeenCalled();
       },
     );
 
@@ -241,7 +293,9 @@ describe('S3AvatarStorage', () => {
         LastModified: lastModified,
       }));
 
-      await expect(storage({ client }).describeObject(KEY)).resolves.toEqual({
+      await expect(
+        storage({ client }).describeStagingObject(KEY),
+      ).resolves.toEqual({
         contentType: 'image/webp',
         byteSize: 2048,
         lastModified,
@@ -261,7 +315,7 @@ describe('S3AvatarStorage', () => {
       });
 
       await expect(
-        storage({ client }).describeObject(KEY),
+        storage({ client }).describeStagingObject(KEY),
       ).resolves.toBeUndefined();
     });
 
@@ -271,7 +325,7 @@ describe('S3AvatarStorage', () => {
       });
 
       await expect(
-        storage({ client }).describeObject(KEY),
+        storage({ client }).describeStagingObject(KEY),
       ).rejects.toMatchObject({
         code: 'AVATAR_STORAGE_UNAVAILABLE',
         retryable: true,
@@ -286,7 +340,7 @@ describe('S3AvatarStorage', () => {
         });
       });
       await expect(
-        storage({ client }).describeObject(KEY),
+        storage({ client }).describeStagingObject(KEY),
       ).rejects.toMatchObject({
         diagnostic: 'object_storage:unavailable',
         retryable: true,

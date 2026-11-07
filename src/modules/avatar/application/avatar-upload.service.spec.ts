@@ -28,7 +28,7 @@ class FakeStorage implements AvatarStoragePort {
   publicUrl(key: string) {
     return `https://public.invalid/${key}`;
   }
-  async describeObject(key: string) {
+  async describeStagingObject(key: string) {
     this.calls.push('check-staging');
     return this.staging.get(key);
   }

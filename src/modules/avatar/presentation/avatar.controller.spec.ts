@@ -88,7 +88,7 @@ class FakeAvatarStorage implements AvatarStoragePort {
     return `${PUBLIC_ORIGIN}${objectKey}`;
   }
 
-  async describeObject(objectKey: string, _signal?: AbortSignal) {
+  async describeStagingObject(objectKey: string, _signal?: AbortSignal) {
     if (this.unavailable) throw storageUnavailable();
     return this.stagingObjects.get(objectKey);
   }
@@ -476,7 +476,7 @@ describe('Avatar upload HTTP flow', () => {
           AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
         );
       const describe = jest
-        .spyOn(storage, 'describeObject')
+        .spyOn(storage, 'describeStagingObject')
         .mockImplementation(async (_key, signal) => {
           if (signal?.aborted) throw storageUnavailable();
           throw new Error('caller deadline did not reach storage');

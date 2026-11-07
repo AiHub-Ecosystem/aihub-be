@@ -194,7 +194,7 @@ export class AvatarUploadService {
     signal?: AbortSignal,
   ): Promise<Avatar> {
     const objectKey = avatarObjectKey(userId, assetId);
-    const stored = await this.storage.describeObject(objectKey, signal);
+    const stored = await this.storage.describeStagingObject(objectKey, signal);
     if (stored === undefined) {
       throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
     }
