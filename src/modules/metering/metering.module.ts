@@ -30,6 +30,10 @@ import {
   METERING_FAILURE_LOGGER,
   type MeteringFailureLoggerPort,
 } from './application/usage-recording/metering-logger.port';
+import {
+  METERING_TELEMETRY,
+  type MeteringTelemetryPort,
+} from './application/usage-recording/metering-telemetry.port';
 import { MeteringService } from './application/usage-recording/metering.service';
 import {
   USAGE_REPOSITORY,
@@ -40,6 +44,7 @@ import { recordPublicApiMajorUsageDrop } from './infrastructure/billing/public-a
 import { PublicApiMajorUsageScheduler } from './infrastructure/billing/public-api-major-usage.scheduler';
 import { NestMeteringFailureLogger } from './infrastructure/usage-recording/nest-metering-failure.logger';
 import { PostgresUsageRepository } from './infrastructure/usage-recording/postgres-usage.repository';
+import { PrometheusMeteringTelemetryAdapter } from './infrastructure/usage-recording/prometheus-metering-telemetry.adapter';
 import { HttpExceptionFilter } from './presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
@@ -57,14 +62,30 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       useClass: NestMeteringFailureLogger,
     },
     {
+      provide: METERING_TELEMETRY,
+      useClass: PrometheusMeteringTelemetryAdapter,
+    },
+    {
       provide: METERING_FINALIZER,
       useFactory: (
         repository: UsageRepositoryPort,
         logger: MeteringFailureLoggerPort,
         quotaCounter: QuotaCounterPort,
+        telemetry: MeteringTelemetryPort,
       ): MeteringFinalizerPort =>
-        new MeteringService(repository, logger, quotaCounter),
-      inject: [USAGE_REPOSITORY, METERING_FAILURE_LOGGER, QUOTA_COUNTER],
+        new MeteringService(
+          repository,
+          logger,
+          quotaCounter,
+          undefined,
+          telemetry,
+        ),
+      inject: [
+        USAGE_REPOSITORY,
+        METERING_FAILURE_LOGGER,
+        QUOTA_COUNTER,
+        METERING_TELEMETRY,
+      ],
     },
     {
       provide: PUBLIC_API_MAJOR_USAGE_BUFFER,
@@ -109,6 +130,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
   ],
   exports: [
     METERING_FINALIZER,
+    METERING_TELEMETRY,
     USAGE_REPOSITORY,
     PUBLIC_API_MAJOR_USAGE_BUFFER,
     HttpExceptionFilter,

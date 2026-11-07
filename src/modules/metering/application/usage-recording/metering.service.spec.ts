@@ -5,8 +5,13 @@ import type {
   MeteringStatus,
 } from './metering-finalizer.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
+import type {
+  MeteringTelemetryPort,
+  MeteringWriteOutcome,
+} from './metering-telemetry.port';
 import {
   DOWNSTREAM_USAGE_REPORTING,
+  METERING_WRITE_TIMEOUT_MS,
   MeteringService,
   resolveMeteringStatus,
 } from './metering.service';
@@ -15,8 +20,12 @@ import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 class FakeUsageRepository implements UsageRepositoryPort {
   readonly records: UsageRecord[] = [];
   shouldFail = false;
+  delayMs = 0;
 
   async insert(record: UsageRecord): Promise<void> {
+    if (this.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    }
     if (this.shouldFail) {
       throw new Error('database unavailable');
     }
@@ -26,9 +35,11 @@ class FakeUsageRepository implements UsageRepositoryPort {
 
 class FakeFailureLogger implements MeteringFailureLoggerPort {
   readonly records: UsageRecord[] = [];
+  readonly reasons: Array<'timeout' | 'error' | undefined> = [];
 
-  writeFailed(record: UsageRecord): void {
+  writeFailed(record: UsageRecord, reason?: 'timeout' | 'error'): void {
     this.records.push(record);
+    this.reasons.push(reason);
   }
 }
 
@@ -45,6 +56,22 @@ class FakeQuotaCounter implements QuotaCounterPort {
       throw new Error('quota counter unavailable');
     }
     this.increments.push(input.organizationId);
+  }
+}
+
+class FakeTelemetry implements MeteringTelemetryPort {
+  readonly durations: Array<{
+    outcome: MeteringWriteOutcome;
+    seconds: number;
+  }> = [];
+  readonly failures: Array<Exclude<MeteringWriteOutcome, 'success'>> = [];
+
+  writeDurationSeconds(outcome: MeteringWriteOutcome, seconds: number): void {
+    this.durations.push({ outcome, seconds });
+  }
+
+  writeFailed(reason: Exclude<MeteringWriteOutcome, 'success'>): void {
+    this.failures.push(reason);
   }
 }
 
@@ -420,9 +447,9 @@ describe('MeteringService', () => {
   it('keeps explicit no-model operations not applicable without zero tokens', () => {
     expect(
       resolveMeteringStatus({
-        mode: 'none',
-        usageReportingExpected: false,
+        mode: 'model',
         modelCalled: false,
+        usageReportingExpected: false,
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       }),
     ).toBe('not_applicable');
@@ -504,5 +531,91 @@ describe('MeteringService', () => {
       expect.objectContaining({ meteringStatus: 'not_applicable' }),
     ]);
     expect(repository.records[1]).not.toHaveProperty('aiProcessingMs');
+  });
+
+  it('stops waiting at the timeout bound, counts the write lost, and keeps the record landed', async () => {
+    const repository = new FakeUsageRepository();
+    repository.delayMs = METERING_WRITE_TIMEOUT_MS * 3;
+    const logger = new FakeFailureLogger();
+    const telemetry = new FakeTelemetry();
+    const service = new MeteringService(
+      repository,
+      logger,
+      undefined,
+      undefined,
+      telemetry,
+    );
+    const startedAt = performance.now();
+
+    await service.finalize(input);
+
+    const elapsedMs = performance.now() - startedAt;
+    // The request path is bounded; it does not wait the full 3x delay.
+    expect(elapsedMs).toBeLessThan(METERING_WRITE_TIMEOUT_MS * 2);
+    // The race was lost, so the record has not landed within the bound.
+    expect(repository.records).toHaveLength(0);
+    expect(telemetry.failures).toEqual(['timeout']);
+    expect(logger.records).toHaveLength(1);
+    expect(logger.reasons).toEqual(['timeout']);
+  });
+
+  it('reports a slow-but-landed insert as timeout, never as success', async () => {
+    const repository = new FakeUsageRepository();
+    repository.delayMs = METERING_WRITE_TIMEOUT_MS + 50;
+    const logger = new FakeFailureLogger();
+    const telemetry = new FakeTelemetry();
+    const service = new MeteringService(
+      repository,
+      logger,
+      undefined,
+      undefined,
+      telemetry,
+    );
+
+    await service.finalize(input);
+
+    expect(telemetry.durations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ outcome: 'timeout' })]),
+    );
+    expect(telemetry.failures).toEqual(['timeout']);
+    // The insert still lands late; the bound only stops the caller waiting.
+    await new Promise((resolve) =>
+      setTimeout(resolve, METERING_WRITE_TIMEOUT_MS + 100),
+    );
+    expect(repository.records).toHaveLength(1);
+  });
+
+  it('counts a rejected insert as error, not timeout', async () => {
+    const repository = new FakeUsageRepository();
+    repository.shouldFail = true;
+    const telemetry = new FakeTelemetry();
+    const logger = new FakeFailureLogger();
+    const service = new MeteringService(
+      repository,
+      logger,
+      undefined,
+      undefined,
+      telemetry,
+    );
+
+    await service.finalize(input);
+
+    expect(telemetry.durations).toEqual([
+      expect.objectContaining({ outcome: 'error' }),
+    ]);
+    expect(telemetry.failures).toEqual(['error']);
+    expect(logger.reasons).toEqual(['error']);
+  });
+
+  it('never lets a metering write failure change the caller result', async () => {
+    const slow = new FakeUsageRepository();
+    slow.delayMs = METERING_WRITE_TIMEOUT_MS * 3;
+    const slowService = new MeteringService(slow);
+    await expect(slowService.finalize(input)).resolves.toBeUndefined();
+
+    const failing = new FakeUsageRepository();
+    failing.shouldFail = true;
+    const failingService = new MeteringService(failing);
+    await expect(failingService.finalize(input)).resolves.toBeUndefined();
   });
 });

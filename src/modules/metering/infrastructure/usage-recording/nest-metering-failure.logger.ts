@@ -59,9 +59,13 @@ function safeRecord(record: UsageRecord): Record<string, unknown> {
 export class NestMeteringFailureLogger implements MeteringFailureLoggerPort {
   private readonly logger = new Logger(NestMeteringFailureLogger.name);
 
-  writeFailed(record: UsageRecord): void {
+  writeFailed(
+    record: UsageRecord,
+    reason: 'timeout' | 'error' = 'error',
+  ): void {
     this.logger.error({
       event: 'metering_write_failed',
+      reason,
       record: safeRecord(record),
     });
   }

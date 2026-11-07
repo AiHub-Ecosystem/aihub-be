@@ -12,6 +12,10 @@ import type {
   MeteringStatus,
 } from './metering-finalizer.port';
 import type { MeteringFailureLoggerPort } from './metering-logger.port';
+import type {
+  MeteringTelemetryPort,
+  MeteringWriteOutcome,
+} from './metering-telemetry.port';
 import { normalizeMeteringTelemetry } from './metering.telemetry';
 import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 
@@ -20,11 +24,23 @@ export const DOWNSTREAM_USAGE_REPORTING = {
   'ai-speaking': true,
 } as const satisfies Record<DownstreamId, boolean>;
 
+/**
+ * Bound on how long a Metering write may hold the request path (#229).
+ * Healthy inserts land in 2-3ms (p99 <15ms); 100ms is ~7x that p99 and
+ * 10x under the pool's 1s connect timeout, so a slow DB cannot push a full
+ * second of latency onto a request that already finished its real work.
+ */
+export const METERING_WRITE_TIMEOUT_MS = 100;
+
 const NOOP_LOGGER: MeteringFailureLoggerPort = {
   writeFailed: () => undefined,
 };
 const NOOP_QUOTA_COUNTER: Pick<QuotaCounterPort, 'increment'> = {
   increment: async () => undefined,
+};
+const NOOP_TELEMETRY: MeteringTelemetryPort = {
+  writeDurationSeconds: () => undefined,
+  writeFailed: () => undefined,
 };
 
 function nonNegativeInteger(value: number | undefined): number | undefined {
@@ -145,6 +161,7 @@ export class MeteringService implements MeteringFinalizerPort {
     private readonly catalog: Readonly<
       Record<string, Pick<OperationDef, 'meteringMode' | 'downstream'>>
     > = OPERATION_CATALOG,
+    private readonly telemetry: MeteringTelemetryPort = NOOP_TELEMETRY,
   ) {}
 
   async finalize(input: MeteringFinalizeInput): Promise<void> {
@@ -163,14 +180,57 @@ export class MeteringService implements MeteringFinalizerPort {
     // would report `missing_usage` for a record persisted as
     // `quota_unverified`.
     input.onStatusWritten?.(record.meteringStatus);
+    await this.writeBounded(record);
+  }
+
+  private async writeBounded(record: UsageRecord): Promise<void> {
+    const startedAt = performance.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = Symbol('timedOut');
+    const timeout = new Promise<typeof timedOut>((resolve) => {
+      timer = setTimeout(() => resolve(timedOut), METERING_WRITE_TIMEOUT_MS);
+    });
+    // The insert that outlives the race still lands when it lands; nothing
+    // retries it, so it cannot duplicate a record another attempt wrote.
+    const landed = this.repository
+      .insert(record)
+      .then(() => ({ kind: 'landed' as const }))
+      .catch((_error: unknown) => ({ kind: 'failed' as const }));
     try {
-      await this.repository.insert(record);
-    } catch {
-      try {
-        this.logger.writeFailed(record);
-      } catch {
-        // A telemetry breadcrumb must never change the customer response.
+      const outcome = await Promise.race([landed, timeout]);
+      if (outcome === timedOut) {
+        this.telemetry.writeDurationSeconds(
+          'timeout',
+          (performance.now() - startedAt) / 1000,
+        );
+        this.telemetry.writeFailed('timeout');
+        this.logLost(record, 'timeout');
+        return;
       }
+      this.telemetry.writeDurationSeconds(
+        outcome.kind === 'landed' ? 'success' : 'error',
+        (performance.now() - startedAt) / 1000,
+      );
+      if (outcome.kind === 'landed') {
+        return;
+      }
+      this.telemetry.writeFailed('error');
+      this.logLost(record, 'error');
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  private logLost(
+    record: UsageRecord,
+    reason: Exclude<MeteringWriteOutcome, 'success'>,
+  ): void {
+    try {
+      this.logger.writeFailed(record, reason);
+    } catch {
+      // A telemetry breadcrumb must never change the customer response.
     }
   }
 }
