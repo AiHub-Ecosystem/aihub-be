@@ -19,10 +19,15 @@ function isApiKeyGeneratorModule(value) {
   return isRecord(value) && typeof value.generateApiKey === 'function';
 }
 
+// The dist file is CommonJS: its exports live on the namespace's `default`,
+// and the SWC `_export` getter hides `generateApiKey` from cjs-module-lexer,
+// so the named import never resolves.
 const apiKeyModule = /** @type {unknown} */ (
-  await import(
-    '../../../dist/modules/identity/api-keys/application/organization-api-key-generator.js'
-  )
+  /** @type {{default: unknown}} */ (
+    await import(
+      '../../../dist/modules/identity/api-keys/application/organization-api-key-generator.js'
+    )
+  ).default
 );
 if (!isApiKeyGeneratorModule(apiKeyModule)) {
   throw new Error('API key generator is unavailable');
