@@ -200,6 +200,17 @@ jobs:
           test -n "$token" && test "$token" != null
           printf 'bearer=%s\n' "$token" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch the served OpenAPI document
+        env:
+          # Through the environment so the token never appears in an expanded
+          # command line in the job log.
+          AIHUB_DAST_BEARER: ${{ steps.login.outputs.bearer }}
+        run: |
+          curl --silent --show-error --fail \
+            -H "Authorization: Bearer $AIHUB_DAST_BEARER" \
+            "$DAST_TARGET/openapi.json" -o "$DAST_DIR/openapi.json"
+          jq -e '.openapi' "$DAST_DIR/openapi.json" >/dev/null
+
       - name: Render the Automation Framework plan
         env:
           # Through the environment so the token never appears in an expanded

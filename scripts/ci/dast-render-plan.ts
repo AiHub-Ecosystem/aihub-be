@@ -113,7 +113,10 @@ export function renderPlan(
   plan = plan
     .replaceAll('${AIHUB_TARGET}', input.target)
     .replaceAll('${AIHUB_API_KEY}', input.apiKey)
-    .replaceAll('${AIHUB_BEARER}', input.bearer);
+    .replaceAll('${AIHUB_BEARER}', input.bearer)
+    // The ZAP container mounts the job's directory at /zap/wrk, so the fetched
+    // document is always at this path inside the scan.
+    .replaceAll('${AIHUB_OPENAPI_FILE}', '/zap/wrk/openapi.json');
 
   const leftover = plan.match(/\$\{[^}]*\}/);
   if (leftover !== null) {

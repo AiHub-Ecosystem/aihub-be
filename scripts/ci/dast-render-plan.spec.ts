@@ -41,7 +41,8 @@ describe('dast-render-plan', () => {
   it('substitutes the target and the minted credentials everywhere', () => {
     for (const plan of [passivePlan(), activePlan()]) {
       expect(plan).not.toMatch(/\$\{[^}]*\}/);
-      expect(plan).toContain('http://dast.aihub.invalid:3000/openapi.json');
+      expect(plan).toContain('apiFile: /zap/wrk/openapi.json');
+      expect(plan).not.toContain('apiUrl:');
       expect(plan).toContain('replacementString: aihub_prod_test');
       expect(plan).toContain('replacementString: Bearer test-token');
     }

@@ -34,17 +34,9 @@ env:
     progressToStdout: true
 
 jobs:
-  # Import the generated OpenAPI document instead of spidering: the document
-  # is generated from source and covers every public operation, so the scan
-  # drives the real surface with no crawl.
-  - type: openapi
-    parameters:
-      apiUrl: ${AIHUB_TARGET}/openapi.json
-      targetUrl: ${AIHUB_TARGET}
-      context: aihub-dast
-
   # Header-based authentication: the seeded gateway key and the bearer token
   # minted at render time ride on every request ZAP makes, in either mode.
+  # This job runs first so the OpenAPI import below also carries the headers.
   - type: replacer
     parameters:
       deleteAllRules: true
@@ -57,6 +49,17 @@ jobs:
         matchType: req_header
         matchString: Authorization
         replacementString: Bearer ${AIHUB_BEARER}
+
+  # Import the generated OpenAPI document instead of spidering: the document
+  # is generated from source and covers every public operation, so the scan
+  # drives the real surface with no crawl. The job fetched it from the running
+  # application with the seeded bearer token — the endpoint is Bearer-guarded,
+  # and the fetch proves the served contract is the one being scanned.
+  - type: openapi
+    parameters:
+      apiFile: ${AIHUB_OPENAPI_FILE}
+      targetUrl: ${AIHUB_TARGET}
+      context: aihub-dast
 
   - type: passiveScan-config
     parameters:
