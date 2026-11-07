@@ -1,12 +1,7 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from './metrics';
-
-export type SpeakingAudioUrlRejectionReason =
-  | 'malformed'
-  | 'traversal'
-  | 'foreign_tenant'
-  | 'unapproved_bucket';
+import { registry } from '@/common/observability/metrics';
+import type { SpeakingAudioUrlRejectionReason } from '@/modules/speaking/application/speaking-audio-url.policy';
 
 const REASONS: readonly SpeakingAudioUrlRejectionReason[] = [
   'malformed',

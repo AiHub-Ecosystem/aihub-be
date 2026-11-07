@@ -32,6 +32,7 @@ import {
 } from './application/speaking-audio-upload.port';
 import { SpeakingAudioUploadService } from './application/speaking-audio-upload.service';
 import { SpeakingAudioUploadSweep } from './application/speaking-audio-upload.sweep';
+import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/speaking-audio-url-rejection-recorder.port';
 import { SPEAKING_MULTIPART_PARSER } from './application/speaking-multipart-parser.port';
 import {
   InFlightCeiling,
@@ -48,6 +49,7 @@ import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres
 import { PostgresSpeakingV2ResultOwnershipRepository } from './infrastructure/postgres-speaking-v2-result-ownership.repository';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
 import { S3SpeakingAudioStorage } from './infrastructure/s3-speaking-audio.storage';
+import { recordSpeakingAudioUrlRejection } from './infrastructure/speaking-audio-url-rejection-metric';
 import { SpeakingAudioUploadController } from './presentation/speaking-audio-upload.controller';
 import { SpeakingGradingController } from './presentation/speaking-grading.controller';
 import { SpeakingQuestionsController } from './presentation/speaking-questions.controller';
@@ -176,6 +178,10 @@ import { SpeakingV2Controller } from './presentation/speaking-v2.controller';
     {
       provide: SPEAKING_MULTIPART_PARSER,
       useClass: FastifySpeakingMultipartParser,
+    },
+    {
+      provide: SPEAKING_AUDIO_URL_REJECTION_RECORDER,
+      useValue: { record: recordSpeakingAudioUrlRejection },
     },
     {
       provide: SPEAKING_UPLOAD_CEILING,

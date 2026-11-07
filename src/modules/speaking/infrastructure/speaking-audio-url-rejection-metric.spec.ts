@@ -1,6 +1,6 @@
 describe('aihub_speaking_audio_url_rejected_total', () => {
   it('exposes the four bounded reasons and increments each once', async () => {
-    const metrics = await import('./metrics');
+    const metrics = await import('@/common/observability/metrics');
     const { recordSpeakingAudioUrlRejection } = await import(
       './speaking-audio-url-rejection-metric'
     );
