@@ -16,20 +16,12 @@ function fakePrisma(
     }
     return {};
   });
-  const transaction = {
-    usageRecord: { create },
-  } as unknown as Prisma.TransactionClient;
-  const runTransaction = jest.fn(
-    async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
-      callback(transaction),
-  );
   const client = {
-    $transaction: runTransaction,
+    usageRecord: { create },
   } as unknown as PrismaClient;
   return {
     client: client as PrismaMeteringClient,
     create,
-    runTransaction,
   };
 }
 
@@ -54,11 +46,10 @@ const record: UsageRecord = {
 };
 
 describe('PostgresUsageRepository', () => {
-  it('inserts the record in a transaction', async () => {
-    const { client, create, runTransaction } = fakePrisma();
+  it('inserts the record directly', async () => {
+    const { client, create } = fakePrisma();
     await new PostgresUsageRepository(client).insert(record);
 
-    expect(runTransaction.mock.calls).toHaveLength(1);
     expect(create).toHaveBeenCalledWith({
       data: {
         requestId: record.requestId,
