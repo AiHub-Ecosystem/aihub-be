@@ -1105,8 +1105,12 @@ async function runK6({
   const summaryValue = jsonAfterPrefix(output, 'BENCHMARK_SUMMARY_JSON ');
   const stubValue = jsonAfterPrefix(output, 'BENCHMARK_STUB_STATS ');
   if (!isK6Summary(summaryValue) || !isStubStats(stubValue)) {
+    await writeFile(
+      path.join(artifactDirectory, `k6-output-${Date.now()}.txt`),
+      output,
+    ).catch(() => undefined);
     throw new Error(
-      `${label}: k6 did not return its summary and stub counters\n${lastLines(result.stdout, 20)}\n${lastLines(result.stderr, 20)}`,
+      `${label}: k6 did not return its summary and stub counters (output ${output.length} bytes, summary marker ${output.includes('BENCHMARK_SUMMARY_JSON ')}, stub marker ${output.includes('BENCHMARK_STUB_STATS ')})\n${lastLines(result.stdout, 20)}\n${lastLines(result.stderr, 20)}`,
     );
   }
   const summary = summaryValue;
