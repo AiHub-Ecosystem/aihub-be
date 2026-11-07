@@ -9,6 +9,15 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.5.1] - 2026-11-07
+
+### Changed
+
+- Speaking `grading-json` accepts only the caller's organization-scoped audio
+  asset, configured catalog sample objects under `speaking-samples/`, or the
+  stable public sample answer URL. Other storage paths are refused before
+  dispatch.
+
 ## [2.5.0] - 2026-11-02
 
 ### Added

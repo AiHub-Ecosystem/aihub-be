@@ -967,11 +967,17 @@ active identity configuration. The response uses the common `{ "data", "meta" }`
 
 `POST /v1/ielts/speaking/grading-json` is the URL fallback. It accepts the same
 Speaking metadata but replaces `audio` with `audio_url`. The URL must be HTTPS
-on the exact host `s3.wispace.app`, may include query parameters for a
-signed object URL, and may be at most 2,048 characters. AIHUB rejects embedded
-credentials, fragments, other hosts/schemes/ports, and unknown fields before
-dispatch. AIHUB validates but does not download the URL; the provider owns
-retrieval and does not follow redirects.
+on the exact host `s3.wispace.app`, and may be at most 2,048 characters. AIHUB
+accepts the caller's own uploaded audio only at
+`/<configured audio asset bucket>/orgs/<your organization ID>/speaking/aud_<ULID>/original`,
+with optional presigned query parameters. It also accepts signed catalog sample
+URLs from the configured sample bucket only when their key begins
+`speaking-samples/`, and the stable public sample URL shown below. Other buckets,
+key shapes, and another Organization's recordings are rejected. Paths cannot
+contain percent-encoding, backslashes, dot segments, or empty segments. AIHUB
+also rejects embedded credentials, fragments, other hosts/schemes/ports, and
+unknown fields before dispatch. AIHUB validates but does not download the URL;
+the provider owns retrieval and does not follow redirects.
 
 ### Moving Speaking from `/v1` to `/v2`
 

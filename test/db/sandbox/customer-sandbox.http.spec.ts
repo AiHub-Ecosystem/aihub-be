@@ -527,7 +527,8 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
             'x-user-identity': mintedAssertion,
           },
           payload: {
-            audio_url: 'https://s3.wispace.app/audio/demo.mp3',
+            audio_url:
+              'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
             part: 1,
             question_id: 'p1_hometown',
           },

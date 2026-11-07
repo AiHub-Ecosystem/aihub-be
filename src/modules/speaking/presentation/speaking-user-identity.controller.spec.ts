@@ -235,7 +235,8 @@ describe('Speaking user identity HTTP flow', () => {
         [
           jsonUrl,
           {
-            audio_url: 'https://s3.wispace.app/audio/a.wav',
+            audio_url:
+              'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
             part: 1,
             question_id: 'q1',
           },
@@ -284,7 +285,8 @@ describe('Speaking user identity HTTP flow', () => {
         'content-type': 'application/json',
       },
       payload: {
-        audio_url: 'https://s3.wispace.app/audio/a.wav',
+        audio_url:
+          'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
         part: 1,
         question_id: 'q1',
       },
@@ -344,7 +346,8 @@ describe('Speaking user identity HTTP flow', () => {
           'content-type': 'application/json',
         },
         payload: {
-          audio_url: 'https://s3.wispace.app/audio/a.wav',
+          audio_url:
+            'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
           part: 1,
           question_id: 'q1',
           organization_id: 'org_spoofed',
