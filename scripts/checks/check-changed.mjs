@@ -1,7 +1,14 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const { BATCHED_GATES, runBatch } =
+  /** @type {typeof import('./check-batch.cjs')} */ (
+    require('./check-batch.cjs')
+  );
 
 /**
  * #813: `bun run check:changed` runs the gates the changed files can break.
@@ -75,6 +82,9 @@ export const GATE_COMMANDS = {
 
 /** The one gate that takes the changed spec files as arguments (#1631). */
 const JEST_SPECS_GATE = 'test:jest-specs';
+
+/** Independent gates that `check:changed` may run together. */
+const BATCHABLE = new Set(BATCHED_GATES);
 
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -291,14 +301,16 @@ export function resolveChangedFiles(git = defaultGit) {
 }
 
 /**
- * @returns {string} `full-verify` when it deferred to the whole loop, `passed`
- *   when every selected gate passed, otherwise the gate that failed.
+ * @param {{resolveFiles: () => string[], runGate: (gate: string) => number | Promise<number>, runBatchGates: (gates: string[]) => Promise<{failed: string[]}>, runFullVerify: () => unknown}} options
+ * @returns {Promise<string>} `full-verify` when it deferred to the whole loop,
+ *   `passed` when every selected gate passed, otherwise the gate that failed.
  */
-/**
- * @param {{resolveFiles: () => string[], runGate: (gate: string) => number, runFullVerify: () => unknown}} options
- * @returns {string}
- */
-export function runCheckChanged({ resolveFiles, runGate, runFullVerify }) {
+export async function runCheckChanged({
+  resolveFiles,
+  runGate,
+  runBatchGates,
+  runFullVerify,
+}) {
   /** @type {string[]} */
   let files;
   try {
@@ -320,8 +332,19 @@ export function runCheckChanged({ resolveFiles, runGate, runFullVerify }) {
     return 'full-verify';
   }
 
+  const batch = plan.gates.filter((gate) => BATCHABLE.has(gate));
+  if (batch.length > 1) {
+    const { failed } = await runBatchGates(batch);
+    if (failed.length > 0) {
+      const first = failed[0];
+      console.error(`[check:changed] gate failed: ${first}`);
+      return first;
+    }
+  }
+
   for (const gate of plan.gates) {
-    const status = runGate(gate);
+    if (batch.length > 1 && BATCHABLE.has(gate)) continue;
+    const status = await runGate(gate);
     if (status !== 0) {
       console.error(`[check:changed] gate failed: ${gate}`);
       return gate;
@@ -343,12 +366,39 @@ function runScript(script, args) {
   return result.status ?? 1;
 }
 
-function main() {
+/** @param {string} gate @param {string[]} files @returns {Promise<{code: number, output: string}>} */
+async function runBufferedGate(gate, files) {
+  const invocation = gateInvocation(gate, files);
+  if (!invocation) {
+    return {
+      code: 0,
+      output: `[check:changed] skip ${gate}: no changed spec file exists\n`,
+    };
+  }
+  return new Promise((resolve) => {
+    const child = spawn('bun', ['run', invocation.script, ...invocation.args], {
+      cwd: process.cwd(),
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.on('error', (error) =>
+      resolve({ code: 1, output: `${gate}: ${error.message}\n` }),
+    );
+    child.on('close', (code) => resolve({ code: code ?? 1, output }));
+  });
+}
+
+async function main() {
   /** @type {string[]} */
   let files = [];
   let fullVerifyStatus = 1;
 
-  const outcome = runCheckChanged({
+  const outcome = await runCheckChanged({
     resolveFiles: () => {
       files = resolveChangedFiles();
       return files;
@@ -365,6 +415,15 @@ function main() {
         `[check:changed] bun run ${[invocation.script, ...invocation.args].join(' ')}`,
       );
       return runScript(invocation.script, invocation.args);
+    },
+    runBatchGates: async (gates) => {
+      const result = await runBatch({
+        gates,
+        run: async (gate) => runBufferedGate(gate, files),
+        log: (line) => console.log(line),
+        error: (line) => console.error(line),
+      });
+      return { failed: result.failed };
     },
     runFullVerify: () => {
       fullVerifyStatus = runScript('verify', []);
@@ -401,5 +460,11 @@ export function isEntryPoint(moduleUrl, argv1) {
 }
 
 if (isEntryPoint(import.meta.url, process.argv[1])) {
-  process.exit(main());
+  main().then(
+    (status) => process.exit(status),
+    (error) => {
+      console.error(error);
+      process.exit(1);
+    },
+  );
 }

@@ -4,6 +4,7 @@ import process from 'node:process';
 import { test } from 'node:test';
 
 import { buildBunTestArgs } from '../cli/run-bun-test.mjs';
+import { runBatch } from './check-batch.cjs';
 import { BATCHED_GATES } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
@@ -337,10 +338,10 @@ await test('renames preserve the old documentation path for gate selection', () 
   assert.ok(planChangedFiles(files).gates.includes('check:doc-drift'));
 });
 
-await test('unresolvable git state falls back to full verify and runs no reduced gate', () => {
+await test('unresolvable git state falls back to full verify and runs no reduced gate', async () => {
   let fallbackCalls = 0;
   const gateCalls = [];
-  const result = runCheckChanged({
+  const result = await runCheckChanged({
     resolveFiles: () => {
       throw new Error('origin/main is missing');
     },
@@ -348,10 +349,115 @@ await test('unresolvable git state falls back to full verify and runs no reduced
       fallbackCalls += 1;
     },
     runGate: (name) => gateCalls.push(name),
+    runBatchGates: async () => ({ failed: [] }),
   });
   assert.equal(result, 'full-verify');
   assert.equal(fallbackCalls, 1);
   assert.deepEqual(gateCalls, []);
+});
+
+await test('plans independent gates as one concurrent batch and keeps dependents sequential', async () => {
+  /** @type {string[]} */
+  const order = [];
+  const result = await runCheckChanged({
+    resolveFiles: () => ['src/modules/example/domain/policy.ts'],
+    runGate: async (gate) => {
+      order.push(`gate:${gate}`);
+      return 0;
+    },
+    runBatchGates: async (/** @type {string[]} */ gates) => {
+      order.push(`batch:${gates.join(',')}`);
+      assert.deepEqual(gates, [
+        'check:data-ownership',
+        'check:deprecation',
+        'check:doc-drift',
+        'check:domain-globals',
+        'check:file-size',
+        'check:imports',
+        'check:tenant-global',
+      ]);
+      return { failed: [] };
+    },
+    runFullVerify: () => undefined,
+  });
+
+  assert.equal(result, 'passed');
+  assert.deepEqual(order.slice(0, 2), [
+    'batch:check:data-ownership,check:deprecation,check:doc-drift,check:domain-globals,check:file-size,check:imports,check:tenant-global',
+    'gate:arch-check',
+  ]);
+  for (const gate of ['lint', 'type-check', 'build', 'test:related']) {
+    assert.ok(order.includes(`gate:${gate}`));
+  }
+});
+
+await test('reports the failing concurrent gate and stops dependent gates', async () => {
+  /** @type {string[]} */
+  const order = [];
+  const result = await runCheckChanged({
+    resolveFiles: () => ['src/modules/example/domain/policy.ts'],
+    runGate: async (gate) => {
+      order.push(gate);
+      return 0;
+    },
+    runBatchGates: async () => {
+      order.push('batch');
+      return { failed: ['check:file-size'] };
+    },
+    runFullVerify: () => undefined,
+  });
+
+  assert.equal(result, 'check:file-size');
+  assert.deepEqual(order, ['batch']);
+});
+
+await test('keeps a single batchable gate sequential', async () => {
+  /** @type {string[]} */
+  const order = [];
+  const result = await runCheckChanged({
+    resolveFiles: () => ['docs/guide.md'],
+    runGate: async (gate) => {
+      order.push(`gate:${gate}`);
+      return 0;
+    },
+    runBatchGates: async () => {
+      order.push('batch');
+      return { failed: [] };
+    },
+    runFullVerify: () => undefined,
+  });
+
+  assert.equal(result, 'passed');
+  assert.equal(order.includes('batch'), false);
+  assert.deepEqual(order, ['gate:format:check']);
+});
+
+await test('buffers concurrent gate output in declared order and names the failure', async () => {
+  /** @type {string[]} */
+  const lines = [];
+  const outcome = await runBatch({
+    gates: ['check:file-size', 'check:imports', 'check:deprecation'],
+    freeBytes: 3 * 256 * 1024 ** 2,
+    run: async (/** @type {string} */ gate) => {
+      await new Promise((resolve) =>
+        setTimeout(resolve, gate === 'check:file-size' ? 20 : 1),
+      );
+      return gate === 'check:imports'
+        ? { code: 1, output: `${gate} failed\n` }
+        : { code: 0, output: `${gate} output\n` };
+    },
+    log: (line) => lines.push(line),
+    error: (line) => lines.push(line),
+  });
+
+  assert.equal(outcome.peakInFlight, 3);
+  assert.deepEqual(outcome.failed, ['check:imports']);
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith('$ ')),
+    ['$ bun run check:imports'],
+  );
+  assert.ok(lines.includes('check:imports failed'));
+  assert.ok(lines.includes('check:batch: also failed check:imports') === false);
 });
 
 await test('the entry-point comparison holds on both path shapes', () => {

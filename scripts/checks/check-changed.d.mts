@@ -21,9 +21,10 @@ export function gateInvocation(
 ): { readonly script: string; readonly args: string[] } | undefined;
 export function runCheckChanged(options: {
   readonly resolveFiles: () => string[];
-  readonly runGate: (gate: string) => number;
+  readonly runGate: (gate: string) => number | Promise<number>;
+  readonly runBatchGates: (gates: string[]) => Promise<{ failed: string[] }>;
   readonly runFullVerify: () => unknown;
-}): string;
+}): Promise<string>;
 export function isEntryPoint(
   moduleUrl: string,
   argv1: string | undefined,
