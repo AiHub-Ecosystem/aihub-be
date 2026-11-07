@@ -14,9 +14,7 @@ export interface UserAccessTokenRevocationRecordPort {
     readonly jti: string;
     readonly now: Date;
   }): Promise<boolean>;
-  listActiveRevocations?(
-    now?: Date,
-  ): Promise<readonly ActiveRevocationRecord[]>;
+  listActiveRevocations(now?: Date): Promise<readonly ActiveRevocationRecord[]>;
 }
 
 export const USER_ACCESS_TOKEN_REVOCATION_RECORD = Symbol(

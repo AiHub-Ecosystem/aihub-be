@@ -28,6 +28,12 @@ class SimulatedNetworkRevocationStore
     await new Promise((resolve) => setTimeout(resolve, 0));
     return this.revokedTokens.has(`${input.issuer}:${input.jti}`);
   }
+
+  async listActiveRevocations(): Promise<
+    readonly { readonly issuer: string; readonly jti: string }[]
+  > {
+    return [];
+  }
 }
 
 describe('Bloom Filter Revocation Benchmark (AC #1252)', () => {

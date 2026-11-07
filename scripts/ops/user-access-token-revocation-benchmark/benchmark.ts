@@ -250,6 +250,7 @@ async function startProbeServer(prisma: PrismaClient) {
   const noRevocationLookup = {
     isRevoked: async () => false,
     revoke: async () => {},
+    listActiveRevocations: async () => [],
   };
   const baselineGuard = new UserAccessJwtGuard(
     verifier,

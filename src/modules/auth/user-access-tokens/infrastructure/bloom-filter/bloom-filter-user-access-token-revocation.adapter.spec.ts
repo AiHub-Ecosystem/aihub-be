@@ -1,6 +1,4 @@
 import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
-import type { ExecutionContext } from '@nestjs/common';
 import { BloomFilterUserAccessTokenRevocationAdapter } from './bloom-filter-user-access-token-revocation.adapter';
 import { InProcessBloomFilter } from './in-process-bloom-filter';
 
@@ -96,7 +94,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
   let mockSubscriber: FakeRedisClient;
   let adapter: BloomFilterUserAccessTokenRevocationAdapter;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     underlying = new RecordingRevocationAdapter();
     bloomFilter = new InProcessBloomFilter({
       capacity: 10_000,
@@ -111,6 +109,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
       redisPublisher: mockPublisher,
       redisSubscriber: mockSubscriber,
     });
+    await adapter.init();
   });
 
   afterEach(async () => {
@@ -338,7 +337,9 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     const published =
       mockPublisher.published[mockPublisher.published.length - 1];
     expect(published).toBeDefined();
-    instanceBSubscriber.emitMessage(published!.channel, published!.message);
+    if (published !== undefined) {
+      instanceBSubscriber.emitMessage(published.channel, published.message);
+    }
 
     // 3. Instance B rejects it upon receiving broadcast
     expect(
@@ -354,32 +355,30 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     await instanceB.close();
   });
 
-  it('allows UserAccessJwtGuard to authenticate without querying underlying store in steady state', async () => {
-    const guard = new UserAccessJwtGuard(
-      {
-        verify: async () => ({
-          userId: 'usr_test_1',
-          issuer: 'aihub_test',
-          jti: 'active_guard_jti',
-          validUntil: new Date(Date.now() + 60_000),
-        }),
-      },
-      { findUserAccountStatus: async () => 'active' },
-      adapter,
-    );
+  it('falls back to underlying store if seeding fails at boot to avoid failing open', async () => {
+    const brokenStore = new RecordingRevocationAdapter();
+    brokenStore.listActiveRevocations = jest
+      .fn()
+      .mockRejectedValue(new Error('DB connection refused'));
 
-    const request: { headers: Record<string, string>; aihubUser?: unknown } = {
-      headers: { authorization: 'Bearer valid.jwt.token' },
-    };
-    const ctx = {
-      switchToHttp: () => ({
-        getRequest: () => request,
-        getResponse: () => ({ header: jest.fn() }),
-      }),
-    } as unknown as ExecutionContext;
+    const degradedAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying: brokenStore,
+      bloomFilter: new InProcessBloomFilter(),
+    });
 
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(underlying.isRevokedCalls).toHaveLength(0);
-    expect(request.aihubUser).toEqual({ userId: 'usr_test_1' });
+    await degradedAdapter.init();
+
+    expect(degradedAdapter.isSeeded).toBe(false);
+
+    // Because seeding failed, isRevoked must query underlying store directly
+    // instead of relying on an empty Bloom filter (failing closed, not open)
+    await degradedAdapter.isRevoked({
+      issuer: 'aihub_test',
+      jti: 'token_after_failed_seed',
+      now: new Date(),
+    });
+
+    expect(brokenStore.isRevokedCalls).toHaveLength(1);
+    await degradedAdapter.close();
   });
 });

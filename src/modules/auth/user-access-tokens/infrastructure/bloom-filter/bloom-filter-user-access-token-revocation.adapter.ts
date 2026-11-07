@@ -48,6 +48,8 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   private readonly redisSubscriber: RedisSubscriberPort | undefined;
   private readonly channel: string;
   private subscribed: boolean;
+  private seeded = false;
+  private seedReady: Promise<number>;
   private subscriberReady: Promise<void> | undefined;
 
   constructor(options: BloomFilterRevocationAdapterOptions) {
@@ -58,6 +60,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     this.channel = options.channel ?? REVOCATION_CHANNEL_DEFAULT;
     this.subscribed = options.redisSubscriber === undefined;
 
+    this.seedReady = this.seed();
     if (this.redisSubscriber) {
       this.subscriberReady = this.setupSubscriber();
     }
@@ -67,8 +70,13 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     return this.subscribed;
   }
 
+  get isSeeded(): boolean {
+    return this.seeded;
+  }
+
   async seed(now: Date = new Date()): Promise<number> {
     if (typeof this.underlying.listActiveRevocations !== 'function') {
+      this.seeded = true;
       return 0;
     }
     try {
@@ -76,8 +84,10 @@ export class BloomFilterUserAccessTokenRevocationAdapter
       for (const record of active) {
         this.bloomFilter.add(this.buildKey(record.issuer, record.jti));
       }
+      this.seeded = true;
       return active.length;
     } catch (error) {
+      this.seeded = false;
       this.logger.error(
         'Failed to seed token revocations from underlying store',
         error,
@@ -86,8 +96,12 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     }
   }
 
-  async init(now: Date = new Date()): Promise<void> {
-    await this.seed(now);
+  async init(now?: Date): Promise<void> {
+    if (now !== undefined) {
+      await this.seed(now);
+    } else {
+      await this.seedReady;
+    }
     if (this.subscriberReady) {
       await this.subscriberReady;
     }
@@ -98,11 +112,13 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     readonly jti: string;
     readonly now: Date;
   }): Promise<boolean> {
+    await this.seedReady;
+
     const key = this.buildKey(input.issuer, input.jti);
 
-    // If subscription to revocation broadcast failed, fall back to authoritative store
-    // so an instance that never joined the channel does not fail open.
-    if (!this.subscribed) {
+    // If subscription to revocation broadcast failed or filter was not seeded,
+    // fall back to authoritative store so an instance does not fail open.
+    if (!this.subscribed || !this.seeded) {
       return this.underlying.isRevoked(input);
     }
 
@@ -152,15 +168,35 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   async listActiveRevocations(
     now: Date = new Date(),
   ): Promise<readonly ActiveRevocationRecord[]> {
-    return this.underlying.listActiveRevocations?.(now) ?? Promise.resolve([]);
+    return this.underlying.listActiveRevocations(now);
   }
 
   async close(): Promise<void> {
     if (this.redisSubscriber) {
       try {
         await this.redisSubscriber.unsubscribe(this.channel);
+        if (
+          'disconnect' in this.redisSubscriber &&
+          typeof (this.redisSubscriber as { disconnect?: () => void })
+            .disconnect === 'function'
+        ) {
+          (this.redisSubscriber as { disconnect: () => void }).disconnect();
+        }
       } catch {
         // Suppress unsubscribe error on shutdown
+      }
+    }
+    if (this.redisPublisher) {
+      try {
+        if (
+          'disconnect' in this.redisPublisher &&
+          typeof (this.redisPublisher as { disconnect?: () => void })
+            .disconnect === 'function'
+        ) {
+          (this.redisPublisher as { disconnect: () => void }).disconnect();
+        }
+      } catch {
+        // Suppress disconnect error on shutdown
       }
     }
   }
