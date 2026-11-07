@@ -3,6 +3,7 @@ import type {
   SpeakingAudioUploadRepositoryPort,
 } from '@/modules/speaking/application/speaking-audio-upload.port';
 import type { SpeakingAudioUploadIntent } from '@/modules/speaking/domain/speaking-audio-asset';
+import { speakingAudioStagingObjectKey } from '@/modules/speaking/domain/speaking-audio-asset';
 
 import { runSpeakingAudioUploadSweepCommand } from './speaking-audio-upload-sweep';
 
@@ -99,6 +100,10 @@ class FakeStorage implements SpeakingAudioAssetStoragePort {
     throw new Error('not used by cleanup');
   }
 
+  async copyObject(): Promise<void> {
+    throw new Error('not used by cleanup');
+  }
+
   async describeObject(): Promise<never> {
     throw new Error('not used by cleanup');
   }
@@ -151,7 +156,11 @@ describe('Speaking Audio upload cleanup command', () => {
       failed: 1,
       dryRun: false,
     });
-    expect(storage.deleted).toEqual([rejected.objectKey]);
+    expect(storage.deleted).toEqual([
+      speakingAudioStagingObjectKey(expired.organizationId, expired.assetId),
+      rejected.objectKey,
+      speakingAudioStagingObjectKey(rejected.organizationId, rejected.assetId),
+    ]);
     expect(repository.intents).toEqual([expired, tooYoung]);
     expect(repository.closed).toBe(true);
     expect(storage.closed).toBe(true);

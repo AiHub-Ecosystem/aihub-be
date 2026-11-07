@@ -1,6 +1,7 @@
 import { AppError, internalError } from '@/common/errors/app-error';
 import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS } from '@/modules/speaking/application/speaking-audio-completion-timeouts';
 import type {
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
@@ -178,23 +179,6 @@ export class PostgresSpeakingAudioUploadRepository
     return matching === 1;
   }
 
-  async rejectIntent(input: {
-    readonly owner: SpeakingAudioUploadOwner;
-    readonly now: Date;
-  }): Promise<boolean> {
-    const updated = await this.run(() =>
-      this.client.speakingAudioUploadIntent.updateMany({
-        where: {
-          ...ownerWhere(input.owner),
-          status: 'open',
-          expiresAt: { gt: input.now },
-        },
-        data: { status: 'rejected' },
-      }),
-    );
-    return updated.count === 1;
-  }
-
   async removeRejectedIntent(owner: SpeakingAudioUploadOwner): Promise<void> {
     await this.run(() =>
       this.client.speakingAudioUploadIntent.deleteMany({
@@ -205,10 +189,23 @@ export class PostgresSpeakingAudioUploadRepository
 
   async completeIntent(input: {
     readonly owner: SpeakingAudioUploadOwner;
-    readonly now: Date;
-    readonly asset: SpeakingAudioAsset;
-  }): Promise<'created' | 'already_completed' | 'missing'> {
-    return this.transaction(async (client) => {
+    readonly now: () => Date;
+    readonly prepare: (
+      intent: SpeakingAudioUploadIntent,
+    ) => Promise<
+      | { readonly kind: 'accepted'; readonly asset: SpeakingAudioAsset }
+      | { readonly kind: 'refused'; readonly refusal: AppError }
+    >;
+  }): Promise<
+    | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
+    | {
+        readonly kind: 'already_completed';
+        readonly asset: SpeakingAudioAsset;
+      }
+    | { readonly kind: 'missing' }
+    | { readonly kind: 'refused'; readonly refusal: AppError }
+  > {
+    return this.completionTransaction(async (client) => {
       const [intentRow] = await client.$queryRawUnsafe<readonly IntentModel[]>(
         LOCK_INTENT_SQL,
         input.owner.assetId,
@@ -218,27 +215,46 @@ export class PostgresSpeakingAudioUploadRepository
       );
 
       if (intentRow === undefined) {
-        return (await this.findAsset(client, input.owner)) === undefined
-          ? 'missing'
-          : 'already_completed';
+        const asset = await this.findAsset(client, input.owner);
+        return asset === undefined
+          ? { kind: 'missing' }
+          : { kind: 'already_completed', asset };
       }
 
       const intent = mapIntent(intentRow);
       if (
         intent === undefined ||
         intent.status !== 'open' ||
-        intent.expiresAt.getTime() <= input.now.getTime()
+        intent.expiresAt.getTime() <= input.now().getTime()
       ) {
-        return 'missing';
+        return { kind: 'missing' };
       }
+      const prepared = await input.prepare(intent);
+      if (prepared.kind === 'refused') {
+        const rejected = await client.speakingAudioUploadIntent.updateMany({
+          where: {
+            ...ownerWhere(input.owner),
+            status: 'open',
+            expiresAt: { gt: input.now() },
+          },
+          data: { status: 'rejected' },
+        });
+        return rejected.count === 1
+          ? { kind: 'refused', refusal: prepared.refusal }
+          : { kind: 'missing' };
+      }
+      if (intent.expiresAt.getTime() <= input.now().getTime()) {
+        return { kind: 'missing' };
+      }
+      const { asset } = prepared;
       if (
-        input.asset.assetId !== intent.assetId ||
-        input.asset.organizationId !== intent.organizationId ||
-        input.asset.endUserId !== intent.endUserId ||
-        input.asset.environment !== intent.environment ||
-        input.asset.objectKey !== intent.objectKey ||
-        input.asset.contentType !== intent.contentType ||
-        input.asset.byteSize !== intent.byteSize
+        asset.assetId !== intent.assetId ||
+        asset.organizationId !== intent.organizationId ||
+        asset.endUserId !== intent.endUserId ||
+        asset.environment !== intent.environment ||
+        asset.objectKey !== intent.objectKey ||
+        asset.contentType !== intent.contentType ||
+        asset.byteSize !== intent.byteSize
       ) {
         throw storeUnavailable(
           'INTERNAL_ERROR',
@@ -250,15 +266,15 @@ export class PostgresSpeakingAudioUploadRepository
 
       await client.speakingAudioAsset.create({
         data: {
-          id: input.asset.assetId,
-          organizationId: input.asset.organizationId,
-          endUserId: input.asset.endUserId,
-          environment: input.asset.environment,
-          objectKey: input.asset.objectKey,
-          contentType: input.asset.contentType,
-          byteSize: input.asset.byteSize,
-          acceptedAt: input.asset.acceptedAt,
-          retentionExpiresAt: input.asset.retentionExpiresAt,
+          id: asset.assetId,
+          organizationId: asset.organizationId,
+          endUserId: asset.endUserId,
+          environment: asset.environment,
+          objectKey: asset.objectKey,
+          contentType: asset.contentType,
+          byteSize: asset.byteSize,
+          acceptedAt: asset.acceptedAt,
+          retentionExpiresAt: asset.retentionExpiresAt,
         },
       });
       const removed = await client.speakingAudioUploadIntent.deleteMany({
@@ -272,7 +288,7 @@ export class PostgresSpeakingAudioUploadRepository
           internalError('Speaking Audio intent changed'),
         );
       }
-      return 'created';
+      return { kind: 'created', asset };
     });
   }
 
@@ -355,12 +371,13 @@ export class PostgresSpeakingAudioUploadRepository
 
   private async transaction<T>(
     run: (client: Prisma.TransactionClient) => Promise<T>,
+    options: {
+      readonly maxWait: number;
+      readonly timeout: number;
+    } = CONTROL_PLANE_TRANSACTION_OPTIONS,
   ): Promise<T> {
     try {
-      return await this.client.$transaction(
-        (client) => run(client),
-        CONTROL_PLANE_TRANSACTION_OPTIONS,
-      );
+      return await this.client.$transaction((client) => run(client), options);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -372,6 +389,15 @@ export class PostgresSpeakingAudioUploadRepository
         error,
       );
     }
+  }
+
+  private async completionTransaction<T>(
+    run: (client: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.transaction(run, {
+      ...CONTROL_PLANE_TRANSACTION_OPTIONS,
+      timeout: SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS,
+    });
   }
 
   private async run<T>(operation: () => Promise<T>): Promise<T> {

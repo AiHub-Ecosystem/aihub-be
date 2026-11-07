@@ -1,3 +1,4 @@
+import type { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingAudioAsset,
@@ -27,16 +28,26 @@ export interface SpeakingAudioUploadRepositoryPort {
     readonly owner: SpeakingAudioUploadOwner;
     readonly now: Date;
   }): Promise<boolean>;
-  rejectIntent(input: {
-    readonly owner: SpeakingAudioUploadOwner;
-    readonly now: Date;
-  }): Promise<boolean>;
   removeRejectedIntent(owner: SpeakingAudioUploadOwner): Promise<void>;
+  /** Holds the intent row lock while preparing storage and recording the asset. */
   completeIntent(input: {
     readonly owner: SpeakingAudioUploadOwner;
-    readonly now: Date;
-    readonly asset: SpeakingAudioAsset;
-  }): Promise<'created' | 'already_completed' | 'missing'>;
+    readonly now: () => Date;
+    readonly prepare: (
+      intent: SpeakingAudioUploadIntent,
+    ) => Promise<
+      | { readonly kind: 'accepted'; readonly asset: SpeakingAudioAsset }
+      | { readonly kind: 'refused'; readonly refusal: AppError }
+    >;
+  }): Promise<
+    | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
+    | {
+        readonly kind: 'already_completed';
+        readonly asset: SpeakingAudioAsset;
+      }
+    | { readonly kind: 'missing' }
+    | { readonly kind: 'refused'; readonly refusal: AppError }
+  >;
   listCleanupCandidates(input: {
     readonly expiredBefore: Date;
     readonly limit: number;
@@ -68,6 +79,14 @@ export interface SpeakingAudioAssetStoragePort {
       }
     | undefined
   >;
+  copyObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly sourceObjectKey: string;
+      readonly destinationObjectKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
   deleteObject(
     input: {
       readonly environment: SpeakingAudioEnvironment;

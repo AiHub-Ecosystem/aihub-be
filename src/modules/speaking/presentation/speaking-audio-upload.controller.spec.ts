@@ -29,7 +29,10 @@ import type {
   SpeakingAudioAsset,
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
-import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import {
+  SPEAKING_AUDIO_MAX_BYTES,
+  speakingAudioStagingObjectKey,
+} from '@/modules/speaking/domain/speaking-audio-asset';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 function uploadUrlBody(response: { json(): unknown }) {
@@ -96,29 +99,6 @@ class FakeAudioUploadRepository implements SpeakingAudioUploadRepositoryPort {
     );
   }
 
-  async rejectIntent(input: {
-    readonly owner: {
-      readonly assetId: string;
-      readonly organizationId: string;
-      readonly endUserId: string;
-      readonly environment: 'production' | 'sandbox';
-    };
-    readonly now: Date;
-  }): Promise<boolean> {
-    const found = await this.findUpload(input.owner);
-    if (
-      found.kind !== 'intent' ||
-      found.intent.status !== 'open' ||
-      found.intent.expiresAt <= input.now
-    )
-      return false;
-    this.intents.set(input.owner.assetId, {
-      ...found.intent,
-      status: 'rejected',
-    });
-    return true;
-  }
-
   async removeRejectedIntent(owner: {
     readonly assetId: string;
     readonly organizationId: string;
@@ -138,21 +118,42 @@ class FakeAudioUploadRepository implements SpeakingAudioUploadRepositoryPort {
       readonly endUserId: string;
       readonly environment: 'production' | 'sandbox';
     };
-    readonly now: Date;
-    readonly asset: SpeakingAudioAsset;
-  }): Promise<'created' | 'already_completed' | 'missing'> {
+    readonly now: () => Date;
+    readonly prepare: Parameters<
+      SpeakingAudioUploadRepositoryPort['completeIntent']
+    >[0]['prepare'];
+  }): Promise<
+    | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
+    | {
+        readonly kind: 'already_completed';
+        readonly asset: SpeakingAudioAsset;
+      }
+    | { readonly kind: 'missing' }
+    | { readonly kind: 'refused'; readonly refusal: AppError }
+  > {
     const found = await this.findUpload(input.owner);
-    if (found.kind === 'asset') return 'already_completed';
+    if (found.kind === 'asset') {
+      return { kind: 'already_completed', asset: found.asset };
+    }
     if (
       found.kind !== 'intent' ||
       found.intent.status !== 'open' ||
-      found.intent.expiresAt <= input.now
+      found.intent.expiresAt <= input.now()
     ) {
-      return 'missing';
+      return { kind: 'missing' };
     }
-    this.assets.set(input.asset.assetId, input.asset);
-    this.intents.delete(input.asset.assetId);
-    return 'created';
+    const prepared = await input.prepare(found.intent);
+    if (prepared.kind === 'refused') {
+      this.intents.set(input.owner.assetId, {
+        ...found.intent,
+        status: 'rejected',
+      });
+      return prepared;
+    }
+    if (found.intent.expiresAt <= input.now()) return { kind: 'missing' };
+    this.assets.set(prepared.asset.assetId, prepared.asset);
+    this.intents.delete(prepared.asset.assetId);
+    return { kind: 'created', asset: prepared.asset };
   }
 
   async listCleanupCandidates(input: {
@@ -226,6 +227,16 @@ class FakeAudioAssetStorage implements SpeakingAudioAssetStoragePort {
       url: `https://s3.wispace.app/${input.environment}/${input.objectKey}?sig=opaque`,
       expiresAt: new Date(this.clock().getTime() + 5 * 60 * 1000),
     };
+  }
+
+  async copyObject(input: {
+    readonly environment: 'production' | 'sandbox';
+    readonly sourceObjectKey: string;
+    readonly destinationObjectKey: string;
+  }): Promise<void> {
+    const object = this.objects.get(input.sourceObjectKey);
+    if (object !== undefined)
+      this.objects.set(input.destinationObjectKey, object);
   }
 
   async describeObject(
@@ -388,10 +399,13 @@ describe('Speaking Audio upload HTTP flow', () => {
       const intent = repository.intents.get(assetId);
       if (intent === undefined)
         throw new Error('upload intent was not persisted');
-      storage.objects.set(intent.objectKey, {
-        contentType: 'audio/wav',
-        byteSize: 1_024,
-      });
+      storage.objects.set(
+        speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+        {
+          contentType: 'audio/wav',
+          byteSize: 1_024,
+        },
+      );
 
       for (const endpoint of [
         {
@@ -522,7 +536,10 @@ describe('Speaking Audio upload HTTP flow', () => {
     expect(storage.signed).toEqual([
       {
         environment: 'sandbox',
-        objectKey: intent.objectKey,
+        objectKey: speakingAudioStagingObjectKey(
+          intent.organizationId,
+          intent.assetId,
+        ),
         contentType: 'audio/wav',
         byteSize: 1_024,
       },
@@ -674,10 +691,13 @@ describe('Speaking Audio upload HTTP flow', () => {
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
-    storage.objects.set(intent.objectKey, {
-      contentType: 'audio/wav',
-      byteSize: 1_024,
-    });
+    storage.objects.set(
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      {
+        contentType: 'audio/wav',
+        byteSize: 1_024,
+      },
+    );
 
     const first = await app.inject({
       method: 'POST',
@@ -712,7 +732,10 @@ describe('Speaking Audio upload HTTP flow', () => {
 
     expect(repeat.statusCode).toBe(200);
     expect(audioAssetBody(repeat).data).toEqual(firstBody.data);
-    expect(storage.described).toEqual([intent.objectKey]);
+    expect(storage.described).toEqual([
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      intent.objectKey,
+    ]);
     expect(repository.assets.size).toBe(1);
   });
 
@@ -755,10 +778,13 @@ describe('Speaking Audio upload HTTP flow', () => {
     expect(missing.statusCode).toBe(404);
     expect(repository.intents.get(assetId)?.status).toBe('open');
 
-    storage.objects.set(intent.objectKey, {
-      contentType: 'audio/ogg',
-      byteSize: 1_200,
-    });
+    storage.objects.set(
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      {
+        contentType: 'audio/ogg',
+        byteSize: 1_200,
+      },
+    );
     const retried = await app.inject({
       method: 'POST',
       url: `/v1/speaking/audio/uploads/${assetId}/complete`,
@@ -795,7 +821,10 @@ describe('Speaking Audio upload HTTP flow', () => {
       const intent = repository.intents.get(assetId);
       if (intent === undefined)
         throw new Error('upload intent was not persisted');
-      storage.objects.set(intent.objectKey, stored);
+      storage.objects.set(
+        speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+        stored,
+      );
 
       const response = await app.inject({
         method: 'POST',
@@ -804,7 +833,10 @@ describe('Speaking Audio upload HTTP flow', () => {
       });
 
       expect(response.statusCode).toBe(expectedStatus);
-      expect(storage.deleted).toEqual([intent.objectKey]);
+      expect(storage.deleted).toEqual([
+        intent.objectKey,
+        speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      ]);
       expect(repository.intents.has(assetId)).toBe(false);
       expect(repository.assets.has(assetId)).toBe(false);
     },
@@ -826,10 +858,13 @@ describe('Speaking Audio upload HTTP flow', () => {
     const intent = repository.intents.get(assetId);
     if (intent === undefined)
       throw new Error('upload intent was not persisted');
-    storage.objects.set(intent.objectKey, {
-      contentType: 'audio/ogg',
-      byteSize: 1_024,
-    });
+    storage.objects.set(
+      speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+      {
+        contentType: 'audio/ogg',
+        byteSize: 1_024,
+      },
+    );
     storage.deleteFails = true;
 
     const rejected = await app.inject({

@@ -20,7 +20,9 @@ import {
   isSpeakingAudioAssetId,
   isSpeakingAudioContentType,
   speakingAudioObjectKey,
+  speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+import { SPEAKING_AUDIO_COMPLETION_DEADLINE_MS } from './speaking-audio-completion-timeouts';
 
 import type {
   SpeakingAudioAssetStoragePort,
@@ -131,7 +133,7 @@ export class SpeakingAudioUploadService
     );
     const signed = await this.storage.createUploadUrl({
       environment: owner.environment,
-      objectKey,
+      objectKey: speakingAudioStagingObjectKey(owner.organizationId, assetId),
       contentType: input.contentType,
       byteSize: input.byteSize,
     });
@@ -178,7 +180,10 @@ export class SpeakingAudioUploadService
 
     const signed = await this.storage.createUploadUrl({
       environment: found.intent.environment,
-      objectKey: found.intent.objectKey,
+      objectKey: speakingAudioStagingObjectKey(
+        found.intent.organizationId,
+        found.intent.assetId,
+      ),
       contentType: found.intent.contentType,
       byteSize: found.intent.byteSize,
     });
@@ -227,79 +232,146 @@ export class SpeakingAudioUploadService
       throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
     }
 
-    const stored = await this.storage.describeObject(
-      {
-        environment: found.intent.environment,
-        objectKey: found.intent.objectKey,
-      },
+    const completionSignal = AbortSignal.any([
       input.context.signal,
-    );
-    if (stored === undefined) {
-      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
-    }
-
-    const refusal = invalidStoredObject(
-      stored.contentType,
-      stored.byteSize,
-      found.intent,
-    );
-    if (refusal !== undefined) {
-      const rejected = await this.repository.rejectIntent({
-        owner,
-        now: this.now(),
-      });
-      if (!rejected) {
-        const current = await this.repository.findUpload(owner);
-        if (current.kind === 'asset') {
-          return { asset: current.asset, created: false };
-        }
-      } else {
-        try {
-          await this.storage.deleteObject(
-            {
-              environment: found.intent.environment,
-              objectKey: found.intent.objectKey,
-            },
-            input.context.signal,
-          );
-          await this.repository.removeRejectedIntent(owner);
-        } catch {
-          // The rejected intent remains durable so a later sweep can retry.
-        }
-      }
-      throw refusal;
-    }
-
-    const acceptedAt = this.now();
-    const asset: SpeakingAudioAsset = {
-      assetId: found.intent.assetId,
-      organizationId: found.intent.organizationId,
-      endUserId: found.intent.endUserId,
-      environment: found.intent.environment,
-      objectKey: found.intent.objectKey,
-      contentType: found.intent.contentType,
-      byteSize: found.intent.byteSize,
-      acceptedAt,
-      retentionExpiresAt: new Date(
-        acceptedAt.getTime() + SPEAKING_AUDIO_RETENTION_MS,
-      ),
-    };
+      AbortSignal.timeout(SPEAKING_AUDIO_COMPLETION_DEADLINE_MS),
+    ]);
     const result = await this.repository.completeIntent({
       owner,
-      now: acceptedAt,
-      asset,
-    });
-    if (result === 'missing') {
-      const current = await this.repository.findUpload(owner);
-      if (current.kind === 'asset') {
-        return { asset: current.asset, created: false };
-      }
-      throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
-    }
+      now: this.now,
+      prepare: async (intent) => {
+        const stagingKey = speakingAudioStagingObjectKey(
+          intent.organizationId,
+          intent.assetId,
+        );
+        const staging = await this.storage.describeObject(
+          { environment: intent.environment, objectKey: stagingKey },
+          completionSignal,
+        );
+        if (staging === undefined) {
+          throw uploadNotFound(
+            'NOT_FOUND',
+            'Speaking audio upload was not found',
+          );
+        }
 
-    return {
-      asset,
-      created: result === 'created',
-    };
+        const stagingRefusal = invalidStoredObject(
+          staging.contentType,
+          staging.byteSize,
+          intent,
+        );
+        if (stagingRefusal !== undefined) {
+          return { kind: 'refused', refusal: stagingRefusal };
+        }
+
+        if (completionSignal.aborted) {
+          throw storageUnavailable(
+            'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+            'Speaking audio storage is unavailable',
+          );
+        }
+        await this.storage.copyObject(
+          {
+            environment: intent.environment,
+            sourceObjectKey: stagingKey,
+            destinationObjectKey: intent.objectKey,
+          },
+          completionSignal,
+        );
+        const finalObject = await this.storage.describeObject(
+          { environment: intent.environment, objectKey: intent.objectKey },
+          completionSignal,
+        );
+        const finalRefusal = invalidStoredObject(
+          finalObject?.contentType,
+          finalObject?.byteSize,
+          intent,
+        );
+        if (finalRefusal !== undefined) {
+          return { kind: 'refused', refusal: finalRefusal };
+        }
+
+        const acceptedAt = this.now();
+        const acceptedAsset: SpeakingAudioAsset = {
+          assetId: intent.assetId,
+          organizationId: intent.organizationId,
+          endUserId: intent.endUserId,
+          environment: intent.environment,
+          objectKey: intent.objectKey,
+          contentType: intent.contentType,
+          byteSize: intent.byteSize,
+          acceptedAt,
+          retentionExpiresAt: new Date(
+            acceptedAt.getTime() + SPEAKING_AUDIO_RETENTION_MS,
+          ),
+        };
+        return { kind: 'accepted', asset: acceptedAsset };
+      },
+    });
+
+    if (result.kind === 'refused') {
+      await this.cleanupRejectedIntent(
+        owner,
+        found.intent,
+        input.context.signal,
+      );
+      throw result.refusal;
+    }
+    if (result.kind === 'created') {
+      await this.deleteStagingBestEffort(
+        found.intent,
+        speakingAudioStagingObjectKey(
+          found.intent.organizationId,
+          found.intent.assetId,
+        ),
+      );
+      return { asset: result.asset, created: true };
+    }
+    if (result.kind === 'already_completed') {
+      return { asset: result.asset, created: false };
+    }
+    throw uploadNotFound('NOT_FOUND', 'Speaking audio upload was not found');
+  }
+
+  private async cleanupRejectedIntent(
+    owner: SpeakingAudioUploadOwner,
+    intent: SpeakingAudioUploadIntent,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    const stagingKey = speakingAudioStagingObjectKey(
+      intent.organizationId,
+      intent.assetId,
+    );
+    try {
+      const outcomes = await Promise.allSettled([
+        this.storage.deleteObject(
+          { environment: intent.environment, objectKey: intent.objectKey },
+          signal,
+        ),
+        this.storage.deleteObject(
+          { environment: intent.environment, objectKey: stagingKey },
+          signal,
+        ),
+      ]);
+      if (outcomes.every((outcome) => outcome.status === 'fulfilled')) {
+        await this.repository.removeRejectedIntent(owner);
+      }
+    } catch {
+      // The rejected intent remains durable so a later sweep can retry.
+    }
+  }
+
+  private async deleteStagingBestEffort(
+    intent: SpeakingAudioUploadIntent,
+    stagingKey: string,
+  ): Promise<void> {
+    try {
+      await this.storage.deleteObject({
+        environment: intent.environment,
+        objectKey: stagingKey,
+      });
+    } catch {
+      // Completion is durable; staging cleanup is best effort.
+    }
   }
 }

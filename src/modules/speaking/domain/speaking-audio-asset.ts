@@ -81,3 +81,16 @@ export function speakingAudioObjectKey(
 ): string {
   return `${SPEAKING_AUDIO_OBJECT_PREFIX}${organizationId}/speaking/${assetId}/original`;
 }
+
+export function speakingAudioStagingObjectKey(
+  organizationId: string,
+  assetId: string,
+): string {
+  return `${SPEAKING_AUDIO_OBJECT_PREFIX}${organizationId}/speaking/${assetId}/upload`;
+}
+
+export function isSpeakingAudioStagingObjectKey(value: string): boolean {
+  return /^orgs\/[A-Za-z0-9_-]+\/speaking\/aud_[0-9A-HJKMNP-TV-Z]{26}\/upload$/.test(
+    value,
+  );
+}

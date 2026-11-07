@@ -1,4 +1,7 @@
-import { SPEAKING_AUDIO_ORPHAN_GRACE_MS } from '@/modules/speaking/domain/speaking-audio-asset';
+import {
+  SPEAKING_AUDIO_ORPHAN_GRACE_MS,
+  speakingAudioStagingObjectKey,
+} from '@/modules/speaking/domain/speaking-audio-asset';
 import type { SpeakingAudioUploadIntent } from '@/modules/speaking/domain/speaking-audio-asset';
 
 import type {
@@ -34,10 +37,21 @@ export class SpeakingAudioUploadSweep {
     expiredBefore: Date,
   ): Promise<boolean> {
     try {
-      await this.storage.deleteObject({
-        environment: intent.environment,
-        objectKey: intent.objectKey,
-      });
+      const outcomes = await Promise.allSettled([
+        this.storage.deleteObject({
+          environment: intent.environment,
+          objectKey: intent.objectKey,
+        }),
+        this.storage.deleteObject({
+          environment: intent.environment,
+          objectKey: speakingAudioStagingObjectKey(
+            intent.organizationId,
+            intent.assetId,
+          ),
+        }),
+      ]);
+      if (outcomes.some((outcome) => outcome.status === 'rejected'))
+        return false;
       return await this.repository.removeCleanupCandidate({
         intent,
         expiredBefore,

@@ -1101,7 +1101,7 @@ curl -sS -X POST "$AIHUB_BASE_URL/v1/speaking/audio/uploads" \
 {
   "data": {
     "asset_id": "aud_01JQ8Z5R3M7T2VXK4YB6HD8C0E",
-    "upload_url": "https://s3.wispace.app/orgs/org_.../original?X-Amz-...",
+    "upload_url": "https://s3.wispace.app/orgs/org_.../upload?X-Amz-...",
     "method": "PUT",
     "headers": { "Content-Type": "audio/wav", "Content-Length": "204800" },
     "expires_at": "2026-10-03T12:05:00Z",
