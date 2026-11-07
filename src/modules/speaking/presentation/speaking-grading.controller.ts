@@ -13,7 +13,7 @@ import type { FastifyReply } from 'fastify';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { parseRequestBody } from '@/common/http/parse-request-body';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordSpeakingAudioUrlRejection } from '@/common/observability/speaking-audio-url-rejection-metric';
 import { appConfig } from '@/config/runtime-configuration';
 import {
   type SpeakingGradeJsonInput,
@@ -62,7 +62,7 @@ function parseJsonBody(
     sampleBucket: configuration.SEAWEEDFS_BUCKET,
   });
   if (!policy.approved) {
-    recordRejected(policy.reason);
+    recordSpeakingAudioUrlRejection(policy.reason);
     throw invalidRequest();
   }
 

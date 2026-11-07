@@ -2,25 +2,13 @@ import { Counter } from '@prometheus-io/client';
 
 import { registry } from './metrics';
 
-export type RejectionReason =
-  | 'rate_limit'
-  | 'quota'
-  | 'concurrency'
-  | 'auth'
-  | 'malformed'
-  | 'traversal'
-  | 'foreign_tenant'
-  | 'unapproved_bucket';
+export type RejectionReason = 'rate_limit' | 'quota' | 'concurrency' | 'auth';
 
 const REJECTION_REASONS: readonly RejectionReason[] = [
   'rate_limit',
   'quota',
   'concurrency',
   'auth',
-  'malformed',
-  'traversal',
-  'foreign_tenant',
-  'unapproved_bucket',
 ];
 
 const rejectedTotal = new Counter({

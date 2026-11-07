@@ -412,7 +412,9 @@ describe('Speaking grading HTTP flow', () => {
       const before = await getMetrics();
       const previous = Number(
         before.match(
-          new RegExp(`aihub_rejected_total\\{reason="${reason}"\\} (\\d+)`),
+          new RegExp(
+            `aihub_speaking_audio_url_rejected_total\\{reason="${reason}"\\} (\\d+)`,
+          ),
         )?.[1] ?? 0,
       );
       const response = await app.inject({
@@ -429,7 +431,7 @@ describe('Speaking grading HTTP flow', () => {
       expect(response.payload).not.toContain(audioUrl);
       expect(outboundJson).toBeUndefined();
       expect(after).toContain(
-        `aihub_rejected_total{reason="${reason}"} ${previous + 1}`,
+        `aihub_speaking_audio_url_rejected_total{reason="${reason}"} ${previous + 1}`,
       );
     },
   );
