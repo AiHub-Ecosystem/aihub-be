@@ -82,6 +82,7 @@ const processHeap = new Gauge('benchmark_process_heap_bytes');
 const eventLoopLag = new Gauge('benchmark_event_loop_lag_seconds');
 const postgresWaiting = new Gauge('benchmark_postgres_waiting');
 const downstreamQueued = new Gauge('benchmark_downstream_queued');
+const downstreamLimitDropped = new Gauge('benchmark_downstream_limit_dropped');
 
 const task1 = task1PayloadFromFixture(
   parseTask1Fixture(
@@ -250,6 +251,8 @@ export function scrapeMetrics() {
     if (name === 'aihub_event_loop_lag_seconds') eventLoopLag.add(value);
     if (name === 'aihub_postgres_pool_waiting') postgresWaiting.add(value);
     if (name === 'aihub_downstream_pool_queued') downstreamQueued.add(value);
+    if (name === 'aihub_downstream_limit_dropped_total')
+      downstreamLimitDropped.add(value);
   }
 }
 

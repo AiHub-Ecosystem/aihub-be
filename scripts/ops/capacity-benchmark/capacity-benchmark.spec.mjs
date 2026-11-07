@@ -11,6 +11,7 @@ import {
 } from './argon2-contention-probe.mjs';
 import { runProcess } from './capacity-benchmark-process.mjs';
 import {
+  adaptiveConcurrencyChecks,
   appendStreamingMarkerChunk,
   authAndGradingWorkload,
   contentionJobsFitLoadWindow,
@@ -33,6 +34,59 @@ import {
   taggedMetricValues,
   task1PayloadFromFixture,
 } from './capacity-benchmark-utils.mjs';
+
+await test('adaptive concurrency passes when the limiter refused and the queue stayed bounded', () => {
+  assert.deepEqual(
+    adaptiveConcurrencyChecks(
+      [
+        {
+          routes: { writing_task1: { count: 10 } },
+          downstreamQueuedPeak: { allOrigins: 12 },
+          downstreamRefusedTotal: { allOrigins: 3 },
+        },
+      ],
+      256,
+    ),
+    { queueBounded: true, limiterEngaged: true, allPassed: true },
+  );
+});
+
+await test('adaptive concurrency fails when the downstream queue outgrew the offered concurrency', () => {
+  assert.deepEqual(
+    adaptiveConcurrencyChecks(
+      [
+        {
+          routes: { writing_task1: { count: 10 } },
+          downstreamQueuedPeak: { allOrigins: 300 },
+          downstreamRefusedTotal: { allOrigins: 40 },
+        },
+      ],
+      256,
+    ),
+    { queueBounded: false, limiterEngaged: true, allPassed: false },
+  );
+});
+
+await test('adaptive concurrency fails when no grading run saw a refusal', () => {
+  assert.deepEqual(
+    adaptiveConcurrencyChecks(
+      [
+        {
+          routes: { writing_task1: { count: 10 } },
+          downstreamQueuedPeak: { allOrigins: 0 },
+          downstreamRefusedTotal: {},
+        },
+        {
+          routes: { login: { count: 10 } },
+          downstreamQueuedPeak: { allOrigins: 5000 },
+          downstreamRefusedTotal: { allOrigins: 9 },
+        },
+      ],
+      256,
+    ),
+    { queueBounded: true, limiterEngaged: false, allPassed: false },
+  );
+});
 
 /** @typedef {{min: number | null, median: number | null, max: number | null}} Spread */
 /** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: Spread | null, goodputRps: Spread | null, overloadChangePercent: Spread | null, timeToBaselineSeconds: Spread | null, p50Ms: Spread | null, p95Ms: Spread | null, p99Ms: Spread, sampleVerdict: string}} RouteSummary */

@@ -545,6 +545,33 @@ export function hasCompleteLoadDelivery(run) {
   );
 }
 
+/**
+ * Acceptance checks for the adaptive downstream concurrency limit (#1590):
+ * every grading run's downstream queue must stay bounded by the offered
+ * concurrency, and the limiter must have refused at least once under the
+ * degraded stub, proving fast-fail engaged instead of unbounded queueing.
+ *
+ * @param {Array<{routes: Record<string, unknown>, downstreamQueuedPeak?: Record<string, number | undefined>, downstreamRefusedTotal?: Record<string, number | undefined>}>} runs
+ * @param {number} maxVUs
+ */
+export function adaptiveConcurrencyChecks(runs, maxVUs) {
+  const gradingRuns = runs.filter((run) =>
+    Object.keys(run.routes).some((name) => isGradingRouteName(name)),
+  );
+  const queueBounded = gradingRuns.every((run) => {
+    const peak = run.downstreamQueuedPeak?.allOrigins;
+    return peak === undefined || (Number.isFinite(peak) && peak <= maxVUs);
+  });
+  const limiterEngaged = gradingRuns.some(
+    (run) => (run.downstreamRefusedTotal?.allOrigins ?? 0) > 0,
+  );
+  return {
+    queueBounded,
+    limiterEngaged,
+    allPassed: queueBounded && limiterEngaged,
+  };
+}
+
 /** @param {number} maxVUs @param {number} userCount */
 export function hasOneUserPerVu(maxVUs, userCount) {
   return (

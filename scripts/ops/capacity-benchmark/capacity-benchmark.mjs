@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { lastLines, runProcess } from './capacity-benchmark-process.mjs';
 import {
+  adaptiveConcurrencyChecks,
   appendStreamingMarkerChunk,
   contentionJobsFitLoadWindow,
   goodputCountsBySecond,
@@ -547,6 +548,7 @@ try {
         appCpuPercentOfLimit: 80,
         appMemoryPercentOfLimit: 80,
         postgresqlPoolWaitingClients: 0,
+        downstreamQueuedPeakLimit: maxVUs,
         hostCpuPercent: 80,
         hostMemoryPercentUsed: 80,
         stubErrorRate: stubErrorRate,
@@ -608,17 +610,30 @@ try {
   };
   // A run whose acceptance checks failed is not a repetition, so it never
   // takes the results.json name the repetitions summary reads.
+  const adaptive = adaptiveConcurrencyChecks(runs, maxVUs);
+  report.benchmark.adaptiveConcurrency = adaptive;
+  const acceptanceErrors = [];
   if (!argon2Contention.allChecksPassed) {
-    report.benchmark.error = 'Argon2 contention acceptance checks did not pass';
+    acceptanceErrors.push('Argon2 contention acceptance checks did not pass');
+  }
+  if (!adaptive.allPassed) {
+    acceptanceErrors.push(
+      adaptive.limiterEngaged
+        ? 'Downstream queue peak exceeded the adaptive-concurrency bound'
+        : 'The adaptive concurrency limiter refused nothing under the degraded stub',
+    );
+  }
+  if (acceptanceErrors.length > 0) {
+    report.benchmark.error = acceptanceErrors.join('; ');
   }
   const resultPath = path.join(
     artifactDirectory,
-    argon2Contention.allChecksPassed ? 'results.json' : 'partial-results.json',
+    acceptanceErrors.length === 0 ? 'results.json' : 'partial-results.json',
   );
   await writeFile(resultPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`Benchmark report written to ${resultPath}\n`);
-  if (!argon2Contention.allChecksPassed) {
-    process.stderr.write('Argon2 contention acceptance checks did not pass.\n');
+  if (acceptanceErrors.length > 0) {
+    process.stderr.write(`${acceptanceErrors.join('; ')}\n`);
     process.exitCode = 1;
   }
 } catch (error) {
@@ -1212,6 +1227,7 @@ async function runK6({
     ),
     postgresPoolWaitingPeak: poolWaitingPeaks(summary.metrics),
     downstreamQueuedPeak: downstreamQueuePeaks(summary.metrics),
+    downstreamRefusedTotal: downstreamRefusalTotals(summary.metrics),
     redisRttMs: stub.redisRoundTripDelayMs,
     isOverload,
     isRecovery,
@@ -1463,6 +1479,12 @@ function poolWaitingPeaks(metrics) {
 function downstreamQueuePeaks(metrics) {
   const peak = metricValue(metrics, 'benchmark_downstream_queued');
   return peak === null ? {} : { allOrigins: peak };
+}
+
+/** @param {MetricSet} metrics @returns {Record<string, number>} */
+function downstreamRefusalTotals(metrics) {
+  const total = metricValue(metrics, 'benchmark_downstream_limit_dropped');
+  return total === null ? {} : { allOrigins: total };
 }
 
 /** @param {unknown} value @returns {number | null} */
