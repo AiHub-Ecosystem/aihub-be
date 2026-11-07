@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
+import { CqrsModule } from '@nestjs/cqrs';
 
 import {
   OPAQUE_TOKEN_BINDINGS,
@@ -66,6 +67,12 @@ import { PostgresOrganizationApiKeyRepository } from './api-keys/infrastructure/
 import { ApiKeyUserIdentityGuard } from './api-keys/presentation/api-key-user-identity.guard';
 import { ApiKeyGuard } from './api-keys/presentation/api-key.guard';
 import { OrganizationApiKeyController } from './api-keys/presentation/organization-api-key.controller';
+import {
+  CreateOrganizationApiKeyHandler,
+  ListOrganizationApiKeysHandler,
+  RevokeOrganizationApiKeyHandler,
+  RotateOrganizationApiKeyHandler,
+} from './api-keys/presentation/organization-api-key.cqrs';
 import { SandboxApiKeyGuard } from './api-keys/presentation/sandbox-api-key.guard';
 import { SandboxDemoKeyValidationGuard } from './api-keys/presentation/sandbox-demo-key-validation.guard';
 import {
@@ -195,6 +202,7 @@ type IdentityTransactionClient = ReturnType<
 @Module({
   // `RateLimitGuard` on the sandbox route consumes the gateway's rate limiter.
   imports: [
+    CqrsModule.forRoot(),
     RuntimeConfigurationModule,
     SecretsModule,
     AuthModule,
@@ -212,6 +220,10 @@ type IdentityTransactionClient = ReturnType<
     OrganizationIdentityConfigController,
   ],
   providers: [
+    CreateOrganizationApiKeyHandler,
+    ListOrganizationApiKeysHandler,
+    RevokeOrganizationApiKeyHandler,
+    RotateOrganizationApiKeyHandler,
     {
       provide: IDENTITY_TRANSACTION_CLIENT,
       inject: [CONTROL_PLANE_PRISMA_CLIENT],

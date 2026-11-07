@@ -1,3 +1,4 @@
+import { CommandBus } from '@nestjs/cqrs';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -28,6 +29,7 @@ import {
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { CreateOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
@@ -35,14 +37,13 @@ import {
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const KEYS_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys`;
 const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
-
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function secretBody(response: { json(): unknown }) {
   return Value.Parse(OrganizationApiKeySecretResponseSchema, response.json());
@@ -176,8 +177,12 @@ describe('Organization API key creation HTTP flow', () => {
   }
 
   it('returns the raw credential once with the durable key metadata', async () => {
+    const execute = jest.spyOn(app.get(CommandBus), 'execute');
     const response = await create();
 
+    expect(execute).toHaveBeenCalledWith(
+      expect.any(CreateOrganizationApiKeyCommand),
+    );
     expect(response.statusCode).toBe(201);
     const body = secretBody(response);
     expect(body.data.api_key).toMatch(/^aihub_prod_[A-Za-z0-9]{43}$/);

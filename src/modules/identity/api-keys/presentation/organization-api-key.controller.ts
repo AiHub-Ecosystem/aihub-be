@@ -4,12 +4,12 @@ import {
   Delete,
   Get,
   HttpCode,
-  Inject,
   Param,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
@@ -22,25 +22,14 @@ import {
   type RevokeOrganizationApiKeyResponse,
 } from '@/contracts/organization/api-key';
 import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
-import {
-  CREATE_ORGANIZATION_API_KEY,
-  type CreateOrganizationApiKeyPort,
-} from '@/modules/identity/api-keys/application/create-organization-api-key.port';
-import {
-  LIST_ORGANIZATION_API_KEYS,
-  type ListOrganizationApiKeysPort,
-} from '@/modules/identity/api-keys/application/list-organization-api-keys.port';
-import {
-  REVOKE_ORGANIZATION_API_KEY,
-  type RevokeOrganizationApiKeyPort,
-} from '@/modules/identity/api-keys/application/revoke-organization-api-key.port';
-import {
-  ROTATE_ORGANIZATION_API_KEY,
-  type RotateOrganizationApiKeyPort,
-} from '@/modules/identity/api-keys/application/rotate-organization-api-key.port';
-
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import {
+  CreateOrganizationApiKeyCommand,
+  ListOrganizationApiKeysQuery,
+  RevokeOrganizationApiKeyCommand,
+  RotateOrganizationApiKeyCommand,
+} from './organization-api-key.cqrs';
 import {
   apiKeyResponse,
   mintedApiKeyResponse,
@@ -50,14 +39,8 @@ import {
 @UseGuards(UserAccessJwtGuard)
 export class OrganizationApiKeyController {
   constructor(
-    @Inject(CREATE_ORGANIZATION_API_KEY)
-    private readonly apiKeys: CreateOrganizationApiKeyPort,
-    @Inject(LIST_ORGANIZATION_API_KEYS)
-    private readonly keyList: ListOrganizationApiKeysPort,
-    @Inject(ROTATE_ORGANIZATION_API_KEY)
-    private readonly rotation: RotateOrganizationApiKeyPort,
-    @Inject(REVOKE_ORGANIZATION_API_KEY)
-    private readonly revocation: RevokeOrganizationApiKeyPort,
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
   ) {}
 
   // `DELETE`, following the route that disables a member: a withdrawal that
@@ -74,12 +57,14 @@ export class OrganizationApiKeyController {
       organizationId,
     );
 
-    const key = await this.revocation.revoke({
-      context,
-      userId,
-      organizationId,
-      apiKeyId,
-    });
+    const key = await this.commandBus.execute(
+      new RevokeOrganizationApiKeyCommand({
+        context,
+        userId,
+        organizationId,
+        apiKeyId,
+      }),
+    );
 
     return {
       data: apiKeyResponse(key),
@@ -101,12 +86,14 @@ export class OrganizationApiKeyController {
       organizationId,
     );
 
-    const rotated = await this.rotation.rotate({
-      context,
-      userId,
-      organizationId,
-      apiKeyId,
-    });
+    const rotated = await this.commandBus.execute(
+      new RotateOrganizationApiKeyCommand({
+        context,
+        userId,
+        organizationId,
+        apiKeyId,
+      }),
+    );
 
     return {
       data: mintedApiKeyResponse(rotated),
@@ -128,7 +115,9 @@ export class OrganizationApiKeyController {
       organizationId,
     );
 
-    const keys = await this.keyList.list({ context, userId, organizationId });
+    const keys = await this.queryBus.execute(
+      new ListOrganizationApiKeysQuery({ context, userId, organizationId }),
+    );
 
     return {
       data: {
@@ -158,19 +147,21 @@ export class OrganizationApiKeyController {
       request,
     );
 
-    const created = await this.apiKeys.create({
-      context,
-      userId,
-      organizationId,
-      name: requested.name,
-      scopes: requested.scopes,
-      ...(requested.allowed_environments === undefined
-        ? {}
-        : { allowedEnvironments: requested.allowed_environments }),
-      ...(requested.expires_at === undefined
-        ? {}
-        : { expiresAt: requested.expires_at }),
-    });
+    const created = await this.commandBus.execute(
+      new CreateOrganizationApiKeyCommand({
+        context,
+        userId,
+        organizationId,
+        name: requested.name,
+        scopes: requested.scopes,
+        ...(requested.allowed_environments === undefined
+          ? {}
+          : { allowedEnvironments: requested.allowed_environments }),
+        ...(requested.expires_at === undefined
+          ? {}
+          : { expiresAt: requested.expires_at }),
+      }),
+    );
 
     return {
       data: mintedApiKeyResponse(created),

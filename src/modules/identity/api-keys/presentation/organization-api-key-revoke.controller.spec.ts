@@ -1,3 +1,4 @@
+import { CommandBus } from '@nestjs/cqrs';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -30,6 +31,7 @@ import {
   type OrganizationApiKeyPort,
   type RevokeOrganizationApiKeyRecordInput,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { RevokeOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
@@ -37,6 +39,7 @@ import {
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
@@ -45,8 +48,6 @@ const KEY_ID = 'ak_01J00000000000000000000001';
 const REVOKE_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys/${KEY_ID}`;
 const CREATED_AT = new Date('2026-09-20T10:00:00.000Z');
 const KEY_HASH = 'b'.repeat(64);
-
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function revoked() {
   return {
@@ -192,8 +193,12 @@ describe('Organization API key revocation HTTP flow', () => {
   }
 
   it('returns the withdrawn key metadata with the published revoked status', async () => {
+    const execute = jest.spyOn(app.get(CommandBus), 'execute');
     const response = await revoke();
 
+    expect(execute).toHaveBeenCalledWith(
+      expect.any(RevokeOrganizationApiKeyCommand),
+    );
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       data: {

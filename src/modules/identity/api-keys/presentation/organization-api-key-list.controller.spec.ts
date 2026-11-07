@@ -1,3 +1,4 @@
+import { QueryBus } from '@nestjs/cqrs';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -26,6 +27,7 @@ import {
   type OrganizationApiKeyPort,
   type OrganizationApiKeyRecord,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
+import { ListOrganizationApiKeysQuery } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import {
   type ListRosterInput,
   ORGANIZATION_MEMBERSHIP,
@@ -33,13 +35,12 @@ import {
   type OrganizationMembershipRole,
   type OrganizationMembershipStatus,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const KEYS_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys`;
-
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function listBody(response: { json(): unknown }) {
   return Value.Parse(ListOrganizationApiKeysResponseSchema, response.json());
@@ -176,6 +177,7 @@ describe('Organization API key listing HTTP flow', () => {
   }
 
   it('returns the organization key metadata for an owner', async () => {
+    const execute = jest.spyOn(app.get(QueryBus), 'execute');
     apiKeys.listApiKeys.mockResolvedValue([
       keyRecord({
         lastUsedAt: new Date('2026-09-21T08:00:00.000Z'),
@@ -185,6 +187,9 @@ describe('Organization API key listing HTTP flow', () => {
 
     const response = await list();
 
+    expect(execute).toHaveBeenCalledWith(
+      expect.any(ListOrganizationApiKeysQuery),
+    );
     expect(response.statusCode).toBe(200);
     expect(listBody(response)).toEqual({
       data: {
