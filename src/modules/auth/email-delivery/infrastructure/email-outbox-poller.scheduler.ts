@@ -235,9 +235,14 @@ export class EmailOutboxPollerScheduler
   }
 
   async dispatchRequests(requestIds: readonly string[]): Promise<void> {
-    if (isShuttingDown() || !(await this.runRecipientKeyGate(false))) return;
+    if (isShuttingDown()) return;
+    // Join the shutdown drain before the first asynchronous boundary, so a
+    // recipient-key gate query that is still pending cannot be closed under
+    // Postgres while shutdown waits (#833).
     backgroundWorkStarted();
     try {
+      if (!(await this.runRecipientKeyGate(false))) return;
+      if (isShuttingDown()) return;
       await this.poller.runOnce({ requestIds });
     } finally {
       backgroundWorkSettled();
@@ -251,14 +256,18 @@ export class EmailOutboxPollerScheduler
    *
    * A pass is background work: closing the server waits for it, within the
    * shutdown drain, before any connection it uses is closed. None starts once
-   * shutdown has begun (#833).
+   * shutdown has begun (#833). The single-flight guard and the drain
+   * registration both run before the asynchronous recipient-key gate, so
+   * ticks during a pending gate cannot start another gate query or pass,
+   * and the drain cannot finish while the gate's Postgres work is active.
    */
   private async pass(): Promise<void> {
     if (this.running || isShuttingDown()) return;
-    if (!(await this.runRecipientKeyGate(false))) return;
     this.running = true;
     backgroundWorkStarted();
     try {
+      if (!(await this.runRecipientKeyGate(false))) return;
+      if (isShuttingDown()) return;
       const summary = this.walDispatchEnabled
         ? await this.poller.reconcile()
         : await this.poller.runOnce();
