@@ -14,7 +14,8 @@ export type RedisProtectionSeam =
   | 'auth_failure_counter'
   | 'auth_rate_limit'
   | 'jwks_cache'
-  | 'email_send_rate';
+  | 'email_send_rate'
+  | 'token_revocation';
 
 export type ApiKeyCacheInvalidationSeam =
   | 'api_key_cache_invalidation_revoke'
@@ -35,6 +36,7 @@ const REDIS_PROTECTION_SEAMS = [
   'auth_rate_limit',
   'jwks_cache',
   'email_send_rate',
+  'token_revocation',
 ] as const satisfies readonly RedisProtectionSeam[];
 
 const redisUnavailableTotal = new Counter({

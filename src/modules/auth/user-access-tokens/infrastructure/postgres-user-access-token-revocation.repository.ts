@@ -27,6 +27,12 @@ const IS_REVOKED_SQL = `
   ) AS revoked
 `;
 
+const LIST_ACTIVE_REVOCATIONS_SQL = `
+  SELECT issuer, jti
+  FROM user_access_token_revocations
+  WHERE effective_expires_at >= $1
+`;
+
 function rethrowDatabaseFailure(error: unknown): never {
   if (isPostgresUnavailable(error)) {
     throw databaseUnavailableError(error);
@@ -67,6 +73,19 @@ export class PostgresUserAccessTokenRevocationRepository
         [input.issuer, input.jti, input.now],
       );
       return rows[0]?.revoked === true;
+    } catch (error) {
+      rethrowDatabaseFailure(error);
+    }
+  }
+
+  async listActiveRevocations(
+    now: Date = new Date(),
+  ): Promise<readonly { readonly issuer: string; readonly jti: string }[]> {
+    try {
+      return await authQueryRows<{
+        readonly issuer: string;
+        readonly jti: string;
+      }>(this.client, LIST_ACTIVE_REVOCATIONS_SQL, [now]);
     } catch (error) {
       rethrowDatabaseFailure(error);
     }

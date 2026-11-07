@@ -42,6 +42,19 @@ export class InMemoryUserAccessTokenRevocationAdapter
     return record !== undefined && record.effectiveExpiresAt >= input.now;
   }
 
+  async listActiveRevocations(
+    now: Date = new Date(),
+  ): Promise<readonly { readonly issuer: string; readonly jti: string }[]> {
+    if (this.failLookup) throw databaseUnavailableError();
+    const active: Array<{ readonly issuer: string; readonly jti: string }> = [];
+    for (const record of this.records.values()) {
+      if (record.effectiveExpiresAt >= now) {
+        active.push({ issuer: record.issuer, jti: record.jti });
+      }
+    }
+    return active;
+  }
+
   reset(): void {
     this.records.clear();
     this.failLookup = false;

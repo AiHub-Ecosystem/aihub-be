@@ -240,14 +240,15 @@ jobs:
       # runbook records when that changes.
       - name: Gate the active scan on injection-class findings
         if: steps.mode.outputs.mode == 'active'
-        run: node --import tsx scripts/ci/dast-gate.ts "$DAST_DIR/zap-results.sarif"
+        # The sarif-json report template appends .json to reportFile.
+        run: node --import tsx scripts/ci/dast-gate.ts "$DAST_DIR/zap-results.sarif.json"
 
       - name: Upload the SARIF artifact
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dast-sarif-${{ steps.mode.outputs.mode }}
-          path: temp/dast/zap-results.sarif
+          path: temp/dast/zap-results.sarif.json
           if-no-files-found: warn
 
       # ZAP's SARIF names findings by URL, which the Code Scanning ingestion
@@ -259,7 +260,7 @@ jobs:
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
-          sarif_file: temp/dast/zap-results.sarif
+          sarif_file: temp/dast/zap-results.sarif.json
           category: dast-${{ steps.mode.outputs.mode }}
 
       - name: Stop the scan target

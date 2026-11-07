@@ -1,6 +1,12 @@
-import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import {
+  type ActiveRevocationRecord,
+  type UserAccessTokenRevocationRecordPort,
+} from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import { Logger, type OnModuleDestroy } from '@nestjs/common';
 import { type Static, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
+
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { InProcessBloomFilter } from './in-process-bloom-filter';
 
 export const REVOCATION_CHANNEL_DEFAULT = 'aihub:auth:token-revocations';
@@ -31,13 +37,18 @@ const RevocationMessageSchema = Type.Object({
 type RevocationMessage = Static<typeof RevocationMessageSchema>;
 
 export class BloomFilterUserAccessTokenRevocationAdapter
-  implements UserAccessTokenRevocationRecordPort
+  implements UserAccessTokenRevocationRecordPort, OnModuleDestroy
 {
+  private readonly logger = new Logger(
+    BloomFilterUserAccessTokenRevocationAdapter.name,
+  );
   private readonly underlying: UserAccessTokenRevocationRecordPort;
   private readonly bloomFilter: InProcessBloomFilter;
   private readonly redisPublisher: RedisPublisherPort | undefined;
   private readonly redisSubscriber: RedisSubscriberPort | undefined;
   private readonly channel: string;
+  private subscribed: boolean;
+  private subscriberReady: Promise<void> | undefined;
 
   constructor(options: BloomFilterRevocationAdapterOptions) {
     this.underlying = options.underlying;
@@ -45,8 +56,41 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     this.redisPublisher = options.redisPublisher;
     this.redisSubscriber = options.redisSubscriber;
     this.channel = options.channel ?? REVOCATION_CHANNEL_DEFAULT;
+    this.subscribed = options.redisSubscriber === undefined;
 
-    this.setupSubscriber();
+    if (this.redisSubscriber) {
+      this.subscriberReady = this.setupSubscriber();
+    }
+  }
+
+  get isSubscribed(): boolean {
+    return this.subscribed;
+  }
+
+  async seed(now: Date = new Date()): Promise<number> {
+    if (typeof this.underlying.listActiveRevocations !== 'function') {
+      return 0;
+    }
+    try {
+      const active = await this.underlying.listActiveRevocations(now);
+      for (const record of active) {
+        this.bloomFilter.add(this.buildKey(record.issuer, record.jti));
+      }
+      return active.length;
+    } catch (error) {
+      this.logger.error(
+        'Failed to seed token revocations from underlying store',
+        error,
+      );
+      return 0;
+    }
+  }
+
+  async init(now: Date = new Date()): Promise<void> {
+    await this.seed(now);
+    if (this.subscriberReady) {
+      await this.subscriberReady;
+    }
   }
 
   async isRevoked(input: {
@@ -55,6 +99,12 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     readonly now: Date;
   }): Promise<boolean> {
     const key = this.buildKey(input.issuer, input.jti);
+
+    // If subscription to revocation broadcast failed, fall back to authoritative store
+    // so an instance that never joined the channel does not fail open.
+    if (!this.subscribed) {
+      return this.underlying.isRevoked(input);
+    }
 
     // Fast-path: Bloom filter guarantees zero false negatives.
     // If not in filter, token was definitely not revoked.
@@ -89,10 +139,20 @@ export class BloomFilterUserAccessTokenRevocationAdapter
           this.channel,
           JSON.stringify(payload),
         );
-      } catch {
-        // Suppress Redis broadcast failure: revocation was safely persisted
+      } catch (error) {
+        this.logger.error(
+          `Failed to broadcast token revocation on channel ${this.channel}`,
+          error,
+        );
+        recordRedisUnavailable('token_revocation');
       }
     }
+  }
+
+  async listActiveRevocations(
+    now: Date = new Date(),
+  ): Promise<readonly ActiveRevocationRecord[]> {
+    return this.underlying.listActiveRevocations?.(now) ?? Promise.resolve([]);
   }
 
   async close(): Promise<void> {
@@ -105,11 +165,15 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     }
   }
 
+  async onModuleDestroy(): Promise<void> {
+    await this.close();
+  }
+
   private buildKey(issuer: string, jti: string): string {
     return JSON.stringify([issuer, jti]);
   }
 
-  private setupSubscriber(): void {
+  private async setupSubscriber(): Promise<void> {
     if (!this.redisSubscriber) return;
 
     this.redisSubscriber.on('message', (...args: unknown[]) => {
@@ -126,6 +190,25 @@ export class BloomFilterUserAccessTokenRevocationAdapter
       }
     });
 
-    this.redisSubscriber.subscribe(this.channel).catch(() => undefined);
+    this.redisSubscriber.on('error', (error) => {
+      this.subscribed = false;
+      this.logger.error(
+        `Token revocation Redis subscriber connection error on channel ${this.channel}`,
+        error,
+      );
+      recordRedisUnavailable('token_revocation');
+    });
+
+    try {
+      await this.redisSubscriber.subscribe(this.channel);
+      this.subscribed = true;
+    } catch (error) {
+      this.subscribed = false;
+      this.logger.error(
+        `Failed to subscribe to token revocation channel ${this.channel}`,
+        error,
+      );
+      recordRedisUnavailable('token_revocation');
+    }
   }
 }

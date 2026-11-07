@@ -93,4 +93,24 @@ describe('User Access JWT revocation records in PostgreSQL', () => {
     );
     expect(rowCount).toBe(1);
   });
+
+  it('lists active revocations and excludes expired ones', async () => {
+    const now = new Date('2026-11-05T12:00:00.000Z');
+    const expired = {
+      issuer: ISSUER,
+      jti: 'expired-jti',
+      effectiveExpiresAt: new Date('2026-11-05T11:59:59.000Z'),
+    };
+    const active = {
+      issuer: ISSUER,
+      jti: 'active-jti',
+      effectiveExpiresAt: new Date('2026-11-05T12:30:00.000Z'),
+    };
+
+    await repository.revoke(expired);
+    await repository.revoke(active);
+
+    const activeList = await repository.listActiveRevocations(now);
+    expect(activeList).toEqual([{ issuer: ISSUER, jti: 'active-jti' }]);
+  });
 });

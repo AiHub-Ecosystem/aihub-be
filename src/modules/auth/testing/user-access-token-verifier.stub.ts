@@ -5,6 +5,7 @@ export const NO_USER_ACCESS_TOKEN_REVOCATIONS: UserAccessTokenRevocationRecordPo
   {
     revoke: async () => undefined,
     isRevoked: async () => false,
+    listActiveRevocations: async () => [],
   };
 
 export function verifiedUserAccessToken(

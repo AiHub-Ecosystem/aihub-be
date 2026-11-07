@@ -1,8 +1,10 @@
 import { internalError } from '@/common/errors/app-error';
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
+import Redis from 'ioredis';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
+import { createRedisClient } from '@/common/redis/create-redis-client';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
@@ -78,6 +80,7 @@ import {
 } from './user-access-tokens/application/revoke-user-access-token.port';
 import { RevokeUserAccessTokenService } from './user-access-tokens/application/revoke-user-access-token.service';
 import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from './user-access-tokens/application/user-access-token-revocation-record.port';
+import { BloomFilterUserAccessTokenRevocationAdapter } from './user-access-tokens/infrastructure/bloom-filter/bloom-filter-user-access-token-revocation.adapter';
 import { PostgresUserAccessTokenRevocationRepository } from './user-access-tokens/infrastructure/postgres-user-access-token-revocation.repository';
 import { UserAccessTokenController } from './user-access-tokens/presentation/user-access-token.controller';
 import { VERIFICATION_TOKEN_REPOSITORY } from './verification/application/verification-token-repository.port';
@@ -252,8 +255,42 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
       useExisting: PostgresRefreshSessionRepository,
     },
     {
+      provide: BloomFilterUserAccessTokenRevocationAdapter,
+      inject: [
+        PostgresUserAccessTokenRevocationRepository,
+        RUNTIME_CONNECTION_CONFIGURATION,
+      ],
+      useFactory: async (
+        underlying: PostgresUserAccessTokenRevocationRepository,
+        connectionConfig: RuntimeConnectionConfigurationPort,
+      ): Promise<BloomFilterUserAccessTokenRevocationAdapter> => {
+        const redisUrl = connectionConfig.redisUrl?.trim();
+        let publisher: Redis | undefined;
+        let subscriber: Redis | undefined;
+        if (redisUrl !== undefined && redisUrl.length > 0) {
+          publisher = createRedisClient(redisUrl, {
+            commandTimeoutMs: 500,
+          });
+          subscriber = new Redis(redisUrl, {
+            lazyConnect: false,
+            enableOfflineQueue: true,
+            maxRetriesPerRequest: null,
+            connectTimeout: 1_000,
+          });
+          subscriber.on('error', () => undefined);
+        }
+        const adapter = new BloomFilterUserAccessTokenRevocationAdapter({
+          underlying,
+          redisPublisher: publisher,
+          redisSubscriber: subscriber,
+        });
+        await adapter.init();
+        return adapter;
+      },
+    },
+    {
       provide: USER_ACCESS_TOKEN_REVOCATION_RECORD,
-      useExisting: PostgresUserAccessTokenRevocationRepository,
+      useExisting: BloomFilterUserAccessTokenRevocationAdapter,
     },
     {
       // Web Sessions live in their own table beside the four refresh tables, so
