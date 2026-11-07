@@ -9,6 +9,18 @@ import {
   recordPostgresPoolError,
   setPostgresPoolStatsSource,
 } from '@/common/observability/metrics';
+import {
+  type PostgresBreakerState,
+  observePostgresConnectRetry,
+  observePostgresConnectRetryLatency,
+  recordPostgresBreakerTransition,
+  recordPostgresPoolShed,
+} from '@/common/observability/postgres-pool-resilience-metrics';
+import {
+  PoolStarvationBreaker,
+  isRetryableConnectError,
+  nextBackoffMs,
+} from './postgres-pool-backoff';
 
 const logger = new Logger('PostgresPool');
 const pools = new Map<PostgresPoolName, Set<Pool>>();
@@ -80,22 +92,32 @@ type PoolConnectCallback = (
  * commit a failed request's writes, or hold its locks. A connection whose last
  * ready-for-query status is not idle is therefore destroyed when it is
  * released: closing the socket makes PostgreSQL roll back and free its locks.
- * Nothing is retried; the caller already holds its error.
+ * Nothing is retried once a query has run; the caller already holds its error.
+ *
+ * Opening a connection is retried (#1608): a failed attempt waits a
+ * decorrelated jittered delay and tries again inside the request's acquisition
+ * deadline. Requests that finally fail feed a starvation breaker; while it is
+ * open, new and queued requests are refused at once instead of waiting.
  */
 class TransactionSafePool extends Pool {
   private readonly maxConnections: number;
   private readonly maxWaiters: number;
   private readonly waiting: PendingConnect[] = [];
   private active = 0;
+  private readonly breaker: PoolStarvationBreaker;
 
   constructor(
     config: PoolConfig,
+    private readonly poolName: PostgresPoolName,
     private readonly onDiscard: (
       client: PoolClient,
       transactionStatus: string,
     ) => void,
   ) {
     super(config);
+    this.breaker = new PoolStarvationBreaker((state) =>
+      this.onBreakerChange(state),
+    );
     this.maxConnections = config.max ?? 10;
     this.maxWaiters = this.maxConnections;
     Object.defineProperty(this, 'waitingCount', {
@@ -129,13 +151,19 @@ class TransactionSafePool extends Pool {
       reject: rejectPromise,
       settled: false,
       started: false,
+      attempts: 0,
+      backoffMs: 0,
+      retryTimer: undefined,
+      deadline: Date.now() + POSTGRES_ACQUISITION_TIMEOUT_MS,
       timer: setTimeout(
         () => this.expire(request),
         POSTGRES_ACQUISITION_TIMEOUT_MS,
       ),
     };
 
-    if (this.active < this.maxConnections) {
+    if (!this.breaker.admit()) {
+      this.shed(request);
+    } else if (this.active < this.maxConnections) {
       this.start(request);
     } else if (this.waiting.length < this.maxWaiters) {
       this.waiting.push(request);
@@ -150,6 +178,13 @@ class TransactionSafePool extends Pool {
     if (request.settled) return;
     request.started = true;
     this.active += 1;
+    this.attempt(request);
+  }
+
+  private attempt(request: PendingConnect): void {
+    const attemptStarted = Date.now();
+    const retried = request.attempts > 0;
+    request.attempts += 1;
 
     // pg-pool's own query() borrows through this callback form.
     super.connect((error, client, done) => {
@@ -158,13 +193,41 @@ class TransactionSafePool extends Pool {
         this.releaseSlot();
         return;
       }
-      clearTimeout(request.timer);
-      request.settled = true;
+      if (retried) {
+        this.observe(() =>
+          observePostgresConnectRetryLatency(
+            this.poolName,
+            client === undefined ? 'failure' : 'success',
+            Date.now() - attemptStarted,
+          ),
+        );
+      }
       if (error !== undefined || client === undefined) {
+        const failure = error ?? poolAcquisitionTimeout();
+        const delay = nextBackoffMs(request.backoffMs);
+        if (
+          isRetryableConnectError(failure) &&
+          Date.now() + delay < request.deadline
+        ) {
+          request.backoffMs = delay;
+          this.observe(() => observePostgresConnectRetry(this.poolName, delay));
+          // The request keeps its slot, so retries never exceed `max`.
+          request.retryTimer = setTimeout(() => {
+            request.retryTimer = undefined;
+            this.attempt(request);
+          }, delay);
+          return;
+        }
+        clearTimeout(request.timer);
+        request.settled = true;
+        this.recordFailure();
         this.releaseSlot();
-        this.deliverError(request, error ?? poolAcquisitionTimeout());
+        this.deliverError(request, failure);
         return;
       }
+      clearTimeout(request.timer);
+      request.settled = true;
+      this.breaker.success();
       const guarded = this.guard(client, () => this.releaseSlot());
       request.callback?.(undefined, guarded, (releaseError) => {
         guarded.release(releaseError);
@@ -180,7 +243,46 @@ class TransactionSafePool extends Pool {
       const index = this.waiting.indexOf(request);
       if (index >= 0) this.waiting.splice(index, 1);
     }
+    this.recordFailure();
+    if (request.retryTimer !== undefined) {
+      // Between attempts no connect callback is pending to give the slot back.
+      clearTimeout(request.retryTimer);
+      request.retryTimer = undefined;
+      this.releaseSlot();
+    }
     this.deliverError(request, poolAcquisitionTimeout());
+  }
+
+  private shed(request: PendingConnect): void {
+    this.observe(() => recordPostgresPoolShed(this.poolName));
+    this.fail(request, poolAcquisitionTimeout());
+  }
+
+  /** A request ended without a connection; enough in a row open the breaker. */
+  private recordFailure(): void {
+    if (!this.breaker.failure()) return;
+    for (const request of this.waiting.splice(0)) this.shed(request);
+  }
+
+  private onBreakerChange(state: PostgresBreakerState): void {
+    this.observe(() => recordPostgresBreakerTransition(this.poolName, state));
+    try {
+      logger.warn({
+        event: 'postgres_pool_breaker',
+        pool: this.poolName,
+        state,
+      });
+    } catch {
+      // An observability failure must not change the breaker.
+    }
+  }
+
+  private observe(record: () => void): void {
+    try {
+      record();
+    } catch {
+      // An observability failure must not fail a connection request.
+    }
   }
 
   private fail(request: PendingConnect, error: Error): void {
@@ -245,8 +347,13 @@ interface PendingConnect {
   readonly resolve: ((client: PoolClient) => void) | undefined;
   readonly reject: ((error: Error) => void) | undefined;
   readonly timer: ReturnType<typeof setTimeout>;
+  /** When the request's acquisition budget, retries included, runs out. */
+  readonly deadline: number;
   settled: boolean;
   started: boolean;
+  attempts: number;
+  backoffMs: number;
+  retryTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
 function poolAcquisitionTimeout(): Error {
@@ -265,27 +372,31 @@ export function createPostgresPool(
 ): Pool {
   // Clients whose own error was already counted.
   const erroredClients = new WeakSet<PoolClient>();
-  const pool = new TransactionSafePool(config, (client, transactionStatus) => {
-    // The connection is ended at once, so a driver error still on its way is
-    // never emitted; the discard counts as the pool error unless the client
-    // already reported one.
-    try {
-      if (!erroredClients.has(client)) {
-        recordPostgresPoolError(name, undefined);
+  const pool = new TransactionSafePool(
+    config,
+    name,
+    (client, transactionStatus) => {
+      // The connection is ended at once, so a driver error still on its way is
+      // never emitted; the discard counts as the pool error unless the client
+      // already reported one.
+      try {
+        if (!erroredClients.has(client)) {
+          recordPostgresPoolError(name, undefined);
+        }
+      } catch {
+        // An observability failure must not keep the connection in the pool.
       }
-    } catch {
-      // An observability failure must not keep the connection in the pool.
-    }
-    try {
-      logger.warn({
-        event: 'postgres_connection_discarded',
-        pool: name,
-        transaction_status: transactionStatus,
-      });
-    } catch {
-      // An observability failure must not keep the connection in the pool.
-    }
-  });
+      try {
+        logger.warn({
+          event: 'postgres_connection_discarded',
+          pool: name,
+          transaction_status: transactionStatus,
+        });
+      } catch {
+        // An observability failure must not keep the connection in the pool.
+      }
+    },
+  );
   rolesByPool.set(pool, roles);
   const registeredPools = pools.get(name) ?? new Set<Pool>();
   registeredPools.add(pool);
