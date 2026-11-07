@@ -178,6 +178,7 @@ aihub_argon2_queue_waits_total                      counter
 aihub_argon2_queue_refusals_total                   counter
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_rejected_total{reason}                         counter
+aihub_speaking_audio_url_rejected_total{reason}      counter
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total{seam}                   counter
 aihub_public_api_major_usage_samples_dropped_total     counter
@@ -203,6 +204,12 @@ Assertion. It does not count membership authorization on user-management
 routes, request validation, unmatched routes, downstream failures, or Redis
 unavailability. A rejected response may also increment `aihub_requests_total`
 once in that separate metric family as specified by #240.
+
+`aihub_speaking_audio_url_rejected_total{reason}` counts `grading-json`
+`audio_url` policy refusals at request validation. Its fixed reasons are
+`malformed`, `traversal`, `foreign_tenant`, and `unapproved_bucket`. It is a
+separate metric family and does not add validation refusals to
+`aihub_rejected_total`.
 
 `aihub_redis_unavailable_total` increments once when a request-path or
 Operator CLI protection/cache seam reports a failed Redis operation, and does

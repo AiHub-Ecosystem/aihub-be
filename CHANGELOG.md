@@ -106,6 +106,15 @@ out.
   exercise requests can use the existing authenticated chart upload flow.
   `writing.grade` remains supported.
 
+## [1.8.1] - 2026-11-07
+
+### Changed
+
+- `/v1` Speaking `grading-json` accepts only the caller's organization-scoped
+  audio asset, configured catalog sample objects under `speaking-samples/`, or
+  the stable public sample answer URL. Other storage paths are refused with
+  `400 INVALID_REQUEST` before dispatch.
+
 ## [1.8.0] - 2026-11-05
 
 ### Added

@@ -76,6 +76,7 @@ describe('metrics scrape endpoint', () => {
         'aihub_downstream_duration_seconds',
         'aihub_tokens_total',
         'aihub_metering_incomplete_total',
+        'aihub_speaking_audio_url_rejected_total',
         'aihub_redis_unavailable_total',
         'aihub_otel_export_failures_total',
         'aihub_otel_dropped_spans_total',

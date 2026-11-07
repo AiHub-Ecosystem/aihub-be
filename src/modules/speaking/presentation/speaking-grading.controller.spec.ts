@@ -17,6 +17,7 @@ import { AppError } from '@/common/errors/app-error';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { getMetrics } from '@/common/observability/metrics';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
@@ -154,6 +155,7 @@ describe('Speaking grading HTTP flow', () => {
   beforeAll(async () => {
     useTestRuntimeConfiguration({
       AIHUB_ALLOW_UNAUTHENTICATED_DEV: 'true',
+      SEAWEEDFS_AUDIO_ASSET_BUCKET: 'aihub-speaking-recordings',
       DOWNSTREAM_AI_SPEAKING_URL: 'https://ai-speaking.test',
       DOWNSTREAM_AI_SPEAKING_CLIENT_ID: 'speaking-client',
       DOWNSTREAM_AI_SPEAKING_SECRET_KEY: 'speaking-secret',
@@ -349,7 +351,7 @@ describe('Speaking grading HTTP flow', () => {
       headers: { 'content-type': 'application/json' },
       payload: {
         audio_url:
-          'https://s3.wispace.app/audio/sample.mp3?signature=contract-test',
+          'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm?signature=contract-test',
         part: 1,
         question_id: 'p1_hometown',
         prompt_text: 'Do you enjoy living in your hometown?',
@@ -370,13 +372,69 @@ describe('Speaking grading HTTP flow', () => {
       part: 1,
       question_id: 'p1_hometown',
       audio_url:
-        'https://s3.wispace.app/audio/sample.mp3?signature=contract-test',
+        'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm?signature=contract-test',
       test_type: 'Practice',
       prompt_text: 'Do you enjoy living in your hometown?',
       test_code: 'TEST-001',
       transcript: null,
     });
   });
+
+  it.each([
+    'https://s3.wispace.app/aihub-speaking-recordings/orgs/local-development/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original?X-Amz-Signature=abc',
+    'https://s3.wispace.app/aihub-speaking-samples/speaking-samples/part-1/sample.webm?X-Amz-Signature=abc',
+  ])('dispatches an approved audio URL family: %s', async (audioUrl) => {
+    outboundJson = undefined;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading-json',
+      headers: { 'content-type': 'application/json' },
+      payload: { audio_url: audioUrl, part: 1, question_id: 'p1_hometown' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(outboundJson).toMatchObject({ audio_url: audioUrl });
+  });
+
+  it.each([
+    [
+      'https://s3.wispace.app/aihub-speaking-recordings/orgs/org_other/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original',
+      'foreign_tenant',
+    ],
+    [
+      'https://s3.wispace.app/aihub-user-assets/orgs/local-development/avatar.webp',
+      'unapproved_bucket',
+    ],
+  ] as const)(
+    'rejects %s before dispatch and increments its metric',
+    async (audioUrl, reason) => {
+      outboundJson = undefined;
+      const before = await getMetrics();
+      const previous = Number(
+        before.match(
+          new RegExp(
+            `aihub_speaking_audio_url_rejected_total\\{reason="${reason}"\\} (\\d+)`,
+          ),
+        )?.[1] ?? 0,
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading-json',
+        headers: { 'content-type': 'application/json' },
+        payload: { audio_url: audioUrl, part: 1, question_id: 'p1_hometown' },
+      });
+      const after = await getMetrics();
+
+      expect(response.statusCode).toBe(400);
+      expectError(response, 'INVALID_REQUEST');
+      expect(response.payload).not.toContain(reason);
+      expect(response.payload).not.toContain(audioUrl);
+      expect(outboundJson).toBeUndefined();
+      expect(after).toContain(
+        `aihub_speaking_audio_url_rejected_total{reason="${reason}"} ${previous + 1}`,
+      );
+    },
+  );
 
   it('maps a JSON upload deadline that expires while parsing to 504', async () => {
     outboundJson = undefined;
@@ -391,7 +449,8 @@ describe('Speaking grading HTTP flow', () => {
         headers: { 'content-type': 'application/json' },
         payload: Readable.from([
           JSON.stringify({
-            audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+            audio_url:
+              'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
             part: 1,
             question_id: 'p1_hometown',
           }),
@@ -412,7 +471,8 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+        audio_url:
+          'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
         part: 1,
         question_id: 'p1_hometown',
       },
@@ -429,7 +489,8 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+        audio_url:
+          'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
         part: 1,
         question_id: 'p1_hometown',
       },
@@ -449,7 +510,8 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+        audio_url:
+          'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
         part: 1,
         question_id: 'p1_hometown',
         user_id: 'attacker-user',
@@ -462,7 +524,11 @@ describe('Speaking grading HTTP flow', () => {
 
   it.each([
     {},
-    { audio_url: 'https://s3.wispace.app/audio/sample.mp3', part: 1 },
+    {
+      audio_url:
+        'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
+      part: 1,
+    },
     {
       audio_url: 'http://s3.wispace.app/audio/sample.mp3',
       part: 1,
@@ -504,7 +570,8 @@ describe('Speaking grading HTTP flow', () => {
       url: '/v1/ielts/speaking/grading-json',
       headers: { 'content-type': 'application/json' },
       payload: {
-        audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+        audio_url:
+          'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
         part: 1,
         question_id: 'p1_hometown',
       },
@@ -537,7 +604,8 @@ describe('Speaking grading HTTP flow', () => {
           url: '/v1/ielts/speaking/grading-json',
           headers: { 'content-type': 'application/json' },
           payload: {
-            audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+            audio_url:
+              'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
             part: 1,
             question_id: 'p1_hometown',
           },
@@ -561,7 +629,8 @@ describe('Speaking grading HTTP flow', () => {
   it('maps a JSON downstream timeout to the public timeout contract', async () => {
     const client = app.get(DownstreamHttpClient);
     const request = {
-      audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+      audio_url:
+        'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
       part: 1,
       question_id: 'p1_hometown',
     };
@@ -593,7 +662,8 @@ describe('Speaking grading HTTP flow', () => {
         url: '/v1/ielts/speaking/grading-json',
         headers: { 'content-type': 'application/json' },
         payload: {
-          audio_url: 'https://s3.wispace.app/audio/sample.mp3',
+          audio_url:
+            'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
           part: 1,
           question_id: 'p1_hometown',
         },

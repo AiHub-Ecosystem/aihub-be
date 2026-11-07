@@ -43,6 +43,12 @@ The app adds the bounded resource attribute `deployment.environment.name` from `
 
 When it fires, check the app's OTLP failure/drop counters and safe outage log first, then DNS/TLS and the source-IP allowlist for `otel.aihubproduction.com`, Tempo receiver readiness, and the metrics-generator remote-write path. Confirm recovery with a new searchable `service.name=aihub-be` trace; exporter success alone is not proof of delivery.
 
+`/metrics` also exposes `aihub_speaking_audio_url_rejected_total{reason}` for
+Speaking `grading-json` audio URL policy refusals. Its bounded reasons are
+`malformed`, `traversal`, `foreign_tenant`, and `unapproved_bucket`; it carries
+no Organization ID, URL, or object-key label and is separate from the
+admission-only `aihub_rejected_total`.
+
 ## Existing collectors audited
 
 | Service             | Existing behavior                                                                                                                                                                                             | AIHUB Prometheus coverage                                                                                                                  |
