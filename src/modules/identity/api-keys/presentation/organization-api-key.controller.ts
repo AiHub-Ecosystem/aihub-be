@@ -25,10 +25,10 @@ import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/use
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 import {
-  CreateOrganizationApiKeyMessage,
+  CreateOrganizationApiKeyCommand,
   ListOrganizationApiKeysQuery,
-  RevokeOrganizationApiKeyMessage,
-  RotateOrganizationApiKeyMessage,
+  RevokeOrganizationApiKeyCommand,
+  RotateOrganizationApiKeyCommand,
 } from './organization-api-key.cqrs';
 import {
   apiKeyResponse,
@@ -58,7 +58,7 @@ export class OrganizationApiKeyController {
     );
 
     const key = await this.commandBus.execute(
-      new RevokeOrganizationApiKeyMessage({
+      new RevokeOrganizationApiKeyCommand({
         context,
         userId,
         organizationId,
@@ -87,7 +87,7 @@ export class OrganizationApiKeyController {
     );
 
     const rotated = await this.commandBus.execute(
-      new RotateOrganizationApiKeyMessage({
+      new RotateOrganizationApiKeyCommand({
         context,
         userId,
         organizationId,
@@ -148,7 +148,7 @@ export class OrganizationApiKeyController {
     );
 
     const created = await this.commandBus.execute(
-      new CreateOrganizationApiKeyMessage({
+      new CreateOrganizationApiKeyCommand({
         context,
         userId,
         organizationId,

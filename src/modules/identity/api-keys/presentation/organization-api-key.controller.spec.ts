@@ -1,3 +1,4 @@
+import { CommandBus } from '@nestjs/cqrs';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -42,6 +43,7 @@ const REQUEST_ID = 'req_01J00000000000000000000000';
 const KEYS_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys`;
 const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
 
+import { CreateOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function secretBody(response: { json(): unknown }) {
@@ -176,8 +178,12 @@ describe('Organization API key creation HTTP flow', () => {
   }
 
   it('returns the raw credential once with the durable key metadata', async () => {
+    const execute = jest.spyOn(app.get(CommandBus), 'execute');
     const response = await create();
 
+    expect(execute).toHaveBeenCalledWith(
+      expect.any(CreateOrganizationApiKeyCommand),
+    );
     expect(response.statusCode).toBe(201);
     const body = secretBody(response);
     expect(body.data.api_key).toMatch(/^aihub_prod_[A-Za-z0-9]{43}$/);

@@ -14,9 +14,12 @@ Adopt `@nestjs/cqrs` for the Organization API-key management routes. Create, rot
 
 The adoption is limited to synchronous request dispatch. It does not use `EventBus`, domain events, asynchronous handlers, projections, a separate read model, or Event Sourcing. PostgreSQL remains the source of truth, with existing authorization, Organization scoping, audit writes, transactions, idempotency, response contracts, and one-time secret disclosure owned by the existing use cases and repository.
 
+The controller's `CommandBus` and `QueryBus` dependencies are the Nest-exported-provider seam allowed by `AGENTS.md`. This pilot intentionally routes the controller through that seam instead of calling an application port directly: the presentation-layer handlers then call the existing application ports, and no Nest type enters `application/`. Keep the four explicit pass-through handlers because each is the concrete bus registration boundary this pilot evaluates; a generic dispatch helper would hide those command-to-use-case mappings for little reduction in code.
+
 ## Consequences
 
 - The four HTTP operations now have explicit command/query handler boundaries that can be exercised through the Nest buses.
 - The package adds a CQRS vocabulary and runtime dependency without moving business behavior out of application use cases.
+- The presentation rule to call an application port directly has a scoped exception here: the controller uses the accepted Nest bus seam, and each concrete handler delegates to that port.
 - This pilot does not establish a general mandate to migrate other modules or operations to CQRS; adopt it elsewhere only when a concrete dispatch need is demonstrated.
 - Event Sourcing remains declined under ADR-0154; the CQRS buses do not provide evidence for changing that decision.

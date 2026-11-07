@@ -1,3 +1,4 @@
+import { CommandBus } from '@nestjs/cqrs';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -46,6 +47,7 @@ const REVOKE_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys/${KEY_ID}`;
 const CREATED_AT = new Date('2026-09-20T10:00:00.000Z');
 const KEY_HASH = 'b'.repeat(64);
 
+import { RevokeOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function revoked() {
@@ -192,8 +194,12 @@ describe('Organization API key revocation HTTP flow', () => {
   }
 
   it('returns the withdrawn key metadata with the published revoked status', async () => {
+    const execute = jest.spyOn(app.get(CommandBus), 'execute');
     const response = await revoke();
 
+    expect(execute).toHaveBeenCalledWith(
+      expect.any(RevokeOrganizationApiKeyCommand),
+    );
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       data: {

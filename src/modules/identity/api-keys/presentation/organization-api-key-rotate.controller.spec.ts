@@ -1,3 +1,4 @@
+import { CommandBus } from '@nestjs/cqrs';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -49,6 +50,7 @@ const CREATED_AT = new Date('2026-09-21T10:00:00.000Z');
 const INHERITED_EXPIRY = new Date('2027-01-01T00:00:00.000Z');
 const RETIRED_HASH = 'a'.repeat(64);
 
+import { RotateOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function rotated() {
@@ -194,8 +196,12 @@ describe('Organization API key rotation HTTP flow', () => {
   }
 
   it('returns the raw replacement once with the inherited key metadata', async () => {
+    const execute = jest.spyOn(app.get(CommandBus), 'execute');
     const response = await rotate();
 
+    expect(execute).toHaveBeenCalledWith(
+      expect.any(RotateOrganizationApiKeyCommand),
+    );
     expect(response.statusCode).toBe(200);
     const body = secretBody(response);
     expect(body.data).toMatchObject({

@@ -16,13 +16,13 @@ import {
   CREATE_ORGANIZATION_API_KEY,
   type CreateOrganizationApiKeyPort,
 } from '@/modules/identity/api-keys/application/create-organization-api-key.port';
-import { type ListOrganizationApiKeysCommand } from '@/modules/identity/api-keys/application/list-organization-api-keys';
+import type { ListOrganizationApiKeysCommand as ListOrganizationApiKeysInput } from '@/modules/identity/api-keys/application/list-organization-api-keys';
 import {
   LIST_ORGANIZATION_API_KEYS,
   type ListOrganizationApiKeysPort,
 } from '@/modules/identity/api-keys/application/list-organization-api-keys.port';
 import { type OrganizationApiKeyView } from '@/modules/identity/api-keys/application/organization-api-key-view';
-import type { RevokeOrganizationApiKeyCommand } from '@/modules/identity/api-keys/application/revoke-organization-api-key';
+import type { RevokeOrganizationApiKeyCommand as RevokeOrganizationApiKeyInput } from '@/modules/identity/api-keys/application/revoke-organization-api-key';
 import {
   REVOKE_ORGANIZATION_API_KEY,
   type RevokeOrganizationApiKeyPort,
@@ -36,62 +36,62 @@ import {
   type RotateOrganizationApiKeyPort,
 } from '@/modules/identity/api-keys/application/rotate-organization-api-key.port';
 
-export class CreateOrganizationApiKeyMessage extends Command<CreatedOrganizationApiKey> {
+export class CreateOrganizationApiKeyCommand extends Command<CreatedOrganizationApiKey> {
   constructor(readonly input: CreateOrganizationApiKeyInput) {
     super();
   }
 }
 
-@CommandHandler(CreateOrganizationApiKeyMessage)
+@CommandHandler(CreateOrganizationApiKeyCommand)
 export class CreateOrganizationApiKeyHandler
-  implements ICommandHandler<CreateOrganizationApiKeyMessage>
+  implements ICommandHandler<CreateOrganizationApiKeyCommand>
 {
   constructor(
     @Inject(CREATE_ORGANIZATION_API_KEY)
     private readonly useCase: CreateOrganizationApiKeyPort,
   ) {}
 
-  execute(command: CreateOrganizationApiKeyMessage) {
+  execute(command: CreateOrganizationApiKeyCommand) {
     return this.useCase.create(command.input);
   }
 }
 
-export class RotateOrganizationApiKeyMessage extends Command<RotatedOrganizationApiKey> {
+export class RotateOrganizationApiKeyCommand extends Command<RotatedOrganizationApiKey> {
   constructor(readonly input: RotateOrganizationApiKeyInput) {
     super();
   }
 }
 
-@CommandHandler(RotateOrganizationApiKeyMessage)
+@CommandHandler(RotateOrganizationApiKeyCommand)
 export class RotateOrganizationApiKeyHandler
-  implements ICommandHandler<RotateOrganizationApiKeyMessage>
+  implements ICommandHandler<RotateOrganizationApiKeyCommand>
 {
   constructor(
     @Inject(ROTATE_ORGANIZATION_API_KEY)
     private readonly useCase: RotateOrganizationApiKeyPort,
   ) {}
 
-  execute(command: RotateOrganizationApiKeyMessage) {
+  execute(command: RotateOrganizationApiKeyCommand) {
     return this.useCase.rotate(command.input);
   }
 }
 
-export class RevokeOrganizationApiKeyMessage extends Command<OrganizationApiKeyView> {
-  constructor(readonly input: RevokeOrganizationApiKeyCommand) {
+export class RevokeOrganizationApiKeyCommand extends Command<OrganizationApiKeyView> {
+  constructor(readonly input: RevokeOrganizationApiKeyInput) {
     super();
   }
 }
 
-@CommandHandler(RevokeOrganizationApiKeyMessage)
+@CommandHandler(RevokeOrganizationApiKeyCommand)
 export class RevokeOrganizationApiKeyHandler
-  implements ICommandHandler<RevokeOrganizationApiKeyMessage>
+  implements ICommandHandler<RevokeOrganizationApiKeyCommand>
 {
   constructor(
     @Inject(REVOKE_ORGANIZATION_API_KEY)
     private readonly useCase: RevokeOrganizationApiKeyPort,
   ) {}
 
-  execute(command: RevokeOrganizationApiKeyMessage) {
+  execute(command: RevokeOrganizationApiKeyCommand) {
     return this.useCase.revoke(command.input);
   }
 }
@@ -99,7 +99,7 @@ export class RevokeOrganizationApiKeyHandler
 export class ListOrganizationApiKeysQuery extends Query<
   readonly OrganizationApiKeyView[]
 > {
-  constructor(readonly input: ListOrganizationApiKeysCommand) {
+  constructor(readonly input: ListOrganizationApiKeysInput) {
     super();
   }
 }
