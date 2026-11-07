@@ -155,9 +155,17 @@ async function seed(): Promise<DastCredentials> {
   }
 }
 
-const credentials = await seed();
-const directory = outDirectory();
-mkdirSync(directory, { recursive: true });
-const credentialsPath = join(directory, 'dast-credentials.json');
-writeFileSync(credentialsPath, `${JSON.stringify(credentials)}\n`);
-console.log(`dast-seed: wrote ${credentialsPath}`);
+async function main(): Promise<void> {
+  const credentials = await seed();
+  const directory = outDirectory();
+  mkdirSync(directory, { recursive: true });
+  const credentialsPath = join(directory, 'dast-credentials.json');
+  writeFileSync(credentialsPath, `${JSON.stringify(credentials)}\n`);
+  console.log(`dast-seed: wrote ${credentialsPath}`);
+}
+
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  console.error(`dast-seed: ${message}`);
+  process.exit(1);
+});
