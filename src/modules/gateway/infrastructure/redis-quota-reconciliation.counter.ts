@@ -4,7 +4,7 @@ import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
   QuotaCounterReadRequest,
-} from '@/modules/metering/application/billing/quota-reconciliation.port';
+} from '@/modules/gateway/application/quota-counter.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
 
@@ -16,9 +16,14 @@ export type RedisQuotaReconciliationClient = Pick<
 export class RedisQuotaReconciliationCounter
   implements QuotaCounterOverwritePort
 {
-  constructor(private readonly client: RedisQuotaReconciliationClient) {}
+  constructor(
+    private readonly client: RedisQuotaReconciliationClient | undefined,
+  ) {}
 
   async read(request: QuotaCounterReadRequest): Promise<number> {
+    if (this.client === undefined) {
+      throw internalError('Redis quota counter is unavailable');
+    }
     const value = await this.client.get(
       quotaKeyForMonth(request.organizationId, request.month),
     );
@@ -32,6 +37,9 @@ export class RedisQuotaReconciliationCounter
   }
 
   async overwrite(request: QuotaCounterOverwriteRequest): Promise<void> {
+    if (this.client === undefined) {
+      throw internalError('Redis quota counter is unavailable');
+    }
     if (!isUsableCount(request.count)) {
       throw internalError('Redis quota counter value is invalid');
     }
@@ -48,6 +56,6 @@ export class RedisQuotaReconciliationCounter
   }
 
   async close(): Promise<void> {
-    await this.client.quit().catch(() => undefined);
+    await this.client?.quit().catch(() => undefined);
   }
 }

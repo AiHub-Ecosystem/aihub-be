@@ -10,6 +10,17 @@ reconciliation command.
 
 ## Schedule
 
+Every application instance also runs a continuous scrubber, starting at the
+next five-minute boundary anchored to the current UTC quota-month start and
+repeating every five minutes. It checks quota-bearing organizations in the
+current month and repairs drift only when `drift > max(ABS, 5% * pgCount)`.
+Defaults are `ABS=0` and `PERCENT=5`,
+configured by `AIHUB_QUOTA_SCRUBBER_INTERVAL_MS`,
+`AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS`, and
+`AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT`. A pass already in progress is
+not overlapped; restart or downtime does not cause catch-up runs. Each repair
+emits a structured `quota_reconciliation_drift_corrected` warning.
+
 The CD-managed scheduled wrapper runs this command in the active Production and
 Sandbox services once per day at 02:00 UTC. Run it manually through the same
 wrapper so it gets the 15-minute per-deployment deadline, same-job lock, and
@@ -27,7 +38,9 @@ Production CLI preview is:
 bun run cli quota:reconcile --target production --dry-run true
 ```
 
-After review, repeat without `--dry-run true` to repair the counters.
+This deliberately reuses `quota:reconcile` for both modes: `--dry-run true`
+previews and omitting the flag applies corrections. After review, repeat
+without `--dry-run true` to repair the counters.
 
 The wrapper uses a nonblocking same-job lock and a host-wide lock shared by all
 scheduled job types. A second `quota` invocation logs
@@ -65,6 +78,16 @@ aihub:v1:quota:<organization_id>:<YYYY-MM>
 
 with the durable total and a 40-day TTL. Organizations without a quota are
 skipped because they do not create quota counters.
+
+Each correction is one atomic Redis `SET ... EX` with a 40-day TTL, not a
+compare-and-set against the earlier read. A request increment between the read
+and overwrite can be lost temporarily; the next pass repairs it from durable
+usage.
+
+The background scrubber uses the configured drift threshold before writing.
+The manual `quota:reconcile` command has no threshold: it rewrites every key,
+including zero counters and the 40-day TTL, making it the operator path for
+exact reconciliation and retained-month backfills.
 
 ## Rerun and backfill
 

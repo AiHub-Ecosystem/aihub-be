@@ -41,6 +41,21 @@ export function formatQuotaReconciliationEvent(
     });
   }
 
+  if (event.type === 'drift_corrected' || event.type === 'drift_preview') {
+    return JSON.stringify({
+      event:
+        event.type === 'drift_preview'
+          ? 'quota_reconciliation_drift_preview'
+          : 'quota_reconciliation_drift_corrected',
+      organization_id: event.organizationId,
+      month: event.month,
+      postgres_count: event.postgresCount,
+      redis_count: event.redisCount,
+      drift_requests: event.driftRequests,
+      threshold_requests: event.thresholdRequests,
+    });
+  }
+
   if (event.type === 'failed') {
     return JSON.stringify({
       event: 'quota_reconcile_failed',

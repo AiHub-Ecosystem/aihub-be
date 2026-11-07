@@ -50,6 +50,9 @@ describe('runtime configuration', () => {
     expect(config.AIHUB_ALLOW_UNAUTHENTICATED_DEV).toBe(true);
     expect(config.UV_THREADPOOL_SIZE).toBe(4);
     expect(config.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY).toBe(2);
+    expect(config.AIHUB_QUOTA_SCRUBBER_INTERVAL_MS).toBe(300_000);
+    expect(config.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS).toBe(0);
+    expect(config.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT).toBe(5);
     expect(config.LOG_LEVEL).toBe('info');
     expect(config.SEAWEEDFS_ENDPOINT_URL).toBe('https://s3.wispace.app');
     expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
@@ -318,6 +321,15 @@ describe('runtime configuration', () => {
       type: 'number',
       defaultValue: 3000,
     });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_QUOTA_SCRUBBER_INTERVAL_MS,
+    ).toMatchObject({ type: 'number', defaultValue: 300_000 });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS,
+    ).toMatchObject({ type: 'number', defaultValue: 0 });
+    expect(
+      runtimeEnvironmentMetadata.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT,
+    ).toMatchObject({ type: 'number', defaultValue: 5 });
     expect(
       runtimeEnvironmentMetadata.AIHUB_DATABASE_POOLER_ENABLED,
     ).toMatchObject({ type: 'boolean', defaultValue: false });
