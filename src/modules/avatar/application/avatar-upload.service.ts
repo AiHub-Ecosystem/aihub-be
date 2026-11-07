@@ -14,6 +14,10 @@ import {
 
 import type { AvatarRepositoryPort } from './avatar-repository.port';
 import type { AvatarStoragePort } from './avatar-storage.port';
+import {
+  AVATAR_COMPLETION_COPY_MIN_REMAINING_MS,
+  AVATAR_COMPLETION_DEADLINE_MS,
+} from './avatar-upload.policy';
 
 export interface AvatarUpload {
   readonly assetId: string;
@@ -39,6 +43,14 @@ function avatarChanged(): AppError {
     code: 'AVATAR_CHANGED',
     message: 'The Avatar was changed by another request',
     retryable: false,
+  });
+}
+
+function avatarStorageUnavailable(): AppError {
+  return new AppError({
+    code: 'AVATAR_STORAGE_UNAVAILABLE',
+    message: 'Avatar storage is unavailable',
+    retryable: true,
   });
 }
 
@@ -103,11 +115,18 @@ export class AvatarUploadService {
     readonly assetId: string;
     readonly signal?: AbortSignal;
   }): Promise<CompletedAvatar> {
+    const deadlineAt = performance.now() + AVATAR_COMPLETION_DEADLINE_MS;
+    const deadline = AbortSignal.timeout(AVATAR_COMPLETION_DEADLINE_MS);
+    const signal =
+      input.signal === undefined
+        ? deadline
+        : AbortSignal.any([input.signal, deadline]);
+    const completion = { ...input, signal, deadlineAt };
     const completed = await this.avatars.withUserLock(input.userId, (avatars) =>
-      this.recordUpload(input, avatars),
+      this.recordUpload(completion, avatars),
     );
     if (completed.created) {
-      await this.discardStaging(completed.avatar.objectKey, input.signal);
+      await this.discardStaging(completed.avatar.objectKey, signal);
     }
     return { ...this.published(completed.avatar), created: completed.created };
   }
@@ -116,7 +135,8 @@ export class AvatarUploadService {
     input: {
       readonly userId: string;
       readonly assetId: string;
-      readonly signal?: AbortSignal;
+      readonly signal: AbortSignal;
+      readonly deadlineAt: number;
     },
     avatars: AvatarRepositoryPort,
   ): Promise<{ readonly avatar: Avatar; readonly created: boolean }> {
@@ -133,6 +153,7 @@ export class AvatarUploadService {
       input.userId,
       input.assetId,
       input.signal,
+      input.deadlineAt,
     );
 
     if (previous === undefined) {
@@ -191,7 +212,8 @@ export class AvatarUploadService {
   private async verifiedUpload(
     userId: string,
     assetId: string,
-    signal?: AbortSignal,
+    signal: AbortSignal,
+    deadlineAt: number,
   ): Promise<Avatar> {
     const objectKey = avatarObjectKey(userId, assetId);
     const stored = await this.storage.describeStagingObject(objectKey, signal);
@@ -218,6 +240,12 @@ export class AvatarUploadService {
       signal,
       true,
     );
+    if (
+      signal?.aborted ||
+      deadlineAt - performance.now() < AVATAR_COMPLETION_COPY_MIN_REMAINING_MS
+    ) {
+      throw avatarStorageUnavailable();
+    }
     await this.storage.copyStagingToFinal({
       objectKey,
       contentType: stagingObject.contentType,

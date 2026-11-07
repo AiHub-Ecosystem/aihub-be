@@ -91,6 +91,14 @@ record, then returns the already-recorded Avatar without copying. This closes
 the interleaving where a replayed staging PUT could otherwise be copied by a
 second concurrent completion after the first one recorded the asset.
 
+The locked completion shares one 20-second deadline signal across its storage
+calls; its transaction timeout is 30 seconds so the transaction-scoped lock
+outlives the callback deadline. A client-side abort does not guarantee the
+server stops an in-flight copy, so a copy could finish after the lock is
+released if storage ignores the abort. The residual race requires a replayed
+PUT and another concurrent completion during the 10-second deadline slack;
+real SeaweedFS cancellation behavior was not verified here.
+
 ## Considered options
 
 - **A presigned read URL in each description.** Rejected: a new URL per
