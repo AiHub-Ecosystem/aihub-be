@@ -7,6 +7,7 @@ import {
 } from 'undici/index.js';
 
 import { AppError, internalError } from '@/common/errors/app-error';
+import { recordDownstreamLimitDropped } from '@/common/observability/downstream-concurrency-metrics';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -218,6 +219,12 @@ export class DownstreamHttpClient {
       inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN ||
       !this.concurrencyLimiter.tryAcquire(base.origin)
     ) {
+      // Hard-ceiling refusals bypass tryAcquire(), so the drop counter the
+      // acceptance criteria name would go silent exactly when a healthy
+      // provider hits the default maximum of 20. Count the drop here too.
+      if (inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN) {
+        recordDownstreamLimitDropped(base.origin);
+      }
       throw markNotDispatched(
         new AppError({
           code: 'AI_SERVICE_UNAVAILABLE',

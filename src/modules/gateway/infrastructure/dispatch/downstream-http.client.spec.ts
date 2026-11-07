@@ -274,11 +274,18 @@ describe('DownstreamHttpClient', () => {
       }
       fast = false;
       const slow = Array.from({ length: 20 }, () => request());
-      // Let the first wave saturate the adaptive limit; excess is refused
-      // synchronously while the admitted stragglers drain, well inside the
-      // default 5s Jest timeout.
-      const settledSlow = await Promise.allSettled(slow);
-      expect(settledSlow).toHaveLength(20);
+      const rejectedAt = performance.now();
+      const error = await request().then(
+        () => undefined,
+        (value: unknown) => value,
+      );
+      expect(error).toMatchObject({
+        code: 'AI_SERVICE_UNAVAILABLE',
+        retryable: true,
+      });
+      expect(isDefinitelyNotDispatched(error)).toBe(true);
+      expect(performance.now() - rejectedAt).toBeLessThan(50);
+      await Promise.allSettled(slow);
     } finally {
       serving.closeAllConnections();
       await client.close();
