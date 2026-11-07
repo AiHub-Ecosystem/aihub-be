@@ -378,6 +378,7 @@ jobs:
             ops/vault/templates/runtime-secrets.json.ctmpl \
             ops/vault/templates/auth-mfa-secrets.json.ctmpl \
             ops/vault/templates/connection-secrets.json.ctmpl \
+            ops/vault/templates/email-wal-secrets.json.ctmpl \
             ops/vault/templates/pgbouncer.ini.ctmpl \
             ops/vault/templates/pgbouncer-userlist.txt.ctmpl \
             ops/vault/templates/pgbouncer-metrics-credentials.json.ctmpl \
@@ -406,6 +407,7 @@ jobs:
           test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/auth-mfa-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/connection-secrets.json.ctmpl"
+          test -s "$APP_DIR/ops/vault/templates/email-wal-secrets.json.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/pgbouncer.ini.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/pgbouncer-userlist.txt.ctmpl"
           test -s "$APP_DIR/ops/vault/templates/pgbouncer-metrics-credentials.json.ctmpl"
