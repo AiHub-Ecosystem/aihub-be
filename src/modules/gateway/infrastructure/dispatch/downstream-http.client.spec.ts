@@ -245,4 +245,53 @@ describe('DownstreamHttpClient', () => {
       );
     }
   });
+  it('routes a degraded provider through the adaptive fast-fail path', async () => {
+    let fast = true;
+    const serving = createServer((_request, response) => {
+      const latency = fast ? 5 : 1_500;
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{}');
+      }, latency);
+    });
+    await new Promise<void>((resolve) =>
+      serving.listen(0, '127.0.0.1', resolve),
+    );
+    const origin = `http://127.0.0.1:${(serving.address() as AddressInfo).port}`;
+    const client = new DownstreamHttpClient(origin, undefined, {});
+    const request = () =>
+      client.request(
+        { method: 'POST', path: '/grade', body: {} },
+        {
+          requestId: 'req_adaptive_backoff',
+          deadlineMs: 30_000,
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+    try {
+      for (let attempt = 0; attempt < 32; attempt += 1) {
+        await request();
+      }
+      fast = false;
+      const slow = Array.from({ length: 20 }, () => request());
+      const rejectedAt = performance.now();
+      const error = await request().then(
+        () => undefined,
+        (value: unknown) => value,
+      );
+      expect(error).toMatchObject({
+        code: 'AI_SERVICE_UNAVAILABLE',
+        retryable: true,
+      });
+      expect(isDefinitelyNotDispatched(error)).toBe(true);
+      expect(performance.now() - rejectedAt).toBeLessThan(50);
+      await Promise.allSettled(slow);
+    } finally {
+      serving.closeAllConnections();
+      await client.close();
+      await new Promise<void>((resolve, reject) =>
+        serving.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
 });

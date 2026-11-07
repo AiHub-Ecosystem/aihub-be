@@ -7,6 +7,7 @@ import {
 } from 'undici/index.js';
 
 import { AppError, internalError } from '@/common/errors/app-error';
+import { recordDownstreamLimitDropped } from '@/common/observability/downstream-concurrency-metrics';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -17,6 +18,10 @@ import type {
   DownstreamRequest,
   InternalAIServiceResponse,
 } from '@/downstream/downstream.types';
+import {
+  Gradient2ConcurrencyLimiter,
+  type Gradient2Config,
+} from './gradient2-concurrency-limiter';
 
 export interface DownstreamHttpRequestOptions {
   readonly authorization?: string;
@@ -34,7 +39,10 @@ type DownstreamHeaders = Readonly<
   Partial<Record<DownstreamId, Readonly<Record<string, string>>>>
 >;
 
-const MAX_CONCURRENT_REQUESTS_PER_ORIGIN = 10;
+// The undici Pool cap stays a hard socket/stream ceiling; the per-origin
+// Gradient2 limit is the adaptive admission signal that usually refuses
+// excess work well before the Pool queues it (#1590, ADR-0154).
+export const MAX_CONCURRENT_REQUESTS_PER_ORIGIN = 20;
 
 const definitelyNotDispatched = new WeakSet<AppError>();
 const downstreamPools = new Map<string, Set<Pool>>();
@@ -162,12 +170,18 @@ function normalizeHeaders(
 export class DownstreamHttpClient {
   private readonly dispatchers = new Map<string, Dispatcher>();
   private readonly inFlightByOrigin = new Map<string, number>();
+  private readonly concurrencyLimiter: Gradient2ConcurrencyLimiter;
 
   constructor(
     private readonly baseUrls: DownstreamBaseUrls,
     private readonly sharedDispatcher?: Dispatcher,
     private readonly configuredHeaders: DownstreamHeaders = {},
-  ) {}
+    concurrencyConfig?: Gradient2Config,
+  ) {
+    this.concurrencyLimiter = new Gradient2ConcurrencyLimiter(
+      concurrencyConfig,
+    );
+  }
 
   async request(
     request: DownstreamRequest,
@@ -199,8 +213,18 @@ export class DownstreamHttpClient {
       }
     }
 
+    const startedAt = performance.now();
     const inFlight = this.inFlightByOrigin.get(base.origin) ?? 0;
-    if (inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN) {
+    if (
+      inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN ||
+      !this.concurrencyLimiter.tryAcquire(base.origin)
+    ) {
+      // Hard-ceiling refusals bypass tryAcquire(), so the drop counter the
+      // acceptance criteria name would go silent exactly when a healthy
+      // provider hits the default maximum of 20. Count the drop here too.
+      if (inFlight >= MAX_CONCURRENT_REQUESTS_PER_ORIGIN) {
+        recordDownstreamLimitDropped(base.origin);
+      }
       throw markNotDispatched(
         new AppError({
           code: 'AI_SERVICE_UNAVAILABLE',
@@ -269,6 +293,10 @@ export class DownstreamHttpClient {
         body: parsedBody,
       };
     } finally {
+      this.concurrencyLimiter.release(
+        base.origin,
+        Math.max(0, performance.now() - startedAt),
+      );
       const remaining = (this.inFlightByOrigin.get(base.origin) ?? 1) - 1;
       if (remaining === 0) {
         this.inFlightByOrigin.delete(base.origin);
