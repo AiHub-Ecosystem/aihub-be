@@ -451,10 +451,11 @@ deadline per deployment and the nonblocking same-job lock.
 It prints one JSON line of counts for both bucket sweeps and never an object
 key. The public sweep keeps record-named objects; the staging sweep deletes
 exact-layout objects past the 24-hour grace without consulting records.
-Unknown-age objects and keys outside the Avatar layout are kept. It exits non-zero when
-any delete failed, or when the bucket, the storage credentials, or the
-database is not configured, in which case it has deleted nothing. Alert on a
-non-zero exit and on a missed run for either container.
+Unknown-age objects and keys outside the Avatar layout are kept. It exits
+non-zero when a public or staging delete failed, or when the bucket, the
+storage credentials, or the database is not configured, in which case it has
+deleted nothing. Alert on a non-zero exit and on a missed run for either
+container.
 
 ### Sweeping Writing Task 1 chart uploads
 

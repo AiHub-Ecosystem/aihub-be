@@ -4,6 +4,7 @@ import process, { loadEnvFile } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { ulid } from 'ulid';
+import { avatarSweepExitCode } from './avatar-sweep-exit-code.cjs';
 
 // The credential format is owned by the identity domain so that this CLI and
 // the self-service endpoint cannot drift apart in prefix, entropy, or hashing.
@@ -1143,8 +1144,8 @@ async function attachFirstOwnerCommand(options) {
 
 // Deletes Avatar objects that no record names once they are old enough
 // (ADR-0068). `--dry-run true` reports without deleting. The summary is one
-// JSON line, and any failed delete makes the exit status non-zero so cron
-// alerts on a partial run. Run it once per deployment, like `usage:prune`.
+// JSON line, and any failed public or staging delete makes the exit status
+// non-zero so cron alerts on a partial run. Run it once per deployment.
 /** @param {CliOptions} options */
 async function sweepAvatarsCommand(options) {
   const dryRun = booleanOption(options, 'dry-run');
@@ -1159,8 +1160,8 @@ async function sweepAvatarsCommand(options) {
     now: () => safety.maintenanceClock.now,
     clockSource: safety.maintenanceClock.source,
   });
-  if (summary.failed > 0) {
-    throw new Error('avatar sweep could not delete every orphaned object');
+  if (avatarSweepExitCode(summary) !== 0) {
+    throw new Error('avatar sweep could not delete every eligible object');
   }
 }
 

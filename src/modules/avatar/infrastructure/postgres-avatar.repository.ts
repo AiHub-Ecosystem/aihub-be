@@ -3,6 +3,7 @@ import type {
   AvatarRepositoryPort,
   RecordAvatarResult,
 } from '@/modules/avatar/application/avatar-repository.port';
+import { AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS } from '@/modules/avatar/application/avatar-upload.policy';
 import {
   type Avatar,
   isAvatarContentType,
@@ -25,6 +26,10 @@ const INSERT_SQL = `
 `;
 const AVATAR_USER_LOCK_SQL =
   'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+const AVATAR_LOCK_TRANSACTION_OPTIONS = {
+  ...CONTROL_PLANE_TRANSACTION_OPTIONS,
+  timeout: AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS,
+};
 
 interface AvatarIdRow {
   readonly id: unknown;
@@ -75,7 +80,7 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
           `avatar:${userId}`,
         );
         return operation(new PostgresAvatarRepository(transaction));
-      }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+      }, AVATAR_LOCK_TRANSACTION_OPTIONS);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw storeError(error);

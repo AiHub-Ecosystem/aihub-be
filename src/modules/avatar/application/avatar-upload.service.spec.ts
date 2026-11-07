@@ -16,6 +16,7 @@ class FakeStorage implements AvatarStoragePort {
   readonly stagingBytes = new Map<string, string>();
   readonly finalBytes = new Map<string, string>();
   readonly calls: string[] = [];
+  readonly signals: (AbortSignal | undefined)[] = [];
   failFinalCheck = false;
   failStagingDelete = false;
   copyGate:
@@ -28,20 +29,24 @@ class FakeStorage implements AvatarStoragePort {
   publicUrl(key: string) {
     return `https://public.invalid/${key}`;
   }
-  async describeStagingObject(key: string) {
+  async describeStagingObject(key: string, signal?: AbortSignal) {
     this.calls.push('check-staging');
+    this.signals.push(signal);
     return this.staging.get(key);
   }
-  async describeFinalObject(key: string) {
+  async describeFinalObject(key: string, signal?: AbortSignal) {
     this.calls.push('check-final');
+    this.signals.push(signal);
     if (this.failFinalCheck) return undefined;
     return this.final.get(key);
   }
   async copyStagingToFinal(input: {
     readonly objectKey: string;
     readonly contentType: 'image/png' | 'image/jpeg' | 'image/webp';
+    readonly signal?: AbortSignal;
   }) {
     this.calls.push('copy');
+    this.signals.push(input.signal);
     const object = this.staging.get(input.objectKey);
     if (object !== undefined)
       this.final.set(input.objectKey, {
@@ -53,12 +58,14 @@ class FakeStorage implements AvatarStoragePort {
     this.copyGate?.started();
     await this.copyGate?.wait;
   }
-  async deleteObject(key: string) {
+  async deleteObject(key: string, signal?: AbortSignal) {
     this.calls.push('delete-final');
+    this.signals.push(signal);
     this.final.delete(key);
   }
-  async deleteStagingObject(key: string) {
+  async deleteStagingObject(key: string, signal?: AbortSignal) {
     this.calls.push('delete-staging');
+    this.signals.push(signal);
     if (this.failStagingDelete) throw new Error('delete failed');
     this.staging.delete(key);
     this.stagingBytes.delete(key);
@@ -134,6 +141,55 @@ describe('AvatarUploadService private staging', () => {
       'check-final',
     ]);
     expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
+  });
+
+  it('passes one completion deadline signal to every storage call while locked', async () => {
+    const { service, storage, repository } = setup();
+    const previous = {
+      assetId: 'ava_01J00000000000000000000002',
+      userId: USER,
+      objectKey: `users/${USER}/avatar/ava_01J00000000000000000000002/original`,
+      contentType: 'image/png' as const,
+      byteSize: 1,
+      acceptedAt: NOW,
+    };
+    repository.avatars.set(USER, previous);
+    storage.final.set(previous.objectKey, {
+      contentType: previous.contentType,
+      byteSize: previous.byteSize,
+      lastModified: NOW,
+    });
+
+    await service.completeUpload({ userId: USER, assetId: ASSET });
+
+    expect(storage.calls).toEqual([
+      'check-staging',
+      'copy',
+      'check-final',
+      'delete-final',
+      'delete-staging',
+    ]);
+    expect(storage.signals).toHaveLength(5);
+    expect(storage.signals[0]).toBeInstanceOf(AbortSignal);
+    expect(
+      storage.signals.every((signal) => signal === storage.signals[0]),
+    ).toBe(true);
+  });
+
+  it('does not copy when the completion deadline aborts before publication', async () => {
+    const { service, storage } = setup();
+    const deadline = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(AbortSignal.abort());
+    try {
+      await expect(
+        service.completeUpload({ userId: USER, assetId: ASSET }),
+      ).rejects.toMatchObject({ code: 'AVATAR_STORAGE_UNAVAILABLE' });
+      expect(storage.calls).toEqual(['check-staging']);
+      expect(storage.signals[0]?.aborted).toBe(true);
+    } finally {
+      deadline.mockRestore();
+    }
   });
 
   it('does not copy when the early staging check fails', async () => {
