@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -26,10 +27,16 @@ import {
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
+import {
+  AVATAR_STAGING_BUCKETS,
+  type AvatarStorageEnvironment,
+} from './avatar-storage.policy';
 const DEFAULT_ORIGIN = new URL(DEFAULT_SEAWEEDFS_ENDPOINT).origin;
 
 export interface AvatarStorageOptions {
   readonly bucket?: string | undefined;
+  readonly stagingBucket?: string | undefined;
+  readonly environment?: AvatarStorageEnvironment;
   readonly now?: () => Date;
   /** Replaces the S3 client built from runtime secrets; for tests. */
   readonly client?: Pick<S3Client, 'send'>;
@@ -49,6 +56,7 @@ interface Configured {
   /** Kept apart from `client`: a test client cannot presign. */
   readonly signer: S3Client | undefined;
   readonly bucket: string;
+  readonly stagingBucket: string;
   /** The approved origin, without a trailing slash. */
   readonly origin: string;
 }
@@ -68,8 +76,16 @@ export class S3AvatarStorage implements AvatarStoragePort {
   ) {
     this.now = options.now ?? (() => new Date());
     const bucket = (options.bucket ?? '').trim();
+    const defaultStagingBucket =
+      AVATAR_STAGING_BUCKETS[options.environment ?? 'production'];
+    const stagingBucket = options.stagingBucket?.trim() || defaultStagingBucket;
 
-    if (sharedClient === undefined || bucket.length === 0) {
+    if (
+      sharedClient === undefined ||
+      bucket.length === 0 ||
+      stagingBucket.length === 0 ||
+      stagingBucket === bucket
+    ) {
       this.configured = undefined;
       return;
     }
@@ -78,6 +94,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
       client: options.client ?? sharedClient,
       signer: sharedClient,
       bucket,
+      stagingBucket,
       origin: DEFAULT_ORIGIN,
     };
   }
@@ -96,7 +113,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
   }): Promise<AvatarUploadUrl> {
-    const { signer, bucket } = this.require(input.objectKey);
+    const { signer, stagingBucket } = this.requireStaging(input.objectKey);
     if (signer === undefined) {
       throw objectStorageUnavailable(
         'AVATAR_STORAGE_UNAVAILABLE',
@@ -110,13 +127,14 @@ export class S3AvatarStorage implements AvatarStoragePort {
       const url = await getSignedUrl(
         signer,
         new PutObjectCommand({
-          Bucket: bucket,
+          Bucket: stagingBucket,
           Key: input.objectKey,
           ContentType: input.contentType,
           CacheControl: AVATAR_CACHE_CONTROL,
         }),
         {
           expiresIn: AVATAR_UPLOAD_URL_TTL_SECONDS,
+          // Private staging closes public exposure without signing browser-managed Content-Length.
           // Browser Fetch controls Content-Length; completion checks stored size.
           signableHeaders: new Set(['content-type', 'cache-control']),
         },
@@ -139,14 +157,44 @@ export class S3AvatarStorage implements AvatarStoragePort {
     return `${origin}/${path}`;
   }
 
-  async describeObject(
+  async copyStagingToFinal(input: {
+    readonly objectKey: string;
+    readonly contentType: AvatarContentType;
+    readonly signal?: AbortSignal;
+  }): Promise<void> {
+    const { client, bucket, stagingBucket } = this.requireStaging(
+      input.objectKey,
+    );
+    try {
+      await client.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          Key: input.objectKey,
+          CopySource: `${stagingBucket}/${input.objectKey}`,
+          MetadataDirective: 'REPLACE',
+          ContentType: input.contentType,
+          CacheControl: AVATAR_CACHE_CONTROL,
+        }),
+        { abortSignal: input.signal ?? objectStorageSignal() },
+      );
+    } catch (error) {
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+        input.signal,
+      );
+    }
+  }
+
+  async describeStagingObject(
     objectKey: string,
     signal = objectStorageSignal(),
   ): Promise<StoredAvatarObject | undefined> {
-    const { client, bucket } = this.require(objectKey);
+    const { client, stagingBucket } = this.requireStaging(objectKey);
     try {
       const head = await client.send(
-        new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
+        new HeadObjectCommand({ Bucket: stagingBucket, Key: objectKey }),
         { abortSignal: signal },
       );
       return {
@@ -167,6 +215,32 @@ export class S3AvatarStorage implements AvatarStoragePort {
     }
   }
 
+  async describeFinalObject(
+    objectKey: string,
+    signal = objectStorageSignal(),
+  ): Promise<StoredAvatarObject | undefined> {
+    const { client, bucket } = this.require(objectKey);
+    try {
+      const head = await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
+        { abortSignal: signal },
+      );
+      return {
+        contentType: head.ContentType,
+        byteSize: head.ContentLength,
+        lastModified: head.LastModified,
+      };
+    } catch (error) {
+      if (objectStorageNotFound(error)) return undefined;
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+        signal,
+      );
+    }
+  }
+
   async deleteObject(
     objectKey: string,
     signal = objectStorageSignal(),
@@ -175,6 +249,26 @@ export class S3AvatarStorage implements AvatarStoragePort {
     try {
       await client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }),
+        { abortSignal: signal },
+      );
+    } catch (error) {
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+        signal,
+      );
+    }
+  }
+
+  async deleteStagingObject(
+    objectKey: string,
+    signal = objectStorageSignal(),
+  ): Promise<void> {
+    const { client, stagingBucket } = this.requireStaging(objectKey);
+    try {
+      await client.send(
+        new DeleteObjectCommand({ Bucket: stagingBucket, Key: objectKey }),
         { abortSignal: signal },
       );
     } catch (error) {
@@ -228,6 +322,55 @@ export class S3AvatarStorage implements AvatarStoragePort {
         ? page.NextContinuationToken
         : undefined;
     } while (continuationToken !== undefined);
+  }
+
+  async *listStagingObjects(prefix: string): AsyncIterable<ListedAvatarObject> {
+    if (this.configured === undefined)
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+      );
+    const { client, stagingBucket } = this.configured;
+    let continuationToken: string | undefined;
+    do {
+      const signal = objectStorageSignal();
+      let page: ListObjectsV2CommandOutput;
+      try {
+        page = await client.send(
+          new ListObjectsV2Command({
+            Bucket: stagingBucket,
+            Prefix: prefix,
+            ...(continuationToken === undefined
+              ? {}
+              : { ContinuationToken: continuationToken }),
+          }),
+          { abortSignal: signal },
+        );
+      } catch (error) {
+        throw objectStorageUnavailable(
+          'AVATAR_STORAGE_UNAVAILABLE',
+          'Avatar storage is unavailable',
+          error,
+          signal,
+        );
+      }
+      for (const object of page.Contents ?? [])
+        if (object.Key !== undefined)
+          yield { objectKey: object.Key, lastModified: object.LastModified };
+      continuationToken = page.IsTruncated
+        ? page.NextContinuationToken
+        : undefined;
+    } while (continuationToken !== undefined);
+  }
+
+  private requireStaging(objectKey: string): Configured {
+    const configured = this.require(objectKey);
+    if (!configured.stagingBucket)
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+      );
+    return configured;
   }
 
   private require(objectKey: string): Configured {

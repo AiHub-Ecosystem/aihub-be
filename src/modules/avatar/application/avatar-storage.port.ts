@@ -31,19 +31,30 @@ export interface AvatarStoragePort {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
   }): Promise<AvatarUploadUrl>;
+  copyStagingToFinal(input: {
+    readonly objectKey: string;
+    readonly contentType: AvatarContentType;
+    readonly signal?: AbortSignal;
+  }): Promise<void>;
   /**
    * The published, unsigned origin URL of an object (ADR-0069). Throws
    * `AVATAR_STORAGE_UNAVAILABLE` when storage is unconfigured.
    */
   publicUrl(objectKey: string): string;
   /** `undefined` when no object exists at the key. */
-  describeObject(
+  describeStagingObject(
+    objectKey: string,
+    signal?: AbortSignal,
+  ): Promise<StoredAvatarObject | undefined>;
+  describeFinalObject(
     objectKey: string,
     signal?: AbortSignal,
   ): Promise<StoredAvatarObject | undefined>;
   deleteObject(objectKey: string, signal?: AbortSignal): Promise<void>;
+  deleteStagingObject(objectKey: string, signal?: AbortSignal): Promise<void>;
   /** Every object under the prefix, across however many pages storage needs. */
   listObjects(prefix: string): AsyncIterable<ListedAvatarObject>;
+  listStagingObjects(prefix: string): AsyncIterable<ListedAvatarObject>;
 }
 
 export const AVATAR_STORAGE = Symbol('AVATAR_STORAGE');

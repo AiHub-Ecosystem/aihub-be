@@ -1,6 +1,12 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import type {
+  AvatarStoragePort,
+  ListedAvatarObject,
+  StoredAvatarObject,
+} from '@/modules/avatar/application/avatar-storage.port';
+import { AvatarUploadService } from '@/modules/avatar/application/avatar-upload.service';
 import { type Avatar, avatarObjectKey } from '@/modules/avatar/domain/avatar';
 import {
   PostgresAvatarRepository,
@@ -12,6 +18,49 @@ import { createTestPool, resetIdentityTables } from '../shared/database';
 let pool: Pool;
 let client: ReturnType<typeof createAvatarQueryClient>;
 let repository: PostgresAvatarRepository;
+
+class DeferredStorage implements AvatarStoragePort {
+  readonly staging = new Map<string, StoredAvatarObject>();
+  readonly final = new Map<string, StoredAvatarObject>();
+  stagingBytes = 'accepted-bytes';
+  finalBytes = '';
+  copyStarted: () => void = () => undefined;
+  copyWait: Promise<void> = Promise.resolve();
+  async createUploadUrl() {
+    return { url: 'private', expiresAt: new Date() };
+  }
+  publicUrl(key: string) {
+    return key;
+  }
+  async describeStagingObject(key: string) {
+    return this.staging.get(key);
+  }
+  async describeFinalObject(key: string) {
+    return this.final.get(key);
+  }
+  async copyStagingToFinal(input: {
+    readonly objectKey: string;
+    readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+  }) {
+    const object = this.staging.get(input.objectKey);
+    if (object !== undefined)
+      this.final.set(input.objectKey, {
+        ...object,
+        contentType: input.contentType,
+      });
+    this.finalBytes = this.stagingBytes;
+    this.copyStarted();
+    await this.copyWait;
+  }
+  async deleteObject(key: string) {
+    this.final.delete(key);
+  }
+  async deleteStagingObject(key: string) {
+    this.staging.delete(key);
+  }
+  async *listObjects(): AsyncIterable<ListedAvatarObject> {}
+  async *listStagingObjects(): AsyncIterable<ListedAvatarObject> {}
+}
 
 beforeAll(() => {
   pool = createTestPool();
@@ -57,6 +106,48 @@ beforeEach(async () => {
 });
 
 describe('Avatar records against PostgreSQL', () => {
+  it('serializes concurrent same-asset completions across a replayed staging PUT', async () => {
+    const assetId = `ava_${ulid()}`;
+    const objectKey = avatarObjectKey(userId, assetId);
+    const now = new Date('2026-10-02T10:00:00.000Z');
+    const storage = new DeferredStorage();
+    storage.staging.set(objectKey, {
+      contentType: 'image/png',
+      byteSize: 12,
+      lastModified: now,
+    });
+    let beginCopy = (): void => undefined;
+    let releaseCopy = (): void => undefined;
+    const copyStarted = new Promise<void>((resolve) => {
+      beginCopy = resolve;
+    });
+    storage.copyWait = new Promise<void>((resolve) => {
+      releaseCopy = resolve;
+    });
+    storage.copyStarted = beginCopy;
+    const service = new AvatarUploadService(
+      repository,
+      storage,
+      () => assetId,
+      () => now,
+    );
+
+    const first = service.completeUpload({ userId, assetId });
+    await copyStarted;
+    storage.stagingBytes = 'replacement-same-length';
+    const second = service.completeUpload({ userId, assetId });
+    releaseCopy();
+
+    await expect(Promise.all([first, second])).resolves.toMatchObject([
+      { created: true },
+      { created: false },
+    ]);
+    expect(storage.finalBytes).toBe('accepted-bytes');
+    await expect(repository.findByUser(userId)).resolves.toMatchObject({
+      assetId,
+    });
+  });
+
   it('records an Avatar and reads it back by its owner', async () => {
     const recorded = avatar(userId);
 

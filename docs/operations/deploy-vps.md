@@ -406,6 +406,14 @@ the command exit non-zero so the next scheduled run can retry it.
 
 ### Sweeping orphaned Avatar objects
 
+Avatar clients upload to the private `aihub-user-asset-staging` bucket in
+Production and `aihub-sandbox-user-asset-staging` in Sandbox. Create both
+before releasing this version and leave anonymous access disabled; a missing
+or public staging bucket makes Avatar uploads fail with a storage error. The
+optional `SEAWEEDFS_USER_ASSET_STAGING_BUCKET` override is mapped per tier by
+deployment configuration. Completion copies accepted objects into the
+existing public Avatar bucket.
+
 Objects that were uploaded but never completed, or whose immediate delete
 failed, are removed by `avatar:sweep`. It lists the Avatar prefix, keeps every
 object that an Avatar record names, and deletes the rest once they are older
@@ -440,11 +448,14 @@ hand. After reviewing the dry-run summaries, run the actual sweep through
 `./scripts/ops/host-jobs/host-scheduled-job.sh avatar-sweep`; it enforces a 30-minute
 deadline per deployment and the nonblocking same-job lock.
 
-It prints one JSON line of counts (`scanned`, `unrecognised`, `orphaned`,
-`deleted`, `failed`, `dryRun`) and never an object key. It exits non-zero when
-any delete failed, or when the bucket, the storage credentials, or the
-database is not configured, in which case it has deleted nothing. Alert on a
-non-zero exit and on a missed run for either container.
+It prints one JSON line of counts for both bucket sweeps and never an object
+key. The public sweep keeps record-named objects; the staging sweep deletes
+exact-layout objects past the 24-hour grace without consulting records.
+Unknown-age objects and keys outside the Avatar layout are kept. It exits
+non-zero when a public or staging delete failed, or when the bucket, the
+storage credentials, or the database is not configured, in which case it has
+deleted nothing. Alert on a non-zero exit and on a missed run for either
+container.
 
 ### Sweeping Writing Task 1 chart uploads
 

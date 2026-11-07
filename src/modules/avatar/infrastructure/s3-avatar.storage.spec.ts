@@ -73,7 +73,7 @@ describe('S3AvatarStorage', () => {
       const parsed = new URL(url);
       expect(parsed.protocol).toBe('https:');
       expect(parsed.hostname).toBe('s3.wispace.app');
-      expect(parsed.pathname).toBe(`/aihub-user-assets/${KEY}`);
+      expect(parsed.pathname).toBe(`/aihub-user-asset-staging/${KEY}`);
       expect(parsed.searchParams.get('X-Amz-Expires')).toBe('300');
       expect(
         parsed.searchParams.get('X-Amz-SignedHeaders')?.split(';'),
@@ -173,7 +173,9 @@ describe('S3AvatarStorage', () => {
           code: 'AVATAR_STORAGE_UNAVAILABLE',
           retryable: true,
         });
-        await expect(unconfigured.describeObject(KEY)).rejects.toMatchObject({
+        await expect(
+          unconfigured.describeStagingObject(KEY),
+        ).rejects.toMatchObject({
           code: 'AVATAR_STORAGE_UNAVAILABLE',
         });
         await expect(unconfigured.deleteObject(KEY)).rejects.toMatchObject({
@@ -192,15 +194,93 @@ describe('S3AvatarStorage', () => {
       },
     );
 
+    it.each([
+      ['override', { bucket: 'same-bucket', stagingBucket: 'same-bucket' }],
+      ['tier default', { bucket: 'aihub-user-asset-staging' }],
+    ])(
+      'refuses a staging bucket that is also the final bucket via %s without fallback',
+      async (_source, options) => {
+        const { client, send } = clientAnswering(async () => ({}));
+        const invalid = storage({ ...options, client });
+        const unavailable = { code: 'AVATAR_STORAGE_UNAVAILABLE' };
+
+        await expect(
+          invalid.createUploadUrl({ objectKey: KEY, contentType: 'image/png' }),
+        ).rejects.toMatchObject(unavailable);
+        await expect(invalid.describeStagingObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        await expect(invalid.describeFinalObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        await expect(
+          invalid.copyStagingToFinal({
+            objectKey: KEY,
+            contentType: 'image/png',
+          }),
+        ).rejects.toMatchObject(unavailable);
+        await expect(invalid.deleteObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        await expect(invalid.deleteStagingObject(KEY)).rejects.toMatchObject(
+          unavailable,
+        );
+        expect(thrown(() => invalid.publicUrl(KEY))).toMatchObject(unavailable);
+        await expect(
+          (async () => {
+            for await (const _ of invalid.listObjects('users/')) {
+              // never reached
+            }
+          })(),
+        ).rejects.toMatchObject(unavailable);
+        await expect(
+          (async () => {
+            for await (const _ of invalid.listStagingObjects('users/')) {
+              // never reached
+            }
+          })(),
+        ).rejects.toMatchObject(unavailable);
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
+
     it('uses the bucket supplied by the application configuration', async () => {
       const { url } = await storage({
-        bucket: 'from-config-bucket',
+        stagingBucket: 'from-config-bucket',
       }).createUploadUrl({
         objectKey: KEY,
         contentType: 'image/png',
       });
 
       expect(new URL(url).pathname).toBe(`/from-config-bucket/${KEY}`);
+    });
+
+    it('selects the Sandbox staging bucket from the runtime scope', async () => {
+      const { url } = await storage({ environment: 'sandbox' }).createUploadUrl(
+        {
+          objectKey: KEY,
+          contentType: 'image/png',
+        },
+      );
+      expect(new URL(url).pathname).toBe(
+        `/aihub-sandbox-user-asset-staging/${KEY}`,
+      );
+    });
+
+    it('copies staging to the public bucket with replacement metadata', async () => {
+      const { client, send } = clientAnswering(async () => ({}));
+      await storage({ client }).copyStagingToFinal({
+        objectKey: KEY,
+        contentType: 'image/png',
+      });
+      expect(send.mock.calls[0]?.[0]?.input).toEqual({
+        Bucket: 'aihub-user-assets',
+        Key: KEY,
+        CopySource: `aihub-user-asset-staging/${KEY}`,
+        MetadataDirective: 'REPLACE',
+        ContentType: 'image/png',
+        CacheControl: 'public, max-age=3600',
+      });
     });
   });
 
@@ -213,13 +293,15 @@ describe('S3AvatarStorage', () => {
         LastModified: lastModified,
       }));
 
-      await expect(storage({ client }).describeObject(KEY)).resolves.toEqual({
+      await expect(
+        storage({ client }).describeStagingObject(KEY),
+      ).resolves.toEqual({
         contentType: 'image/webp',
         byteSize: 2048,
         lastModified,
       });
       expect(send.mock.calls[0]?.[0]?.input).toEqual({
-        Bucket: 'aihub-user-assets',
+        Bucket: 'aihub-user-asset-staging',
         Key: KEY,
       });
     });
@@ -233,7 +315,7 @@ describe('S3AvatarStorage', () => {
       });
 
       await expect(
-        storage({ client }).describeObject(KEY),
+        storage({ client }).describeStagingObject(KEY),
       ).resolves.toBeUndefined();
     });
 
@@ -243,7 +325,7 @@ describe('S3AvatarStorage', () => {
       });
 
       await expect(
-        storage({ client }).describeObject(KEY),
+        storage({ client }).describeStagingObject(KEY),
       ).rejects.toMatchObject({
         code: 'AVATAR_STORAGE_UNAVAILABLE',
         retryable: true,
@@ -258,7 +340,7 @@ describe('S3AvatarStorage', () => {
         });
       });
       await expect(
-        storage({ client }).describeObject(KEY),
+        storage({ client }).describeStagingObject(KEY),
       ).rejects.toMatchObject({
         diagnostic: 'object_storage:unavailable',
         retryable: true,

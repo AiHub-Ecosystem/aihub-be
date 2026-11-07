@@ -51,6 +51,16 @@ import { AvatarController } from './presentation/avatar.controller';
       ): AvatarStoragePort =>
         new S3AvatarStorage(client, {
           bucket: configuration.SEAWEEDFS_USER_ASSET_BUCKET,
+          environment:
+            configuration.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+              ? 'sandbox'
+              : 'production',
+          ...(configuration.SEAWEEDFS_USER_ASSET_STAGING_BUCKET === undefined
+            ? {}
+            : {
+                stagingBucket:
+                  configuration.SEAWEEDFS_USER_ASSET_STAGING_BUCKET,
+              }),
         }),
     },
     // Published for the operator sweep (`avatar:sweep`), which builds its own

@@ -31,6 +31,7 @@ function keyOf(n: number): string {
 
 class FakeAvatarStorage implements AvatarStoragePort {
   readonly objects = new Map<string, Date | undefined>();
+  readonly stagingObjects = new Map<string, Date | undefined>();
   readonly deleted: string[] = [];
   readonly failDeleteOf = new Set<string>();
   listedPages = 0;
@@ -49,8 +50,20 @@ class FakeAvatarStorage implements AvatarStoragePort {
     throw new Error('not used by the sweep');
   }
 
-  async describeObject(): Promise<StoredAvatarObject | undefined> {
+  async describeStagingObject(): Promise<StoredAvatarObject | undefined> {
     throw new Error('not used by the sweep');
+  }
+
+  async copyStagingToFinal(): Promise<void> {
+    throw new Error('not used by the sweep');
+  }
+  async describeFinalObject(): Promise<StoredAvatarObject | undefined> {
+    throw new Error('not used by the sweep');
+  }
+  async deleteStagingObject(objectKey: string): Promise<void> {
+    if (this.failDeleteOf.has(objectKey)) throw new Error('delete failed');
+    this.deleted.push(objectKey);
+    this.stagingObjects.delete(objectKey);
   }
 
   async deleteObject(objectKey: string): Promise<void> {
@@ -82,6 +95,12 @@ class FakeAvatarStorage implements AvatarStoragePort {
       for (const [objectKey, lastModified] of all.slice(index, index + 2)) {
         yield { objectKey, lastModified };
       }
+    }
+  }
+
+  async *listStagingObjects(prefix: string): AsyncIterable<ListedAvatarObject> {
+    for (const [objectKey, lastModified] of this.stagingObjects) {
+      if (objectKey.startsWith(prefix)) yield { objectKey, lastModified };
     }
   }
 }
@@ -139,6 +158,11 @@ describe('runAvatarSweepCommand', () => {
       deleted: 1,
       failed: 0,
       dryRun: false,
+      stagingScanned: 0,
+      stagingUnrecognised: 0,
+      stagingEligible: 0,
+      stagingDeleted: 0,
+      stagingFailed: 0,
       cutoff_source: 'process',
     });
     expect(closed.value).toBe(true);
