@@ -246,7 +246,11 @@ export async function waitFor<T>(
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   let last: T | undefined;
-  while (Date.now() < deadline) {
+  // At least one read attempt runs even when the deadline is already due:
+  // the deadline limits waiting between attempts, not the first attempt,
+  // so a caller that probes with a very short timeout still gets its
+  // `lastProbe` evidence.
+  do {
     try {
       last = await read();
       if (ready(last)) return last;
@@ -254,7 +258,7 @@ export async function waitFor<T>(
       // The service has not bound its port yet.
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
-  }
+  } while (Date.now() < deadline);
   throw new Error(message);
 }
 
