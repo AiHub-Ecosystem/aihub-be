@@ -32,7 +32,7 @@ class DeferredStorage implements AvatarStoragePort {
   publicUrl(key: string) {
     return key;
   }
-  async describeObject(key: string) {
+  async describeStagingObject(key: string) {
     return this.staging.get(key);
   }
   async describeFinalObject(key: string) {

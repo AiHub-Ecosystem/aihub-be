@@ -94,7 +94,7 @@ describe('SeaweedFS S3 transport', () => {
     await expect(
       new S3AvatarStorage(client, {
         bucket: 'aihub-user-assets',
-      }).describeObject(
+      }).describeStagingObject(
         'users/usr_test/avatar/ava_test/original',
         AbortSignal.timeout(1_500),
       ),
@@ -120,7 +120,7 @@ describe('SeaweedFS S3 transport', () => {
     const failure: unknown = await new S3AvatarStorage(client, {
       bucket: 'aihub-user-assets',
     })
-      .describeObject(
+      .describeStagingObject(
         'users/usr_test/avatar/ava_test/original',
         AbortSignal.timeout(1_500),
       )
@@ -147,7 +147,7 @@ describe('SeaweedFS S3 transport', () => {
     await expect(
       new S3AvatarStorage(client, {
         bucket: 'aihub-user-assets',
-      }).describeObject(
+      }).describeStagingObject(
         'users/usr_test/avatar/ava_test/original',
         AbortSignal.timeout(1_500),
       ),
@@ -238,7 +238,7 @@ describe('SeaweedFS S3 transport', () => {
       await expect(
         new S3AvatarStorage(client, {
           bucket: 'aihub-user-assets',
-        }).describeObject(
+        }).describeStagingObject(
           'users/usr_test/avatar/ava_test/original',
           AbortSignal.timeout(1_500),
         ),
@@ -367,7 +367,10 @@ describe('SeaweedFS S3 transport', () => {
         kind === 'avatar'
           ? new S3AvatarStorage(client, {
               bucket: 'aihub-user-assets',
-            }).describeObject('users/usr_test/avatar/ava_test/original', signal)
+            }).describeStagingObject(
+              'users/usr_test/avatar/ava_test/original',
+              signal,
+            )
           : kind === 'speaking'
             ? new S3SpeakingAudioAssetStorage(client, {
                 sandboxBucket: 'aihub-sandbox-speaking-recordings',

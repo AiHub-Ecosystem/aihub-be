@@ -42,7 +42,7 @@ export interface AvatarStoragePort {
    */
   publicUrl(objectKey: string): string;
   /** `undefined` when no object exists at the key. */
-  describeObject(
+  describeStagingObject(
     objectKey: string,
     signal?: AbortSignal,
   ): Promise<StoredAvatarObject | undefined>;

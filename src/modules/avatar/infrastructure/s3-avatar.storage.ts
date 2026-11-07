@@ -83,7 +83,8 @@ export class S3AvatarStorage implements AvatarStoragePort {
     if (
       sharedClient === undefined ||
       bucket.length === 0 ||
-      stagingBucket.length === 0
+      stagingBucket.length === 0 ||
+      stagingBucket === bucket
     ) {
       this.configured = undefined;
       return;
@@ -186,7 +187,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
     }
   }
 
-  async describeObject(
+  async describeStagingObject(
     objectKey: string,
     signal = objectStorageSignal(),
   ): Promise<StoredAvatarObject | undefined> {
