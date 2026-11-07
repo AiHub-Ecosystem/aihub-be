@@ -53,6 +53,22 @@ const fields = {
     defaultValue: 2,
     minValue: 1,
   },
+  AIHUB_QUOTA_SCRUBBER_INTERVAL_MS: {
+    kind: 'number',
+    defaultValue: 300_000,
+    minValue: 1_000,
+  },
+  AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS: {
+    kind: 'number',
+    defaultValue: 0,
+    minValue: 0,
+  },
+  AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT: {
+    kind: 'number',
+    defaultValue: 5,
+    minValue: 0,
+    maxValue: 100,
+  },
   LOG_LEVEL: {
     kind: 'enum',
     values: ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'],
@@ -339,6 +355,9 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'PORT',
     'UV_THREADPOOL_SIZE',
     'AIHUB_AUTH_ARGON2_MAX_CONCURRENCY',
+    'AIHUB_QUOTA_SCRUBBER_INTERVAL_MS',
+    'AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS',
+    'AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT',
     'LOG_LEVEL',
     'OTEL_SERVICE_NAME',
     'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',

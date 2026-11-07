@@ -7,6 +7,8 @@ import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import {
   QUOTA_COUNTER,
+  QUOTA_COUNTER_OVERWRITE,
+  type QuotaCounterOverwritePort,
   type QuotaCounterPort,
 } from '@/modules/gateway/application/quota-counter.port';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
@@ -22,6 +24,7 @@ import {
   type PublicApiMajorUsageRepositoryPort,
 } from './application/billing/public-api-major-usage';
 import { PublicApiMajorUsageFlusher } from './application/billing/public-api-major-usage-flusher';
+import { QuotaReconciliationService } from './application/billing/quota-reconciliation';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
@@ -40,8 +43,10 @@ import {
   type UsageRepositoryPort,
 } from './application/usage-recording/usage-repository.port';
 import { PostgresPublicApiMajorUsageRepository } from './infrastructure/billing/postgres-public-api-major-usage.repository';
+import { PostgresQuotaReconciliationRepository } from './infrastructure/billing/postgres-quota-reconciliation.repository';
 import { recordPublicApiMajorUsageDrop } from './infrastructure/billing/public-api-major-usage-drop-metric';
 import { PublicApiMajorUsageScheduler } from './infrastructure/billing/public-api-major-usage.scheduler';
+import { QuotaReconciliationScheduler } from './infrastructure/billing/quota-reconciliation.scheduler';
 import { NestMeteringFailureLogger } from './infrastructure/usage-recording/nest-metering-failure.logger';
 import { PostgresUsageRepository } from './infrastructure/usage-recording/postgres-usage.repository';
 import { PrometheusMeteringTelemetryAdapter } from './infrastructure/usage-recording/prometheus-metering-telemetry.adapter';
@@ -99,6 +104,34 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
         runtime: PrismaClientHolder,
       ): PublicApiMajorUsageRepositoryPort =>
         new PostgresPublicApiMajorUsageRepository(runtime.prisma),
+    },
+    {
+      provide: QuotaReconciliationService,
+      inject: [RUNTIME_PRISMA_CLIENT, QUOTA_COUNTER_OVERWRITE],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        counter: QuotaCounterOverwritePort,
+      ): QuotaReconciliationService => {
+        return new QuotaReconciliationService(
+          new PostgresQuotaReconciliationRepository(runtime.prisma),
+          counter,
+        );
+      },
+    },
+    {
+      provide: QuotaReconciliationScheduler,
+      inject: [QuotaReconciliationService, appConfig.KEY],
+      useFactory: (
+        reconciliation: QuotaReconciliationService,
+        configuration: ConfigType<typeof appConfig>,
+      ): QuotaReconciliationScheduler =>
+        new QuotaReconciliationScheduler(
+          reconciliation,
+          configuration.AIHUB_QUOTA_SCRUBBER_INTERVAL_MS,
+          configuration.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS,
+          configuration.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT / 100,
+          configuration.NODE_ENV !== 'test',
+        ),
     },
     {
       provide: PublicApiMajorUsageScheduler,

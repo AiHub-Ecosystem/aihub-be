@@ -75,6 +75,8 @@ import { GradingOrchestrator } from './application/graded-request/grading-orches
 import { GRADING_ORCHESTRATOR } from './application/graded-request/grading-orchestrator.port';
 import {
   QUOTA_COUNTER,
+  QUOTA_COUNTER_OVERWRITE,
+  type QuotaCounterOverwritePort,
   type QuotaCounterPort,
 } from './application/quota-counter.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
@@ -101,6 +103,7 @@ import {
 } from './infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
 import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
+import { RedisQuotaReconciliationCounter } from './infrastructure/redis-quota-reconciliation.counter';
 import { RedisQuotaSeeder } from './infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
@@ -222,6 +225,14 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT, RedisQuotaSeeder],
     },
     {
+      provide: QUOTA_COUNTER_OVERWRITE,
+      inject: [REDIS_GATEWAY_CLIENT],
+      useFactory: (
+        client: RedisGatewayClient | undefined,
+      ): QuotaCounterOverwritePort =>
+        new RedisQuotaReconciliationCounter(client),
+    },
+    {
       provide: SANDBOX_DISPATCH_BUDGET,
       inject: [RUNTIME_PRISMA_CLIENT],
       useFactory: (runtime: PrismaClientHolder): SandboxDispatchBudgetPort =>
@@ -302,6 +313,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     GRADED_ADMISSION,
     RateLimitGuard,
     QUOTA_COUNTER,
+    QUOTA_COUNTER_OVERWRITE,
     CONCURRENCY_LIMITER,
   ],
 })

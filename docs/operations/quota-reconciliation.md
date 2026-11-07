@@ -10,6 +10,17 @@ reconciliation command.
 
 ## Schedule
 
+Every application instance also runs a continuous scrubber, starting at the
+next five-minute boundary anchored to the current UTC quota-month start and
+repeating every five minutes. It checks quota-bearing organizations in the
+current month and repairs drift only when the absolute difference is greater
+than `max(0 requests, 5% of the Postgres count)`. These defaults are configured
+by `AIHUB_QUOTA_SCRUBBER_INTERVAL_MS`,
+`AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS`, and
+`AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT`. A pass already in progress is
+not overlapped; restart or downtime does not cause catch-up runs. Each repair
+emits a structured `quota_reconciliation_drift_corrected` warning.
+
 The CD-managed scheduled wrapper runs this command in the active Production and
 Sandbox services once per day at 02:00 UTC. Run it manually through the same
 wrapper so it gets the 15-minute per-deployment deadline, same-job lock, and
@@ -65,6 +76,10 @@ aihub:v1:quota:<organization_id>:<YYYY-MM>
 
 with the durable total and a 40-day TTL. Organizations without a quota are
 skipped because they do not create quota counters.
+
+The background scrubber uses the configured drift threshold before writing.
+The manual `quota:reconcile` command repairs any nonzero difference, making it
+the operator path for exact reconciliation and retained-month backfills.
 
 ## Rerun and backfill
 

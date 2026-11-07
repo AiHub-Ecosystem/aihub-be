@@ -95,4 +95,28 @@ describe('formatQuotaReconciliationEvent', () => {
     expect(summary(0, 2)).toContain('"status":"attention"');
     expect(summary(1, 0)).toContain('"status":"attention"');
   });
+
+  it('formats a structured correction audit line with only counts and identifiers', () => {
+    expect(
+      formatQuotaReconciliationEvent({
+        type: 'drift_corrected',
+        organizationId: 'org_alpha',
+        month: '2026-09',
+        postgresCount: 42,
+        redisCount: 0,
+        driftRequests: 42,
+        thresholdRequests: 5,
+      }),
+    ).toBe(
+      JSON.stringify({
+        event: 'quota_reconcile_drift_corrected',
+        organization_id: 'org_alpha',
+        month: '2026-09',
+        postgres_count: 42,
+        redis_count: 0,
+        drift_requests: 42,
+        threshold_requests: 5,
+      }),
+    );
+  });
 });

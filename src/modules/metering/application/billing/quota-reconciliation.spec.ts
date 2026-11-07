@@ -180,7 +180,6 @@ describe('QuotaReconciliationService', () => {
     await service.reconcile('2026-09', (event) => events.push(event));
 
     expect(counter.writes).toEqual([
-      { organizationId: 'org_alpha', month: '2026-09', count: 0 },
       { organizationId: 'org_zulu', month: '2026-09', count: 3 },
     ]);
     expect(events).toEqual([
@@ -205,6 +204,15 @@ describe('QuotaReconciliationService', () => {
           overQuota: true,
           excess: 1,
         },
+      },
+      {
+        type: 'drift_corrected',
+        organizationId: 'org_zulu',
+        month: '2026-09',
+        postgresCount: 3,
+        redisCount: 0,
+        driftRequests: 3,
+        thresholdRequests: 0,
       },
       {
         type: 'summary',
@@ -250,6 +258,15 @@ describe('QuotaReconciliationService', () => {
         },
       },
       {
+        type: 'drift_preview',
+        organizationId: 'org_alpha',
+        month: '2026-09',
+        postgresCount: 4,
+        redisCount: 0,
+        driftRequests: 4,
+        thresholdRequests: 0,
+      },
+      {
         type: 'preview_summary',
         month: '2026-09',
         summary: {
@@ -284,8 +301,7 @@ describe('QuotaReconciliationService', () => {
     });
 
     expect(counter.values.get('org_alpha:2026-09')).toBe(4);
-    expect(counter.writes).toHaveLength(2);
-    expect(counter.writes[0]).toEqual(counter.writes[1]);
+    expect(counter.writes).toHaveLength(1);
   });
 
   it('reports and repairs an overcount as request-unit drift', async () => {
@@ -305,6 +321,47 @@ describe('QuotaReconciliationService', () => {
       driftRequests: 2,
     });
     expect(counter.values.get('org_alpha:2026-09')).toBe(4);
+  });
+
+  it('repairs only drift above the larger absolute or percentage threshold', async () => {
+    const source = new FakeSnapshotPort([
+      {
+        organizationId: 'org_alpha',
+        monthlyRequestQuota: 20,
+        billableRequestCount: 100,
+      },
+      {
+        organizationId: 'org_beta',
+        monthlyRequestQuota: 2_000,
+        billableRequestCount: 1_000,
+      },
+    ]);
+    const counter = new FakeCounter();
+    counter.values.set('org_alpha:2026-09', 92);
+    counter.values.set('org_beta:2026-09', 960);
+    const events: QuotaReconciliationEvent[] = [];
+    const service = new QuotaReconciliationService(source, counter, now);
+
+    await expect(
+      service.reconcile('2026-09', (event) => events.push(event), {
+        driftThresholdAbs: 5,
+        driftThresholdFraction: 0.05,
+      }),
+    ).resolves.toMatchObject({ driftedOrganizations: 1, driftRequests: 8 });
+
+    expect(counter.values.get('org_alpha:2026-09')).toBe(100);
+    expect(counter.values.get('org_beta:2026-09')).toBe(960);
+    expect(events.filter((event) => event.type === 'drift_corrected')).toEqual([
+      {
+        type: 'drift_corrected',
+        organizationId: 'org_alpha',
+        month: '2026-09',
+        postgresCount: 100,
+        redisCount: 92,
+        driftRequests: 8,
+        thresholdRequests: 5,
+      },
+    ]);
   });
 
   it('leaves earlier writes in place and emits a safe partial-failure event', async () => {
@@ -343,6 +400,15 @@ describe('QuotaReconciliationService', () => {
           overQuota: false,
           excess: 0,
         },
+      },
+      {
+        type: 'drift_corrected',
+        organizationId: 'org_alpha',
+        month: '2026-09',
+        postgresCount: 1,
+        redisCount: 0,
+        driftRequests: 1,
+        thresholdRequests: 0,
       },
       {
         type: 'failed',

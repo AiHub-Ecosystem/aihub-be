@@ -31,6 +31,24 @@ export type QuotaReconciliationEvent =
   | { readonly type: 'reconciled'; readonly result: QuotaReconciledResult }
   | { readonly type: 'preview'; readonly result: QuotaReconciledResult }
   | {
+      readonly type: 'drift_corrected';
+      readonly organizationId: string;
+      readonly month: string;
+      readonly postgresCount: number;
+      readonly redisCount: number;
+      readonly driftRequests: number;
+      readonly thresholdRequests: number;
+    }
+  | {
+      readonly type: 'drift_preview';
+      readonly organizationId: string;
+      readonly month: string;
+      readonly postgresCount: number;
+      readonly redisCount: number;
+      readonly driftRequests: number;
+      readonly thresholdRequests: number;
+    }
+  | {
       readonly type: 'failed';
       readonly organizationId: string;
       readonly month: string;
@@ -202,7 +220,11 @@ export class QuotaReconciliationService {
   async reconcile(
     requestedMonth?: string,
     emit: (event: QuotaReconciliationEvent) => void = () => undefined,
-    options: { readonly dryRun?: boolean } = {},
+    options: {
+      readonly dryRun?: boolean;
+      readonly driftThresholdAbs?: number;
+      readonly driftThresholdFraction?: number;
+    } = {},
   ): Promise<QuotaReconciliationSummary> {
     const target = parseTargetMonth(requestedMonth, this.now());
     let sourceSnapshots: readonly QuotaOrganizationSnapshot[];
@@ -239,7 +261,12 @@ export class QuotaReconciliationService {
       }
 
       const drift = Math.abs(currentCount - snapshot.billableCount);
-      if (options.dryRun !== true) {
+      const threshold = Math.max(
+        options.driftThresholdAbs ?? 0,
+        (options.driftThresholdFraction ?? 0) * snapshot.billableCount,
+      );
+      const needsCorrection = drift > threshold;
+      if (needsCorrection && options.dryRun !== true) {
         try {
           await this.counterPort.overwrite({
             organizationId: snapshot.organizationId,
@@ -264,7 +291,7 @@ export class QuotaReconciliationService {
       if (snapshot.overQuota) {
         overQuota += 1;
       }
-      if (drift > 0) {
+      if (needsCorrection) {
         driftedCount += 1;
         driftRequests += drift;
       }
@@ -273,6 +300,21 @@ export class QuotaReconciliationService {
         type: options.dryRun === true ? 'preview' : 'reconciled',
         result: { ...snapshot, month: target.month },
       });
+      if (needsCorrection) {
+        const detail = {
+          organizationId: snapshot.organizationId,
+          month: target.month,
+          postgresCount: snapshot.billableCount,
+          redisCount: currentCount,
+          driftRequests: drift,
+          thresholdRequests: threshold,
+        };
+        if (options.dryRun === true) {
+          emit({ type: 'drift_preview', ...detail });
+        } else {
+          emit({ type: 'drift_corrected', ...detail });
+        }
+      }
     }
 
     const summary = {
