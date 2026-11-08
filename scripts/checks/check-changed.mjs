@@ -44,6 +44,27 @@ const TS_GATES = [
 ];
 
 /**
+ * #1634: spec and test TypeScript files cannot break the production-only
+ * gates, so a test-only diff runs this reduced set. Boundary or contract rules
+ * a test path violates are still caught by the full `bun run verify` loop CI
+ * runs on push.
+ */
+const TS_TEST_GATES = ['lint', 'test:related', 'type-check'];
+
+/**
+ * Whether a path is test-only: a spec or test file by suffix, or anything
+ * under the `test/` root (including fixtures and shell specs).
+ * @param {string} path
+ */
+function isTestPath(path) {
+  return (
+    path.startsWith('test/') ||
+    path.endsWith('.spec.ts') ||
+    path.endsWith('.test.ts')
+  );
+}
+
+/**
  * Gate -> the command that runs it. `test:related` uses Bun's changed-file graph.
  */
 /** @type {Readonly<Record<string, string>>} */
@@ -105,6 +126,15 @@ function classifyPathGates(p) {
   /** @type {Set<string>} */
   const gates = new Set();
 
+  // #1634: every test path, including non-TypeScript fixtures and shell specs
+  // under `test/`, gets the same reduced set. This runs before the tool-specific
+  // branches so `check-app-errors.spec.ts` is not mistaken for the tool it tests.
+  if (isTestPath(path)) {
+    if (path.endsWith('.spec.ts')) gates.add(JEST_SPECS_GATE);
+    for (const gate of TS_TEST_GATES) gates.add(gate);
+    return sorted(gates);
+  }
+
   if (path === 'openapi.json') {
     return ['lint', 'validate:openapi'];
   }
@@ -127,9 +157,6 @@ function classifyPathGates(p) {
     if (/(^|\/)domain\//.test(path)) gates.add('check:domain-globals');
     gates.add('check:tenant-global');
     if (/(^|\/)src\/contracts\//.test(path)) gates.add('validate:openapi');
-    // CI also loads every spec under Jest (`coverage:unit`), and a spec can pass
-    // under Bun yet fail to load there (#1631).
-    if (path.endsWith('.spec.ts')) gates.add(JEST_SPECS_GATE);
     return sorted(gates);
   }
 
