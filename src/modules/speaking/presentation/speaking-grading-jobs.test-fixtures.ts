@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { internalError } from '@/common/errors/app-error';
+import { type AppError, internalError } from '@/common/errors/app-error';
 
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
 import type {
@@ -21,6 +21,7 @@ import type {
 import type {
   SpeakingAudioAsset,
   SpeakingAudioEnvironment,
+  SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 
 export const JOB_ID = 'sgj_01J00000000000000000000001';
@@ -290,7 +291,25 @@ export class FakeAudioRepository implements SpeakingAudioUploadRepositoryPort {
       : { kind: 'missing' };
   }
 
-  async createIntent(): Promise<void> {}
+  async createIntent(_intent: SpeakingAudioUploadIntent): Promise<void> {}
+  async createIntentWithinCeiling(input: {
+    readonly intent: SpeakingAudioUploadIntent;
+    readonly decide: (holding: {
+      readonly openIntents: number;
+      readonly issuedInWindow: number;
+      readonly storedBytes: number;
+    }) =>
+      | { readonly kind: 'within' }
+      | { readonly kind: 'refused'; readonly refusal: AppError };
+  }): Promise<ReturnType<typeof input.decide>> {
+    const decision = input.decide({
+      openIntents: 0,
+      issuedInWindow: 0,
+      storedBytes: 0,
+    });
+    if (decision.kind === 'within') await this.createIntent(input.intent);
+    return decision;
+  }
   async confirmRefreshableIntent(): Promise<boolean> {
     return false;
   }
@@ -361,6 +380,7 @@ export function seededJob(
   return {
     ...owner,
     jobId: JOB_ID,
+    identityMode: 'declared_id',
     apiKeyId: 'ak_test',
     maxConcurrent: 4,
     quotaTracked: true,

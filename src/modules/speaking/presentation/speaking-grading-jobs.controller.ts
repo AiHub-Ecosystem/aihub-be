@@ -92,6 +92,7 @@ export class SpeakingGradingJobsController {
       apiKeyId: authenticated.apiKeyId,
       environment: authenticated.environment,
       userId: identity.userId,
+      identityMode: identity.mode,
       scopes: authenticated.scopes,
     });
     const idempotencyKey = request.headers['idempotency-key'];

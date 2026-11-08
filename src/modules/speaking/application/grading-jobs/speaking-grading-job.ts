@@ -1,3 +1,4 @@
+import type { UserIdentityMode } from '@/common/request-context/request-context';
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
 import type { SpeakingV2TestType } from '@/contracts/speaking/v2/response.shared';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
@@ -47,6 +48,7 @@ export interface SpeakingGradingJobOwner {
 }
 
 export interface SpeakingGradingJob extends SpeakingGradingJobOwner {
+  readonly identityMode: UserIdentityMode;
   readonly jobId: string;
   /** The API key that submitted the job; metering attributes usage to it. */
   readonly apiKeyId: string;

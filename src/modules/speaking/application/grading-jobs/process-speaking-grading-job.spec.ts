@@ -34,6 +34,7 @@ const job: SpeakingGradingJob = {
   organizationId: 'org_acme',
   endUserId: 'user_acme',
   environment: 'sandbox',
+  identityMode: 'declared_id',
   apiKeyId: 'ak_acme',
   maxConcurrent: 3,
   quotaTracked: true,
@@ -275,6 +276,7 @@ describe('ProcessSpeakingGradingJob', () => {
       result: questionResult,
       completedAt: new Date(NOW.getTime() + 321),
     });
+    expect(subject.record).toHaveBeenCalledTimes(1);
     expect(subject.record).toHaveBeenCalledWith(
       {
         organizationId: job.organizationId,
@@ -283,6 +285,9 @@ describe('ProcessSpeakingGradingJob', () => {
       },
       'response',
       questionResult.meta.response_id,
+    );
+    expect(subject.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ identityMode: job.identityMode }),
     );
     expect(subject.finalize).toHaveBeenCalledTimes(1);
     expect(subject.finalize).toHaveBeenCalledWith(
@@ -301,6 +306,39 @@ describe('ProcessSpeakingGradingJob', () => {
       }),
     );
     expect(subject.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('records Part ownership when the job is linked to a Part result', async () => {
+    const linkedJob: SpeakingGradingJob = {
+      ...job,
+      status: 'running',
+      request: { ...job.request, partResultId: 'part-result-1' },
+    };
+    const subject = harness({ claimed: linkedJob });
+
+    await subject.processor.execute({
+      jobId: job.jobId,
+      environment: job.environment,
+    });
+
+    const owner = {
+      organizationId: job.organizationId,
+      endUserId: job.endUserId,
+      environment: job.environment,
+    };
+    expect(subject.record).toHaveBeenNthCalledWith(
+      1,
+      owner,
+      'response',
+      questionResult.meta.response_id,
+    );
+    expect(subject.record).toHaveBeenNthCalledWith(
+      2,
+      owner,
+      'part',
+      'part-result-1',
+    );
+    expect(subject.repository.succeed).toHaveBeenCalled();
   });
 
   it('stores the synchronous AUDIO_UNREADABLE code and still finalizes the dispatched attempt', async () => {

@@ -598,13 +598,14 @@ model SpeakingAudioAsset {
 }
 
 /// A durable Speaking grading job; PostgreSQL remains its source of truth.
-/// Status and id checks plus sweep indexes are owned by migration 0061.
+/// Status, id and identity-mode checks plus sweep indexes are owned by migration 0062.
 /// @owner speaking
 model SpeakingGradingJob {
   jobId             String    @id @map("job_id")
   organizationId    String    @map("organization_id")
   endUserId         String    @map("end_user_id")
   environment       String
+  identityMode      String    @map("identity_mode")
   apiKeyId          String    @map("api_key_id")
   maxConcurrent     Int       @map("max_concurrent")
   quotaTracked      Boolean   @map("quota_tracked")

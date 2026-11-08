@@ -20,6 +20,7 @@ interface SpeakingGradingJobRow {
   readonly organizationId: string;
   readonly endUserId: string;
   readonly environment: string;
+  readonly identityMode: string;
   readonly apiKeyId: string;
   readonly maxConcurrent: number;
   readonly quotaTracked: boolean;
@@ -46,6 +47,7 @@ const JOB_COLUMNS = `
   organization_id AS "organizationId",
   end_user_id AS "endUserId",
   environment,
+  identity_mode AS "identityMode",
   api_key_id AS "apiKeyId",
   max_concurrent AS "maxConcurrent",
   quota_tracked AS "quotaTracked",
@@ -80,7 +82,7 @@ async function insertJob(
   job: NewSpeakingGradingJob,
 ): Promise<void> {
   await client.$executeRawUnsafe(
-    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'queued', $15)`,
+    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at, identity_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'queued', $15, $16)`,
     job.jobId,
     job.organizationId,
     job.endUserId,
@@ -96,6 +98,7 @@ async function insertJob(
     job.request.testCode ?? null,
     job.request.partResultId ?? null,
     job.createdAt,
+    job.identityMode,
   );
 }
 
@@ -120,6 +123,15 @@ function invalidStoredJob(): never {
 
 function requiredEnvironment(value: string): SpeakingAudioEnvironment {
   if (value !== 'production' && value !== 'sandbox') {
+    return invalidStoredJob();
+  }
+  return value;
+}
+
+function requiredIdentityMode(
+  value: string,
+): SpeakingGradingJob['identityMode'] {
+  if (value !== 'declared_id' && value !== 'signed_assertion') {
     return invalidStoredJob();
   }
   return value;
@@ -186,6 +198,7 @@ function mapJob(
     organizationId: row.organizationId,
     endUserId: row.endUserId,
     environment: requiredEnvironment(row.environment),
+    identityMode: requiredIdentityMode(row.identityMode),
     apiKeyId: row.apiKeyId,
     maxConcurrent: row.maxConcurrent,
     quotaTracked: row.quotaTracked,

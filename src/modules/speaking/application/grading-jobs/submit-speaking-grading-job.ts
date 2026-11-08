@@ -108,6 +108,10 @@ export class SubmitSpeakingGradingJob {
   ): Promise<SpeakingGradingJobAcceptedData> {
     const { context, authenticated, request } = input;
     const owner = ownerFromContext(context);
+    const identityMode = context.identityMode;
+    if (identityMode === undefined) {
+      throw internalError('Speaking grading job identity mode is unavailable');
+    }
     if (
       owner.organizationId !== authenticated.organizationId ||
       context.apiKeyId !== authenticated.apiKeyId
@@ -118,6 +122,17 @@ export class SubmitSpeakingGradingJob {
       SPEAKING_GRADING_JOB_CREATE_OPERATION,
       input.idempotencyKey,
     );
+    const admissionInput: AdmitGradedRequestInput = {
+      apiKeyId: authenticated.apiKeyId,
+      rateLimitRpm: authenticated.rateLimitRpm,
+      organizationId: owner.organizationId,
+      requestId: context.requestId,
+      operation: 'speaking.v2.question-grading',
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+      environment: owner.environment,
+      monthlyRequestQuota: authenticated.monthlyRequestQuota,
+      hardStopOnQuota: authenticated.hardStopOnQuota,
+    };
     const { result } =
       await this.idempotency.execute<SpeakingGradingJobAcceptedData>(
         {
@@ -131,14 +146,28 @@ export class SubmitSpeakingGradingJob {
           responseStatus: 202,
           signal: context.signal,
           deadlineAt: context.deadlineAt,
+          beforeDuplicate: async () => {
+            const decision = await admitGradedRequest(this.admission, {
+              ...admissionInput,
+              monthlyRequestQuota: null,
+            });
+            if (decision.stage === 'rate_limit') recordRejected('rate_limit');
+            if (decision.stage !== 'admitted') {
+              throw gradedAdmissionRefusal(
+                decision,
+                owner.organizationId,
+                this.now,
+              );
+            }
+          },
         },
         () =>
           this.submit(
             owner,
             authenticated,
             request,
-            context.requestId,
-            idempotencyKey,
+            admissionInput,
+            identityMode,
           ),
         (value) => Value.Parse(SpeakingGradingJobAcceptedDataSchema, value),
       );
@@ -149,8 +178,8 @@ export class SubmitSpeakingGradingJob {
     owner: SpeakingGradingJobOwner,
     authenticated: AuthenticatedApiKey,
     request: SpeakingGradingJobSubmitRequest,
-    requestId: string,
-    idempotencyKey: string | undefined,
+    admissionInput: AdmitGradedRequestInput,
+    identityMode: NonNullable<RequestContext['identityMode']>,
   ): Promise<SpeakingGradingJobAcceptedData> {
     const now = this.now();
     const assetOwner: SpeakingAudioUploadOwner = {
@@ -167,17 +196,6 @@ export class SubmitSpeakingGradingJob {
 
     const environment = owner.environment;
     const quota = authenticated.monthlyRequestQuota;
-    const admissionInput: AdmitGradedRequestInput = {
-      apiKeyId: authenticated.apiKeyId,
-      rateLimitRpm: authenticated.rateLimitRpm,
-      organizationId: owner.organizationId,
-      requestId,
-      operation: 'speaking.v2.question-grading',
-      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
-      environment,
-      monthlyRequestQuota: quota,
-      hardStopOnQuota: authenticated.hardStopOnQuota,
-    };
     const quotaTracked = gradedAdmissionPolicy(admissionInput).quotaTracked;
     const jobId = `sgj_${ulid()}`;
     const job: NewSpeakingGradingJob = {
@@ -185,6 +203,7 @@ export class SubmitSpeakingGradingJob {
       organizationId: owner.organizationId,
       endUserId: owner.endUserId,
       environment,
+      identityMode,
       apiKeyId: authenticated.apiKeyId,
       maxConcurrent: authenticated.maxConcurrent,
       quotaTracked,

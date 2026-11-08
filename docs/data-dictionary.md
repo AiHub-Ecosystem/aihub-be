@@ -33,7 +33,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | PublicApiMajorUnattributedUsage    | metering    | 6       |
 | DispatchAttempt                    | metering    | 7       |
 | SpeakingAudioAsset                 | speaking    | 9       |
-| SpeakingGradingJob                 | speaking    | 23      |
+| SpeakingGradingJob                 | speaking    | 24      |
 | SpeakingV2ResultOwnership          | speaking    | 7       |
 | SpeakingAudioUploadIntent          | speaking    | 10      |
 | WritingChartUpload                 | writing     | 15      |
@@ -476,6 +476,7 @@ Owner: `speaking`
 | organizationId    | String    | @map("organization_id")                               |
 | endUserId         | String    | @map("end_user_id")                                   |
 | environment       | String    |                                                       |
+| identityMode      | String    | @map("identity_mode")                                 |
 | apiKeyId          | String    | @map("api_key_id")                                    |
 | maxConcurrent     | Int       | @map("max_concurrent")                                |
 | quotaTracked      | Boolean   | @map("quota_tracked")                                 |

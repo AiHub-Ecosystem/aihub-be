@@ -5,6 +5,8 @@ CREATE TABLE speaking_grading_jobs (
   end_user_id            text NOT NULL,
   environment            text NOT NULL
                          CHECK (environment IN ('production', 'sandbox')),
+  identity_mode          text NOT NULL
+                         CHECK (identity_mode IN ('declared_id', 'signed_assertion')),
   api_key_id             text NOT NULL,
   max_concurrent         integer NOT NULL CHECK (max_concurrent > 0), -- squawk-ignore prefer-bigint-over-int -- mirrors organizations.max_concurrent, an integer; approved: #1718
   quota_tracked          boolean NOT NULL,

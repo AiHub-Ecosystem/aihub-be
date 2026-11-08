@@ -18,7 +18,11 @@ export class BullmqSpeakingGradingJobQueue
   >;
 
   constructor(redisUrl: string) {
-    const connection = { url: redisUrl, maxRetriesPerRequest: null };
+    const connection = {
+      url: redisUrl,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    };
     this.queues = {
       production: new Queue(SPEAKING_GRADING_JOB_QUEUE_NAMES.production, {
         connection,

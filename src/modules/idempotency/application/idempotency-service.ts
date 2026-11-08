@@ -192,11 +192,13 @@ export class IdempotencyService implements IdempotencyServicePort {
     });
 
     if (reservation.kind === 'conflict') {
+      await input.beforeDuplicate?.();
       throw conflictError(reservation.reason, this.random);
     }
 
     if (reservation.kind === 'replay') {
       await input.beforeReplay?.();
+      await input.beforeDuplicate?.();
       if (
         reservation.responseStatus < 200 ||
         reservation.responseStatus >= 300

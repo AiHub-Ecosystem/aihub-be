@@ -238,6 +238,7 @@ export class ProcessSpeakingGradingJob {
         apiKeyId: job.apiKeyId,
         environment: job.environment,
         userId: job.endUserId,
+        identityMode: job.identityMode,
         scopes: ['speaking.grade'],
       });
     } catch (error) {
@@ -267,15 +268,23 @@ export class ProcessSpeakingGradingJob {
         ? {}
         : { aiProcessingMs: result.aiProcessingMs }),
     });
+    const owner = {
+      organizationId: job.organizationId,
+      endUserId: job.endUserId,
+      environment: job.environment,
+    };
     await this.dependencies.resultOwnership.record(
-      {
-        organizationId: job.organizationId,
-        endUserId: job.endUserId,
-        environment: job.environment,
-      },
+      owner,
       'response',
       result.data.meta.response_id,
     );
+    if (job.request.partResultId !== undefined) {
+      await this.dependencies.resultOwnership.record(
+        owner,
+        'part',
+        job.request.partResultId,
+      );
+    }
     await this.dependencies.repository.succeed({
       jobId: job.jobId,
       result: result.data,

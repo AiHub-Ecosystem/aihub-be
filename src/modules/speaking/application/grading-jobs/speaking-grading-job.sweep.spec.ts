@@ -19,6 +19,7 @@ const job = (
   organizationId: 'org_acme',
   endUserId: 'user_acme',
   environment,
+  identityMode: 'declared_id',
   apiKeyId: 'ak_acme',
   maxConcurrent: 2,
   quotaTracked: true,

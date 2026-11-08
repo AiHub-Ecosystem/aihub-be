@@ -73,6 +73,7 @@ describe('Speaking grading jobs HTTP flow', () => {
   let admissionCalls: GradedAdmissionRequest[];
   let pollRateLimitCalls: number;
   let idempotency: IdempotencyServicePort;
+  let sandboxReservations: string[];
   let nextKey = 0;
 
   beforeAll(async () => {
@@ -81,6 +82,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     queue = new FakeQueue();
     admissionCalls = [];
     pollRateLimitCalls = 0;
+    sandboxReservations = [];
     idempotency = new IdempotencyService(new InMemoryIdempotencyRepository());
     const admission: GradedAdmissionPort = {
       consume: async (request) => {
@@ -96,7 +98,10 @@ describe('Speaking grading jobs HTTP flow', () => {
       },
     };
     const sandboxBudget: SandboxDispatchBudgetPort = {
-      reserve: async () => true,
+      reserve: async (input) => {
+        sandboxReservations.push(input.requestId);
+        return true;
+      },
       release: async () => undefined,
       allowanceFor: async () => null,
     };
@@ -199,6 +204,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     admissionCalls.length = 0;
     admissionDecision = undefined;
     pollRateLimitCalls = 0;
+    sandboxReservations.length = 0;
   });
 
   afterAll(async () => {
@@ -247,7 +253,11 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(admissionCalls).toHaveLength(1);
     expect(pollRateLimitCalls).toBe(0);
     const job = [...repository.jobs.values()][0];
-    expect(job).toMatchObject({ maxConcurrent: 4, quotaTracked: true });
+    expect(job).toMatchObject({
+      maxConcurrent: 4,
+      quotaTracked: true,
+      identityMode: 'declared_id',
+    });
   });
 
   it('refuses a graded admission with 429 and creates no job', async () => {
@@ -334,11 +344,42 @@ describe('Speaking grading jobs HTTP flow', () => {
     });
     expect(repository.jobs.size).toBe(1);
     expect(queue.enqueued).toHaveLength(1);
-    expect(admissionCalls).toHaveLength(1);
-    expect(admissionCalls[0]).toMatchObject({
-      idempotencyKey,
-      operation: 'speaking.v2.question-grading',
+    expect(admissionCalls).toHaveLength(3);
+    expect(admissionCalls.map((call) => call.monthlyRequestQuota)).toEqual([
+      2,
+      null,
+      null,
+    ]);
+    expect(admissionCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idempotencyKey,
+          operation: 'speaking.v2.question-grading',
+        }),
+      ]),
+    );
+  });
+
+  it('admission-checks a Sandbox replay without reserving another dispatch', async () => {
+    const sandboxOwner = { ...OWNER, environment: 'sandbox' as const };
+    const requestHeaders = headers({
+      'x-test-environment': 'sandbox',
+      'idempotency-key': key(),
     });
+    audioRepository.seed(speakingAsset(sandboxOwner));
+
+    const first = await submit(REQUEST_BODY, requestHeaders);
+    const replay = await submit(REQUEST_BODY, requestHeaders);
+
+    expect(first.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(202);
+    expect(repository.jobs.size).toBe(1);
+    expect(admissionCalls).toHaveLength(2);
+    expect(admissionCalls.map((call) => call.monthlyRequestQuota)).toEqual([
+      null,
+      null,
+    ]);
+    expect(sandboxReservations).toHaveLength(1);
   });
 
   it('answers 202 if enqueue fails after the durable job is created', async () => {

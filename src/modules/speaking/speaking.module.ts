@@ -115,7 +115,7 @@ const UNAVAILABLE_QUEUE: SpeakingGradingJobQueuePort = {
     Promise.reject(internalError('Speaking grading job queue is unavailable')),
 };
 
-/** Background work (worker and sweep) runs only outside tests and with Redis configured. */
+/** Queue, worker and sweep run only outside tests and with Redis configured. */
 function backgroundEnabled(
   configuration: ConfigType<typeof appConfig>,
   connections: RuntimeConnectionConfigurationPort,
@@ -138,12 +138,13 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
   },
   {
     provide: SPEAKING_GRADING_JOB_QUEUE,
-    inject: [RUNTIME_CONNECTION_CONFIGURATION],
+    inject: [appConfig.KEY, RUNTIME_CONNECTION_CONFIGURATION],
     useFactory: (
+      configuration: ConfigType<typeof appConfig>,
       connections: RuntimeConnectionConfigurationPort,
     ): SpeakingGradingJobQueuePort => {
-      const url = connections.redisUrl?.trim();
-      return url === undefined || url === ''
+      const url = backgroundEnabled(configuration, connections);
+      return url === undefined
         ? UNAVAILABLE_QUEUE
         : new BullmqSpeakingGradingJobQueue(url);
     },

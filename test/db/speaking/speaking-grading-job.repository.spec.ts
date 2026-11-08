@@ -18,6 +18,7 @@ function makeJob(
     organizationId: 'org_' + ulid(),
     endUserId: 'learner-1',
     environment: 'production',
+    identityMode: 'signed_assertion',
     apiKeyId: 'key_' + ulid(),
     maxConcurrent: 3,
     quotaTracked: true,
@@ -370,6 +371,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     await expect(
       repository.findOwned(owner(job), job.jobId),
     ).resolves.toMatchObject({
+      identityMode: 'signed_assertion',
       status: 'succeeded',
       result: RESULT,
     });
