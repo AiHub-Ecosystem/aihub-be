@@ -203,6 +203,7 @@ const pathCases = [
     gates: ['knip', 'test:check-changed'],
   },
   { path: 'tsconfig.json', gates: ['type-check'] },
+  { path: 'tsconfig.scripts.json', gates: ['type-check:scripts'] },
   { path: 'knip.json', gates: ['knip'] },
   { path: 'biome.json', gates: ['lint'] },
   { path: '.prettierrc', gates: ['format:check'] },

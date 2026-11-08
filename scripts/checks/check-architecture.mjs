@@ -956,33 +956,42 @@ export function collectSourceTextFailures(options) {
     if (!ts.isIdentifier(parameter.name)) {
       return false;
     }
+    /** @type {import('typescript').Identifier} */
+    const parameterName = parameter.name;
 
-    let owner = parameter.parent;
+    let owner = /** @type {import('typescript').Node | undefined} */ (
+      parameter.parent
+    );
     while (owner !== undefined && !isFunctionLikeNode(owner)) {
       owner = owner.parent;
     }
-    if (owner?.body === undefined) {
+    if (!isFunctionLikeNode(owner)) {
+      return false;
+    }
+    /** @type {import('typescript').FunctionLikeDeclaration} */
+    const ownerFn = owner;
+    if (ownerFn.body === undefined) {
       return false;
     }
 
     let isValidated = false;
     /** @param {import('typescript').Node} node */
     function visit(node) {
-      if (node !== owner.body && isFunctionLikeNode(node)) {
+      if (node !== ownerFn.body && isFunctionLikeNode(node)) {
         return;
       }
       if (
         isParseRequestQueryCall(node) &&
         node.arguments[1] !== undefined &&
         ts.isIdentifier(node.arguments[1]) &&
-        node.arguments[1].text === parameter.name.text
+        node.arguments[1].text === parameterName.text
       ) {
         isValidated = true;
         return;
       }
       ts.forEachChild(node, visit);
     }
-    visit(owner.body);
+    visit(ownerFn.body);
     return isValidated;
   }
 
@@ -1020,9 +1029,14 @@ export function collectSourceTextFailures(options) {
       }
 
       if (node.kind === ts.SyntaxKind.Parameter) {
-        const query = queryDecorator(node);
+        const query = queryDecorator(
+          /** @type {import('typescript').ParameterDeclaration} */ (node),
+        );
         const isValidated =
-          query?.isWholeQuery === true && queryParameterIsValidated(node);
+          query?.isWholeQuery === true &&
+          queryParameterIsValidated(
+            /** @type {import('typescript').ParameterDeclaration} */ (node),
+          );
         if (
           query !== undefined &&
           !isValidated &&

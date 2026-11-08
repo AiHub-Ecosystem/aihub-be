@@ -215,7 +215,7 @@ async function startProbeServer() {
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(PROBE_PORT, '127.0.0.1', resolve);
+    server.listen(PROBE_PORT, '127.0.0.1', () => resolve(undefined));
   });
   server.unref();
 }
@@ -223,14 +223,14 @@ async function startProbeServer() {
 /** @returns {Promise<typeof import('jose')>} */
 function importJoseFromApp() {
   return /** @type {Promise<typeof import('jose')>} */ (
-    import(pathToFileURL(requireFromApp.resolve('jose')))
+    import(pathToFileURL(requireFromApp.resolve('jose')).href)
   );
 }
 
 /** @returns {Promise<SharpModule>} */
 function importSharpFromApp() {
   return /** @type {Promise<SharpModule>} */ (
-    import(pathToFileURL(requireFromApp.resolve('sharp')))
+    import(pathToFileURL(requireFromApp.resolve('sharp')).href)
   );
 }
 
@@ -238,7 +238,9 @@ function importSharpFromApp() {
 function importChartVerifierFromApp() {
   return /** @type {Promise<ChartVerifierModule>} */ (
     import(
-      '/app/dist/modules/writing/chart-uploads/application/writing-chart-image-verifier.js'
+      /** @type {any} */ (
+        '/app/dist/modules/writing/chart-uploads/application/writing-chart-image-verifier.js'
+      )
     )
   );
 }
@@ -247,7 +249,9 @@ function importChartVerifierFromApp() {
 function importChartProcessingFromApp() {
   return /** @type {Promise<ChartProcessingModule>} */ (
     import(
-      '/app/dist/modules/writing/chart-uploads/application/writing-chart-image-processing.js'
+      /** @type {any} */ (
+        '/app/dist/modules/writing/chart-uploads/application/writing-chart-image-processing.js'
+      )
     )
   );
 }

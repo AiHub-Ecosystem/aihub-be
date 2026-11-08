@@ -310,6 +310,7 @@ function createRuntimeEnvironment(workspaceRoot, markersPath) {
     );
   ciBootConfig.writeBootConfig(runtimeDirectory);
 
+  /** @type {NodeJS.ProcessEnv & Record<string, string>} */
   const env = {
     ...process.env,
     ...readEnvFile(path.join(runtimeDirectory, 'boot.env')),

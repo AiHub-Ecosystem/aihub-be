@@ -92,8 +92,8 @@ await test('adaptive concurrency fails when no grading run saw a refusal', () =>
 /** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: Spread | null, goodputRps: Spread | null, overloadChangePercent: Spread | null, timeToBaselineSeconds: Spread | null, p50Ms: Spread | null, p95Ms: Spread | null, p99Ms: Spread, sampleVerdict: string}} RouteSummary */
 /** @typedef {{completionP99Ms: Spread, samples: Array<{status: string, count: number}>}} PathSummary */
 /** @typedef {{p95Ms: Spread | null, samples: Array<{failures: number, missedSamples: number}>}} ProbeSummary */
-/** @typedef {{label: string, verdict: string, offeredRateRps: number, probes: {health: ProbeSummary, readiness: ProbeSummary}, routes: Record<string, RouteSummary>, paths: Record<string, Record<string, PathSummary>>}} StageSummary */
-/** @typedef {{stages: StageSummary[]}} RepetitionSummary */
+/** @typedef {NonNullable<ReturnType<typeof import('./capacity-benchmark-utils.mjs').summarizeRepetitions>>} RepetitionSummary */
+/** @typedef {RepetitionSummary['stages'][number]} StageSummary */
 
 await test('reads Argon2 queue counters from Prometheus exposition', () => {
   assert.deepEqual(

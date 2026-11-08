@@ -50,6 +50,7 @@ function parseRequested(raw) {
 /**
  * Returns the worker count and why it was chosen, so the caller can report a
  * degraded run instead of letting it look like a slow machine.
+ * @param {{freeBytes?: number, requested?: string | null}} [options]
  */
 function resolveMaxWorkers({ freeBytes, requested } = {}) {
   const pinned = parseRequested(requested);

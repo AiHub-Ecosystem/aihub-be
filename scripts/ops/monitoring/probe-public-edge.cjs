@@ -112,7 +112,7 @@ function startPublicHealthMonitor(
   let busy = false;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
-  /** @type {(() => void) | undefined} */
+  /** @type {((value?: unknown) => void) | undefined} */
   let wake;
 
   /** @type {Promise<void>} */
@@ -141,14 +141,16 @@ function startPublicHealthMonitor(
 
       const remaining = intervalMs - (performance.now() - startedAt);
       if (running && remaining > 0) {
-        await new Promise((resolve) => {
-          wake = resolve;
-          timer = setTimeout(() => {
-            timer = undefined;
-            wake = undefined;
-            resolve();
-          }, remaining);
-        });
+        await new Promise(
+          (/** @type {(value?: unknown) => void} */ resolve) => {
+            wake = resolve;
+            timer = setTimeout(() => {
+              timer = undefined;
+              wake = undefined;
+              resolve();
+            }, remaining);
+          },
+        );
       }
     }
   })();

@@ -33,12 +33,12 @@ import {
 /** @typedef {GradingRouteName | AuthRouteName} BenchmarkRouteName */
 /** @typedef {BenchmarkRouteName | 'mixed_grading' | 'auth_and_grading'} BenchmarkWorkload */
 /** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
-/** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
-/** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
+/** @typedef {import('./capacity-benchmark-utils.mjs').PathPercentiles} PathPercentiles */
+/** @typedef {import('./capacity-benchmark-utils.mjs').PathTimings} PathTimings */
 /** @typedef {{count: number, requestsPerSecond: number, deadlineMs: number}} RouteGoodput */
 /** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: Percentiles}} ProbeResult */
 /** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
-/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {routes?: Record<string, {count: number, status: string}>, paths?: Record<string, Record<string, {count: number, status: string}>>}}} BenchmarkRun */
+/** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, completedRateRps?: number, droppedIterations?: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {minimumSamples?: number, status?: string, routes?: Record<string, {count?: number, status: string}>, paths?: Record<string, Record<string, {count?: number, status: string}>>}}} BenchmarkRun */
 /** @typedef {Record<string, {values?: Record<string, unknown>}>} MetricSet */
 /** @typedef {{totalMs: number[], admissionMs: number[], completionMs: number[], paths: Record<string, {admissionMs: number[], completionMs: number[]}>, errorsByCode: Record<string, number>}} RequestTiming */
 /** @typedef {BenchmarkRoute & {path: string, errorsByCode: Record<string, number>, transportErrorCount: number, correctedTotalMs: PathPercentiles, admissionMs: PathPercentiles, completionMs: PathPercentiles, timingsByPath: Record<string, PathTimings>, downstreamMs: Percentiles, gatewayTotalMs: Percentiles, responseShare?: number | null}} RouteResult */
@@ -50,7 +50,7 @@ import {
 /** @typedef {{startedAt: string, completedAt: string, result: string} | null} Argon2ChartVerification */
 /** @typedef {{idle: ProbeSamples, burst: ProbeSamples, chartVerification: Argon2ChartVerification, queueMetrics: Argon2QueueMetrics}} Argon2StopResponse */
 /** @typedef {{cpuPercent: number | null, memoryBytes: number | null, usedMemoryBytes: number | null}} ResourcePeak */
-/** @typedef {{cpuPercent: number | null, usedMemoryBytes: number, freeMemoryBytes: number}} HostSample */
+/** @typedef {{at: string, cpuPercent: number | null, memoryBytes?: number | null, usedMemoryBytes: number, freeMemoryBytes: number}} HostSample */
 /** @typedef {{exitCode: number | null, stdout: string, stderr: string, durationMs: number}} AppCommandResult */
 /** @typedef {{metrics: MetricSet}} K6Summary */
 /** @typedef {{errors: number | Record<string, number>, redisRoundTripDelayMs: number}} StubStats */
@@ -243,8 +243,11 @@ try {
   hostWatcher = watchHostResources();
 
   const gradingRoutes = gradingRouteNames;
+  /** @type {AuthRouteName[]} */
   const authRoutes = ['login', 'refresh', 'web_session_exchange'];
+  /** @type {BenchmarkRouteName[]} */
   const routeNames = [...gradingRoutes, ...authRoutes];
+  /** @type {Array<{ workload: BenchmarkWorkload; routeNames: BenchmarkRouteName[] }>} */
   const scenarios = [
     ...gradingRoutes.map((name) => ({ workload: name, routeNames: [name] })),
     { workload: 'mixed_grading', routeNames: gradingRoutes },
@@ -383,7 +386,10 @@ try {
 
   /** @type {Record<GradingRouteName, number>} */
   const deadlines = gradingRouteDeadlinesMs;
-  const mixedRuns = runs.filter((run) => run.workload === 'mixed_grading');
+  const mixedRuns =
+    /** @type {import('./capacity-benchmark-utils.mjs').BenchmarkRun[]} */ (
+      runs.filter((run) => run.workload === 'mixed_grading')
+    );
   const mixedSafeRate = highestPassingRate(
     mixedRuns,
     gradingRoutes,
@@ -396,7 +402,9 @@ try {
       {
         deadlineMs: deadlines[name],
         highestPassingRateRps: highestPassingRate(
-          runs.filter((run) => run.workload === name),
+          /** @type {import('./capacity-benchmark-utils.mjs').BenchmarkRun[]} */ (
+            runs.filter((run) => run.workload === name)
+          ),
           [name],
           deadlines[name],
           minimumGradingSamples,
@@ -839,13 +847,14 @@ function parseProbeSamples(value) {
   ) {
     throw new Error('invalid Argon2 probe samples');
   }
+  const samples = /** @type {ProbeSamples} */ (value);
   return {
-    dnsLookupSampleCount: value.dnsLookupSampleCount,
-    dnsLookupP95Ms: value.dnsLookupP95Ms,
-    jwtVerifySampleCount: value.jwtVerifySampleCount,
-    jwtVerifyP95Ms: value.jwtVerifyP95Ms,
-    probeFailures: value.probeFailures,
-    processRssPeakBytes: value.processRssPeakBytes,
+    dnsLookupSampleCount: samples.dnsLookupSampleCount,
+    dnsLookupP95Ms: samples.dnsLookupP95Ms,
+    jwtVerifySampleCount: samples.jwtVerifySampleCount,
+    jwtVerifyP95Ms: samples.jwtVerifyP95Ms,
+    probeFailures: samples.probeFailures,
+    processRssPeakBytes: samples.processRssPeakBytes,
   };
 }
 
@@ -1001,7 +1010,7 @@ async function dockerRestartCount(containerId) {
   return count;
 }
 
-/** @returns {Promise<Array<{reference: string, id: string, repoDigests: string[]}>>} */
+/** @returns {Promise<Array<{reference: string, imageId: string, repositoryDigests: string[]}>>} */
 async function dockerImageIdentities() {
   const { stdout } = await dockerCompose(['config', '--images']);
   const references = stdout.trim().split(/\r?\n/);
@@ -1025,7 +1034,7 @@ async function dockerImageIdentities() {
 
 /**
  * @param {{appContainerId: string, workload: BenchmarkWorkload, rate: number, routeNames: BenchmarkRouteName[], runDuration: string, label: string, onLoadFinished?: (time: number) => void, onLoadStarted?: (time: number) => void, isOverload?: boolean, isRecovery?: boolean}} options
- * @returns {Promise<BenchmarkRun & {processRssPeakBytes: number | null, postgresPoolWaitingPeak: Record<string, number>, appContainerResourcePeak: ResourcePeak & {cpuPercentOfLimit: number | null, memoryPercentOfLimit: number | null}, hostResourcePeak: ResourcePeak & {memoryPercentUsed: number | null}}>}
+ * @returns {Promise<BenchmarkRun & Record<string, unknown> & {processRssPeakBytes: number | null, postgresPoolWaitingPeak: Record<string, number>, appContainerResourcePeak: ResourcePeak & {cpuPercentOfLimit: number | null, memoryPercentOfLimit: number | null}, hostResourcePeak: ResourcePeak & {memoryPercentUsed: number | null}}>}
  */
 async function runK6({
   appContainerId,
@@ -1155,7 +1164,7 @@ async function runK6({
   const restartCountAfter = await dockerRestartCount(appContainerId);
   const pathSamples = Object.fromEntries(
     routeNames
-      .filter((name) => gradingRouteNames.includes(name))
+      .filter(isGradingRouteName)
       .map((name) => [
         name,
         gradedPathSampleAdequacy(
@@ -1193,10 +1202,12 @@ async function runK6({
     },
     sampleAdequacy: {
       minimumSamples: minimumGradingSamples,
-      status: routeNames.some((name) => gradingRouteNames.includes(name))
+      status: routeNames.some(isGradingRouteName)
         ? hasMinimumRouteSamples(
             { routes: routeResults },
-            routeNames.filter((name) => gradingRouteNames.includes(name)),
+            /** @type {BenchmarkRouteName[]} */ (
+              routeNames.filter(isGradingRouteName)
+            ),
             minimumGradingSamples,
           ) && pathSamplesAdequate
           ? 'sufficient'
@@ -1205,7 +1216,7 @@ async function runK6({
       routes: Object.fromEntries(
         routeNames.map((name) => [
           name,
-          gradingRouteNames.includes(name)
+          isGradingRouteName(name)
             ? {
                 count: routeResults[name].count,
                 status:
@@ -1221,13 +1232,11 @@ async function runK6({
     appResourceSampleCount: appSamples.length,
     hostResourceSampleCount: hostSamples.length,
     injectedStubErrors: stub.errors,
-    processRssPeakBytes: metricValue(
-      summary.metrics,
-      'benchmark_process_rss_bytes',
+    processRssPeakBytes: /** @type {number | null} */ (
+      metricValue(summary.metrics, 'benchmark_process_rss_bytes')
     ),
-    processHeapPeakBytes: metricValue(
-      summary.metrics,
-      'benchmark_process_heap_bytes',
+    processHeapPeakBytes: /** @type {number | null} */ (
+      metricValue(summary.metrics, 'benchmark_process_heap_bytes')
     ),
     eventLoopLagPeakSeconds: metricValue(
       summary.metrics,
@@ -1262,7 +1271,7 @@ async function runK6({
   };
 }
 
-/** @param {MetricSet} metrics @param {BenchmarkRouteName} name @param {RequestTiming} [logTiming] @param {number} durationSeconds @param {boolean} isRecovery @returns {RouteResult} */
+/** @param {MetricSet} metrics @param {BenchmarkRouteName} name @param {RequestTiming} [logTiming] @param {number} [durationSeconds] @param {boolean} [isRecovery] @returns {RouteResult} */
 function routeSummary(metrics, name, logTiming, durationSeconds, isRecovery) {
   const latency = metrics[`benchmark_latency_${name}`]?.values ?? {};
   const routePaths = {

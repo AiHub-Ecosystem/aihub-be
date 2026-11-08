@@ -37,13 +37,17 @@ const gradingRoutes = [
   'speaking_json',
 ];
 /** @type {Record<RouteName, import('k6/metrics').Counter>} */
-const routeResponseCounts = {};
+const routeResponseCounts =
+  /** @type {Record<RouteName, import('k6/metrics').Counter>} */ ({});
 /** @type {Record<RouteName, import('k6/metrics').Counter>} */
-const routeErrorCounts = {};
+const routeErrorCounts =
+  /** @type {Record<RouteName, import('k6/metrics').Counter>} */ ({});
 /** @type {Record<RouteName, import('k6/metrics').Counter>} */
-const routeTransportErrorCounts = {};
+const routeTransportErrorCounts =
+  /** @type {Record<RouteName, import('k6/metrics').Counter>} */ ({});
 /** @type {Record<GradingRouteName, import('k6/metrics').Counter>} */
-const routeGoodputCounts = {};
+const routeGoodputCounts =
+  /** @type {Record<GradingRouteName, import('k6/metrics').Counter>} */ ({});
 for (const name of allRoutes) {
   routeResponseCounts[name] = new Counter(`benchmark_api_responses_${name}`);
   routeErrorCounts[name] = new Counter(`benchmark_api_errors_${name}`);
@@ -230,7 +234,11 @@ export function load(data) {
   if (selected === 'login') return requestLogin(user);
   if (selected === 'refresh') return requestRefresh(user);
   if (selected === 'web_session_exchange') return requestWebSession(user);
-  return requestGrade(selected, organization, user);
+  return requestGrade(
+    /** @type {GradingRouteName} */ (selected),
+    organization,
+    user,
+  );
 }
 
 export function scrapeMetrics() {

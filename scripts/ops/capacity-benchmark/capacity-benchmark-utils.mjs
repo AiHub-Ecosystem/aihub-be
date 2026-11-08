@@ -12,24 +12,25 @@ export const gradingRouteDeadlinesMs = {
   speaking_json: 30_000,
 };
 /** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
-/** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
+/** @typedef {{count?: number, p50: number | null, p95?: number | null, p99: number | null}} PathPercentiles */
 /** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
-/** @typedef {{count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}} SampleAdequacy */
+/** @typedef {{count?: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}} SampleAdequacy */
 /** @typedef {{count: number, requestsPerSecond: number, deadlineMs: number}} RouteGoodput */
 /** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: Percentiles}} ProbeResult */
 /** @typedef {{count: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, errorCount: number, acceptedLatencyMs: Percentiles, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
 /** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {routes?: Record<string, SampleAdequacy>, paths?: Record<string, Record<string, SampleAdequacy>>}}} BenchmarkRun */
-/** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {logicalCpuCount: number, totalMemoryBytes: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
+/** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {logicalCpuCount: number, totalMemoryBytes?: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
 /** @typedef {{min: number | null, median: number | null, max: number | null}} NumericSpread */
 /** @typedef {{samples: Array<{repetition: number, count: number, status: string, admissionP50Ms: number | null, admissionP99Ms: number | null, completionP50Ms: number | null, completionP99Ms: number | null}>, admissionP50Ms: NumericSpread | null, admissionP99Ms: NumericSpread | null, completionP50Ms: NumericSpread | null, completionP99Ms: NumericSpread | null, sampleVerdict: 'sufficient' | 'inconclusive'}} RepetitionPathSummary */
 /** @typedef {{samples: Array<{errorCount: number}>, acceptedP99Ms: NumericSpread | null, p50Ms: NumericSpread | null, p95Ms: NumericSpread | null, p99Ms: NumericSpread | null, sampleVerdict: string}} RepetitionRouteSummary */
+/** @typedef {Pick<BenchmarkRun, 'offeredRateRps' | 'holdDuration' | 'completedRequests'> & { routes: Record<string, { count: number, p99Ms: number | null, errorCount: number }>, droppedIterations?: number }} BenchmarkPassingRateRun */
 
 /** @param {number} durationSeconds */
 export function k6ProcessTimeoutMs(durationSeconds) {
   return (durationSeconds + K6_GRACEFUL_STOP_SECONDS + 30) * 1000;
 }
 
-/** @param {BenchmarkRun[]} runs @param {BenchmarkRouteName[]} routeNames @param {number | Record<string, number>} deadlineMs @param {number} [minimumSamples] */
+/** @param {Array<BenchmarkPassingRateRun>} runs @param {BenchmarkRouteName[]} routeNames @param {number | Record<string, number>} deadlineMs @param {number} [minimumSamples] */
 export function highestPassingRate(
   runs,
   routeNames,
@@ -84,7 +85,7 @@ const gradedPathPairs = {
   speaking_json: ['declared_id:none', 'signed_assertion:none'],
 };
 
-/** @param {Pick<BenchmarkRun, 'routes'>} run @param {BenchmarkRouteName[]} routeNames @param {number} minimumSamples */
+/** @param {{ routes: Record<string, { count?: number } | undefined> }} run @param {BenchmarkRouteName[]} routeNames @param {number} minimumSamples */
 export function hasMinimumRouteSamples(run, routeNames, minimumSamples) {
   return (
     Number.isSafeInteger(minimumSamples) &&
@@ -129,7 +130,7 @@ export function summarizeGradedPathTimings(paths) {
   );
 }
 
-/** @param {GradingRouteName} route @param {Record<string, PathTimings>} timings @param {number} minimumSamples @returns {Record<string, SampleAdequacy>} */
+/** @param {GradingRouteName} route @param {Record<string, { completionMs?: { count?: number }, [key: string]: unknown } | undefined>} timings @param {number} minimumSamples @returns {Record<string, SampleAdequacy>} */
 export function gradedPathSampleAdequacy(route, timings, minimumSamples) {
   return Object.fromEntries(
     gradedPathPairs[route].map((path) => {
@@ -164,7 +165,7 @@ export function minimumGradingHoldSeconds(
   }
 
   let lowestRouteShare;
-  if (gradingRoutes.includes(workload)) {
+  if (gradingRoutes.includes(/** @type {GradingRouteName} */ (workload))) {
     lowestRouteShare = 1;
   } else if (workload === 'mixed_grading') {
     lowestRouteShare = 1 / gradingRoutes.length;
@@ -450,26 +451,29 @@ export function summarizeRepetitions(reports, expectedRepetitions) {
         offeredRateRps: firstSample.run.offeredRateRps,
         repetitionCount: samples.length,
         verdict: complete && sampleAdequate ? 'sufficient' : 'inconclusive',
-        probes: Object.fromEntries(
-          /** @type {const} */ (['health', 'readiness']).map((name) => {
-            const probeSamples = samples.map(({ repetition, run }) => ({
-              repetition,
-              count: run.probes[name].count,
-              failures: run.probes[name].failures,
-              missedSamples: run.probes[name].missedSamples,
-              p95Ms: run.probes[name].latencyMs.p95,
-            }));
-            return [
-              name,
-              {
-                samples: probeSamples,
-                p95Ms: numericSpread(
-                  probeSamples.map((sample) => sample.p95Ms),
-                ),
-              },
-            ];
-          }),
-        ),
+        probes:
+          /** @type {Record<'health' | 'readiness', { samples: Array<{ repetition: number, count: number, failures: number, missedSamples: number, p95Ms: number | null }>, p95Ms: NumericSpread | null }>} */ (
+            Object.fromEntries(
+              /** @type {const} */ (['health', 'readiness']).map((name) => {
+                const probeSamples = samples.map(({ repetition, run }) => ({
+                  repetition,
+                  count: run.probes[name].count,
+                  failures: run.probes[name].failures,
+                  missedSamples: run.probes[name].missedSamples,
+                  p95Ms: run.probes[name].latencyMs.p95,
+                }));
+                return [
+                  name,
+                  {
+                    samples: probeSamples,
+                    p95Ms: numericSpread(
+                      probeSamples.map((sample) => sample.p95Ms),
+                    ),
+                  },
+                ];
+              }),
+            )
+          ),
         routes,
         paths,
       };
@@ -719,9 +723,10 @@ export function parseDockerStats(line) {
   if (memory != null && typeof memory !== 'string') {
     throw new Error('invalid Docker stats output');
   }
+  const memoryString = /** @type {string | null} */ (memory);
   return {
     cpuPercent: parseFloat(String(stats.CPUPerc)),
-    memoryBytes: parseBytes(memory?.split('/')[0]?.trim() ?? ''),
+    memoryBytes: parseBytes(memoryString?.split('/')[0]?.trim() ?? ''),
   };
 }
 

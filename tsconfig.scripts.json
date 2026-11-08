@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "target": "ES2022",
+    "lib": ["es2024", "ESNext.Array", "ESNext.Collection", "ESNext.Iterator"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@prisma-client/*": ["./dist/generated/prisma/*"]
+    },
+    "types": ["node"],
+    "skipLibCheck": true,
+    "strict": false
+  },
+  "include": ["scripts/**/*.mjs", "scripts/**/*.cjs", "scripts/**/*.js"],
+  "exclude": ["node_modules", "dist", "coverage", "temp"]
+}

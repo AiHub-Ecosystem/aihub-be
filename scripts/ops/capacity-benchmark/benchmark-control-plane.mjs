@@ -19,17 +19,16 @@ const { PrismaClient } = prismaClientModule;
 /** @typedef {{id: string, organizationId: string, status: string, scopes: string[], allowedEnvironments: string[], expiresAt: Date | null, organization: {status: string, entitlements: string[], rateLimitRpm: number, maxConcurrent: number, monthlyRequestQuota: number | null, hardStopOnQuota: boolean}}} PrismaApiKeyRow */
 /** @typedef {RawApiKeyRow | PrismaApiKeyRow} ApiKeyLookupRow */
 /** @typedef {{organizationId: string, apiKeyId: string, organizationStatus: string, status: string, scopes: string[], entitlements: string[], allowedEnvironments: string[], expiresAt: Date | null, rateLimitRpm: number, maxConcurrent: number, monthlyRequestQuota: number | null, hardStopOnQuota: boolean}} ApiKeyOutputInput */
-/** @typedef {ApiKeyOutputInput} ApiKeyOutput */
+/** @typedef {{organizationId: string, apiKeyId: string, organizationStatus: string, status: string, scopes: string[], entitlements: string[], allowedEnvironments: string[], expiresAt: string | null, rateLimitRpm: number, maxConcurrent: number, monthlyRequestQuota: number | null, hardStopOnQuota: boolean}} ApiKeyOutput */
 /** @typedef {{billable_request_count: string | number | bigint, billable_token_count: string | number | bigint, missing_usage_count: string | number | bigint}} UsageAggregateRow */
 /** @typedef {{request_id?: string, requestId?: string}} MeteringInsertRow */
 /** @typedef {{requestId: string | null, organizationId: string, apiKeyId: string, actorId: null, service: string, operation: string, environment: string, outcome: string, httpStatus: number, errorCode: null, billableRequests: number, inputTokens: number, outputTokens: number, totalTokens: number, models: null, meteringStatus: string, totalMs: number, downstreamMs: number, aiProcessingMs: number}} UsageRecord */
 /** @typedef {{reset: () => void, count: () => number}} PoolMetrics */
-/** @typedef {(queryText: string, values?: Array<string | number | boolean | null | Date | Buffer>, callback?: import('pg').QueryResultCallback) => Promise<import('pg').QueryResult> | import('pg').Query} PgClientQuery */
+/** @typedef {(queryText: string, values?: Array<string | number | boolean | null | Date | Buffer>, callback?: (error: Error, result: unknown) => void) => Promise<import('pg').QueryResult> | import('pg').Query} PgClientQuery */
 /** @typedef {{metrics: PoolMetrics, name?: string, apiKeyLookup: () => Promise<ApiKeyLookupRow | null>, meteringInsert: (requestId: string) => Promise<MeteringInsertRow[]>, usageAggregate: (from: Date, to: Date) => Promise<UsageAggregateRow | undefined>, normalizeApiKey: (row: ApiKeyLookupRow | null) => ReturnType<typeof apiKeyOutput>, normalizeMeteringInsert: (rows: MeteringInsertRow[]) => Array<{requestId: string | undefined}>, normalizeUsageAggregate: (row: UsageAggregateRow | undefined) => ReturnType<typeof aggregateOutput>}} BenchmarkMode */
 /** @typedef {Record<'raw' | 'prisma' | 'prismaRaw', BenchmarkMode>} BenchmarkModes */
-/** @typedef {{name: string, label: string, from?: Date, to?: Date}} BenchmarkOperation */
 /** @typedef {{p50: number | null, p95: number | null, completedRate: number, roundTrips: number | null, failures: number}} PassResult */
-/** @typedef {{name: 'apiKeyLookup' | 'meteringInsert' | 'lookupThenInsert', label: string} | {name: 'usageAggregate', label: string, from: Date, to: Date}} BenchmarkOperation */
+/** @typedef {{name: 'apiKeyLookup' | 'meteringInsert' | 'lookupThenInsert' | 'usageAggregate', label: string, from?: Date, to?: Date}} BenchmarkOperation */
 /** @typedef {'raw' | 'prisma' | 'prismaRaw'} BenchmarkModeName */
 /** @typedef {Record<BenchmarkModeName, BenchmarkMode>} BenchmarkModeSet */
 /** @typedef {{apiKeyLookup: ApiKeyOutput | null, meteringInsert: Array<{requestId: string | undefined}>, lookupThenInsert: {apiKey: ApiKeyOutput | null, inserted: Array<{requestId: string | undefined}>}, usageAggregate: ReturnType<typeof aggregateOutput>}} BenchmarkOutputs */
@@ -72,14 +71,16 @@ function parseRawApiKeyRow(value) {
     api_key_id: value.api_key_id,
     organization_status: value.organization_status,
     status: value.status,
-    scopes: value.scopes,
-    entitlements: value.entitlements,
-    allowed_environments: value.allowed_environments,
-    expires_at: value.expires_at,
-    rate_limit_rpm: value.rate_limit_rpm,
-    max_concurrent: value.max_concurrent,
-    monthly_request_quota: value.monthly_request_quota,
-    hard_stop_on_quota: value.hard_stop_on_quota,
+    scopes: /** @type {string[]} */ (value.scopes),
+    entitlements: /** @type {string[]} */ (value.entitlements),
+    allowed_environments: /** @type {string[]} */ (value.allowed_environments),
+    expires_at: /** @type {Date | null} */ (value.expires_at),
+    rate_limit_rpm: /** @type {number} */ (value.rate_limit_rpm),
+    max_concurrent: /** @type {number} */ (value.max_concurrent),
+    monthly_request_quota: /** @type {number | null} */ (
+      value.monthly_request_quota
+    ),
+    hard_stop_on_quota: /** @type {boolean} */ (value.hard_stop_on_quota),
   };
 }
 
@@ -266,16 +267,16 @@ function instrumentPool(pool) {
         return;
       }
       wrapped.add(client);
-      /** @type {PgClientQuery} */
       const query = client.query.bind(client);
-      /** @type {PgClientQuery} */
-      client.query = (queryText, values, callback) => {
-        statements += 1;
-        if (callback !== undefined) return query(queryText, values, callback);
-        return values === undefined
-          ? query(queryText)
-          : query(queryText, values);
-      };
+      client.query = /** @type {typeof client.query} */ (
+        (queryText, values, callback) => {
+          statements += 1;
+          if (callback !== undefined) return query(queryText, values, callback);
+          return values === undefined
+            ? query(queryText)
+            : query(queryText, values);
+        }
+      );
     },
   );
   return {
@@ -286,7 +287,7 @@ function instrumentPool(pool) {
   };
 }
 
-/** @param {ApiKeyOutputInput | null | undefined} row */
+/** @param {ApiKeyOutputInput | null | undefined} row @returns {ApiKeyOutput | null} */
 function apiKeyOutput(row) {
   if (row === null || row === undefined) {
     return null;
@@ -429,7 +430,7 @@ function canonical(value) {
   return JSON.stringify(value);
 }
 
-/** @param {string | URL} databaseUrl */
+/** @param {string} databaseUrl */
 async function applyMigrations(databaseUrl) {
   const migrationsDirectory = join(ROOT, 'prisma/migrations');
   const files = (await readdir(migrationsDirectory, { withFileTypes: true }))

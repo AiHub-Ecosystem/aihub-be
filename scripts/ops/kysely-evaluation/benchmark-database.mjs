@@ -153,7 +153,9 @@ async function seed(pool, from, to) {
 /** @param {QueryResult} result @returns {NormalizedRow[]} */
 function normalize(result) {
   const rows = /** @type {readonly AggregateRow[]} */ (
-    Array.isArray(result) ? result : result.rows
+    Array.isArray(result)
+      ? result
+      : /** @type {{ rows: readonly AggregateRow[] }} */ (result).rows
   );
   return rows.map((row) => ({
     organization_id: row.organization_id,
@@ -230,20 +232,20 @@ async function main() {
     /** @type {Record<string, () => Promise<QueryResult>>} */
     const modes = {
       prismaRaw: () =>
-        /** @type {NonNullable<typeof prisma>>} */ (prisma).$queryRawUnsafe(
+        /** @type {NonNullable<typeof prisma>} */ (prisma).$queryRawUnsafe(
           QUOTA_RECONCILIATION_SQL,
           from,
           to,
         ),
       rawPg: () =>
-        /** @type {NonNullable<typeof pool>>} */ (pool).query(
+        /** @type {NonNullable<typeof pool>} */ (pool).query(
           QUOTA_RECONCILIATION_SQL,
           [from, to],
         ),
       kysely: () =>
-        /** @type {NonNullable<typeof database>>} */ (database).executeQuery(
+        /** @type {NonNullable<typeof database>} */ (database).executeQuery(
           compileKyselyQuotaReconciliation(
-            /** @type {NonNullable<typeof database>>} */ (database),
+            /** @type {NonNullable<typeof database>} */ (database),
             from,
             to,
           ),

@@ -5,7 +5,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
-/** @typedef {{host_ip?: string, target?: number, published?: string, protocol?: string}} MonitoringPort */
+/** @typedef {{host_ip?: string, target?: number, published?: string, protocol?: string} | string} MonitoringPort */
 /** @typedef {{target: string, read_only?: boolean}} MonitoringVolume */
 /** @typedef {{command?: string[], ports?: MonitoringPort[], volumes?: MonitoringVolume[], networks?: {monitoring?: {ipv4_address?: string}, redis?: object | null}, build?: {args?: Record<string, string>}, user?: string, privileged?: boolean, cap_add?: string[], profiles?: string[], mem_limit?: string | number, cpus?: number, read_only?: boolean, [key: string]: unknown}} MonitoringService */
 /** @typedef {{services: Record<string, MonitoringService>}} MonitoringCompose */
@@ -431,7 +431,9 @@ void test('rejects a public listener, published port, or weakened container boun
   );
 
   const publicPrometheus = validExporterCompose();
-  publicPrometheus.services['prometheus-aihub'].ports[0].host_ip = '0.0.0.0';
+  /** @type {{host_ip?: string}} */ (
+    publicPrometheus.services['prometheus-aihub'].ports[0]
+  ).host_ip = '0.0.0.0';
   assert.throws(
     () => validateExporterCompose(publicPrometheus),
     /must publish only on loopback/,

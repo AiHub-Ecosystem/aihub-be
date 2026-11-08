@@ -100,6 +100,7 @@ export const GATE_COMMANDS = {
   'test:shell-specs': 'test:shell-specs',
   'test:related': 'test:related',
   'type-check': 'type-check',
+  'type-check:scripts': 'type-check:scripts',
   'validate:openapi': 'validate:openapi',
 };
 
@@ -188,6 +189,9 @@ function classifyPathGates(p) {
   }
   if (path === 'tsconfig.json') {
     return ['type-check'];
+  }
+  if (path === 'tsconfig.scripts.json') {
+    return ['type-check:scripts'];
   }
   if (path === 'knip.json') {
     return ['knip'];
