@@ -381,4 +381,40 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     expect(brokenStore.isRevokedCalls).toHaveLength(1);
     await degradedAdapter.close();
   });
+
+  it('re-seeds after a failed boot seed and re-engages the fast path', async () => {
+    const recoveringStore = new RecordingRevocationAdapter();
+    let seedAttempts = 0;
+    recoveringStore.listActiveRevocations = jest.fn(async () => {
+      seedAttempts += 1;
+      if (seedAttempts < 2) {
+        throw new Error('DB connection refused');
+      }
+      return [{ issuer: 'aihub_test', jti: 'seeded_on_retry_jti' }];
+    });
+
+    const retryAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying: recoveringStore,
+      bloomFilter: new InProcessBloomFilter(),
+    });
+    await retryAdapter.init();
+    expect(retryAdapter.isSeeded).toBe(false);
+
+    // The adapter schedules its own background retry; driving seed() here
+    // proves the second attempt re-engages the fast path without a restart.
+    await retryAdapter.seed();
+    expect(retryAdapter.isSeeded).toBe(true);
+    expect(seedAttempts).toBe(2);
+
+    // Fast path is engaged: an unrevoked token avoids the store entirely.
+    const callsBefore = recoveringStore.isRevokedCalls.length;
+    const unrevoked = await retryAdapter.isRevoked({
+      issuer: 'aihub_test',
+      jti: 'unrevoked_after_recovery',
+      now: new Date(),
+    });
+    expect(unrevoked).toBe(false);
+    expect(recoveringStore.isRevokedCalls.length).toBe(callsBefore);
+    await retryAdapter.close();
+  });
 });

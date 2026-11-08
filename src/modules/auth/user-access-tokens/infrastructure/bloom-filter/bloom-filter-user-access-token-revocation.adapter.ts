@@ -36,6 +36,10 @@ const RevocationMessageSchema = Type.Object({
 });
 type RevocationMessage = Static<typeof RevocationMessageSchema>;
 
+// A failed boot seed usually means a cold connection pool; the retry re-engages
+// the fast path without a restart. Bounded so a down database is not hammered.
+const SEED_RETRY_DELAY_MS = 10_000;
+
 export class BloomFilterUserAccessTokenRevocationAdapter
   implements UserAccessTokenRevocationRecordPort, OnModuleDestroy
 {
@@ -51,6 +55,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   private seeded = false;
   private seedReady: Promise<number>;
   private subscriberReady: Promise<void> | undefined;
+  private seedRetryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: BloomFilterRevocationAdapterOptions) {
     this.underlying = options.underlying;
@@ -85,6 +90,10 @@ export class BloomFilterUserAccessTokenRevocationAdapter
         this.bloomFilter.add(this.buildKey(record.issuer, record.jti));
       }
       this.seeded = true;
+      if (this.seedRetryTimer !== undefined) {
+        clearTimeout(this.seedRetryTimer);
+        this.seedRetryTimer = undefined;
+      }
       return active.length;
     } catch (error) {
       this.seeded = false;
@@ -92,8 +101,20 @@ export class BloomFilterUserAccessTokenRevocationAdapter
         'Failed to seed token revocations from underlying store',
         error,
       );
+      // The failure is usually a cold connection pool at boot; a bounded
+      // background retry re-engages the fast path without a restart.
+      this.scheduleSeedRetry();
       return 0;
     }
+  }
+
+  private scheduleSeedRetry(): void {
+    if (this.seedRetryTimer !== undefined) return;
+    this.seedRetryTimer = setTimeout(() => {
+      this.seedRetryTimer = undefined;
+      void this.seed().catch(() => undefined);
+    }, SEED_RETRY_DELAY_MS);
+    this.seedRetryTimer.unref?.();
   }
 
   async init(now?: Date): Promise<void> {
@@ -172,6 +193,10 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   }
 
   async close(): Promise<void> {
+    if (this.seedRetryTimer !== undefined) {
+      clearTimeout(this.seedRetryTimer);
+      this.seedRetryTimer = undefined;
+    }
     if (this.redisSubscriber) {
       try {
         await this.redisSubscriber.unsubscribe(this.channel);
