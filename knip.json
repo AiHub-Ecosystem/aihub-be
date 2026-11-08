@@ -91,6 +91,10 @@
     // Hand-written types for scripts/checks/jest-worker-cap.cjs — same reason:
     // Jest reaches it through jest.config.cjs, outside the TypeScript graph.
     "scripts/checks/jest-worker-cap.d.cts",
+    // Hand-written types for scripts/checks/knip-cache-args.cjs — same reason:
+    // the spec reaches the .cjs through TypeScript, so without this knip
+    // reports a live file as unused.
+    "scripts/checks/knip-cache-args.d.cts",
     // Hand-written types for Vault's PgBouncer budget module; Knip does not
     // follow TypeScript's adjacent-declaration lookup from the .mjs import.
     "ops/vault/pgbouncer-budget.d.mts",
