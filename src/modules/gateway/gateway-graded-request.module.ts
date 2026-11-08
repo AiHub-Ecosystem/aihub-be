@@ -12,8 +12,10 @@ import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
 } from '@/modules/gateway/application/graded-request/grading-orchestrator.port';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
-import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyServicePort,
+} from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
   METERING_FINALIZER,

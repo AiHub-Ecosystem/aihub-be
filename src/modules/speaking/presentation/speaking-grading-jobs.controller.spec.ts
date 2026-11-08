@@ -13,12 +13,12 @@ import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concu
 import type { DispatchObserverPort } from '@/modules/gateway/application/dispatch/dispatch-observer.port';
 import { GuardedOperationDispatcher } from '@/modules/gateway/application/dispatch/guarded-operation-dispatcher';
 import type { OperationTransportPort } from '@/modules/gateway/application/dispatch/operation-transport.port';
-import type {
-  GradedAdmissionDecision,
-  GradedAdmissionPort,
-  GradedAdmissionRequest,
+import {
+  GRADED_ADMISSION,
+  type GradedAdmissionDecision,
+  type GradedAdmissionPort,
+  type GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
-import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { GradingOrchestrator } from '@/modules/gateway/application/graded-request/grading-orchestrator';
 import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
@@ -45,8 +45,10 @@ import {
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
 import { SpeakingGradingJobSweep } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.sweep';
 import { SubmitSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/submit-speaking-grading-job';
-import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
-import { SPEAKING_AUDIO_UPLOAD_REPOSITORY } from '@/modules/speaking/application/speaking-audio-upload.port';
+import {
+  SPEAKING_AUDIO_UPLOAD_REPOSITORY,
+  type SpeakingAudioAssetStoragePort,
+} from '@/modules/speaking/application/speaking-audio-upload.port';
 import { SpeakingGradingJobsController } from './speaking-grading-jobs.controller';
 import {
   ASSET_ID,

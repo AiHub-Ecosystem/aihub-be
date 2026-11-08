@@ -15,11 +15,11 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
-import type {
-  ApiKeyAuthenticatorPort,
-  AuthenticatedApiKey,
+import {
+  API_KEY_AUTHENTICATOR,
+  type ApiKeyAuthenticatorPort,
+  type AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';

@@ -9,8 +9,7 @@ import {
 } from '@nestjs/common/constants';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import type { PublicRouteDef } from '@/catalog/public-routes';
+import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
 import { ApiKeyUserIdentityGuard } from '@/modules/identity/api-keys/presentation/api-key-user-identity.guard';
 import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
 import {

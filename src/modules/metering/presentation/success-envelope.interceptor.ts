@@ -25,10 +25,8 @@ import {
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
-} from '@/modules/metering/application/usage-recording/metering-finalizer.port';
-import type {
-  MeteringModel,
-  MeteringUsage,
+  type MeteringModel,
+  type MeteringUsage,
 } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 
 interface DispatchResultLike {

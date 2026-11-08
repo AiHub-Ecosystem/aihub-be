@@ -19,14 +19,14 @@ import {
   type OperationDispatcherPort,
 } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import type {
-  IdempotencyExecution,
-  IdempotencyExecutionInput,
-  IdempotencyReplayDecoder,
-  IdempotencyServicePort,
-  IdempotencyWork,
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyExecution,
+  type IdempotencyExecutionInput,
+  type IdempotencyReplayDecoder,
+  type IdempotencyServicePort,
+  type IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,

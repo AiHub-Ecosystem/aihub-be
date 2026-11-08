@@ -1,13 +1,11 @@
 import { internalError } from '@/common/errors/app-error';
-import type {
-  EmailDispatchOptions,
-  EmailMessage,
-  EmailProviderResponse,
-  EmailSenderPort,
-} from '@/modules/auth/email-delivery/application/email-sender.port';
 import {
   EMAIL_ATTEMPT_TIMEOUT_MS,
+  type EmailDispatchOptions,
+  type EmailMessage,
+  type EmailProviderResponse,
   EmailProviderTransportError,
+  type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import type { ResendRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 

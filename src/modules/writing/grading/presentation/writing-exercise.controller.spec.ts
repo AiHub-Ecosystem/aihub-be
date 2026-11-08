@@ -1,9 +1,9 @@
 import type { OperationId } from '@/catalog/operation-id';
-import type {
-  GradedPipelineContext,
-  GradedPipelineEnginePort,
+import {
+  type GradedPipelineContext,
+  type GradedPipelineEnginePort,
+  createGradedPipelineContext,
 } from '@/modules/gateway/public/graded-pipeline';
-import { createGradedPipelineContext } from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { WritingExerciseController } from './writing-exercise.controller';
 

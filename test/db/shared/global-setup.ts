@@ -15,11 +15,11 @@ import {
 } from './database';
 import {
   DATABASE_LANE_TEMPLATE_NAME,
+  type MigrationFile,
   databaseTemplateAction,
   databaseTemplateDescription,
   migrationFingerprint,
 } from './database-template';
-import type { MigrationFile } from './database-template';
 import { timeDatabasePhase } from './lane-timing';
 
 const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');

@@ -51,6 +51,7 @@
     // spec-file idiom. Enabling the two by name keeps this a positive list —
     // nothing is switched off to make the run green.
     "promise/always-return": "error",
+    "import/no-duplicates": ["error", { "prefer-inline": true }],
     "import/no-named-as-default-member": "error",
     // Type-aware rules for #110 — gateway defect class. `no-floating-promises`,
     // `no-misused-promises`, and `await-thenable` are the direct gateway failure

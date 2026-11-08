@@ -1,6 +1,8 @@
 import { internalError } from '@/common/errors/app-error';
-import type { QueueEmailDeliveryRequestInput } from '@/modules/auth/email-delivery/application/email-outbox.port';
-import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import {
+  type EmailOutboxPort,
+  type QueueEmailDeliveryRequestInput,
+} from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type {
   AuthMfaFactorRecord,
   AuthMfaRepositoryPort,

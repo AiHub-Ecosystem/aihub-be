@@ -11,8 +11,10 @@ import type {
   EmailOutboxWalSlotHealth,
   ReleaseUnspentEmailAttemptInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
-import type { EmailDeliveryBacklogRow } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
+import {
+  type EmailDeliveryBacklogRow,
+  PostgresEmailDeliveryRequestRepository,
+} from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { authQueryRows } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import type { claimEmailDeliveryRequests } from './email-delivery-claim';
 import { readEmailOutboxCancellationTimestamps } from './postgres-email-outbox-cancellation-metrics';

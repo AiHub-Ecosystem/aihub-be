@@ -594,11 +594,12 @@ model SpeakingAudioAsset {
   retentionExpiresAt   DateTime @map("retention_expires_at") @db.Timestamptz(6)
 
   @@index([retentionExpiresAt, id], map: "speaking_audio_assets_retention_idx")
+  @@index([organizationId], map: "speaking_audio_assets_org_idx")
   @@map("speaking_audio_assets")
 }
 
 /// A durable Speaking grading job; PostgreSQL remains its source of truth.
-/// Status, id and identity-mode checks plus sweep indexes are owned by migration 0062.
+/// Status, id and identity-mode checks plus sweep indexes are owned by migration 0063.
 /// @owner speaking
 model SpeakingGradingJob {
   jobId             String    @id @map("job_id")
@@ -654,7 +655,8 @@ model SpeakingV2ResultOwnership {
 ///
 /// The partial indexes `speaking_audio_upload_intents_expiry_idx` and
 /// `speaking_audio_upload_intents_rejected_idx`, and this table's `CHECK`
-/// constraints, are owned by migration 0025.
+/// constraints, are owned by migration 0025; the organization ceiling indexes
+/// are owned by migration 0062.
 /// @owner speaking
 model SpeakingAudioUploadIntent {
   id             String   @id
@@ -668,6 +670,8 @@ model SpeakingAudioUploadIntent {
   createdAt      DateTime @map("created_at") @db.Timestamptz(6)
   expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
 
+  @@index([organizationId, createdAt], map: "speaking_audio_upload_intents_org_idx")
+  @@index([organizationId, expiresAt], map: "speaking_audio_upload_intents_org_open_idx", where: raw("(status = 'open'::text)"))
   @@index([expiresAt, createdAt], map: "speaking_audio_upload_intents_expiry_idx", where: raw("(status = 'open'::text)"))
   @@index([createdAt], map: "speaking_audio_upload_intents_rejected_idx", where: raw("(status = 'rejected'::text)"))
   @@map("speaking_audio_upload_intents")
@@ -779,6 +783,7 @@ model UserAccount {
   passwordResetTokens PasswordResetToken?
   refreshTokens     RefreshToken[]
   avatar            UserAvatar?
+  avatarUploadGrants UserAvatarUploadGrant[]
   mfaFactor         UserMfaFactor?
   mfaRecoveryCodes  UserMfaRecoveryCode[]
   webSessions       WebSession[]
@@ -803,6 +808,26 @@ model UserAvatar {
   userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onUpdate: NoAction)
 
   @@map("user_avatars")
+}
+
+/// One presigned Avatar upload URL an account holds and has not consumed yet.
+///
+/// Bounds how many URLs one account can have open at once and how many it is
+/// issued per rolling window (#374). A consumed row keeps counting toward the
+/// issuance window, so completing an upload never restores issuance headroom.
+/// @owner avatar
+model UserAvatarUploadGrant {
+  id            String      @id
+  userAccountId String      @map("user_account_id")
+  objectKey     String      @unique(map: "user_avatar_upload_grants_object_key_key") @map("object_key")
+  status        String      @default("open")
+  createdAt     DateTime    @map("created_at") @db.Timestamptz(6)
+  expiresAt     DateTime    @map("expires_at") @db.Timestamptz(6)
+  userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userAccountId, createdAt], map: "user_avatar_upload_grants_issuance_idx")
+  @@index([expiresAt], map: "user_avatar_upload_grants_expiry_idx")
+  @@map("user_avatar_upload_grants")
 }
 
 /// A TOTP second factor.

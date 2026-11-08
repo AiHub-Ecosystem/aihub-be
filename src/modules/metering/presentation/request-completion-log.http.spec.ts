@@ -28,25 +28,29 @@ import {
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
-import type { DispatchResult } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
-import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import {
+  type DispatchResult,
+  OPERATION_DISPATCHER,
+} from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
-import type {
-  IdempotencyExecution,
-  IdempotencyExecutionInput,
-  IdempotencyReplayDecoder,
-  IdempotencyServicePort,
-  IdempotencyWork,
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyExecution,
+  type IdempotencyExecutionInput,
+  type IdempotencyReplayDecoder,
+  type IdempotencyServicePort,
+  type IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
-import type { UsageRecord } from '@/modules/metering/application/usage-recording/usage-repository.port';
-import { USAGE_REPOSITORY } from '@/modules/metering/application/usage-recording/usage-repository.port';
+import {
+  USAGE_REPOSITORY,
+  type UsageRecord,
+} from '@/modules/metering/application/usage-recording/usage-repository.port';
 import { registerRequestHooks } from '@/register-request-hooks';
 import { getOwnPrototypeMethod } from '../../../../test/support/own-prototype-method';
 

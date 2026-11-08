@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { CollectionDefinition } from 'postman-collection';
-import { Collection } from 'postman-collection';
+import { Collection, type CollectionDefinition } from 'postman-collection';
 
 import {
   buildPostmanCollection,

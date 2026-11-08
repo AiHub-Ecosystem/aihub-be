@@ -22,8 +22,10 @@ import {
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
-import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/public/sandbox-dispatch-budget';
-import type { SandboxDispatchBudgetPort } from '@/modules/gateway/public/sandbox-dispatch-budget';
+import {
+  SANDBOX_DISPATCH_BUDGET,
+  type SandboxDispatchBudgetPort,
+} from '@/modules/gateway/public/sandbox-dispatch-budget';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
   CONTROL_PLANE_PRISMA_CLIENT,

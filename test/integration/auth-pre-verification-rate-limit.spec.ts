@@ -22,8 +22,10 @@ import {
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { InMemoryWebSessionAdapter } from '@/modules/auth/testing/in-memory-web-session.adapter';
-import { NO_USER_ACCESS_TOKEN_REVOCATIONS } from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
+import {
+  NO_USER_ACCESS_TOKEN_REVOCATIONS,
+  verifiedUserAccessToken,
+} from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import {

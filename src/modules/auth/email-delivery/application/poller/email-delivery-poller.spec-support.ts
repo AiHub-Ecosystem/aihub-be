@@ -1,17 +1,17 @@
-import { EmailPayloadUnknownKeyVersionError } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type {
-  ClaimEmailDeliveryRequestsInput,
-  ClaimedFailureReport,
-  EmailCredentialActionabilityPort,
-  EmailCredentialState,
-  EmailDeliveryErrorCode,
-  EmailDeliveryKind,
-  EmailDeliveryPayload,
-  EmailDeliveryRequestRecord,
-  EmailDispatchStorePort,
-  EmailNoticeResolvers,
-  EmailPayloadCipherPort,
-  ReleaseUnspentEmailAttemptInput,
+import {
+  type ClaimEmailDeliveryRequestsInput,
+  type ClaimedFailureReport,
+  type EmailCredentialActionabilityPort,
+  type EmailCredentialState,
+  type EmailDeliveryErrorCode,
+  type EmailDeliveryKind,
+  type EmailDeliveryPayload,
+  type EmailDeliveryRequestRecord,
+  type EmailDispatchStorePort,
+  type EmailNoticeResolvers,
+  type EmailPayloadCipherPort,
+  EmailPayloadUnknownKeyVersionError,
+  type ReleaseUnspentEmailAttemptInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   EmailProviderOutageCircuitPort,

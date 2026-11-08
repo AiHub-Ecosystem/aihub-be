@@ -1,5 +1,6 @@
 import type {
   AvatarRepositoryPort,
+  AvatarUploadGrantRecord,
   RecordAvatarResult,
 } from '@/modules/avatar/application/avatar-repository.port';
 import type { Avatar } from '@/modules/avatar/domain/avatar';
@@ -11,6 +12,13 @@ import type { Avatar } from '@/modules/avatar/domain/avatar';
  */
 export class InMemoryAvatarRepository implements AvatarRepositoryPort {
   readonly avatars = new Map<string, Avatar>();
+  readonly grants = new Map<
+    string,
+    (AvatarUploadGrantRecord & {
+      readonly createdAt: Date;
+      consumed: boolean;
+    })[]
+  >();
   beforeNextChange: (() => void) | undefined;
   private readonly locks = new Map<string, Promise<void>>();
 
@@ -44,6 +52,66 @@ export class InMemoryAvatarRepository implements AvatarRepositoryPort {
       [...this.avatars.values()].map((avatar) => avatar.objectKey),
     );
     return new Set(objectKeys.filter((key) => recorded.has(key)));
+  }
+
+  /** Test-seam: the grants `now` still leaves usable. */
+  openUploads(
+    userId: string,
+    now: Date = new Date(),
+  ): AvatarUploadGrantRecord[] {
+    return (this.grants.get(userId) ?? []).filter(
+      (grant) => !grant.consumed && grant.expiresAt.getTime() > now.getTime(),
+    );
+  }
+
+  async openUploadGrants(
+    userId: string,
+    now: Date,
+  ): Promise<readonly AvatarUploadGrantRecord[]> {
+    return this.openUploads(userId, now);
+  }
+
+  async grantUpload(
+    grant: AvatarUploadGrantRecord & {
+      readonly userId: string;
+      readonly createdAt: Date;
+    },
+    limits: {
+      readonly openLimit: number;
+      readonly issuanceLimit: number;
+      readonly issuanceWindowMs: number;
+    },
+  ): Promise<boolean> {
+    return this.withUserLock(grant.userId, async () => {
+      const held = this.grants.get(grant.userId) ?? [];
+      const now = grant.createdAt.getTime();
+      const open = held.filter(
+        (entry) => !entry.consumed && entry.expiresAt.getTime() > now,
+      );
+      const since = now - limits.issuanceWindowMs;
+      const issuedInWindow = held.filter(
+        (entry) => entry.createdAt.getTime() > since,
+      );
+      if (
+        open.length >= limits.openLimit ||
+        issuedInWindow.length >= limits.issuanceLimit
+      ) {
+        return false;
+      }
+      this.grants.set(grant.userId, [...held, { ...grant, consumed: false }]);
+      return true;
+    });
+  }
+
+  async consumeUploadGrant(userId: string, assetId: string): Promise<void> {
+    const held = this.grants.get(userId);
+    if (held === undefined) return;
+    this.grants.set(
+      userId,
+      held.map((grant) =>
+        grant.assetId === assetId ? { ...grant, consumed: true } : grant,
+      ),
+    );
   }
 
   async record(avatar: Avatar): Promise<RecordAvatarResult> {

@@ -4,6 +4,10 @@ import type {
   ListedAvatarObject,
   StoredAvatarObject,
 } from './avatar-storage.port';
+import {
+  AVATAR_OPEN_UPLOAD_MAX,
+  AVATAR_UPLOAD_ISSUANCE_MAX,
+} from './avatar-upload.policy';
 import { AvatarUploadService } from './avatar-upload.service';
 
 const USER = 'usr_01J00000000000000000000000';
@@ -24,7 +28,8 @@ class FakeStorage implements AvatarStoragePort {
     | undefined;
 
   async createUploadUrl() {
-    return { url: 'private', expiresAt: NOW };
+    // A real grant lives five minutes; an already-expired one holds no slot.
+    return { url: 'private', expiresAt: new Date(NOW.getTime() + 5 * 60_000) };
   }
   publicUrl(key: string) {
     return `https://public.invalid/${key}`;
@@ -80,10 +85,17 @@ class FakeStorage implements AvatarStoragePort {
 function setup() {
   const repository = new InMemoryAvatarRepository();
   const storage = new FakeStorage();
+  // Distinct per call: each grant is its own object and its own slot.
+  let minted = 0;
   const service = new AvatarUploadService(
     repository,
     storage,
-    () => ASSET,
+    () => {
+      minted += 1;
+      return minted === 1
+        ? ASSET
+        : `ava_01J000000000000000000000${String(minted).padStart(2, '0')}`;
+    },
     () => NOW,
   );
   const objectKey = `users/${USER}/avatar/${ASSET}/original`;
@@ -281,5 +293,85 @@ describe('AvatarUploadService private staging', () => {
       service.completeUpload({ userId: USER, assetId: ASSET }),
     ).resolves.toMatchObject({ created: true });
     expect(storage.calls.filter((call) => call === 'copy')).toHaveLength(1);
+  });
+});
+
+describe('AvatarUploadService upload grants (#374)', () => {
+  const upload = { contentType: 'image/png', byteSize: 12 } as const;
+
+  it('records an open grant for the account so outstanding URLs are countable', async () => {
+    const { service, repository } = setup();
+
+    const granted = await service.requestUpload({ userId: USER, ...upload });
+
+    expect(repository.openUploads(USER, NOW)).toEqual([
+      expect.objectContaining({
+        assetId: granted.assetId,
+        objectKey: `users/${USER}/avatar/${granted.assetId}/original`,
+        expiresAt: granted.expiresAt,
+      }),
+    ]);
+  });
+
+  it('refuses a further URL while the account holds the maximum open ones', async () => {
+    const { service, repository } = setup();
+    for (let held = 0; held < AVATAR_OPEN_UPLOAD_MAX; held += 1) {
+      await service.requestUpload({ userId: USER, ...upload });
+    }
+
+    await expect(
+      service.requestUpload({ userId: USER, ...upload }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+    expect(repository.openUploads(USER, NOW)).toHaveLength(
+      AVATAR_OPEN_UPLOAD_MAX,
+    );
+  });
+
+  it('frees the slot once the grant is consumed by a completion', async () => {
+    const { service, repository, storage, objectKey } = setup();
+    await service.requestUpload({ userId: USER, ...upload });
+    await service.completeUpload({ userId: USER, assetId: ASSET });
+
+    expect(storage.final.has(objectKey)).toBe(true);
+    expect(repository.openUploads(USER, NOW)).toEqual([]);
+    await expect(
+      service.requestUpload({ userId: USER, ...upload }),
+    ).resolves.toMatchObject({ contentType: 'image/png' });
+  });
+
+  it('drops a grant that has outlived its URL, so an abandoned upload does not hold a slot', async () => {
+    const { service, repository } = setup();
+    await service.requestUpload({ userId: USER, ...upload });
+    const later = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+
+    const [still] = repository.openUploads(USER, later);
+    expect(still).toBeUndefined();
+  });
+
+  it('caps issuance per account over a rolling window, however many are completed', async () => {
+    const { service, repository } = setup();
+    for (let issued = 0; issued < AVATAR_UPLOAD_ISSUANCE_MAX; issued += 1) {
+      const granted = await service.requestUpload({ userId: USER, ...upload });
+      // Consume the slot each time, so nothing is refused for holding too many.
+      await repository.consumeUploadGrant(USER, granted.assetId);
+    }
+    expect(repository.openUploads(USER, NOW)).toEqual([]);
+
+    await expect(
+      service.requestUpload({ userId: USER, ...upload }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+  });
+
+  it('counts per account, so another account is unaffected', async () => {
+    const { service, repository } = setup();
+    const other = 'usr_01J00000000000000000000009';
+    for (let issued = 0; issued < AVATAR_UPLOAD_ISSUANCE_MAX; issued += 1) {
+      const granted = await service.requestUpload({ userId: USER, ...upload });
+      await repository.consumeUploadGrant(USER, granted.assetId);
+    }
+
+    await expect(
+      service.requestUpload({ userId: other, ...upload }),
+    ).resolves.toMatchObject({ contentType: 'image/png' });
   });
 });

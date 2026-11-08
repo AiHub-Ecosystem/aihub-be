@@ -97,3 +97,50 @@ never proxying bytes, applies unchanged.
   saving it would need a durable pending-deletion table and a retry loop.
 - **A generic asset module now.** Rejected for the same reason ADR-0065 gave:
   generalise when the Audio asset exists, with two real shapes to compare.
+
+## Update (2026-11-08): upload URL issuance is bounded per account (#374)
+
+Point 5 said no upload intent is stored. Presigning still stores no intent, and
+completion still rebuilds the key from the authenticated account. What it now
+also stores is the one fact the ceilings need: a count of outstanding grants.
+
+1. Every issued upload URL is recorded in `user_avatar_upload_grants`, keyed by
+   the account, the asset ID, and the exact object key, with the URL's own
+   expiry. A row is `open` until its completion consumes it and `consumed`
+   afterwards.
+2. An account may hold **3** open (unconsumed, unexpired) grants at once. One
+   covers setting or replacing the Avatar; the other two are headroom for a
+   client that abandons an upload and starts again. Because the Avatar bucket
+   is public-read, every open grant is also a writable public object until
+   completion, so this number is what actually bounds a single account's
+   reachable storage.
+3. An account may be issued **10** URLs in any rolling hour. Abandoning an
+   upload costs one issuance, so this bounds churn rather than concurrency. A
+   consumed grant keeps counting toward the window: completing an upload never
+   restores issuance headroom.
+4. Both counts are read and the grant is written under one per-account advisory
+   lock (`avatar:grants:{userId}`, distinct from completion's
+   `avatar:{userId}`), so two concurrent requests cannot both observe headroom.
+5. A refused issuance answers `429 RATE_LIMITED` with the window as
+   `retry_after_ms`, is counted on `aihub_rejected_total{reason="rate_limit"}`,
+   and never returns the signed URL. The URL is signed first because the grant
+   has to record the signature's own expiry, and signing is a local
+   computation over a request that never leaves the process; a refused
+   signature is simply discarded.
+6. A grant that has outlived its URL holds no slot, so an abandoned upload
+   frees its slot without any cleanup job. Grants need no sweep of their own.
+
+The values live in `src/modules/avatar/application/avatar-upload.policy.ts`
+beside the use case that applies them.
+
+### Considered options for the ceilings
+
+- **Store nothing and count from storage listings.** Rejected: listing the
+  bucket per request is far more expensive than one indexed row, and a listing
+  cannot tell a grant AIHUB issued from an object someone else wrote.
+- **A per-account rate limit in Redis only.** Rejected on ADR-0007's terms:
+  Redis is a counter cache, not durable state, and the open-URL ceiling needs
+  to survive a Redis flush.
+- **Reuse the inferential "no intent" rule and let completion enforce it.**
+  Rejected: a URL that is never completed is exactly the abuse case, so the
+  limit has to bind before the URL is handed out.

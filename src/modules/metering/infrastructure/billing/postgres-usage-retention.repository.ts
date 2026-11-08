@@ -2,13 +2,13 @@ import { isUsableCount } from '@/common/counts/is-usable-count';
 import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import { asDateOrIso } from '@/common/postgres/row-readers';
-import type {
-  UsageRetentionBatch,
-  UsageRetentionBatchRequest,
-  UsageRetentionCursor,
-  UsageRetentionPort,
+import {
+  type UsageRetentionBatch,
+  type UsageRetentionBatchRequest,
+  type UsageRetentionCursor,
+  type UsageRetentionPort,
+  compareUsageRetentionCursor,
 } from '@/modules/metering/application/billing/usage-retention';
-import { compareUsageRetentionCursor } from '@/modules/metering/application/billing/usage-retention';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 

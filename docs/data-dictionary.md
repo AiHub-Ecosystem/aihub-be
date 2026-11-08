@@ -39,8 +39,9 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | WritingChartUpload                 | writing     | 15      |
 | WritingChartRevocationAudit        | writing     | 10      |
 | UsageRecord                        | metering    | 21      |
-| UserAccount                        | auth        | 20      |
+| UserAccount                        | auth        | 21      |
 | UserAvatar                         | avatar      | 7       |
+| UserAvatarUploadGrant              | avatar      | 7       |
 | UserMfaFactor                      | auth        | 8       |
 | UserMfaRecoveryCode                | auth        | 5       |
 | WebSession                         | auth        | 8       |
@@ -615,6 +616,7 @@ Owner: `auth`
 | passwordResetTokens          | PasswordResetToken?           |                                            |
 | refreshTokens                | RefreshToken[]                |                                            |
 | avatar                       | UserAvatar?                   |                                            |
+| avatarUploadGrants           | UserAvatarUploadGrant[]       |                                            |
 | mfaFactor                    | UserMfaFactor?                |                                            |
 | mfaRecoveryCodes             | UserMfaRecoveryCode[]         |                                            |
 | webSessions                  | WebSession[]                  |                                            |
@@ -635,6 +637,20 @@ Owner: `avatar`
 | byteSize      | Int         | @map("byte_size")                                                        |
 | acceptedAt    | DateTime    | @map("accepted_at") @db.Timestamptz(6)                                   |
 | userAccount   | UserAccount | @relation(fields: [userAccountId], references: [id], onUpdate: NoAction) |
+
+## UserAvatarUploadGrant
+
+Owner: `avatar`
+
+| Column        | Type        | Attributes                                                                                  |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------- |
+| id            | String      | @id                                                                                         |
+| userAccountId | String      | @map("user_account_id")                                                                     |
+| objectKey     | String      | @unique(map: "user_avatar_upload_grants_object_key_key") @map("object_key")                 |
+| status        | String      | @default("open")                                                                            |
+| createdAt     | DateTime    | @map("created_at") @db.Timestamptz(6)                                                       |
+| expiresAt     | DateTime    | @map("expires_at") @db.Timestamptz(6)                                                       |
+| userAccount   | UserAccount | @relation(fields: [userAccountId], references: [id], onDelete: Cascade, onUpdate: NoAction) |
 
 ## UserMfaFactor
 

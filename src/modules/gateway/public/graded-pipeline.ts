@@ -1,11 +1,9 @@
 export {
   GRADED_PIPELINE_ENGINE,
+  type GradedPipelineContext,
+  type GradedPipelineDispatchResult,
+  type GradedPipelineEnginePort,
   completeGradedPipelineResponse,
-} from '@/modules/gateway/application/graded-request/graded-pipeline.port';
-export type {
-  GradedPipelineContext,
-  GradedPipelineDispatchResult,
-  GradedPipelineEnginePort,
 } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
 export { createGradedPipelineContext } from '@/modules/gateway/presentation/graded-pipeline-context';
 export {

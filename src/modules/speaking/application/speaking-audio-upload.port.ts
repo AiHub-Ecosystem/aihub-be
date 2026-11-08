@@ -7,6 +7,10 @@ import type {
   SpeakingAudioEnvironment,
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+import type {
+  SpeakingAudioCeilingDecision,
+  SpeakingAudioOrganizationHolding,
+} from './speaking-audio-org-ceiling.policy';
 
 export type SpeakingAudioUploadLookup =
   | { readonly kind: 'intent'; readonly intent: SpeakingAudioUploadIntent }
@@ -22,6 +26,18 @@ export interface SpeakingAudioUploadOwner {
 
 export interface SpeakingAudioUploadRepositoryPort {
   createIntent(intent: SpeakingAudioUploadIntent): Promise<void>;
+  /**
+   * Records the intent only while the Organization is within its ceilings, and
+   * reports which ceiling refused it otherwise (#374). Counting and writing
+   * happen under one per-organization lock, so two concurrent requests cannot
+   * both observe headroom.
+   */
+  createIntentWithinCeiling(input: {
+    readonly intent: SpeakingAudioUploadIntent;
+    readonly decide: (
+      holding: SpeakingAudioOrganizationHolding,
+    ) => SpeakingAudioCeilingDecision;
+  }): Promise<SpeakingAudioCeilingDecision>;
   findUpload(
     owner: SpeakingAudioUploadOwner,
   ): Promise<SpeakingAudioUploadLookup>;

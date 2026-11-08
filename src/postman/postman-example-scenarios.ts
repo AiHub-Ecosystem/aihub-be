@@ -1,5 +1,4 @@
 import { SPEAKING_SAMPLE_ANSWER } from '@/modules/speaking/application/speaking-question-catalog';
-import type { Scenario } from './postman-scenarios';
 import {
   BFF_CLIENT_SECRET_HEADER,
   IDEMPOTENCY_HEADER,
@@ -7,6 +6,7 @@ import {
   ORGANIZATION_INVITATION_BODY,
   ORGANIZATION_INVITATION_PATH,
   SPEAKING_GRADE_JSON_PATH,
+  type Scenario,
   TASK1_GRADE_BODY,
   TASK1_GRADE_PATH,
   TASK2_GRADE_BODY,

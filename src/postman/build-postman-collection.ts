@@ -13,8 +13,7 @@ import {
   SPEAKING_SAMPLE_ANSWER_SCENARIOS,
   WEB_SESSION_SCENARIOS,
 } from './postman-example-scenarios';
-import { D1_SCENARIOS } from './postman-scenarios';
-import type { Scenario } from './postman-scenarios';
+import { D1_SCENARIOS, type Scenario } from './postman-scenarios';
 import {
   SPEAKING_V2_VARIABLES,
   speakingV2Folder,

@@ -1,5 +1,7 @@
-import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
-import { SpeakingV2QuestionResultSchema } from '@/contracts/speaking/v2/question-result';
+import {
+  type SpeakingV2QuestionResult,
+  SpeakingV2QuestionResultSchema,
+} from '@/contracts/speaking/v2/question-result';
 import { Value } from '@sinclair/typebox/value';
 
 import {

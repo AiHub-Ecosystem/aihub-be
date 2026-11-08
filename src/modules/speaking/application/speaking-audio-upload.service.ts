@@ -6,23 +6,23 @@ import {
   uploadNotFound,
 } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import type { RequestContext } from '@/common/request-context/request-context';
-import type {
-  SpeakingAudioAsset,
-  SpeakingAudioEnvironment,
-  SpeakingAudioUploadIntent,
-} from '@/modules/speaking/domain/speaking-audio-asset';
 import {
   SPEAKING_AUDIO_MAX_BYTES,
   SPEAKING_AUDIO_MIN_BYTES,
   SPEAKING_AUDIO_RETENTION_MS,
   SPEAKING_AUDIO_UPLOAD_INTENT_TTL_MS,
+  type SpeakingAudioAsset,
+  type SpeakingAudioEnvironment,
+  type SpeakingAudioUploadIntent,
   isSpeakingAudioAssetId,
   isSpeakingAudioContentType,
   speakingAudioObjectKey,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { SPEAKING_AUDIO_COMPLETION_DEADLINE_MS } from './speaking-audio-completion-timeouts';
+import { decideSpeakingAudioCeiling } from './speaking-audio-org-ceiling.policy';
 
 import type {
   SpeakingAudioAssetStoragePort,
@@ -148,7 +148,19 @@ export class SpeakingAudioUploadService
       expiresAt: intentExpiresAt,
       status: 'open',
     };
-    await this.repository.createIntent(intent);
+
+    // Refused before the intent exists and before its URL is returned: an
+    // Organization over a ceiling never gets a writable credential (#374).
+    const decision = await this.repository.createIntentWithinCeiling({
+      intent,
+      decide: (holding) => decideSpeakingAudioCeiling(holding, intent.byteSize),
+    });
+    if (decision.kind === 'refused') {
+      recordRejected(
+        decision.refusal.code === 'QUOTA_EXCEEDED' ? 'quota' : 'rate_limit',
+      );
+      throw decision.refusal;
+    }
 
     return {
       assetId,

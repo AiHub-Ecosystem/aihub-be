@@ -1,19 +1,19 @@
 import type { EmailDeliveryKind } from './email-kind-handler.registry';
 
-export { EMAIL_DELIVERY_KINDS } from './email-kind-handler.registry';
-export type { EmailDeliveryKind } from './email-kind-handler.registry';
+export {
+  EMAIL_DELIVERY_KINDS,
+  type EmailDeliveryKind,
+  type EmailDeliveryPayload,
+} from './email-kind-handler.registry';
 export {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,
+  type ApiKeyNearExpiryNotificationInput,
+  type ApiKeyNearExpiryNotificationPayload,
+  type ApiKeyNearExpiryNoticeResolverPort,
+  type AuthEmailDeliveryPayload,
+  type EmailNoticeResolvers,
   isApiKeyNearExpiryNotificationPayload,
 } from './payload/email-delivery-payload';
-export type {
-  ApiKeyNearExpiryNotificationInput,
-  ApiKeyNearExpiryNotificationPayload,
-  ApiKeyNearExpiryNoticeResolverPort,
-  AuthEmailDeliveryPayload,
-  EmailNoticeResolvers,
-} from './payload/email-delivery-payload';
-export type { EmailDeliveryPayload } from './email-kind-handler.registry';
 
 export const EMAIL_NOTICE_RESOLVERS = Symbol('EMAIL_NOTICE_RESOLVERS');
 

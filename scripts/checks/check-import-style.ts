@@ -22,6 +22,7 @@ interface Violation {
   file: string;
   line: number;
   specifier: string;
+  message?: string;
 }
 
 const SOURCE_TREES = ['src', 'test', 'scripts'] as const;
@@ -136,13 +137,50 @@ export function collectViolations(file: string, srcRoot: string): Violation[] {
     }));
 }
 
+export function collectDuplicateReexportViolations(file: string): Violation[] {
+  const text = readFileSync(file, 'utf8');
+
+  if (!text.includes('export') || !text.includes('from')) {
+    return [];
+  }
+
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const seen = new Set<string>();
+  const violations: Violation[] = [];
+
+  for (const statement of source.statements) {
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      const specifier = statement.moduleSpecifier.text;
+
+      if (seen.has(specifier)) {
+        violations.push({
+          file,
+          line: lineOf(source, statement),
+          specifier,
+          message:
+            'consolidate duplicate re-exports from the same module into a single declaration',
+        });
+      } else {
+        seen.add(specifier);
+      }
+    }
+  }
+
+  return violations;
+}
+
 export function collectSourceViolations(root: string): Violation[] {
   const srcRoot = join(root, 'src');
 
   return SOURCE_TREES.flatMap((tree) =>
-    collectFiles(join(root, tree), '.ts').flatMap((file) =>
-      collectViolations(file, srcRoot),
-    ),
+    collectFiles(join(root, tree), '.ts').flatMap((file) => [
+      ...collectViolations(file, srcRoot),
+      ...collectDuplicateReexportViolations(file),
+    ]),
   ).sort(
     (left, right) =>
       left.file.localeCompare(right.file) || left.line - right.line,
@@ -175,8 +213,9 @@ function report(violations: Violation[], remedy: string): void {
   }
 
   for (const violation of violations) {
+    const violationRemedy = violation.message ?? remedy;
     console.error(
-      `${violation.file}:${violation.line}: ${remedy} ('${violation.specifier}')`,
+      `${violation.file}:${violation.line}: ${violationRemedy} ('${violation.specifier}')`,
     );
   }
 

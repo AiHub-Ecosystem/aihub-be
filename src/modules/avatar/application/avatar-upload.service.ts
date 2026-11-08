@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { payloadTooLarge, uploadNotFound } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
+import { recordRejected } from '@/common/observability/rejected-metric';
 import {
   AVATAR_COMPLETION_WINDOW_MS,
   AVATAR_MAX_BYTES,
@@ -17,6 +18,9 @@ import type { AvatarStoragePort } from './avatar-storage.port';
 import {
   AVATAR_COMPLETION_COPY_MIN_REMAINING_MS,
   AVATAR_COMPLETION_DEADLINE_MS,
+  AVATAR_OPEN_UPLOAD_MAX,
+  AVATAR_UPLOAD_ISSUANCE_MAX,
+  AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
 } from './avatar-upload.policy';
 
 export interface AvatarUpload {
@@ -88,10 +92,41 @@ export class AvatarUploadService {
     }
 
     const assetId = this.newAssetId(this.now());
+    const objectKey = avatarObjectKey(input.userId, assetId);
     const signed = await this.storage.createUploadUrl({
-      objectKey: avatarObjectKey(input.userId, assetId),
+      objectKey,
       contentType,
     });
+
+    // The URL is a write credential for one object, so it is recorded before
+    // it is handed out: an account holds a bounded number at once and is issued
+    // a bounded number per window (#374). Signing the URL first costs nothing
+    // because the grant has to record the signature's own expiry, and a
+    // refused signature is never returned.
+    const granted = await this.avatars.grantUpload(
+      {
+        userId: input.userId,
+        assetId,
+        objectKey,
+        expiresAt: signed.expiresAt,
+        createdAt: this.now(),
+      },
+      {
+        openLimit: AVATAR_OPEN_UPLOAD_MAX,
+        issuanceLimit: AVATAR_UPLOAD_ISSUANCE_MAX,
+        issuanceWindowMs: AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
+      },
+    );
+    if (!granted) {
+      recordRejected('rate_limit');
+      throw new AppError({
+        code: 'RATE_LIMITED',
+        message: 'Avatar upload limit reached; retry later',
+        retryable: true,
+        retryAfterMs: AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
+      });
+    }
+
     return {
       assetId,
       uploadUrl: signed.url,
@@ -125,6 +160,9 @@ export class AvatarUploadService {
     const completed = await this.avatars.withUserLock(input.userId, (avatars) =>
       this.recordUpload(completion, avatars),
     );
+    // A consumed grant stops holding a slot whether this request created the
+    // record or found it already recorded by a concurrent completion.
+    await this.avatars.consumeUploadGrant(input.userId, input.assetId);
     if (completed.created) {
       await this.discardStaging(completed.avatar.objectKey, signal);
     }

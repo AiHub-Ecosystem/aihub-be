@@ -1,8 +1,10 @@
 import type { RequestContext } from '@/common/request-context/request-context';
 import { admitOrganizationRead } from '@/modules/identity/membership/application/organization-admission';
 import type { OrganizationMembershipPort } from '@/modules/identity/membership/application/organization-membership.port';
-import type { OrganizationIdentityConfigRepositoryPort } from './organization-identity-config-repository.port';
-import type { StoredOrganizationIdentityConfig } from './organization-identity-config-repository.port';
+import {
+  type OrganizationIdentityConfigRepositoryPort,
+  type StoredOrganizationIdentityConfig,
+} from './organization-identity-config-repository.port';
 
 export interface ReadOrganizationIdentityConfigCommand {
   readonly context: RequestContext;

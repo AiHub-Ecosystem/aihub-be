@@ -5,13 +5,13 @@ import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { getMetrics } from '@/common/observability/metrics';
-import type {
-  EmailDeliveryKind,
-  EmailDeliveryRequestRecord,
-  EmailDispatchStorePort,
-  EmailPayloadCipherPort,
+import {
+  EMAIL_DELIVERY_KINDS,
+  type EmailDeliveryKind,
+  type EmailDeliveryRequestRecord,
+  type EmailDispatchStorePort,
+  type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type {
   EmailDispatchOptions,
   EmailMessage,

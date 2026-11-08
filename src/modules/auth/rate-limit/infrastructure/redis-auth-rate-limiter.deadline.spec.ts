@@ -1,5 +1,9 @@
-import { type Server, type Socket, createServer } from 'node:net';
-import type { AddressInfo } from 'node:net';
+import {
+  type AddressInfo,
+  type Server,
+  type Socket,
+  createServer,
+} from 'node:net';
 import { performance } from 'node:perf_hooks';
 
 import { RedisAuthRateLimiter } from './redis-auth-rate-limiter';

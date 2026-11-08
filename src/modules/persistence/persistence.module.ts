@@ -89,13 +89,14 @@ export {
   CONTROL_PLANE_PRISMA_CLIENT,
   CONTROL_PLANE_READ_PRISMA_CLIENT,
   EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
+  type PrismaClientHolder,
+  type PrismaPool,
   RUNTIME_PRISMA_CLIENT,
 } from './infrastructure/persistence-client';
-export type {
-  PrismaClientHolder,
-  PrismaPool,
-} from './infrastructure/persistence-client';
-export { createPrismaClient } from './infrastructure/prisma-client';
+export {
+  createFixturePrismaClient,
+  createPrismaClient,
+} from './infrastructure/prisma-client';
 export {
   isLifecycleProperty,
   isRowlessWrite,
@@ -103,4 +104,3 @@ export {
   postgresError,
   runGuardedTransaction,
 } from './infrastructure/prisma-raw';
-export { createFixturePrismaClient } from './infrastructure/prisma-client';

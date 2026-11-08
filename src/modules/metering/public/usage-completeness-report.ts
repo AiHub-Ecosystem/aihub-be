@@ -1,11 +1,9 @@
 export {
+  type UsageCompletenessReport,
   UsageCompletenessReportService,
   UsageReportError,
-} from '@/modules/metering/application/billing/usage-completeness-report';
-export type {
-  UsageCompletenessReport,
-  UsageReportErrorCode,
-  UsageReportOperationDefinition,
-  UsageReportRepositoryPort,
-  UsageReportWindow,
+  type UsageReportErrorCode,
+  type UsageReportOperationDefinition,
+  type UsageReportRepositoryPort,
+  type UsageReportWindow,
 } from '@/modules/metering/application/billing/usage-completeness-report';

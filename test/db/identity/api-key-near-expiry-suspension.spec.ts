@@ -3,11 +3,11 @@ import { monotonicFactory } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
-import type {
-  ApiKeyNearExpiryNotificationPayload,
-  EmailPayloadCipherPort,
+import {
+  type ApiKeyNearExpiryNotificationPayload,
+  type EmailPayloadCipherPort,
+  isApiKeyNearExpiryNotificationPayload,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { isApiKeyNearExpiryNotificationPayload } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { PostgresApiKeyNearExpiryNotices } from '@/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices';

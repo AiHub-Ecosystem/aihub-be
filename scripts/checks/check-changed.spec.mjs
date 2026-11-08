@@ -4,8 +4,7 @@ import process from 'node:process';
 import { test } from 'node:test';
 
 import { buildBunTestArgs } from '../cli/run-bun-test.mjs';
-import { runBatch } from './check-batch.cjs';
-import { BATCHED_GATES } from './check-batch.cjs';
+import { BATCHED_GATES, runBatch } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
   gateInvocation,
@@ -58,17 +57,7 @@ const pathCases = [
   {
     path: 'src/modules/example/application/use-case.spec.ts',
     gates: [
-      'arch-check',
-      'build',
-      'check:app-errors',
-      'check:data-ownership',
-      'check:deprecation',
       'check:doc-drift',
-      'check:file-size',
-      'check:imports',
-      'check:imports:dist',
-      'check:tenant-global',
-      'knip',
       'lint',
       'test:jest-specs',
       'test:related',
@@ -76,12 +65,43 @@ const pathCases = [
     ],
   },
   {
-    path: 'scripts/checks/check-app-errors.spec.ts',
+    path: 'src/modules/example/domain/policy.spec.ts',
     gates: [
-      'check:app-errors',
       'check:doc-drift',
       'lint',
-      'test:check-app-errors',
+      'test:jest-specs',
+      'test:related',
+      'type-check',
+    ],
+  },
+  {
+    path: 'src/modules/example/application/use-case.test.ts',
+    gates: ['check:doc-drift', 'lint', 'test:related', 'type-check'],
+  },
+  {
+    path: 'test/unit/example.spec.ts',
+    gates: ['lint', 'test:jest-specs', 'test:related', 'type-check'],
+  },
+  {
+    path: 'test/support/helper.ts',
+    gates: ['lint', 'test:related', 'type-check'],
+  },
+  {
+    path: 'test/fixtures/ai-speaking/grading-no-speech.200.json',
+    gates: ['lint', 'test:related', 'type-check'],
+  },
+  {
+    path: 'test/cli/request-log-lookup.spec.sh',
+    gates: ['lint', 'test:related', 'type-check'],
+  },
+  {
+    path: 'scripts/checks/check-app-errors.spec.ts',
+    gates: [
+      'check:doc-drift',
+      'lint',
+      'test:jest-specs',
+      'test:related',
+      'type-check',
     ],
   },
   {
@@ -181,6 +201,45 @@ for (const { path, gates } of pathCases) {
 await test('a changed non-TypeScript spec does not select the Jest gate (#1631)', () => {
   const { gates } = planChangedFiles(['scripts/checks/check-changed.spec.mjs']);
   assert.ok(!gates.includes('test:jest-specs'));
+});
+
+await test('a test-only diff skips production-only gates (#1634)', () => {
+  const { gates } = planChangedFiles([
+    'src/modules/example/application/use-case.spec.ts',
+  ]);
+  for (const gate of [
+    'build',
+    'knip',
+    'check:app-errors',
+    'check:data-ownership',
+    'check:imports:dist',
+  ]) {
+    assert.ok(!gates.includes(gate), `${gate} must not run for a spec diff`);
+  }
+});
+
+await test('a mixed diff keeps the full union of gates (#1634)', () => {
+  const mixed = planChangedFiles([
+    'src/modules/example/application/use-case.ts',
+    'src/modules/example/application/use-case.spec.ts',
+  ]).gates;
+  assert.deepEqual(mixed, [
+    'arch-check',
+    'build',
+    'check:app-errors',
+    'check:data-ownership',
+    'check:deprecation',
+    'check:doc-drift',
+    'check:file-size',
+    'check:imports',
+    'check:imports:dist',
+    'check:tenant-global',
+    'knip',
+    'lint',
+    'test:jest-specs',
+    'test:related',
+    'type-check',
+  ]);
 });
 
 await test('the Jest gate gets the changed specs that still exist, normalized and sorted (#1631)', () => {

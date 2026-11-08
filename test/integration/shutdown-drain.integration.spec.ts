@@ -17,16 +17,20 @@ import { GracefulFastifyAdapter } from '@/common/http/graceful-fastify-adapter';
 import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
-import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
-import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
-import type {
-  DispatchResult,
-  OperationDispatcherPort,
+import {
+  CONCURRENCY_LIMITER,
+  type ConcurrencyLimiterPort,
+} from '@/modules/gateway/application/concurrency-limiter.port';
+import {
+  type DispatchResult,
+  OPERATION_DISPATCHER,
+  type OperationDispatcherPort,
 } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
-import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
-import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
+import {
+  QUOTA_COUNTER,
+  type QuotaCounterPort,
+} from '@/modules/gateway/application/quota-counter.port';
 import type {
   CompleteIdempotencyInput,
   IdempotencyAttemptInput,
@@ -35,19 +39,19 @@ import type {
   ReserveIdempotencyInput,
 } from '@/modules/idempotency/application/idempotency-repository.port';
 import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
-import type {
-  IdempotencyExecution,
-  IdempotencyExecutionInput,
-  IdempotencyReplayDecoder,
-  IdempotencyServicePort,
-  IdempotencyWork,
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyExecution,
+  type IdempotencyExecutionInput,
+  type IdempotencyReplayDecoder,
+  type IdempotencyServicePort,
+  type IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
-import type {
-  UsageRecord,
-  UsageRepositoryPort,
+import {
+  USAGE_REPOSITORY,
+  type UsageRecord,
+  type UsageRepositoryPort,
 } from '@/modules/metering/application/usage-recording/usage-repository.port';
-import { USAGE_REPOSITORY } from '@/modules/metering/application/usage-recording/usage-repository.port';
 import { registerRequestHooks } from '@/register-request-hooks';
 
 const GRADE_PATH = '/v1/ielts/writing/task1/grade';

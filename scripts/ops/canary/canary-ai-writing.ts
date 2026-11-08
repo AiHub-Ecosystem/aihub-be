@@ -25,8 +25,10 @@ import { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { task1GradeAdapter } from '@/downstream/writing/task1-grade.adapter';
 import { task2GradeAdapter } from '@/downstream/writing/task2-grade.adapter';
-import type { DownstreamHttpRequestOptions } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
-import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import {
+  DownstreamHttpClient,
+  type DownstreamHttpRequestOptions,
+} from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 
 // ---------------------------------------------------------------------------
 // Public types
