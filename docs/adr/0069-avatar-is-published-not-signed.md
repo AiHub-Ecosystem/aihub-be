@@ -67,12 +67,23 @@ sensitive asset.
 ## 2026-11-07: Private staging for Avatar uploads
 
 The 2026-10-26 live Sandbox audit measured two Avatar gaps at the storage and
-use-case level; it did not exercise HTTP routes, real accounts, guards, or
-Postgres state. Reusing a still-valid PUT URL after completion replaced the
-accepted same-length PNG, and anonymous GET served the replacement. A PUT of
-2,097,153 bytes against a 90-byte declaration was stored and anonymously
-readable before completion rejected and deleted it. These are measured live
-SeaweedFS and deployed-use-case results, not route-level acceptance evidence.
+use-case level; on 2026-11-08, full route-level acceptance probes against the
+deployed Sandbox HTTP routes (`POST /v1/me/avatar/uploads` and `POST
+/v1/me/avatar/uploads/:assetId/complete`) with a dedicated User Account and
+JWT bearer auth verified all 7 threat-model cases:
+
+- Baseline PUT (90 b PNG): PUT 200 into staging, staging anonymous HEAD/GET 403,
+  completion 201, public GET 200 (`image/png`, `Cache-Control: public, max-age=3600`, 90 b).
+- Mismatched `Content-Type: text/html`: PUT 403 `SignatureDoesNotMatch`, completion 404.
+- Body above 2 MiB limit (2,097,153 b): PUT 200 into private staging, public GET 404
+  before completion (no public exposure), completion refuses 413 `PAYLOAD_TOO_LARGE`,
+  public GET 404 after completion.
+- Chunked transfer without `Content-Length`: PUT 200 into staging, completion 201, public GET 200.
+- Extra unsigned `x-amz-copy-source`: PUT 403 `SignatureDoesNotMatch`.
+- Extra unsigned `x-amz-acl`: PUT 403 `SignatureDoesNotMatch`.
+- Second PUT after completion (TM-U2): Second PUT 200 (recreates private staging only),
+  anonymous public GET continues serving the original accepted bytes; repeated completion
+  answers 200 `created: false` with the same record, and public GET remains unaltered.
 
 Avatar clients now upload to a private staging bucket. Completion describes
 staging and checks its age, size, and type; copies it server-side to the
