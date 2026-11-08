@@ -6,7 +6,7 @@ describe('Speaking grading jobs migration', () => {
     const sql = readFileSync(
       join(
         __dirname,
-        '../../../../../prisma/migrations/0061_speaking_grading_jobs/migration.sql',
+        '../../../../../prisma/migrations/0062_speaking_grading_jobs/migration.sql',
       ),
       'utf8',
     );

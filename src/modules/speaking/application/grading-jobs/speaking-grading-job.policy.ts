@@ -1,4 +1,4 @@
-/** Timing policy for Speaking grading jobs (ADR-0158 decision 6). */
+/** Timing policy for Speaking grading jobs (ADR-0159 decision 6). */
 export const SPEAKING_GRADING_JOB_POLICY = {
   /** How often the sweep runs. */
   sweepIntervalMs: 30_000,

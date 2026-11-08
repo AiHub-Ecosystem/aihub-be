@@ -122,7 +122,7 @@ The client never sees any of these fields.
 
 ## D.5 Lifecycle 3 — Async Media (Phase 4, Contract Frozen Now)
 
-> **Superseded routes (2026-11-08):** [ADR-0158](../../../adr/0158-async-speaking-grading-job-on-v2-with-bullmq.md) places the job at `POST /v2/ielts/speaking/grading-jobs` and `GET /v2/ielts/speaking/grading-jobs/{job_id}`, and replaces the separate reconciler with one sweep. The Postgres-is-source-of-truth rule below still holds.
+> **Superseded routes (2026-11-08):** [ADR-0159](../../../adr/0159-async-speaking-grading-job-on-v2-with-bullmq.md) places the job at `POST /v2/ielts/speaking/grading-jobs` and `GET /v2/ielts/speaking/grading-jobs/{job_id}`, and replaces the separate reconciler with one sweep. The Postgres-is-source-of-truth rule below still holds.
 
 ```
 POST /v1/speaking/grade

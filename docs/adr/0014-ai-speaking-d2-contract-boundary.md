@@ -1,6 +1,6 @@
 # ADR-0014: AI Speaking D2 contract boundary and evidence
 
-- Status: Accepted; the planned async `POST /v1/speaking/grade` withdrawn and replaced on `/v2` by [ADR-0158](0158-async-speaking-grading-job-on-v2-with-bullmq.md)
+- Status: Accepted; the planned async `POST /v1/speaking/grade` withdrawn and replaced on `/v2` by [ADR-0159](0159-async-speaking-grading-job-on-v2-with-bullmq.md)
 - Date: 2026-09-14
 - Related issues: [#24](https://github.com/lengocanh2005it/aihub-be/issues/24), [#25](https://github.com/lengocanh2005it/aihub-be/issues/25), [#27](https://github.com/lengocanh2005it/aihub-be/issues/27)
 

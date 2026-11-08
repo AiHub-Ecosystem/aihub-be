@@ -9,7 +9,7 @@ import type {
 } from './speaking-grading-job';
 
 /**
- * Durable job state in Postgres, the source of truth (ADR-0158). Every state
+ * Durable job state in Postgres, the source of truth (ADR-0159). Every state
  * change is conditional on the current state so two workers, or two deployment
  * slots running the sweep, can never both win. A method that reports `false`,
  * `undefined` or an empty list changed nothing.
@@ -58,7 +58,7 @@ export interface SpeakingGradingJobRepositoryPort {
     readonly since: Date;
   }): Promise<number>;
 
-  // Sweep steps (ADR-0158 decision 6). Each is one conditional statement.
+  // Sweep steps (ADR-0159 decision 6). Each is one conditional statement.
 
   /** Ids of jobs still `queued` that were created before `createdBefore`, oldest first. */
   listStaleQueued(input: {

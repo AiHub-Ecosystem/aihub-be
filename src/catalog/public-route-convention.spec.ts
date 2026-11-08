@@ -214,7 +214,7 @@ const OPTIONAL_DATA = Type.Object({
 });
 
 describe('public route convention (ADR-0129)', () => {
-  it('accepts the grading-jobs collection as a job create (ADR-0158 decision 2)', () => {
+  it('accepts the grading-jobs collection as a job create (ADR-0159 decision 2)', () => {
     const submit = route({
       id: 'speaking.gradingJobs.create',
       path: '/v2/ielts/speaking/grading-jobs',
@@ -227,7 +227,7 @@ describe('public route convention (ADR-0129)', () => {
       successStatus: 200,
     });
 
-    // ADR-0158 decision 2 names job creation as a collection create, not a graded call.
+    // ADR-0159 decision 2 names job creation as a collection create, not a graded call.
     expect(violations([submit, poll], {})).toEqual([]);
   });
 

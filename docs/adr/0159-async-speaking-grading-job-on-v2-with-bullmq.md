@@ -1,4 +1,4 @@
-# ADR-0158: The async Speaking grading job lives on `/v2`, runs on BullMQ, and never re-dispatches
+# ADR-0159: The async Speaking grading job lives on `/v2`, runs on BullMQ, and never re-dispatches
 
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it in [#1718](https://github.com/AiHub-Ecosystem/aihub-be/issues/1718) on 2026-11-08.
 - Amends: [ADR-0014](0014-ai-speaking-d2-contract-boundary.md) (the planned `POST /v1/speaking/grade`), [ADR-0074](0074-transactional-email-outbox.md) (Redis is not used as a queue), [ADR-0129](0129-public-route-and-response-convention.md) (a graded operation ends in `/grade`)

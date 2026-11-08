@@ -2,7 +2,7 @@ import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-
 import type { SpeakingV2TestType } from '@/contracts/speaking/v2/response.shared';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 
-/** Where a Speaking grading job stands (ADR-0158). */
+/** Where a Speaking grading job stands (ADR-0159). */
 export type SpeakingGradingJobStatus =
   | 'queued'
   | 'running'

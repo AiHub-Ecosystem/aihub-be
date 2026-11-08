@@ -64,7 +64,7 @@ export class PostgresSandboxDispatchBudget
 
     return this.client.$transaction(async (transaction) => {
       // A Speaking grading job reserves at submit under its job id and the
-      // shared dispatcher reserves again under the same id (ADR-0158): a
+      // shared dispatcher reserves again under the same id (ADR-0159): a
       // reservation this request already holds admits it without a second unit.
       const held = await transaction.sandboxDispatchReservation.findUnique({
         where: { requestId: input.requestId },
