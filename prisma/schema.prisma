@@ -594,6 +594,7 @@ model SpeakingAudioAsset {
   retentionExpiresAt   DateTime @map("retention_expires_at") @db.Timestamptz(6)
 
   @@index([retentionExpiresAt, id], map: "speaking_audio_assets_retention_idx")
+  @@index([organizationId], map: "speaking_audio_assets_org_idx")
   @@map("speaking_audio_assets")
 }
 
@@ -616,7 +617,8 @@ model SpeakingV2ResultOwnership {
 ///
 /// The partial indexes `speaking_audio_upload_intents_expiry_idx` and
 /// `speaking_audio_upload_intents_rejected_idx`, and this table's `CHECK`
-/// constraints, are owned by migration 0025.
+/// constraints, are owned by migration 0025; the organization ceiling indexes
+/// are owned by migration 0062.
 /// @owner speaking
 model SpeakingAudioUploadIntent {
   id             String   @id
@@ -630,6 +632,8 @@ model SpeakingAudioUploadIntent {
   createdAt      DateTime @map("created_at") @db.Timestamptz(6)
   expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
 
+  @@index([organizationId, createdAt], map: "speaking_audio_upload_intents_org_idx")
+  @@index([organizationId, expiresAt], map: "speaking_audio_upload_intents_org_open_idx", where: raw("(status = 'open'::text)"))
   @@index([expiresAt, createdAt], map: "speaking_audio_upload_intents_expiry_idx", where: raw("(status = 'open'::text)"))
   @@index([createdAt], map: "speaking_audio_upload_intents_rejected_idx", where: raw("(status = 'rejected'::text)"))
   @@map("speaking_audio_upload_intents")
