@@ -33,6 +33,7 @@ bash.exe.stackdump
 .aihub-socket/
 /artifacts/capacity-benchmark/
 .workbuddy-ai/
+.perch/
 
 # Agent-authored throwaway files (issue-body scratch, ad-hoc captures, one-shot
 # scripts). The folder is created on demand and emptied when the task ends; see
