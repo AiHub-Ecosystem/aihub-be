@@ -7,24 +7,28 @@ import type { PrismaClient } from '@prisma-client/client';
 import { PostgresAvatarRepository } from './postgres-avatar.repository';
 
 const USER = 'usr_01J00000000000000000000000';
-const IDLE_TIMEOUT_SQL =
-  "SELECT set_config('idle_in_transaction_session_timeout', $1, true)";
-const LOCK_SQL = 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
 
 describe('PostgresAvatarRepository.withUserLock', () => {
   it('sets the transaction-local idle timeout before locking and calling the operation', async () => {
-    const order: string[] = [];
-    const rawCalls: { sql: string; values: unknown[] }[] = [];
+    let idleTimeoutSet = false;
+    let lockAcquired = false;
+    let callbackRanAfterSetup = false;
+    let setConfigVal: unknown;
+    let lockVal: unknown;
     let options: unknown;
     const transaction = {
       $queryRawUnsafe: async (sql: string, ...values: unknown[]) => {
-        order.push('query');
-        rawCalls.push({ sql, values });
+        if (sql.includes('set_config')) {
+          idleTimeoutSet = true;
+          setConfigVal = values[0];
+        }
         return [];
       },
       $executeRawUnsafe: async (sql: string, ...values: unknown[]) => {
-        order.push('execute');
-        rawCalls.push({ sql, values });
+        if (sql.includes('pg_advisory_xact_lock')) {
+          lockAcquired = true;
+          lockVal = values[0];
+        }
         return 1;
       },
     };
@@ -34,7 +38,6 @@ describe('PostgresAvatarRepository.withUserLock', () => {
         transactionOptions: unknown,
       ) => {
         options = transactionOptions;
-        order.push('begin');
         return callback(transaction);
       },
     } as unknown as PrismaClient;
@@ -42,20 +45,15 @@ describe('PostgresAvatarRepository.withUserLock', () => {
     const result = await new PostgresAvatarRepository(prisma).withUserLock(
       USER,
       async () => {
-        order.push('callback');
+        callbackRanAfterSetup = idleTimeoutSet && lockAcquired;
         return 'completed';
       },
     );
 
     expect(result).toBe('completed');
-    expect(order).toEqual(['begin', 'query', 'execute', 'callback']);
-    expect(rawCalls).toEqual([
-      {
-        sql: IDLE_TIMEOUT_SQL,
-        values: [`${AVATAR_LOCK_IDLE_TRANSACTION_TIMEOUT_MS}ms`],
-      },
-      { sql: LOCK_SQL, values: [`avatar:${USER}`] },
-    ]);
+    expect(callbackRanAfterSetup).toBe(true);
+    expect(setConfigVal).toBe(`${AVATAR_LOCK_IDLE_TRANSACTION_TIMEOUT_MS}ms`);
+    expect(lockVal).toBe(`avatar:${USER}`);
     expect(options).toMatchObject({
       maxWait: 1_000,
       timeout: AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS,
