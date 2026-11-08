@@ -98,6 +98,14 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.10.0] - 2026-11-08
+
+### Added
+
+- `POST /v1/me/avatar/uploads` (Avatar presigned upload creation) now declares `429`. Avatar presigning is bounded per account (ADR-0068
+  update): an account may hold 3 open, unconsumed, unexpired upload URLs and
+  be issued 10 per rolling hour; a refusal answers `429 RATE_LIMITED`.
+
 ## [1.7.0] - 2026-11-02
 
 ### Changed
