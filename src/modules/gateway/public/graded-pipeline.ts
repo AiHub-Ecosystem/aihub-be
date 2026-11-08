@@ -10,5 +10,5 @@ export {
   admitGradedRequest,
   gradedAdmissionPolicy,
   gradedAdmissionRefusal,
+  type AdmitGradedRequestInput,
 } from '@/modules/gateway/application/graded-request/admit-graded-request';
-export type { AdmitGradedRequestInput } from '@/modules/gateway/application/graded-request/admit-graded-request';
