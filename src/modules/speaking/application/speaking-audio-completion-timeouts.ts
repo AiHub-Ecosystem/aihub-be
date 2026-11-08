@@ -1,3 +1,4 @@
-// Keep the lock-holding transaction longer than the deadline for its storage calls.
+// Invariant: 20 s storage deadline < 30 s Prisma timeout <= 35 s idle timeout.
 export const SPEAKING_AUDIO_COMPLETION_DEADLINE_MS = 20_000;
 export const SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS = 30_000;
+export const SPEAKING_AUDIO_COMPLETION_IDLE_TRANSACTION_TIMEOUT_MS = 35_000;

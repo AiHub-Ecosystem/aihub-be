@@ -1,7 +1,10 @@
 import { AppError, internalError } from '@/common/errors/app-error';
 import { storeUnavailable } from '@/common/errors/upload-errors';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
-import { SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS } from '@/modules/speaking/application/speaking-audio-completion-timeouts';
+import {
+  SPEAKING_AUDIO_COMPLETION_IDLE_TRANSACTION_TIMEOUT_MS,
+  SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS,
+} from '@/modules/speaking/application/speaking-audio-completion-timeouts';
 import type {
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
@@ -121,6 +124,10 @@ const LOCK_INTENT_SQL = `
   FOR UPDATE
 `;
 
+const SET_COMPLETION_IDLE_TIMEOUT_SQL = `
+  SELECT set_config('idle_in_transaction_session_timeout', $1, true)
+`;
+
 export class PostgresSpeakingAudioUploadRepository
   implements SpeakingAudioUploadRepositoryPort
 {
@@ -206,6 +213,10 @@ export class PostgresSpeakingAudioUploadRepository
     | { readonly kind: 'refused'; readonly refusal: AppError }
   > {
     return this.completionTransaction(async (client) => {
+      await client.$queryRawUnsafe<readonly { set_config: string }[]>(
+        SET_COMPLETION_IDLE_TIMEOUT_SQL,
+        String(SPEAKING_AUDIO_COMPLETION_IDLE_TRANSACTION_TIMEOUT_MS),
+      );
       const [intentRow] = await client.$queryRawUnsafe<readonly IntentModel[]>(
         LOCK_INTENT_SQL,
         input.owner.assetId,
