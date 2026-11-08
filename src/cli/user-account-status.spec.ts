@@ -6,7 +6,7 @@ import type {
   RevokeAllRefreshSessionsInput,
   RevokeAllRefreshSessionsResult,
   UserAccountStatusPort,
-} from '@/modules/auth/accounts/application/user-account-status.port';
+} from '@/modules/auth/shared/application/user-account-status.port';
 import {
   runDisableUserAccountCommand,
   runRestoreUserAccountCommand,

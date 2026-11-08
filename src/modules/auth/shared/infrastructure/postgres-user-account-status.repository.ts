@@ -11,9 +11,11 @@ import type {
   RevokeAllRefreshSessionsInput,
   RevokeAllRefreshSessionsResult,
   UserAccountStatusPort,
-} from '@/modules/auth/accounts/application/user-account-status.port';
+} from '@/modules/auth/shared/application/user-account-status.port';
 import {
   type AuthRepositoryClient,
+  type AuthSqlClient,
+  type AuthTransactionClient,
   authQueryRows,
   authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
@@ -42,6 +44,45 @@ function rethrowDatabaseFailure(error: unknown): never {
   throw error;
 }
 
+async function findActiveActorId(
+  transaction: AuthSqlClient,
+  username: string,
+): Promise<string | undefined> {
+  const actorRows = await authQueryRows<{ id: string }>(
+    transaction,
+    FIND_ACTIVE_ACTOR_SQL,
+    [username],
+  );
+  return actorRows[0]?.id;
+}
+
+async function recordStatusAudit(
+  transaction: AuthTransactionClient,
+  input: {
+    readonly userAccountId: string | null;
+    readonly actorUserAccountId: string;
+    readonly action:
+      | 'user_account.disabled'
+      | 'user_account.restored'
+      | 'refresh_session.revoked_all';
+    readonly requestId: string;
+    readonly occurredAt: Date;
+  },
+): Promise<void> {
+  const auditId = `uasa_${ulid()}`;
+  await transaction.userAccountStatusAudit.create({
+    data: {
+      id: auditId,
+      userAccountId: input.userAccountId,
+      actorUserAccountId: input.actorUserAccountId,
+      actorSource: 'self_declared_operator',
+      action: input.action,
+      requestId: input.requestId,
+      occurredAt: input.occurredAt,
+    },
+  });
+}
+
 export class PostgresUserAccountStatusRepository
   implements UserAccountStatusPort
 {
@@ -56,12 +97,10 @@ export class PostgresUserAccountStatusRepository
   ): Promise<DisableUserAccountResult> {
     try {
       return await authTransaction(this.client, async (transaction) => {
-        const actorRows = await authQueryRows<{ id: string }>(
+        const actorId = await findActiveActorId(
           transaction,
-          FIND_ACTIVE_ACTOR_SQL,
-          [input.actorUsername],
+          input.actorUsername,
         );
-        const actorId = actorRows[0]?.id;
         if (actorId === undefined) {
           return { kind: 'actor_invalid' };
         }
@@ -114,17 +153,12 @@ export class PostgresUserAccountStatusRepository
             data: { consumedAt: input.occurredAt },
           });
 
-        const auditId = `uasa_${ulid()}`;
-        await transaction.userAccountStatusAudit.create({
-          data: {
-            id: auditId,
-            userAccountId: target.id,
-            actorUserAccountId: actorId,
-            actorSource: 'self_declared_operator',
-            action: 'user_account.disabled',
-            requestId: input.requestId,
-            occurredAt: input.occurredAt,
-          },
+        await recordStatusAudit(transaction, {
+          userAccountId: target.id,
+          actorUserAccountId: actorId,
+          action: 'user_account.disabled',
+          requestId: input.requestId,
+          occurredAt: input.occurredAt,
         });
 
         return {
@@ -149,12 +183,10 @@ export class PostgresUserAccountStatusRepository
   ): Promise<RestoreUserAccountResult> {
     try {
       return await authTransaction(this.client, async (transaction) => {
-        const actorRows = await authQueryRows<{ id: string }>(
+        const actorId = await findActiveActorId(
           transaction,
-          FIND_ACTIVE_ACTOR_SQL,
-          [input.actorUsername],
+          input.actorUsername,
         );
-        const actorId = actorRows[0]?.id;
         if (actorId === undefined) {
           return { kind: 'actor_invalid' };
         }
@@ -182,17 +214,12 @@ export class PostgresUserAccountStatusRepository
           data: { status: 'active', updatedAt: input.occurredAt },
         });
 
-        const auditId = `uasa_${ulid()}`;
-        await transaction.userAccountStatusAudit.create({
-          data: {
-            id: auditId,
-            userAccountId: target.id,
-            actorUserAccountId: actorId,
-            actorSource: 'self_declared_operator',
-            action: 'user_account.restored',
-            requestId: input.requestId,
-            occurredAt: input.occurredAt,
-          },
+        await recordStatusAudit(transaction, {
+          userAccountId: target.id,
+          actorUserAccountId: actorId,
+          action: 'user_account.restored',
+          requestId: input.requestId,
+          occurredAt: input.occurredAt,
         });
 
         return {
@@ -211,12 +238,10 @@ export class PostgresUserAccountStatusRepository
   ): Promise<RevokeAllRefreshSessionsResult> {
     try {
       return await authTransaction(this.client, async (transaction) => {
-        const actorRows = await authQueryRows<{ id: string }>(
+        const actorId = await findActiveActorId(
           transaction,
-          FIND_ACTIVE_ACTOR_SQL,
-          [input.actorUsername],
+          input.actorUsername,
         );
-        const actorId = actorRows[0]?.id;
         if (actorId === undefined) {
           return { kind: 'actor_invalid' };
         }
@@ -226,17 +251,12 @@ export class PostgresUserAccountStatusRepository
           data: { revokedAt: input.occurredAt },
         });
 
-        const auditId = `uasa_${ulid()}`;
-        await transaction.userAccountStatusAudit.create({
-          data: {
-            id: auditId,
-            userAccountId: null,
-            actorUserAccountId: actorId,
-            actorSource: 'self_declared_operator',
-            action: 'refresh_session.revoked_all',
-            requestId: input.requestId,
-            occurredAt: input.occurredAt,
-          },
+        await recordStatusAudit(transaction, {
+          userAccountId: null,
+          actorUserAccountId: actorId,
+          action: 'refresh_session.revoked_all',
+          requestId: input.requestId,
+          occurredAt: input.occurredAt,
         });
 
         return {

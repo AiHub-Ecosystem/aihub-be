@@ -3,9 +3,9 @@ import type { ExecutionContext } from '@nestjs/common';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { PostgresUserAccountStatusRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account-status.repository';
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import { PostgresUserAccountStatusRepository } from '@/modules/auth/shared/infrastructure/postgres-user-account-status.repository';
 import { PostgresUserAccessTokenRevocationRepository } from '@/modules/auth/user-access-tokens/infrastructure/postgres-user-access-token-revocation.repository';
 import type { IssuedRefreshToken } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import type {

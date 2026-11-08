@@ -3,8 +3,8 @@ import type {
   RestoreUserAccountResult,
   RevokeAllRefreshSessionsResult,
   UserAccountStatusPort,
-} from '@/modules/auth/accounts/application/user-account-status.port';
-import { PostgresUserAccountStatusRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account-status.repository';
+} from '@/modules/auth/shared/application/user-account-status.port';
+import { PostgresUserAccountStatusRepository } from '@/modules/auth/shared/infrastructure/postgres-user-account-status.repository';
 import { createOperatorAuthClient } from './operator-auth-client';
 import { runOperatorCommand } from './operator-command-context';
 
