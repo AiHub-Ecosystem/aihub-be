@@ -253,7 +253,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - User Access JWTs authenticate user-facing/BFF boundaries; grading routes continue to use the organization API-key and User Identity boundaries until a separate authorization decision changes them.
 - Refresh Tokens are renewable credentials with explicit rotation and revocation; they are not interchangeable with API keys or User Access JWTs.
 - Each successful login creates a separate Refresh Session and Token Family; logout revokes only the family represented by the current cookie, so another login remains independent.
-- The #66 slice treats the refresh cookie as an AIHUB-hosted, host-only, `Secure`/`HttpOnly`/`SameSite=Strict` browser credential; cross-site BFF forwarding and its CSRF contract are deferred.
+- The #66 slice treats the refresh cookie as an AIHUB-hosted, host-only, `Secure`/`HttpOnly`/`SameSite=Strict` browser credential; cross-site BFF forwarding now carries the ADR-0157 CSRF contract on top, and same-site behavior is unchanged.
 - The refresh cookie is named `__Host-aihub_refresh`, uses `Path=/` with no `Domain`, lives for 30 days, and is cleared with the same attributes plus immediate expiry.
 - Refresh credentials are cookie-only: refresh accepts exactly one named cookie and an empty body, never an authorization header, query value, alternate cookie, or duplicate cookie name.
 - Each successful refresh issues a new opaque 32-byte CSPRNG credential with a new 30-day sliding expiry; only its SHA-256 hash is durable, and refresh credentials use a port distinct from verification tokens.

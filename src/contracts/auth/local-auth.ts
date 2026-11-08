@@ -128,6 +128,13 @@ export const LoginResponseSchema = Type.Object(
         access_token: Type.String({ minLength: 1 }),
         token_type: Type.Literal('Bearer'),
         expires_in: Type.Literal(900),
+        csrf_token: Type.Optional(
+          Type.String({
+            pattern: '^[A-Za-z0-9_-]{43}$',
+            description:
+              'Cross-site BFF forwarding only (ADR-0157): the CSRF token bound to this refresh session, returned when the request carried the Customer Web BFF client secret. The BFF delivers it to the browser, which presents it back in X-AIHUB-CSRF-Token on forwarded refresh and logout calls; refresh rotation issues a new one.',
+          }),
+        ),
       },
       { additionalProperties: false },
     ),

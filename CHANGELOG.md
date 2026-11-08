@@ -9,6 +9,20 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [1.9.0] - 2026-11-08
+
+### Added
+
+- Cross-site BFF forwarding for the refresh-cookie flow (ADR-0157). When a
+  request to `POST /v1/auth/login`, `POST /v1/auth/refresh`, or
+  `POST /v1/auth/logout` carries the Customer Web BFF client secret, the route
+  requires a CSRF token in `X-AIHUB-CSRF-Token` and the end user's address in
+  `X-AIHUB-End-User-IP`; a forwarded login and refresh return a
+  `data.csrf_token` bound to the refresh session, and refresh rotation issues a
+  new one. A forwarded refresh without a valid token is refused with
+  `401 AUTH_REFRESH_TOKEN_INVALID` while the cookie is preserved. Requests
+  without the client secret keep the same-site browser contract byte for byte.
+
 ## [2.5.0] - 2026-11-02
 
 ### Added

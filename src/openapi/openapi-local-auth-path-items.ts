@@ -15,6 +15,7 @@ import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
 } from '@/modules/auth/local-credentials/public/local-auth';
+import { AIHUB_CSRF_HEADER } from '@/modules/auth/shared/presentation/cross-site-csrf';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import {
   routeAlternateSuccessResponsesOf,
@@ -34,6 +35,23 @@ function refreshInvalidResponse(): Record<string, unknown> {
         schema: errorResponseSchema(['AUTH_REFRESH_TOKEN_INVALID']),
       },
     },
+  };
+}
+
+/**
+ * Cross-site BFF forwarding (ADR-0157): the header exists only on a request
+ * forwarded by the Customer Web BFF, whose client secret authenticates the
+ * caller and switches the route onto the CSRF contract. A browser never sends
+ * it, and same-site answers stay byte-identical without it.
+ */
+function crossSiteCsrfParameter(): Record<string, unknown> {
+  return {
+    name: AIHUB_CSRF_HEADER,
+    in: 'header',
+    required: false,
+    schema: { type: 'string' },
+    description:
+      'Cross-site BFF forwarding only, when the request carries the Customer Web BFF client secret. On login: the pre-login CSRF token the BFF derives from that secret. On refresh and logout: the CSRF token bound to the refresh session, as last returned in the login or refresh response. A forwarded call without a valid token is refused.',
   };
 }
 
@@ -191,13 +209,17 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
     schema: TSchema,
     responses: Record<string, unknown>,
     requestBodyRequired = true,
+    extraParameters: Record<string, unknown>[] = [],
   ): Record<string, unknown> => ({
     post: {
       operationId,
       summary,
       ...routeIdentityScopeOf(operationId),
       ...routeSecurityOf(operationId),
-      parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
+      parameters: [
+        { $ref: '#/components/parameters/CorrelationId' },
+        ...extraParameters,
+      ],
       requestBody: {
         required: requestBodyRequired,
         content: { 'application/json': { schema } },
@@ -220,6 +242,8 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
       'Issue a User Access JWT',
       publishedLocalAuthRequestSchema(routeSchemaOf('auth.login', 'request')),
       loginResponses,
+      true,
+      [crossSiteCsrfParameter()],
     ),
     [routePathOf('auth.mfa.enrollment')]: {
       post: {
@@ -341,6 +365,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
       routeSchemaOf('auth.refresh', 'request'),
       refreshResponses,
       false,
+      [crossSiteCsrfParameter()],
     ),
     [routePathOf('auth.logout')]: operation(
       'auth.logout',
@@ -348,6 +373,7 @@ export function localAuthPathItems(): Record<string, Record<string, unknown>> {
       routeSchemaOf('auth.logout', 'request'),
       logoutResponses,
       false,
+      [crossSiteCsrfParameter()],
     ),
     [routePathOf('me.profile.read')]: {
       get: {

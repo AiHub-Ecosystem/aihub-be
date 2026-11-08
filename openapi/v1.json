@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "1.8.1"
+    "version": "1.9.0"
   },
   "servers": [
     {
@@ -8778,6 +8778,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "X-AIHUB-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cross-site BFF forwarding only, when the request carries the Customer Web BFF client secret. On login: the pre-login CSRF token the BFF derives from that secret. On refresh and logout: the CSRF token bound to the refresh session, as last returned in the login or refresh response. A forwarded call without a valid token is refused."
           }
         ],
         "requestBody": {
@@ -8851,6 +8860,11 @@
                         "expires_in": {
                           "const": 900,
                           "type": "number"
+                        },
+                        "csrf_token": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "description": "Cross-site BFF forwarding only (ADR-0157): the CSRF token bound to this refresh session, returned when the request carried the Customer Web BFF client secret. The BFF delivers it to the browser, which presents it back in X-AIHUB-CSRF-Token on forwarded refresh and logout calls; refresh rotation issues a new one.",
+                          "type": "string"
                         }
                       }
                     },
@@ -9306,6 +9320,11 @@
                         "expires_in": {
                           "const": 900,
                           "type": "number"
+                        },
+                        "csrf_token": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "description": "Cross-site BFF forwarding only (ADR-0157): the CSRF token bound to this refresh session, returned when the request carried the Customer Web BFF client secret. The BFF delivers it to the browser, which presents it back in X-AIHUB-CSRF-Token on forwarded refresh and logout calls; refresh rotation issues a new one.",
+                          "type": "string"
                         }
                       }
                     },
@@ -9615,6 +9634,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "X-AIHUB-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cross-site BFF forwarding only, when the request carries the Customer Web BFF client secret. On login: the pre-login CSRF token the BFF derives from that secret. On refresh and logout: the CSRF token bound to the refresh session, as last returned in the login or refresh response. A forwarded call without a valid token is refused."
           }
         ],
         "requestBody": {
@@ -9669,6 +9697,11 @@
                         "expires_in": {
                           "const": 900,
                           "type": "number"
+                        },
+                        "csrf_token": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "description": "Cross-site BFF forwarding only (ADR-0157): the CSRF token bound to this refresh session, returned when the request carried the Customer Web BFF client secret. The BFF delivers it to the browser, which presents it back in X-AIHUB-CSRF-Token on forwarded refresh and logout calls; refresh rotation issues a new one.",
+                          "type": "string"
                         }
                       }
                     },
@@ -9744,6 +9777,9 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
           }
         }
       }
@@ -9761,6 +9797,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "X-AIHUB-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cross-site BFF forwarding only, when the request carries the Customer Web BFF client secret. On login: the pre-login CSRF token the BFF derives from that secret. On refresh and logout: the CSRF token bound to the refresh session, as last returned in the login or refresh response. A forwarded call without a valid token is refused."
           }
         ],
         "requestBody": {
@@ -9798,6 +9843,9 @@
           },
           "500": {
             "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
           }
         }
       }
@@ -10412,6 +10460,11 @@
                         "expires_in": {
                           "const": 900,
                           "type": "number"
+                        },
+                        "csrf_token": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "description": "Cross-site BFF forwarding only (ADR-0157): the CSRF token bound to this refresh session, returned when the request carried the Customer Web BFF client secret. The BFF delivers it to the browser, which presents it back in X-AIHUB-CSRF-Token on forwarded refresh and logout calls; refresh rotation issues a new one.",
+                          "type": "string"
                         }
                       }
                     },

@@ -1,6 +1,6 @@
 # Rotating refresh-session boundary
 
-Status: accepted (amended by ADR-0054: a Verification Sign-in also creates a Refresh Session)
+Status: accepted (amended by ADR-0054: a Verification Sign-in also creates a Refresh Session; amended by [ADR-0157](0157-cross-site-bff-csrf-contract-for-the-refresh-cookie.md): cross-site BFF forwarding carries a CSRF contract)
 
 Each successful AIHUB login creates an independent durable Refresh Session and
 Refresh Token Family. Refresh rotation is strict and atomic: reuse of any

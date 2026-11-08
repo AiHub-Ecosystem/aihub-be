@@ -1386,7 +1386,8 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: EmptyAuthRequestSchema,
     responseSchema: LoginResponseSchema,
-    errorStatuses: [400, 429, 500],
+    // 503: a BFF-forwarded refresh without the end-user address (ADR-0157).
+    errorStatuses: [400, 429, 500, 503],
   },
   'auth.logout': {
     cacheControl: { value: 'no-store' },
@@ -1399,7 +1400,8 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: EmptyAuthRequestSchema,
     responseSchema: null,
-    errorStatuses: [400, 500],
+    // 503: the BFF client-secret guard with no provisioned secret (ADR-0157).
+    errorStatuses: [400, 500, 503],
   },
   'auth.user_access_tokens.revoke': {
     openApi: {

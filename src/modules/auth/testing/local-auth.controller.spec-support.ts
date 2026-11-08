@@ -71,6 +71,7 @@ import {
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
+import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 
 export const USER_ID = 'usr_01J00000000000000000000000';
 export const EMAIL = 'person@example.com';
@@ -291,6 +292,7 @@ export async function createLocalAuthTestContext(
   accessTokenVerifierOverride?: UserAccessTokenVerifierPort,
   requestLogStream?: RequestLogStream,
   configureFastify?: (fastify: FastifyInstance) => void,
+  clientSecret?: string,
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -360,6 +362,8 @@ export async function createLocalAuthTestContext(
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)
     .useValue(mfa)
+    .overrideProvider(WEB_SESSION_CLIENT_SECRET)
+    .useValue({ resolve: () => clientSecret })
     .compile();
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
