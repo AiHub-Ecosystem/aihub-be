@@ -8,3 +8,9 @@ export type {
   GradedPipelineEnginePort,
 } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
 export { createGradedPipelineContext } from '@/modules/gateway/presentation/graded-pipeline-context';
+export {
+  admitGradedRequest,
+  gradedAdmissionPolicy,
+  gradedAdmissionRefusal,
+} from '@/modules/gateway/application/graded-request/admit-graded-request';
+export type { AdmitGradedRequestInput } from '@/modules/gateway/application/graded-request/admit-graded-request';

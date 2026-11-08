@@ -96,6 +96,10 @@ class FakeStorage implements SpeakingAudioAssetStoragePort {
     this.closed = true;
   }
 
+  async readObject(): Promise<never> {
+    throw new Error('not used by cleanup');
+  }
+
   async createUploadUrl(): Promise<never> {
     throw new Error('not used by cleanup');
   }

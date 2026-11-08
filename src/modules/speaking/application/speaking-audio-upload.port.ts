@@ -1,5 +1,6 @@
 import type { AppError } from '@/common/errors/app-error';
 import type { RequestContext } from '@/common/request-context/request-context';
+import type { SpeakingAudio } from '@/contracts/speaking/grading';
 import type {
   SpeakingAudioAsset,
   SpeakingAudioContentType,
@@ -60,6 +61,14 @@ export interface SpeakingAudioUploadRepositoryPort {
 }
 
 export interface SpeakingAudioAssetStoragePort {
+  readObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly objectKey: string;
+      readonly contentType: SpeakingAudioContentType;
+    },
+    signal?: AbortSignal,
+  ): Promise<SpeakingAudio>;
   createUploadUrl(input: {
     readonly environment: SpeakingAudioEnvironment;
     readonly objectKey: string;

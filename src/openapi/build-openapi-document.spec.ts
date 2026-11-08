@@ -150,6 +150,15 @@ const V1_OPERATION_IDS = OPERATION_IDS.filter((operationId) =>
 const V2_OPERATION_IDS = OPERATION_IDS.filter((operationId) =>
   OPERATION_CATALOG[operationId].path.startsWith('/v2/'),
 );
+// The same split for the registry: a /v2 route is checked against the /v2 document.
+const V1_PUBLIC_ROUTES = Object.fromEntries(
+  Object.entries(PUBLIC_ROUTES).filter(([, route]) =>
+    route.path.startsWith('/v1/'),
+  ),
+) as Record<string, PublicRouteDef>;
+const V2_PUBLIC_ROUTES = Object.entries(PUBLIC_ROUTES).filter(([, route]) =>
+  route.path.startsWith('/v2/'),
+) as [string, PublicRouteDef][];
 
 describe('buildOpenApiDocument', () => {
   it('describes an injected retrieval operation without a request body', () => {
@@ -204,7 +213,7 @@ describe('buildOpenApiDocument', () => {
   it('derives success Cache-Control documentation from both catalogs', () => {
     const document = build();
 
-    for (const route of Object.values(PUBLIC_ROUTES) as PublicRouteDef[]) {
+    for (const route of Object.values(V1_PUBLIC_ROUTES)) {
       const method = route.method.toLowerCase() as keyof OpenApiPathItem;
       const operation = document.paths[toOpenApiPath(route.path)]?.[method];
       const statuses = [
@@ -270,7 +279,7 @@ describe('buildOpenApiDocument', () => {
     }
     expect(organizationIdSchema.description).toContain('Organization ID');
 
-    for (const route of Object.values(PUBLIC_ROUTES)) {
+    for (const route of Object.values(V1_PUBLIC_ROUTES)) {
       if (route.organizationResolution !== 'path') continue;
 
       const method = route.method.toLowerCase() as keyof OpenApiPathItem;
@@ -315,7 +324,7 @@ describe('buildOpenApiDocument', () => {
       OPERATION_IDS.map((operationId) => OPERATION_CATALOG[operationId].path),
     );
     const declared = new Set(
-      Object.values(PUBLIC_ROUTES).map((route) => toOpenApiPath(route.path)),
+      Object.values(V1_PUBLIC_ROUTES).map((route) => toOpenApiPath(route.path)),
     );
 
     expect(
@@ -410,7 +419,7 @@ describe('buildOpenApiDocument', () => {
     const doc = build();
     const mismatches: Record<string, unknown> = {};
 
-    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+    for (const [routeId, route] of Object.entries(V1_PUBLIC_ROUTES)) {
       const pathItem = doc.paths[toOpenApiPath(route.path)];
       const operation = pathItem?.[
         route.method.toLowerCase() as keyof OpenApiPathItem
@@ -448,7 +457,7 @@ describe('buildOpenApiDocument', () => {
     const doc = build();
     const mismatches: Record<string, string> = {};
 
-    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+    for (const [routeId, route] of Object.entries(V1_PUBLIC_ROUTES)) {
       const pathItem = doc.paths[toOpenApiPath(route.path)];
       const operation = pathItem?.[
         route.method.toLowerCase() as keyof OpenApiPathItem
@@ -483,7 +492,7 @@ describe('buildOpenApiDocument', () => {
     const doc = build();
     const mismatches: Record<string, unknown> = {};
 
-    for (const [routeId, route] of Object.entries(PUBLIC_ROUTES)) {
+    for (const [routeId, route] of Object.entries(V1_PUBLIC_ROUTES)) {
       const pathItem = doc.paths[toOpenApiPath(route.path)];
       const operation = pathItem?.[
         route.method.toLowerCase() as keyof OpenApiPathItem
@@ -1234,6 +1243,32 @@ describe('buildOpenApiDocument', () => {
       expect(pathItem?.post?.operationId).toBe(operationId);
       expect(catalogued.path).toMatch(/^\/v1\//);
       expect(catalogued.path).not.toMatch(/^\/v1\/v1\//);
+    }
+  });
+
+  it('documents each /v2 registry route with its identity scope, security and no-store', () => {
+    const doc = buildOpenApiDocument(findPublicApiMajor(2)) as OpenApiDocument;
+
+    expect(V2_PUBLIC_ROUTES.length).toBeGreaterThan(0);
+    for (const [, route] of V2_PUBLIC_ROUTES) {
+      const operation = doc.paths[toOpenApiPath(route.path)]?.[
+        route.method.toLowerCase() as keyof OpenApiPathItem
+      ] as (OpenApiOperation & Record<string, unknown>) | undefined;
+
+      expect(operation).toBeDefined();
+      expect(operation?.['x-identity-scope'] ?? null).toBe(
+        route.publishedIdentityScope,
+      );
+      expect(operation?.security).toBeDefined();
+      expect(
+        operation?.responses[String(route.successStatus)]?.headers?.[
+          'Cache-Control'
+        ]?.schema,
+      ).toEqual(
+        route.cacheControl?.value
+          ? { type: 'string', enum: [route.cacheControl.value] }
+          : undefined,
+      );
     }
   });
 

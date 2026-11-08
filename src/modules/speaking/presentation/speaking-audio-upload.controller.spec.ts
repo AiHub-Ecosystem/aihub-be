@@ -216,6 +216,10 @@ class FakeAudioAssetStorage implements SpeakingAudioAssetStoragePort {
   deleteFails = false;
   unavailable = false;
 
+  async readObject(): Promise<never> {
+    throw new Error('not used by upload controller tests');
+  }
+
   async createUploadUrl(input: {
     readonly environment: 'production' | 'sandbox';
     readonly objectKey: string;

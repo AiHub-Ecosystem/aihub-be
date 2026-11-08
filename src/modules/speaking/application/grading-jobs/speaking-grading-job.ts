@@ -9,9 +9,6 @@ export type SpeakingGradingJobStatus =
   | 'succeeded'
   | 'failed';
 
-export const SPEAKING_GRADING_JOB_TERMINAL_STATUSES: readonly SpeakingGradingJobStatus[] =
-  ['succeeded', 'failed'];
-
 /**
  * Codes a job may end with beyond the public codes the synchronous v2 question
  * grade already maps (such as `AUDIO_UNREADABLE`). `retryable` says whether the
@@ -53,6 +50,19 @@ export interface SpeakingGradingJob extends SpeakingGradingJobOwner {
   readonly jobId: string;
   /** The API key that submitted the job; metering attributes usage to it. */
   readonly apiKeyId: string;
+  /**
+   * The Organization's Concurrency permit ceiling read at submit, as the
+   * synchronous route reads it at authentication.
+   * ponytail: snapshot, so a limit change reaches only jobs submitted after it
+   * (at most the 15-minute queue window); look it up at claim time if that matters.
+   */
+  readonly maxConcurrent: number;
+  /**
+   * Whether submit admission checked a monthly quota for this job
+   * (`gradedAdmissionPolicy(...).quotaTracked`); metering evidence carries it
+   * as the synchronous route does, so the finalizer increments the counter.
+   */
+  readonly quotaTracked: boolean;
   readonly audioAssetId: string;
   readonly request: SpeakingGradingJobRequest;
   readonly status: SpeakingGradingJobStatus;

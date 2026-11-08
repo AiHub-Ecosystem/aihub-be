@@ -30,6 +30,9 @@ let organizationId: string;
 let otherOrganizationId: string;
 
 const storage: SpeakingAudioAssetStoragePort = {
+  readObject: async () => {
+    throw new Error('not used by upload repository tests');
+  },
   createUploadUrl: async () => ({
     url: 'https://example.test/upload',
     expiresAt: new Date('2026-10-03T04:30:00.000Z'),

@@ -100,6 +100,11 @@ import {
   SpeakingQuestionsResponseSchema,
 } from '@/contracts/speaking/questions';
 import {
+  SpeakingGradingJobPollResponseSchema,
+  SpeakingGradingJobSubmitRequestSchema,
+  SpeakingGradingJobSubmitResponseSchema,
+} from '@/contracts/speaking/v2/grading-job';
+import {
   CreateWritingChartUploadRequestSchema,
   WritingChartAssetResponseSchema,
   WritingChartUploadGrantResponseSchema,
@@ -273,6 +278,66 @@ export const PUBLIC_ROUTES = {
     requestSchema: null,
     responseSchema: SpeakingQuestionsResponseSchema,
     errorStatuses: [400, 500],
+  },
+  'speaking.gradingJobs.create': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Speaking grading job responses must not be cached.',
+    },
+    openApi: {
+      summary: 'Submit an asynchronous Speaking grading job',
+      description: [
+        'Creates a durable job that grades one question from a previously uploaded Audio asset. The request is admitted synchronously and returns without calling the AI Service; poll the returned `job_id` for the result.',
+        'An optional `Idempotency-Key` replays the original 202 response for the same request body.',
+      ].join('\n\n'),
+      successDescription:
+        'The queued job identifier. No Speaking result is dispatched or returned by this request.',
+    },
+    method: 'POST',
+    timeoutMs: 10_000,
+    path: '/v2/ielts/speaking/grading-jobs',
+    callerAuth: 'api-key',
+    requiredScope: 'speaking.grade',
+    organizationResolution: 'caller',
+    successStatus: 202,
+    publishedIdentityScope: 'user',
+    idempotency: 'optional',
+    requestSchema: SpeakingGradingJobSubmitRequestSchema,
+    responseSchema: SpeakingGradingJobSubmitResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 409, 413, 429, 500, 503],
+  },
+  'speaking.gradingJobs.get': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'Speaking grading job responses must not be cached.',
+    },
+    openApi: {
+      summary: 'Poll a Speaking grading job',
+      description:
+        'Returns the job state and, when terminal, its Speaking v2 question result or safe error. Only the same Organization and End-User ID can read the job.',
+      parameters: [
+        {
+          name: 'job_id',
+          in: 'path',
+          required: true,
+          description: 'The job identifier returned by the submit request.',
+          schema: { type: 'string', pattern: '^sgj_[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      ],
+      successDescription: 'The current state of the owned grading job.',
+    },
+    method: 'GET',
+    timeoutMs: 30_000,
+    path: '/v2/ielts/speaking/grading-jobs/:jobId',
+    callerAuth: 'api-key',
+    requiredScope: 'speaking.grade',
+    organizationResolution: 'caller',
+    successStatus: 200,
+    publishedIdentityScope: 'user',
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingGradingJobPollResponseSchema,
+    errorStatuses: [400, 401, 403, 404, 429, 500, 503],
   },
   'speaking.audioUploads.create': {
     cacheControl: {

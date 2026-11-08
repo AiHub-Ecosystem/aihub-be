@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.5.0"
+    "version": "2.6.0"
   },
   "servers": [
     {
@@ -9395,6 +9395,1216 @@
           }
         },
         "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v2/ielts/speaking/grading-jobs": {
+      "post": {
+        "operationId": "speaking.gradingJobs.create",
+        "summary": "Submit an asynchronous Speaking grading job",
+        "description": "Creates a durable job that grades one question from a previously uploaded Audio asset. The request is admitted synchronously and returns without calling the AI Service; poll the returned `job_id` for the result.\n\nAn optional `Idempotency-Key` replays the original 202 response for the same request body.",
+        "x-identity-scope": "user",
+        "x-required-scope": "speaking.grade",
+        "x-idempotency": "optional",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Optional. When supplied, the key replays the completed result for a repeat call."
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["audio_asset_id", "part", "question_id"],
+                "properties": {
+                  "audio_asset_id": {
+                    "pattern": "^aud_[0-9A-HJKMNP-TV-Z]{26}$",
+                    "type": "string"
+                  },
+                  "part": {
+                    "minimum": 1,
+                    "maximum": 3,
+                    "type": "integer"
+                  },
+                  "question_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "prompt_text": {
+                    "type": "string"
+                  },
+                  "test_type": {
+                    "anyOf": [
+                      {
+                        "const": "practice",
+                        "type": "string"
+                      },
+                      {
+                        "const": "full_test",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "test_code": {
+                    "type": "string"
+                  },
+                  "part_result_id": {
+                    "maxLength": 64,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The queued job identifier. No Speaking result is dispatched or returned by this request.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Speaking grading job responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["job_id", "status"],
+                      "properties": {
+                        "job_id": {
+                          "pattern": "^sgj_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": "queued",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/v2/ielts/speaking/grading-jobs/{job_id}": {
+      "get": {
+        "operationId": "speaking.gradingJobs.get",
+        "summary": "Poll a Speaking grading job",
+        "description": "Returns the job state and, when terminal, its Speaking v2 question result or safe error. Only the same Organization and End-User ID can read the job.",
+        "x-identity-scope": "user",
+        "x-required-scope": "speaking.grade",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "The job identifier returned by the submit request.",
+            "schema": {
+              "type": "string",
+              "pattern": "^sgj_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The current state of the owned grading job.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Speaking grading job responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["job_id", "status", "created_at"],
+                      "properties": {
+                        "job_id": {
+                          "pattern": "^sgj_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "queued",
+                              "type": "string"
+                            },
+                            {
+                              "const": "running",
+                              "type": "string"
+                            },
+                            {
+                              "const": "succeeded",
+                              "type": "string"
+                            },
+                            {
+                              "const": "failed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "created_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "completed_at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "result": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "meta",
+                            "transcript",
+                            "scores",
+                            "overall_feedback",
+                            "criteria"
+                          ],
+                          "properties": {
+                            "meta": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "schema_version",
+                                "result_type",
+                                "test_id",
+                                "test_type",
+                                "part",
+                                "question_id",
+                                "response_id",
+                                "part_result_id",
+                                "graded_at"
+                              ],
+                              "properties": {
+                                "schema_version": {
+                                  "const": "2.4",
+                                  "type": "string"
+                                },
+                                "result_type": {
+                                  "const": "question_result",
+                                  "type": "string"
+                                },
+                                "test_id": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "test_type": {
+                                  "anyOf": [
+                                    {
+                                      "const": "practice",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "full_test",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "part": {
+                                  "minimum": 1,
+                                  "maximum": 3,
+                                  "type": "integer"
+                                },
+                                "question_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "response_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "part_result_id": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "graded_at": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "transcript": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": ["text", "stats", "tokens"],
+                              "properties": {
+                                "text": {
+                                  "type": "string"
+                                },
+                                "stats": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": [
+                                    "word_count",
+                                    "speaking_seconds"
+                                  ],
+                                  "properties": {
+                                    "word_count": {
+                                      "anyOf": [
+                                        {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "speaking_seconds": {
+                                      "anyOf": [
+                                        {
+                                          "minimum": 0,
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "tokens": {
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": true,
+                                    "type": "object",
+                                    "required": [
+                                      "index",
+                                      "text",
+                                      "start_ms",
+                                      "end_ms"
+                                    ],
+                                    "properties": {
+                                      "index": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      },
+                                      "start_ms": {
+                                        "anyOf": [
+                                          {
+                                            "minimum": 0,
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "end_ms": {
+                                        "anyOf": [
+                                          {
+                                            "minimum": 0,
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "scores": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "overall",
+                                "fluency_coherence",
+                                "lexical_resource",
+                                "grammatical_range_accuracy",
+                                "pronunciation",
+                                "is_provisional"
+                              ],
+                              "properties": {
+                                "overall": {
+                                  "minimum": 0,
+                                  "maximum": 9,
+                                  "multipleOf": 0.5,
+                                  "type": "number"
+                                },
+                                "fluency_coherence": {
+                                  "minimum": 0,
+                                  "maximum": 9,
+                                  "type": "integer"
+                                },
+                                "lexical_resource": {
+                                  "minimum": 0,
+                                  "maximum": 9,
+                                  "type": "integer"
+                                },
+                                "grammatical_range_accuracy": {
+                                  "minimum": 0,
+                                  "maximum": 9,
+                                  "type": "integer"
+                                },
+                                "pronunciation": {
+                                  "minimum": 0,
+                                  "maximum": 9,
+                                  "type": "integer"
+                                },
+                                "is_provisional": {
+                                  "type": "boolean"
+                                }
+                              }
+                            },
+                            "overall_feedback": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": ["overview_vi", "details"],
+                              "properties": {
+                                "overview_vi": {
+                                  "type": "string"
+                                },
+                                "details": {
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": true,
+                                    "type": "object",
+                                    "required": ["criterion", "comment_vi"],
+                                    "properties": {
+                                      "criterion": {
+                                        "type": "string"
+                                      },
+                                      "comment_vi": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "criteria": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "fluency_coherence",
+                                "lexical_resource",
+                                "grammatical_range_accuracy",
+                                "pronunciation"
+                              ],
+                              "properties": {
+                                "fluency_coherence": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": ["summary", "diagnostics"],
+                                  "properties": {
+                                    "summary": {
+                                      "additionalProperties": true,
+                                      "type": "object",
+                                      "required": [
+                                        "reason_for_band_vi",
+                                        "strengths_vi",
+                                        "areas_for_improvement_vi"
+                                      ],
+                                      "properties": {
+                                        "reason_for_band_vi": {
+                                          "type": "string"
+                                        },
+                                        "strengths_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "areas_for_improvement_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "diagnostics": {
+                                      "anyOf": [
+                                        {
+                                          "type": "null"
+                                        },
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": true,
+                                            "type": "object",
+                                            "required": [
+                                              "reference",
+                                              "kind",
+                                              "error_codes",
+                                              "explain_vi",
+                                              "improvement",
+                                              "improvement_vi"
+                                            ],
+                                            "properties": {
+                                              "reference": {
+                                                "additionalProperties": true,
+                                                "type": "object",
+                                                "required": [
+                                                  "token_range",
+                                                  "text",
+                                                  "start_ms",
+                                                  "end_ms"
+                                                ],
+                                                "properties": {
+                                                  "token_range": {
+                                                    "minItems": 2,
+                                                    "maxItems": 2,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "start_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "end_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  }
+                                                }
+                                              },
+                                              "kind": {
+                                                "type": "string"
+                                              },
+                                              "error_codes": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "explain_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "lexical_resource": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": ["summary", "diagnostics"],
+                                  "properties": {
+                                    "summary": {
+                                      "additionalProperties": true,
+                                      "type": "object",
+                                      "required": [
+                                        "reason_for_band_vi",
+                                        "strengths_vi",
+                                        "areas_for_improvement_vi"
+                                      ],
+                                      "properties": {
+                                        "reason_for_band_vi": {
+                                          "type": "string"
+                                        },
+                                        "strengths_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "areas_for_improvement_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "diagnostics": {
+                                      "anyOf": [
+                                        {
+                                          "type": "null"
+                                        },
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": true,
+                                            "type": "object",
+                                            "required": [
+                                              "reference",
+                                              "kind",
+                                              "error_codes",
+                                              "explain_vi",
+                                              "improvement",
+                                              "improvement_vi"
+                                            ],
+                                            "properties": {
+                                              "reference": {
+                                                "additionalProperties": true,
+                                                "type": "object",
+                                                "required": [
+                                                  "token_range",
+                                                  "text",
+                                                  "start_ms",
+                                                  "end_ms"
+                                                ],
+                                                "properties": {
+                                                  "token_range": {
+                                                    "minItems": 2,
+                                                    "maxItems": 2,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "start_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "end_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  }
+                                                }
+                                              },
+                                              "kind": {
+                                                "type": "string"
+                                              },
+                                              "error_codes": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "explain_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "grammatical_range_accuracy": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": ["summary", "diagnostics"],
+                                  "properties": {
+                                    "summary": {
+                                      "additionalProperties": true,
+                                      "type": "object",
+                                      "required": [
+                                        "reason_for_band_vi",
+                                        "strengths_vi",
+                                        "areas_for_improvement_vi"
+                                      ],
+                                      "properties": {
+                                        "reason_for_band_vi": {
+                                          "type": "string"
+                                        },
+                                        "strengths_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "areas_for_improvement_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "diagnostics": {
+                                      "anyOf": [
+                                        {
+                                          "type": "null"
+                                        },
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": true,
+                                            "type": "object",
+                                            "required": [
+                                              "reference",
+                                              "kind",
+                                              "error_codes",
+                                              "explain_vi",
+                                              "improvement",
+                                              "improvement_vi"
+                                            ],
+                                            "properties": {
+                                              "reference": {
+                                                "additionalProperties": true,
+                                                "type": "object",
+                                                "required": [
+                                                  "token_range",
+                                                  "text",
+                                                  "start_ms",
+                                                  "end_ms"
+                                                ],
+                                                "properties": {
+                                                  "token_range": {
+                                                    "minItems": 2,
+                                                    "maxItems": 2,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "start_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "end_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  }
+                                                }
+                                              },
+                                              "kind": {
+                                                "type": "string"
+                                              },
+                                              "error_codes": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "explain_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "pronunciation": {
+                                  "additionalProperties": true,
+                                  "type": "object",
+                                  "required": ["summary", "diagnostics"],
+                                  "properties": {
+                                    "summary": {
+                                      "additionalProperties": true,
+                                      "type": "object",
+                                      "required": [
+                                        "reason_for_band_vi",
+                                        "strengths_vi",
+                                        "areas_for_improvement_vi"
+                                      ],
+                                      "properties": {
+                                        "reason_for_band_vi": {
+                                          "type": "string"
+                                        },
+                                        "strengths_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "areas_for_improvement_vi": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "diagnostics": {
+                                      "anyOf": [
+                                        {
+                                          "type": "null"
+                                        },
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": true,
+                                            "type": "object",
+                                            "required": [
+                                              "reference",
+                                              "kind",
+                                              "error_codes",
+                                              "explain_vi",
+                                              "improvement",
+                                              "improvement_vi"
+                                            ],
+                                            "properties": {
+                                              "reference": {
+                                                "additionalProperties": true,
+                                                "type": "object",
+                                                "required": [
+                                                  "token_range",
+                                                  "text",
+                                                  "start_ms",
+                                                  "end_ms"
+                                                ],
+                                                "properties": {
+                                                  "token_range": {
+                                                    "minItems": 2,
+                                                    "maxItems": 2,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "start_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "end_ms": {
+                                                    "anyOf": [
+                                                      {
+                                                        "minimum": 0,
+                                                        "type": "number"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  }
+                                                }
+                                              },
+                                              "kind": {
+                                                "type": "string"
+                                              },
+                                              "error_codes": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "explain_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "improvement_vi": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "error": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": ["code", "message", "retryable"],
+                          "properties": {
+                            "code": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "message": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "head": {
+        "operationId": "speaking.gradingJobs.get.head",
+        "summary": "Retrieve response headers",
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-identity-scope": "user",
+        "x-required-scope": "speaking.grade",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/UserIdentity"
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "The job identifier returned by the submit request.",
+            "schema": {
+              "type": "string",
+              "pattern": "^sgj_[0-9A-HJKMNP-TV-Z]{26}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Speaking grading job responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "401": {
+            "description": "Same status as GET, without a response body."
+          },
+          "403": {
+            "description": "Same status as GET, without a response body."
+          },
+          "404": {
+            "description": "Same status as GET, without a response body."
+          },
+          "429": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          }
+        }
       }
     }
   }

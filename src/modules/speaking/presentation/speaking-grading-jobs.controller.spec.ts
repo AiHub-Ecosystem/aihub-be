@@ -1,0 +1,401 @@
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
+
+import { registerBodySizeGuard } from '@/common/http/body-size.hook';
+import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { generateRequestId } from '@/common/request-context/request-id';
+import type {
+  GradedAdmissionDecision,
+  GradedAdmissionPort,
+  GradedAdmissionRequest,
+} from '@/modules/gateway/application/graded-admission.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
+import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
+import {
+  SANDBOX_DISPATCH_BUDGET,
+  type SandboxDispatchBudgetPort,
+} from '@/modules/gateway/public/sandbox-dispatch-budget';
+import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyServicePort,
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
+import { ApiKeyUserIdentityGuard } from '@/modules/identity/api-keys/presentation/api-key-user-identity.guard';
+import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
+import type { MeteringFinalizerPort } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
+import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
+import { GetSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/get-speaking-grading-job';
+import {
+  SPEAKING_GRADING_JOB_QUEUE,
+  SPEAKING_GRADING_JOB_REPOSITORY,
+} from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
+import { SubmitSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/submit-speaking-grading-job';
+import { SPEAKING_AUDIO_UPLOAD_REPOSITORY } from '@/modules/speaking/application/speaking-audio-upload.port';
+import { SpeakingGradingJobsController } from './speaking-grading-jobs.controller';
+import {
+  ASSET_ID,
+  FakeAudioRepository,
+  FakeJobRepository,
+  FakeQueue,
+  JOB_ID,
+  OWNER,
+  REQUEST_BODY,
+  seededJob,
+  speakingAsset,
+} from './speaking-grading-jobs.test-fixtures';
+
+function json(response: { readonly payload: string }): unknown {
+  return JSON.parse(response.payload);
+}
+
+describe('Speaking grading jobs HTTP flow', () => {
+  let app: NestFastifyApplication;
+  let repository: FakeJobRepository;
+  let audioRepository: FakeAudioRepository;
+  let queue: FakeQueue;
+  let admissionDecision: GradedAdmissionDecision | undefined;
+  let admissionCalls: GradedAdmissionRequest[];
+  let pollRateLimitCalls: number;
+  let idempotency: IdempotencyServicePort;
+  let nextKey = 0;
+
+  beforeAll(async () => {
+    repository = new FakeJobRepository();
+    audioRepository = new FakeAudioRepository();
+    queue = new FakeQueue();
+    admissionCalls = [];
+    pollRateLimitCalls = 0;
+    idempotency = new IdempotencyService(new InMemoryIdempotencyRepository());
+    const admission: GradedAdmissionPort = {
+      consume: async (request) => {
+        admissionCalls.push(request);
+        if (admissionDecision !== undefined) return admissionDecision;
+        if (
+          request.monthlyRequestQuota !== null &&
+          request.monthlyRequestQuota <= 0
+        ) {
+          return { stage: 'quota', quota: request.monthlyRequestQuota };
+        }
+        return { stage: 'admitted' };
+      },
+    };
+    const sandboxBudget: SandboxDispatchBudgetPort = {
+      reserve: async () => true,
+      release: async () => undefined,
+      allowanceFor: async () => null,
+    };
+    const authenticatedGuard = {
+      canActivate: (context: import('@nestjs/common').ExecutionContext) => {
+        const request = context
+          .switchToHttp()
+          .getRequest<AuthenticatedRequest>();
+        const organizationHeader = request.headers['x-test-org'];
+        const environmentHeader = request.headers['x-test-environment'];
+        const identityHeader = request.headers['x-user-identity'];
+        const organizationId =
+          typeof organizationHeader === 'string'
+            ? organizationHeader
+            : OWNER.organizationId;
+        const environment =
+          environmentHeader === 'sandbox' ? 'sandbox' : 'production';
+        const endUserId =
+          typeof identityHeader === 'string' ? identityHeader : OWNER.endUserId;
+        request.aihubAuth = {
+          organizationId,
+          apiKeyId: 'ak_test',
+          environment,
+          scopes: ['speaking.grade'],
+          rateLimitRpm: 60,
+          maxConcurrent: 4,
+          monthlyRequestQuota: 2,
+          hardStopOnQuota: true,
+          allowedEnvironments: [environment],
+        };
+        request.aihubIdentity = {
+          userId: endUserId,
+          organizationId,
+          scopes: [],
+          mode: 'declared_id',
+        };
+        return true;
+      },
+    };
+    const testingModule = Test.createTestingModule({
+      controllers: [SpeakingGradingJobsController],
+      providers: [
+        {
+          provide: SubmitSpeakingGradingJob,
+          useValue: new SubmitSpeakingGradingJob(
+            repository,
+            queue,
+            audioRepository,
+            admission,
+            sandboxBudget,
+            idempotency,
+          ),
+        },
+        {
+          provide: GetSpeakingGradingJob,
+          useValue: new GetSpeakingGradingJob(repository),
+        },
+        { provide: SPEAKING_GRADING_JOB_REPOSITORY, useValue: repository },
+        { provide: SPEAKING_GRADING_JOB_QUEUE, useValue: queue },
+        {
+          provide: SPEAKING_AUDIO_UPLOAD_REPOSITORY,
+          useValue: audioRepository,
+        },
+        { provide: GRADED_ADMISSION, useValue: admission },
+        { provide: SANDBOX_DISPATCH_BUDGET, useValue: sandboxBudget },
+        { provide: IDEMPOTENCY_SERVICE, useValue: idempotency },
+      ],
+    })
+      .overrideGuard(ApiKeyUserIdentityGuard)
+      .useValue(authenticatedGuard)
+      .overrideGuard(RateLimitGuard)
+      .useValue({
+        canActivate: async () => {
+          pollRateLimitCalls += 1;
+          return true;
+        },
+      });
+    const moduleRef = await testingModule.compile();
+    app = moduleRef.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter({ genReqId: () => generateRequestId() }),
+    );
+    app.useGlobalFilters(
+      new HttpExceptionFilter({
+        finalize: async () => undefined,
+      } satisfies MeteringFinalizerPort),
+    );
+    registerBodySizeGuard(app.getHttpAdapter().getInstance());
+    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  });
+
+  beforeEach(() => {
+    repository.jobs.clear();
+    audioRepository.assets.clear();
+    audioRepository.seed(speakingAsset());
+    queue.attempts.length = 0;
+    queue.enqueued.length = 0;
+    queue.failNext = false;
+    admissionCalls.length = 0;
+    admissionDecision = undefined;
+    pollRateLimitCalls = 0;
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  function headers(extra: Record<string, string> = {}): Record<string, string> {
+    return {
+      'x-api-key': 'test-key',
+      'x-user-identity': OWNER.endUserId,
+      ...extra,
+    };
+  }
+
+  function key(): string {
+    nextKey += 1;
+    return `speaking-job-${nextKey}`;
+  }
+
+  async function submit(
+    body: typeof REQUEST_BODY = REQUEST_BODY,
+    requestHeaders: Record<string, string> = headers(),
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/v2/ielts/speaking/grading-jobs',
+      headers: { 'content-type': 'application/json', ...requestHeaders },
+      payload: body,
+    });
+  }
+
+  it('accepts and queues a job without dispatching it', async () => {
+    const response = await submit();
+    const accepted = json(response) as {
+      data: { job_id: string; status: string };
+      meta: { request_id: string };
+    };
+
+    expect(response.statusCode).toBe(202);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(accepted.data.job_id).toMatch(/^sgj_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(accepted.data.status).toBe('queued');
+    expect(accepted.meta.request_id).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(repository.jobs.size).toBe(1);
+    expect(queue.enqueued).toEqual([expect.any(String)]);
+    expect(admissionCalls).toHaveLength(1);
+    expect(pollRateLimitCalls).toBe(1);
+    const job = [...repository.jobs.values()][0];
+    expect(job).toMatchObject({ maxConcurrent: 4, quotaTracked: true });
+  });
+
+  it('refuses a graded admission with 429 and creates no job', async () => {
+    admissionDecision = { stage: 'rate_limit', retryAfterMs: 1000 };
+
+    const response = await submit();
+
+    expect(response.statusCode).toBe(429);
+    expect(json(response)).toMatchObject({ error: { code: 'RATE_LIMITED' } });
+    expect(repository.jobs.size).toBe(0);
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('counts current-month in-flight jobs against the quota before creating another', async () => {
+    const now = new Date();
+    repository.seed({
+      ...seededJob('queued'),
+      jobId: `${JOB_ID.slice(0, -1)}2`,
+      createdAt: now,
+    });
+    repository.seed({
+      ...seededJob('running'),
+      jobId: `${JOB_ID.slice(0, -1)}3`,
+      createdAt: now,
+    });
+
+    const response = await submit();
+
+    expect(response.statusCode).toBe(429);
+    expect(json(response)).toMatchObject({ error: { code: 'QUOTA_EXCEEDED' } });
+    expect(admissionCalls[0]?.monthlyRequestQuota).toBe(0);
+    expect(repository.jobs.size).toBe(2);
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it.each([
+    ['another End-User', { 'x-user-identity': 'user_other' }],
+    ['another Organization', { 'x-test-org': 'org_other' }],
+    ['another Environment', { 'x-test-environment': 'sandbox' }],
+  ])('hides an Audio asset owned by %s', async (_label, extraHeaders) => {
+    const response = await submit(REQUEST_BODY, headers(extraHeaders));
+
+    expect(response.statusCode).toBe(404);
+    expect(json(response)).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    expect(repository.jobs.size).toBe(0);
+  });
+
+  it('hides an expired Audio asset as NOT_FOUND', async () => {
+    audioRepository.assets.set(
+      ASSET_ID,
+      speakingAsset(OWNER, new Date(Date.now() - 1)),
+    );
+
+    const response = await submit();
+
+    expect(response.statusCode).toBe(404);
+    expect(json(response)).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    expect(repository.jobs.size).toBe(0);
+  });
+
+  it('replays the original 202 for a matching idempotency key and refuses a different body', async () => {
+    const idempotencyKey = key();
+    const first = await submit(
+      REQUEST_BODY,
+      headers({ 'idempotency-key': idempotencyKey }),
+    );
+    const replay = await submit(
+      REQUEST_BODY,
+      headers({ 'idempotency-key': idempotencyKey }),
+    );
+    const changed = await submit(
+      { ...REQUEST_BODY, question_id: 'p1_work' },
+      headers({ 'idempotency-key': idempotencyKey }),
+    );
+
+    expect(first.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(202);
+    expect(json(replay)).toMatchObject({
+      data: (json(first) as { data: unknown }).data,
+    });
+    expect(changed.statusCode).toBe(409);
+    expect(json(changed)).toMatchObject({
+      error: { code: 'IDEMPOTENCY_CONFLICT' },
+    });
+    expect(repository.jobs.size).toBe(1);
+    expect(queue.enqueued).toHaveLength(1);
+    expect(admissionCalls).toHaveLength(1);
+  });
+
+  it('answers 202 if enqueue fails after the durable job is created', async () => {
+    queue.failNext = true;
+
+    const response = await submit();
+
+    expect(response.statusCode).toBe(202);
+    expect(repository.jobs.size).toBe(1);
+    expect(queue.attempts).toHaveLength(1);
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('polls a succeeded job with the Speaking result and response_id', async () => {
+    repository.seed(seededJob('succeeded'));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v2/ielts/speaking/grading-jobs/${JOB_ID}`,
+      headers: headers(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(json(response)).toMatchObject({
+      data: {
+        job_id: JOB_ID,
+        status: 'succeeded',
+        result: { meta: { response_id: 'resp_123' } },
+      },
+    });
+    expect(admissionCalls).toHaveLength(0);
+    expect(pollRateLimitCalls).toBe(1);
+  });
+
+  it('polls a failed job as 200 with its safe error', async () => {
+    repository.seed(seededJob('failed'));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v2/ielts/speaking/grading-jobs/${JOB_ID}`,
+      headers: headers(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(json(response)).toMatchObject({
+      data: {
+        job_id: JOB_ID,
+        status: 'failed',
+        error: { code: 'AUDIO_UNREADABLE', retryable: false },
+      },
+    });
+    expect(admissionCalls).toHaveLength(0);
+  });
+
+  it('returns NOT_FOUND for a foreign or malformed job id', async () => {
+    repository.seed(
+      seededJob('succeeded', { ...OWNER, endUserId: 'user_other' }),
+    );
+    const foreign = await app.inject({
+      method: 'GET',
+      url: `/v2/ielts/speaking/grading-jobs/${JOB_ID}`,
+      headers: headers(),
+    });
+    const malformed = await app.inject({
+      method: 'GET',
+      url: '/v2/ielts/speaking/grading-jobs/not-a-job-id',
+      headers: headers(),
+    });
+
+    expect(foreign.statusCode).toBe(404);
+    expect(json(foreign)).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    expect(malformed.statusCode).toBe(404);
+    expect(json(malformed)).toMatchObject({ error: { code: 'NOT_FOUND' } });
+  });
+});

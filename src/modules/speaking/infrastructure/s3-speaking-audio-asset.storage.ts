@@ -1,12 +1,18 @@
+import { Blob } from 'node:buffer';
+import { Readable } from 'node:stream';
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
+  type GetObjectCommandOutput,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+import { AppError } from '@/common/errors/app-error';
+import type { SpeakingAudio } from '@/contracts/speaking/grading';
 import {
   objectStorageNotFound,
   objectStorageSignal,
@@ -15,7 +21,10 @@ import {
 import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
 import {
   SPEAKING_AUDIO_BUCKETS,
+  SPEAKING_AUDIO_MAX_BYTES,
   SPEAKING_AUDIO_UPLOAD_URL_TTL_SECONDS,
+  type SpeakingAudioContentType,
+  isSpeakingAudioContentType,
   isSpeakingAudioObjectKey,
   isSpeakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
@@ -33,6 +42,45 @@ interface ConfiguredStorage {
   readonly client: Pick<S3Client, 'send'>;
   readonly productionBucket: string | undefined;
   readonly sandboxBucket: string | undefined;
+}
+
+const AUDIO_FILENAMES: Record<SpeakingAudioContentType, string> = {
+  'audio/wav': 'audio.wav',
+  'audio/mpeg': 'audio.mp3',
+  'audio/mp4': 'audio.mp4',
+  'audio/webm': 'audio.webm',
+  'audio/ogg': 'audio.ogg',
+};
+
+function audioTooLarge(): AppError {
+  return new AppError({
+    code: 'PAYLOAD_TOO_LARGE',
+    message: 'Speaking audio exceeds the permitted size',
+    retryable: false,
+  });
+}
+
+async function readBody(
+  body: NonNullable<GetObjectCommandOutput['Body']>,
+): Promise<Uint8Array> {
+  if (!(body instanceof Readable)) {
+    const bytes = await body.transformToByteArray();
+    if (bytes.byteLength > SPEAKING_AUDIO_MAX_BYTES) throw audioTooLarge();
+    return bytes;
+  }
+
+  const chunks: Buffer[] = [];
+  let byteSize = 0;
+  for await (const chunk of body) {
+    const bytes = Buffer.from(chunk as Uint8Array);
+    byteSize += bytes.byteLength;
+    if (byteSize > SPEAKING_AUDIO_MAX_BYTES) {
+      body.destroy();
+      throw audioTooLarge();
+    }
+    chunks.push(bytes);
+  }
+  return Buffer.concat(chunks, byteSize);
 }
 
 export class S3SpeakingAudioAssetStorage
@@ -149,6 +197,67 @@ export class S3SpeakingAudioAssetStorage
         { abortSignal: signal },
       );
     } catch (error) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+        error,
+        signal,
+      );
+    }
+  }
+
+  async readObject(
+    input: {
+      readonly environment: SpeakingAudioEnvironment;
+      readonly objectKey: string;
+      readonly contentType: SpeakingAudioContentType;
+    },
+    signal = objectStorageSignal(),
+  ): Promise<SpeakingAudio> {
+    const { client, bucket } = this.require(input.environment, input.objectKey);
+    if (
+      !isSpeakingAudioObjectKey(input.objectKey) ||
+      !isSpeakingAudioContentType(input.contentType)
+    ) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
+    }
+
+    try {
+      const output = await client.send(
+        new GetObjectCommand({ Bucket: bucket, Key: input.objectKey }),
+        { abortSignal: signal },
+      );
+      if (
+        output.ContentLength !== undefined &&
+        output.ContentLength > SPEAKING_AUDIO_MAX_BYTES
+      ) {
+        if (output.Body instanceof Readable) output.Body.destroy();
+        throw audioTooLarge();
+      }
+      if (output.Body === undefined) {
+        throw objectStorageUnavailable(
+          'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+          'Speaking audio storage is unavailable',
+        );
+      }
+      const bytes = await readBody(output.Body);
+      return {
+        blob: new Blob([bytes], { type: input.contentType }),
+        filename: AUDIO_FILENAMES[input.contentType],
+        contentType: input.contentType,
+      };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      if (objectStorageNotFound(error)) {
+        throw new AppError({
+          code: 'NOT_FOUND',
+          message: 'Speaking audio object was not found',
+          retryable: false,
+        });
+      }
       throw objectStorageUnavailable(
         'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
         'Speaking audio storage is unavailable',
