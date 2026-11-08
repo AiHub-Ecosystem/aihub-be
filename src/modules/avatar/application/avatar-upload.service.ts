@@ -249,6 +249,7 @@ export class AvatarUploadService {
     await this.storage.copyStagingToFinal({
       objectKey,
       contentType: stagingObject.contentType,
+      stagingEtag: stored.etag,
       ...(signal === undefined ? {} : { signal }),
     });
     const published = await this.storage.describeFinalObject(objectKey, signal);

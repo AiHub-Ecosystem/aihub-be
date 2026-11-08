@@ -267,11 +267,12 @@ describe('S3AvatarStorage', () => {
       );
     });
 
-    it('copies staging to the public bucket with replacement metadata', async () => {
+    it('copies staging to the public bucket with replacement metadata and etag binding', async () => {
       const { client, send } = clientAnswering(async () => ({}));
       await storage({ client }).copyStagingToFinal({
         objectKey: KEY,
         contentType: 'image/png',
+        stagingEtag: '"etag-123"',
       });
       expect(send.mock.calls[0]?.[0]?.input).toEqual({
         Bucket: 'aihub-user-assets',
@@ -280,17 +281,19 @@ describe('S3AvatarStorage', () => {
         MetadataDirective: 'REPLACE',
         ContentType: 'image/png',
         CacheControl: 'public, max-age=3600',
+        CopySourceIfMatch: '"etag-123"',
       });
     });
   });
 
   describe('describing an object', () => {
-    it('reports what landed', async () => {
+    it('reports what landed including etag', async () => {
       const lastModified = new Date('2026-10-02T09:30:00.000Z');
       const { client, send } = clientAnswering(async () => ({
         ContentType: 'image/webp',
         ContentLength: 2048,
         LastModified: lastModified,
+        ETag: '"etag-staging-456"',
       }));
 
       await expect(
@@ -299,6 +302,7 @@ describe('S3AvatarStorage', () => {
         contentType: 'image/webp',
         byteSize: 2048,
         lastModified,
+        etag: '"etag-staging-456"',
       });
       expect(send.mock.calls[0]?.[0]?.input).toEqual({
         Bucket: 'aihub-user-asset-staging',

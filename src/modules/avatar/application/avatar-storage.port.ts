@@ -11,6 +11,8 @@ export interface StoredAvatarObject {
   readonly byteSize: number | undefined;
   /** Storage's own clock; `undefined` when storage does not report it. */
   readonly lastModified: Date | undefined;
+  /** ETag from storage; used to bind the copy source so a replayed PUT cannot swap bytes. */
+  readonly etag?: string | undefined;
 }
 
 export interface ListedAvatarObject {
@@ -35,6 +37,8 @@ export interface AvatarStoragePort {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
     readonly signal?: AbortSignal;
+    /** Binds the copy source by ETag so a replayed PUT cannot swap bytes. */
+    readonly stagingEtag?: string | undefined;
   }): Promise<void>;
   /**
    * The published, unsigned origin URL of an object (ADR-0069). Throws

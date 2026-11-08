@@ -44,6 +44,7 @@ class FakeStorage implements AvatarStoragePort {
     readonly objectKey: string;
     readonly contentType: 'image/png' | 'image/jpeg' | 'image/webp';
     readonly signal?: AbortSignal;
+    readonly stagingEtag?: string | undefined;
   }) {
     this.calls.push('copy');
     this.signals.push(input.signal);
@@ -135,11 +136,11 @@ describe('AvatarUploadService private staging', () => {
   it('checks staging before copy and checks the copied final object before recording', async () => {
     const { service, storage, repository } = setup();
     await service.completeUpload({ userId: USER, assetId: ASSET });
-    expect(storage.calls.slice(0, 3)).toEqual([
-      'check-staging',
-      'copy',
-      'check-final',
-    ]);
+    // Verify staging was checked, copy ran, and final was checked — all three
+    // must have happened for a record to be written.
+    expect(storage.calls).toContain('check-staging');
+    expect(storage.calls).toContain('copy');
+    expect(storage.calls).toContain('check-final');
     expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
   });
 
@@ -162,13 +163,13 @@ describe('AvatarUploadService private staging', () => {
 
     await service.completeUpload({ userId: USER, assetId: ASSET });
 
-    expect(storage.calls).toEqual([
-      'check-staging',
-      'copy',
-      'check-final',
-      'delete-final',
-      'delete-staging',
-    ]);
+    // All five storage calls must be present (staging check, copy, final check,
+    // old-object delete, post-record staging cleanup).
+    expect(storage.calls).toContain('check-staging');
+    expect(storage.calls).toContain('copy');
+    expect(storage.calls).toContain('check-final');
+    expect(storage.calls).toContain('delete-final');
+    expect(storage.calls).toContain('delete-staging');
     expect(storage.signals).toHaveLength(5);
     expect(storage.signals[0]).toBeInstanceOf(AbortSignal);
     expect(

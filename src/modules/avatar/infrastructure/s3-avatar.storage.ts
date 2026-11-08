@@ -161,6 +161,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
     readonly signal?: AbortSignal;
+    readonly stagingEtag?: string | undefined;
   }): Promise<void> {
     const { client, bucket, stagingBucket } = this.requireStaging(
       input.objectKey,
@@ -174,6 +175,9 @@ export class S3AvatarStorage implements AvatarStoragePort {
           MetadataDirective: 'REPLACE',
           ContentType: input.contentType,
           CacheControl: AVATAR_CACHE_CONTROL,
+          ...(input.stagingEtag !== undefined
+            ? { CopySourceIfMatch: input.stagingEtag }
+            : {}),
         }),
         { abortSignal: input.signal ?? objectStorageSignal() },
       );
@@ -201,6 +205,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
         contentType: head.ContentType,
         byteSize: head.ContentLength,
         lastModified: head.LastModified,
+        etag: head.ETag,
       };
     } catch (error) {
       if (objectStorageNotFound(error)) {
