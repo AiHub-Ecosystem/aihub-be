@@ -18,6 +18,7 @@ const BASE_ARGS = [
   '--preload',
   './test/support/bun-jest-compat.ts',
   '--path-ignore-patterns=test/db/**',
+  '--path-ignore-patterns=temp/**',
 ];
 
 /** @param {string[]} args */

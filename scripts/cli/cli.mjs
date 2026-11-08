@@ -219,11 +219,41 @@ const quotaTargetMonthDescriptor = cliRunnerDescriptor(
   'parseTargetMonth',
   'quota reconciliation command is unavailable',
 );
+/** @type {CliRunnerDescriptor<import('../../src/cli/user-account-status.js').runDisableUserAccountCommand>} */
+const disableUserAccountDescriptor = cliRunnerDescriptor(
+  'user-account-status',
+  'runDisableUserAccountCommand',
+  'disable user account command is unavailable',
+);
+/** @type {CliRunnerDescriptor<import('../../src/cli/user-account-status.js').runRestoreUserAccountCommand>} */
+const restoreUserAccountDescriptor = cliRunnerDescriptor(
+  'user-account-status',
+  'runRestoreUserAccountCommand',
+  'restore user account command is unavailable',
+);
+/** @type {CliRunnerDescriptor<import('../../src/cli/user-account-status.js').runRevokeAllRefreshSessionsCommand>} */
+const revokeAllRefreshSessionsDescriptor = cliRunnerDescriptor(
+  'user-account-status',
+  'runRevokeAllRefreshSessionsCommand',
+  'revoke all refresh sessions command is unavailable',
+);
 
 /** @template {CliRunner} T @param {CliRunnerDescriptor<T>} descriptor @param {Parameters<T>} args */
 async function runCliCommand(descriptor, ...args) {
   const runner = await loadCliRunner(descriptor);
   return runner(...args);
+}
+
+async function runDisableUserAccount(input) {
+  return runCliCommand(disableUserAccountDescriptor, input);
+}
+
+async function runRestoreUserAccount(input) {
+  return runCliCommand(restoreUserAccountDescriptor, input);
+}
+
+async function runRevokeAllRefreshSessions(input) {
+  return runCliCommand(revokeAllRefreshSessionsDescriptor, input);
 }
 
 async function runOrganizationStatus(input) {
@@ -1142,6 +1172,53 @@ async function attachFirstOwnerCommand(options) {
   }
 }
 
+// Disabling and restoring user accounts are operator acts (ADR-0158).
+// `--actor` names the operator's own active AIHUB User Account for audit;
+// an unknown user or actor is a usage error.
+/** @param {CliOptions} options @param {'active' | 'disabled'} status */
+async function userAccountStatusCommand(options, status) {
+  const user = requiredOption(options, 'user');
+  const actorUsername = requiredOption(options, 'actor');
+  const command = status === 'disabled' ? 'user:disable' : 'user:restore';
+  const safety = await prepareOperatorMutation(command, options);
+  if (safety?.previewed) return;
+
+  const outcome =
+    status === 'disabled'
+      ? await runDisableUserAccount({
+          databaseUrl: controlPlaneDatabaseUrl(),
+          user,
+          actorUsername,
+        })
+      : await runRestoreUserAccount({
+          databaseUrl: controlPlaneDatabaseUrl(),
+          user,
+          actorUsername,
+        });
+  if (outcome === 'user_not_found' || outcome === 'actor_invalid') {
+    usageError();
+  }
+}
+
+// Revokes all active refresh sessions across all accounts (ADR-0158, #293).
+/** @param {CliOptions} options */
+async function revokeAllRefreshSessionsCommand(options) {
+  const actorUsername = requiredOption(options, 'actor');
+  const safety = await prepareOperatorMutation(
+    'session:revoke-all-refresh',
+    options,
+  );
+  if (safety?.previewed) return;
+
+  const outcome = await runRevokeAllRefreshSessions({
+    databaseUrl: controlPlaneDatabaseUrl(),
+    actorUsername,
+  });
+  if (outcome === 'actor_invalid') {
+    usageError();
+  }
+}
+
 // Deletes Avatar objects that no record names once they are old enough
 // (ADR-0068). `--dry-run true` reports without deleting. The summary is one
 // JSON line, and any failed public or staging delete makes the exit status
@@ -1472,6 +1549,18 @@ async function main() {
   }
   if (command === 'org:grant-entitlement') {
     await organizationGrantEntitlementCommand(options);
+    return;
+  }
+  if (command === 'user:disable') {
+    await userAccountStatusCommand(options, 'disabled');
+    return;
+  }
+  if (command === 'user:restore') {
+    await userAccountStatusCommand(options, 'active');
+    return;
+  }
+  if (command === 'session:revoke-all-refresh') {
+    await revokeAllRefreshSessionsCommand(options);
     return;
   }
   if (command === 'avatar:sweep') {

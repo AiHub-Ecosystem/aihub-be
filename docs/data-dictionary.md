@@ -23,6 +23,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | PasswordResetToken                 | auth        | 7       |
 | RefreshToken                       | auth        | 9       |
 | UserAccessTokenRevocation          | auth        | 3       |
+| UserAccountStatusAudit             | auth        | 9       |
 | SandboxDispatchReservation         | gateway     | 6       |
 | SandboxAllowanceDefault            | gateway     | 2       |
 | SandboxAllowanceOverride           | gateway     | 3       |
@@ -37,7 +38,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | WritingChartUpload                 | writing     | 15      |
 | WritingChartRevocationAudit        | writing     | 10      |
 | UsageRecord                        | metering    | 21      |
-| UserAccount                        | auth        | 18      |
+| UserAccount                        | auth        | 20      |
 | UserAvatar                         | avatar      | 7       |
 | UserMfaFactor                      | auth        | 8       |
 | UserMfaRecoveryCode                | auth        | 5       |
@@ -332,6 +333,22 @@ Owner: `auth`
 | jti                | String   |                                                 |
 | effectiveExpiresAt | DateTime | @map("effective_expires_at") @db.Timestamptz(6) |
 
+## UserAccountStatusAudit
+
+Owner: `auth`
+
+| Column             | Type         | Attributes                                                                                                               |
+| ------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| id                 | String       | @id                                                                                                                      |
+| userAccountId      | String?      | @map("user_account_id")                                                                                                  |
+| actorUserAccountId | String       | @map("actor_user_account_id")                                                                                            |
+| actorSource        | String       | @default("legacy_unknown") @map("actor_source")                                                                          |
+| action             | String       |                                                                                                                          |
+| requestId          | String       | @map("request_id")                                                                                                       |
+| occurredAt         | DateTime     | @map("occurred_at") @db.Timestamptz(6)                                                                                   |
+| userAccount        | UserAccount? | @relation("target_status_audits", fields: [userAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)     |
+| actor              | UserAccount  | @relation("actor_status_audits", fields: [actorUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
+
 ## SandboxDispatchReservation
 
 Owner: `gateway`
@@ -570,6 +587,8 @@ Owner: `auth`
 | mfaRecoveryCodes             | UserMfaRecoveryCode[]         |                                            |
 | webSessions                  | WebSession[]                  |                                            |
 | writingChartRevocationAudits | WritingChartRevocationAudit[] |                                            |
+| statusAuditsAsTarget         | UserAccountStatusAudit[]      | @relation("target_status_audits")          |
+| statusAuditsAsActor          | UserAccountStatusAudit[]      | @relation("actor_status_audits")           |
 
 ## UserAvatar
 

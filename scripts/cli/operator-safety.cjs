@@ -33,6 +33,11 @@ const MUTATION_ACTIONS = {
   'usage:prune': ['delete usage and dispatch evidence past retention'],
   'billing:adjust': ['record a billing adjustment', 'id'],
   'billing:statement': ['close a billing month', 'month'],
+  'user:disable': ['disable a user account and end all its sessions', 'user'],
+  'user:restore': ['restore a user account to active', 'user'],
+  'session:revoke-all-refresh': [
+    'revoke all refresh sessions for all accounts',
+  ],
 };
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const MUTATION_PREVIEW_OPTIONS = {
@@ -79,6 +84,9 @@ const MUTATION_PREVIEW_OPTIONS = {
     'actor',
   ],
   'billing:statement': ['month', 'org', 'close', 'actor'],
+  'user:disable': ['user', 'actor'],
+  'user:restore': ['user', 'actor'],
+  'session:revoke-all-refresh': ['actor'],
 };
 /**
  * Options each Operator command accepts, beyond the `--target` / `--dry-run`
@@ -135,6 +143,9 @@ const COMMAND_OPTIONS = {
     'period-from',
     'period-to',
   ],
+  'user:disable': ['user', 'actor'],
+  'user:restore': ['user', 'actor'],
+  'session:revoke-all-refresh': ['actor'],
 };
 const MUTATING_COMMANDS = new Set(Object.keys(MUTATION_ACTIONS));
 const CONTROL_PLANE_COMMANDS = new Set([
@@ -146,6 +157,9 @@ const CONTROL_PLANE_COMMANDS = new Set([
   'org:restore',
   'org:grant-entitlement',
   'org:attach-owner',
+  'user:disable',
+  'user:restore',
+  'session:revoke-all-refresh',
 ]);
 const NATIVE_DRY_RUN_COMMANDS = new Set([
   'avatar:sweep',

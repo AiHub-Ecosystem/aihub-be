@@ -594,6 +594,42 @@ Escalate if a deleted object still returns 2xx five minutes after origin
 deletion. These are observed results for the tested paths, not a guarantee
 about copies outside AIHUB's control.
 
+### Disabling an abusive account and ending its sessions
+
+When responding to an abusive, compromised, or credential-leaked User Account (#367):
+
+1. **Disable the account**:
+   Sets the account status to `disabled` and revokes every active Refresh Session (`refresh_tokens`), active Web Session (`web_sessions`), open Email Verification Token (`email_verification_tokens`), and open Password Reset Token (`password_reset_tokens`) in one atomic transaction. Next Bearer requests and session refreshes are refused immediately.
+
+   ```sh
+   bun run cli user:disable --user <id-or-username> \
+     --actor <active-operator-username> --target production --dry-run true
+   bun run cli user:disable --user <id-or-username> \
+     --actor <active-operator-username> --target production
+   ```
+
+2. **Restore an account**:
+   Restores a disabled account back to `active`. It leaves all previously revoked sessions and tokens revoked (they must sign in afresh). Pre-disable User Access JWTs carry an accepted residual window of at most 15 minutes bounded by original expiry (ADR-0158).
+
+   ```sh
+   bun run cli user:restore --user <id-or-username> \
+     --actor <active-operator-username> --target production --dry-run true
+   bun run cli user:restore --user <id-or-username> \
+     --actor <active-operator-username> --target production
+   ```
+
+3. **Revoke all Refresh Sessions (incident key rotation)**:
+   Revokes every active Refresh Session across all accounts. Used alongside emergency User Access JWT key rotation ([incident response](incident-response.md#containment-levers)) to force every client to re-authenticate.
+
+   ```sh
+   bun run cli session:revoke-all-refresh \
+     --actor <active-operator-username> --target production --dry-run true
+   bun run cli session:revoke-all-refresh \
+     --actor <active-operator-username> --target production
+   ```
+
+Both commands append an immutable audit record to `user_account_status_audits` naming the Operator actor, target account, action, and timestamp.
+
 ### Scheduled operator jobs
 
 Each mutating CLI preflights its actual database and reports the connected

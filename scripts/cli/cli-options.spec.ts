@@ -77,6 +77,9 @@ describe('COMMAND_OPTIONS', () => {
       'usage:major-report',
       'billing:statement',
       'billing:adjust',
+      'user:disable',
+      'user:restore',
+      'session:revoke-all-refresh',
     ];
     for (const command of routed) {
       expect(COMMAND_OPTIONS[command]).toBeDefined();
@@ -526,8 +529,11 @@ describe('operator CLI safety', () => {
         'org:suspend',
         'quota:reconcile',
         'registrations:sweep',
+        'session:revoke-all-refresh',
         'speaking:audio-upload-sweep',
         'usage:prune',
+        'user:disable',
+        'user:restore',
         'writing:chart-revoke',
         'writing:chart-upload-sweep',
       ].sort(),

@@ -419,6 +419,27 @@ model UserAccessTokenRevocation {
   @@map("user_access_token_revocations")
 }
 
+/// Internal operator audit record for user account status changes and global session revocations.
+///
+/// The append-only trigger is owned by migration 0061.
+/// @owner auth
+model UserAccountStatusAudit {
+  id                 String       @id
+  userAccountId      String?      @map("user_account_id")
+  actorUserAccountId String       @map("actor_user_account_id")
+  actorSource        String       @default("legacy_unknown") @map("actor_source")
+  action             String
+  requestId          String       @map("request_id")
+  occurredAt         DateTime     @map("occurred_at") @db.Timestamptz(6)
+  userAccount        UserAccount? @relation("target_status_audits", fields: [userAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  actor              UserAccount  @relation("actor_status_audits", fields: [actorUserAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([userAccountId], map: "user_account_status_audits_user_account_id_idx")
+  @@index([actorUserAccountId], map: "user_account_status_audits_actor_user_account_id_idx")
+  @@index([occurredAt, id], map: "user_account_status_audits_occurred_at_idx")
+  @@map("user_account_status_audits")
+}
+
 /// One Sandbox dispatch reservation; the advisory lock on this table's month
 /// serialises the budget.
 ///
@@ -724,6 +745,8 @@ model UserAccount {
   mfaRecoveryCodes  UserMfaRecoveryCode[]
   webSessions       WebSession[]
   writingChartRevocationAudits WritingChartRevocationAudit[]
+  statusAuditsAsTarget UserAccountStatusAudit[] @relation("target_status_audits")
+  statusAuditsAsActor  UserAccountStatusAudit[] @relation("actor_status_audits")
 
   @@map("user_accounts")
 }
