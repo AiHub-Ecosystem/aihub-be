@@ -50,7 +50,7 @@
     "lint": "node scripts/generate/generate-prisma-client.mjs && oxlint . && biome check .",
     "format:check": "prettier --check \"**/*.{md,yaml,yml}\"",
     "arch-check": "node scripts/checks/check-architecture.mjs",
-    "check:app-errors": "tsx scripts/checks/check-app-errors.ts",
+    "check:app-errors": "bun scripts/checks/check-app-errors.ts",
     "check:imports": "bun scripts/checks/check-import-style.ts",
     "check:imports:dist": "bun scripts/checks/check-import-style.ts --dist",
     "check:migrations": "squawk --no-error-on-unmatched-pattern \"prisma/migrations/*/migration.sql\"",
