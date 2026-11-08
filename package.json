@@ -80,7 +80,8 @@
     "check:changed": "node scripts/checks/check-changed.mjs",
     "check:batch": "node scripts/checks/check-batch.cjs",
     "test:check-app-errors": "jest --runTestsByPath scripts/checks/check-app-errors.spec.ts",
-    "test:check-changed": "node --test scripts/checks/check-changed.spec.mjs"
+    "test:check-changed": "node --test scripts/checks/check-changed.spec.mjs",
+    "test:shell-specs": "node scripts/checks/run-shell-specs.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

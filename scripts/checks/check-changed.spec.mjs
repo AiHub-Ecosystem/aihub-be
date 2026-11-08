@@ -185,10 +185,45 @@ const pathCases = [
     ],
   },
   { path: 'openapi.json', gates: ['lint', 'validate:openapi'] },
+  { path: 'openapi/v1.json', gates: ['lint', 'validate:openapi'] },
+  { path: 'openapi/v2.json', gates: ['lint', 'validate:openapi'] },
+  {
+    path: 'scripts/ci/api-compatibility/accepted-breaking-changes.json',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
   { path: 'jest.config.cjs', gates: ['coverage:unit', 'lint'] },
   {
     path: 'scripts/cli/run-bun-test.mjs',
     gates: ['check:doc-drift', 'lint', 'test:check-changed'],
+  },
+  {
+    // #1460: the gate configuration files select the gate whose behaviour
+    // they control, so weakening one cannot produce a green run.
+    path: 'package.json',
+    gates: ['knip', 'test:check-changed'],
+  },
+  { path: 'tsconfig.json', gates: ['type-check'] },
+  { path: 'knip.json', gates: ['knip'] },
+  { path: 'biome.json', gates: ['lint'] },
+  { path: '.prettierrc', gates: ['format:check'] },
+  { path: '.prettierignore', gates: ['format:check'] },
+  { path: '.lintstagedrc', gates: ['test:lint-staged'] },
+  { path: '.swcrc', gates: ['build'] },
+  {
+    path: 'ops/monitoring/alert.rules.yml',
+    gates: ['check:doc-drift', 'format:check', 'test:monitoring-config'],
+  },
+  {
+    path: 'scripts/ops/host-jobs/container-watchdog.sh',
+    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+  },
+  {
+    path: 'scripts/ops/backups/restore-postgres-rehearsal.sh',
+    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+  },
+  {
+    path: 'scripts/ops/monitoring/probe-sandbox-mint.sh',
+    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
   },
 ];
 
@@ -343,6 +378,89 @@ await test('the Bun runner forwards changed and watch options with default specs
   assert.ok(args.includes('--changed=origin/main'));
   assert.ok(args.includes('--watch'));
   assert.equal(args.at(-1), '.spec.ts');
+});
+
+await test('wrappers whose directory has no co-located suite select documentation drift only (#1460)', () => {
+  for (const path of [
+    'scripts/ops/firewall/docker-user-guard.sh',
+    'scripts/ops/speaking/speaking-gateway-smoke.sh',
+    'scripts/ops/blue-green/blue-green-host.sh',
+    'scripts/ops/logs/request-log-lookup.sh',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
+  }
+});
+
+await test('SAST-only CodeQL inputs select no local gate and say so (#1460)', () => {
+  for (const path of [
+    '.github/codeql/triage.json',
+    '.github/codeql/queries/RawSqlInjection.ql',
+    '.github/codeql/tests/raw-sql/raw-sql.expected',
+  ]) {
+    // The explicit no-gate answer is observable as its own full-verify
+    // reason, distinct from an unclassified path naming the file.
+    assert.deepEqual(planChangedFiles([path]), {
+      fullVerify: true,
+      reason: 'no gate can break the changed files',
+    });
+  }
+});
+
+await test('a no-gate path does not force the full loop onto its mixed diff (#1460)', () => {
+  assert.deepEqual(
+    planChangedFiles(['.github/codeql/triage.json', 'docs/guide.md']).gates,
+    ['format:check'],
+  );
+});
+
+await test('the shell-spec gate gets the co-located suites of the changed wrappers (#1460)', () => {
+  const listDir = (/** @type {string} */ dir) =>
+    dir === 'scripts/ops/host-jobs'
+      ? [
+          'container-watchdog.spec.sh',
+          'host-scheduled-job.spec.sh',
+          'install-host-jobs.sh',
+        ]
+      : [];
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      [
+        'scripts/ops/host-jobs/container-watchdog.sh',
+        'scripts\\ops\\host-jobs\\install-host-jobs.sh',
+        'scripts/ops/speaking/speaking-gateway-smoke.sh',
+        'src/a.ts',
+      ],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: [
+        'scripts/ops/host-jobs/container-watchdog.spec.sh',
+        'scripts/ops/host-jobs/host-scheduled-job.spec.sh',
+      ],
+    },
+  );
+});
+
+await test('the shell-spec gate has nothing to run when no changed wrapper exists', () => {
+  assert.equal(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/host-jobs/gone.sh'],
+      () => false,
+    ),
+    undefined,
+  );
+});
+
+await test('the shell-spec gate script runs the selected suites through bash', () => {
+  const packageJson = /** @type {{scripts: Record<string, string>}} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
+  const command = packageJson.scripts[GATE_COMMANDS['test:shell-specs']] ?? '';
+  assert.ok(command.includes('run-shell-specs.mjs'));
 });
 
 await test('unknown paths force full verification, including mixed changes', () => {

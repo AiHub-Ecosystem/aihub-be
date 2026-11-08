@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -96,6 +96,8 @@ export const GATE_COMMANDS = {
   'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
   'test:monitoring-config': 'test:monitoring-config',
+  'test:api-compatibility': 'test:api-compatibility',
+  'test:shell-specs': 'test:shell-specs',
   'test:related': 'test:related',
   'type-check': 'type-check',
   'validate:openapi': 'validate:openapi',
@@ -104,12 +106,50 @@ export const GATE_COMMANDS = {
 /** The one gate that takes the changed spec files as arguments (#1631). */
 const JEST_SPECS_GATE = 'test:jest-specs';
 
+/**
+ * The gate that runs the co-located shell suites for changed wrappers under
+ * `scripts/ops/` (#1460). It takes the selected `*.spec.sh` paths, like the
+ * Jest gate takes spec paths.
+ */
+const SHELL_SPECS_GATE = 'test:shell-specs';
+
 /** Independent gates that `check:changed` may run together. */
 const BATCHABLE = new Set(BATCHED_GATES);
 
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const DOC_DRIFT_INPUT = /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/)/;
+
+/** @param {string} dir @returns {string[]} */
+function listDirEntries(dir) {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The co-located `*.spec.sh` suites for changed wrappers under `scripts/ops/`
+ * (#1460). Selection is per directory: CI exercises each wrapper directory's
+ * stub suites, and a directory-level match keeps helpers such as
+ * `install-host-jobs.sh` covered by the suite that drives it.
+ *
+ * @param {readonly string[]} files changed `.sh` paths under `scripts/ops/`
+ * @param {(dir: string) => readonly string[]} [listDir]
+ * @returns {string[]}
+ */
+export function selectShellSpecs(files, listDir = listDirEntries) {
+  /** @type {Set<string>} */
+  const specs = new Set();
+  for (const file of files) {
+    const dir = file.slice(0, file.lastIndexOf('/'));
+    for (const entry of listDir(dir)) {
+      if (entry.endsWith('.spec.sh')) specs.add(`${dir}/${entry}`);
+    }
+  }
+  return sorted(specs);
+}
 
 /** @param {string} p */
 function norm(p) {
@@ -135,12 +175,45 @@ function classifyPathGates(p) {
     return sorted(gates);
   }
 
-  if (path === 'openapi.json') {
+  if (path === 'openapi.json' || /^openapi\/v\d+\.json$/.test(path)) {
     return ['lint', 'validate:openapi'];
+  }
+
+  // #1460: these configure the gates themselves, so a change selects the gate
+  // whose behaviour the file controls instead of falling through.
+  if (path === 'package.json') {
+    // knip reads the entry and script configuration; `test:check-changed`
+    // parses `scripts.verify` and asserts the gate map against it.
+    return ['knip', 'test:check-changed'];
+  }
+  if (path === 'tsconfig.json') {
+    return ['type-check'];
+  }
+  if (path === 'knip.json') {
+    return ['knip'];
+  }
+  if (path === 'biome.json') {
+    return ['lint'];
+  }
+  if (path === '.prettierrc' || path === '.prettierignore') {
+    return ['format:check'];
+  }
+  if (path === '.lintstagedrc') {
+    return ['test:lint-staged'];
+  }
+  if (path === '.swcrc') {
+    return ['build'];
   }
 
   if (/(^|\/)jest\.config[^/]*\.(?:cjs|js|ts)$/.test(path)) {
     return ['coverage:unit', 'lint'];
+  }
+
+  // The accepted-breaks list feeds the N-1 compatibility check; its loader
+  // throws on a malformed list and its specs fail when an entry stops
+  // matching a real break (#1460).
+  if (path === 'scripts/ci/api-compatibility/accepted-breaking-changes.json') {
+    return ['lint', 'test:api-compatibility'];
   }
 
   if (path.includes('check-app-errors')) {
@@ -180,6 +253,12 @@ function classifyPathGates(p) {
     ];
   }
 
+  // The alert rules are asserted by the monitoring-config suite in CI, so a
+  // rules file whose expression no longer parses fails here too (#1460).
+  if (path.startsWith('ops/monitoring/') && path.endsWith('.yml')) {
+    return ['format:check', 'test:monitoring-config'];
+  }
+
   if (/\.(?:md|ya?ml)$/.test(path)) {
     return ['format:check'];
   }
@@ -190,6 +269,28 @@ function classifyPathGates(p) {
 
   if (/(^|\/)scripts\/ops\/monitoring\/check-monitoring-config\./.test(path)) {
     return ['lint', 'test:monitoring-config'];
+  }
+
+  // #1460: recorded no-gate answers, not silent fall-throughs. The firewall
+  // guard's suite needs a Linux network namespace and runs only in CI; the
+  // speaking, blue-green and logs wrappers have no co-located suite. The
+  // documentation drift gate still covers path references to them. These must
+  // precede the general `scripts/ops` wrapper rule below.
+  if (/^(?:scripts\/ops\/(?:firewall|speaking|blue-green|logs)\/)/.test(path)) {
+    return [];
+  }
+
+  // #1460: a wrapper change selects the co-located stub suites CI runs for
+  // its directory, instead of reaching the gate map with no answer.
+  if (path.startsWith('scripts/ops/') && path.endsWith('.sh')) {
+    return ['lint', 'test:shell-specs'];
+  }
+
+  // #1460: the gate that reads the CodeQL triage state is the SAST
+  // `codeql-gate`, which needs the CodeQL scan artifacts and runs only in CI;
+  // no local gate can break from these files.
+  if (path.startsWith('.github/codeql/') && !/\.ya?ml$/.test(path)) {
+    return [];
   }
 
   if (path.includes('check-changed')) {
@@ -263,6 +364,12 @@ export function planChangedFiles(files) {
     for (const gate of matched) gates.add(gate);
   }
 
+  // #1460: an explicitly recorded no-gate diff still never reports success
+  // having decided nothing; the full loop answers instead.
+  if (gates.size === 0) {
+    return { fullVerify: true, reason: 'no gate can break the changed files' };
+  }
+
   return { gates: sorted(gates) };
 }
 
@@ -278,10 +385,25 @@ export function planChangedFiles(files) {
  * @param {string} gate
  * @param {readonly string[]} files
  * @param {(path: string) => boolean} [exists]
+ * @param {(dir: string) => readonly string[]} [listDir]
  * @returns {{ script: string, args: string[] } | undefined}
  */
-export function gateInvocation(gate, files, exists = existsSync) {
+export function gateInvocation(gate, files, exists = existsSync, listDir) {
   const script = GATE_COMMANDS[gate];
+  if (gate === SHELL_SPECS_GATE) {
+    const specs = selectShellSpecs(
+      files
+        .map(norm)
+        .filter(
+          (file) =>
+            file.startsWith('scripts/ops/') &&
+            file.endsWith('.sh') &&
+            exists(file),
+        ),
+      listDir,
+    );
+    return specs.length === 0 ? undefined : { script, args: specs };
+  }
   if (gate !== JEST_SPECS_GATE) return { script, args: [] };
 
   const specs = files
