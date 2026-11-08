@@ -12,6 +12,7 @@ describe('host scheduled job image paths', () => {
       '/app/scripts/runtime/runtime-entrypoint.mjs',
       '/app/scripts/cli/cli.mjs',
       '/app/scripts/cli/operator-safety.cjs',
+      '/app/scripts/cli/avatar-sweep-exit-code.cjs',
     ]);
   });
 
