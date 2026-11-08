@@ -76,9 +76,17 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
+          EVENT_NAME: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          if [[ -z "$BASE_SHA" && "$EVENT_NAME" == workflow_dispatch ]]; then
+            BASE_SHA="$(git merge-base "origin/$DEFAULT_BRANCH" "$HEAD_SHA")"
+            if [[ "$BASE_SHA" == "$HEAD_SHA" ]]; then
+              BASE_SHA="$(git rev-parse "${HEAD_SHA}^" 2>/dev/null || true)"
+            fi
+          fi
           if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && \
             "$BASE_SHA" != 0000000000000000000000000000000000000000 && \
             "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$BASE_SHA" != "$HEAD_SHA" ]]; then
