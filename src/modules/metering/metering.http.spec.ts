@@ -11,16 +11,18 @@ import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import type {
-  IdempotencyExecution,
-  IdempotencyExecutionInput,
-  IdempotencyReplayDecoder,
-  IdempotencyServicePort,
-  IdempotencyWork,
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyExecution,
+  type IdempotencyExecutionInput,
+  type IdempotencyReplayDecoder,
+  type IdempotencyServicePort,
+  type IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
-import { METERING_FINALIZER } from './application/usage-recording/metering-finalizer.port';
-import type { MeteringFinalizeInput } from './application/usage-recording/metering-finalizer.port';
+import {
+  METERING_FINALIZER,
+  type MeteringFinalizeInput,
+} from './application/usage-recording/metering-finalizer.port';
 
 class FakeFinalizer {
   readonly inputs: MeteringFinalizeInput[] = [];

@@ -3,11 +3,9 @@ export {
   calculateUsageRetentionCutoff,
   USAGE_PRUNE_BATCH_SIZE,
   UsagePruneError,
+  type UsagePruneErrorCode,
+  type UsageRetentionEvent,
+  type UsageRetentionPort,
   UsageRetentionService,
-} from '@/modules/metering/application/billing/usage-retention';
-export type {
-  UsagePruneErrorCode,
-  UsageRetentionEvent,
-  UsageRetentionPort,
-  UsageRetentionSummary,
+  type UsageRetentionSummary,
 } from '@/modules/metering/application/billing/usage-retention';

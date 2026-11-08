@@ -13,29 +13,33 @@ import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
-import type {
-  DispatchResult,
-  OperationDispatcherPort,
+import {
+  type DispatchResult,
+  OPERATION_DISPATCHER,
+  type OperationDispatcherPort,
 } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
-import { OPERATION_DISPATCHER } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import type {
-  IdempotencyExecution,
-  IdempotencyExecutionInput,
-  IdempotencyReplayDecoder,
-  IdempotencyServicePort,
-  IdempotencyWork,
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyExecution,
+  type IdempotencyExecutionInput,
+  type IdempotencyReplayDecoder,
+  type IdempotencyServicePort,
+  type IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
-import type {
-  ApiKeyAuthenticatorPort,
-  AuthenticatedApiKey,
+import {
+  API_KEY_AUTHENTICATOR,
+  type ApiKeyAuthenticatorPort,
+  type AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import type { OrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
-import { ORGANIZATION_IDENTITY_CONFIG_REPOSITORY } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
-import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
-import { JWKS_KEY_PROVIDER } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import {
+  ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
+  type OrganizationIdentityConfig,
+} from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import {
+  JWKS_KEY_PROVIDER,
+  type JwksKeyProviderPort,
+} from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
 const RequestIdEnvelopeSchema = Type.Object({

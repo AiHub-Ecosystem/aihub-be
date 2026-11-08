@@ -1,13 +1,18 @@
-import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import type { OperationDef } from '@/catalog/operation-catalog';
+import {
+  OPERATION_CATALOG,
+  type OperationDef,
+} from '@/catalog/operation-catalog';
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
 import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import {
   type PublicApiMajorDef,
   findPublicApiMajor,
 } from '@/catalog/public-api-majors';
-import { PUBLIC_ROUTES, isPublicRouteId } from '@/catalog/public-routes';
-import type { PublicRouteDef } from '@/catalog/public-routes';
+import {
+  PUBLIC_ROUTES,
+  type PublicRouteDef,
+  isPublicRouteId,
+} from '@/catalog/public-routes';
 import { Type } from '@sinclair/typebox';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';

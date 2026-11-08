@@ -1,10 +1,10 @@
 import type { CallerAuth } from '@/catalog/public-routes';
-import type {
-  PublicApiMajorCollectorRow,
-  PublicApiMajorCoverage,
-  PublicApiMajorUsageDroppedInterval,
+import {
+  type PublicApiMajorCollectorRow,
+  type PublicApiMajorCoverage,
+  type PublicApiMajorUsageDroppedInterval,
+  assessPublicApiMajorCoverage,
 } from './public-api-major-coverage';
-import { assessPublicApiMajorCoverage } from './public-api-major-coverage';
 
 export const PUBLIC_API_MAJOR_USAGE_BUFFER = Symbol(
   'PUBLIC_API_MAJOR_USAGE_BUFFER',

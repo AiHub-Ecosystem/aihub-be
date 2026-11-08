@@ -29,8 +29,10 @@ import {
   writingV3Task1GradeAdapter,
   writingV3Task2GradeAdapter,
 } from '@/downstream/writing/writing-v3-grade.adapters';
-import { IDEMPOTENCY_SERVICE } from '@/modules/idempotency/application/idempotency-service.port';
-import type { IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
+import {
+  IDEMPOTENCY_SERVICE,
+  type IdempotencyServicePort,
+} from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
   DISPATCH_ATTEMPT_RECORD,

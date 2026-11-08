@@ -1,8 +1,6 @@
-import type {
-  EmailPayloadCipherPort,
-  EmailPayloadContext,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
+  type EmailPayloadCipherPort,
+  type EmailPayloadContext,
   EmailPayloadUnknownKeyVersionError,
   EnvelopeCipherError,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';

@@ -1,6 +1,5 @@
 import type { AvatarRepositoryPort } from '@/modules/avatar/application/avatar-repository.port';
-import { avatarObjectKey } from '@/modules/avatar/domain/avatar';
-import type { Avatar } from '@/modules/avatar/domain/avatar';
+import { type Avatar, avatarObjectKey } from '@/modules/avatar/domain/avatar';
 import { ulid } from 'ulid';
 
 export function avatarRepositoryContract(

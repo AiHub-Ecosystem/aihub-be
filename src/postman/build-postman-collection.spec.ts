@@ -1,6 +1,5 @@
 import { runInNewContext } from 'node:vm';
-import type { CollectionDefinition } from 'postman-collection';
-import { Collection } from 'postman-collection';
+import { Collection, type CollectionDefinition } from 'postman-collection';
 
 import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';

@@ -1,5 +1,7 @@
-import type { EmailMessage } from '@/modules/auth/email-delivery/application/email-sender.port';
-import { EmailProviderTransportError } from '@/modules/auth/email-delivery/application/email-sender.port';
+import {
+  type EmailMessage,
+  EmailProviderTransportError,
+} from '@/modules/auth/email-delivery/application/email-sender.port';
 import { ResendEmailSender } from './resend-email.sender';
 
 describe('ResendEmailSender', () => {

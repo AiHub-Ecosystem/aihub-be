@@ -4,8 +4,7 @@ import process from 'node:process';
 import { test } from 'node:test';
 
 import { buildBunTestArgs } from '../cli/run-bun-test.mjs';
-import { runBatch } from './check-batch.cjs';
-import { BATCHED_GATES } from './check-batch.cjs';
+import { BATCHED_GATES, runBatch } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
   gateInvocation,

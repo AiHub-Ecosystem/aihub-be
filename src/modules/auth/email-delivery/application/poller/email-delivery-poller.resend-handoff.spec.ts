@@ -2,13 +2,13 @@ import type {
   ApiKeyNearExpiryNotificationPayload,
   EmailNoticeResolvers,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type {
-  EmailDispatchOptions,
-  EmailMessage,
-  EmailProviderResponse,
-  EmailSenderPort,
+import {
+  type EmailDispatchOptions,
+  type EmailMessage,
+  type EmailProviderResponse,
+  EmailProviderTransportError,
+  type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
-import { EmailProviderTransportError } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,

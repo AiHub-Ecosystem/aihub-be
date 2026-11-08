@@ -1,8 +1,8 @@
 import {
   SPEAKING_AUDIO_ORPHAN_GRACE_MS,
+  type SpeakingAudioUploadIntent,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
-import type { SpeakingAudioUploadIntent } from '@/modules/speaking/domain/speaking-audio-asset';
 
 import type {
   SpeakingAudioAssetStoragePort,

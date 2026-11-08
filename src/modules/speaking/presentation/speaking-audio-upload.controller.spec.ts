@@ -14,10 +14,14 @@ import {
   SpeakingAudioUploadUrlResponseSchema,
 } from '@/contracts/speaking/audio-upload';
 import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
-import type { ApiKeyAuthenticatorPort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import type { UserIdentityResolverPort } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
-import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
+import {
+  API_KEY_AUTHENTICATOR,
+  type ApiKeyAuthenticatorPort,
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import {
+  USER_IDENTITY_RESOLVER,
+  type UserIdentityResolverPort,
+} from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import type {
   SpeakingAudioCeilingDecision,
   SpeakingAudioOrganizationHolding,
@@ -29,12 +33,10 @@ import {
   type SpeakingAudioAssetStoragePort,
   type SpeakingAudioUploadRepositoryPort,
 } from '@/modules/speaking/application/speaking-audio-upload.port';
-import type {
-  SpeakingAudioAsset,
-  SpeakingAudioUploadIntent,
-} from '@/modules/speaking/domain/speaking-audio-asset';
 import {
   SPEAKING_AUDIO_MAX_BYTES,
+  type SpeakingAudioAsset,
+  type SpeakingAudioUploadIntent,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';

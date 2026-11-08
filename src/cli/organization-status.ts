@@ -1,7 +1,7 @@
-import { type OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
-import type {
-  OrganizationStatusPort,
-  SetOrganizationStatusResult,
+import {
+  type OrganizationStatus,
+  type OrganizationStatusPort,
+  type SetOrganizationStatusResult,
 } from '@/modules/identity/organizations/application/organization-status.port';
 import { PostgresOrganizationStatusRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-status.repository';
 import type { OperatorRedisFailurePort } from '@/modules/identity/shared/application/operator-redis-failure.port';

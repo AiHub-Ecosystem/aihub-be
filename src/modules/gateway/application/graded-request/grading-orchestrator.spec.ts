@@ -5,8 +5,10 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { isRecord } from '@/common/is-record';
 import type { RequestContext } from '@/common/request-context/request-context';
-import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
-import type { SpeakingGradeResponse } from '@/contracts/speaking/grading';
+import {
+  type SpeakingGradeResponse,
+  SpeakingGradeResponseSchema,
+} from '@/contracts/speaking/grading';
 import type { GradeResponse } from '@/contracts/writing/grading';
 import type { OperationDispatcherPort } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import type {

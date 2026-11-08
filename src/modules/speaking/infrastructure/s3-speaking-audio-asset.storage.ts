@@ -16,10 +16,10 @@ import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/applicati
 import {
   SPEAKING_AUDIO_BUCKETS,
   SPEAKING_AUDIO_UPLOAD_URL_TTL_SECONDS,
+  type SpeakingAudioEnvironment,
   isSpeakingAudioObjectKey,
   isSpeakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
-import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 
 export interface SpeakingAudioAssetStorageOptions {
   readonly productionBucket?: string;

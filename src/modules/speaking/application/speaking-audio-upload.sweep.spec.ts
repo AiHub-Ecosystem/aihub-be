@@ -1,5 +1,7 @@
-import type { SpeakingAudioUploadIntent } from '@/modules/speaking/domain/speaking-audio-asset';
-import { speakingAudioStagingObjectKey } from '@/modules/speaking/domain/speaking-audio-asset';
+import {
+  type SpeakingAudioUploadIntent,
+  speakingAudioStagingObjectKey,
+} from '@/modules/speaking/domain/speaking-audio-asset';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,

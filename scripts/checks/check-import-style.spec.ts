@@ -11,6 +11,8 @@ import { dirname, join } from 'node:path';
 import {
   canSkipAst,
   collectDistViolations,
+  collectDuplicateReexportViolations,
+  collectSourceViolations,
   collectViolations,
 } from './check-import-style';
 
@@ -228,5 +230,90 @@ describe('emitted output', () => {
     );
 
     expect(collectDistViolations(join(root, 'dist'))).toEqual([]);
+  });
+});
+
+describe('duplicate re-exports', () => {
+  it('reports duplicate re-exports from the same module', () => {
+    const file = fixture(
+      'src/modules/writing/public/sample.ts',
+      "export { A } from './sample-source';\nexport type { B } from './sample-source';\n",
+    );
+
+    expect(collectDuplicateReexportViolations(file)).toEqual([
+      {
+        file,
+        line: 2,
+        specifier: './sample-source',
+        message:
+          'consolidate duplicate re-exports from the same module into a single declaration',
+      },
+    ]);
+  });
+
+  it('reports multiple duplicate re-exports past the first declaration', () => {
+    const file = fixture(
+      'src/modules/writing/public/sample.ts',
+      "export { A } from './sample-source';\nexport type { B } from './sample-source';\nexport { C } from './sample-source';\n",
+    );
+
+    expect(collectDuplicateReexportViolations(file)).toEqual([
+      {
+        file,
+        line: 2,
+        specifier: './sample-source',
+        message:
+          'consolidate duplicate re-exports from the same module into a single declaration',
+      },
+      {
+        file,
+        line: 3,
+        specifier: './sample-source',
+        message:
+          'consolidate duplicate re-exports from the same module into a single declaration',
+      },
+    ]);
+  });
+
+  it('accepts unified inline type re-exports', () => {
+    const file = fixture(
+      'src/modules/writing/public/sample.ts',
+      "export { A, type B } from './sample-source';\n",
+    );
+
+    expect(collectDuplicateReexportViolations(file)).toEqual([]);
+  });
+
+  it('accepts distinct module re-exports', () => {
+    const file = fixture(
+      'src/modules/writing/public/sample.ts',
+      "export { A } from './source-a';\nexport { B } from './source-b';\n",
+    );
+
+    expect(collectDuplicateReexportViolations(file)).toEqual([]);
+  });
+
+  it('ignores exports without module specifiers', () => {
+    const file = fixture(
+      'src/modules/writing/public/sample.ts',
+      'const A = 1;\nexport { A };\nexport const B = 2;\n',
+    );
+
+    expect(collectDuplicateReexportViolations(file)).toEqual([]);
+  });
+
+  it('collects duplicate re-export violations across source trees', () => {
+    const file = fixture(
+      'src/sample.ts',
+      "export { A } from './sample-source';\nexport { B } from './sample-source';\n",
+    );
+
+    expect(collectSourceViolations(root)).toContainEqual(
+      expect.objectContaining({
+        file,
+        line: 2,
+        specifier: './sample-source',
+      }),
+    );
   });
 });

@@ -1,13 +1,11 @@
-import type {
-  UsageReportRepositoryPort,
-  UsageReportSnapshotQuery,
-  UsageReportSnapshotRow,
-} from './usage-completeness-report';
 import {
   UsageCompletenessReportService,
   UsageReportDatabaseError,
   type UsageReportOperationDefinition,
+  type UsageReportRepositoryPort,
   UsageReportSnapshotError,
+  type UsageReportSnapshotQuery,
+  type UsageReportSnapshotRow,
   usageReportOperations,
 } from './usage-completeness-report';
 

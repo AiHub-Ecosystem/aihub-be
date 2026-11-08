@@ -11,12 +11,10 @@ import { createRedisClient } from '@/common/redis/create-redis-client';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import { numberReply } from '@/common/redis/number-reply';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
-import type {
-  ApiKeyCachePort,
-  ApiKeyRecord,
-  AuthFailureCounterPort,
-} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
+  type ApiKeyCachePort,
+  type ApiKeyRecord,
+  type AuthFailureCounterPort,
   apiKeyCacheKey,
   apiKeyCacheMissKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';

@@ -2,8 +2,10 @@ import { ulid } from 'ulid';
 
 import type { Pool } from 'pg';
 
-import { EMAIL_DELIVERY_KINDS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type { EmailDeliveryTransaction } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import {
+  EMAIL_DELIVERY_KINDS,
+  type EmailDeliveryTransaction,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import { createPostgresAuthClient } from './postgres-auth.client';

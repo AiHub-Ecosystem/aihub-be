@@ -1,5 +1,7 @@
-import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import type { OperationDef } from '@/catalog/operation-catalog';
+import {
+  OPERATION_CATALOG,
+  type OperationDef,
+} from '@/catalog/operation-catalog';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
 import {
   type PublicApiMajorDef,

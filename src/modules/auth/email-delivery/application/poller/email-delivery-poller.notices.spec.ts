@@ -1,7 +1,7 @@
-import { API_KEY_NEAR_EXPIRY_WINDOW_MS } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import type {
-  ApiKeyNearExpiryNotificationPayload,
-  EmailNoticeResolvers,
+import {
+  API_KEY_NEAR_EXPIRY_WINDOW_MS,
+  type ApiKeyNearExpiryNotificationPayload,
+  type EmailNoticeResolvers,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller';
 import {

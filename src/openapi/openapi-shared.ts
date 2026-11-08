@@ -1,13 +1,16 @@
 import { type TSchema, Type } from '@sinclair/typebox';
 
 import type { CacheControlPolicy } from '@/catalog/openapi-operation-metadata';
-import type {
-  IdempotencyMode,
-  OperationDef,
+import {
+  type IdempotencyMode,
+  OPERATION_CATALOG,
+  type OperationDef,
 } from '@/catalog/operation-catalog';
-import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import type { PublicRouteDef, PublicRouteId } from '@/catalog/public-routes';
-import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import {
+  PUBLIC_ROUTES,
+  type PublicRouteDef,
+  type PublicRouteId,
+} from '@/catalog/public-routes';
 import { ERROR_CODES, type ErrorCode } from '@/common/errors/error-code';
 import {
   type HttpStatus,

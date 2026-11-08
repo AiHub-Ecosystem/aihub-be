@@ -1,20 +1,16 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type {
-  SpeakingAudioAsset,
-  SpeakingAudioUploadIntent,
-} from '@/modules/speaking/domain/speaking-audio-asset';
 import {
+  type SpeakingAudioAsset,
+  type SpeakingAudioUploadIntent,
   speakingAudioObjectKey,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
-import type {
-  SpeakingAudioCeilingDecision,
-  SpeakingAudioOrganizationHolding,
-} from './speaking-audio-org-ceiling.policy';
 import {
   SPEAKING_AUDIO_ORG_OPEN_INTENT_MAX,
   SPEAKING_AUDIO_ORG_STORED_BYTES_MAX,
+  type SpeakingAudioCeilingDecision,
+  type SpeakingAudioOrganizationHolding,
 } from './speaking-audio-org-ceiling.policy';
 import type {
   SpeakingAudioAssetStoragePort,

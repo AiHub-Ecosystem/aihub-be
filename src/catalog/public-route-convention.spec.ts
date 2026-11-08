@@ -1,5 +1,4 @@
-import { Type } from '@sinclair/typebox';
-import type { TSchema } from '@sinclair/typebox';
+import { type TSchema, Type } from '@sinclair/typebox';
 
 import { OPERATION_CATALOG } from './operation-catalog';
 import { PUBLIC_ROUTES } from './public-routes';

@@ -1,5 +1,8 @@
-import type { QueryFake } from './query-fake-client';
-import { ScriptedPrisma, prismaFromQueryFake } from './query-fake-client';
+import {
+  type QueryFake,
+  ScriptedPrisma,
+  prismaFromQueryFake,
+} from './query-fake-client';
 
 interface RecordingFake extends Omit<QueryFake, 'transaction'> {
   queries: Array<{ text: string; values: readonly unknown[] }>;

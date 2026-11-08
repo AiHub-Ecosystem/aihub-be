@@ -1,21 +1,19 @@
 import { AppError } from '@/common/errors/app-error';
-import type {
-  CancelStaleEmailDeliveryRequestsInput,
-  ClaimEmailDeliveryRequestsInput,
-  ClaimedFailureReport,
-  EmailDeliveryCancelReason,
-  EmailDeliveryErrorCode,
-  EmailDeliveryKind,
-  EmailDeliveryRequestRecord,
-  EmailDeliveryRequestWriterPort,
-  EmailDeliveryTransaction,
-  InsertEmailDeliveryRequestInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import {
+  type CancelStaleEmailDeliveryRequestsInput,
+  type ClaimEmailDeliveryRequestsInput,
+  type ClaimedFailureReport,
   EMAIL_DELIVERY_CANCEL_REASONS,
   EMAIL_DELIVERY_ERROR_CODES,
   EMAIL_DELIVERY_KINDS,
   EMAIL_DELIVERY_REQUEST_STATUSES,
+  type EmailDeliveryCancelReason,
+  type EmailDeliveryErrorCode,
+  type EmailDeliveryKind,
+  type EmailDeliveryRequestRecord,
+  type EmailDeliveryRequestWriterPort,
+  type EmailDeliveryTransaction,
+  type InsertEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';

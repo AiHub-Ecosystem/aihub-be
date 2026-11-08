@@ -1,12 +1,12 @@
 import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
-import type {
-  ApiKeyNearExpiryNoticeResolverPort,
-  ApiKeyNearExpiryNotificationInput,
-  ApiKeyNearExpiryNotificationPayload,
-  EmailDeliveryTransaction,
+import {
+  type ApiKeyNearExpiryNoticeResolverPort,
+  type ApiKeyNearExpiryNotificationInput,
+  type ApiKeyNearExpiryNotificationPayload,
+  type EmailDeliveryTransaction,
+  emailDeliveryTransactionBrand,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { emailDeliveryTransactionBrand } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type {
   ApiKeyNearExpiryNoticeRecordPort,

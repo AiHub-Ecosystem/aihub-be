@@ -1,10 +1,6 @@
 import {
   METRICS_ROUTE_PATH,
   getMetrics,
-  registerEmailDeliveryMetrics,
-  registry,
-} from './metrics';
-import {
   observeDispatchDeadlineMsRemaining,
   recordArgon2QueueRefusal,
   recordArgon2QueueWait,
@@ -16,6 +12,8 @@ import {
   recordEmailOutboxUnrecognisedPayload,
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
+  registerEmailDeliveryMetrics,
+  registry,
   setDispatchAttemptUnresolvedSource,
   setDownstreamPoolQueuedSource,
   setEmailOutboxBacklogSource,

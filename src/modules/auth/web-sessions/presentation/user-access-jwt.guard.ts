@@ -17,8 +17,10 @@ import {
   type UserAccountRepositoryPort,
 } from '@/modules/auth/accounts/application/user-account.port';
 import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
-import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import {
+  USER_ACCESS_TOKEN_REVOCATION_RECORD,
+  type UserAccessTokenRevocationRecordPort,
+} from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
