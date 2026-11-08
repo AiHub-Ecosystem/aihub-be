@@ -18,6 +18,10 @@ import type { ApiKeyAuthenticatorPort } from '@/modules/identity/api-keys/applic
 import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { UserIdentityResolverPort } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
+import type {
+  SpeakingAudioCeilingDecision,
+  SpeakingAudioOrganizationHolding,
+} from '@/modules/speaking/application/speaking-audio-org-ceiling.policy';
 import {
   SPEAKING_AUDIO_ASSET_STORAGE,
   SPEAKING_AUDIO_UPLOAD_CLOCK,
@@ -53,6 +57,22 @@ class FakeAudioUploadRepository implements SpeakingAudioUploadRepositoryPort {
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
     this.intents.set(intent.assetId, intent);
+  }
+
+  async createIntentWithinCeiling(input: {
+    readonly intent: SpeakingAudioUploadIntent;
+    readonly decide: (
+      holding: SpeakingAudioOrganizationHolding,
+    ) => SpeakingAudioCeilingDecision;
+  }): Promise<SpeakingAudioCeilingDecision> {
+    const decision = input.decide({
+      openIntents: 0,
+      issuedInWindow: 0,
+      storedBytes: 0,
+    });
+    if (decision.kind === 'refused') return decision;
+    this.intents.set(input.intent.assetId, input.intent);
+    return decision;
   }
 
   async findUpload(input: {

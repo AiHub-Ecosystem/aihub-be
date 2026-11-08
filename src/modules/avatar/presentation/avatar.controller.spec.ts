@@ -79,7 +79,9 @@ class FakeAvatarStorage implements AvatarStoragePort {
     this.signed.push({ ...input });
     return {
       url: UPLOAD_URL,
-      expiresAt: new Date('2026-10-02T10:05:00.000Z'),
+      // Far-future and fixed: a past instant would be an already-expired grant
+      // that holds no open slot, and the ceiling could never be reached (#374).
+      expiresAt: new Date('2099-01-01T00:00:00.000Z'),
     };
   }
 
@@ -186,6 +188,7 @@ describe('Avatar upload HTTP flow', () => {
     storage.unavailable = false;
     storage.deleteFails = false;
     repository.avatars.clear();
+    repository.grants.clear();
     repository.beforeNextChange = undefined;
   });
 
@@ -248,7 +251,7 @@ describe('Avatar upload HTTP flow', () => {
             'Content-Length': '1234',
             'Cache-Control': 'public, max-age=3600',
           },
-          expires_at: '2026-10-02T10:05:00.000Z',
+          expires_at: '2099-01-01T00:00:00.000Z',
         },
         meta: { request_id: REQUEST_ID },
       });
@@ -310,6 +313,19 @@ describe('Avatar upload HTTP flow', () => {
       const response = await requestUpload();
 
       expect(response.statusCode).toBe(201);
+    });
+
+    it('refuses a further open URL past the per-account ceiling with 429', async () => {
+      await requestUpload();
+      await requestUpload();
+      await requestUpload();
+
+      const response = await requestUpload();
+
+      expect(response.statusCode).toBe(429);
+      expect(response.json<unknown>()).toMatchObject({
+        error: { code: 'RATE_LIMITED', retryable: true },
+      });
     });
 
     it('answers a retryable storage-unavailable error when storage fails', async () => {

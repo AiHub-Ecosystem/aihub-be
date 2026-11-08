@@ -741,6 +741,7 @@ model UserAccount {
   passwordResetTokens PasswordResetToken?
   refreshTokens     RefreshToken[]
   avatar            UserAvatar?
+  avatarUploadGrants UserAvatarUploadGrant[]
   mfaFactor         UserMfaFactor?
   mfaRecoveryCodes  UserMfaRecoveryCode[]
   webSessions       WebSession[]
@@ -765,6 +766,26 @@ model UserAvatar {
   userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onUpdate: NoAction)
 
   @@map("user_avatars")
+}
+
+/// One presigned Avatar upload URL an account holds and has not consumed yet.
+///
+/// Bounds how many URLs one account can have open at once and how many it is
+/// issued per rolling window (#374). A consumed row keeps counting toward the
+/// issuance window, so completing an upload never restores issuance headroom.
+/// @owner avatar
+model UserAvatarUploadGrant {
+  id            String      @id
+  userAccountId String      @map("user_account_id")
+  objectKey     String      @unique(map: "user_avatar_upload_grants_object_key_key") @map("object_key")
+  status        String      @default("open")
+  createdAt     DateTime    @map("created_at") @db.Timestamptz(6)
+  expiresAt     DateTime    @map("expires_at") @db.Timestamptz(6)
+  userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userAccountId, createdAt], map: "user_avatar_upload_grants_issuance_idx")
+  @@index([expiresAt], map: "user_avatar_upload_grants_expiry_idx")
+  @@map("user_avatar_upload_grants")
 }
 
 /// A TOTP second factor.

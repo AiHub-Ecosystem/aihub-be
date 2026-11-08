@@ -6,6 +6,11 @@ import {
   SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS,
 } from '@/modules/speaking/application/speaking-audio-completion-timeouts';
 import type {
+  SpeakingAudioCeilingDecision,
+  SpeakingAudioOrganizationHolding,
+} from '@/modules/speaking/application/speaking-audio-org-ceiling.policy';
+import { SPEAKING_AUDIO_ORG_ISSUANCE_WINDOW_MS } from '@/modules/speaking/application/speaking-audio-org-ceiling.policy';
+import type {
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
@@ -128,6 +133,39 @@ const SET_COMPLETION_IDLE_TIMEOUT_SQL = `
   SELECT set_config('idle_in_transaction_session_timeout', $1, true)
 `;
 
+const ORG_CEILING_LOCK_SQL =
+  'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+
+/**
+ * Intents still open and unexpired, intents created in the issuance window,
+ * and the bytes the Organization already stores: completed assets plus what an
+ * open intent may still turn into (#374).
+ */
+const HOLDING_SQL = `
+  SELECT
+    (SELECT count(*)::int FROM speaking_audio_upload_intents
+      WHERE organization_id = $1 AND status = 'open' AND expires_at > $2)
+      AS "openIntents",
+    (SELECT count(*)::int FROM speaking_audio_upload_intents
+      WHERE organization_id = $1 AND created_at > $3)
+      AS "issuedInWindow",
+    (SELECT coalesce(sum(byte_size), 0)::bigint FROM speaking_audio_assets
+      WHERE organization_id = $1)
+    + (SELECT coalesce(sum(byte_size), 0)::bigint FROM speaking_audio_upload_intents
+      WHERE organization_id = $1 AND status = 'open' AND expires_at > $2)
+      AS "storedBytes"
+`;
+
+interface HoldingRow {
+  readonly openIntents: number;
+  readonly issuedInWindow: number;
+  readonly storedBytes: bigint | number | string;
+}
+
+function organizationCeilingLockKey(organizationId: string): string {
+  return `${organizationId}:speaking-audio:intents`;
+}
+
 export class PostgresSpeakingAudioUploadRepository
   implements SpeakingAudioUploadRepositoryPort
 {
@@ -150,6 +188,51 @@ export class PostgresSpeakingAudioUploadRepository
         },
       }),
     );
+  }
+
+  async createIntentWithinCeiling(input: {
+    readonly intent: SpeakingAudioUploadIntent;
+    readonly decide: (
+      holding: SpeakingAudioOrganizationHolding,
+    ) => SpeakingAudioCeilingDecision;
+  }): Promise<SpeakingAudioCeilingDecision> {
+    const { intent } = input;
+    return this.transaction(async (client) => {
+      await client.$queryRawUnsafe(
+        ORG_CEILING_LOCK_SQL,
+        organizationCeilingLockKey(intent.organizationId),
+      );
+      const [row] = await client.$queryRawUnsafe<readonly HoldingRow[]>(
+        HOLDING_SQL,
+        intent.organizationId,
+        intent.createdAt,
+        new Date(
+          intent.createdAt.getTime() - SPEAKING_AUDIO_ORG_ISSUANCE_WINDOW_MS,
+        ),
+      );
+      const decision = input.decide({
+        openIntents: Number(row?.openIntents ?? 0),
+        issuedInWindow: Number(row?.issuedInWindow ?? 0),
+        storedBytes: Number(row?.storedBytes ?? 0),
+      });
+      if (decision.kind === 'refused') return decision;
+
+      await client.speakingAudioUploadIntent.create({
+        data: {
+          id: intent.assetId,
+          organizationId: intent.organizationId,
+          endUserId: intent.endUserId,
+          environment: intent.environment,
+          objectKey: intent.objectKey,
+          contentType: intent.contentType,
+          byteSize: intent.byteSize,
+          status: 'open',
+          createdAt: intent.createdAt,
+          expiresAt: intent.expiresAt,
+        },
+      });
+      return decision;
+    });
   }
 
   async findUpload(

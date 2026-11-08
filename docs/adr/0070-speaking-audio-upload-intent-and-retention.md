@@ -38,3 +38,50 @@ An Audio asset is created only after a client uploads directly to SeaweedFS and 
 ## Update (2026-11-07)
 
 Speaking upload URLs target `orgs/{organizationId}/speaking/{assetId}/upload` in the same private bucket; the durable asset key remains `/original`. Completion checks staging metadata, copies staging to final, checks final metadata, records the asset, then deletes staging best effort. The repository holds the per-intent row lock across storage verification and asset recording, so a concurrent completion sees the recorded asset without copying again. Storage calls inside the lock share a 20-second abort deadline, and the transaction timeout is 30 seconds so it outlives that deadline. Because Postgres also enforces a 10-second server-side idle-in-transaction timeout during storage calls, completion sets a transaction-local 35-second idle timeout before verification; the invariant is 20-second deadline < 30-second transaction timeout <= 35-second idle timeout. A client-side abort does not guarantee the server stops an in-flight copy; the residual window is the 10-second deadline slack and requires a replayed staging PUT plus a concurrent completion. Expired or rejected intent cleanup removes both keys, including a final object left by a crash before the asset row is written. At deploy time, an open intent whose client uploaded to the former `/original` URL has no staging object and receives the existing `NOT_FOUND`; the client requests a fresh URL and uploads again. Refreshed URLs also target staging.
+
+## Update (2026-11-08): Organization-wide upload ceilings (#374)
+
+Points 1–5 bounded one intent, and the route's rate limit bounds one API key.
+Neither bounds an Organization: many keys multiply the per-key ceiling, and no
+ceiling counted stored bytes. Because a full SeaweedFS disk also takes down
+`aihub-db` and every other project on the shared VPS, an Organization needs its
+own ceilings. They are recorded and enforced in
+`src/modules/speaking/application/speaking-audio-org-ceiling.policy.ts`.
+
+1. An Organization may hold **8** open, unexpired intents. At the 25 MiB
+   per-intent ceiling that bounds outstanding upload bytes to 200 MiB per
+   Organization at once. One recording of a full IELTS answer needs one intent;
+   the rest is headroom for a client that abandons an upload and starts again.
+2. An Organization may create **60** intents in any rolling hour, counted from
+   the intent lifetime: an older intent has expired and its object is being
+   swept, so it can no longer be used.
+3. An Organization may hold **5 GiB** of stored Audio bytes at once: the sum of
+   completed assets plus the bytes open intents may still turn into one. This is
+   far above a real Organization's monthly recordings and far below the shared
+   disk, so it only ever refuses an abusive Organization.
+4. The counts and the intent write happen in one transaction under a
+   per-organization advisory lock (`{organizationId}:speaking-audio:intents`),
+   so two concurrent requests cannot both observe headroom. The decision itself
+   is a pure function the repository calls under that lock, so a test reaches
+   it without a database (`.claude/rules/infrastructure.md`).
+5. An open- or issuance-ceiling refusal answers `429 RATE_LIMITED`; a
+   stored-bytes refusal answers `429 QUOTA_EXCEEDED`. Both are counted on
+   `aihub_rejected_total` as `rate_limit` and `quota` respectively, and neither
+   returns an upload URL or writes an intent.
+6. The ceilings add no state and no cleanup: open intents already expire, and
+   completed assets already carry the 30-day retention this ADR records.
+
+### Considered options for the ceilings
+
+- **Configuration rather than constants.** Rejected for now: these are policy,
+  and policy lives beside the use case. Make them settings only when a real
+  customer is refused, which would also need a per-Organization override story.
+- **Count stored bytes from storage listings.** Rejected: the assets table
+  already holds every accepted byte size, and a listing cannot distinguish an
+  AIHUB asset from an object written by another tenant of the shared host.
+- **A per-Organization rate limit in Redis.** Rejected on the same grounds as
+  ADR-0007: Redis is a counter cache, while a storage ceiling has to hold after
+  a flush or a failover.
+- **Reject at completion rather than at intent creation.** Rejected: the
+  storage is already written by then, which is the cost the ceiling exists to
+  prevent.

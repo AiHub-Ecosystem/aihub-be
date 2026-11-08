@@ -748,6 +748,13 @@ only on that account; no route takes an account id.
   2 MiB are accepted.
 - `DELETE /v1/me/avatar` removes it and always answers `204`.
 
+An account may hold **3** uncompleted, unexpired upload URLs at once and be
+issued **10** in any rolling hour. Past either limit, `POST
+/v1/me/avatar/uploads` answers `429 RATE_LIMITED` with `retry_after_ms` and no
+`upload_url`. An upload URL that expires unconsumed frees its slot on its own,
+so abandoning an upload never blocks the next one. Both limits exist so one
+account cannot fill object storage; the values are recorded in ADR-0068.
+
 Every upload gets a new URL, so a cached image is never shown under the wrong
 Avatar. A removed or replaced image can remain in browser caches for up to an
 hour. `409 AVATAR_CHANGED` means another request changed the Avatar first:
@@ -1127,6 +1134,17 @@ from what you declared is refused and its object deleted.
 End-User ID. A completion sent before storage has the object yet is retryable
 until the intent expires. `503 SPEAKING_AUDIO_STORAGE_UNAVAILABLE` is retryable
 and leaves the intent open.
+
+Each Organization is limited to **8** open upload intents, **60** new intents
+per rolling hour, and **5 GiB** of stored Audio at once (completed assets plus
+what open intents may still store). These cap the Organization across all of
+its API keys, not one key. Past either intent limit,
+`POST /v1/speaking/audio/uploads` answers `429 RATE_LIMITED` with
+`retry_after_ms`; past the storage limit it answers `429 QUOTA_EXCEEDED`. Either
+refusal returns no `upload_url` and creates no intent. An intent that expires
+unused frees its slot, so abandoning an upload never blocks the next one.
+Recordings expire 30 days after acceptance, so stored bytes fall again on their
+own. The values are recorded in ADR-0070.
 
 This public sample is a candidate's answer to the matching Part 1 question,
 not audio of the examiner reading the prompt. Its URL has no signature or

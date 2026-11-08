@@ -1,3 +1,4 @@
+import { getMetrics } from '@/common/observability/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   SpeakingAudioAsset,
@@ -7,6 +8,14 @@ import {
   speakingAudioObjectKey,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+import type {
+  SpeakingAudioCeilingDecision,
+  SpeakingAudioOrganizationHolding,
+} from './speaking-audio-org-ceiling.policy';
+import {
+  SPEAKING_AUDIO_ORG_OPEN_INTENT_MAX,
+  SPEAKING_AUDIO_ORG_STORED_BYTES_MAX,
+} from './speaking-audio-org-ceiling.policy';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
@@ -20,6 +29,12 @@ type Stored = { contentType: string; byteSize: number; bytes: string };
 class Repository implements SpeakingAudioUploadRepositoryPort {
   intent: SpeakingAudioUploadIntent | undefined;
   asset: SpeakingAudioAsset | undefined;
+  /** What the Org currently holds; a test sets it to reach a ceiling. */
+  holding: SpeakingAudioOrganizationHolding = {
+    openIntents: 0,
+    issuedInWindow: 0,
+    storedBytes: 0,
+  };
   rejectedCount = 0;
   failCompletionOnce = false;
   activeCompletions = 0;
@@ -29,6 +44,17 @@ class Repository implements SpeakingAudioUploadRepositoryPort {
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
     this.intent = intent;
+  }
+  async createIntentWithinCeiling(input: {
+    readonly intent: SpeakingAudioUploadIntent;
+    readonly decide: (
+      holding: SpeakingAudioOrganizationHolding,
+    ) => SpeakingAudioCeilingDecision;
+  }): Promise<SpeakingAudioCeilingDecision> {
+    const decision = input.decide(this.holding);
+    if (decision.kind === 'refused') return decision;
+    this.intent = input.intent;
+    return decision;
   }
   async findUpload() {
     return this.asset !== undefined
@@ -389,5 +415,79 @@ describe('SpeakingAudioUploadService staging completion', () => {
     expect(h.storage.objects.get(h.intent.objectKey)?.bytes).toBe(
       'accepted bytes',
     );
+  });
+});
+
+async function rejectedCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="rate_limit"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
+
+describe('SpeakingAudioUploadService Organization ceilings (#374)', () => {
+  const request = (h: ReturnType<typeof setup>, byteSize = 1_024) =>
+    h.service.requestUpload({
+      context: h.context,
+      contentType: 'audio/wav',
+      byteSize,
+    });
+
+  it('refuses a new intent once the Organization holds the maximum open ones', async () => {
+    const h = setup();
+    h.repository.holding = {
+      openIntents: SPEAKING_AUDIO_ORG_OPEN_INTENT_MAX,
+      issuedInWindow: 0,
+      storedBytes: 0,
+    };
+
+    await expect(request(h)).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      retryable: true,
+    });
+    expect(h.repository.intent).toBeUndefined();
+  });
+
+  it('refuses an intent that would exceed the Organization storage ceiling', async () => {
+    const h = setup();
+    h.repository.holding = {
+      openIntents: 0,
+      issuedInWindow: 0,
+      storedBytes: SPEAKING_AUDIO_ORG_STORED_BYTES_MAX - 10,
+    };
+
+    await expect(request(h, 1_024)).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      retryable: false,
+    });
+    expect(h.repository.intent).toBeUndefined();
+  });
+
+  it('accepts an intent that fits exactly within the storage ceiling', async () => {
+    const h = setup();
+    h.repository.holding = {
+      openIntents: 0,
+      issuedInWindow: 0,
+      storedBytes: SPEAKING_AUDIO_ORG_STORED_BYTES_MAX - 1_024,
+    };
+
+    await expect(request(h)).resolves.toMatchObject({ byteSize: 1_024 });
+    expect(h.repository.intent).toBeDefined();
+  });
+
+  it('counts the refusal on the rejected metric', async () => {
+    const h = setup();
+    h.repository.holding = {
+      openIntents: SPEAKING_AUDIO_ORG_OPEN_INTENT_MAX,
+      issuedInWindow: 0,
+      storedBytes: 0,
+    };
+    const before = await rejectedCount();
+
+    await expect(request(h)).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+
+    await expect(rejectedCount()).resolves.toBe(before + 1);
   });
 });

@@ -502,7 +502,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: CreateAvatarUploadRequestSchema,
     responseSchema: AvatarUploadResponseSchema,
-    errorStatuses: [400, 401, 413, 500, 503],
+    errorStatuses: [400, 401, 413, 429, 500, 503],
   },
   // `201` when this call records the Avatar, first or replacement; a repeated
   // completion of the same asset answers `200` with the same body.
