@@ -147,18 +147,7 @@ export class SubmitSpeakingGradingJob {
           signal: context.signal,
           deadlineAt: context.deadlineAt,
           beforeDuplicate: async () => {
-            const decision = await admitGradedRequest(this.admission, {
-              ...admissionInput,
-              monthlyRequestQuota: null,
-            });
-            if (decision.stage === 'rate_limit') recordRejected('rate_limit');
-            if (decision.stage !== 'admitted') {
-              throw gradedAdmissionRefusal(
-                decision,
-                owner.organizationId,
-                this.now,
-              );
-            }
+            await this.admitRepeat(admissionInput, owner.organizationId);
           },
         },
         () =>
@@ -172,6 +161,25 @@ export class SubmitSpeakingGradingJob {
         (value) => Value.Parse(SpeakingGradingJobAcceptedDataSchema, value),
       );
     return result;
+  }
+
+  /**
+   * Applies rate-limit and retry-budget admission without the monthly quota:
+   * a replay or an asset probe never grades, so it must not consume quota,
+   * but it still answers through the same rate limit as first attempts.
+   */
+  private async admitRepeat(
+    admissionInput: AdmitGradedRequestInput,
+    organizationId: string,
+  ): Promise<void> {
+    const decision = await admitGradedRequest(this.admission, {
+      ...admissionInput,
+      monthlyRequestQuota: null,
+    });
+    if (decision.stage === 'rate_limit') recordRejected('rate_limit');
+    if (decision.stage !== 'admitted') {
+      throw gradedAdmissionRefusal(decision, organizationId, this.now);
+    }
   }
 
   private async submit(
@@ -191,6 +199,10 @@ export class SubmitSpeakingGradingJob {
       found.kind !== 'asset' ||
       found.asset.retentionExpiresAt.getTime() <= now.getTime()
     ) {
+      // The probe consumed no admission yet: charge the rate limit and the
+      // Organization retry budget before answering NOT_FOUND, or a caller
+      // could poll for foreign asset ids without ever being limited.
+      await this.admitRepeat(admissionInput, owner.organizationId);
       throw notFound();
     }
 

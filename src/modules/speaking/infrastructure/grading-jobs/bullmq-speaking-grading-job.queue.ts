@@ -38,15 +38,20 @@ export class BullmqSpeakingGradingJobQueue
     readonly environment: SpeakingAudioEnvironment;
     readonly delayMs?: number;
   }): Promise<void> {
+    // A delayed reschedule (permit denied) can be enqueued while the BullMQ
+    // job carrying the same durable id is still active, so it must not set a
+    // custom job id: BullMQ would dedupe against the active job and silently
+    // drop the retry. The consumer reads the durable id from the payload.
     await this.queues[input.environment].add(
       'grade',
       { jobId: input.jobId },
       {
-        jobId: input.jobId,
         attempts: 1,
         removeOnComplete: true,
         removeOnFail: true,
-        ...(input.delayMs === undefined ? {} : { delay: input.delayMs }),
+        ...(input.delayMs === undefined
+          ? { jobId: input.jobId }
+          : { delay: input.delayMs }),
       },
     );
   }

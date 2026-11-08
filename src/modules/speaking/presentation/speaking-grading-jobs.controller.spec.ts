@@ -5,6 +5,7 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { ulid } from 'ulid';
 
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
@@ -305,6 +306,8 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(response.statusCode).toBe(404);
     expect(json(response)).toMatchObject({ error: { code: 'NOT_FOUND' } });
     expect(repository.jobs.size).toBe(0);
+    expect(admissionCalls).toHaveLength(1);
+    expect(admissionCalls[0]?.monthlyRequestQuota).toBeNull();
   });
 
   it('hides an expired Audio asset as NOT_FOUND', async () => {
@@ -318,6 +321,22 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(response.statusCode).toBe(404);
     expect(json(response)).toMatchObject({ error: { code: 'NOT_FOUND' } });
     expect(repository.jobs.size).toBe(0);
+    expect(admissionCalls).toHaveLength(1);
+  });
+
+  it('rate-limits an asset probe instead of answering NOT_FOUND', async () => {
+    admissionDecision = { stage: 'rate_limit', retryAfterMs: 1000 };
+
+    const response = await submit({
+      ...REQUEST_BODY,
+      audio_asset_id: 'aud_' + ulid(),
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(json(response)).toMatchObject({ error: { code: 'RATE_LIMITED' } });
+    expect(repository.jobs.size).toBe(0);
+    expect(admissionCalls).toHaveLength(1);
+    expect(admissionCalls[0]?.monthlyRequestQuota).toBeNull();
   });
 
   it('replays the original 202 for a matching idempotency key and refuses a different body', async () => {
