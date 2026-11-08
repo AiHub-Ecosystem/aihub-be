@@ -59,6 +59,20 @@ describe('runtime configuration', () => {
     expect(config.AIHUB_DATABASE_POOLER_ENABLED).toBe(false);
   });
 
+  it('accepts the optional Avatar staging bucket override', () => {
+    expect(
+      loadRuntimeConfiguration({
+        NODE_ENV: 'test',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+        AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
+        AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',
+        AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
+        AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
+        SEAWEEDFS_USER_ASSET_STAGING_BUCKET: 'private-assets-test',
+      }).SEAWEEDFS_USER_ASSET_STAGING_BUCKET,
+    ).toBe('private-assets-test');
+  });
+
   it('requires approved per-role pool caps when PgBouncer runtime routing is enabled', () => {
     let caught: unknown;
     try {

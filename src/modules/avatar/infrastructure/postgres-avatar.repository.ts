@@ -1,13 +1,20 @@
 import { AppError, internalError } from '@/common/errors/app-error';
+import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
+import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import type {
   AvatarRepositoryPort,
   RecordAvatarResult,
 } from '@/modules/avatar/application/avatar-repository.port';
 import {
+  AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS,
+  AVATAR_LOCK_IDLE_TRANSACTION_TIMEOUT_MS,
+} from '@/modules/avatar/application/avatar-upload.policy';
+import {
   type Avatar,
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
-import type { PrismaClient, UserAvatar } from '@prisma-client/client';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import type { Prisma, PrismaClient, UserAvatar } from '@prisma-client/client';
 
 export { createAvatarQueryClient } from './postgres-avatar.fixture-client';
 
@@ -22,12 +29,23 @@ const INSERT_SQL = `
   ON CONFLICT (user_account_id) DO NOTHING
   RETURNING id
 `;
+const AVATAR_USER_LOCK_SQL =
+  'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+const AVATAR_IDLE_TIMEOUT_SQL =
+  "SELECT set_config('idle_in_transaction_session_timeout', $1, true)";
+const AVATAR_LOCK_TRANSACTION_OPTIONS = {
+  ...CONTROL_PLANE_TRANSACTION_OPTIONS,
+  timeout: AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS,
+};
 
 interface AvatarIdRow {
   readonly id: unknown;
 }
 
 function storeError(cause: unknown): AppError {
+  if (postgresTimeoutKind(cause) !== undefined) {
+    return databaseUnavailableError(cause, 'Avatar store is unavailable');
+  }
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Avatar store is unavailable',
@@ -54,7 +72,34 @@ function mapRow(row: UserAvatar | null): Avatar | undefined {
 }
 
 export class PostgresAvatarRepository implements AvatarRepositoryPort {
-  constructor(private readonly client: PrismaClient) {}
+  constructor(
+    private readonly client: PrismaClient | Prisma.TransactionClient,
+  ) {}
+
+  async withUserLock<T>(
+    userId: string,
+    operation: (repository: AvatarRepositoryPort) => Promise<T>,
+  ): Promise<T> {
+    if (!('$transaction' in this.client)) {
+      throw storeError(internalError('Avatar transaction is unavailable'));
+    }
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        await transaction.$queryRawUnsafe(
+          AVATAR_IDLE_TIMEOUT_SQL,
+          `${AVATAR_LOCK_IDLE_TRANSACTION_TIMEOUT_MS}ms`,
+        );
+        await transaction.$executeRawUnsafe(
+          AVATAR_USER_LOCK_SQL,
+          `avatar:${userId}`,
+        );
+        return operation(new PostgresAvatarRepository(transaction));
+      }, AVATAR_LOCK_TRANSACTION_OPTIONS);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw storeError(error);
+    }
+  }
 
   async findByUser(userId: string): Promise<Avatar | undefined> {
     return mapRow(

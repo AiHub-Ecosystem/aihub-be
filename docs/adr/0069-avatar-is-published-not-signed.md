@@ -55,9 +55,7 @@ sensitive asset.
   sample object still answers `403`.
 - Verified on 2026-10-02 against both Avatar buckets, from outside the network:
   SeaweedFS stores `Cache-Control: public, max-age=3600` from the upload and
-  serves it back on every read, and each of the checks above held. Whether it
-  enforces a signed `Content-Length` is still untested; completion's own check
-  of the stored object is what guarantees the size.
+  serves it back on every read, and each of the checks above held.
 - A removed or replaced image can stay in caches for up to an hour. Removal
   deletes the object at the origin at once; it cannot recall copies.
 - Anyone holding an Avatar URL learns its owner's account id, because the key
@@ -65,6 +63,45 @@ sensitive asset.
   Any slice that shows one account's Avatar to another must first stop
   exposing the account id, by changing the key layout or otherwise, because
   the membership roster deliberately hides account ids.
+
+## 2026-11-07: Private staging for Avatar uploads
+
+The 2026-10-26 live Sandbox audit measured two Avatar gaps at the storage and
+use-case level; it did not exercise HTTP routes, real accounts, guards, or
+Postgres state. Reusing a still-valid PUT URL after completion replaced the
+accepted same-length PNG, and anonymous GET served the replacement. A PUT of
+2,097,153 bytes against a 90-byte declaration was stored and anonymously
+readable before completion rejected and deleted it. These are measured live
+SeaweedFS and deployed-use-case results, not route-level acceptance evidence.
+
+Avatar clients now upload to a private staging bucket. Completion describes
+staging and checks its age, size, and type; copies it server-side to the
+existing public Avatar key with replacement `Content-Type` and `Cache-Control`
+metadata; describes and validates the final object; then records it and best
+effort deletes staging. The client URL never names the public key, so later
+PUTs can only recreate a private staging object and cannot change published
+bytes. Content-Length remains unsigned because browser Fetch controls it; the
+private staging bucket prevents an oversized pre-completion object from being
+publicly exposed, and completion validates the object that landed.
+
+Completion holds a transaction-scoped PostgreSQL advisory lock keyed by user
+account across the staging checks, copy, final check, and record change. A
+second completion of the same asset takes that lock before checking the
+record, then returns the already-recorded Avatar without copying. This closes
+the interleaving where a replayed staging PUT could otherwise be copied by a
+second concurrent completion after the first one recorded the asset.
+
+The locked completion shares one 20-second deadline signal across its storage
+calls; its transaction timeout is 30 seconds so the transaction-scoped lock
+outlives the callback deadline. A client-side abort does not guarantee the
+server stops an in-flight copy, so a copy could finish after the lock is
+released if storage ignores the abort. The residual race requires a replayed
+PUT and another concurrent completion during the 10-second deadline slack;
+real SeaweedFS cancellation behavior was not verified here.
+
+The lock transaction also sets a transaction-local 35-second idle timeout,
+overriding the request pool's 10-second session value so storage calls within
+the 20-second completion deadline cannot have PostgreSQL release the lock.
 
 ## Considered options
 
