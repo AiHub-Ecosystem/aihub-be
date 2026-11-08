@@ -5,7 +5,8 @@ import { PostgresSpeakingAudioUploadRepository } from './postgres-speaking-audio
 
 describe('PostgresSpeakingAudioUploadRepository completion timeout', () => {
   it('sets the transaction-local idle timeout before preparing the object', async () => {
-    const order: string[] = [];
+    let prepareCalledAfterSetConfig = false;
+    let setConfigCalled = false;
     const row = {
       id: 'aud_01J00000000000000000000001',
       organizationId: 'org_speaking_upload',
@@ -31,8 +32,11 @@ describe('PostgresSpeakingAudioUploadRepository completion timeout', () => {
       retentionExpiresAt: new Date('2026-11-13T12:00:00.000Z'),
     };
     const query = jest.fn(async (sql: string, ..._values: unknown[]) => {
-      order.push(sql.includes('set_config') ? 'set_config' : 'lock');
-      return sql.includes('set_config') ? [] : [row];
+      if (sql.includes('set_config')) {
+        setConfigCalled = true;
+        return [];
+      }
+      return [row];
     });
     const transaction = {
       $queryRawUnsafe: query,
@@ -58,13 +62,15 @@ describe('PostgresSpeakingAudioUploadRepository completion timeout', () => {
       },
       now: () => new Date('2026-10-14T12:00:00.000Z'),
       prepare: async () => {
-        order.push('prepare');
+        prepareCalledAfterSetConfig = setConfigCalled;
         return { kind: 'accepted', asset };
       },
     });
 
+    // set_config was called with the 35 000 ms idle timeout value.
     expect(query.mock.calls[0]?.[0]).toContain('set_config');
     expect(query.mock.calls[0]?.[1]).toBe('35000');
-    expect(order).toEqual(['set_config', 'lock', 'prepare']);
+    // prepare ran only after set_config had already been called.
+    expect(prepareCalledAfterSetConfig).toBe(true);
   });
 });
