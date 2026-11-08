@@ -99,6 +99,10 @@ released if storage ignores the abort. The residual race requires a replayed
 PUT and another concurrent completion during the 10-second deadline slack;
 real SeaweedFS cancellation behavior was not verified here.
 
+The lock transaction also sets a transaction-local 35-second idle timeout,
+overriding the request pool's 10-second session value so storage calls within
+the 20-second completion deadline cannot have PostgreSQL release the lock.
+
 ## Considered options
 
 - **A presigned read URL in each description.** Rejected: a new URL per

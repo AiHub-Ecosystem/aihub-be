@@ -1,9 +1,14 @@
 import { AppError, internalError } from '@/common/errors/app-error';
+import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
+import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import type {
   AvatarRepositoryPort,
   RecordAvatarResult,
 } from '@/modules/avatar/application/avatar-repository.port';
-import { AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS } from '@/modules/avatar/application/avatar-upload.policy';
+import {
+  AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS,
+  AVATAR_LOCK_IDLE_TRANSACTION_TIMEOUT_MS,
+} from '@/modules/avatar/application/avatar-upload.policy';
 import {
   type Avatar,
   isAvatarContentType,
@@ -26,6 +31,8 @@ const INSERT_SQL = `
 `;
 const AVATAR_USER_LOCK_SQL =
   'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+const AVATAR_IDLE_TIMEOUT_SQL =
+  "SELECT set_config('idle_in_transaction_session_timeout', $1, true)";
 const AVATAR_LOCK_TRANSACTION_OPTIONS = {
   ...CONTROL_PLANE_TRANSACTION_OPTIONS,
   timeout: AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS,
@@ -36,6 +43,9 @@ interface AvatarIdRow {
 }
 
 function storeError(cause: unknown): AppError {
+  if (postgresTimeoutKind(cause) !== undefined) {
+    return databaseUnavailableError(cause, 'Avatar store is unavailable');
+  }
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Avatar store is unavailable',
@@ -75,6 +85,10 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
     }
     try {
       return await this.client.$transaction(async (transaction) => {
+        await transaction.$queryRawUnsafe(
+          AVATAR_IDLE_TIMEOUT_SQL,
+          `${AVATAR_LOCK_IDLE_TRANSACTION_TIMEOUT_MS}ms`,
+        );
         await transaction.$executeRawUnsafe(
           AVATAR_USER_LOCK_SQL,
           `avatar:${userId}`,
