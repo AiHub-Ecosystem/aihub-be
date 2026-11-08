@@ -1,6 +1,6 @@
 # ADR-0129: Public routes follow one naming and response convention
 
-- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#305](https://github.com/AiHub-Ecosystem/aihub-be/issues/305).
+- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-29 in [#305](https://github.com/AiHub-Ecosystem/aihub-be/issues/305); the `/grade` rule scoped to synchronous graded calls, and the Speaking `grading-jobs` collection named, by [ADR-0158](0158-async-speaking-grading-job-on-v2-with-bullmq.md).
 - Date: 2026-10-29
 - Related: [ADR-0014](0014-ai-speaking-d2-contract-boundary.md), [ADR-0015](0015-ai-speaking-json-url-boundary.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [#305](https://github.com/AiHub-Ecosystem/aihub-be/issues/305), [#1374](https://github.com/AiHub-Ecosystem/aihub-be/issues/1374)
 
