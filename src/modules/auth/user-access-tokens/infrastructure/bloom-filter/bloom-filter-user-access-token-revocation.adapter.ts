@@ -53,6 +53,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   private readonly channel: string;
   private subscribed: boolean;
   private seeded = false;
+  private seedRetried = false;
   private seedReady: Promise<number>;
   private subscriberReady: Promise<void> | undefined;
   private seedRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -94,6 +95,11 @@ export class BloomFilterUserAccessTokenRevocationAdapter
         clearTimeout(this.seedRetryTimer);
         this.seedRetryTimer = undefined;
       }
+      if (this.seedRetried) {
+        this.logger.log(
+          `Revocation filter seeded after retry with ${active.length} active record(s)`,
+        );
+      }
       return active.length;
     } catch (error) {
       this.seeded = false;
@@ -110,6 +116,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
 
   private scheduleSeedRetry(): void {
     if (this.seedRetryTimer !== undefined) return;
+    this.seedRetried = true;
     this.seedRetryTimer = setTimeout(() => {
       this.seedRetryTimer = undefined;
       void this.seed().catch(() => undefined);
