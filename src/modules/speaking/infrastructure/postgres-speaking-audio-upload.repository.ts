@@ -98,6 +98,21 @@ function mapAsset(row: AssetModel | undefined): SpeakingAudioAsset | undefined {
   };
 }
 
+function intentData(intent: SpeakingAudioUploadIntent) {
+  return {
+    id: intent.assetId,
+    organizationId: intent.organizationId,
+    endUserId: intent.endUserId,
+    environment: intent.environment,
+    objectKey: intent.objectKey,
+    contentType: intent.contentType,
+    byteSize: intent.byteSize,
+    status: 'open',
+    createdAt: intent.createdAt,
+    expiresAt: intent.expiresAt,
+  };
+}
+
 function ownerWhere(owner: SpeakingAudioUploadOwner) {
   return {
     id: owner.assetId,
@@ -174,18 +189,7 @@ export class PostgresSpeakingAudioUploadRepository
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
     await this.run(() =>
       this.client.speakingAudioUploadIntent.create({
-        data: {
-          id: intent.assetId,
-          organizationId: intent.organizationId,
-          endUserId: intent.endUserId,
-          environment: intent.environment,
-          objectKey: intent.objectKey,
-          contentType: intent.contentType,
-          byteSize: intent.byteSize,
-          status: 'open',
-          createdAt: intent.createdAt,
-          expiresAt: intent.expiresAt,
-        },
+        data: intentData(intent),
       }),
     );
   }
@@ -218,18 +222,7 @@ export class PostgresSpeakingAudioUploadRepository
       if (decision.kind === 'refused') return decision;
 
       await client.speakingAudioUploadIntent.create({
-        data: {
-          id: intent.assetId,
-          organizationId: intent.organizationId,
-          endUserId: intent.endUserId,
-          environment: intent.environment,
-          objectKey: intent.objectKey,
-          contentType: intent.contentType,
-          byteSize: intent.byteSize,
-          status: 'open',
-          createdAt: intent.createdAt,
-          expiresAt: intent.expiresAt,
-        },
+        data: intentData(intent),
       });
       return decision;
     });

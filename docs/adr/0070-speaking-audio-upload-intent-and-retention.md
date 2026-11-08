@@ -68,8 +68,14 @@ own ceilings. They are recorded and enforced in
    stored-bytes refusal answers `429 QUOTA_EXCEEDED`. Both are counted on
    `aihub_rejected_total` as `rate_limit` and `quota` respectively, and neither
    returns an upload URL or writes an intent.
-6. The ceilings add no state and no cleanup: open intents already expire, and
-   completed assets already carry the 30-day retention this ADR records.
+6. The ceilings add no state and no cleanup: open intents already expire, so
+   their bytes stop counting when they do. Completed assets carry the 30-day
+   retention this ADR records, but their rows are not deleted yet — that
+   deletion is [#209](https://github.com/AiHub-Ecosystem/aihub-be/issues/209).
+   Until it lands, an expired asset still counts toward the 5 GiB ceiling, so
+   the ceiling only ever rises. It is sized for that: 5 GiB is far above a real
+   Organization's recordings, and #209's deletion makes the ceiling fall again
+   without changing any value here.
 
 ### Considered options for the ceilings
 

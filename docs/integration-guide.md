@@ -1143,8 +1143,10 @@ its API keys, not one key. Past either intent limit,
 `retry_after_ms`; past the storage limit it answers `429 QUOTA_EXCEEDED`. Either
 refusal returns no `upload_url` and creates no intent. An intent that expires
 unused frees its slot, so abandoning an upload never blocks the next one.
-Recordings expire 30 days after acceptance, so stored bytes fall again on their
-own. The values are recorded in ADR-0070.
+Recordings are accepted for 30 days, and until scheduled deletion of expired
+recordings ships ([#209](https://github.com/AiHub-Ecosystem/aihub-be/issues/209))
+their bytes keep counting toward the 5 GiB ceiling. The values are recorded in
+ADR-0070.
 
 This public sample is a candidate's answer to the matching Part 1 question,
 not audio of the examiner reading the prompt. Its URL has no signature or

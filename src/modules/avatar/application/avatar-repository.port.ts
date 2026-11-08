@@ -10,6 +10,16 @@ export interface AvatarUploadGrantRecord {
   readonly objectKey: string;
   readonly expiresAt: Date;
 }
+
+/**
+ * The two ceilings one grant is judged against, plus the window the issuance
+ * one counts over. They always travel together, so they are one type.
+ */
+export interface AvatarUploadGrantLimits {
+  readonly openLimit: number;
+  readonly issuanceLimit: number;
+  readonly issuanceWindowMs: number;
+}
 /**
  * `recorded` wrote the Avatar. `already_recorded` found this same asset already
  * recorded for the account, which is a repeated completion. `exists` means the
@@ -51,11 +61,7 @@ export interface AvatarRepositoryPort {
       readonly userId: string;
       readonly createdAt: Date;
     },
-    limits: {
-      readonly openLimit: number;
-      readonly issuanceLimit: number;
-      readonly issuanceWindowMs: number;
-    },
+    limits: AvatarUploadGrantLimits,
   ): Promise<boolean>;
   /**
    * Drops the grant's open state when completion consumes it. Idempotent: a

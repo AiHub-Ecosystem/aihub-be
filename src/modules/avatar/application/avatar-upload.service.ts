@@ -98,12 +98,25 @@ export class AvatarUploadService {
       contentType,
     });
 
-    const granted = await this.grant({
-      userId: input.userId,
-      assetId,
-      objectKey,
-      expiresAt: signed.expiresAt,
-    });
+    // The URL is a write credential for one object, so it is recorded before
+    // it is handed out: an account holds a bounded number at once and is issued
+    // a bounded number per window (#374). Signing the URL first costs nothing
+    // because the grant has to record the signature's own expiry, and a
+    // refused signature is never returned.
+    const granted = await this.avatars.grantUpload(
+      {
+        userId: input.userId,
+        assetId,
+        objectKey,
+        expiresAt: signed.expiresAt,
+        createdAt: this.now(),
+      },
+      {
+        openLimit: AVATAR_OPEN_UPLOAD_MAX,
+        issuanceLimit: AVATAR_UPLOAD_ISSUANCE_MAX,
+        issuanceWindowMs: AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
+      },
+    );
     if (!granted) {
       recordRejected('rate_limit');
       throw new AppError({
@@ -121,28 +134,6 @@ export class AvatarUploadService {
       byteSize,
       expiresAt: signed.expiresAt,
     };
-  }
-
-  /**
-   * The URL is a write credential for one object, so it is recorded before it
-   * is handed out: an account holds a bounded number at once and is issued a
-   * bounded number per window (#374). Storage signing costs nothing if the
-   * grant is refused, and the signed URL is never returned.
-   */
-  private async grant(input: {
-    readonly userId: string;
-    readonly assetId: string;
-    readonly objectKey: string;
-    readonly expiresAt: Date;
-  }): Promise<boolean> {
-    return this.avatars.grantUpload(
-      { ...input, createdAt: this.now() },
-      {
-        openLimit: AVATAR_OPEN_UPLOAD_MAX,
-        issuanceLimit: AVATAR_UPLOAD_ISSUANCE_MAX,
-        issuanceWindowMs: AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
-      },
-    );
   }
 
   /**
