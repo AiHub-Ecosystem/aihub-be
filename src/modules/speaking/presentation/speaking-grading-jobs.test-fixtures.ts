@@ -6,6 +6,7 @@ import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-
 import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
+  SpeakingGradingJobError,
   SpeakingGradingJobOwner,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import type {
@@ -54,6 +55,29 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     this.jobs.set(job.jobId, { ...job, status: 'queued' });
   }
 
+  async createWithAdmission(input: {
+    readonly job: NewSpeakingGradingJob;
+    readonly since: Date;
+    readonly monthlyQuota: number | null;
+    readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
+  }): Promise<boolean> {
+    const inFlight =
+      input.monthlyQuota === null
+        ? 0
+        : await this.countInFlight({
+            organizationId: input.job.organizationId,
+            environment: input.job.environment,
+            since: input.since,
+          });
+    const monthlyQuota =
+      input.monthlyQuota === null
+        ? null
+        : Math.max(0, input.monthlyQuota - inFlight);
+    if (!(await input.admit(monthlyQuota))) return false;
+    await this.create(input.job);
+    return true;
+  }
+
   async findOwned(owner: SpeakingGradingJobOwner, jobId: string) {
     const job = this.jobs.get(jobId);
     return job !== undefined && ownerKey(job) === ownerKey(owner)
@@ -61,24 +85,81 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
       : undefined;
   }
 
-  async claim(): Promise<SpeakingGradingJob | undefined> {
-    return undefined;
+  async claim(
+    input: Parameters<SpeakingGradingJobRepositoryPort['claim']>[0],
+  ): Promise<SpeakingGradingJob | undefined> {
+    const job = this.jobs.get(input.jobId);
+    if (job === undefined || job.status !== 'queued') return undefined;
+    const claimed = {
+      ...job,
+      status: 'running' as const,
+      leaseExpiresAt: input.leaseExpiresAt,
+    };
+    this.jobs.set(input.jobId, claimed);
+    return claimed;
   }
 
-  async returnToQueue(): Promise<boolean> {
-    return false;
+  async returnToQueue(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (
+      job === undefined ||
+      job.status !== 'running' ||
+      job.dispatchStartedAt !== undefined
+    ) {
+      return false;
+    }
+    this.jobs.set(jobId, { ...job, status: 'queued' });
+    return true;
   }
 
-  async markDispatchStarted(): Promise<boolean> {
-    return false;
+  async markDispatchStarted(jobId: string, now: Date): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (
+      job === undefined ||
+      job.status !== 'running' ||
+      job.dispatchStartedAt !== undefined
+    ) {
+      return false;
+    }
+    this.jobs.set(jobId, { ...job, dispatchStartedAt: now });
+    return true;
   }
 
-  async succeed(): Promise<boolean> {
-    return false;
+  async succeed(input: {
+    readonly jobId: string;
+    readonly result: NonNullable<SpeakingGradingJob['result']>;
+    readonly completedAt: Date;
+  }): Promise<boolean> {
+    const job = this.jobs.get(input.jobId);
+    if (job === undefined || job.status !== 'running') return false;
+    this.jobs.set(input.jobId, {
+      ...job,
+      status: 'succeeded',
+      result: input.result,
+      completedAt: input.completedAt,
+    });
+    return true;
   }
 
-  async fail(): Promise<boolean> {
-    return false;
+  async fail(input: {
+    readonly jobId: string;
+    readonly error: SpeakingGradingJobError;
+    readonly completedAt: Date;
+  }): Promise<boolean> {
+    const job = this.jobs.get(input.jobId);
+    if (
+      job === undefined ||
+      (job.status !== 'queued' && job.status !== 'running')
+    ) {
+      return false;
+    }
+    this.jobs.set(input.jobId, {
+      ...job,
+      status: 'failed',
+      error: input.error,
+      completedAt: input.completedAt,
+    });
+    return true;
   }
 
   async countInFlight(input: {
@@ -95,28 +176,98 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     ).length;
   }
 
-  async listStaleQueued(): Promise<
+  async listStaleQueued(
+    input: Parameters<SpeakingGradingJobRepositoryPort['listStaleQueued']>[0],
+  ): Promise<
     readonly { jobId: string; environment: SpeakingAudioEnvironment }[]
   > {
-    return [];
+    return [...this.jobs.values()]
+      .filter(
+        (job) => job.status === 'queued' && job.createdAt < input.createdBefore,
+      )
+      .sort(
+        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+      )
+      .slice(0, input.limit)
+      .map(({ jobId, environment }) => ({ jobId, environment }));
   }
 
-  async releaseExpiredLeases(): Promise<
+  async releaseExpiredLeases(
+    now: Date,
+  ): Promise<
     readonly { jobId: string; environment: SpeakingAudioEnvironment }[]
   > {
-    return [];
+    const released = [];
+    for (const job of this.jobs.values()) {
+      if (
+        job.status !== 'running' ||
+        job.dispatchStartedAt !== undefined ||
+        job.leaseExpiresAt === undefined ||
+        job.leaseExpiresAt > now
+      ) {
+        continue;
+      }
+      this.jobs.set(job.jobId, { ...job, status: 'queued' });
+      released.push({ jobId: job.jobId, environment: job.environment });
+    }
+    return released;
   }
 
-  async interruptStaleDispatches(): Promise<readonly SpeakingGradingJob[]> {
-    return [];
+  async interruptStaleDispatches(
+    input: Parameters<
+      SpeakingGradingJobRepositoryPort['interruptStaleDispatches']
+    >[0],
+  ): Promise<readonly SpeakingGradingJob[]> {
+    const interrupted: SpeakingGradingJob[] = [];
+    for (const job of this.jobs.values()) {
+      if (
+        job.status !== 'running' ||
+        job.dispatchStartedAt === undefined ||
+        job.dispatchStartedAt >= input.startedBefore
+      ) {
+        continue;
+      }
+      const failed = {
+        ...job,
+        status: 'failed' as const,
+        error: input.error,
+        completedAt: input.completedAt,
+      };
+      this.jobs.set(job.jobId, failed);
+      interrupted.push(failed);
+    }
+    return interrupted;
   }
 
-  async expireQueued(): Promise<readonly SpeakingGradingJob[]> {
-    return [];
+  async expireQueued(
+    input: Parameters<SpeakingGradingJobRepositoryPort['expireQueued']>[0],
+  ): Promise<readonly SpeakingGradingJob[]> {
+    const expired: SpeakingGradingJob[] = [];
+    for (const job of this.jobs.values()) {
+      if (job.status !== 'queued' || job.createdAt >= input.createdBefore) {
+        continue;
+      }
+      const failed = {
+        ...job,
+        status: 'failed' as const,
+        error: input.error,
+        completedAt: input.completedAt,
+      };
+      this.jobs.set(job.jobId, failed);
+      expired.push(failed);
+    }
+    return expired;
   }
 
-  async deleteCreatedBefore(): Promise<number> {
-    return 0;
+  async deleteCreatedBefore(createdBefore: Date): Promise<number> {
+    let deleted = 0;
+    for (const [jobId, job] of this.jobs) {
+      if (job.createdAt < createdBefore) {
+        this.jobs.delete(jobId);
+        deleted += 1;
+      }
+    }
+    return deleted;
   }
 }
 

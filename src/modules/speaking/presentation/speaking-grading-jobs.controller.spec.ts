@@ -1,3 +1,5 @@
+import { Blob } from 'node:buffer';
+
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -7,12 +9,18 @@ import { Test } from '@nestjs/testing';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
+import type { DispatchObserverPort } from '@/modules/gateway/application/dispatch/dispatch-observer.port';
+import { GuardedOperationDispatcher } from '@/modules/gateway/application/dispatch/guarded-operation-dispatcher';
+import type { OperationTransportPort } from '@/modules/gateway/application/dispatch/operation-transport.port';
 import type {
   GradedAdmissionDecision,
   GradedAdmissionPort,
   GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
+import { GradingOrchestrator } from '@/modules/gateway/application/graded-request/grading-orchestrator';
+import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';
 import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';
 import {
   SANDBOX_DISPATCH_BUDGET,
@@ -28,12 +36,16 @@ import { ApiKeyUserIdentityGuard } from '@/modules/identity/api-keys/presentatio
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { MeteringFinalizerPort } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
+import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
 import { GetSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/get-speaking-grading-job';
+import { ProcessSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/process-speaking-grading-job';
 import {
   SPEAKING_GRADING_JOB_QUEUE,
   SPEAKING_GRADING_JOB_REPOSITORY,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
+import { SpeakingGradingJobSweep } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.sweep';
 import { SubmitSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/submit-speaking-grading-job';
+import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
 import { SPEAKING_AUDIO_UPLOAD_REPOSITORY } from '@/modules/speaking/application/speaking-audio-upload.port';
 import { SpeakingGradingJobsController } from './speaking-grading-jobs.controller';
 import {
@@ -233,7 +245,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(repository.jobs.size).toBe(1);
     expect(queue.enqueued).toEqual([expect.any(String)]);
     expect(admissionCalls).toHaveLength(1);
-    expect(pollRateLimitCalls).toBe(1);
+    expect(pollRateLimitCalls).toBe(0);
     const job = [...repository.jobs.values()][0];
     expect(job).toMatchObject({ maxConcurrent: 4, quotaTracked: true });
   });
@@ -323,6 +335,10 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(repository.jobs.size).toBe(1);
     expect(queue.enqueued).toHaveLength(1);
     expect(admissionCalls).toHaveLength(1);
+    expect(admissionCalls[0]).toMatchObject({
+      idempotencyKey,
+      operation: 'speaking.v2.question-grading',
+    });
   });
 
   it('answers 202 if enqueue fails after the durable job is created', async () => {
@@ -397,5 +413,95 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(json(foreign)).toMatchObject({ error: { code: 'NOT_FOUND' } });
     expect(malformed.statusCode).toBe(404);
     expect(json(malformed)).toMatchObject({ error: { code: 'NOT_FOUND' } });
+  });
+
+  it('recovers submit over HTTP, dispatches through operation transport, then polls result', async () => {
+    queue.failNext = true;
+    const response = await submit();
+    const accepted = json(response) as { data: { job_id: string } };
+    const operationCalls: string[] = [];
+    const result = seededJob('succeeded').result!;
+    const transport = {
+      prepare: async (operation: string) => ({
+        send: async (call: {
+          readonly onResponseReceived: (statusCode: number) => void;
+        }) => {
+          operationCalls.push(operation);
+          call.onResponseReceived(200);
+          return {
+            operation,
+            data: result,
+            downstreamMs: 1,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          };
+        },
+      }),
+      isUndelivered: () => false,
+    } as unknown as OperationTransportPort;
+    const attempts: DispatchAttemptRecordPort = {
+      beginAttempt: async () => 'attempt_1',
+      recordOutcome: async () => undefined,
+    };
+    const observer: DispatchObserverPort = {
+      deadlineMsRemaining: () => undefined,
+      cancelledByDeadline: () => undefined,
+    };
+    const dispatcher = new GuardedOperationDispatcher(
+      transport,
+      attempts,
+      new SandboxAdmission(undefined, () => undefined),
+      observer,
+      () => undefined,
+    );
+    const worker = new ProcessSpeakingGradingJob({
+      repository,
+      queue,
+      audioRepository,
+      audioStorage: {
+        readObject: async () => ({
+          blob: new Blob([Buffer.from('audio bytes')], { type: 'audio/wav' }),
+          filename: 'audio.wav',
+          contentType: 'audio/wav',
+        }),
+      } satisfies Pick<SpeakingAudioAssetStoragePort, 'readObject'>,
+      concurrencyLimiter: {
+        acquire: async () => ({
+          allowed: true,
+          lease: { release: async () => undefined },
+        }),
+      } satisfies ConcurrencyLimiterPort,
+      orchestrator: new GradingOrchestrator(dispatcher, idempotency),
+      resultOwnership: { record: async () => undefined },
+      finalizer: { finalize: async () => undefined },
+      sandboxBudget: { release: async () => undefined },
+    });
+    const sweep = new SpeakingGradingJobSweep(repository, queue, {
+      release: async () => undefined,
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(queue.enqueued).toHaveLength(0);
+    const summary = await sweep.run(new Date(Date.now() + 61_000));
+    expect(summary.staleQueuedEnqueued).toBe(1);
+    expect(queue.enqueued).toEqual([accepted.data.job_id]);
+    await worker.execute({
+      jobId: accepted.data.job_id,
+      environment: 'production',
+    });
+
+    const polled = await app.inject({
+      method: 'GET',
+      url: `/v2/ielts/speaking/grading-jobs/${accepted.data.job_id}`,
+      headers: headers(),
+    });
+    expect(polled.statusCode).toBe(200);
+    expect(json(polled)).toMatchObject({
+      data: {
+        job_id: accepted.data.job_id,
+        status: 'succeeded',
+        result: { meta: { response_id: result.meta.response_id } },
+      },
+    });
+    expect(operationCalls).toEqual(['speaking.v2.question-grading']);
   });
 });

@@ -39,6 +39,9 @@ export class PostgresUsageRepository implements UsageRepositoryPort {
         downstreamMs: record.downstreamMs ?? null,
         aiProcessingMs: record.aiProcessingMs ?? null,
         billingBasis: record.billingBasis,
+        ...(record.occurredAt === undefined
+          ? {}
+          : { createdAt: record.occurredAt }),
       },
     });
   }

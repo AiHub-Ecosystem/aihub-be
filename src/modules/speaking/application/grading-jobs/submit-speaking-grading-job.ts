@@ -132,7 +132,14 @@ export class SubmitSpeakingGradingJob {
           signal: context.signal,
           deadlineAt: context.deadlineAt,
         },
-        () => this.submit(owner, authenticated, request, context.requestId),
+        () =>
+          this.submit(
+            owner,
+            authenticated,
+            request,
+            context.requestId,
+            idempotencyKey,
+          ),
         (value) => Value.Parse(SpeakingGradingJobAcceptedDataSchema, value),
       );
     return result;
@@ -143,6 +150,7 @@ export class SubmitSpeakingGradingJob {
     authenticated: AuthenticatedApiKey,
     request: SpeakingGradingJobSubmitRequest,
     requestId: string,
+    idempotencyKey: string | undefined,
   ): Promise<SpeakingGradingJobAcceptedData> {
     const now = this.now();
     const assetOwner: SpeakingAudioUploadOwner = {
@@ -159,61 +167,19 @@ export class SubmitSpeakingGradingJob {
 
     const environment = owner.environment;
     const quota = authenticated.monthlyRequestQuota;
-    const inFlight =
-      quota === null || environment === 'sandbox'
-        ? 0
-        : await this.repository.countInFlight({
-            organizationId: owner.organizationId,
-            environment,
-            since: quotaPeriod(now).start,
-          });
     const admissionInput: AdmitGradedRequestInput = {
       apiKeyId: authenticated.apiKeyId,
       rateLimitRpm: authenticated.rateLimitRpm,
       organizationId: owner.organizationId,
       requestId,
       operation: 'speaking.v2.question-grading',
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       environment,
-      monthlyRequestQuota:
-        quota === null ? null : Math.max(0, quota - inFlight),
+      monthlyRequestQuota: quota,
       hardStopOnQuota: authenticated.hardStopOnQuota,
     };
     const quotaTracked = gradedAdmissionPolicy(admissionInput).quotaTracked;
-    const decision = await admitGradedRequest(this.admission, admissionInput);
-    if (decision.stage !== 'admitted') {
-      if (decision.stage === 'rate_limit') recordRejected('rate_limit');
-      if (decision.stage === 'quota') recordRejected('quota');
-      throw gradedAdmissionRefusal(decision, owner.organizationId, this.now);
-    }
-
     const jobId = `sgj_${ulid()}`;
-    let sandboxReserved = false;
-    if (environment === 'sandbox') {
-      let admitted: boolean;
-      try {
-        admitted = await this.sandboxBudget.reserve({
-          organizationId: owner.organizationId,
-          requestId: jobId,
-        });
-      } catch (cause) {
-        throw new AppError({
-          code: 'INTERNAL_ERROR',
-          message: 'Sandbox dispatch admission is unavailable',
-          retryable: true,
-          cause,
-        });
-      }
-      if (!admitted) {
-        recordRejected('quota');
-        throw gradedAdmissionRefusal(
-          { stage: 'quota', quota: 0 },
-          owner.organizationId,
-          this.now,
-        );
-      }
-      sandboxReserved = true;
-    }
-
     const job: NewSpeakingGradingJob = {
       jobId,
       organizationId: owner.organizationId,
@@ -226,8 +192,58 @@ export class SubmitSpeakingGradingJob {
       request: questionRequest(request),
       createdAt: now,
     };
+    let decision: Awaited<ReturnType<typeof admitGradedRequest>> | undefined;
+    let sandboxReserved = false;
     try {
-      await this.repository.create(job);
+      const created = await this.repository.createWithAdmission({
+        job,
+        since: quotaPeriod(now).start,
+        monthlyQuota: environment === 'sandbox' ? null : quota,
+        admit: async (monthlyRequestQuota) => {
+          const admissionDecision = await admitGradedRequest(this.admission, {
+            ...admissionInput,
+            monthlyRequestQuota,
+          });
+          decision = admissionDecision;
+          if (admissionDecision.stage !== 'admitted') {
+            if (admissionDecision.stage === 'rate_limit') {
+              recordRejected('rate_limit');
+            }
+            if (admissionDecision.stage === 'quota') recordRejected('quota');
+            return false;
+          }
+
+          if (environment === 'sandbox') {
+            let admitted: boolean;
+            try {
+              admitted = await this.sandboxBudget.reserve({
+                organizationId: owner.organizationId,
+                requestId: jobId,
+              });
+            } catch (cause) {
+              throw new AppError({
+                code: 'INTERNAL_ERROR',
+                message: 'Sandbox dispatch admission is unavailable',
+                retryable: true,
+                cause,
+              });
+            }
+            if (!admitted) {
+              recordRejected('quota');
+              decision = { stage: 'quota', quota: 0 };
+              return false;
+            }
+            sandboxReserved = true;
+          }
+          return true;
+        },
+      });
+      if (!created) {
+        if (decision === undefined || decision.stage === 'admitted') {
+          throw internalError('Speaking grading job admission is unavailable');
+        }
+        throw gradedAdmissionRefusal(decision, owner.organizationId, this.now);
+      }
     } catch (error) {
       if (sandboxReserved) {
         await this.sandboxBudget.release(jobId).catch(() => undefined);

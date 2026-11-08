@@ -66,7 +66,6 @@ export class SpeakingGradingJobsController {
   @RequireApiKeyScope(
     PUBLIC_ROUTES['speaking.gradingJobs.create'].requiredScope!,
   )
-  @UseGuards(RateLimitGuard)
   @HttpCode(PUBLIC_ROUTES['speaking.gradingJobs.create'].successStatus)
   async submit(
     @Req() request: AuthenticatedRequest,

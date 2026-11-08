@@ -18,6 +18,14 @@ export interface SpeakingGradingJobRepositoryPort {
   /** Commits a new job as `queued`. */
   create(job: NewSpeakingGradingJob): Promise<void>;
 
+  /** Serializes quota check, graded admission and job creation for one Organization-month. */
+  createWithAdmission(input: {
+    readonly job: NewSpeakingGradingJob;
+    readonly since: Date;
+    readonly monthlyQuota: number | null;
+    readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
+  }): Promise<boolean>;
+
   /** The job only when it belongs to this Organization, End-User ID and Environment. */
   findOwned(
     owner: SpeakingGradingJobOwner,

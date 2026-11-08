@@ -1,5 +1,6 @@
 export interface QuotaCounterRequest {
   readonly organizationId: string;
+  readonly occurredAt?: Date;
 }
 
 export interface QuotaCounterOverwriteRequest {

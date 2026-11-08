@@ -313,6 +313,33 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBe(2);
   });
 
+  it('serializes concurrent admission against monthly in-flight quota', async () => {
+    const organizationId = 'org_' + ulid();
+    const jobs = [makeJob({ organizationId }), makeJob({ organizationId })];
+    const since = new Date('2026-11-01T00:00:00.000Z');
+
+    const results = await Promise.all(
+      jobs.map((job) =>
+        repository.createWithAdmission({
+          job,
+          since,
+          monthlyQuota: 1,
+          admit: async (monthlyQuota) =>
+            monthlyQuota !== null && monthlyQuota > 0,
+        }),
+      ),
+    );
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    await expect(
+      repository.countInFlight({
+        organizationId,
+        environment: 'production',
+        since,
+      }),
+    ).resolves.toBe(1);
+  });
+
   it('stores a successful result and refuses to fail a terminal job', async () => {
     const job = makeJob();
     await repository.create(job);

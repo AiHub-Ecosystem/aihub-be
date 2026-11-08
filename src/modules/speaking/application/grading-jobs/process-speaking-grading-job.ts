@@ -323,6 +323,7 @@ export class ProcessSpeakingGradingJob {
           : { errorCode: input.errorCode }),
         modelCalled: input.modelCalled,
         quotaTracked: job.quotaTracked,
+        occurredAt: dispatchStartedAt,
         totalMs: Math.max(
           0,
           this.now().getTime() - dispatchStartedAt.getTime(),

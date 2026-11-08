@@ -110,7 +110,10 @@ export class RedisQuotaCounter implements QuotaCounterPort {
 
     const client = this.client;
     try {
-      const key = monthKey(request.organizationId, this.now());
+      const key = monthKey(
+        request.organizationId,
+        request.occurredAt ?? this.now(),
+      );
       const count = await client.eval(INCREMENT_EXISTING_SCRIPT, 1, key);
       if (count === 0) {
         throw internalError('Redis quota counter is missing');

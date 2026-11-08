@@ -2,6 +2,7 @@ import { AppError, internalError } from '@/common/errors/app-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { SpeakingV2QuestionResultSchema } from '@/contracts/speaking/v2/question-result';
 import type { SpeakingV2TestType } from '@/contracts/speaking/v2/response.shared';
+import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
@@ -11,7 +12,7 @@ import type {
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import type { SpeakingGradingJobRepositoryPort } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
-import type { PrismaClient } from '@prisma-client/client';
+import { Prisma, type PrismaClient } from '@prisma-client/client';
 import { Value } from '@sinclair/typebox/value';
 
 interface SpeakingGradingJobRow {
@@ -64,6 +65,54 @@ const JOB_COLUMNS = `
   error_retryable AS "errorRetryable",
   created_at AS "createdAt",
   completed_at AS "completedAt"`;
+
+const SPEAKING_GRADING_QUOTA_LOCK_SQL =
+  'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+
+interface InFlightCountInput {
+  readonly organizationId: string;
+  readonly environment: SpeakingAudioEnvironment;
+  readonly since: Date;
+}
+
+async function insertJob(
+  client: PrismaClient | Prisma.TransactionClient,
+  job: NewSpeakingGradingJob,
+): Promise<void> {
+  await client.$executeRawUnsafe(
+    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'queued', $15)`,
+    job.jobId,
+    job.organizationId,
+    job.endUserId,
+    job.environment,
+    job.apiKeyId,
+    job.quotaTracked,
+    job.maxConcurrent,
+    job.audioAssetId,
+    job.request.part,
+    job.request.questionId,
+    job.request.promptText ?? null,
+    job.request.testType ?? null,
+    job.request.testCode ?? null,
+    job.request.partResultId ?? null,
+    job.createdAt,
+  );
+}
+
+async function countInFlight(
+  client: PrismaClient | Prisma.TransactionClient,
+  input: InFlightCountInput,
+): Promise<number> {
+  const rows = await client.$queryRawUnsafe<
+    readonly { readonly count: bigint }[]
+  >(
+    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running') AND created_at >= $3`,
+    input.organizationId,
+    input.environment,
+    input.since,
+  );
+  return Number(rows[0]?.count ?? 0n);
+}
 
 function invalidStoredJob(): never {
   throw internalError('Speaking grading job store is invalid');
@@ -185,26 +234,55 @@ export class PostgresSpeakingGradingJobRepository
   constructor(private readonly client: PrismaClient) {}
 
   async create(job: NewSpeakingGradingJob): Promise<void> {
-    await this.run(async () => {
-      await this.client.$executeRawUnsafe(
-        `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'queued', $15)`,
-        job.jobId,
-        job.organizationId,
-        job.endUserId,
-        job.environment,
-        job.apiKeyId,
-        job.quotaTracked,
-        job.maxConcurrent,
-        job.audioAssetId,
-        job.request.part,
-        job.request.questionId,
-        job.request.promptText ?? null,
-        job.request.testType ?? null,
-        job.request.testCode ?? null,
-        job.request.partResultId ?? null,
-        job.createdAt,
+    await this.run(() => insertJob(this.client, job));
+  }
+
+  async createWithAdmission(input: {
+    readonly job: NewSpeakingGradingJob;
+    readonly since: Date;
+    readonly monthlyQuota: number | null;
+    readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
+  }): Promise<boolean> {
+    if (input.monthlyQuota === null) {
+      if (!(await input.admit(null))) return false;
+      await this.create(input.job);
+      return true;
+    }
+
+    const monthlyQuota = input.monthlyQuota;
+    let admissionFailed = false;
+    let admissionError: unknown;
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          SPEAKING_GRADING_QUOTA_LOCK_SQL,
+          `speaking-grading-quota:${input.job.organizationId}:${input.since.toISOString().slice(0, 7)}`,
+        );
+        const inFlight = await countInFlight(transaction, {
+          organizationId: input.job.organizationId,
+          environment: input.job.environment,
+          since: input.since,
+        });
+        let admitted: boolean;
+        try {
+          admitted = await input.admit(Math.max(0, monthlyQuota - inFlight));
+        } catch (error) {
+          admissionFailed = true;
+          admissionError = error;
+          throw error;
+        }
+        if (!admitted) return false;
+        await insertJob(transaction, input.job);
+        return true;
+      }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+    } catch (error) {
+      if (admissionFailed) throw admissionError;
+      if (error instanceof AppError) throw error;
+      throw databaseUnavailableError(
+        error,
+        'Speaking grading job store is unavailable',
       );
-    });
+    }
   }
 
   async findOwned(
@@ -306,22 +384,8 @@ export class PostgresSpeakingGradingJobRepository
     });
   }
 
-  async countInFlight(input: {
-    readonly organizationId: string;
-    readonly environment: SpeakingAudioEnvironment;
-    readonly since: Date;
-  }): Promise<number> {
-    return this.run(async () => {
-      const rows = await this.client.$queryRawUnsafe<
-        readonly { readonly count: bigint }[]
-      >(
-        `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running') AND created_at >= $3`,
-        input.organizationId,
-        input.environment,
-        input.since,
-      );
-      return Number(rows[0]?.count ?? 0n);
-    });
+  async countInFlight(input: InFlightCountInput): Promise<number> {
+    return this.run(() => countInFlight(this.client, input));
   }
 
   async listStaleQueued(input: {

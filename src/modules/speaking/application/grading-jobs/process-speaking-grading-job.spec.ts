@@ -295,6 +295,7 @@ describe('ProcessSpeakingGradingJob', () => {
         environment: job.environment,
         outcome: 'success',
         quotaTracked: true,
+        occurredAt: NOW,
         modelCalled: true,
         totalMs: 321,
       }),
