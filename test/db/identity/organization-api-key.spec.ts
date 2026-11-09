@@ -80,6 +80,14 @@ async function seedOrganization(
     'INSERT INTO organizations (id, name, status, entitlements) VALUES ($1, $2, $3, $4)',
     [id, `Organization ${id}`, status, [...entitlements]],
   );
+  if (actorUserId !== undefined) {
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_account_id, role, status, created_at, updated_at)
+       VALUES ($1, $2, 'owner', 'active', now(), now())
+       ON CONFLICT (organization_id, user_account_id) DO NOTHING`,
+      [id, actorUserId],
+    );
+  }
 }
 
 function listContext(organizationId: string) {

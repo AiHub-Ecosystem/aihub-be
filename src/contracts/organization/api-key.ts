@@ -67,8 +67,12 @@ export const OrganizationApiKeySchema = Type.Object(
      * columns or nobody has rotated it: the list reports unknown rather than
      * guessing an account.
      */
-    created_by: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-    last_rotated_by: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    created_by: Type.Optional(
+      Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    ),
+    last_rotated_by: Type.Optional(
+      Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    ),
   },
   { additionalProperties: false },
 );

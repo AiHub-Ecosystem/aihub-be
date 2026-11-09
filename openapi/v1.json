@@ -6746,9 +6746,7 @@
                               "status",
                               "expires_at",
                               "last_used_at",
-                              "created_at",
-                              "created_by",
-                              "last_rotated_by"
+                              "created_at"
                             ],
                             "properties": {
                               "id": {
@@ -6977,9 +6975,7 @@
                         "status",
                         "expires_at",
                         "last_used_at",
-                        "created_at",
-                        "created_by",
-                        "last_rotated_by"
+                        "created_at"
                       ],
                       "properties": {
                         "api_key": {
@@ -7211,9 +7207,7 @@
                         "status",
                         "expires_at",
                         "last_used_at",
-                        "created_at",
-                        "created_by",
-                        "last_rotated_by"
+                        "created_at"
                       ],
                       "properties": {
                         "id": {
@@ -7408,9 +7402,7 @@
                         "status",
                         "expires_at",
                         "last_used_at",
-                        "created_at",
-                        "created_by",
-                        "last_rotated_by"
+                        "created_at"
                       ],
                       "properties": {
                         "api_key": {
