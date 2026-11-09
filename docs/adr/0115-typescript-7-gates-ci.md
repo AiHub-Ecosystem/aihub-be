@@ -16,7 +16,7 @@ ADR-0042 kept `tsc` 5.9 as the CI gate because the TypeScript 7 compiler, `tsgo`
 TypeScript 7.0 ships no JavaScript API: the `typescript@7` package exports only its version. Two kinds of consumer still need the old API:
 
 - dependency-cruiser, which runs inside `pnpm arch-check`, imports `typescript` and accepts only versions below 7. With TypeScript 7 installed under that name it stops reading TypeScript sources and reports 30 false violations.
-- `scripts/checks/check-architecture.mjs` and `scripts/checks/check-import-style.ts` call `ts.createSourceFile` and related functions.
+- `scripts/checks/architecture/check-architecture.mjs` and `scripts/checks/structure/check-import-style.ts` call `ts.createSourceFile` and related functions.
 
 ## Decision
 

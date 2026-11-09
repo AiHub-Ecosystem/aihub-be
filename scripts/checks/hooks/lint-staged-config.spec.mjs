@@ -4,11 +4,11 @@ import { test } from 'node:test';
 
 await test('type-aware Oxlint runs from the repository root for staged source', async () => {
   const config = await readFile(
-    new URL('../../.lintstagedrc', import.meta.url),
+    new URL('../../../.lintstagedrc', import.meta.url),
     'utf8',
   );
   const hook = await readFile(
-    new URL('../../.husky/pre-commit', import.meta.url),
+    new URL('../../../.husky/pre-commit', import.meta.url),
     'utf8',
   );
   const taskStart = config.indexOf('"*.{ts,mts,cts,js,mjs,cjs}"');

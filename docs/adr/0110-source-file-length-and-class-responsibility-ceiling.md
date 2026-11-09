@@ -16,14 +16,14 @@ Cross-links: ADR-0082 (folder-entry ceiling), ADR-0090 (dependency rule).
 
 ## Enforcement
 
-- File length: `scripts/checks/check-file-size.mjs` (500 code lines), wired into `pnpm verify`.
+- File length: `scripts/checks/structure/check-file-size.mjs` (500 code lines), wired into `pnpm verify`.
 - Complexity: oxlint `eslint/complexity` at 64 via an override for `src/**/*.ts` (specs/testing excluded), with an allowlist for the remaining depth site.
 - Nesting depth: oxlint `eslint/max-depth` at 4 via the same override.
 - The "floor" rule stays a review guideline with no check.
 
 ## Update (2026-10-21): the grandfathered files are ratcheted
 
-The file-length rule is enforced by `scripts/checks/check-file-size.mjs`, not by an oxlint `max-lines` override. Six hand-written files remain grandfathered: the two OpenAPI and Postman builders, the membership, invitation and email-delivery repositories, and the JWKS key provider. Being on the list used to remove the ceiling entirely. Since [#869](https://github.com/AiHub-Ecosystem/aihub-be/issues/869), the check records each file's code-line count and enforces it:
+The file-length rule is enforced by `scripts/checks/structure/check-file-size.mjs`, not by an oxlint `max-lines` override. Six hand-written files remain grandfathered: the two OpenAPI and Postman builders, the membership, invitation and email-delivery repositories, and the JWKS key provider. Being on the list used to remove the ceiling entirely. Since [#869](https://github.com/AiHub-Ecosystem/aihub-be/issues/869), the check records each file's code-line count and enforces it:
 
 - it fails when a grandfathered file grows past its recorded count;
 - it fails when the file shrinks, until the recorded count is lowered;

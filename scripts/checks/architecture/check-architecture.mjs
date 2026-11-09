@@ -1366,7 +1366,7 @@ function main() {
       // spec can scan an isolated copy of the tree (#1636).
       fileURLToPath(
         new URL(
-          '../../node_modules/dependency-cruiser/bin/dependency-cruiser.mjs',
+          '../../../node_modules/dependency-cruiser/bin/dependency-cruiser.mjs',
           import.meta.url,
         ),
       ),

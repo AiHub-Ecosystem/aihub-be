@@ -2,7 +2,7 @@
 import { join } from 'node:path';
 import process from 'node:process';
 
-import { defineFileVisitorCheck } from './support/check-runner.mjs';
+import { defineFileVisitorCheck } from '../support/check-runner.mjs';
 
 /**
  * Rejects recovering Organization identity from a module-level (repository-global)

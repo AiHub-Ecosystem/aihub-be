@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 
-import architectureConfig from '../../.dependency-cruiser.cjs';
+import architectureConfig from '../../../.dependency-cruiser.cjs';
 import { collectSourceTextFailures } from './check-architecture.mjs';
 import cacheHelpers from './dependency-cruiser-cache.cjs';
 
@@ -93,6 +93,7 @@ const archCheckScript = join(
   repoRoot,
   'scripts',
   'checks',
+  'architecture',
   'check-architecture.mjs',
 );
 let workspace: string | undefined;
@@ -735,6 +736,7 @@ describe('cross-module import rule over the real tree', () => {
           __dirname,
           '..',
           '..',
+          '..',
           'node_modules/dependency-cruiser/bin/dependency-cruiser.mjs',
         ),
         '--config',
@@ -744,7 +746,7 @@ describe('cross-module import rule over the real tree', () => {
         'src',
       ],
       {
-        cwd: join(__dirname, '..', '..'),
+        cwd: join(__dirname, '..', '..', '..'),
         encoding: 'utf8',
         // The JSON report for this tree is larger than spawnSync's 1 MiB
         // default, and a truncated report fails to parse rather than assert.
@@ -941,7 +943,7 @@ function withoutComments(source: string): string {
 }
 
 function commonFilesReadingEnvironment(): string[] {
-  const commonDirectory = join(__dirname, '..', '..', 'src', 'common');
+  const commonDirectory = join(__dirname, '..', '..', '..', 'src', 'common');
 
   return readdirSync(commonDirectory, { recursive: true, withFileTypes: true })
     .filter(
@@ -994,7 +996,7 @@ describe('common layer environment boundary', () => {
  */
 describe('cross-module table access', () => {
   function migrations(): string {
-    return join(__dirname, '..', '..', 'prisma', 'migrations');
+    return join(__dirname, '..', '..', '..', 'prisma', 'migrations');
   }
 
   function createdTables(): Set<string> {
@@ -1023,7 +1025,7 @@ describe('cross-module table access', () => {
   /** `userAccount` -> `user_accounts`, read from the schema's `@@map`. */
   function delegateTables(): Map<string, string> {
     const schema = readFileSync(
-      join(__dirname, '..', '..', 'prisma', 'schema.prisma'),
+      join(__dirname, '..', '..', '..', 'prisma', 'schema.prisma'),
       'utf8',
     );
     const delegates = new Map<string, string>();
@@ -1061,10 +1063,10 @@ describe('cross-module table access', () => {
     };
 
     for (const file of moduleInfrastructureFiles(
-      join(__dirname, '..', '..', 'src', 'modules'),
+      join(__dirname, '..', '..', '..', 'src', 'modules'),
     )) {
       const module = relative(
-        join(__dirname, '..', '..', 'src', 'modules'),
+        join(__dirname, '..', '..', '..', 'src', 'modules'),
         file,
       )
         .split(/[\\/]/)
@@ -1144,7 +1146,7 @@ describe('request bodies reach their contract through parseRequestBody', () => {
     'modules/identity/shared/presentation/organization-id.pipe.ts',
   ];
 
-  const srcRoot = join(__dirname, '..', '..', 'src');
+  const srcRoot = join(__dirname, '..', '..', '..', 'src');
 
   function presentationFiles(): string[] {
     return readdirSync(srcRoot, { recursive: true, withFileTypes: true })

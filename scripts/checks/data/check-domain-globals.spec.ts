@@ -25,7 +25,7 @@ describe('domain-globals check', () => {
 
     const result = spawnSync(
       process.platform === 'win32' ? 'node.exe' : 'node',
-      ['scripts/checks/check-domain-globals.mjs'],
+      ['scripts/checks/data/check-domain-globals.mjs'],
       {
         cwd: process.cwd(),
         encoding: 'utf8',
@@ -40,7 +40,7 @@ describe('domain-globals check', () => {
   it('passes on the real tree', () => {
     const result = spawnSync(
       process.platform === 'win32' ? 'node.exe' : 'node',
-      ['scripts/checks/check-domain-globals.mjs'],
+      ['scripts/checks/data/check-domain-globals.mjs'],
       {
         cwd: process.cwd(),
         encoding: 'utf8',

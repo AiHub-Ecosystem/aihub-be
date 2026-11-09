@@ -12,7 +12,7 @@ Three rules in `.dependency-cruiser.cjs` (#1733), reported beside the general ru
 
 The narrowed set drops exactly one seam from ADR-0106's: the shared Fastify request primitive. Today the drop is preventive — auth's only file declaring `module 'fastify'` is the exported `UserAccessJwtGuard`, and gateway declares none — so the restricted rules and the general rule currently report the same edges. The value is the ratchet: when a future file declares the shared request primitive, the general rule exempts it on every edge while these two edges keep refusing it until someone widens this record.
 
-The rules live in dependency-cruiser configuration, which `scripts/checks/check-architecture.mjs` runs as its second stage, so `bun run arch-check` fails on each of them. The spec in `scripts/checks/check-architecture.spec.ts` pins each rule's shape and its silence over the real tree, and its fixture cases prove the check fails on a synthetic violation of each edge.
+The rules live in dependency-cruiser configuration, which `scripts/checks/architecture/check-architecture.mjs` runs as its second stage, so `bun run arch-check` fails on each of them. The spec in `scripts/checks/architecture/check-architecture.spec.ts` pins each rule's shape and its silence over the real tree, and its fixture cases prove the check fails on a synthetic violation of each edge.
 
 - Status: Accepted (amends ADR-0106)
 - Related issue: [#1733](https://github.com/AiHub-Ecosystem/aihub-be/issues/1733)

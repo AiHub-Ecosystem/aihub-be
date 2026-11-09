@@ -58,7 +58,7 @@ function problemsIn(message) {
 const file = process.argv[2];
 if (file === undefined) {
   console.error(
-    'usage: node scripts/checks/commit-message.mjs <commit-message-file>',
+    'usage: node scripts/checks/hooks/commit-message.mjs <commit-message-file>',
   );
   process.exit(2);
 }

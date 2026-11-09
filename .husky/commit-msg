@@ -1,2 +1,2 @@
 #!/usr/bin/env sh
-node scripts/checks/commit-message.mjs "$1"
+node scripts/checks/hooks/commit-message.mjs "$1"

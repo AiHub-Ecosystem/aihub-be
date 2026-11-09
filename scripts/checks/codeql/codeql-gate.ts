@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = process.cwd();
 const TRIAGE_FILE = '.github/codeql/triage.json';
@@ -181,8 +182,7 @@ function main(sarifPaths: readonly string[]): void {
 
 if (
   process.argv[1] !== undefined &&
-  path.resolve(process.argv[1]) ===
-    path.join(ROOT, 'scripts/checks/codeql-gate.ts')
+  import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   main(process.argv.slice(2));
 }
