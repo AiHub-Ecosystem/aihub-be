@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Writes the DAST boot configuration: the throwaway configuration the image
- * boot check uses (scripts/ci/ci-boot-config.cjs), with the connection secrets
+ * boot check uses (scripts/ci/boot/ci-boot-config.cjs), with the connection secrets
  * repointed at the job's disposable PostgreSQL and Redis and the production
  * host set to the loopback name the scanner resolves.
  *
- *   node scripts/ci/dast-boot-config.cjs <directory>
+ *   node scripts/ci/dast/dast-boot-config.cjs <directory>
  *
  * Requires AIHUB_DAST_DATABASE_URL and AIHUB_DAST_REDIS_URL in the
  * environment. Every credential stays fake and minted per run; the only hosts
@@ -16,7 +16,7 @@
 const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 
-const { writeBootConfig } = require('./ci-boot-config.cjs');
+const { writeBootConfig } = require('../boot/ci-boot-config.cjs');
 // The app resolves its request environment from the Host header's hostname
 // (src/modules/identity/shared/presentation/request-environment.ts), so the
 // scanner must use this exact name. The job adds it to the runner's
@@ -65,7 +65,9 @@ function repointConnections(connections, databaseUrl, redisUrl) {
 function main() {
   const directory = process.argv[2];
   if (directory === undefined) {
-    console.error('usage: node scripts/ci/dast-boot-config.cjs <directory>');
+    console.error(
+      'usage: node scripts/ci/dast/dast-boot-config.cjs <directory>',
+    );
     process.exit(2);
   }
   const databaseUrl = process.env.AIHUB_DAST_DATABASE_URL;

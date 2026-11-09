@@ -2,7 +2,7 @@ import {
   ACTIVE_RULES,
   DAST_FAILING_RULE_IDS,
   PASSIVE_RULES,
-} from '../../ops/dast/zap-rules';
+} from '../../../ops/dast/zap-rules';
 import { renderPlan } from './dast-render-plan';
 
 const BASE: Parameters<typeof renderPlan>[0] = {

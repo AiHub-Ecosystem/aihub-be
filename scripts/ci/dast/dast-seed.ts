@@ -2,7 +2,7 @@
  * Seeds the disposable DAST database with the one Organization, gateway API
  * key, and User Account the scan authenticates with (issue #319).
  *
- *   DATABASE_URL=postgres://... node --import tsx scripts/ci/dast-seed.ts \
+ *   DATABASE_URL=postgres://... node --import tsx scripts/ci/dast/dast-seed.ts \
  *     --out temp/dast
  *
  * The key, the password, and the bearer token they mint are created inside the
@@ -58,7 +58,7 @@ function outDirectory(): string {
   const directory = index >= 0 ? process.argv[index + 1] : undefined;
   if (directory === undefined || directory.length === 0) {
     console.error(
-      'usage: node --import tsx scripts/ci/dast-seed.ts --out <dir>',
+      'usage: node --import tsx scripts/ci/dast/dast-seed.ts --out <dir>',
     );
     process.exit(2);
   }

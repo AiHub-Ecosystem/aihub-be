@@ -21,7 +21,7 @@ async function loadApiKeyGenerator() {
   }
 
   const module = /** @type {ApiKeyGeneratorModule} */ (
-    await import(apiKeyModule)
+    await import(apiKeyModule.href)
   );
   const generateApiKey =
     module.generateApiKey ?? module.default?.generateApiKey;
@@ -79,8 +79,8 @@ import {
 /** @typedef {{database: string; deployment: OperatorDeployment; host: string; port: number; databaseNow: Date}} OperatorDatabaseTarget */
 /** @typedef {{target: OperatorDatabaseTarget; maintenanceClock: {now: Date; source: 'process' | 'database'}; previewed: boolean}} OperatorMutationSafety */
 /** @typedef {{database: string; host: string | null; port: number | null; database_now: Date}} OperatorDatabaseRow */
-/** @typedef {import('./load-cli-runner.cjs').CliRunner} CliRunner */
-/** @template {CliRunner} T @typedef {import('./load-cli-runner.cjs').CliRunnerDescriptor<T>} CliRunnerDescriptor */
+/** @typedef {import('./load-cli-runner.d.cts').CliRunner} CliRunner */
+/** @template {CliRunner} T @typedef {import('./load-cli-runner.d.cts').CliRunnerDescriptor<T>} CliRunnerDescriptor */
 /** @typedef {import('../../src/modules/identity/domain/api-key.ts').GeneratedApiKey} GeneratedApiKey */
 /** @typedef {(id: string, environment?: string) => GeneratedApiKey} ApiKeyGenerator */
 /** @typedef {{generateApiKey?: ApiKeyGenerator; default?: {generateApiKey?: ApiKeyGenerator}}} ApiKeyGeneratorModule */
@@ -105,133 +105,133 @@ function cliRunnerDescriptor(name, exportName, unavailableMessage) {
   };
 }
 
-/** @type {CliRunnerDescriptor<import('../../src/cli/organization-status.js').runOrganizationStatusCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-status').runOrganizationStatusCommand>} */
 const organizationStatusDescriptor = cliRunnerDescriptor(
   'organization-status',
   'runOrganizationStatusCommand',
   'organization status command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/organization-entitlement.js').runGrantOrganizationEntitlementCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-entitlement').runGrantOrganizationEntitlementCommand>} */
 const organizationEntitlementDescriptor = cliRunnerDescriptor(
   'organization-entitlement',
   'runGrantOrganizationEntitlementCommand',
   'organization entitlement command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/organization-first-owner.js').runAttachFirstOwnerCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-first-owner').runAttachFirstOwnerCommand>} */
 const attachFirstOwnerDescriptor = cliRunnerDescriptor(
   'organization-first-owner',
   'runAttachFirstOwnerCommand',
   'first owner attachment command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/usage-prune.js').runUsagePruneCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/usage-prune').runUsagePruneCommand>} */
 const usagePruneDescriptor = cliRunnerDescriptor(
   'usage-prune',
   'runUsagePruneCommand',
   'usage prune command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/avatar-sweep.js').runAvatarSweepCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/avatar-sweep').runAvatarSweepCommand>} */
 const avatarSweepDescriptor = cliRunnerDescriptor(
   'avatar-sweep',
   'runAvatarSweepCommand',
   'avatar sweep command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/notifications-sweep.js').runNotificationsSweepCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/notifications-sweep').runNotificationsSweepCommand>} */
 const notificationsSweepDescriptor = cliRunnerDescriptor(
   'notifications-sweep',
   'runNotificationsSweepCommand',
   'notifications sweep command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/registrations-sweep.js').runRegistrationsSweepCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/registrations-sweep').runRegistrationsSweepCommand>} */
 const registrationsSweepDescriptor = cliRunnerDescriptor(
   'registrations-sweep',
   'runRegistrationsSweepCommand',
   'registrations sweep command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/speaking-audio-upload-sweep.js').runSpeakingAudioUploadSweepCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/speaking-audio-upload-sweep').runSpeakingAudioUploadSweepCommand>} */
 const speakingAudioUploadSweepDescriptor = cliRunnerDescriptor(
   'speaking-audio-upload-sweep',
   'runSpeakingAudioUploadSweepCommand',
   'Speaking Audio upload sweep command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/writing-chart-upload-sweep.js').runWritingChartUploadSweepCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/writing-chart-upload-sweep').runWritingChartUploadSweepCommand>} */
 const writingChartUploadSweepDescriptor = cliRunnerDescriptor(
   'writing-chart-upload-sweep',
   'runWritingChartUploadSweepCommand',
   'Writing chart upload sweep command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/writing-chart-revoke.js').runWritingChartRevokeCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/writing-chart-revoke').runWritingChartRevokeCommand>} */
 const writingChartRevokeDescriptor = cliRunnerDescriptor(
   'writing-chart-revoke',
   'runWritingChartRevokeCommand',
   'Writing chart revocation command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/usage-report.js').runUsageReportCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/usage-report').runUsageReportCommand>} */
 const usageReportDescriptor = cliRunnerDescriptor(
   'usage-report',
   'runUsageReportCommand',
   'usage report command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/public-api-major-report.js').runPublicApiMajorReportCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/public-api-major-report').runPublicApiMajorReportCommand>} */
 const publicApiMajorReportDescriptor = cliRunnerDescriptor(
   'public-api-major-report',
   'runPublicApiMajorReportCommand',
   'public API major report command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/quota-reconcile.js').runQuotaReconciliationCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/quota-reconcile').runQuotaReconciliationCommand>} */
 const quotaReconciliationDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
   'runQuotaReconciliationCommand',
   'quota reconciliation command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/redis-ttl-audit.js').runRedisTtlAuditCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/redis-ttl-audit').runRedisTtlAuditCommand>} */
 const redisTtlAuditDescriptor = cliRunnerDescriptor(
   'redis-ttl-audit',
   'runRedisTtlAuditCommand',
   'Redis TTL audit command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/organization-api-key.js').runCreateOperatorApiKeyCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-api-key').runCreateOperatorApiKeyCommand>} */
 const createOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'organization-api-key',
   'runCreateOperatorApiKeyCommand',
   'operator API key command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/organization-api-key.js').runRevokeOperatorApiKeyCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-api-key').runRevokeOperatorApiKeyCommand>} */
 const revokeOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'organization-api-key',
   'runRevokeOperatorApiKeyCommand',
   'operator API key command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/billing-statement.js').runBillingStatementCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/billing-statement').runBillingStatementCommand>} */
 const billingStatementDescriptor = cliRunnerDescriptor(
   'billing-statement',
   'runBillingStatementCommand',
   'billing statement command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/billing-statement.js').runBillingAdjustCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/billing-statement').runBillingAdjustCommand>} */
 const billingAdjustDescriptor = cliRunnerDescriptor(
   'billing-statement',
   'runBillingAdjustCommand',
   'billing adjustment command is unavailable',
 );
-/** @type {CliRunnerDescriptor<typeof import('../../src/cli/quota-reconcile.js').parseTargetMonth>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/quota-reconcile').parseTargetMonth>} */
 const quotaTargetMonthDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
   'parseTargetMonth',
   'quota reconciliation command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/user-account-status.js').runDisableUserAccountCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/user-account-status').runDisableUserAccountCommand>} */
 const disableUserAccountDescriptor = cliRunnerDescriptor(
   'user-account-status',
   'runDisableUserAccountCommand',
   'disable user account command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/user-account-status.js').runRestoreUserAccountCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/user-account-status').runRestoreUserAccountCommand>} */
 const restoreUserAccountDescriptor = cliRunnerDescriptor(
   'user-account-status',
   'runRestoreUserAccountCommand',
   'restore user account command is unavailable',
 );
-/** @type {CliRunnerDescriptor<import('../../src/cli/user-account-status.js').runRevokeAllRefreshSessionsCommand>} */
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/user-account-status').runRevokeAllRefreshSessionsCommand>} */
 const revokeAllRefreshSessionsDescriptor = cliRunnerDescriptor(
   'user-account-status',
   'runRevokeAllRefreshSessionsCommand',
@@ -244,34 +244,44 @@ async function runCliCommand(descriptor, ...args) {
   return runner(...args);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/user-account-status').runDisableUserAccountCommand>[0]} input */
 async function runDisableUserAccount(input) {
   return runCliCommand(disableUserAccountDescriptor, input);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/user-account-status').runRestoreUserAccountCommand>[0]} input */
 async function runRestoreUserAccount(input) {
   return runCliCommand(restoreUserAccountDescriptor, input);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/user-account-status').runRevokeAllRefreshSessionsCommand>[0]} input */
 async function runRevokeAllRefreshSessions(input) {
   return runCliCommand(revokeAllRefreshSessionsDescriptor, input);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/organization-status').runOrganizationStatusCommand>[0]} input */
 async function runOrganizationStatus(input) {
   return runCliCommand(organizationStatusDescriptor, input);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/organization-entitlement').runGrantOrganizationEntitlementCommand>[0]} input */
 async function runGrantOrganizationEntitlement(input) {
   return runCliCommand(organizationEntitlementDescriptor, input);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/organization-first-owner').runAttachFirstOwnerCommand>[0]} input */
 async function runAttachFirstOwner(input) {
   return runCliCommand(attachFirstOwnerDescriptor, input);
 }
 
+/** @param {Parameters<typeof import('../../src/cli/usage-prune').runUsagePruneCommand>[0]} input */
 async function runUsagePrune(input) {
   return runCliCommand(usagePruneDescriptor, input);
 }
 
+/**
+ * @param {Error & { code?: string }} error
+ */
 function invalidUsageReportWindow(error) {
   return (
     error instanceof Error &&
@@ -280,6 +290,7 @@ function invalidUsageReportWindow(error) {
   );
 }
 
+/** @param {Parameters<typeof import('../../src/cli/usage-report').runUsageReportCommand>[0]} input */
 async function runUsageReport(input) {
   try {
     return await runCliCommand(usageReportDescriptor, input);
@@ -309,6 +320,7 @@ async function parseTargetMonth(raw, now) {
   }
 }
 
+/** @param {Parameters<typeof import('../../src/cli/quota-reconcile').runQuotaReconciliationCommand>[0]} input */
 async function runQuotaReconciliation(input) {
   try {
     return await runCliCommand(quotaReconciliationDescriptor, input);
@@ -348,7 +360,7 @@ let runtimeConnectionLoaded = false;
 if (existsSync(runtimeConnectionModule)) {
   const runtimeConnection =
     /** @type {typeof import('../../src/modules/secrets/infrastructure/runtime-connection.environment.ts') & {default?: Record<string, unknown>}} */ (
-      await import(runtimeConnectionModule)
+      await import(runtimeConnectionModule.href)
     );
   const loadRuntimeConnectionEnvironment =
     runtimeConnection.loadRuntimeConnectionEnvironment ??
@@ -530,13 +542,14 @@ function validatePublicJwks(value) {
   }
 
   for (const candidate of /** @type {unknown[]} */ (value.keys)) {
-    const key = candidate;
-    if (!isRecord(key)) {
+    if (!isRecord(candidate)) {
       usageError();
     }
+    const key = /** @type {Record<string, unknown>} */ (candidate);
     if (
       Object.keys(key).some((member) => PRIVATE_JWK_MEMBERS.has(member)) ||
-      (key.alg !== undefined && !IDENTITY_CONFIG_ALGORITHMS.has(key.alg))
+      (key.alg !== undefined &&
+        !IDENTITY_CONFIG_ALGORITHMS.has(/** @type {string} */ (key.alg)))
     ) {
       usageError();
     }
@@ -652,16 +665,17 @@ function existingIdentityAlgorithms(row) {
   return row.allowed_algorithms;
 }
 
-/** @param {{ max_assertion_ttl_seconds: unknown }} row */
+/** @param {{ max_assertion_ttl_seconds: unknown }} row @returns {number} */
 function existingIdentityTtl(row) {
+  const ttl = /** @type {unknown} */ (row.max_assertion_ttl_seconds);
   if (
-    !Number.isInteger(row.max_assertion_ttl_seconds) ||
-    row.max_assertion_ttl_seconds <= 0 ||
-    row.max_assertion_ttl_seconds > MAX_ASSERTION_TTL_SECONDS
+    !Number.isInteger(ttl) ||
+    /** @type {number} */ (ttl) <= 0 ||
+    /** @type {number} */ (ttl) > MAX_ASSERTION_TTL_SECONDS
   ) {
     usageError();
   }
-  return row.max_assertion_ttl_seconds;
+  return /** @type {number} */ (ttl);
 }
 
 /** @param {{controlPlane?: boolean}} [options] @returns {Promise<import('pg').Pool>} */
@@ -1025,10 +1039,10 @@ async function cleanupIdempotency(options) {
 
   const [factoryModule, repositoryModule] = await Promise.all([
     /** @type {Promise<PrismaClientFactoryModule>} */ (
-      import(prismaClientFactoryModule)
+      import(prismaClientFactoryModule.href)
     ),
     /** @type {Promise<IdempotencyRepositoryModule>} */ (
-      import(idempotencyRepositoryModule)
+      import(idempotencyRepositoryModule.href)
     ),
   ]);
   const createOperatorPrismaClientValue =
@@ -1095,9 +1109,11 @@ async function auditRedisTtlCommand(options) {
     usageError();
   }
 
-  const summary = await runCliCommand(redisTtlAuditDescriptor, {
-    redisUrl: process.env.REDIS_URL ?? '',
-  });
+  const summary = /** @type {{ missingTtl: number }} */ (
+    await runCliCommand(redisTtlAuditDescriptor, {
+      redisUrl: process.env.REDIS_URL ?? '',
+    })
+  );
   if (summary.missingTtl > 0) {
     throw new Error('AIHUB Redis keys without TTL were detected');
   }
@@ -1140,13 +1156,15 @@ async function organizationGrantEntitlementCommand(options) {
   );
   if (safety?.previewed) return;
 
-  const outcome = await runGrantOrganizationEntitlement({
-    databaseUrl: controlPlaneDatabaseUrl(),
-    redisUrl: process.env.REDIS_URL,
-    organizationId,
-    actorUsername,
-    entitlement,
-  });
+  const outcome = /** @type {string} */ (
+    await runGrantOrganizationEntitlement({
+      databaseUrl: controlPlaneDatabaseUrl(),
+      redisUrl: process.env.REDIS_URL,
+      organizationId,
+      actorUsername,
+      entitlement,
+    })
+  );
   if (!['granted', 'unchanged'].includes(outcome)) usageError();
 }
 
@@ -1231,12 +1249,14 @@ async function sweepAvatarsCommand(options) {
   );
   if (safety.previewed) return;
 
-  const summary = await runCliCommand(avatarSweepDescriptor, {
-    databaseUrl: process.env.DATABASE_URL ?? '',
-    dryRun,
-    now: () => safety.maintenanceClock.now,
-    clockSource: safety.maintenanceClock.source,
-  });
+  const summary = /** @type {{ failed: number; stagingFailed: number }} */ (
+    await runCliCommand(avatarSweepDescriptor, {
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      dryRun,
+      now: () => safety.maintenanceClock.now,
+      clockSource: safety.maintenanceClock.source,
+    })
+  );
   if (avatarSweepExitCode(summary) !== 0) {
     throw new Error('avatar sweep could not delete every eligible object');
   }
@@ -1279,12 +1299,14 @@ async function sweepSpeakingAudioUploadsCommand(options) {
   );
   if (safety.previewed) return;
 
-  const summary = await runCliCommand(speakingAudioUploadSweepDescriptor, {
-    databaseUrl: process.env.DATABASE_URL ?? '',
-    dryRun,
-    now: () => safety.maintenanceClock.now,
-    clockSource: safety.maintenanceClock.source,
-  });
+  const summary = /** @type {{ failed: number }} */ (
+    await runCliCommand(speakingAudioUploadSweepDescriptor, {
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      dryRun,
+      now: () => safety.maintenanceClock.now,
+      clockSource: safety.maintenanceClock.source,
+    })
+  );
   if (summary.failed > 0) {
     throw new Error(
       'Speaking Audio upload sweep could not delete every object',
@@ -1300,12 +1322,14 @@ async function sweepWritingChartUploadsCommand(options) {
   );
   if (safety.previewed) return;
 
-  const summary = await runCliCommand(writingChartUploadSweepDescriptor, {
-    databaseUrl: process.env.DATABASE_URL ?? '',
-    dryRun,
-    now: () => safety.maintenanceClock.now,
-    clockSource: safety.maintenanceClock.source,
-  });
+  const summary = /** @type {{ failed: number }} */ (
+    await runCliCommand(writingChartUploadSweepDescriptor, {
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      dryRun,
+      now: () => safety.maintenanceClock.now,
+      clockSource: safety.maintenanceClock.source,
+    })
+  );
   if (summary.failed > 0) {
     throw new Error('Writing chart upload sweep could not delete every object');
   }
@@ -1413,10 +1437,10 @@ function errorCode(error) {
   return typeof code === 'string' ? code : undefined;
 }
 
-/** @template {CliRunner} T @param {CliRunnerDescriptor<T>} descriptor @param {Parameters<T>[0]} input */
-async function runBilling(descriptor, input) {
+/** @template {CliRunner} T @param {CliRunnerDescriptor<T>} descriptor @param {Parameters<T>} args */
+async function runBilling(descriptor, ...args) {
   try {
-    return await runCliCommand(descriptor, input);
+    return await runCliCommand(descriptor, ...args);
   } catch (error) {
     if (invalidBillingInput(error)) {
       usageError();
@@ -1626,11 +1650,14 @@ function describeFailure(error) {
   );
 }
 
-main().catch((error) => {
-  console.error(
-    error instanceof Error && error.code === 'AUDIT_COMPLETION_FAILURE'
-      ? 'Revocation outcome is unconfirmed: the request is audited, but completion could not be confirmed. After database recovery, rerun the same URL and actor; deletion is idempotent.'
-      : `Command failed: ${describeFailure(error)}`,
-  );
-  process.exitCode = error instanceof CliUsageError ? 2 : 1;
-});
+main().catch(
+  /** @param {Error & { code?: string }} error */
+  (error) => {
+    console.error(
+      error instanceof Error && error.code === 'AUDIT_COMPLETION_FAILURE'
+        ? 'Revocation outcome is unconfirmed: the request is audited, but completion could not be confirmed. After database recovery, rerun the same URL and actor; deletion is idempotent.'
+        : `Command failed: ${describeFailure(error)}`,
+    );
+    process.exitCode = error instanceof CliUsageError ? 2 : 1;
+  },
+);

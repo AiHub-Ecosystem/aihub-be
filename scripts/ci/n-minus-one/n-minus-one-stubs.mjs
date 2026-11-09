@@ -94,14 +94,18 @@ const resend = createHttpsServer(
 );
 
 await Promise.all([
-  new Promise((resolve, reject) => {
-    writing.once('error', reject);
-    writing.listen(18080, '0.0.0.0', resolve);
-  }),
-  new Promise((resolve, reject) => {
-    resend.once('error', reject);
-    resend.listen(18443, '0.0.0.0', resolve);
-  }),
+  /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      writing.once('error', reject);
+      writing.listen(18080, '0.0.0.0', () => resolve());
+    })
+  ),
+  /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      resend.once('error', reject);
+      resend.listen(18443, '0.0.0.0', () => resolve());
+    })
+  ),
 ]);
 
 process.stdout.write('compatibility stubs ready\n');

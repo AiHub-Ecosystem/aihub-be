@@ -146,13 +146,13 @@
     },
     {
       "ruleId": "js/clear-text-logging",
-      "path": "scripts/ci/dast-render-plan.ts",
+      "path": "scripts/ci/dast/dast-render-plan.ts",
       "fingerprint": "60ffd854093ff6d4:1",
       "reason": "CI tooling renders ZAP plan for dynamic security testing with synthetic test key."
     },
     {
       "ruleId": "js/biased-cryptographic-random",
-      "path": "scripts/ci/dast-seed.ts",
+      "path": "scripts/ci/dast/dast-seed.ts",
       "fingerprint": "91dc67e457337f78:1",
       "reason": "Test seed script generates random characters for synthetic test accounts."
     },

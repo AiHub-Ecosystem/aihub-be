@@ -29,7 +29,7 @@ function createPostgresLaneClient(connectionString) {
   });
 
   return {
-    connect: () => client.connect(),
+    connect: () => client.connect().then(() => undefined),
     query: async (query, values) => {
       const result = await client.query(query, [...values]);
       return { rows: result.rows };
@@ -61,8 +61,9 @@ async function withDatabaseLaneLock(client, run) {
       DATABASE_LANE_LOCK_KEY,
     );
     if (result.rows[0]?.acquired !== true) {
-      /** @type {Error & {code: string}} */
-      const error = new Error('Database validation lane is already held');
+      const error = /** @type {Error & {code: string}} */ (
+        new Error('Database validation lane is already held')
+      );
       error.code = 'DB_LANE_HELD';
       throw error;
     }

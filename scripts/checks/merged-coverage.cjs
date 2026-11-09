@@ -228,7 +228,7 @@ function parseCoverageReport(value) {
     throw new Error('coverage baseline must be a JSON object');
   }
   const report = /** @type {Record<string, unknown>} */ (value);
-  /** @param {CoverageMetric} metric */
+  /** @param {CoverageMetric} metric @returns {number | undefined} */
   const readMetric = (metric) => {
     const amount = report[metric];
     if (
@@ -237,7 +237,7 @@ function parseCoverageReport(value) {
     ) {
       throw new Error(`coverage baseline ${metric} must be a finite number`);
     }
-    return amount;
+    return /** @type {number | undefined} */ (amount);
   };
   const marginPoints = report.marginPoints;
   if (
@@ -250,13 +250,21 @@ function parseCoverageReport(value) {
   if (recordedLanes !== undefined && !isStringArray(recordedLanes)) {
     throw new Error('coverage baseline recordedLanes must be a string array');
   }
+  const marginPointsValue = /** @type {number | undefined} */ (marginPoints);
+  const recordedLanesValue = /** @type {string[] | undefined} */ (
+    recordedLanes
+  );
   return {
     lines: readMetric('lines'),
     branches: readMetric('branches'),
     statements: readMetric('statements'),
     functions: readMetric('functions'),
-    ...(marginPoints === undefined ? {} : { marginPoints }),
-    ...(recordedLanes === undefined ? {} : { recordedLanes }),
+    ...(marginPointsValue === undefined
+      ? {}
+      : { marginPoints: marginPointsValue }),
+    ...(recordedLanesValue === undefined
+      ? {}
+      : { recordedLanes: recordedLanesValue }),
   };
 }
 
@@ -289,8 +297,10 @@ function main(argv = process.argv.slice(2), root = process.cwd()) {
       ? DEFAULT_MARGIN_POINTS
       : Number(marginArgument.split('=')[1]);
 
+  /** @param {CoverageLane} lane @returns {lane is {name: string; report: string; missing: false; map: CoverageMap}} */
+  const isPresentLane = (lane) => !lane.missing;
   const lanes = LANES.map((lane) => loadLane(root, lane));
-  const present = lanes.filter((lane) => !lane.missing);
+  const present = lanes.filter(isPresentLane);
   const absent = lanes.filter((lane) => lane.missing);
 
   if (present.length === 0) {

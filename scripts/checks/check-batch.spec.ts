@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 // Reached through require because the module under test is plain CommonJS run by
-// node, the same shape host-job-image-check.spec.ts uses.
+// node, the same shape `scripts/ci/image/host-job-image-check.spec.ts` uses.
 const {
   BATCHED_GATES,
   BYTES_PER_CHILD,

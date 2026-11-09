@@ -44,3 +44,7 @@ temp/
 # 1DevTool Chrome panel writes Chromium's debug log into the launch
 # directory (repo root) on Windows; never part of the build or the repo.
 debug.log
+# Stray log dumps redirected to the repo root (a verify:summary capture sat
+# there unignored until it was cleaned up by hand). Root-scoped on purpose:
+# nested logs stay visible so a fixture or tool log is never hidden by accident.
+/*.log

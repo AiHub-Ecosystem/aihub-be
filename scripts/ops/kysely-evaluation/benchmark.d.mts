@@ -1,6 +1,20 @@
-import type { CompiledQuery, Kysely, QueryResult } from 'kysely';
-import type { PostgresDialectConfig } from 'kysely/dist/dialect/postgres/postgres-dialect-config.js';
+import type {
+  CompiledQuery,
+  Kysely,
+  PostgresDialect,
+  QueryResult,
+} from 'kysely';
 import type { Pool, PoolConfig } from 'pg';
+
+/**
+ * The dialect config type kysely does not re-export from its root entry
+ * point: its `exports` map exposes only `.`, `./helpers/*`, `./migration` and
+ * `./readonly`, so the deep `kysely/dist/...` path this file used to import is
+ * outside the package's public surface. Deriving the type from the public
+ * `PostgresDialect` constructor keeps the shape faithful without the deep
+ * import.
+ */
+type PostgresDialectConfig = ConstructorParameters<typeof PostgresDialect>[0];
 
 export interface BenchmarkRow {
   organization_id: string;
@@ -15,7 +29,7 @@ export interface KyselyBenchmarkModule {
     to: Date,
   ) => CompiledQuery<BenchmarkRow>;
   createKyselyQuotaClient: (
-    pool: PostgresDialectConfig['pool'],
+    pool: PostgresDialectConfig['pool'] | StubPool,
   ) => Kysely<never>;
 }
 

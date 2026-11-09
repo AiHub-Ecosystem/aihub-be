@@ -204,7 +204,8 @@ function collectorFromRow(row: unknown): PublicApiMajorCollectorRow {
     environment: text(row.environment),
     startedAt: row.started_at,
     coveredThrough: row.covered_through,
-    stoppedCleanlyAt: row.stopped_cleanly_at,
+    stoppedCleanlyAt:
+      row.stopped_cleanly_at instanceof Date ? row.stopped_cleanly_at : null,
   };
 }
 

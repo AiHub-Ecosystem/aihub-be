@@ -19,14 +19,14 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null;
 }
 
-/** @param {unknown} value @returns {value is (options: {env: NodeJS.ProcessEnv}) => void} */
+/** @param {unknown} value @returns {value is (options: {env: NodeJS.ProcessEnv; target?: string}) => void} */
 function isRuntimeConnectionLoader(value) {
   return typeof value === 'function';
 }
 
 if (existsSync(runtimeConnectionModule)) {
   const runtimeConnection = /** @type {unknown} */ (
-    await import(runtimeConnectionModule)
+    await import(runtimeConnectionModule.href)
   );
   const defaultExport = isRecord(runtimeConnection)
     ? runtimeConnection.default

@@ -320,10 +320,10 @@ function shape(draft: OrganizationAuditDraft): Shape {
         targetId: draft.organizationId,
         targetLabel: draft.name,
         detail:
-          draft.denial === undefined
+          'previousName' in draft
             ? { previousName: draft.previousName }
             : { denial: draft.denial },
-        outcome: draft.denial === undefined ? 'applied' : 'denied',
+        outcome: 'previousName' in draft ? 'applied' : 'denied',
       };
     case 'invitation.sent':
     case 'invitation.resent':

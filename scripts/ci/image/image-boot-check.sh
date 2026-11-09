@@ -3,10 +3,10 @@
 # its own health check. Answers one question: does this artifact start.
 # See docs/operations/ci-boot-check.md for what it does and does not prove.
 #
-#   scripts/ci/image-boot-check.sh <image>
+#   scripts/ci/image/image-boot-check.sh <image>
 set -euo pipefail
 
-image="${1:?usage: scripts/ci/image-boot-check.sh <image>}"
+image="${1:?usage: scripts/ci/image/image-boot-check.sh <image>}"
 timeout_seconds="${BOOT_CHECK_TIMEOUT_SECONDS:-90}"
 container="aihub-boot-check-$$"
 config_dir="$(mktemp -d)"
@@ -17,7 +17,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-node "$(dirname "$0")/ci-boot-config.cjs" "$config_dir"
+node "$(dirname "$0")/../boot/ci-boot-config.cjs" "$config_dir"
 # The image runs as uid 10001; the mounted files must be readable by it.
 chmod 0755 "$config_dir"
 chmod 0644 "$config_dir"/*

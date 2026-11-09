@@ -1,10 +1,10 @@
 const { existsSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
 
-/** @typedef {import('./load-cli-runner.cjs').CliRunner} CliRunner */
+/** @typedef {import('./load-cli-runner.d.cts').CliRunner} CliRunner */
 /**
  * @template {CliRunner} T
- * @typedef {import('./load-cli-runner.cjs').CliRunnerDescriptor<T>} CliRunnerDescriptor
+ * @typedef {import('./load-cli-runner.d.cts').CliRunnerDescriptor<T>} CliRunnerDescriptor
  */
 
 /** @type {WeakMap<object, Promise<CliRunner>>} */
@@ -52,7 +52,10 @@ async function loadRunnerModule(descriptor) {
     try {
       loadedModule = require(descriptor.builtPath);
     } catch (error) {
-      if (!(error instanceof Error) || error.code !== 'ERR_REQUIRE_ESM') {
+      if (
+        !(error instanceof Error) ||
+        /** @type {{ code?: string }} */ (error).code !== 'ERR_REQUIRE_ESM'
+      ) {
         throw error;
       }
       loadedModule = await import(pathToFileURL(descriptor.builtPath).href);

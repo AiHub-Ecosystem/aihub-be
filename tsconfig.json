@@ -1,9 +1,11 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "module": "preserve",
+    "moduleDetection": "force",
     "target": "ES2022",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": ["es2024", "ESNext.Array", "ESNext.Collection", "ESNext.Iterator"],
     "paths": {
       "@/*": ["./src/*"],
       "@prisma-client/*": ["./dist/generated/prisma/*"],
@@ -19,7 +21,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "types": ["node", "jest"],

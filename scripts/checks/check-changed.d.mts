@@ -18,7 +18,12 @@ export function gateInvocation(
   gate: string,
   files: readonly string[],
   exists?: (path: string) => boolean,
+  listDir?: (dir: string) => readonly string[],
 ): { readonly script: string; readonly args: string[] } | undefined;
+export function selectShellSpecs(
+  files: readonly string[],
+  listDir?: (dir: string) => readonly string[],
+): string[];
 export function runCheckChanged(options: {
   readonly resolveFiles: () => string[];
   readonly runGate: (gate: string) => number | Promise<number>;

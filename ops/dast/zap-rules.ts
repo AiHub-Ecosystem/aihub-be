@@ -3,7 +3,7 @@
  *
  * Two ZAP Automation Framework plan renders consume it: the passive
  * pull-request scan and the scheduled active scan. The renderer
- * (`scripts/ci/dast-render-plan.ts`) injects these entries at the
+ * (`scripts/ci/dast/dast-render-plan.ts`) injects these entries at the
  * `@dast-rules` markers of `ops/dast/zap-plan.template.yaml`, so this file is
  * the single statement of what the scans ignore and why. Every `off` entry
  * carries its reason as a required field, and the type system rejects an

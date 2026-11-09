@@ -1,7 +1,7 @@
 /**
  * Renders the ZAP Automation Framework plan for one DAST run (issue #319).
  *
- *   node --import tsx scripts/ci/dast-render-plan.ts --mode passive \
+ *   node --import tsx scripts/ci/dast/dast-render-plan.ts --mode passive \
  *     --target http://dast.aihub.invalid:3000 \
  *     --api-key <seeded key> --bearer <access token> \
  *     --out temp/dast/zap-plan.yaml
@@ -24,11 +24,11 @@ import {
   type ActiveRule,
   PASSIVE_RULES,
   type PassiveRule,
-} from '../../ops/dast/zap-rules';
+} from '../../../ops/dast/zap-rules';
 
 const TEMPLATE_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
-  '../../ops/dast/zap-plan.template.yaml',
+  '../../../ops/dast/zap-plan.template.yaml',
 );
 
 export interface RenderInput {

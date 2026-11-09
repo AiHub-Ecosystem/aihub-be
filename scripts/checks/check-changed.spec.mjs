@@ -159,7 +159,10 @@ const pathCases = [
     path: 'docs/operations/runbook.md',
     gates: ['check:doc-drift', 'format:check'],
   },
-  { path: '.github/workflows/ci.yml', gates: ['format:check'] },
+  {
+    path: '.github/workflows/ci.yml',
+    gates: ['format:check', 'test:secret-scan'],
+  },
   {
     path: 'ops/nginx/site.conf',
     gates: ['check:doc-drift', 'check:nginx-headers', 'lint'],
@@ -185,10 +188,86 @@ const pathCases = [
     ],
   },
   { path: 'openapi.json', gates: ['lint', 'validate:openapi'] },
+  { path: 'openapi/v1.json', gates: ['lint', 'validate:openapi'] },
+  { path: 'openapi/v2.json', gates: ['lint', 'validate:openapi'] },
+  {
+    path: 'scripts/ci/api-compatibility/accepted-breaking-changes.json',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
   { path: 'jest.config.cjs', gates: ['coverage:unit', 'lint'] },
   {
     path: 'scripts/cli/run-bun-test.mjs',
     gates: ['check:doc-drift', 'lint', 'test:check-changed'],
+  },
+  {
+    // #1460: the gate configuration files select the gate whose behaviour
+    // they control, so weakening one cannot produce a green run.
+    path: 'package.json',
+    gates: ['knip', 'test:check-changed'],
+  },
+  { path: 'tsconfig.json', gates: ['type-check'] },
+  { path: 'tsconfig.scripts.json', gates: ['type-check:scripts'] },
+  { path: 'knip.json', gates: ['knip'] },
+  { path: 'biome.json', gates: ['lint'] },
+  // #1768: the remaining gate-tool configuration files follow the same rule.
+  { path: '.dependency-cruiser.cjs', gates: ['arch-check'] },
+  { path: '.oxlintrc.json', gates: ['lint'] },
+  { path: 'nest-cli.json', gates: ['build'] },
+  { path: 'tsconfig.build.json', gates: ['build'] },
+  { path: '.squawk.toml', gates: ['check:migrations'] },
+  {
+    // #1777: the spec that pins the cached format:check command and proves
+    // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
+    // so the gate set is widened by that layer.
+    path: 'scripts/checks/format-check-cache.spec.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:format-check'],
+  },
+  {
+    // #1779: the tested secret-scan plan, and the spec that pins both the
+    // decision and the workflow wiring that applies it.
+    path: 'scripts/ci/secret-scan/secret-scan-plan.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:secret-scan'],
+  },
+  {
+    path: 'scripts/ci/secret-scan/secret-scan-plan.spec.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:secret-scan'],
+  },
+  { path: '.prettierrc', gates: ['format:check'] },
+  { path: '.prettierignore', gates: ['format:check'] },
+  { path: '.lintstagedrc', gates: ['test:lint-staged'] },
+  // #1767: each husky hook selects the gate that asserts its content.
+  { path: '.husky/pre-commit', gates: ['test:lint-staged'] },
+  { path: '.husky/commit-msg', gates: ['test:commit-message'] },
+  // #1767: the whole checker directory selects the suite that exercises it,
+  // not only its accepted-breaking-changes list.
+  {
+    path: 'scripts/ci/api-compatibility/check-release.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
+  {
+    path: 'scripts/ci/api-compatibility/check.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
+  {
+    path: 'scripts/ci/api-compatibility/fixtures/example.json',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
+  { path: '.swcrc', gates: ['build'] },
+  {
+    path: 'ops/monitoring/alert.rules.yml',
+    gates: ['check:doc-drift', 'format:check', 'test:monitoring-config'],
+  },
+  {
+    path: 'scripts/ops/host-jobs/container-watchdog.sh',
+    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+  },
+  {
+    path: 'scripts/ops/backups/restore-postgres-rehearsal.sh',
+    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+  },
+  {
+    path: 'scripts/ops/monitoring/probe-sandbox-mint.sh',
+    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
   },
 ];
 
@@ -343,6 +422,115 @@ await test('the Bun runner forwards changed and watch options with default specs
   assert.ok(args.includes('--changed=origin/main'));
   assert.ok(args.includes('--watch'));
   assert.equal(args.at(-1), '.spec.ts');
+});
+
+await test('wrappers whose directory has no co-located suite select documentation drift only (#1460)', () => {
+  for (const path of [
+    'scripts/ops/firewall/docker-user-guard.sh',
+    'scripts/ops/speaking/speaking-gateway-smoke.sh',
+    'scripts/ops/blue-green/blue-green-host.sh',
+    'scripts/ops/logs/request-log-lookup.sh',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
+  }
+});
+
+await test('SAST-only CodeQL inputs select no local gate and say so (#1460)', () => {
+  for (const path of [
+    '.github/codeql/triage.json',
+    '.github/codeql/queries/RawSqlInjection.ql',
+    '.github/codeql/tests/raw-sql/raw-sql.expected',
+  ]) {
+    // The explicit no-gate answer is observable as its own full-verify
+    // reason, distinct from an unclassified path naming the file.
+    assert.deepEqual(planChangedFiles([path]), {
+      fullVerify: true,
+      reason: 'no gate can break the changed files',
+    });
+  }
+});
+
+await test('a no-gate path does not force the full loop onto its mixed diff (#1460)', () => {
+  assert.deepEqual(
+    planChangedFiles(['.github/codeql/triage.json', 'docs/guide.md']).gates,
+    ['format:check'],
+  );
+});
+
+await test('Vault policies and templates select no local gate and say so (#1767)', () => {
+  // Provisioning is a deploy action: no local gate reads these files, so the
+  // recorded answer is a no-gate diff rather than an unclassified fall-through.
+  // `ops/` is also a documentation-drift input, so the answer is doc drift
+  // alone, and `check:doc-drift` passing means every other gate is genuinely
+  // unaffected by the change.
+  for (const path of [
+    'ops/vault/policies/aihub-production-runtime.hcl',
+    'ops/vault/agent/aihub-runtime.hcl',
+    'ops/vault/templates/runtime-secrets.json.ctmpl',
+    'ops/vault/templates/pgbouncer.ini.ctmpl',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
+  }
+});
+
+await test('a Vault template change does not force the full loop onto its mixed diff (#1767)', () => {
+  assert.deepEqual(
+    planChangedFiles([
+      'ops/vault/templates/runtime-secrets.json.ctmpl',
+      'docs/guide.md',
+    ]).gates,
+    ['check:doc-drift', 'format:check'],
+  );
+});
+
+await test('the shell-spec gate gets the co-located suites of the changed wrappers (#1460)', () => {
+  const listDir = (/** @type {string} */ dir) =>
+    dir === 'scripts/ops/host-jobs'
+      ? [
+          'container-watchdog.spec.sh',
+          'host-scheduled-job.spec.sh',
+          'install-host-jobs.sh',
+        ]
+      : [];
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      [
+        'scripts/ops/host-jobs/container-watchdog.sh',
+        'scripts\\ops\\host-jobs\\install-host-jobs.sh',
+        'scripts/ops/speaking/speaking-gateway-smoke.sh',
+        'src/a.ts',
+      ],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: [
+        'scripts/ops/host-jobs/container-watchdog.spec.sh',
+        'scripts/ops/host-jobs/host-scheduled-job.spec.sh',
+      ],
+    },
+  );
+});
+
+await test('the shell-spec gate has nothing to run when no changed wrapper exists', () => {
+  assert.equal(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/host-jobs/gone.sh'],
+      () => false,
+    ),
+    undefined,
+  );
+});
+
+await test('the shell-spec gate script runs the selected suites through bash', () => {
+  const packageJson = /** @type {{scripts: Record<string, string>}} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
+  const command = packageJson.scripts[GATE_COMMANDS['test:shell-specs']] ?? '';
+  assert.ok(command.includes('run-shell-specs.mjs'));
 });
 
 await test('unknown paths force full verification, including mixed changes', () => {

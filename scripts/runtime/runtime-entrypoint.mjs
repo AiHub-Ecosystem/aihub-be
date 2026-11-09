@@ -52,7 +52,7 @@ async function main() {
   }
 
   const runtimeConnection = /** @type {unknown} */ (
-    await import(runtimeConnectionModule)
+    await import(runtimeConnectionModule.href)
   );
   const defaultExport = isRecord(runtimeConnection)
     ? runtimeConnection.default
@@ -91,7 +91,7 @@ async function main() {
       : target,
     import.meta.url,
   );
-  await import(targetUrl);
+  await import(targetUrl.href);
 }
 
 main().catch((error) => {

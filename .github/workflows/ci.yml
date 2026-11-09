@@ -75,26 +75,39 @@ jobs:
       - name: Scan changed commits
         shell: bash
         env:
+          EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
-          EVENT_NAME: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          if [[ -z "$BASE_SHA" && "$EVENT_NAME" == workflow_dispatch ]]; then
-            BASE_SHA="$(git merge-base "origin/$DEFAULT_BRANCH" "$HEAD_SHA")"
-            if [[ "$BASE_SHA" == "$HEAD_SHA" ]]; then
-              BASE_SHA="$(git rev-parse "${HEAD_SHA}^" 2>/dev/null || true)"
-            fi
-          fi
-          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && \
-            "$BASE_SHA" != 0000000000000000000000000000000000000000 && \
-            "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$BASE_SHA" != "$HEAD_SHA" ]]; then
-            gitleaks git --config .gitleaks.toml --redact --no-banner \
-              --log-opts="$BASE_SHA..$HEAD_SHA"
-          else
-            gitleaks git --config .gitleaks.toml --redact --no-banner
-          fi
+          # #1779: which commits to scan is a tested decision, not an inline
+          # branch. A manual run has no range of its own, so it is refused
+          # rather than falling through to a scan of the whole history.
+          # Parsed with node, which this step already needs, so the job gains
+          # no jq dependency it does not otherwise declare.
+          plan=$(node scripts/ci/secret-scan/secret-scan-plan.mjs)
+          mode=$(node -p 'JSON.parse(process.argv[1]).mode' "$plan")
+
+          case "$mode" in
+            range)
+              range=$(node -p 'JSON.parse(process.argv[1]).range' "$plan")
+              echo "Scanning $range"
+              gitleaks git --config .gitleaks.toml --redact --no-banner \
+                --log-opts="$range"
+              ;;
+            full-history)
+              echo "Scanning the whole history: this push carried no usable base."
+              gitleaks git --config .gitleaks.toml --redact --no-banner
+              ;;
+            refused)
+              echo "::error::$(node -p 'JSON.parse(process.argv[1]).message' "$plan")"
+              exit 1
+              ;;
+            *)
+              echo "::error::unexpected secret-scan plan: $mode"
+              exit 1
+              ;;
+          esac
 
   static:
     name: Static checks
@@ -127,6 +140,17 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      # #1777: `format:check` runs prettier with `--cache`. Without this the
+      # CI job always ran cold (~25s); with it an unchanged tree re-checks only
+      # the files a commit touched. The key carries the lockfile and the
+      # prettier config, because an option change invalidates every entry.
+      - name: Cache prettier
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.cache/prettier
+          key: prettier-${{ runner.os }}-${{ hashFiles('bun.lock', '.prettierrc', '.prettierignore') }}
+          restore-keys: prettier-${{ runner.os }}-
 
       - name: Check unused exports
         run: bun run knip
@@ -921,7 +945,7 @@ jobs:
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
-            | node scripts/ci/check-production-compose-logs.cjs
+            | node scripts/ci/compose/check-production-compose-logs.cjs
 
       - name: Validate production Compose defaults and trusted proxy
         env:
@@ -933,7 +957,7 @@ jobs:
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
-            | node scripts/ci/check-trusted-proxy-compose.cjs
+            | node scripts/ci/compose/check-trusted-proxy-compose.cjs
 
       # Built and loaded into this runner's daemon, not pushed: the boot check
       # below has to start the exact image, and buildx cannot both load an image
@@ -957,7 +981,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Check scheduled job paths in the shipped image
-        run: node scripts/ci/host-job-image-check.cjs aihub:image-boot
+        run: node scripts/ci/image/host-job-image-check.cjs aihub:image-boot
 
       # ADR-0088: the generated client is Rust-free and the `prisma` CLI is a
       # devDependency, so neither it nor its engines may reach the runtime image.
@@ -967,7 +991,7 @@ jobs:
           'test ! -e node_modules/prisma && test ! -e node_modules/.bin/prisma'
 
       - name: Boot the image and wait for its health check
-        run: bash scripts/ci/image-boot-check.sh aihub:image-boot
+        run: bash scripts/ci/image/image-boot-check.sh aihub:image-boot
 
       - name: Select active per-tier release revisions
         id: previous_release

@@ -1,7 +1,7 @@
 const { execFileSync, spawnSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 
-const { pushPathPatterns, pushRunsCi } = require('./ci-push-filter.cjs');
+const { pushPathPatterns, pushRunsCi } = require('../push/ci-push-filter.cjs');
 
 /** @param {string} status @returns {string[]} */
 function parseActiveRevisions(status) {

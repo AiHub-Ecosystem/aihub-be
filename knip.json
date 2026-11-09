@@ -73,10 +73,10 @@
     "scripts/ops/monitoring/update-alert-rules-fingerprint.spec.mjs",
     // Hand-written types for scripts/checks/prisma-drift/prisma-drift.cjs — same reason.
     "scripts/checks/prisma-drift/prisma-drift.d.cts",
-    // Hand-written types for scripts/ci/ci-boot-config.cjs — same reason.
-    "scripts/ci/ci-boot-config.d.cts",
-    // Hand-written types for scripts/ci/ci-push-filter.cjs — same reason.
-    "scripts/ci/ci-push-filter.d.cts",
+    // Hand-written types for scripts/ci/boot/ci-boot-config.cjs — same reason.
+    "scripts/ci/boot/ci-boot-config.d.cts",
+    // Hand-written types for scripts/ci/push/ci-push-filter.cjs — same reason.
+    "scripts/ci/push/ci-push-filter.d.cts",
     // Hand-written types for scripts/checks/verify-summary.cjs — same reason.
     "scripts/checks/verify-summary.d.cts",
     // Hand-written types for scripts/checks/merged-coverage.cjs — same reason.
@@ -91,6 +91,10 @@
     // Hand-written types for scripts/checks/jest-worker-cap.cjs — same reason:
     // Jest reaches it through jest.config.cjs, outside the TypeScript graph.
     "scripts/checks/jest-worker-cap.d.cts",
+    // Hand-written types for scripts/checks/knip-cache-args.cjs — same reason:
+    // the spec reaches the .cjs through TypeScript, so without this knip
+    // reports a live file as unused.
+    "scripts/checks/knip-cache-args.d.cts",
     // Hand-written types for Vault's PgBouncer budget module; Knip does not
     // follow TypeScript's adjacent-declaration lookup from the .mjs import.
     "ops/vault/pgbouncer-budget.d.mts",

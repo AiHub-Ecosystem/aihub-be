@@ -21,7 +21,7 @@ export const API_HOST = 'api.ci-boot.invalid';
 export const USER_ID = 'usr_01J00000000000000000000000';
 export const USERNAME = 'release-compat-owner';
 const require = createRequire(import.meta.url);
-const bootConfigModule: unknown = require('../ci-boot-config.cjs');
+const bootConfigModule: unknown = require('../boot/ci-boot-config.cjs');
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

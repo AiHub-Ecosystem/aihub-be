@@ -103,7 +103,10 @@ function runDiffProcess({ command, args, timeoutMs, phase, cwd, env }) {
       timeout: timeoutMs,
     });
 
-    if (result.error?.code === 'ETIMEDOUT') {
+    if (
+      result.error &&
+      /** @type {{ code?: string }} */ (result.error).code === 'ETIMEDOUT'
+    ) {
       throw new Error(`${phase} timed out after ${timeoutMs}ms`);
     }
     if (result.error) {

@@ -18,7 +18,9 @@ if (process.argv[2] === 'scripts/cli/cli.mjs') {
     '/app/scripts/cli/cli.mjs',
     ...process.argv.slice(3),
   ];
-  await import('/app/scripts/cli/cli.mjs');
+  await import(/** @type {any} */ ('/app/scripts/cli/cli.mjs'));
 } else {
-  await import('/app/scripts/runtime/runtime-entrypoint.mjs');
+  await import(
+    /** @type {any} */ ('/app/scripts/runtime/runtime-entrypoint.mjs')
+  );
 }

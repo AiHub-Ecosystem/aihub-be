@@ -4,11 +4,15 @@ import process from 'node:process';
 
 import { summarizeRepetitions } from './capacity-benchmark-utils.mjs';
 
+/** @typedef {{p50: number | null, p95: number | null, p99: number | null}} Percentiles */
+/** @typedef {{count: number, p50: number | null, p95: number | null, p99: number | null}} PathPercentiles */
+/** @typedef {{admissionMs: PathPercentiles, completionMs: PathPercentiles}} PathTimings */
 /** @typedef {{count: number, requestsPerSecond: number, deadlineMs: number}} RouteGoodput */
-/** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: {p50: number | null, p95: number | null, p99: number | null}}} ProbeResult */
-/** @typedef {{count: number, errorCount: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, acceptedLatencyMs: {p50: number | null, p95: number | null, p99: number | null}, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, {admissionMs: {count: number, p50: number | null, p95: number | null, p99: number | null}, completionMs: {count: number, p50: number | null, p95: number | null, p99: number | null}}>} BenchmarkRoute */
+/** @typedef {{count: number, failures: number, missedSamples: number, latencyMs: Percentiles}} ProbeResult */
+/** @typedef {{count: number, errorCount: number, p50Ms: number | null, p95Ms: number | null, p99Ms: number | null, acceptedLatencyMs: Percentiles, goodput?: RouteGoodput, goodputBySecond?: number[], timingsByPath?: Record<string, PathTimings>}} BenchmarkRoute */
 /** @typedef {{workload: string, label: string, offeredRateRps: number, holdDuration: string, completedRequests: number, routes: Record<string, BenchmarkRoute>, probes: {health: ProbeResult, readiness: ProbeResult}, isOverload: boolean, isRecovery: boolean, sampleAdequacy?: {routes?: Record<string, {count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}>, paths?: Record<string, Record<string, {count: number, status: 'sufficient' | 'inconclusive' | 'not_applicable'}>>}}} BenchmarkRun */
-/** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {operatingSystem: string, logicalCpuCount: number, cpuModel: string | null, totalMemoryBytes: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
+/** @typedef {{benchmark: {repetition: number, runtimeCommit: string, runnerDescription: string | null, host: {operatingSystem: string, architecture: string, cpuModel: string | null, logicalCpuCount: number, totalMemoryBytes: number}, configuration: {stageRatesRps: number[], minimumGradingSamples: number}, redis: {configuredRoundTripLatencyMs: number}, downstreamStub: {latencyMs: number, errorRate: number}}, runs: BenchmarkRun[]}} BenchmarkReport */
+/** @typedef {{operatingSystem: string, architecture: string, cpuModel: string | null, logicalCpuCount: number, totalMemoryBytes: number}} HostInfo */
 /** @typedef {NonNullable<ReturnType<typeof summarizeRepetitions>>} RepetitionSummary */
 
 const expectedRepetitions = Number(process.argv[2] ?? 3);
@@ -48,7 +52,7 @@ process.stdout.write(markdown);
 
 /** @param {RepetitionSummary} result @returns {string} */
 function renderMarkdown(result) {
-  const host = result.host;
+  const host = /** @type {HostInfo} */ (result.host);
   const lines = [
     '# Capacity benchmark repetitions',
     '',
