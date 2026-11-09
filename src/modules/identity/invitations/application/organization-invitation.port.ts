@@ -30,10 +30,18 @@ export interface OrganizationInviteEmailDelivery {
 /**
  * `member_exists` is resolved inside the same transaction as the insert, so a
  * membership that becomes active concurrently cannot slip past the check.
+ *
+ * `caller_not_authorized` and `organization_suspended` are also resolved inside
+ * the transaction, under the Organization lock: the caller's Membership and the
+ * Organization status are re-read there, so an authority change or suspension
+ * that committed while the request waited refuses the send (ADR-0027 as
+ * amended, #447).
  */
 export type CreateOrganizationInvitationResult =
   | { readonly kind: 'created' }
-  | { readonly kind: 'member_exists' };
+  | { readonly kind: 'member_exists' }
+  | { readonly kind: 'caller_not_authorized' }
+  | { readonly kind: 'organization_suspended' };
 
 export interface AcceptOrganizationInvitationInput {
   readonly context: RequestContext;
@@ -57,7 +65,11 @@ export interface ListOpenOrganizationInvitationsInput {
 export interface RevokeOrganizationInvitationInput {
   readonly context: RequestContext;
   readonly actorUserId: string;
-  readonly actorRole: OrganizationMembershipRole;
+  /**
+   * Not carried: the caller's role is re-read under the Organization lock
+   * inside the transaction, since a role captured before the transaction can
+   * be stale (ADR-0027 as amended, #447).
+   */
   readonly organizationId: string;
   readonly invitationId: string;
   readonly now: Date;

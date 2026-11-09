@@ -194,7 +194,6 @@ describe('a suspended Organization closes every management surface', () => {
         repository.revokeInvitation({
           context: managementContext(),
           actorUserId: USER_ID,
-          actorRole: 'owner',
           organizationId: ORGANIZATION_ID,
           invitationId: INVITATION_ID,
           now: NOW,

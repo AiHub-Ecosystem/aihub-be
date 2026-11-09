@@ -71,7 +71,6 @@ const organizationScoped = [
       ).revokeInvitation({
         context: ctx,
         actorUserId: 'usr_actor',
-        actorRole: 'owner',
         organizationId: 'org_acme',
         invitationId: 'oin_01J00000000000000000000000',
         now,

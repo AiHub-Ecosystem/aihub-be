@@ -47,7 +47,6 @@ export class RevokeOrganizationInvitation {
     const result = await this.invitations.revokeInvitation({
       context: input.context,
       actorUserId: input.userId,
-      actorRole: caller.role,
       organizationId: input.organizationId,
       invitationId: input.invitationId,
       now: this.now(),
