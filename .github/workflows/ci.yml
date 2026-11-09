@@ -741,7 +741,15 @@ jobs:
         uses: ./.github/actions/enable-bounded-logical-wal
 
       - name: Run the cross-tenant isolation lane
-        run: bun run test:tenant-isolation
+        run: bun run coverage:tenant-isolation
+
+      - name: Upload the tenant-isolation lane coverage report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tenant-isolation-coverage
+          path: coverage/tenant-isolation/coverage-final.json
+          if-no-files-found: error
+          retention-days: 1
 
   # One coverage figure per pull request, merged across the lanes that test
   # `src`, and a failure when it falls past the agreed margin. Reading a single
@@ -750,9 +758,11 @@ jobs:
   # lane runs them.
   coverage:
     name: Merged coverage
+    if: ${{ !cancelled() }}
     needs:
       - test
       - database
+      - tenant-isolation
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -791,6 +801,12 @@ jobs:
         with:
           name: db-coverage
           path: coverage/db
+
+      - name: Download the tenant-isolation lane coverage report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tenant-isolation-coverage
+          path: coverage/tenant-isolation
 
       # The margin and the reason for it live beside the constant in the script.
       # The baseline is committed, so a drop is measured against main rather
