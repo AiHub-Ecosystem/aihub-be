@@ -196,6 +196,6 @@ describe('Auth transaction lifetime on Prisma', () => {
         createdAt,
       },
     ]);
-    expect(Buffer.isBuffer(rows[0]?.binary)).toBe(true);
+    expect(Buffer.isBuffer(rows[0]?.['binary'])).toBe(true);
   });
 });

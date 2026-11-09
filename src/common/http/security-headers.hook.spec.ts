@@ -77,8 +77,8 @@ describe('registerSecurityHeaders', () => {
       url: DEPRECATED_ROUTE.path,
     });
 
-    expect(response.headers.deprecation).toBe('@1672531200');
-    expect(response.headers.sunset).toBe('Wed, 30 Jun 2027 00:00:00 GMT');
+    expect(response.headers['deprecation']).toBe('@1672531200');
+    expect(response.headers['sunset']).toBe('Wed, 30 Jun 2027 00:00:00 GMT');
     expect(response.headers.link).toBe(
       '</docs#organizations.create>; rel="successor-version"; title="organizations.create"',
     );
@@ -87,8 +87,8 @@ describe('registerSecurityHeaders', () => {
   it('omits deprecation headers for a route without a sunset descriptor', async () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
 
-    expect(response.headers.deprecation).toBeUndefined();
-    expect(response.headers.sunset).toBeUndefined();
+    expect(response.headers['deprecation']).toBeUndefined();
+    expect(response.headers['sunset']).toBeUndefined();
     expect(response.headers.link).toBeUndefined();
   });
 
@@ -189,8 +189,8 @@ describe('registerSecurityHeaders with a sunset Public API major', () => {
     await start('2028-01-01T00:00:00Z');
     const response = await app.inject({ method: 'POST', url: DISPATCH_PATH });
 
-    expect(response.headers.deprecation).toBe('@1798761600');
-    expect(response.headers.sunset).toBe('Sat, 01 Jan 2028 00:00:00 GMT');
+    expect(response.headers['deprecation']).toBe('@1798761600');
+    expect(response.headers['sunset']).toBe('Sat, 01 Jan 2028 00:00:00 GMT');
     expect(response.headers.link).toBe(
       '</docs?version=v2>; rel="successor-version"; title="v2"',
     );
@@ -203,8 +203,8 @@ describe('registerSecurityHeaders with a sunset Public API major', () => {
       url: DEPRECATED_ROUTE.path,
     });
 
-    expect(response.headers.deprecation).toBe('@1672531200');
-    expect(response.headers.sunset).toBe('Wed, 30 Jun 2027 00:00:00 GMT');
+    expect(response.headers['deprecation']).toBe('@1672531200');
+    expect(response.headers['sunset']).toBe('Wed, 30 Jun 2027 00:00:00 GMT');
     expect(response.headers.link).toBe(
       '</docs#organizations.create>; rel="successor-version"; title="organizations.create"',
     );
@@ -217,8 +217,8 @@ describe('registerSecurityHeaders with a sunset Public API major', () => {
       url: DEPRECATED_ROUTE.path,
     });
 
-    expect(response.headers.deprecation).toBe('@1672531200');
-    expect(response.headers.sunset).toBe('Mon, 01 Mar 2027 00:00:00 GMT');
+    expect(response.headers['deprecation']).toBe('@1672531200');
+    expect(response.headers['sunset']).toBe('Mon, 01 Mar 2027 00:00:00 GMT');
     expect(response.headers.link).toBe(
       '</docs?version=v2>; rel="successor-version"; title="v2"',
     );
@@ -232,8 +232,8 @@ describe('registerSecurityHeaders with a sunset Public API major', () => {
     await start('2028-01-01T00:00:00Z');
     const response = await app.inject({ method: method as 'GET', url });
 
-    expect(response.headers.deprecation).toBeUndefined();
-    expect(response.headers.sunset).toBeUndefined();
+    expect(response.headers['deprecation']).toBeUndefined();
+    expect(response.headers['sunset']).toBeUndefined();
     expect(response.headers.link).toBeUndefined();
   });
 });

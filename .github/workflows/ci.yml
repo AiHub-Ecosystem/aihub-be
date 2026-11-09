@@ -179,6 +179,14 @@ jobs:
       - name: Generate and validate OpenAPI
         run: bun run generate:openapi && bun run validate:openapi
 
+      # #1789: every generator writes deterministically, so a regenerated
+      # artifact that differs from the committed file is a stale contract
+      # shipping. The check regenerates all three and asserts the clean tree;
+      # it runs here, in a required job, because it rewrites the artifact
+      # files and must never run over a developer's uncommitted work.
+      - name: Check generated artifacts match the committed tree
+        run: node scripts/ci/generated-drift/check-generated-drift.mjs
+
       # The release gate runs on pushes to main too (#1398): work lands there
       # directly, and CD deploys whatever contract a push carries. A push
       # compares with the last revision CD deployed, not the commit before it:

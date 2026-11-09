@@ -13,17 +13,19 @@ function isRefreshCookieAuth(auth: unknown): boolean {
     return false;
   }
 
-  const apiKey = auth.apikey;
+  const apiKey = auth['apikey'];
   if (!Array.isArray(apiKey)) {
     return false;
   }
 
   const key = apiKey.find(
     (entry): entry is Record<string, unknown> =>
-      isRecord(entry) && entry.key === 'key' && typeof entry.value === 'string',
+      isRecord(entry) &&
+      entry['key'] === 'key' &&
+      typeof entry['value'] === 'string',
   );
 
-  return key?.value === REFRESH_COOKIE_NAME;
+  return key?.['value'] === REFRESH_COOKIE_NAME;
 }
 
 /**
@@ -44,11 +46,11 @@ export function normalizeRefreshCookieAuth(value: unknown): void {
   }
 
   const record = value;
-  const request = record.request;
+  const request = record['request'];
   if (isRecord(request)) {
     const requestRecord = request;
-    if (isRefreshCookieAuth(requestRecord.auth)) {
-      requestRecord.cookie = [
+    if (isRefreshCookieAuth(requestRecord['auth'])) {
+      requestRecord['cookie'] = [
         {
           key: REFRESH_COOKIE_NAME,
           value: '{{refreshToken}}',
@@ -57,13 +59,13 @@ export function normalizeRefreshCookieAuth(value: unknown): void {
           httpOnly: true,
         },
       ];
-      requestRecord.auth = undefined;
+      requestRecord['auth'] = undefined;
 
-      const path = isRecord(requestRecord.url)
-        ? requestRecord.url.path
+      const path = isRecord(requestRecord['url'])
+        ? requestRecord['url']['path']
         : undefined;
       const route = Array.isArray(path) ? path.join('/') : undefined;
-      requestRecord.event = [
+      requestRecord['event'] = [
         {
           listen: 'test',
           script: {
@@ -96,12 +98,12 @@ export function normalizeRefreshCookieAuth(value: unknown): void {
 
 export function addOrganizationRosterCheck(items: unknown[]): void {
   for (const item of items) {
-    if (!isRecord(item) || !isRecord(item.request)) {
+    if (!isRecord(item) || !isRecord(item['request'])) {
       continue;
     }
 
-    const url = item.request.url;
-    const path = isRecord(url) ? url.path : undefined;
+    const url = item['request']['url'];
+    const path = isRecord(url) ? url['path'] : undefined;
     // The OpenAPI document renders `:param` as `{param}`, so compare against
     // the OpenAPI spelling. A roster path carrying a parameter would otherwise
     // stop matching here without anything failing.
@@ -112,9 +114,9 @@ export function addOrganizationRosterCheck(items: unknown[]): void {
       continue;
     }
 
-    item.request.description =
+    item['request']['description'] =
       'Lists Organizations where the user has an active membership, including configured entitlement names. identity_configured reports saved active identity configuration only; it does not probe the JWKS source.';
-    item.event = [
+    item['event'] = [
       {
         listen: 'test',
         script: {
@@ -154,29 +156,30 @@ export function addBffClientSecret(items: unknown[]): void {
   for (const item of items) {
     if (!isRecord(item)) continue;
 
-    if (isRecord(item.request)) {
-      const url = item.request.url;
-      const path = isRecord(url) ? url.path : undefined;
+    if (isRecord(item['request'])) {
+      const url = item['request']['url'];
+      const path = isRecord(url) ? url['path'] : undefined;
       if (
         Array.isArray(path) &&
         path.every((part) => typeof part === 'string') &&
         BFF_API_KEY_PATHS.has(`/${path.join('/')}`)
       ) {
-        const headers = Array.isArray(item.request.header)
-          ? item.request.header
+        const headers = Array.isArray(item['request']['header'])
+          ? item['request']['header']
           : [];
         if (
           !headers.some(
             (header) =>
-              isRecord(header) && header.key === BFF_CLIENT_SECRET_HEADER.key,
+              isRecord(header) &&
+              header['key'] === BFF_CLIENT_SECRET_HEADER.key,
           )
         ) {
           headers.push(BFF_CLIENT_SECRET_HEADER);
         }
-        item.request.header = headers;
+        item['request']['header'] = headers;
       }
     }
 
-    if (Array.isArray(item.item)) addBffClientSecret(item.item);
+    if (Array.isArray(item['item'])) addBffClientSecret(item['item']);
   }
 }

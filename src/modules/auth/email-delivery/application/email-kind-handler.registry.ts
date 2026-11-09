@@ -63,9 +63,9 @@ function isInvitationRole(value: unknown): boolean {
 function hasUnrecognisedInvitationRole(value: unknown): boolean {
   return (
     isRecord(value) &&
-    typeof value.role === 'string' &&
-    value.role.length > 0 &&
-    !isInvitationRole(value.role) &&
+    typeof value['role'] === 'string' &&
+    value['role'].length > 0 &&
+    !isInvitationRole(value['role']) &&
     Value.Check(OrganizationInviteEmailDeliveryPayloadSchema, {
       ...value,
       role: INVITE_EMAIL_ROLES[0],

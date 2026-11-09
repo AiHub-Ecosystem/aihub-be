@@ -533,9 +533,9 @@ function addArgon2ConcurrencyProblem(
   problems: string[],
 ): void {
   if (
-    typeof values.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY === 'number' &&
-    typeof values.UV_THREADPOOL_SIZE === 'number' &&
-    values.AIHUB_AUTH_ARGON2_MAX_CONCURRENCY >= values.UV_THREADPOOL_SIZE
+    typeof values['AIHUB_AUTH_ARGON2_MAX_CONCURRENCY'] === 'number' &&
+    typeof values['UV_THREADPOOL_SIZE'] === 'number' &&
+    values['AIHUB_AUTH_ARGON2_MAX_CONCURRENCY'] >= values['UV_THREADPOOL_SIZE']
   ) {
     problems.push('AIHUB_AUTH_ARGON2_MAX_CONCURRENCY');
   }
@@ -545,10 +545,11 @@ function createRuntimeLoadContext(
   raw: Readonly<Record<string, string | undefined>>,
 ): RuntimeLoadContext {
   return {
-    modeValue: nonEmpty(raw.NODE_ENV) ?? 'production',
-    secretSource: nonEmpty(raw.AIHUB_RUNTIME_SECRET_SOURCE),
-    connectionFile: nonEmpty(raw.AIHUB_RUNTIME_SECRETS_FILE),
-    databaseScope: nonEmpty(raw.AIHUB_RUNTIME_DATABASE_SCOPE) ?? 'production',
+    modeValue: nonEmpty(raw['NODE_ENV']) ?? 'production',
+    secretSource: nonEmpty(raw['AIHUB_RUNTIME_SECRET_SOURCE']),
+    connectionFile: nonEmpty(raw['AIHUB_RUNTIME_SECRETS_FILE']),
+    databaseScope:
+      nonEmpty(raw['AIHUB_RUNTIME_DATABASE_SCOPE']) ?? 'production',
   };
 }
 
@@ -655,13 +656,13 @@ function loadRuntimeSettings(
   }
   if (
     context.secretSource === 'agent-file' &&
-    nonEmpty(raw.AIHUB_RUNTIME_SECRETS_FILE) === undefined
+    nonEmpty(raw['AIHUB_RUNTIME_SECRETS_FILE']) === undefined
   ) {
     step.problems.push('AIHUB_RUNTIME_SECRETS_FILE');
   }
   if (
     context.secretSource === 'agent-file' &&
-    nonEmpty(raw.AIHUB_AUTH_MFA_SECRETS_FILE) === undefined
+    nonEmpty(raw['AIHUB_AUTH_MFA_SECRETS_FILE']) === undefined
   ) {
     step.problems.push('AIHUB_AUTH_MFA_SECRETS_FILE');
   }
@@ -681,7 +682,7 @@ function loadConnectionSettings(
   context: RuntimeLoadContext,
 ): RuntimeLoadStep {
   const step = loadRuntimeFieldGroup(raw, context, 'connections');
-  if (raw.AIHUB_DATABASE_POOLER_ENABLED === 'true') {
+  if (raw['AIHUB_DATABASE_POOLER_ENABLED'] === 'true') {
     for (const name of [
       'AIHUB_POSTGRES_POOL_MAX_RUNTIME',
       'AIHUB_POSTGRES_POOL_MAX_CONTROL_PLANE',
@@ -703,7 +704,7 @@ function loadDeliverySettings(
   if (
     isProductionLike(context.modeValue as RuntimeMode) &&
     context.databaseScope !== 'sandbox' &&
-    nonEmpty(raw.CUSTOMER_WEB_BASE_URL) === undefined
+    nonEmpty(raw['CUSTOMER_WEB_BASE_URL']) === undefined
   ) {
     step.problems.push('CUSTOMER_WEB_BASE_URL');
   }
@@ -725,22 +726,22 @@ function loadStorageSettings(
   const step = loadRuntimeFieldGroup(raw, context, 'storage');
 
   if (
-    step.values.SEAWEEDFS_ENDPOINT_URL !== undefined &&
-    step.values.SEAWEEDFS_ENDPOINT_URL !== DEFAULT_SEAWEEDFS_ENDPOINT
+    step.values['SEAWEEDFS_ENDPOINT_URL'] !== undefined &&
+    step.values['SEAWEEDFS_ENDPOINT_URL'] !== DEFAULT_SEAWEEDFS_ENDPOINT
   ) {
     step.problems.push('SEAWEEDFS_ENDPOINT_URL');
   }
   if (
-    raw.SEAWEEDFS_ACCESS_KEY_ID !== undefined &&
-    nonEmpty(raw.SEAWEEDFS_ACCESS_KEY_ID) !== undefined &&
-    nonEmpty(raw.SEAWEEDFS_SECRET_ACCESS_KEY) === undefined
+    raw['SEAWEEDFS_ACCESS_KEY_ID'] !== undefined &&
+    nonEmpty(raw['SEAWEEDFS_ACCESS_KEY_ID']) !== undefined &&
+    nonEmpty(raw['SEAWEEDFS_SECRET_ACCESS_KEY']) === undefined
   ) {
     step.problems.push('SEAWEEDFS_SECRET_ACCESS_KEY');
   }
   if (
-    raw.SEAWEEDFS_SECRET_ACCESS_KEY !== undefined &&
-    nonEmpty(raw.SEAWEEDFS_SECRET_ACCESS_KEY) !== undefined &&
-    nonEmpty(raw.SEAWEEDFS_ACCESS_KEY_ID) === undefined
+    raw['SEAWEEDFS_SECRET_ACCESS_KEY'] !== undefined &&
+    nonEmpty(raw['SEAWEEDFS_SECRET_ACCESS_KEY']) !== undefined &&
+    nonEmpty(raw['SEAWEEDFS_ACCESS_KEY_ID']) === undefined
   ) {
     step.problems.push('SEAWEEDFS_ACCESS_KEY_ID');
   }

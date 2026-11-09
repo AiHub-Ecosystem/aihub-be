@@ -43,7 +43,7 @@ export async function runWritingChartUploadSweepCommand(
   let storage = input.storage;
   if (storage === undefined) {
     const environment =
-      process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+      process.env['AIHUB_RUNTIME_DATABASE_SCOPE'] === 'sandbox'
         ? 'sandbox'
         : 'production';
     storage = createCliWritingChartStorage(environment);

@@ -76,8 +76,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function requires(schema: unknown, name: string): boolean {
   return (
     isRecord(schema) &&
-    Array.isArray(schema.required) &&
-    schema.required.includes(name)
+    Array.isArray(schema['required']) &&
+    schema['required'].includes(name)
   );
 }
 
@@ -89,13 +89,13 @@ function requires(schema: unknown, name: string): boolean {
  */
 function dataCarriesStatus(schema: TSchema): boolean {
   const plain: unknown = JSON.parse(JSON.stringify(schema));
-  if (!isRecord(plain) || !isRecord(plain.properties)) return false;
-  const data = plain.properties.data;
+  if (!isRecord(plain) || !isRecord(plain['properties'])) return false;
+  const data = plain['properties']['data'];
   return (
     requires(plain, 'data') &&
     isRecord(data) &&
-    isRecord(data.properties) &&
-    'status' in data.properties &&
+    isRecord(data['properties']) &&
+    'status' in data['properties'] &&
     requires(data, 'status')
   );
 }

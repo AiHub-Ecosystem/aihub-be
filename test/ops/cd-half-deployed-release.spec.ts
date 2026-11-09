@@ -80,7 +80,7 @@ function runHostJobsStep(
       input: script,
       encoding: 'utf8',
       env: {
-        PATH: process.env.PATH ?? '',
+        PATH: process.env['PATH'] ?? '',
         APP_DIR: root,
         AIHUB_IMAGE: `ghcr.io/example/aihub:${TARGET}`,
         DEPLOY_OUTCOME: deployOutcome,

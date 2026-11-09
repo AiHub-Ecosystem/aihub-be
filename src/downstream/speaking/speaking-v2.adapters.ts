@@ -73,13 +73,14 @@ export const speakingV2QuestionGradingAdapter: DownstreamAdapter<
       part: String(input.part),
       question_id: input.questionId,
     };
-    if (input.promptText !== undefined) fields.prompt_text = input.promptText;
+    if (input.promptText !== undefined)
+      fields['prompt_text'] = input.promptText;
     if (input.testType !== undefined) {
-      fields.test_type = toProviderSpeakingTestType(input.testType);
+      fields['test_type'] = toProviderSpeakingTestType(input.testType);
     }
-    if (input.testCode !== undefined) fields.test_code = input.testCode;
+    if (input.testCode !== undefined) fields['test_code'] = input.testCode;
     if (input.partResultId !== undefined) {
-      fields.part_result_id = input.partResultId;
+      fields['part_result_id'] = input.partResultId;
     }
 
     const body: DownstreamMultipartBody = {

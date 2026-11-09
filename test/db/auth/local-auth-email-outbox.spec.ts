@@ -179,7 +179,7 @@ let sender: RecordingSender;
 let cipher: EmailPayloadCipherPort;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL = testDatabaseUrl();
+  process.env['DATABASE_URL'] = testDatabaseUrl();
   pool = createTestPool();
   await resetIdentityTables(pool);
 

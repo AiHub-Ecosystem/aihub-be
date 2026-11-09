@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { test } from 'node:test';
 
-import { buildBunTestArgs } from '../cli/run-bun-test.mjs';
+import { buildBunTestArgs } from '../../cli/run-bun-test.mjs';
 import { BATCHED_GATES, runBatch } from './check-batch.cjs';
 import {
   GATE_COMMANDS,
@@ -29,6 +29,7 @@ const pathCases = [
       'check:folder-entries',
       'check:imports',
       'check:imports:dist',
+      'check:log-redaction',
       'check:tenant-global',
       'knip',
       'lint',
@@ -49,6 +50,7 @@ const pathCases = [
       'check:folder-entries',
       'check:imports',
       'check:imports:dist',
+      'check:log-redaction',
       'check:tenant-global',
       'knip',
       'lint',
@@ -111,7 +113,7 @@ const pathCases = [
     gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
   },
   {
-    path: 'scripts/checks/check-app-errors.spec.ts',
+    path: 'scripts/checks/data/check-app-errors.spec.ts',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -122,7 +124,7 @@ const pathCases = [
     ],
   },
   {
-    path: 'scripts/checks/check-app-errors.ts',
+    path: 'scripts/checks/data/check-app-errors.ts',
     gates: [
       'check:app-errors',
       'check:doc-drift',
@@ -132,7 +134,7 @@ const pathCases = [
     ],
   },
   {
-    path: 'scripts/checks/check-changed.spec.mjs',
+    path: 'scripts/checks/changed/check-changed.spec.mjs',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -141,7 +143,7 @@ const pathCases = [
     ],
   },
   {
-    path: 'scripts/checks/issue-triage-hook.mjs',
+    path: 'scripts/checks/hooks/issue-triage-hook.mjs',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -150,7 +152,7 @@ const pathCases = [
     ],
   },
   {
-    path: 'scripts/checks/check-doc-drift.mjs',
+    path: 'scripts/checks/doc-drift/check-doc-drift.mjs',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -159,7 +161,29 @@ const pathCases = [
     ],
   },
   {
-    path: 'scripts/checks/lint-staged-config.spec.mjs',
+    // #1788: the redaction gate and its spec select each other, the way the
+    // doc-drift pair does.
+    path: 'scripts/checks/architecture/check-log-redaction.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'check:log-redaction',
+      'lint',
+      'test:log-redaction',
+    ],
+  },
+  {
+    path: 'scripts/checks/architecture/check-log-redaction.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'check:log-redaction',
+      'lint',
+      'test:log-redaction',
+    ],
+  },
+  {
+    path: 'scripts/checks/hooks/lint-staged-config.spec.mjs',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -208,8 +232,30 @@ const pathCases = [
     gates: ['check:doc-drift', 'format:check'],
   },
   {
+    // #1789: the workflow also wires the generated-artifact drift check, so
+    // its spec runs beside the secret-scan suite it already selected.
     path: '.github/workflows/ci.yml',
-    gates: ['format:check', 'test:secret-scan'],
+    gates: ['format:check', 'test:generated-drift', 'test:secret-scan'],
+  },
+  {
+    // #1789: the drift check and its spec select each other. The check itself
+    // is CI-only (the static job), so no local check gate maps here.
+    path: 'scripts/ci/generated-drift/check-generated-drift.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:generated-drift',
+    ],
+  },
+  {
+    path: 'scripts/ci/generated-drift/check-generated-drift.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:generated-drift',
+    ],
   },
   {
     path: 'ops/nginx/site.conf',
@@ -227,6 +273,7 @@ const pathCases = [
       'check:file-size',
       'check:imports',
       'check:imports:dist',
+      'check:log-redaction',
       'check:tenant-global',
       'knip',
       'lint',
@@ -277,7 +324,7 @@ const pathCases = [
     // #1777: the spec that pins the cached format:check command and proves
     // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
     // so the gate set is widened by that layer.
-    path: 'scripts/checks/format-check-cache.spec.mjs',
+    path: 'scripts/checks/changed/format-check-cache.spec.mjs',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -403,7 +450,9 @@ for (const { path, gates } of pathCases) {
 }
 
 await test('a changed non-TypeScript spec does not select the Jest gate (#1631)', () => {
-  const { gates } = planChangedFiles(['scripts/checks/check-changed.spec.mjs']);
+  const { gates } = planChangedFiles([
+    'scripts/checks/changed/check-changed.spec.mjs',
+  ]);
   assert.ok(!gates.includes('test:jest-specs'));
 });
 
@@ -438,6 +487,7 @@ await test('a mixed diff keeps the full union of gates (#1634)', () => {
     'check:folder-entries',
     'check:imports',
     'check:imports:dist',
+    'check:log-redaction',
     'check:tenant-global',
     'knip',
     'lint',
@@ -747,6 +797,7 @@ await test('plans independent gates as one concurrent batch and keeps dependents
         'check:domain-globals',
         'check:file-size',
         'check:imports',
+        'check:log-redaction',
         'check:tenant-global',
       ]);
       return { failed: [] };
@@ -756,7 +807,7 @@ await test('plans independent gates as one concurrent batch and keeps dependents
 
   assert.equal(result, 'passed');
   assert.deepEqual(order.slice(0, 2), [
-    'batch:check:data-ownership,check:deprecation,check:doc-drift,check:domain-globals,check:file-size,check:imports,check:tenant-global',
+    'batch:check:data-ownership,check:deprecation,check:doc-drift,check:domain-globals,check:file-size,check:imports,check:log-redaction,check:tenant-global',
     'gate:arch-check',
   ]);
   for (const gate of ['lint', 'type-check', 'build', 'test:related']) {
@@ -839,12 +890,12 @@ await test('the entry-point comparison holds on both path shapes', () => {
   const [moduleUrl, argv1] =
     process.platform === 'win32'
       ? [
-          'file:///D:/repo/scripts/checks/check-changed.mjs',
-          String.raw`D:\repo\scripts\checks\check-changed.mjs`,
+          'file:///D:/repo/scripts/checks/changed/check-changed.mjs',
+          String.raw`D:\repo\scripts\checks\changed\check-changed.mjs`,
         ]
       : [
-          'file:///repo/scripts/checks/check-changed.mjs',
-          '/repo/scripts/checks/check-changed.mjs',
+          'file:///repo/scripts/checks/changed/check-changed.mjs',
+          '/repo/scripts/checks/changed/check-changed.mjs',
         ];
   assert.equal(
     isEntryPoint(moduleUrl, argv1),
@@ -853,7 +904,7 @@ await test('the entry-point comparison holds on both path shapes', () => {
   );
   assert.equal(
     isEntryPoint(
-      'file:///repo/scripts/checks/check-changed.mjs',
+      'file:///repo/scripts/checks/changed/check-changed.mjs',
       '/repo/scripts/checks/other.mjs',
     ),
     false,

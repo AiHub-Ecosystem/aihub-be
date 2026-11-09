@@ -7,6 +7,7 @@ const script = join(
   process.cwd(),
   'scripts',
   'checks',
+  'data',
   'check-tenant-global.mjs',
 );
 

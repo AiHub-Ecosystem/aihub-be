@@ -67,7 +67,7 @@ let authClient: PostgresAuthClient;
 let hasher: Argon2PasswordHasher;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL = testDatabaseUrl();
+  process.env['DATABASE_URL'] = testDatabaseUrl();
   pool = createTestPool();
   await resetIdentityTables(pool);
 

@@ -4,7 +4,7 @@ Read this before starting a full `bun run verify` loop, and whenever a run dies 
 
 The default `bun run test` and `bun run verify` unit lane uses Bun 1.4.4 with per-file isolation and `--smol`. CI also runs `bun run coverage:unit` with Jest and SWC because its Istanbul report supplies branch records required by the merged-coverage gate. The Jest coverage lane is memory-bound on a developer machine, not worker-bound. `jest.config.cjs` caps it at two workers, and the database lanes run `--runInBand` behind a Postgres advisory lane lock, so two concurrent `bun run test:db` invocations wait for each other instead of interleaving. CI runs the same coverage and database scripts under the same caps, so there is no lower-worker CI mode to fall back on.
 
-Check free memory before running `bun run coverage:unit`. Jest lowers its worker count from measured free memory (`scripts/checks/jest-worker-cap.cjs`: a two GiB per worker budget, never above the two it replaces, never below one) and prints one warning line when it does. With less than 4 GiB free it uses one worker; otherwise it uses two. Proceed with `bun run verify` without asking for confirmation or deferring it solely because free RAM is low. Pin a count with `AIHUB_JEST_MAX_WORKERS` when you know the machine better than the budget does; an unusable value fails at config load, not silently. One worker can still exhaust memory on a saturated host; if that happens, follow the worker/heap-death procedure in `AGENTS.md` and report the run as inconclusive. Setting `NODE_OPTIONS=--max-old-space-size` helps only while physical memory remains; on a saturated host it postpones the crash and makes it larger.
+Check free memory before running `bun run coverage:unit`. Jest lowers its worker count from measured free memory (`scripts/checks/jest/jest-worker-cap.cjs`: a two GiB per worker budget, never above the two it replaces, never below one) and prints one warning line when it does. With less than 4 GiB free it uses one worker; otherwise it uses two. Proceed with `bun run verify` without asking for confirmation or deferring it solely because free RAM is low. Pin a count with `AIHUB_JEST_MAX_WORKERS` when you know the machine better than the budget does; an unusable value fails at config load, not silently. One worker can still exhaust memory on a saturated host; if that happens, follow the worker/heap-death procedure in `AGENTS.md` and report the run as inconclusive. Setting `NODE_OPTIONS=--max-old-space-size` helps only while physical memory remains; on a saturated host it postpones the crash and makes it larger.
 
 Run one full loop at a time on a machine. Concurrent agents double the resident workers, and that overlap, not the code under test, is the usual source of a heap death here.
 
@@ -26,3 +26,18 @@ Run one full loop at a time on a machine. Concurrent agents double the resident 
 5. Remove the container, then run `bun run lint` before any `bun run verify`: the lane regenerates `dist/generated/prisma` in runtime mode, and lint regenerates the plain client that type-aware lint needs.
 
 Specs that need Redis fail with `ECONNREFUSED` when no throwaway Redis exists; that is the environment, not the code. Do not run the lane while `bun run verify` runs, since both write `dist/generated/prisma`.
+
+## Multi-commit branch verification
+
+When a pull request delivers multiple ordered commits, every intermediate commit must remain bisect-friendly and compile independently. Run `git rebase --exec "bunx tsc --noEmit" <base>` across the branch range before opening the pull request to verify that intermediate commits do not have broken imports.
+
+## Windows cross-drive worktrees and lint-staged backup
+
+On Windows, when a Git worktree sits on a different drive than the primary repository Git directory (e.g. `C:\...` worktree pointing to `D:\aihub-be\.git`), `lint-staged`'s automatic stash backup in Husky's pre-commit hook can fail with `✖ Failed to back up original state!`.
+
+When this happens:
+
+1. Verify staged files directly: `bunx lint-staged`.
+2. Run `bun run check:changed`.
+3. Commit with `--no-verify`.
+4. Validate the commit message immediately with `git log -1 --format=%B | node scripts/checks/hooks/commit-message.mjs`.

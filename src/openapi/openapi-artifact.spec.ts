@@ -84,13 +84,13 @@ describe('committed openapi.json', () => {
     expect(JSON.stringify(path.put?.requestBody)).toContain('jwks_url');
     expect(path.put?.responses?.['409']).toBeDefined();
     expect(path.put?.responses?.['503']).toBeDefined();
-    expect(JSON.stringify(document.components.responses.Error400)).toContain(
+    expect(JSON.stringify(document.components.responses['Error400'])).toContain(
       'IDENTITY_JWKS_URL_UNSAFE',
     );
-    expect(JSON.stringify(document.components.responses.Error400)).toContain(
+    expect(JSON.stringify(document.components.responses['Error400'])).toContain(
       'IDENTITY_JWKS_INVALID',
     );
-    expect(JSON.stringify(document.components.responses.Error503)).toContain(
+    expect(JSON.stringify(document.components.responses['Error503'])).toContain(
       'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
     );
   });

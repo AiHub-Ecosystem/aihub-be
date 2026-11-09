@@ -218,11 +218,11 @@ function mapRosterRow(value: unknown): RosterRow | undefined {
     value,
     'organization_status',
   );
-  const organizationEntitlements = value.organization_entitlements;
-  const identityConfigStatus = value.identity_config_status;
+  const organizationEntitlements = value['organization_entitlements'];
+  const identityConfigStatus = value['identity_config_status'];
   const identityConfigured = identityConfigStatus === 'active';
   const callerRole = membershipRoleValue(value, 'caller_role');
-  const memberCount = value.member_count;
+  const memberCount = value['member_count'];
   const memberUsername = stringValue(value, 'member_username');
   const memberRole = membershipRoleValue(value, 'member_role');
 
@@ -332,23 +332,23 @@ function mapOrganizationMembershipListRows(
   }
 
   const first = rows[0];
-  if (!isRecord(first) || typeof first.authorized !== 'boolean') {
+  if (!isRecord(first) || typeof first['authorized'] !== 'boolean') {
     throw invalidIdentityData();
   }
 
-  const authorized = first.authorized;
+  const authorized = first['authorized'];
   const members: ListedOrganizationMember[] = [];
   let emptyProjectionCount = 0;
 
   for (const value of rows) {
-    if (!isRecord(value) || value.authorized !== authorized) {
+    if (!isRecord(value) || value['authorized'] !== authorized) {
       throw invalidIdentityData();
     }
 
     if (
-      value.member_username === null &&
-      value.member_role === null &&
-      value.member_status === null
+      value['member_username'] === null &&
+      value['member_role'] === null &&
+      value['member_status'] === null
     ) {
       emptyProjectionCount += 1;
       continue;

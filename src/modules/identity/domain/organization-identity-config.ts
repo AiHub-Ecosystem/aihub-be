@@ -38,13 +38,15 @@ function base64UrlString(value: unknown): value is string {
 }
 
 function hasPublicKeyMaterial(key: Record<string, unknown>): boolean {
-  if (key.kty === 'RSA') {
-    return base64UrlString(key.n) && base64UrlString(key.e);
+  if (key['kty'] === 'RSA') {
+    return base64UrlString(key['n']) && base64UrlString(key['e']);
   }
 
-  if (key.kty === 'EC') {
+  if (key['kty'] === 'EC') {
     return (
-      key.crv === 'P-256' && base64UrlString(key.x) && base64UrlString(key.y)
+      key['crv'] === 'P-256' &&
+      base64UrlString(key['x']) &&
+      base64UrlString(key['y'])
     );
   }
 
@@ -53,21 +55,21 @@ function hasPublicKeyMaterial(key: Record<string, unknown>): boolean {
 
 function hasUsableKeyMetadata(key: Record<string, unknown>): boolean {
   if (
-    key.kid !== undefined &&
-    (typeof key.kid !== 'string' || key.kid.length === 0)
+    key['kid'] !== undefined &&
+    (typeof key['kid'] !== 'string' || key['kid'].length === 0)
   ) {
     return false;
   }
 
-  if (key.use !== undefined && key.use !== 'sig') {
+  if (key['use'] !== undefined && key['use'] !== 'sig') {
     return false;
   }
 
-  if (key.key_ops !== undefined) {
+  if (key['key_ops'] !== undefined) {
     return (
-      Array.isArray(key.key_ops) &&
-      key.key_ops.every((operation) => typeof operation === 'string') &&
-      key.key_ops.includes('verify')
+      Array.isArray(key['key_ops']) &&
+      key['key_ops'].every((operation) => typeof operation === 'string') &&
+      key['key_ops'].includes('verify')
     );
   }
 
@@ -79,14 +81,14 @@ export function parsePublicJsonWebKeySet(
 ): PublicJsonWebKeySet | undefined {
   if (
     !isRecord(value) ||
-    !Array.isArray(value.keys) ||
-    value.keys.length === 0
+    !Array.isArray(value['keys']) ||
+    value['keys'].length === 0
   ) {
     return undefined;
   }
 
   const keys: PublicJsonWebKey[] = [];
-  for (const candidate of value.keys) {
+  for (const candidate of value['keys']) {
     if (
       !isRecord(candidate) ||
       !hasPublicKeyMaterial(candidate) ||
@@ -102,16 +104,16 @@ export function parsePublicJsonWebKeySet(
     }
 
     if (
-      candidate.alg !== undefined &&
-      candidate.alg !== 'RS256' &&
-      candidate.alg !== 'ES256'
+      candidate['alg'] !== undefined &&
+      candidate['alg'] !== 'RS256' &&
+      candidate['alg'] !== 'ES256'
     ) {
       return undefined;
     }
 
     if (
-      (candidate.alg === 'RS256' && candidate.kty !== 'RSA') ||
-      (candidate.alg === 'ES256' && candidate.kty !== 'EC')
+      (candidate['alg'] === 'RS256' && candidate['kty'] !== 'RSA') ||
+      (candidate['alg'] === 'ES256' && candidate['kty'] !== 'EC')
     ) {
       return undefined;
     }

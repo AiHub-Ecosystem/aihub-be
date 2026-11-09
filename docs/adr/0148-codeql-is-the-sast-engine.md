@@ -39,7 +39,7 @@ then needs GitHub Advanced Security.
 ## Gate
 
 The scan runs with `upload: never`, uploads the SARIF in a separate step, and
-then `scripts/checks/codeql-gate.ts` decides the job result. A finding passes
+then `scripts/checks/codeql/codeql-gate.ts` decides the job result. A finding passes
 when the scanner marks it suppressed or `.github/codeql/triage.json` holds an
 entry for that one alert with a written reason. Any other finding fails the
 job. A SARIF file with no runs also fails, so a scan that did not happen
@@ -68,7 +68,7 @@ static parts, or a same-file `const` that holds one. It also rejects a use of
 either method that is not a direct call (destructured, `.bind`, `.call`).
 
 A `WHERE` or `ORDER BY` fragment built from a closed set is listed once, in
-`SQL_FRAGMENT_ALLOWLIST` in `scripts/checks/check-architecture.mjs`. A template
+`SQL_FRAGMENT_ALLOWLIST` in `scripts/checks/architecture/check-architecture.mjs`. A template
 literal may interpolate a call to a listed builder (today `billableRequestSql`)
 when it is imported from the listed module and its arguments are literals.
 Adding a builder means adding it to that list after review; a request value

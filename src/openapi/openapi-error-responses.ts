@@ -78,7 +78,7 @@ export function buildErrorResponses(
       },
     };
   }
-  responses.AuthRateLimited = {
+  responses['AuthRateLimited'] = {
     description:
       'An authentication rate budget is exhausted. The refusal is the same one on every authentication route, so the response always carries the wait in `retry_after_ms` and, whenever a wait is known, in the `Retry-After` header.',
     headers: {

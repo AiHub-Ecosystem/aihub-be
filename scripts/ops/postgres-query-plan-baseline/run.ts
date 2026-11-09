@@ -21,14 +21,14 @@ const SANDBOX_RESERVATION_COUNT = BASELINE.sandboxReservationCount;
 const RETENTION_SPAN_SECONDS = BASELINE.retentionSpanSeconds;
 
 function localAdminUrl(): string {
-  if (process.env.AIHUB_POSTGRES_BASELINE !== '1') {
+  if (process.env['AIHUB_POSTGRES_BASELINE'] !== '1') {
     throw new Error(
       'Set AIHUB_POSTGRES_BASELINE=1 to create and drop a disposable local database',
     );
   }
 
   const connectionString =
-    process.env.DB_LANE_ADMIN_URL?.trim() || DEFAULT_ADMIN_URL;
+    process.env['DB_LANE_ADMIN_URL']?.trim() || DEFAULT_ADMIN_URL;
   const url = new URL(connectionString);
   if (
     !['postgres:', 'postgresql:'].includes(url.protocol) ||

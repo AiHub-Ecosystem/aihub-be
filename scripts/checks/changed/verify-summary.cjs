@@ -150,7 +150,7 @@ function run() {
   const logPath = path.join(directory, logFileName(new Date()));
 
   const child = spawn('bun', ['run', 'verify'], {
-    cwd: path.join(__dirname, '..', '..'),
+    cwd: path.join(__dirname, '..', '..', '..'),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 

@@ -134,12 +134,12 @@ describe('PostgresUserAccountStatusRepository', () => {
       const auditData = (
         auditCreate.args[0] as { data: Record<string, unknown> }
       ).data;
-      expect(auditData.userAccountId).toBe(TARGET_USER_ID);
-      expect(auditData.actorUserAccountId).toBe(ACTOR_ID);
-      expect(auditData.action).toBe('user_account.disabled');
-      expect(auditData.actorSource).toBe('self_declared_operator');
-      expect(auditData.requestId).toBe(REQUEST_ID);
-      expect(auditData.occurredAt).toBe(NOW);
+      expect(auditData['userAccountId']).toBe(TARGET_USER_ID);
+      expect(auditData['actorUserAccountId']).toBe(ACTOR_ID);
+      expect(auditData['action']).toBe('user_account.disabled');
+      expect(auditData['actorSource']).toBe('self_declared_operator');
+      expect(auditData['requestId']).toBe(REQUEST_ID);
+      expect(auditData['occurredAt']).toBe(NOW);
 
       // Verify email verification token consumed_reason is superseded
       const tokenUpdate = script.statements.find(
@@ -149,7 +149,7 @@ describe('PostgresUserAccountStatusRepository', () => {
       const tokenData = (
         tokenUpdate.args[0] as { data: Record<string, unknown> }
       ).data;
-      expect(tokenData.consumedReason).toBe('superseded');
+      expect(tokenData['consumedReason']).toBe('superseded');
     });
   });
 
@@ -254,9 +254,9 @@ describe('PostgresUserAccountStatusRepository', () => {
       const auditData = (
         auditCreate.args[0] as { data: Record<string, unknown> }
       ).data;
-      expect(auditData.userAccountId).toBe(TARGET_USER_ID);
-      expect(auditData.actorUserAccountId).toBe(ACTOR_ID);
-      expect(auditData.action).toBe('user_account.restored');
+      expect(auditData['userAccountId']).toBe(TARGET_USER_ID);
+      expect(auditData['actorUserAccountId']).toBe(ACTOR_ID);
+      expect(auditData['action']).toBe('user_account.restored');
     });
   });
 
@@ -307,9 +307,9 @@ describe('PostgresUserAccountStatusRepository', () => {
       const auditData = (
         auditCreate.args[0] as { data: Record<string, unknown> }
       ).data;
-      expect(auditData.userAccountId).toBeNull();
-      expect(auditData.actorUserAccountId).toBe(ACTOR_ID);
-      expect(auditData.action).toBe('refresh_session.revoked_all');
+      expect(auditData['userAccountId']).toBeNull();
+      expect(auditData['actorUserAccountId']).toBe(ACTOR_ID);
+      expect(auditData['action']).toBe('refresh_session.revoked_all');
     });
   });
 });

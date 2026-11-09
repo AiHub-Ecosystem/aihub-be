@@ -91,13 +91,13 @@ describe('Speaking v2 response adapters', () => {
     const noCriteria = fixture('grading-v2-question-post.200.json') as {
       data: Record<string, unknown>;
     };
-    delete noCriteria.data.criteria;
+    delete noCriteria.data['criteria'];
     expect(() => parseSpeakingV2QuestionResult(noCriteria)).toThrow(AppError);
 
     const noTranscript = fixture('grading-v2-question-post.200.json') as {
       data: Record<string, unknown>;
     };
-    noTranscript.data.transcript = null;
+    noTranscript.data['transcript'] = null;
     expect(() => parseSpeakingV2QuestionResult(noTranscript)).toThrow(AppError);
   });
 
@@ -110,10 +110,10 @@ describe('Speaking v2 response adapters', () => {
         transcript: { stats: Record<string, unknown> };
       };
     };
-    body.data.meta.test_id = null;
-    body.data.meta.part_result_id = null;
-    body.data.transcript.stats.speaking_seconds = null;
-    body.data.transcript.stats.word_count = null;
+    body.data.meta['test_id'] = null;
+    body.data.meta['part_result_id'] = null;
+    body.data.transcript.stats['speaking_seconds'] = null;
+    body.data.transcript.stats['word_count'] = null;
 
     const result = parseSpeakingV2QuestionResult(body);
 
@@ -129,7 +129,7 @@ describe('Speaking v2 response adapters', () => {
     'accepts a null total_speaking_seconds on %s, which the provider returns for recordings without speech',
     (name, parse) => {
       const body = fixture(name) as { data: { meta: Record<string, unknown> } };
-      body.data.meta.total_speaking_seconds = null;
+      body.data.meta['total_speaking_seconds'] = null;
 
       expect(parse(body).meta.total_speaking_seconds).toBeNull();
     },
@@ -142,12 +142,12 @@ describe('Speaking v2 response adapters', () => {
       };
     };
     const finding =
-      body.data.criteria.grammatical_range_accuracy?.diagnostics[0];
+      body.data.criteria['grammatical_range_accuracy']?.diagnostics[0];
     if (finding === undefined) throw new Error('fixture has no finding');
-    finding.error_codes = null;
-    finding.explain_vi = null;
-    finding.improvement = null;
-    finding.improvement_vi = null;
+    finding['error_codes'] = null;
+    finding['explain_vi'] = null;
+    finding['improvement'] = null;
+    finding['improvement_vi'] = null;
 
     const result = parseSpeakingV2QuestionResult(body);
 
@@ -160,13 +160,13 @@ describe('Speaking v2 response adapters', () => {
     const missing = fixture('grading-v2-question-post.200.json') as {
       data: { scores: Record<string, unknown> };
     };
-    delete missing.data.scores.overall;
+    delete missing.data.scores['overall'];
     expect(() => parseSpeakingV2QuestionResult(missing)).toThrow(AppError);
 
     const mistyped = fixture('grading-v2-question-post.200.json') as {
       data: { scores: Record<string, unknown> };
     };
-    mistyped.data.scores.overall = '7.5';
+    mistyped.data.scores['overall'] = '7.5';
     expect(() => parseSpeakingV2QuestionResult(mistyped)).toThrow(AppError);
   });
 });

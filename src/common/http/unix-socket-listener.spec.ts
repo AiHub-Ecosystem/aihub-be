@@ -43,7 +43,7 @@ function call(
 async function startApp(socketPath: string) {
   const app = Fastify(createAppFastifyProxyOptions('172.16.7.1', socketPath));
   app.get('/caller-ip', (request) => ({ ip: request.ip ?? null }));
-  if (process.platform === 'win32' && process.versions.bun !== undefined) {
+  if (process.platform === 'win32' && process.versions['bun'] !== undefined) {
     // shortcut: Bun on Windows cannot listen on named pipes; use loopback TCP until it can.
     const server = createServer((request, response) => {
       app.routing(request, response);

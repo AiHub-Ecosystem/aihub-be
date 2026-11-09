@@ -75,26 +75,26 @@ function readVerificationAccount(
 ): LockedVerificationAccount | undefined {
   if (
     row === undefined ||
-    typeof row.id !== 'string' ||
-    (row.status !== 'pending_verification' && row.status !== 'active')
+    typeof row['id'] !== 'string' ||
+    (row['status'] !== 'pending_verification' && row['status'] !== 'active')
   ) {
     return undefined;
   }
-  return { id: row.id, status: row.status };
+  return { id: row['id'], status: row['status'] };
 }
 
 function readVerificationToken(
   row: Readonly<Record<string, unknown>> | undefined,
   now: Date,
 ): LockedVerificationToken | undefined {
-  if (row === undefined || typeof row.id !== 'string') return undefined;
+  if (row === undefined || typeof row['id'] !== 'string') return undefined;
 
-  const expiresAt = row.expires_at;
-  const consumedAt = row.consumed_at;
-  const consumedReason = row.consumed_reason;
-  const browserBindingHash = row.browser_binding_hash;
-  const signedInAt = row.signed_in_at;
-  const requiresProof = row.requires_password;
+  const expiresAt = row['expires_at'];
+  const consumedAt = row['consumed_at'];
+  const consumedReason = row['consumed_reason'];
+  const browserBindingHash = row['browser_binding_hash'];
+  const signedInAt = row['signed_in_at'];
+  const requiresProof = row['requires_password'];
 
   if (
     !(expiresAt instanceof Date) ||
@@ -118,7 +118,7 @@ function readVerificationToken(
         ? 'verified'
         : 'spent';
   return {
-    id: row.id,
+    id: row['id'],
     state,
     requiresProof,
     signInClaimed: signedInAt !== null,
@@ -418,14 +418,14 @@ export class PostgresVerificationTokenRepository
     const row = rows[0];
     if (
       row === undefined ||
-      typeof row.requires_password !== 'boolean' ||
-      typeof row.password_hash !== 'string'
+      typeof row['requires_password'] !== 'boolean' ||
+      typeof row['password_hash'] !== 'string'
     ) {
       return undefined;
     }
     return {
-      requiresPassword: row.requires_password,
-      passwordHash: row.password_hash,
+      requiresPassword: row['requires_password'],
+      passwordHash: row['password_hash'],
     };
   }
 
@@ -465,7 +465,7 @@ export class PostgresVerificationTokenRepository
       `,
       [accountId],
     );
-    return rows[0]?.password_hash === verifiedPasswordHash;
+    return rows[0]?.['password_hash'] === verifiedPasswordHash;
   }
 
   /**

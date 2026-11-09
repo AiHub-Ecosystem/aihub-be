@@ -74,12 +74,12 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     throw internalError('stored invitation replay is invalid');
   }
 
-  const invitationId = value.invitationId;
-  const organizationId = value.organizationId;
-  const email = value.email;
-  const role = value.role;
-  const expiresAt = value.expiresAt;
-  const emailDeliveryStatus = value.emailDeliveryStatus;
+  const invitationId = value['invitationId'];
+  const organizationId = value['organizationId'];
+  const email = value['email'];
+  const role = value['role'];
+  const expiresAt = value['expiresAt'];
+  const emailDeliveryStatus = value['emailDeliveryStatus'];
   if (
     typeof invitationId !== 'string' ||
     typeof organizationId !== 'string' ||

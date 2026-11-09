@@ -192,7 +192,7 @@ describe('Organization suspension against PostgreSQL', () => {
 
     expect(await snapshot()).toEqual(before);
     expect(await authenticatedOrganizationStatus()).toBe('active');
-    expect((await events()).map((event) => event.action)).toEqual([
+    expect((await events()).map((event) => event['action'])).toEqual([
       'organization.suspended',
       'organization.restored',
     ]);

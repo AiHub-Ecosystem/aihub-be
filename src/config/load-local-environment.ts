@@ -14,7 +14,7 @@ const DEPLOYED_MODES = new Set(['production', 'staging']);
  * behavior: the file loads, and it may itself declare `NODE_ENV=development`.
  */
 export function loadLocalEnvironment(
-  mode: string | undefined = process.env.NODE_ENV,
+  mode: string | undefined = process.env['NODE_ENV'],
   directory: string = process.cwd(),
 ): void {
   const envFile = join(directory, '.env');

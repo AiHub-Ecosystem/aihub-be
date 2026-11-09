@@ -51,7 +51,7 @@ describe('dispatch attempt identity against PostgreSQL', () => {
       );
 
       expect(rows).toHaveLength(2);
-      expect(rows.map((row) => row.stored.organization_id)).toEqual([
+      expect(rows.map((row) => row.stored['organization_id'])).toEqual([
         ORGANIZATION_A,
         ORGANIZATION_B,
       ]);

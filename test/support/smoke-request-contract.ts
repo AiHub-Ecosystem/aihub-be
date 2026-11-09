@@ -105,8 +105,8 @@ function expectedHeaders(
   const headers: { name: string; required: boolean }[] = [];
   // An operation without its own `security` inherits the document's.
   const inherited = member(document, 'security');
-  const security = Array.isArray(operation.security)
-    ? operation.security
+  const security = Array.isArray(operation['security'])
+    ? operation['security']
     : Array.isArray(inherited)
       ? inherited
       : [];
@@ -127,8 +127,8 @@ function expectedHeaders(
       }
     }
   }
-  const parameters = Array.isArray(operation.parameters)
-    ? operation.parameters
+  const parameters = Array.isArray(operation['parameters'])
+    ? operation['parameters']
     : [];
   for (const raw of parameters) {
     const parameter = resolveRef(document, raw);
@@ -157,8 +157,8 @@ export function expectedRequestFrom(
     resolveRef(document, member(content[mediaType], 'schema')),
     'request schema',
   );
-  const required = Array.isArray(schema.required) ? schema.required : [];
-  const properties = need(schema.properties, 'request properties');
+  const required = Array.isArray(schema['required']) ? schema['required'] : [];
+  const properties = need(schema['properties'], 'request properties');
   return {
     method,
     path,

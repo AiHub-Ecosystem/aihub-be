@@ -104,7 +104,7 @@
     },
     {
       "ruleId": "js/insecure-temporary-file",
-      "path": "scripts/checks/verify-summary.cjs",
+      "path": "scripts/checks/changed/verify-summary.cjs",
       "fingerprint": "97ee09b50099a7cd:1",
       "reason": "Developer verify log under the OS temp dir; holds no secret and its path is printed for the same user."
     },

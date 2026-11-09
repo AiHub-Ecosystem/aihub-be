@@ -158,12 +158,12 @@ function repositoryError(message: string, cause?: unknown): AppError {
 function requestIdFrom(row: unknown): string {
   if (
     !isRecord(row) ||
-    typeof row.request_id !== 'string' ||
-    row.request_id.length === 0
+    typeof row['request_id'] !== 'string' ||
+    row['request_id'].length === 0
   ) {
     throw repositoryError('Idempotency record is malformed');
   }
-  return row.request_id;
+  return row['request_id'];
 }
 
 function requireMutationResult(
@@ -182,39 +182,39 @@ function reservationFromRow(row: unknown): IdempotencyReservation {
   }
 
   if (
-    typeof row.request_id !== 'string' ||
-    row.request_id.length === 0 ||
+    typeof row['request_id'] !== 'string' ||
+    row['request_id'].length === 0 ||
     !('response_status' in row) ||
     !('response_body' in row)
   ) {
     throw repositoryError('Idempotency record is malformed');
   }
 
-  const state = row.state;
+  const state = row['state'];
   if (state === 'pending') {
-    if (row.response_status !== null || row.response_body !== null) {
+    if (row['response_status'] !== null || row['response_body'] !== null) {
       throw repositoryError('Idempotency record is malformed');
     }
     return { kind: 'conflict', reason: 'pending' };
   }
   if (state === 'failed') {
-    if (row.response_status !== null || row.response_body !== null) {
+    if (row['response_status'] !== null || row['response_body'] !== null) {
       throw repositoryError('Idempotency record is malformed');
     }
     return { kind: 'conflict', reason: 'pending' };
   }
   if (
     state !== 'completed' ||
-    typeof row.response_status !== 'number' ||
-    !Number.isInteger(row.response_status) ||
-    row.response_body === null
+    typeof row['response_status'] !== 'number' ||
+    !Number.isInteger(row['response_status']) ||
+    row['response_body'] === null
   ) {
     throw repositoryError('Idempotency record is malformed');
   }
   return {
     kind: 'replay',
-    responseStatus: row.response_status,
-    responseBody: row.response_body,
+    responseStatus: row['response_status'],
+    responseBody: row['response_body'],
   };
 }
 

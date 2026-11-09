@@ -16,8 +16,8 @@ export function isRosterCursorPosition(
 ): value is RosterCursorPosition {
   return (
     isRecord(value) &&
-    typeof value.organizationId === 'string' &&
-    value.organizationId.length > 0
+    typeof value['organizationId'] === 'string' &&
+    value['organizationId'].length > 0
   );
 }
 

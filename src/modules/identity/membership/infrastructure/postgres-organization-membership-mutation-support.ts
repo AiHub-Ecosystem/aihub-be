@@ -171,7 +171,7 @@ function ownerCount(value: unknown): number | undefined {
     return undefined;
   }
 
-  const raw = value.owner_count;
+  const raw = value['owner_count'];
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
     return raw;
   }

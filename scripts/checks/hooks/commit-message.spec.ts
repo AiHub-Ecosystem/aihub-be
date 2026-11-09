@@ -3,7 +3,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const script = join(process.cwd(), 'scripts', 'checks', 'commit-message.mjs');
+const script = join(
+  process.cwd(),
+  'scripts',
+  'checks',
+  'hooks',
+  'commit-message.mjs',
+);
 
 function run(message: string) {
   const directory = mkdtempSync(join(tmpdir(), 'aihub-commit-message-'));

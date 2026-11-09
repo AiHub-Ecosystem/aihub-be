@@ -46,7 +46,7 @@ async function build(): Promise<Record<string, unknown>> {
 }
 
 function findD1Folder(collection: Record<string, unknown>): PostmanItemGroup {
-  const item = collection.item as readonly PostmanItemGroup[];
+  const item = collection['item'] as readonly PostmanItemGroup[];
   const folder = item.find((entry) =>
     entry.name.startsWith('D1 handover test cases'),
   );
@@ -59,7 +59,7 @@ function findD1Folder(collection: Record<string, unknown>): PostmanItemGroup {
 function findIdempotencyFolder(
   collection: Record<string, unknown>,
 ): PostmanItemGroup {
-  const item = collection.item as readonly PostmanItemGroup[];
+  const item = collection['item'] as readonly PostmanItemGroup[];
   const folder = item.find(
     (entry) => entry.name === 'Idempotency mode examples',
   );
@@ -72,7 +72,7 @@ function findIdempotencyFolder(
 function findConcurrencyFolder(
   collection: Record<string, unknown>,
 ): PostmanItemGroup {
-  const item = collection.item as readonly PostmanItemGroup[];
+  const item = collection['item'] as readonly PostmanItemGroup[];
   const folder = item.find(
     (entry) => entry.name === 'Concurrency limit examples',
   );
@@ -93,7 +93,7 @@ describe('buildPostmanCollection', () => {
 
   it('declares baseUrl and apiKey as collection variables', async () => {
     const collection = await build();
-    const variables = collection.variable as readonly {
+    const variables = collection['variable'] as readonly {
       key: string;
       value: string;
     }[];
@@ -109,7 +109,7 @@ describe('buildPostmanCollection', () => {
 
   it('represents refresh and logout credentials as a Postman cookie, not a header', async () => {
     const collection = await build();
-    const items = collection.item as readonly PostmanItem[];
+    const items = collection['item'] as readonly PostmanItem[];
     const refresh = items.find(
       (item) =>
         item.name === 'Rotate a refresh session and issue a User Access JWT',
@@ -135,7 +135,7 @@ describe('buildPostmanCollection', () => {
 
   it('includes unauthenticated local-auth requests from the OpenAPI contract', async () => {
     const collection = await build();
-    const items = collection.item as readonly PostmanItemGroup[];
+    const items = collection['item'] as readonly PostmanItemGroup[];
     const names = items.map((item) => item.name);
 
     expect(names).toEqual(
@@ -151,7 +151,7 @@ describe('buildPostmanCollection', () => {
 
   async function verificationScript(): Promise<string> {
     const collection = await build();
-    const items = collection.item as readonly PostmanItem[];
+    const items = collection['item'] as readonly PostmanItem[];
     const folder = items.find(
       (item) =>
         item.name === 'Customer Web Web Sessions (server-to-server, BFF only)',
@@ -232,7 +232,7 @@ describe('buildPostmanCollection', () => {
 
   it('documents saved identity readiness without exposing JWKS configuration', async () => {
     const collection = await build();
-    const items = collection.item as readonly PostmanItem[];
+    const items = collection['item'] as readonly PostmanItem[];
     const roster = items.find(
       (item) => item.name === 'List the authenticated user organization roster',
     );
@@ -265,7 +265,7 @@ describe('buildPostmanCollection', () => {
     );
     const headers = scenario?.request?.header ?? [];
     const script = scenario?.event?.[0]?.script.exec.join('\n') ?? '';
-    const variables = collection.variable as readonly { key: string }[];
+    const variables = collection['variable'] as readonly { key: string }[];
 
     expect(variables.map((variable) => variable.key)).toEqual(
       expect.arrayContaining(['declaredIdentityApiKey', 'declaredUserId']),

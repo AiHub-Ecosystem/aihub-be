@@ -1,6 +1,7 @@
 import type { Dirent } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import * as ts from 'typescript';
 
 const ROOT = process.cwd();
@@ -109,8 +110,7 @@ async function main(): Promise<void> {
 
 if (
   process.argv[1] !== undefined &&
-  path.resolve(process.argv[1]) ===
-    path.join(ROOT, 'scripts/checks/check-app-errors.ts')
+  import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   void main();
 }

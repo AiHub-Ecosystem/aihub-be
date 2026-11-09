@@ -85,28 +85,28 @@ const LIST_AUDIT_EVENTS_SQL = `
 function actionValue(
   record: Record<string, unknown>,
 ): OrganizationAuditAction | undefined {
-  const value = record.action;
+  const value = record['action'];
   return ORGANIZATION_AUDIT_ACTIONS.find((action) => action === value);
 }
 
 function outcomeValue(
   record: Record<string, unknown>,
 ): OrganizationAuditOutcome | undefined {
-  const value = record.outcome;
+  const value = record['outcome'];
   return ORGANIZATION_AUDIT_OUTCOMES.find((outcome) => outcome === value);
 }
 
 function actorSourceValue(
   record: Record<string, unknown>,
 ): OrganizationAuditActorSource | undefined {
-  const value = record.actor_source;
+  const value = record['actor_source'];
   return ORGANIZATION_AUDIT_ACTOR_SOURCES.find((source) => source === value);
 }
 
 function targetTypeValue(
   record: Record<string, unknown>,
 ): OrganizationAuditTargetType | undefined {
-  const value = record.target_type;
+  const value = record['target_type'];
   return TARGET_TYPES.find((targetType) => targetType === value);
 }
 
@@ -141,12 +141,12 @@ function mapAuditEvent(
 
   // A redacted label is absent, not broken: the event still stands and is
   // still returned, which is the difference between an erasure and a deletion.
-  const rawLabel = value.target_label;
+  const rawLabel = value['target_label'];
   if (rawLabel !== null && typeof rawLabel !== 'string') {
     return undefined;
   }
 
-  const rawDetail = value.detail;
+  const rawDetail = value['detail'];
   if (rawDetail !== null && !isRecord(rawDetail)) {
     return undefined;
   }

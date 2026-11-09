@@ -41,10 +41,10 @@ function isMalformed(
   operation: OperationId,
 ): boolean {
   return (
-    value.operation !== operation ||
-    typeof value.downstreamMs !== 'number' ||
-    !Number.isFinite(value.downstreamMs) ||
-    value.downstreamMs < 0 ||
+    value['operation'] !== operation ||
+    typeof value['downstreamMs'] !== 'number' ||
+    !Number.isFinite(value['downstreamMs']) ||
+    value['downstreamMs'] < 0 ||
     !('data' in value)
   );
 }
@@ -58,7 +58,7 @@ function decodeStoredResult<K extends OperationId>(
     isRecord(value) &&
     !isMalformed(value, operation) &&
     def.responseContract !== 'unresolved'
-      ? parseStoredData(def.responseContract, value.data)
+      ? parseStoredData(def.responseContract, value['data'])
       : undefined;
   if (!isRecord(value) || data === undefined) {
     const operationGroup = operation.split('.')[0] ?? 'graded';
@@ -70,7 +70,7 @@ function decodeStoredResult<K extends OperationId>(
     {
       operation,
       data,
-      downstreamMs: value.downstreamMs as number,
+      downstreamMs: value['downstreamMs'] as number,
     },
     readDispatchTelemetry(value),
   ) as DispatchResult<ResponseFor<K>>;

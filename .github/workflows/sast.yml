@@ -5,7 +5,7 @@ name: SAST
 # script, an S3 key, a log call or a backtracking regex; process.env outside
 # the configuration boundary).
 #
-# The gate is scripts/checks/codeql-gate.ts, not the upload: a finding fails the
+# The gate is scripts/checks/codeql/codeql-gate.ts, not the upload: a finding fails the
 # job unless the scanner marks it suppressed or .github/codeql/triage.json
 # waives that rule at that path with a reason. The SARIF is uploaded either way
 # so the Security tab shows what the gate saw.
@@ -76,7 +76,7 @@ jobs:
           category: /language:javascript-typescript
 
       - name: Fail on untriaged findings
-        run: bunx tsx scripts/checks/codeql-gate.ts codeql-results/javascript.sarif
+        run: bunx tsx scripts/checks/codeql/codeql-gate.ts codeql-results/javascript.sarif
 
   # Each AIHUB query has a positive and a negative fixture under
   # .github/codeql/tests. A query that stops matching its positive case, or

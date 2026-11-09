@@ -42,13 +42,13 @@ describe('S3WritingChartUploadStorage contract', () => {
     const url = new URL(grant.url);
     expect(url.hostname).toBe('s3.wispace.app');
     expect(url.pathname).toContain('/aihub-sandbox-writing-chart-staging');
-    const encodedPolicy = grant.fields.Policy;
+    const encodedPolicy = grant.fields['Policy'];
     expect(encodedPolicy).toBeDefined();
     const policy = JSON.parse(
       Buffer.from(encodedPolicy ?? '', 'base64').toString('utf8'),
     ) as { conditions: unknown[]; expiration: string };
-    expect(grant.fields.bucket).toBe('aihub-sandbox-writing-chart-staging');
-    expect(grant.fields.key).toBe(STAGING_KEY);
+    expect(grant.fields['bucket']).toBe('aihub-sandbox-writing-chart-staging');
+    expect(grant.fields['key']).toBe(STAGING_KEY);
     expect(grant.fields['Content-Type']).toBe('image/png');
     expect(policy.conditions).toContainEqual([
       'content-length-range',

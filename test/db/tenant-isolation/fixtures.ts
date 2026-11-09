@@ -91,7 +91,7 @@ export async function signUserAssertion(
 
 function tenantIsolationRedisUrl(): string {
   const url = new URL(
-    process.env.TENANT_ISOLATION_REDIS_URL?.trim() ||
+    process.env['TENANT_ISOLATION_REDIS_URL']?.trim() ||
       'redis://127.0.0.1:6379/15',
   );
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();

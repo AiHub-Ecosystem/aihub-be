@@ -309,14 +309,14 @@ describe('Speaking user identity HTTP flow', () => {
     }
     expect(
       outboundRequests.map(({ body }) =>
-        body instanceof UndiciFormData ? body.get('user_id') : body.user_id,
+        body instanceof UndiciFormData ? body.get('user_id') : body['user_id'],
       ),
     ).toEqual(['same_end_user', 'same_end_user']);
     expect(
       outboundRequests.map(({ body }) =>
         body instanceof UndiciFormData
           ? body.get('organization_id')
-          : body.organization_id,
+          : body['organization_id'],
       ),
     ).toEqual([null, undefined]);
   });

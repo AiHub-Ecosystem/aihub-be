@@ -122,8 +122,8 @@ describe('Sandbox demo key validation HTTP flow', () => {
   });
 
   beforeEach(() => {
-    hostConfig.AIHUB_SANDBOX_HOST = 'localhost';
-    hostConfig.AIHUB_PRODUCTION_HOST = undefined;
+    hostConfig['AIHUB_SANDBOX_HOST'] = 'localhost';
+    hostConfig['AIHUB_PRODUCTION_HOST'] = undefined;
     // A key per case, so the per-key rate limit cannot couple these cases.
     keysIssued += 1;
     authenticated = {
@@ -201,8 +201,8 @@ describe('Sandbox demo key validation HTTP flow', () => {
 
   it('applies the same identity mode to a Production selection with no allowance', async () => {
     activeConfig = identityConfig;
-    hostConfig.AIHUB_SANDBOX_HOST = undefined;
-    hostConfig.AIHUB_PRODUCTION_HOST = 'localhost';
+    hostConfig['AIHUB_SANDBOX_HOST'] = undefined;
+    hostConfig['AIHUB_PRODUCTION_HOST'] = 'localhost';
     authenticated = {
       ...authenticatedApiKey,
       environment: 'production',

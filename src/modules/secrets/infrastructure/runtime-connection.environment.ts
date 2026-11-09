@@ -35,13 +35,13 @@ export function loadRuntimeConnectionEnvironment(
   options: RuntimeConnectionEnvironmentOptions,
 ): void {
   const env = options.env;
-  const scope = resolveScope(env.AIHUB_RUNTIME_DATABASE_SCOPE);
+  const scope = resolveScope(env['AIHUB_RUNTIME_DATABASE_SCOPE']);
   if (scope === 'production') {
-    delete env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY;
-    delete env.AIHUB_SANDBOX_ASSERTION_KID;
+    delete env['AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY'];
+    delete env['AIHUB_SANDBOX_ASSERTION_KID'];
   }
 
-  const path = env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE?.trim();
+  const path = env['AIHUB_RUNTIME_CONNECTION_SECRETS_FILE']?.trim();
   if (path === undefined || path.length === 0) {
     return;
   }
@@ -69,8 +69,8 @@ export function loadRuntimeConnectionEnvironment(
     'runtime connection secret document',
   );
 
-  const database = asRecord(root.database, 'database runtime secret bundle');
-  const redis = asRecord(root.redis, 'Redis runtime secret bundle');
+  const database = asRecord(root['database'], 'database runtime secret bundle');
+  const redis = asRecord(root['redis'], 'Redis runtime secret bundle');
   assertAllowedKeys(
     database,
     [
@@ -101,7 +101,7 @@ export function loadRuntimeConnectionEnvironment(
     scope === 'sandbox' ? 'sandbox database URL' : 'database URL',
   );
   const directControlPlaneDatabaseUrl =
-    env.CONTROL_PLANE_DATABASE_URL?.trim() || directDatabaseUrl;
+    env['CONTROL_PLANE_DATABASE_URL']?.trim() || directDatabaseUrl;
   const directControlPlaneReadDatabaseUrl =
     scope === 'sandbox'
       ? requiredRecordString(
@@ -109,24 +109,26 @@ export function loadRuntimeConnectionEnvironment(
           'sandbox_control_plane_read_url',
           'sandbox control-plane read URL',
         )
-      : env.CONTROL_PLANE_READ_DATABASE_URL?.trim() ||
+      : env['CONTROL_PLANE_READ_DATABASE_URL']?.trim() ||
         directControlPlaneDatabaseUrl;
   const directEmailBudgetDatabaseUrl = requiredRecordString(
     database,
     'email_send_budget_url',
     'shared email daily budget database URL',
   );
-  const poolerEnabled = parsePoolerEnabled(env.AIHUB_DATABASE_POOLER_ENABLED);
+  const poolerEnabled = parsePoolerEnabled(
+    env['AIHUB_DATABASE_POOLER_ENABLED'],
+  );
   const usePooler = poolerEnabled && options.target !== 'operator';
 
-  env.DATABASE_URL = usePooler
+  env['DATABASE_URL'] = usePooler
     ? requiredRecordString(
         database,
         scope === 'sandbox' ? 'sandbox_pooler_url' : 'pooler_url',
         'PgBouncer runtime URL',
       )
     : directDatabaseUrl;
-  env.CONTROL_PLANE_DATABASE_URL = usePooler
+  env['CONTROL_PLANE_DATABASE_URL'] = usePooler
     ? requiredRecordString(
         database,
         scope === 'sandbox'
@@ -135,7 +137,7 @@ export function loadRuntimeConnectionEnvironment(
         'PgBouncer control-plane URL',
       )
     : directControlPlaneDatabaseUrl;
-  env.CONTROL_PLANE_READ_DATABASE_URL = usePooler
+  env['CONTROL_PLANE_READ_DATABASE_URL'] = usePooler
     ? requiredRecordString(
         database,
         scope === 'sandbox'
@@ -144,7 +146,7 @@ export function loadRuntimeConnectionEnvironment(
         'PgBouncer control-plane read URL',
       )
     : directControlPlaneReadDatabaseUrl;
-  env.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL = usePooler
+  env['AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL'] = usePooler
     ? requiredRecordString(
         database,
         scope === 'sandbox'
@@ -153,7 +155,7 @@ export function loadRuntimeConnectionEnvironment(
         'PgBouncer email budget URL',
       )
     : directEmailBudgetDatabaseUrl;
-  const emailWalPath = env.AIHUB_EMAIL_WAL_SECRETS_FILE?.trim();
+  const emailWalPath = env['AIHUB_EMAIL_WAL_SECRETS_FILE']?.trim();
   if (emailWalPath) {
     let emailWalRaw: string;
     try {
@@ -173,18 +175,18 @@ export function loadRuntimeConnectionEnvironment(
       ['email_wal_url', 'sandbox_email_wal_url'],
       'email WAL secret bundle',
     );
-    env.AIHUB_EMAIL_WAL_DATABASE_URL = requiredRecordString(
+    env['AIHUB_EMAIL_WAL_DATABASE_URL'] = requiredRecordString(
       emailWal,
       scope === 'sandbox' ? 'sandbox_email_wal_url' : 'email_wal_url',
       scope === 'sandbox' ? 'sandbox email WAL URL' : 'email WAL URL',
     );
   }
-  env.REDIS_URL = requiredRecordString(
+  env['REDIS_URL'] = requiredRecordString(
     redis,
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox Redis URL' : 'Redis URL',
   );
-  env.AIHUB_EMAIL_SEND_RATE_REDIS_URL = requiredRecordString(
+  env['AIHUB_EMAIL_SEND_RATE_REDIS_URL'] = requiredRecordString(
     redis,
     'email_send_rate_url',
     'email send rate Redis URL',
@@ -207,12 +209,12 @@ export function loadRuntimeConnectionEnvironment(
     ['private_key_pem', 'key_id'],
     'sandbox assertion runtime secret bundle',
   );
-  env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY = requiredRecordString(
+  env['AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY'] = requiredRecordString(
     assertion,
     'private_key_pem',
     'sandbox assertion private key',
   );
-  env.AIHUB_SANDBOX_ASSERTION_KID = requiredRecordString(
+  env['AIHUB_SANDBOX_ASSERTION_KID'] = requiredRecordString(
     assertion,
     'key_id',
     'sandbox assertion key id',

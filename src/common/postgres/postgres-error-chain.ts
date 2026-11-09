@@ -30,9 +30,9 @@ export function findPostgresErrorLink(
 
     const record = candidate as Record<string, unknown>;
     const link: PostgresErrorLink = {
-      code: record.code ?? record.originalCode,
-      message: record.message ?? record.originalMessage,
-      kind: record.kind,
+      code: record['code'] ?? record['originalCode'],
+      message: record['message'] ?? record['originalMessage'],
+      kind: record['kind'],
       wrapped: next.wrapped,
     };
     if (matches(link)) return link;

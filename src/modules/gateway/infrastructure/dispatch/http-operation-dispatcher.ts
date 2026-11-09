@@ -83,7 +83,7 @@ function retryAfterMs(value: string | undefined): number | undefined {
   const match = weekdayForms
     .map((pattern) => pattern.exec(trimmed))
     .find((candidate) => candidate !== null);
-  if (match?.groups?.weekday === undefined) return undefined;
+  if (match?.groups?.['weekday'] === undefined) return undefined;
   const asctime = match[0]?.endsWith(' GMT') !== true;
   const timestamp = Date.parse(asctime ? `${trimmed} GMT` : trimmed);
   const weekday = new Date(timestamp).getUTCDay();
@@ -99,9 +99,9 @@ function retryAfterMs(value: string | undefined): number | undefined {
   ];
   if (
     !Number.isFinite(timestamp) ||
-    (match.groups.weekday.length === 3
-      ? shortWeekdays[weekday] !== match.groups.weekday
-      : longWeekdays[weekday] !== match.groups.weekday)
+    (match.groups['weekday'].length === 3
+      ? shortWeekdays[weekday] !== match.groups['weekday']
+      : longWeekdays[weekday] !== match.groups['weekday'])
   ) {
     return undefined;
   }

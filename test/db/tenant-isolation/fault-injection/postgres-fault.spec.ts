@@ -88,9 +88,9 @@ async function answerFor(error: unknown) {
     status,
     retryAfter,
     error: {
-      code: body.error?.code,
-      retryable: body.error?.retryable,
-      retryAfterMs: body.error?.retry_after_ms,
+      code: body.error?.['code'],
+      retryable: body.error?.['retryable'],
+      retryAfterMs: body.error?.['retry_after_ms'],
     },
   };
 }

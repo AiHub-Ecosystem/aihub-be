@@ -28,19 +28,20 @@ function parseHttpDate(value: string, now: Date): number | undefined {
   ).find((candidate) => candidate !== undefined);
   if (groups === undefined) return undefined;
 
-  const month = HTTP_DATE_MONTHS.indexOf(groups.month ?? '');
+  const month = HTTP_DATE_MONTHS.indexOf(groups['month'] ?? '');
   const weekday = HTTP_DATE_WEEKDAYS.indexOf(
-    (groups.weekday ?? '').slice(0, 3),
+    (groups['weekday'] ?? '').slice(0, 3),
   );
   let year =
-    groups.year === undefined
-      ? Math.floor(now.getUTCFullYear() / 100) * 100 + Number(groups.shortYear)
-      : Number(groups.year);
+    groups['year'] === undefined
+      ? Math.floor(now.getUTCFullYear() / 100) * 100 +
+        Number(groups['shortYear'])
+      : Number(groups['year']);
 
-  const day = Number(groups.day);
-  const hour = Number(groups.hour);
-  const minute = Number(groups.minute);
-  const second = Number(groups.second);
+  const day = Number(groups['day']);
+  const hour = Number(groups['hour']);
+  const minute = Number(groups['minute']);
+  const second = Number(groups['second']);
   if (month < 0 || weekday < 0 || hour > 23 || minute > 59 || second > 60) {
     return undefined;
   }
@@ -52,7 +53,7 @@ function parseHttpDate(value: string, now: Date): number | undefined {
     return date.getTime() + (second === 60 ? 1_000 : 0);
   };
   let timestamp = timestampForYear(year);
-  if (groups.shortYear !== undefined) {
+  if (groups['shortYear'] !== undefined) {
     const fiftyYearsFromNow = new Date(now);
     fiftyYearsFromNow.setUTCFullYear(now.getUTCFullYear() + 50);
     if (timestamp > fiftyYearsFromNow.getTime()) {

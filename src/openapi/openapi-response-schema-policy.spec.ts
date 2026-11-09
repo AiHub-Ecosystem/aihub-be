@@ -17,10 +17,11 @@ function collectObjectSchemas(
   }
   if (!isRecord(value)) return found;
 
-  if (value.type === 'object' || isRecord(value.properties)) found.push(value);
+  if (value['type'] === 'object' || isRecord(value['properties']))
+    found.push(value);
 
-  if (isRecord(value.properties)) {
-    for (const property of Object.values(value.properties)) {
+  if (isRecord(value['properties'])) {
+    for (const property of Object.values(value['properties'])) {
       collectObjectSchemas(property, found);
     }
   }
@@ -43,28 +44,28 @@ function collectObjectSchemas(
 
 function responseSchemas(document: JsonRecord): unknown[] {
   const schemas: unknown[] = [];
-  const paths = document.paths;
+  const paths = document['paths'];
   if (isRecord(paths)) {
     for (const pathItem of Object.values(paths)) {
       if (!isRecord(pathItem)) continue;
       for (const operation of Object.values(pathItem)) {
-        if (!isRecord(operation) || !isRecord(operation.responses)) continue;
-        for (const response of Object.values(operation.responses)) {
-          if (!isRecord(response) || !isRecord(response.content)) continue;
-          for (const media of Object.values(response.content)) {
-            if (isRecord(media)) schemas.push(media.schema);
+        if (!isRecord(operation) || !isRecord(operation['responses'])) continue;
+        for (const response of Object.values(operation['responses'])) {
+          if (!isRecord(response) || !isRecord(response['content'])) continue;
+          for (const media of Object.values(response['content'])) {
+            if (isRecord(media)) schemas.push(media['schema']);
           }
         }
       }
     }
   }
 
-  const components = document.components;
-  if (isRecord(components) && isRecord(components.responses)) {
-    for (const response of Object.values(components.responses)) {
-      if (!isRecord(response) || !isRecord(response.content)) continue;
-      for (const media of Object.values(response.content)) {
-        if (isRecord(media)) schemas.push(media.schema);
+  const components = document['components'];
+  if (isRecord(components) && isRecord(components['responses'])) {
+    for (const response of Object.values(components['responses'])) {
+      if (!isRecord(response) || !isRecord(response['content'])) continue;
+      for (const media of Object.values(response['content'])) {
+        if (isRecord(media)) schemas.push(media['schema']);
       }
     }
   }
@@ -81,23 +82,24 @@ describe('public OpenAPI object schema policy', () => {
 
     expect(objects.length).toBeGreaterThan(0);
     expect(
-      objects.every((schema) => schema.additionalProperties === true),
+      objects.every((schema) => schema['additionalProperties'] === true),
     ).toBe(true);
   });
 
   it('keeps request object schemas closed', () => {
     const objects: JsonRecord[] = [];
-    const paths = document.paths;
+    const paths = document['paths'];
     if (!isRecord(paths)) throw new Error('OpenAPI paths are missing');
 
     for (const pathItem of Object.values(paths)) {
       if (!isRecord(pathItem)) continue;
       for (const operation of Object.values(pathItem)) {
-        if (!isRecord(operation) || !isRecord(operation.requestBody)) continue;
-        const content = operation.requestBody.content;
+        if (!isRecord(operation) || !isRecord(operation['requestBody']))
+          continue;
+        const content = operation['requestBody']['content'];
         if (!isRecord(content)) continue;
         for (const media of Object.values(content)) {
-          if (isRecord(media)) collectObjectSchemas(media.schema, objects);
+          if (isRecord(media)) collectObjectSchemas(media['schema'], objects);
         }
       }
     }
@@ -107,12 +109,13 @@ describe('public OpenAPI object schema policy', () => {
       objects
         .filter(
           (schema) =>
-            schema.type === 'object' &&
+            schema['type'] === 'object' &&
             !(
-              isRecord(schema.patternProperties) && !isRecord(schema.properties)
+              isRecord(schema['patternProperties']) &&
+              !isRecord(schema['properties'])
             ),
         )
-        .every((schema) => schema.additionalProperties === false),
+        .every((schema) => schema['additionalProperties'] === false),
     ).toBe(true);
   });
 });

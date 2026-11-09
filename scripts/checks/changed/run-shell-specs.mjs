@@ -11,7 +11,7 @@ import process from 'node:process';
 const specs = process.argv.slice(2);
 if (specs.length === 0 || specs.some((spec) => !spec.endsWith('.spec.sh'))) {
   console.error(
-    'usage: node scripts/checks/run-shell-specs.mjs <path/to/suite.spec.sh>...',
+    'usage: node scripts/checks/changed/run-shell-specs.mjs <path/to/suite.spec.sh>...',
   );
   process.exit(1);
 }

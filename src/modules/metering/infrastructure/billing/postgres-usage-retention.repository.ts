@@ -53,14 +53,14 @@ const USAGE_RETENTION_PREVIEW_SQL = `
 `;
 
 function cursorFromRow(value: unknown): UsageRetentionCursor {
-  if (!isRecord(value) || typeof value.request_id !== 'string') {
+  if (!isRecord(value) || typeof value['request_id'] !== 'string') {
     throw internalError('usage retention row is invalid');
   }
-  const createdAt = asDateOrIso(value.created_at);
-  if (createdAt === undefined || value.request_id.length === 0) {
+  const createdAt = asDateOrIso(value['created_at']);
+  if (createdAt === undefined || value['request_id'].length === 0) {
     throw internalError('usage retention row is invalid');
   }
-  return { createdAt, requestId: value.request_id };
+  return { createdAt, requestId: value['request_id'] };
 }
 
 interface UsageRetentionRow {

@@ -10,8 +10,8 @@ import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
 export function createCliSeaweedFsClient() {
   return createSeaweedFsS3Client({
     workload: 'operator',
-    endpoint: process.env.SEAWEEDFS_ENDPOINT_URL,
-    region: process.env.SEAWEEDFS_REGION,
+    endpoint: process.env['SEAWEEDFS_ENDPOINT_URL'],
+    region: process.env['SEAWEEDFS_REGION'],
     credentials: createCliRuntimeSecretProvider().getSnapshot().seaweedfs,
   });
 }

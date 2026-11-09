@@ -3,7 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-const script = join(process.cwd(), 'scripts', 'checks', 'check-file-size.mjs');
+const script = join(
+  process.cwd(),
+  'scripts',
+  'checks',
+  'structure',
+  'check-file-size.mjs',
+);
 const SPLIT_MEMBERSHIP_ENTRY =
   'src/modules/identity/membership/infrastructure/postgres-organization-membership.repository.ts';
 const SPLIT_OPENAPI_ENTRY = 'src/openapi/build-openapi-document.ts';

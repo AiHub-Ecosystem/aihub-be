@@ -50,10 +50,10 @@ export function isApprovedSpeakingAudioUrl(
     /^https:\/\/(?<authority>[^/?#]*)(?<path>\/[^?#]*)?(?:\?[^#]*)?$/i.exec(
       value,
     );
-  if (raw === null || raw.groups?.authority !== SPEAKING_AUDIO_URL_HOST) {
+  if (raw === null || raw.groups?.['authority'] !== SPEAKING_AUDIO_URL_HOST) {
     return rejected('malformed');
   }
-  const rawPath = raw.groups?.path ?? '';
+  const rawPath = raw.groups?.['path'] ?? '';
   if (
     /[%\\]/.test(rawPath) ||
     rawPath.includes('//') ||

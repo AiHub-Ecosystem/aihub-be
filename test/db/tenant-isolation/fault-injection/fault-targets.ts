@@ -79,7 +79,7 @@ function loopbackHost(url: URL): string {
 /** The lane's Redis database 15, the only Redis these tests may touch. */
 export function redisTarget(): FaultTarget & { readonly database: string } {
   const target = new URL(
-    process.env.TENANT_ISOLATION_REDIS_URL?.trim() ||
+    process.env['TENANT_ISOLATION_REDIS_URL']?.trim() ||
       'redis://127.0.0.1:6379/15',
   );
   const host = loopbackHost(target);

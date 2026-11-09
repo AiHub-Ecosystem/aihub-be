@@ -50,17 +50,17 @@ function addPublicRoute(
 // Manual because a generated HEAD operation needs bodyless copies of each GET response.
 function addHeadOperations(paths: Record<string, unknown>): void {
   for (const pathItem of Object.values(paths)) {
-    if (!isRecord(pathItem) || !isRecord(pathItem.get) || pathItem.head) {
+    if (!isRecord(pathItem) || !isRecord(pathItem['get']) || pathItem['head']) {
       continue;
     }
 
-    const getOperation = pathItem.get;
-    const getResponses = isRecord(getOperation.responses)
-      ? getOperation.responses
+    const getOperation = pathItem['get'];
+    const getResponses = isRecord(getOperation['responses'])
+      ? getOperation['responses']
       : {};
     const responses = Object.fromEntries(
       Object.entries(getResponses).map(([status, response]) => {
-        const headers = isRecord(response) ? response.headers : undefined;
+        const headers = isRecord(response) ? response['headers'] : undefined;
         return [
           status,
           {
@@ -74,9 +74,9 @@ function addHeadOperations(paths: Record<string, unknown>): void {
       }),
     );
 
-    pathItem.head = {
+    pathItem['head'] = {
       ...getOperation,
-      operationId: `${String(getOperation.operationId)}.head`,
+      operationId: `${String(getOperation['operationId'])}.head`,
       summary: 'Retrieve response headers',
       description:
         'Returns the same status and headers as GET without a response body.',

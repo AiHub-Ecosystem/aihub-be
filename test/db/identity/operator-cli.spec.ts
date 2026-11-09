@@ -157,7 +157,7 @@ withBuild('operator CLI against PostgreSQL', () => {
       'k',
     );
     const [key] = await rows('SELECT id FROM api_keys');
-    const keyId = String(key?.id);
+    const keyId = String(key?.['id']);
 
     const first = cli('key:revoke', '--key', keyId, '--actor', 'ops-alice');
     const repeat = cli('key:revoke', '--key', keyId, '--actor', 'ops-alice');
@@ -187,7 +187,7 @@ withBuild('operator CLI against PostgreSQL', () => {
       'k',
     );
     const [key] = await rows('SELECT id FROM api_keys');
-    const keyId = String(key?.id);
+    const keyId = String(key?.['id']);
 
     const first = runCli({ REDIS_URL: 'redis://127.0.0.1:1' }, [
       'key:revoke',

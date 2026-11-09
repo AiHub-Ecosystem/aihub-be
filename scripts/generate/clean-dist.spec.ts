@@ -87,6 +87,6 @@ describe('build script', () => {
       }
     ).scripts;
 
-    expect(scripts.build).toContain('scripts/generate/clean-dist.cjs');
+    expect(scripts['build']).toContain('scripts/generate/clean-dist.cjs');
   });
 });

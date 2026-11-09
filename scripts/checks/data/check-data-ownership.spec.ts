@@ -13,6 +13,7 @@ const script = join(
   process.cwd(),
   'scripts',
   'checks',
+  'data',
   'check-data-ownership.mjs',
 );
 
