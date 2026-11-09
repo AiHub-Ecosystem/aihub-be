@@ -207,6 +207,8 @@ describe('Organization API key listing HTTP flow', () => {
             expires_at: '2027-01-01T00:00:00.000Z',
             last_used_at: '2026-09-21T08:00:00.000Z',
             created_at: '2026-09-20T10:00:00.000Z',
+            created_by: null,
+            last_rotated_by: null,
           },
         ],
       },

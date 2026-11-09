@@ -214,6 +214,8 @@ describe('Organization API key revocation HTTP flow', () => {
         expires_at: null,
         last_used_at: null,
         created_at: CREATED_AT.toISOString(),
+        created_by: null,
+        last_rotated_by: null,
       },
       meta: { request_id: REQUEST_ID },
     });

@@ -159,7 +159,11 @@ describe('Organization API key creation HTTP flow', () => {
   });
 
   function create(
-    payload: object = { name: 'Prod backend', scopes: ['writing.grade'] },
+    payload: object = {
+      name: 'Prod backend',
+      scopes: ['writing.grade'],
+      allowed_environments: ['production'],
+    },
     headers: Record<string, string> = {
       authorization: 'Bearer valid.token.value',
     },
@@ -200,6 +204,8 @@ describe('Organization API key creation HTTP flow', () => {
         expires_at: null,
         last_used_at: null,
         created_at: CREATED_AT.toISOString(),
+        created_by: null,
+        last_rotated_by: null,
       },
       meta: { request_id: REQUEST_ID },
     });
@@ -343,6 +349,7 @@ describe('Organization API key creation HTTP flow', () => {
     await create({
       name: 'Prod backend',
       scopes: ['writing.grade', 'speaking.grade'],
+      allowed_environments: ['production'],
     });
 
     expect(createCall().requiredEntitlements).toEqual(['writing', 'speaking']);
@@ -354,6 +361,7 @@ describe('Organization API key creation HTTP flow', () => {
     const response = await create({
       name: 'Prod backend',
       scopes: ['speaking.grade'],
+      allowed_environments: ['production'],
     });
 
     expect(response.statusCode).toBe(403);
@@ -453,6 +461,7 @@ describe('Organization API key creation HTTP flow', () => {
     const response = await create({
       name: 'Short lived',
       scopes: ['writing.grade'],
+      allowed_environments: ['production'],
       expires_at: expiresAt.toISOString(),
     });
 

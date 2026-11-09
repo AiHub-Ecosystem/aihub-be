@@ -25,9 +25,11 @@ export const CreateOrganizationApiKeyRequestSchema = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 100 }),
     scopes: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
-    allowed_environments: Type.Optional(
-      Type.Array(NewCustomerKeyEnvironmentSchema, { minItems: 1 }),
-    ),
+    // Required since #447: the environment a credential is bound to is part of
+    // its authority, so the caller states it instead of receiving a default.
+    allowed_environments: Type.Array(NewCustomerKeyEnvironmentSchema, {
+      minItems: 1,
+    }),
     expires_at: Type.Optional(Type.String({ format: 'date-time' })),
   },
   { additionalProperties: false },
@@ -59,6 +61,14 @@ export const OrganizationApiKeySchema = Type.Object(
       Type.Null(),
     ]),
     created_at: Type.String({ format: 'date-time' }),
+    /**
+     * Who created the key and who last rotated it, by immutable username
+     * (ADR-0027 as amended, #447). Null when the key predates the attribution
+     * columns or nobody has rotated it: the list reports unknown rather than
+     * guessing an account.
+     */
+    created_by: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    last_rotated_by: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   },
   { additionalProperties: false },
 );

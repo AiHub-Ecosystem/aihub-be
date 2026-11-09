@@ -165,13 +165,15 @@ describe('CreateOrganizationApiKey', () => {
     ).resolves.toMatchObject({ allowedEnvironments: ['sandbox'] });
   });
 
-  it('binds a key with no stated environment to Production', async () => {
+  it('refuses a request that states no environment', async () => {
     const { useCase, apiKeys } = createUseCase();
 
-    const created = await create(useCase);
-
-    expect(created.allowedEnvironments).toEqual(['production']);
-    expect(apiKeys.created[0]?.allowedEnvironments).toEqual(['production']);
+    // #447: the environment is part of the credential's authority, so the
+    // caller states it instead of receiving a Production default.
+    await expect(create(useCase)).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+    });
+    expect(apiKeys.created).toHaveLength(0);
   });
 
   it('refuses a Sandbox key carrying a scope outside the AI service scopes', async () => {

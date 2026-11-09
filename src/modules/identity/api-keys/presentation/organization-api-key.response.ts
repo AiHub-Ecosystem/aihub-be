@@ -10,6 +10,9 @@ interface PublishedApiKey {
   readonly expiresAt: Date | null;
   readonly lastUsedAt: Date | null;
   readonly createdAt: Date;
+  /** Who created the key and who last rotated it, by immutable username. */
+  readonly createdByUsername: string | null;
+  readonly lastRotatedByUsername: string | null;
 }
 
 /** One key in the wire shape every Organization API-key route answers with. */
@@ -24,6 +27,8 @@ export function apiKeyResponse(key: PublishedApiKey) {
     expires_at: key.expiresAt?.toISOString() ?? null,
     last_used_at: key.lastUsedAt?.toISOString() ?? null,
     created_at: key.createdAt.toISOString(),
+    created_by: key.createdByUsername,
+    last_rotated_by: key.lastRotatedByUsername,
   };
 }
 

@@ -6680,7 +6680,9 @@
                               "status",
                               "expires_at",
                               "last_used_at",
-                              "created_at"
+                              "created_at",
+                              "created_by",
+                              "last_rotated_by"
                             ],
                             "properties": {
                               "id": {
@@ -6750,6 +6752,28 @@
                               "created_at": {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              "created_by": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "last_rotated_by": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             }
                           }
@@ -6816,7 +6840,7 @@
               "schema": {
                 "additionalProperties": false,
                 "type": "object",
-                "required": ["name", "scopes"],
+                "required": ["name", "scopes", "allowed_environments"],
                 "properties": {
                   "name": {
                     "minLength": 1,
@@ -6887,7 +6911,9 @@
                         "status",
                         "expires_at",
                         "last_used_at",
-                        "created_at"
+                        "created_at",
+                        "created_by",
+                        "last_rotated_by"
                       ],
                       "properties": {
                         "api_key": {
@@ -6961,6 +6987,28 @@
                         "created_at": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "created_by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "last_rotated_by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },
@@ -7097,7 +7145,9 @@
                         "status",
                         "expires_at",
                         "last_used_at",
-                        "created_at"
+                        "created_at",
+                        "created_by",
+                        "last_rotated_by"
                       ],
                       "properties": {
                         "id": {
@@ -7167,6 +7217,28 @@
                         "created_at": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "created_by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "last_rotated_by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },
@@ -7270,7 +7342,9 @@
                         "status",
                         "expires_at",
                         "last_used_at",
-                        "created_at"
+                        "created_at",
+                        "created_by",
+                        "last_rotated_by"
                       ],
                       "properties": {
                         "api_key": {
@@ -7344,6 +7418,28 @@
                         "created_at": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "created_by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "last_rotated_by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },

@@ -18,7 +18,6 @@ import type { OrganizationApiKeyPort } from './organization-api-key.port';
 
 /** Only the two public customer environments have an issued key prefix. */
 type CustomerKeyEnvironment = Exclude<KeyEnvironment, 'staging'>;
-const DEFAULT_ENVIRONMENTS: readonly CustomerKeyEnvironment[] = ['production'];
 const MAX_KEY_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -49,6 +48,10 @@ export interface CreatedOrganizationApiKey {
   readonly allowedEnvironments: readonly string[];
   readonly expiresAt: Date | null;
   readonly createdAt: Date;
+  /** The creator, by immutable username (ADR-0027 as amended). */
+  readonly createdByUsername: string | null;
+  /** A new key has no rotation history yet. */
+  readonly lastRotatedByUsername: null;
 }
 
 function validatedName(name: string): string {
@@ -72,14 +75,19 @@ function validatedScopes(scopes: readonly string[]): readonly string[] {
   return requested;
 }
 
-/** New customer key requests support only the public Sandbox and Production tiers. */
+/**
+ * New customer key requests support only the public Sandbox and Production
+ * tiers, and the caller must state which one: the environment is part of the
+ * credential's authority, so a request without one is refused rather than
+ * defaulted (ADR-0027 as amended, #447).
+ */
 function validatedEnvironments(
   environments: readonly string[] | undefined,
 ): readonly CustomerKeyEnvironment[] {
-  const requested =
-    environments === undefined
-      ? [...DEFAULT_ENVIRONMENTS]
-      : [...new Set(environments)];
+  if (environments === undefined) {
+    throw invalidRequest();
+  }
+  const requested = [...new Set(environments)];
 
   if (requested.length !== 1) {
     throw invalidRequest();
@@ -210,6 +218,8 @@ export class CreateOrganizationApiKey {
     }
 
     return {
+      createdByUsername: admission.caller.username ?? null,
+      lastRotatedByUsername: null,
       apiKey: generated.raw,
       id: generated.id,
       organizationId: input.organizationId,
