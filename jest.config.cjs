@@ -46,7 +46,7 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '<rootDir>/test/db/',
-    '<rootDir>/test/cli/pgbouncer-(budget|exporter)\\.spec\\.ts',
+    '<rootDir>/test/cli/pgbouncer/.+\\.spec\\.ts',
     '<rootDir>/scripts/runtime/dev-runner\\.spec\\.ts',
     '<rootDir>/scripts/checks/check-architecture\\.spec\\.ts',
   ],
