@@ -47,6 +47,24 @@ import {
 } from './organization-api-key-attribution';
 import { organizationApiKeyCallerRefusalFor } from './organization-api-key-caller-authority';
 
+function extractHandlingUsername(
+  value: Record<string, unknown>,
+  flatKey: 'createdByUsername' | 'lastRotatedByUsername',
+  nestedKey: 'createdByAccount' | 'lastRotatedByAccount',
+): string | null | undefined {
+  if (flatKey in value) {
+    return handlingAttributionValue(value, flatKey);
+  }
+  const account = value[nestedKey];
+  if (account === null || account === undefined) {
+    return null;
+  }
+  if (isRecord(account)) {
+    return handlingAttributionValue(account, 'username');
+  }
+  return undefined;
+}
+
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -60,13 +78,15 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   const expiresAt = dateValue(value, 'expiresAt');
   const lastUsedAt = dateValue(value, 'lastUsedAt');
   const createdAt = dateValue(value, 'createdAt');
-  const createdByUsername = handlingAttributionValue(
+  const createdByUsername = extractHandlingUsername(
     value,
     'createdByUsername',
+    'createdByAccount',
   );
-  const lastRotatedByUsername = handlingAttributionValue(
+  const lastRotatedByUsername = extractHandlingUsername(
     value,
     'lastRotatedByUsername',
+    'lastRotatedByAccount',
   );
 
   // Mapped from the row rather than hardcoded to the value the query happens
