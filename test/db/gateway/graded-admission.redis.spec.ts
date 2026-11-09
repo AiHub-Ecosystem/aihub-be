@@ -3,7 +3,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
@@ -12,7 +11,10 @@ import {
   GRADED_ADMISSION_SCRIPT,
   RedisGradedAdmission,
 } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import { quotaKeyForMonth } from '@/modules/gateway/infrastructure/redis-quota-counter';
+import {
+  quotaKeyForMonth,
+  quotaPeriod,
+} from '@/modules/metering/public/quota-counter';
 import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
 import {
   createSandboxTestRedis,

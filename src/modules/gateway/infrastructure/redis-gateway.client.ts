@@ -1,5 +1,8 @@
 import { internalError } from '@/common/errors/app-error';
-import { createRedisClient } from '@/common/redis/create-redis-client';
+import {
+  REDIS_NO_REPLAY_OPTIONS,
+  createRedisClient,
+} from '@/common/redis/create-redis-client';
 import { numberReply } from '@/common/redis/number-reply';
 import Redis from 'ioredis';
 
@@ -112,9 +115,8 @@ export function createRedisGatewayClient(
 
   const client = createRedisClient(url, {
     // Calibrated 2026-10-21 from Production app to remote Redis: ready p99 265.537 ms (100 samples), PING p99 71.184 ms (1,000).
-    connectTimeoutMs: 1_000,
     commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
-    autoResendUnfulfilledCommands: false,
+    ...REDIS_NO_REPLAY_OPTIONS,
   });
   return new IoredisGatewayClient(client);
 }

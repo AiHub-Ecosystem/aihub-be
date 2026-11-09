@@ -7,28 +7,22 @@ import type {
   QuotaCounterPort,
   QuotaCounterRequest,
   QuotaCounterSeedPort,
-} from '@/modules/gateway/application/quota-counter.port';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+} from '@/modules/metering/application/quota/quota-counter.port';
+import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
+import { quotaPeriod } from '@/modules/metering/application/quota/quota-period';
 import { safeNonNegativeCount } from '@/modules/metering/public/count-decode';
-import type { RedisGatewayClient } from './redis-gateway.client';
+import type { RedisMeteringClient } from './redis-metering.client';
 
 export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;
 
 export type RedisQuotaCounterClient = Pick<
-  RedisGatewayClient,
+  RedisMeteringClient,
   'eval' | 'get' | 'quit'
 >;
 
 interface LoggerLike {
   warn(fields: Record<string, unknown>): void;
   log(fields: Record<string, unknown>): void;
-}
-
-export function quotaKeyForMonth(
-  organizationId: string,
-  month: string,
-): string {
-  return `aihub:v1:quota:${organizationId}:${month}`;
 }
 
 function monthKey(organizationId: string, now: Date): string {

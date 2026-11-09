@@ -1,6 +1,6 @@
-import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
 import { IdempotencyService } from '@/modules/idempotency/application/idempotency-service';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
+import type { QuotaCounterPort } from '@/modules/metering/application/quota/quota-counter.port';
 import { billBackgroundCompletion } from '@/modules/metering/application/usage-recording/background-completion-billing';
 import { completeRequestMetering } from '@/modules/metering/application/usage-recording/metering-completion';
 import type { MeteringEvidence } from '@/modules/metering/application/usage-recording/metering-evidence';

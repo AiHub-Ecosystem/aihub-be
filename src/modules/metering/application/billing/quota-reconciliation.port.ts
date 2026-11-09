@@ -2,7 +2,7 @@ export type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
   QuotaCounterReadRequest,
-} from '@/modules/gateway/application/quota-counter.port';
+} from '@/modules/metering/application/quota/quota-counter.port';
 
 export interface QuotaReconciliationTarget {
   readonly month: string;

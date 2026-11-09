@@ -25,6 +25,7 @@ export interface QuotaCounterPort {
 
 export const QUOTA_COUNTER = Symbol('QUOTA_COUNTER');
 export const QUOTA_COUNTER_OVERWRITE = Symbol('QUOTA_COUNTER_OVERWRITE');
+export const QUOTA_COUNTER_SEED = Symbol('QUOTA_COUNTER_SEED');
 
 /** Rebuilds a monthly quota counter Redis lost, from durable usage (#371). */
 export interface QuotaCounterSeedPort {

@@ -14,17 +14,17 @@ import type {
   GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
 import { RETRY_BUDGET_WINDOW_MS } from '@/modules/gateway/application/graded-request/admit-graded-request';
-import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
-import {
-  quotaPeriod,
-  quotaUnverifiableError,
-} from '@/modules/gateway/application/quota-period';
 import {
   rateLimitStanding,
   rateLimitWindow,
 } from '@/modules/gateway/application/rate-limit-window';
+import {
+  type QuotaCounterSeedPort,
+  quotaKeyForMonth,
+  quotaPeriod,
+  quotaUnverifiableError,
+} from '@/modules/metering/public/quota-counter';
 import type { RedisGatewayClient } from './redis-gateway.client';
-import { quotaKeyForMonth } from './redis-quota-counter';
 import { rateLimitKey } from './redis-rate-limiter';
 
 /**

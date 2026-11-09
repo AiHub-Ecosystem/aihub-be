@@ -4,7 +4,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 
-import { quotaPeriod } from '@/modules/gateway/public/quota-period';
+import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import type { QuotaReconciliationService } from '@/modules/metering/public/quota-reconciliation';
 
 export function nextQuotaReconciliationDelay(
