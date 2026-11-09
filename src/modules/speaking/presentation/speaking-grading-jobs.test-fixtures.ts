@@ -90,7 +90,13 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     input: Parameters<SpeakingGradingJobRepositoryPort['claim']>[0],
   ): Promise<SpeakingGradingJob | undefined> {
     const job = this.jobs.get(input.jobId);
-    if (job === undefined || job.status !== 'queued') return undefined;
+    if (
+      job === undefined ||
+      job.status !== 'queued' ||
+      job.createdAt < input.expireBefore
+    ) {
+      return undefined;
+    }
     const claimed = {
       ...job,
       status: 'running' as const,
@@ -384,6 +390,7 @@ export function seededJob(
     apiKeyId: 'ak_test',
     maxConcurrent: 4,
     quotaTracked: true,
+    quotaUnverified: false,
     audioAssetId: ASSET_ID,
     request: { part: 1, questionId: 'p1_hometown' },
     status,

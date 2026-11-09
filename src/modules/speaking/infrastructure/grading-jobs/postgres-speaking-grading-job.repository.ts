@@ -24,6 +24,7 @@ interface SpeakingGradingJobRow {
   readonly apiKeyId: string;
   readonly maxConcurrent: number;
   readonly quotaTracked: boolean;
+  readonly quotaUnverified: boolean;
   readonly audioAssetId: string;
   readonly part: number;
   readonly questionId: string;
@@ -51,6 +52,7 @@ const JOB_COLUMNS = `
   api_key_id AS "apiKeyId",
   max_concurrent AS "maxConcurrent",
   quota_tracked AS "quotaTracked",
+  quota_unverified AS "quotaUnverified",
   audio_asset_id AS "audioAssetId",
   part,
   question_id AS "questionId",
@@ -82,13 +84,14 @@ async function insertJob(
   job: NewSpeakingGradingJob,
 ): Promise<void> {
   await client.$executeRawUnsafe(
-    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at, identity_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'queued', $15, $16)`,
+    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, quota_unverified, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at, identity_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'queued', $16, $17)`,
     job.jobId,
     job.organizationId,
     job.endUserId,
     job.environment,
     job.apiKeyId,
     job.quotaTracked,
+    job.quotaUnverified,
     job.maxConcurrent,
     job.audioAssetId,
     job.request.part,
@@ -202,6 +205,7 @@ function mapJob(
     apiKeyId: row.apiKeyId,
     maxConcurrent: row.maxConcurrent,
     quotaTracked: row.quotaTracked,
+    quotaUnverified: row.quotaUnverified,
     audioAssetId: row.audioAssetId,
     request: {
       part: row.part,
@@ -320,14 +324,16 @@ export class PostgresSpeakingGradingJobRepository
     readonly jobId: string;
     readonly now: Date;
     readonly leaseExpiresAt: Date;
+    readonly expireBefore: Date;
   }): Promise<SpeakingGradingJob | undefined> {
     return this.run(async () => {
       const rows = await this.client.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'running', lease_expires_at = $2 WHERE job_id = $1 AND status = 'queued' RETURNING ${JOB_COLUMNS}`,
+        `UPDATE speaking_grading_jobs SET status = 'running', lease_expires_at = $2 WHERE job_id = $1 AND status = 'queued' AND created_at >= $3 RETURNING ${JOB_COLUMNS}`,
         input.jobId,
         input.leaseExpiresAt,
+        input.expireBefore,
       );
       return mapJob(rows[0]);
     });

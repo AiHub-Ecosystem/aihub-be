@@ -65,6 +65,12 @@ export interface SpeakingGradingJob extends SpeakingGradingJobOwner {
    * as the synchronous route does, so the finalizer increments the counter.
    */
   readonly quotaTracked: boolean;
+  /**
+   * Admission admitted the job without verifying the quota counter (it was
+   * lost and could not be rebuilt, `hardStopOnQuota: false`). Carried into
+   * metering evidence like the synchronous pipeline's `quotaUnverified`.
+   */
+  readonly quotaUnverified: boolean;
   readonly audioAssetId: string;
   readonly request: SpeakingGradingJobRequest;
   readonly status: SpeakingGradingJobStatus;

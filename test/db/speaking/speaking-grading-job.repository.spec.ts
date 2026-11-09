@@ -22,6 +22,7 @@ function makeJob(
     apiKeyId: 'key_' + ulid(),
     maxConcurrent: 3,
     quotaTracked: true,
+    quotaUnverified: false,
     audioAssetId: 'aud_' + ulid(),
     request: {
       part: 1,
@@ -131,7 +132,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('allows exactly one concurrent claim', async () => {
+  it('allows exactly one concurrent claim and refuses a job past its queue deadline', async () => {
     const job = makeJob();
     await repository.create(job);
 
@@ -140,11 +141,13 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         jobId: job.jobId,
         now: NOW,
         leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+        expireBefore: new Date(NOW.getTime() - 1),
       }),
       repository.claim({
         jobId: job.jobId,
         now: NOW,
         leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+        expireBefore: new Date(NOW.getTime() - 1),
       }),
     ]);
 
@@ -153,6 +156,22 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       status: 'running',
       maxConcurrent: 3,
     });
+
+    const expired = makeJob({
+      createdAt: new Date(NOW.getTime() - 16 * 60_000),
+    });
+    await repository.create(expired);
+    await expect(
+      repository.claim({
+        jobId: expired.jobId,
+        now: NOW,
+        leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+        expireBefore: new Date(NOW.getTime() - 15 * 60_000),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.findOwned(owner(expired), expired.jobId),
+    ).resolves.toMatchObject({ status: 'queued' });
   });
 
   it('returns an unmarked running job to the queue and marks dispatch once', async () => {
@@ -162,6 +181,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       jobId: job.jobId,
       now: NOW,
       leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
     });
 
     await expect(repository.returnToQueue(job.jobId)).resolves.toBe(true);
@@ -172,6 +192,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       jobId: job.jobId,
       now: NOW,
       leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
     });
     await expect(repository.markDispatchStarted(job.jobId, NOW)).resolves.toBe(
       true,
@@ -201,6 +222,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       jobId: leased.jobId,
       now: NOW,
       leaseExpiresAt: new Date(NOW.getTime() - 1),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
     });
     await expect(repository.releaseExpiredLeases(NOW)).resolves.toContainEqual({
       jobId: leased.jobId,
@@ -218,6 +240,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       jobId: dispatched.jobId,
       now: NOW,
       leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
     });
     await repository.markDispatchStarted(
       dispatched.jobId,
@@ -298,6 +321,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       jobId: running.jobId,
       now: NOW,
       leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
     });
     await repository.fail({
       jobId: terminal.jobId,
@@ -348,6 +372,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       jobId: job.jobId,
       now: NOW,
       leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
     });
 
     await expect(

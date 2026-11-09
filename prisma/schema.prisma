@@ -610,6 +610,7 @@ model SpeakingGradingJob {
   apiKeyId          String    @map("api_key_id")
   maxConcurrent     Int       @map("max_concurrent")
   quotaTracked      Boolean   @map("quota_tracked")
+  quotaUnverified   Boolean   @map("quota_unverified")
   audioAssetId      String    @map("audio_asset_id")
   part              Int
   questionId        String    @map("question_id")

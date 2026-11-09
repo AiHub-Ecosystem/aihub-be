@@ -20,6 +20,7 @@ describe('Speaking grading jobs migration', () => {
     );
     expect(sql).toContain('result                 jsonb');
     expect(sql).toContain('quota_tracked          boolean NOT NULL');
+    expect(sql).toContain('quota_unverified       boolean NOT NULL');
     expect(sql).toContain('speaking_grading_jobs_claim_idx');
     expect(sql).toContain('speaking_grading_jobs_status_created_idx');
     expect(sql).toContain('speaking_grading_jobs_lease_idx');

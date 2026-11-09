@@ -38,6 +38,7 @@ const job: SpeakingGradingJob = {
   apiKeyId: 'ak_acme',
   maxConcurrent: 3,
   quotaTracked: true,
+  quotaUnverified: false,
   audioAssetId: 'aud_01J00000000000000000000001',
   request: { part: 1, questionId: 'question-1' },
   status: 'queued',

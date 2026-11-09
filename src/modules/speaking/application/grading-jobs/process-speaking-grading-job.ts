@@ -91,6 +91,12 @@ export class ProcessSpeakingGradingJob {
       leaseExpiresAt: new Date(
         now.getTime() + SPEAKING_GRADING_JOB_POLICY.claimLeaseMs,
       ),
+      // The queue deadline is enforced atomically at claim: an outage that
+      // replays queued BullMQ wake-ups cannot dispatch and bill expired jobs
+      // before the sweep settles them.
+      expireBefore: new Date(
+        now.getTime() - SPEAKING_GRADING_JOB_POLICY.queueExpiryMs,
+      ),
     });
     if (job === undefined) return;
 
@@ -332,6 +338,7 @@ export class ProcessSpeakingGradingJob {
           : { errorCode: input.errorCode }),
         modelCalled: input.modelCalled,
         quotaTracked: job.quotaTracked,
+        ...(job.quotaUnverified ? { quotaUnverified: true } : {}),
         occurredAt: dispatchStartedAt,
         totalMs: Math.max(
           0,

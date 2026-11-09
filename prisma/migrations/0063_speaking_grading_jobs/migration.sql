@@ -10,6 +10,7 @@ CREATE TABLE speaking_grading_jobs (
   api_key_id             text NOT NULL,
   max_concurrent         integer NOT NULL CHECK (max_concurrent > 0), -- squawk-ignore prefer-bigint-over-int -- mirrors organizations.max_concurrent, an integer; approved: #1718
   quota_tracked          boolean NOT NULL,
+  quota_unverified       boolean NOT NULL,
   audio_asset_id         text NOT NULL,
   part                   integer NOT NULL CHECK (part BETWEEN 1 AND 3), -- squawk-ignore prefer-bigint-over-int -- an IELTS Speaking part number, 1..3; approved: #1718
   question_id            text NOT NULL,

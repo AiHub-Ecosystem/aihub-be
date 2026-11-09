@@ -210,6 +210,9 @@ export class SubmitSpeakingGradingJob {
     const quota = authenticated.monthlyRequestQuota;
     const quotaTracked = gradedAdmissionPolicy(admissionInput).quotaTracked;
     const jobId = `sgj_${ulid()}`;
+    // Admission runs inside the repository transaction after this object is
+    // captured, so the flag reaches the insert through a getter.
+    let quotaUnverified = false;
     const job: NewSpeakingGradingJob = {
       jobId,
       organizationId: owner.organizationId,
@@ -219,6 +222,9 @@ export class SubmitSpeakingGradingJob {
       apiKeyId: authenticated.apiKeyId,
       maxConcurrent: authenticated.maxConcurrent,
       quotaTracked,
+      get quotaUnverified() {
+        return quotaUnverified;
+      },
       audioAssetId: request.audio_asset_id,
       request: questionRequest(request),
       createdAt: now,
@@ -243,6 +249,7 @@ export class SubmitSpeakingGradingJob {
             if (admissionDecision.stage === 'quota') recordRejected('quota');
             return false;
           }
+          quotaUnverified = admissionDecision.quotaUnverified === true;
 
           if (environment === 'sandbox') {
             let admitted: boolean;

@@ -32,11 +32,17 @@ export interface SpeakingGradingJobRepositoryPort {
     jobId: string,
   ): Promise<SpeakingGradingJob | undefined>;
 
-  /** `queued` -> `running` with a lease; `undefined` when another worker owns it or it is terminal. */
+  /**
+   * `queued` -> `running` with a lease; `undefined` when another worker owns it,
+   * it is terminal, or it was created before `expireBefore`: a job past its
+   * queue deadline is never claimed, so an outage cannot dispatch it before the
+   * sweep settles it as `JOB_EXPIRED`.
+   */
   claim(input: {
     readonly jobId: string;
     readonly now: Date;
     readonly leaseExpiresAt: Date;
+    readonly expireBefore: Date;
   }): Promise<SpeakingGradingJob | undefined>;
 
   /** `running` without a dispatch mark -> `queued`, for a worker that must wait (no Concurrency permit). */
