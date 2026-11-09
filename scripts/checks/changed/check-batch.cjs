@@ -55,6 +55,8 @@ const BATCHED_GATES = [
   'test:lint-staged',
   'check:doc-drift',
   'test:doc-drift',
+  'check:log-redaction',
+  'test:log-redaction',
 ];
 
 /** @param {{freeBytes?: number}} [options] @returns {number} */

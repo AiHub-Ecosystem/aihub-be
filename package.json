@@ -63,6 +63,8 @@
     "test:format-check": "node --test scripts/checks/changed/format-check-cache.spec.mjs",
     "check:doc-drift": "node scripts/checks/doc-drift/check-doc-drift.mjs",
     "test:doc-drift": "node --test scripts/checks/doc-drift/check-doc-drift.spec.mjs",
+    "check:log-redaction": "node scripts/checks/architecture/check-log-redaction.mjs",
+    "test:log-redaction": "node --test scripts/checks/architecture/check-log-redaction.spec.mjs",
     "knip": "bun run generate:prisma-client && node scripts/checks/knip/knip.mjs",
     "verify:summary": "node scripts/checks/changed/verify-summary.cjs",
     "provider:refresh": "node scripts/generate/refresh-provider-contract.mjs",

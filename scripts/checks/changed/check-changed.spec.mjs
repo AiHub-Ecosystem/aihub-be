@@ -29,6 +29,7 @@ const pathCases = [
       'check:folder-entries',
       'check:imports',
       'check:imports:dist',
+      'check:log-redaction',
       'check:tenant-global',
       'knip',
       'lint',
@@ -49,6 +50,7 @@ const pathCases = [
       'check:folder-entries',
       'check:imports',
       'check:imports:dist',
+      'check:log-redaction',
       'check:tenant-global',
       'knip',
       'lint',
@@ -159,6 +161,28 @@ const pathCases = [
     ],
   },
   {
+    // #1788: the redaction gate and its spec select each other, the way the
+    // doc-drift pair does.
+    path: 'scripts/checks/architecture/check-log-redaction.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'check:log-redaction',
+      'lint',
+      'test:log-redaction',
+    ],
+  },
+  {
+    path: 'scripts/checks/architecture/check-log-redaction.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'check:log-redaction',
+      'lint',
+      'test:log-redaction',
+    ],
+  },
+  {
     path: 'scripts/checks/hooks/lint-staged-config.spec.mjs',
     gates: [
       'check:doc-drift',
@@ -227,6 +251,7 @@ const pathCases = [
       'check:file-size',
       'check:imports',
       'check:imports:dist',
+      'check:log-redaction',
       'check:tenant-global',
       'knip',
       'lint',
@@ -440,6 +465,7 @@ await test('a mixed diff keeps the full union of gates (#1634)', () => {
     'check:folder-entries',
     'check:imports',
     'check:imports:dist',
+    'check:log-redaction',
     'check:tenant-global',
     'knip',
     'lint',
@@ -749,6 +775,7 @@ await test('plans independent gates as one concurrent batch and keeps dependents
         'check:domain-globals',
         'check:file-size',
         'check:imports',
+        'check:log-redaction',
         'check:tenant-global',
       ]);
       return { failed: [] };
@@ -758,7 +785,7 @@ await test('plans independent gates as one concurrent batch and keeps dependents
 
   assert.equal(result, 'passed');
   assert.deepEqual(order.slice(0, 2), [
-    'batch:check:data-ownership,check:deprecation,check:doc-drift,check:domain-globals,check:file-size,check:imports,check:tenant-global',
+    'batch:check:data-ownership,check:deprecation,check:doc-drift,check:domain-globals,check:file-size,check:imports,check:log-redaction,check:tenant-global',
     'gate:arch-check',
   ]);
   for (const gate of ['lint', 'type-check', 'build', 'test:related']) {

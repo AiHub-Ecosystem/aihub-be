@@ -6,7 +6,7 @@ paths:
 
 # Security rules
 
-- Never log or return API keys, key hashes, user assertions, internal JWTs, essay text, raw request bodies, or raw downstream bodies.
+- Never log or return API keys, key hashes, user assertions, internal JWTs, essay text, raw request bodies, or raw downstream bodies. `bun run check:log-redaction` enforces this: a logging call whose argument names a secret-bearing identifier fails unless the call site carries `redact-ok: <reason>`.
 - Hash API keys before persistence and compare hashes in the identity boundary; do not store recoverable credentials.
 - Enforce organization and scope checks before dispatching a downstream operation.
 - Keep host selection in trusted configuration; never accept a client-controlled downstream URL.

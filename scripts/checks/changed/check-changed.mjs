@@ -37,6 +37,7 @@ const TS_GATES = [
   'check:file-size',
   'check:imports',
   'check:imports:dist',
+  'check:log-redaction',
   'knip',
   'lint',
   'test:related',
@@ -97,6 +98,8 @@ export const GATE_COMMANDS = {
   'test:format-check': 'test:format-check',
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
+  'check:log-redaction': 'check:log-redaction',
+  'test:log-redaction': 'test:log-redaction',
   'test:issue-triage': 'test:issue-triage',
   'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
@@ -394,6 +397,11 @@ function classifyPathGates(p) {
   }
   if (path.includes('check-doc-drift')) {
     return ['check:doc-drift', 'lint', 'test:doc-drift'];
+  }
+  // #1788: the gate and its spec select each other, the way the doc-drift
+  // pair does, so weakening the gate cannot produce a green run.
+  if (path.includes('check-log-redaction')) {
+    return ['check:log-redaction', 'lint', 'test:log-redaction'];
   }
   if (path.includes('lint-staged-config')) {
     return ['lint', 'test:lint-staged'];
