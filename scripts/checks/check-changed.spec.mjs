@@ -206,6 +206,12 @@ const pathCases = [
   { path: 'tsconfig.scripts.json', gates: ['type-check:scripts'] },
   { path: 'knip.json', gates: ['knip'] },
   { path: 'biome.json', gates: ['lint'] },
+  // #1768: the remaining gate-tool configuration files follow the same rule.
+  { path: '.dependency-cruiser.cjs', gates: ['arch-check'] },
+  { path: '.oxlintrc.json', gates: ['lint'] },
+  { path: 'nest-cli.json', gates: ['build'] },
+  { path: 'tsconfig.build.json', gates: ['build'] },
+  { path: '.squawk.toml', gates: ['check:migrations'] },
   { path: '.prettierrc', gates: ['format:check'] },
   { path: '.prettierignore', gates: ['format:check'] },
   { path: '.lintstagedrc', gates: ['test:lint-staged'] },

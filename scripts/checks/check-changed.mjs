@@ -199,6 +199,23 @@ function classifyPathGates(p) {
   if (path === 'biome.json') {
     return ['lint'];
   }
+  // #1768: `check-architecture.mjs` runs dependency-cruiser through its cache
+  // helper, so a rules change must select the architecture gate; without this
+  // branch a `.cjs` change selects only the generic code gates.
+  if (path === '.dependency-cruiser.cjs') {
+    return ['arch-check'];
+  }
+  if (path === '.oxlintrc.json') {
+    return ['lint'];
+  }
+  // `nest build` compiles through both of these.
+  if (path === 'nest-cli.json' || path === 'tsconfig.build.json') {
+    return ['build'];
+  }
+  // squawk lints the migration SQL that `check:migrations` runs.
+  if (path === '.squawk.toml') {
+    return ['check:migrations'];
+  }
   if (path === '.prettierrc' || path === '.prettierignore') {
     return ['format:check'];
   }
