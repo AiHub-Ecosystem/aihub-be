@@ -43,6 +43,9 @@ function createUseCase(allowedEnvironments: readonly string[]) {
     scopes: ['writing.grade'],
     allowedEnvironments,
     status: 'active',
+    createdByUsername: null,
+    lastRotatedByUsername: null,
+    createdByUserId: null,
     expiresAt: null,
     lastUsedAt: null,
     createdAt: NOW,
@@ -61,6 +64,8 @@ function createUseCase(allowedEnvironments: readonly string[]) {
           allowedEnvironments: input.replacementAllowedEnvironments,
           expiresAt: retired.expiresAt,
           createdAt: NOW,
+          createdByUsername: null,
+          lastRotatedByUsername: 'rotator',
         };
         return result;
       },

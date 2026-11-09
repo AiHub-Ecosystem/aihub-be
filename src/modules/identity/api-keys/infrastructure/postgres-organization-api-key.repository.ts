@@ -35,6 +35,12 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  API_KEY_ATTRIBUTION_JOINS_SQL,
+  ATTRIBUTION_COLUMNS_SQL,
+  handlingUsername,
+} from './organization-api-key-attribution';
+import { callerRetainsAuthority } from './organization-api-key-caller-authority';
 
 /**
  * Locking the Organization row is what makes the active-key limit hold: two
@@ -64,6 +70,9 @@ const INVENTORY_SELECT = {
   expiresAt: true,
   lastUsedAt: true,
   createdAt: true,
+  createdBy: true,
+  createdByAccount: { select: { username: true } },
+  lastRotatedByAccount: { select: { username: true } },
 } as const;
 
 /**
@@ -77,17 +86,19 @@ const INVENTORY_SELECT = {
  */
 const LOCK_API_KEY_SQL = `
   SELECT
-    encode(key_hash, 'hex') AS key_hash_hex,
-    name,
-    key_prefix,
-    scopes,
-    allowed_environments,
-    status,
-    expires_at
-  FROM api_keys
-  WHERE id = $1
-    AND organization_id = $2
-  FOR UPDATE
+    encode(api_key.key_hash, 'hex') AS key_hash_hex,
+    api_key.name,
+    api_key.key_prefix,
+    api_key.scopes,
+    api_key.allowed_environments,
+    api_key.status,
+    api_key.expires_at,
+    ${ATTRIBUTION_COLUMNS_SQL}
+  FROM api_keys AS api_key
+  ${API_KEY_ATTRIBUTION_JOINS_SQL}
+  WHERE api_key.id = $1
+    AND api_key.organization_id = $2
+  FOR UPDATE OF api_key
 `;
 
 /**
@@ -97,20 +108,22 @@ const LOCK_API_KEY_SQL = `
  */
 const LOCK_API_KEY_FOR_REVOKE_SQL = `
   SELECT
-    encode(key_hash, 'hex') AS key_hash_hex,
-    id,
-    name,
-    key_prefix AS "keyPrefix",
-    scopes,
-    allowed_environments AS "allowedEnvironments",
-    status,
-    expires_at AS "expiresAt",
-    last_used_at AS "lastUsedAt",
-    created_at AS "createdAt"
-  FROM api_keys
-  WHERE id = $1
-    AND organization_id = $2
-  FOR UPDATE
+    encode(api_key.key_hash, 'hex') AS key_hash_hex,
+    api_key.id,
+    api_key.name,
+    api_key.key_prefix AS "keyPrefix",
+    api_key.scopes,
+    api_key.allowed_environments AS "allowedEnvironments",
+    api_key.status,
+    api_key.expires_at AS "expiresAt",
+    api_key.last_used_at AS "lastUsedAt",
+    api_key.created_at AS "createdAt",
+    ${ATTRIBUTION_COLUMNS_SQL}
+  FROM api_keys AS api_key
+  ${API_KEY_ATTRIBUTION_JOINS_SQL}
+  WHERE api_key.id = $1
+    AND api_key.organization_id = $2
+  FOR UPDATE OF api_key
 `;
 
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
@@ -126,6 +139,12 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   const expiresAt = dateValue(value, 'expiresAt');
   const lastUsedAt = dateValue(value, 'lastUsedAt');
   const createdAt = dateValue(value, 'createdAt');
+  const createdByUsername = handlingUsername(value, 'createdByUsername');
+  const lastRotatedByUsername = handlingUsername(
+    value,
+    'lastRotatedByUsername',
+  );
+  const createdByUserId = handlingUsername(value, 'createdBy');
 
   // Mapped from the row rather than hardcoded to the value the query happens
   // to select: the filter belongs in one place, and a mapper that contradicts
@@ -145,7 +164,10 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
     expiresAt === undefined ||
     lastUsedAt === undefined ||
     createdAt === undefined ||
-    createdAt === null
+    createdAt === null ||
+    createdByUsername === undefined ||
+    lastRotatedByUsername === undefined ||
+    createdByUserId === undefined
   ) {
     return undefined;
   }
@@ -160,6 +182,9 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
     expiresAt: expiresAt ?? null,
     lastUsedAt,
     createdAt,
+    createdByUsername,
+    lastRotatedByUsername,
+    createdByUserId,
   };
 }
 
@@ -197,6 +222,19 @@ export class PostgresOrganizationApiKeyRepository
         if (!isRecord(organization) || organization.status !== 'active') {
           return { kind: 'organization_unavailable' as const };
         }
+        // ADR-0027 as amended: the caller is re-read under the Organization
+        // lock, so a disable or demotion that committed while this request
+        // waited refuses it instead of leaving a fresh credential behind.
+        if (
+          !(await callerRetainsAuthority(
+            transaction,
+            input.organizationId,
+            input.actorUserId,
+            'api_key_rotate',
+          ))
+        ) {
+          return { kind: 'caller_not_authorized' as const };
+        }
 
         const keyRows = await identityRows(transaction, LOCK_API_KEY_SQL, [
           input.apiKeyId,
@@ -216,12 +254,16 @@ export class PostgresOrganizationApiKeyRepository
           'allowed_environments',
         );
         const expiresAt = dateValue(key, 'expires_at');
+        const createdByUsername = handlingUsername(key, 'createdByUsername');
+        const storedCreatedBy = handlingUsername(key, 'createdByUserId');
         if (
           retiredKeyHash === undefined ||
           retiredKeyPrefix === undefined ||
           name === undefined ||
           scopes === undefined ||
           allowedEnvironments === undefined ||
+          createdByUsername === undefined ||
+          storedCreatedBy === undefined ||
           // `undefined` is an unreadable value; `null` is a key with no expiry.
           expiresAt === undefined
         ) {
@@ -254,6 +296,8 @@ export class PostgresOrganizationApiKeyRepository
 
         // Rotation narrows environment authority to one. It is exempt from the
         // active-key cap because it never changes how many keys are active.
+        // The replacement keeps the creator and records this caller as the last
+        // rotator, so the attribution follows the credential (ADR-0027 as amended).
         const { createdAt } = await transaction.apiKey.create({
           data: {
             id: input.replacementId,
@@ -264,6 +308,11 @@ export class PostgresOrganizationApiKeyRepository
             scopes: [...scopes],
             allowedEnvironments: [...input.replacementAllowedEnvironments],
             expiresAt: expiresAt ?? null,
+            // The stored creator wins: the application's copy only exists so a
+            // key created before this column read the same. Falling back to
+            // the caller would attribute a successor to whoever rotated it.
+            createdBy: storedCreatedBy ?? input.createdBy,
+            lastRotatedBy: input.actorUserId,
           },
           select: { createdAt: true },
         });
@@ -291,6 +340,8 @@ export class PostgresOrganizationApiKeyRepository
           allowedEnvironments: [...input.replacementAllowedEnvironments],
           expiresAt: expiresAt ?? null,
           createdAt,
+          createdByUsername,
+          lastRotatedByUsername: input.rotatedByUsername,
         };
       });
     } catch (error) {
@@ -327,6 +378,19 @@ export class PostgresOrganizationApiKeyRepository
         const organization = organizationRows[0];
         if (!isRecord(organization) || organization.status !== 'active') {
           return { kind: 'organization_unavailable' as const };
+        }
+        // ADR-0027 as amended: a caller demoted or disabled while this request
+        // waited is refused here, so a revoked-then-reread key cannot be
+        // closed by an authority that no longer exists.
+        if (
+          !(await callerRetainsAuthority(
+            transaction,
+            input.organizationId,
+            input.actorUserId,
+            'api_key_revoke',
+          ))
+        ) {
+          return { kind: 'caller_not_authorized' as const };
         }
 
         const keyRows = await identityRows(
@@ -463,6 +527,19 @@ export class PostgresOrganizationApiKeyRepository
         if (entitlements === undefined) {
           throw invalidIdentityData();
         }
+        // ADR-0027 as amended: an admin disabled during an incident must not
+        // complete a concurrent creation and walk away with a fresh
+        // credential.
+        if (
+          !(await callerRetainsAuthority(
+            transaction,
+            input.organizationId,
+            input.actorUserId,
+            'api_key_create',
+          ))
+        ) {
+          return { kind: 'caller_not_authorized' as const };
+        }
         if (
           !hasRequiredOrganizationApiKeyEntitlements(
             entitlements,
@@ -489,6 +566,7 @@ export class PostgresOrganizationApiKeyRepository
             scopes: [...input.scopes],
             allowedEnvironments: [...input.allowedEnvironments],
             expiresAt: input.expiresAt,
+            createdBy: input.actorUserId,
           },
           select: { createdAt: true },
         });

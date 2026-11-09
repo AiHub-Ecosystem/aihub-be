@@ -61,6 +61,8 @@ function rotated() {
     allowedEnvironments: ['production'] as readonly string[],
     expiresAt: INHERITED_EXPIRY,
     createdAt: CREATED_AT,
+    createdByUsername: null,
+    lastRotatedByUsername: 'rotator',
   };
 }
 

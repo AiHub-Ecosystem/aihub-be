@@ -33,6 +33,10 @@ export interface RotatedOrganizationApiKey {
   readonly allowedEnvironments: readonly string[];
   readonly expiresAt: Date | null;
   readonly createdAt: Date;
+  /** Who created the key this replacement inherits, if anyone is recorded. */
+  readonly createdByUsername: string | null;
+  /** Who rotated it: the caller, by definition of this act (ADR-0027 as amended). */
+  readonly lastRotatedByUsername: string | null;
 }
 
 /**
@@ -70,6 +74,7 @@ export class RotateOrganizationApiKey {
     }
 
     const now = this.now();
+    const rotatedByUsername = admission.caller.username ?? null;
     // Reuse the management read to pick the one environment the replacement
     // keeps; the transaction refuses if the stored allowlist changed since.
     const retired = (
@@ -79,6 +84,7 @@ export class RotateOrganizationApiKey {
       })
     ).find((key) => key.apiKeyId === input.apiKeyId);
     const retiredAllowedEnvironments = retired?.allowedEnvironments ?? [];
+    const retiredCreatedBy = retired?.createdByUserId ?? null;
     const replacementAllowedEnvironments = rotatedKeyEnvironments(
       retiredAllowedEnvironments,
     );
@@ -100,6 +106,8 @@ export class RotateOrganizationApiKey {
       keyPrefix: generated.prefix,
       retiredAllowedEnvironments,
       replacementAllowedEnvironments,
+      createdBy: retiredCreatedBy,
+      rotatedByUsername: rotatedByUsername ?? '',
       now,
     });
 
@@ -116,6 +124,11 @@ export class RotateOrganizationApiKey {
       throw forbidden('API key cannot be rotated');
     }
     if (result.kind === 'organization_unavailable') {
+      throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_rotate.refusal);
+    }
+    if (result.kind === 'caller_not_authorized') {
+      // The caller lost the authority this act needs while it waited for its
+      // locks. No replacement was written, so nothing leaked.
       throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_rotate.refusal);
     }
 
@@ -139,6 +152,8 @@ export class RotateOrganizationApiKey {
       allowedEnvironments: result.allowedEnvironments,
       expiresAt: result.expiresAt,
       createdAt: result.createdAt,
+      createdByUsername: result.createdByUsername,
+      lastRotatedByUsername: result.lastRotatedByUsername,
     };
   }
 }

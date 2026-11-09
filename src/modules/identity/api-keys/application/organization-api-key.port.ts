@@ -28,7 +28,9 @@ export type CreateOrganizationApiKeyRecordResult =
   | { readonly kind: 'created'; readonly createdAt: Date }
   | { readonly kind: 'entitlements_missing' }
   | { readonly kind: 'limit_reached' }
-  | { readonly kind: 'organization_unavailable' };
+  | { readonly kind: 'organization_unavailable' }
+  /** The caller's Membership no longer admits this surface (ADR-0027 as amended). */
+  | { readonly kind: 'caller_not_authorized' };
 
 export interface ListOrganizationApiKeysInput {
   readonly context: RequestContext;
@@ -39,6 +41,10 @@ export interface ListOrganizationApiKeysInput {
  * One durable key as the management surface reads it. `status` is the column,
  * not the status the API publishes: an expired key still reads `active` here,
  * and the published lifecycle is derived from `expiresAt` in the domain.
+ *
+ * ADR-0027 as amended: `createdByUsername` and `lastRotatedByUsername` are who handled the
+ * key, so a removed manager's credentials are attributable rather than only
+ * traceable through an audit event that is pruned years earlier.
  */
 export interface OrganizationApiKeyRecord {
   readonly apiKeyId: string;
@@ -50,6 +56,10 @@ export interface OrganizationApiKeyRecord {
   readonly expiresAt: Date | null;
   readonly lastUsedAt: Date | null;
   readonly createdAt: Date;
+  readonly createdByUsername: string | null;
+  readonly lastRotatedByUsername: string | null;
+  /** The creator's account, so a rotation can carry the attribution forward. */
+  readonly createdByUserId: string | null;
 }
 
 export interface RotateOrganizationApiKeyRecordInput {
@@ -67,6 +77,10 @@ export interface RotateOrganizationApiKeyRecordInput {
   readonly retiredAllowedEnvironments: readonly string[];
   /** The environments the replacement keeps. */
   readonly replacementAllowedEnvironments: readonly string[];
+  /** The retired key's creator, so the replacement carries the same attribution. */
+  readonly createdBy: string | null;
+  /** The acting account's username, reported as the replacement's last rotator. */
+  readonly rotatedByUsername: string;
   /**
    * The application's clock. The store decides rotatability under its lock but
    * against this moment, so the expiry rule is never settled by the database's
@@ -85,10 +99,14 @@ export type RotateOrganizationApiKeyRecordResult =
       readonly allowedEnvironments: readonly string[];
       readonly expiresAt: Date | null;
       readonly createdAt: Date;
+      readonly createdByUsername: string | null;
+      readonly lastRotatedByUsername: string | null;
     }
   | { readonly kind: 'key_not_found' }
   | { readonly kind: 'key_not_rotatable' }
-  | { readonly kind: 'organization_unavailable' };
+  | { readonly kind: 'organization_unavailable' }
+  /** The caller's Membership no longer admits this surface (ADR-0027 as amended). */
+  | { readonly kind: 'caller_not_authorized' };
 
 export interface RevokeOrganizationApiKeyRecordInput {
   readonly context: RequestContext;
@@ -113,7 +131,9 @@ export type RevokeOrganizationApiKeyRecordResult =
       readonly key: OrganizationApiKeyRecord;
     }
   | { readonly kind: 'key_not_found' }
-  | { readonly kind: 'organization_unavailable' };
+  | { readonly kind: 'organization_unavailable' }
+  /** The caller's Membership no longer admits this surface (ADR-0027 as amended). */
+  | { readonly kind: 'caller_not_authorized' };
 
 export interface OrganizationApiKeyPort {
   createApiKey(

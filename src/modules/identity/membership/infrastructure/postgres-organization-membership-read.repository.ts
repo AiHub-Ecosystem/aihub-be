@@ -35,16 +35,22 @@ import {
   identityRows,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
+// The caller's username rides along because surfaces that record who handled an
+// organization-owned credential report it in the same response (ADR-0027 as amended), and
+// resolving it here costs no second read.
 export const RESOLVE_MEMBERSHIP_SQL = `
   SELECT
     membership.organization_id,
     membership.user_account_id,
+    caller.username,
     organization.status AS organization_status,
     membership.role,
     membership.status AS membership_status
   FROM organization_members AS membership
   INNER JOIN organizations AS organization
     ON organization.id = membership.organization_id
+  INNER JOIN user_accounts AS caller
+    ON caller.id = membership.user_account_id
   WHERE membership.user_account_id = $1
     AND membership.organization_id = $2
   LIMIT 1
@@ -176,13 +182,20 @@ function mapMembershipRecord(
   );
   const role = membershipRoleValue(value, 'role');
   const status = membershipStatusValue(value, 'membership_status');
+  const username =
+    value.username === undefined || value.username === null
+      ? undefined
+      : stringValue(value, 'username');
 
   if (
     organizationId === undefined ||
     userId === undefined ||
     organizationStatus === undefined ||
     role === undefined ||
-    status === undefined
+    status === undefined ||
+    (value.username !== undefined &&
+      value.username !== null &&
+      username === undefined)
   ) {
     return undefined;
   }
@@ -193,6 +206,7 @@ function mapMembershipRecord(
     organizationStatus,
     role,
     status,
+    ...(username === undefined ? {} : { username }),
   };
 }
 

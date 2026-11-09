@@ -6,7 +6,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 
 | Table (model)                      | Owner       | Columns |
 | ---------------------------------- | ----------- | ------- |
-| ApiKey                             | identity    | 15      |
+| ApiKey                             | identity    | 19      |
 | OperatorRedisFailure               | identity    | 2       |
 | NotificationEvent                  | identity    | 8       |
 | AuthIdentity                       | auth        | 8       |
@@ -38,7 +38,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | WritingChartUpload                 | writing     | 15      |
 | WritingChartRevocationAudit        | writing     | 10      |
 | UsageRecord                        | metering    | 21      |
-| UserAccount                        | auth        | 21      |
+| UserAccount                        | auth        | 23      |
 | UserAvatar                         | avatar      | 7       |
 | UserAvatarUploadGrant              | avatar      | 7       |
 | UserMfaFactor                      | auth        | 8       |
@@ -51,23 +51,27 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 
 Owner: `identity`
 
-| Column              | Type                | Attributes                                                                                    |
-| ------------------- | ------------------- | --------------------------------------------------------------------------------------------- |
-| id                  | String              | @id                                                                                           |
-| organizationId      | String              | @map("organization_id")                                                                       |
-| keyHash             | Bytes               | @unique(map: "api_keys_hash_uq") @map("key_hash")                                             |
-| keyPrefix           | String              | @map("key_prefix")                                                                            |
-| name                | String              |                                                                                               |
-| scopes              | String[]            | @default([])                                                                                  |
-| allowedEnvironments | String[]            | @default(["production"]) @map("allowed_environments")                                         |
-| status              | String              | @default("active")                                                                            |
-| expiresAt           | DateTime?           | @map("expires_at") @db.Timestamptz(6)                                                         |
-| lastUsedAt          | DateTime?           | @map("last_used_at") @db.Timestamptz(6)                                                       |
-| revokedAt           | DateTime?           | @map("revoked_at") @db.Timestamptz(6)                                                         |
-| createdAt           | DateTime            | @default(now()) @map("created_at") @db.Timestamptz(6)                                         |
-| internal            | Boolean             | @default(false)                                                                               |
-| organization        | Organization        | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction) |
-| notificationEvents  | NotificationEvent[] |                                                                                               |
+| Column               | Type                | Attributes                                                                                                          |
+| -------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| id                   | String              | @id                                                                                                                 |
+| organizationId       | String              | @map("organization_id")                                                                                             |
+| keyHash              | Bytes               | @unique(map: "api_keys_hash_uq") @map("key_hash")                                                                   |
+| keyPrefix            | String              | @map("key_prefix")                                                                                                  |
+| name                 | String              |                                                                                                                     |
+| scopes               | String[]            | @default([])                                                                                                        |
+| allowedEnvironments  | String[]            | @default(["production"]) @map("allowed_environments")                                                               |
+| status               | String              | @default("active")                                                                                                  |
+| expiresAt            | DateTime?           | @map("expires_at") @db.Timestamptz(6)                                                                               |
+| lastUsedAt           | DateTime?           | @map("last_used_at") @db.Timestamptz(6)                                                                             |
+| revokedAt            | DateTime?           | @map("revoked_at") @db.Timestamptz(6)                                                                               |
+| createdAt            | DateTime            | @default(now()) @map("created_at") @db.Timestamptz(6)                                                               |
+| internal             | Boolean             | @default(false)                                                                                                     |
+| createdBy            | String?             | @map("created_by")                                                                                                  |
+| lastRotatedBy        | String?             | @map("last_rotated_by")                                                                                             |
+| organization         | Organization        | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)                       |
+| createdByAccount     | UserAccount?        | @relation("ApiKeyCreatedBy", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)         |
+| lastRotatedByAccount | UserAccount?        | @relation("ApiKeyLastRotatedBy", fields: [lastRotatedBy], references: [id], onDelete: NoAction, onUpdate: NoAction) |
+| notificationEvents   | NotificationEvent[] |                                                                                                                     |
 
 ## OperatorRedisFailure
 
@@ -591,6 +595,8 @@ Owner: `auth`
 | writingChartRevocationAudits | WritingChartRevocationAudit[] |                                            |
 | statusAuditsAsTarget         | UserAccountStatusAudit[]      | @relation("target_status_audits")          |
 | statusAuditsAsActor          | UserAccountStatusAudit[]      | @relation("actor_status_audits")           |
+| apiKeysCreated               | ApiKey[]                      | @relation("ApiKeyCreatedBy")               |
+| apiKeysLastRotated           | ApiKey[]                      | @relation("ApiKeyLastRotatedBy")           |
 
 ## UserAvatar
 

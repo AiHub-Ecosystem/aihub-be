@@ -31,6 +31,12 @@ export interface OrganizationMembershipRecord {
   readonly organizationStatus: OrganizationStatus;
   readonly role: OrganizationMembershipRole;
   readonly status: OrganizationMembershipStatus;
+  /**
+   * The immutable public identifier of the caller. Surfaces that record who
+   * handled an organization-owned credential report it in the same response
+   * (ADR-0027 as amended), and the admission has already read it.
+   */
+  readonly username?: string;
 }
 
 export interface ResolveMembershipInput {

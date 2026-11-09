@@ -542,6 +542,10 @@ describe('organization API key rotation against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: stored.rows[0]?.allowed_environments ?? [],
       replacementAllowedEnvironments: [replacementEnvironment],
+      // Attribution is not what these concurrency suites assert; the keys they
+      // seed predate migration 0063, so a null creator is the honest value.
+      createdBy: null,
+      rotatedByUsername: 'rotator',
       now,
     });
   }
@@ -652,6 +656,8 @@ describe('organization API key rotation against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: ['sandbox', 'production'],
       replacementAllowedEnvironments: ['sandbox'],
+      createdBy: null,
+      rotatedByUsername: 'rotator',
       now: new Date(),
     });
 
@@ -698,6 +704,8 @@ describe('organization API key rotation against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: ['sandbox', 'production'],
       replacementAllowedEnvironments: ['sandbox'],
+      createdBy: null,
+      rotatedByUsername: 'rotator',
       now: new Date(),
     });
 
@@ -798,6 +806,8 @@ describe('organization API key rotation against PostgreSQL', () => {
         keyPrefix: replacement.prefix,
         retiredAllowedEnvironments: ['production'],
         replacementAllowedEnvironments: ['production'],
+        createdBy: null,
+        rotatedByUsername: 'rotator',
         now: new Date(),
       }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
@@ -1111,6 +1121,8 @@ describe('organization API key audit trail against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: ['production'],
       replacementAllowedEnvironments: ['production'],
+      createdBy: null,
+      rotatedByUsername: 'rotator',
       now: new Date(),
     });
 

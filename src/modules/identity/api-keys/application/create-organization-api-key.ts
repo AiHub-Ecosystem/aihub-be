@@ -203,6 +203,11 @@ export class CreateOrganizationApiKey {
     if (result.kind === 'organization_unavailable') {
       throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_create.refusal);
     }
+    if (result.kind === 'caller_not_authorized') {
+      // The caller's Membership changed while this request waited for its
+      // locks; it is the same refusal a fresh request would receive.
+      throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_create.refusal);
+    }
 
     return {
       apiKey: generated.raw,

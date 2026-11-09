@@ -59,6 +59,9 @@ function keyRecord(
     expiresAt: null,
     lastUsedAt: null,
     createdAt: new Date('2026-09-20T10:00:00.000Z'),
+    createdByUsername: null,
+    lastRotatedByUsername: null,
+    createdByUserId: null,
     ...overrides,
   };
 }

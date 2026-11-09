@@ -63,6 +63,9 @@ function revoked() {
       expiresAt: null,
       lastUsedAt: null,
       createdAt: CREATED_AT,
+      createdByUsername: null,
+      lastRotatedByUsername: null,
+      createdByUserId: null,
     },
   };
 }
