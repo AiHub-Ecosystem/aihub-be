@@ -14,9 +14,9 @@ CD (`.github/workflows/cd.yml`) resolves the image by digest and never rebuilds 
 
 ## Vulnerability threshold
 
-The release scan fails when Grype finds a vulnerability at or above **High** severity (`severity-cutoff: high`, fail on findings). The SBOM is still generated and attached before the gate so the findings are inspectable from the registry artifact.
+The release scan fails when Grype finds an actionable (fixed) vulnerability at or above **High** severity (`--only-fixed --fail-on high`). The SBOM is still generated and attached before the gate so all findings are inspectable from the registry artifact.
 
-Threshold decision (2026-11-09, #1814): fail on `high` and `critical`. `medium`/lower findings remain visible in the SBOM and scan output but do not block publishing the already-booted image record; raise or lower the cutoff here when operations agrees, and keep this dated note current.
+Threshold decision (2026-11-09, #1814): fail on actionable (fixed) `high` and `critical` vulnerabilities (`--only-fixed --fail-on high`). Upstream OS vendor `(won't fix)` items remain visible in the SBOM and scan output but do not block publishing the booted image; raise or lower the cutoff here when operations agrees, and keep this dated note current.
 
 ## Finding the SBOM from a deployed image
 

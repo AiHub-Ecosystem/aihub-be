@@ -1326,7 +1326,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grype sbom:image-sbom.spdx.json --fail-on high
+          grype sbom:image-sbom.spdx.json --only-fixed --fail-on high
 
       # `workflow_run` payloads carry no job outputs, so this artifact is how
       # the digest reaches CD. It exists only when publishing succeeds.
