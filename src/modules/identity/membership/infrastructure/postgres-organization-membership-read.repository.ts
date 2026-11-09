@@ -183,7 +183,7 @@ function mapMembershipRecord(
   const role = membershipRoleValue(value, 'role');
   const status = membershipStatusValue(value, 'membership_status');
   const username =
-    value.username === undefined || value.username === null
+    value['username'] === undefined || value['username'] === null
       ? undefined
       : stringValue(value, 'username');
 
@@ -193,8 +193,8 @@ function mapMembershipRecord(
     organizationStatus === undefined ||
     role === undefined ||
     status === undefined ||
-    (value.username !== undefined &&
-      value.username !== null &&
+    (value['username'] !== undefined &&
+      value['username'] !== null &&
       username === undefined)
   ) {
     return undefined;

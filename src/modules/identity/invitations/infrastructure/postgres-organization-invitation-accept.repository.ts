@@ -192,7 +192,7 @@ export class PostgresOrganizationInvitationAcceptRepository
         // or expired while this transaction waited for the Organization lock
         // is refused here, exactly as the pre-read would have.
         const consumedAt =
-          invitation.consumed_at === null
+          invitation['consumed_at'] === null
             ? null
             : dateValue(invitation, 'consumed_at');
         const expiresAt = dateValue(invitation, 'expires_at');

@@ -11,21 +11,21 @@ import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-id
 export function jsonWebKeyThumbprint(
   jwk: PublicJsonWebKey,
 ): string | undefined {
-  const kty = jwk.kty;
+  const kty = jwk['kty'];
   if (typeof kty !== 'string') return undefined;
 
   // RFC 7638 hashes the members' values exactly as the JWK carries them, so
   // the base64url strings go into the canonical JSON unreencoded.
   let required: Record<string, string>;
   if (kty === 'RSA') {
-    const e = jwk.e;
-    const n = jwk.n;
+    const e = jwk['e'];
+    const n = jwk['n'];
     if (typeof e !== 'string' || typeof n !== 'string') return undefined;
     required = { e, kty, n };
   } else if (kty === 'EC') {
-    const crv = jwk.crv;
-    const x = jwk.x;
-    const y = jwk.y;
+    const crv = jwk['crv'];
+    const x = jwk['x'];
+    const y = jwk['y'];
     if (
       typeof crv !== 'string' ||
       typeof x !== 'string' ||

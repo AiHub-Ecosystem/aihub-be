@@ -52,8 +52,8 @@ export function lockedCallerAuthority(
     return undefined;
   }
 
-  const role = value.role;
-  const status = value.membership_status;
+  const role = value['role'];
+  const status = value['membership_status'];
   return (role === 'owner' || role === 'admin' || role === 'member') &&
     (status === 'active' || status === 'disabled')
     ? { role, status }
