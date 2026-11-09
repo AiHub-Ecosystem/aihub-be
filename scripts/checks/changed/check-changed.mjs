@@ -98,6 +98,7 @@ export const GATE_COMMANDS = {
   'test:format-check': 'test:format-check',
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
+  'test:commit-messages': 'test:commit-messages',
   'test:generated-drift': 'test:generated-drift',
   'check:log-redaction': 'check:log-redaction',
   'test:log-redaction': 'test:log-redaction',
@@ -320,10 +321,21 @@ function classifyPathGates(p) {
 
   // A workflow edit can break the scan range selection, so the job that reads
   // ci.yml is asserted by its own suite. This precedes the generic YAML rule
-  // below, which would otherwise stop at `format:check`. #1789: the workflow
-  // also wires the generated-artifact drift check, so its spec runs too.
+  // below, which would otherwise stop at `format:check`. #1786: the workflow
+  // also runs the hook and drift suites and the commit-message range check,
+  // so their specs run too. #1789: the workflow wires the generated-artifact
+  // drift check, so its spec runs as well.
   if (path === '.github/workflows/ci.yml') {
-    return ['format:check', 'test:generated-drift', 'test:secret-scan'];
+    return [
+      'format:check',
+      'test:commit-message',
+      'test:commit-messages',
+      'test:doc-drift',
+      'test:generated-drift',
+      'test:issue-triage',
+      'test:lint-staged',
+      'test:secret-scan',
+    ];
   }
 
   // #1766: a compose change selects the validators CI runs over the rendered
@@ -423,6 +435,12 @@ function classifyPathGates(p) {
   // artifact files, so it must never run over a developer's uncommitted work.
   if (path.includes('generated-drift')) {
     return ['lint', 'test:generated-drift'];
+  }
+  // #1786: the commit-message range checker and its spec select each other.
+  // The checker itself runs only in CI's static job, where the range comes
+  // from the trigger; a local run has no range to answer for.
+  if (path.includes('commit-messages')) {
+    return ['lint', 'test:commit-messages'];
   }
 
   if (path.includes('nginx')) {

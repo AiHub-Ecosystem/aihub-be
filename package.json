@@ -65,6 +65,8 @@
     "test:doc-drift": "node --test scripts/checks/doc-drift/check-doc-drift.spec.mjs",
     "check:generated-drift": "node scripts/ci/generated-drift/check-generated-drift.mjs",
     "test:generated-drift": "node --test scripts/ci/generated-drift/check-generated-drift.spec.mjs",
+    "check:commit-messages": "node scripts/ci/commit-messages/check-commit-messages.mjs",
+    "test:commit-messages": "node --test scripts/ci/commit-messages/check-commit-messages.spec.mjs",
     "check:log-redaction": "node scripts/checks/architecture/check-log-redaction.mjs",
     "test:log-redaction": "node --test scripts/checks/architecture/check-log-redaction.spec.mjs",
     "knip": "bun run generate:prisma-client && node scripts/checks/knip/knip.mjs",

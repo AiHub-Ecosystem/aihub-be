@@ -91,10 +91,8 @@ await test('a failed generator is reported instead of silently passing its artif
 
 await test('the static job runs the check on pull requests and pushes to main', () => {
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
-  const staticJob = workflow.slice(
-    workflow.indexOf('  static:'),
-    workflow.indexOf('  oasdiff'),
-  );
+  const start = workflow.indexOf('\n  static:');
+  const staticJob = workflow.slice(start, workflow.indexOf('\n  test:', start));
   assert.ok(staticJob.length > 0, 'the static job is missing');
   assert.match(
     staticJob,
