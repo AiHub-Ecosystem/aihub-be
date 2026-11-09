@@ -5,13 +5,13 @@ Speaking assessment. Your backend sends a grading request to AIHUB and receives
 the result; keep AIHUB credentials on your server, never in a browser or mobile
 app.
 
-## Customer API
+## Legacy `/v1` grading endpoints
 
-The table below lists the `/v1` grading operations. `/v2` is the latest Public
-API major and also serves Writing exercises, Speaking Part and Test grading, and
-stored-result reads; `/v1` is deprecated and has a published sunset date. Use
-the [integration guide](docs/integration-guide.md) and the generated `/docs`
-reference for each major's supported operations, limits, and lifecycle.
+The table below lists the grading operations available on `/v1`. `/v2` is the
+latest Public API major and also serves Writing exercises, Speaking grading,
+and stored-result reads. Both majors are currently supported, and `/v1` has a
+published sunset date. Use the [integration guide](docs/integration-guide.md)
+and the API Reference for the operations, limits, and lifecycle of each major.
 
 | Capability                             | Endpoint                               | Request                     |
 | -------------------------------------- | -------------------------------------- | --------------------------- |
@@ -20,12 +20,11 @@ reference for each major's supported operations, limits, and lifecycle.
 | Grade IELTS Speaking audio             | `POST /v1/ielts/speaking/grading`      | Multipart audio upload      |
 | Grade IELTS Speaking from an audio URL | `POST /v1/ielts/speaking/grading-json` | JSON request with audio URL |
 
-For a customer-facing API docs UI, show the `/v1` downstream grading operations
-listed above. The public Speaking question catalog at
-`GET /v1/ielts/speaking/questions` is a separate supporting endpoint, not an AI
-service proxy. Account, sign-in, and Organization-management routes are also
-outside that product docs scope. The backend's generated `/docs` reference
-currently covers the complete API, not just the customer integration surface.
+The table is not a complete list of customer API operations. The generated
+`/docs` reference covers the complete API; the Customer Web's API Reference
+lists the supported majors and their operations. The public Speaking question
+catalog at `GET /v1/ielts/speaking/questions` is a supporting endpoint, not an AI
+service proxy.
 
 ## Authentication at a Glance
 

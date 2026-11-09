@@ -137,14 +137,17 @@ function target(value: unknown): BillingAdjustmentTarget {
   if (typeof value === 'object' && value !== null) {
     const record = value as Record<string, unknown>;
     if (
-      Array.isArray(record.request_ids) &&
-      record.request_ids.every((id) => typeof id === 'string')
+      Array.isArray(record['request_ids']) &&
+      record['request_ids'].every((id) => typeof id === 'string')
     ) {
-      return { requestIds: record.request_ids as string[] };
+      return { requestIds: record['request_ids'] as string[] };
     }
-    const period = record.period as Record<string, unknown> | undefined;
-    if (typeof period?.from === 'string' && typeof period.to === 'string') {
-      return { period: { from: period.from, to: period.to } };
+    const period = record['period'] as Record<string, unknown> | undefined;
+    if (
+      typeof period?.['from'] === 'string' &&
+      typeof period['to'] === 'string'
+    ) {
+      return { period: { from: period['from'], to: period['to'] } };
     }
   }
   throw internalError('billing field corrects is invalid');
@@ -221,19 +224,19 @@ async function readUsage(
     organizationId ?? null,
   );
   return rows.map((row) => ({
-    organizationId: text(row.organization_id, 'organization_id'),
-    operation: text(row.operation, 'operation'),
-    billableResponses: count(row.billable_responses, 'billable_responses'),
+    organizationId: text(row['organization_id'], 'organization_id'),
+    operation: text(row['operation'], 'operation'),
+    billableResponses: count(row['billable_responses'], 'billable_responses'),
     billableBackgroundCompletions: count(
-      row.billable_background,
+      row['billable_background'],
       'billable_background',
     ),
-    quotaUnverified: count(row.quota_unverified, 'quota_unverified'),
-    excludedReplays: count(row.excluded_replays, 'excluded_replays'),
-    excludedFailures: count(row.excluded_failures, 'excluded_failures'),
-    excludedInternal: count(row.excluded_internal, 'excluded_internal'),
+    quotaUnverified: count(row['quota_unverified'], 'quota_unverified'),
+    excludedReplays: count(row['excluded_replays'], 'excluded_replays'),
+    excludedFailures: count(row['excluded_failures'], 'excluded_failures'),
+    excludedInternal: count(row['excluded_internal'], 'excluded_internal'),
     excludedNonProduction: count(
-      row.excluded_non_production,
+      row['excluded_non_production'],
       'excluded_non_production',
     ),
   }));
@@ -250,15 +253,15 @@ async function readAdjustments(
     organizationId ?? null,
   );
   return rows.map((row) => ({
-    id: text(row.id, 'id'),
-    organizationId: text(row.organization_id, 'organization_id'),
-    operation: text(row.operation, 'operation'),
-    requests: signedCount(row.requests, 'requests'),
-    reason: text(row.reason, 'reason'),
-    corrects: target(row.corrects),
-    actor: text(row.actor, 'actor'),
-    actorSource: actorSource(row.actor_source),
-    createdAt: date(row.created_at, 'created_at'),
+    id: text(row['id'], 'id'),
+    organizationId: text(row['organization_id'], 'organization_id'),
+    operation: text(row['operation'], 'operation'),
+    requests: signedCount(row['requests'], 'requests'),
+    reason: text(row['reason'], 'reason'),
+    corrects: target(row['corrects']),
+    actor: text(row['actor'], 'actor'),
+    actorSource: actorSource(row['actor_source']),
+    createdAt: date(row['created_at'], 'created_at'),
   }));
 }
 
@@ -273,17 +276,17 @@ async function readClosures(
     organizationId ?? null,
   );
   return rows.map((row) => ({
-    organizationId: text(row.organization_id, 'organization_id'),
-    operation: text(row.operation, 'operation'),
-    billableRequests: count(row.billable_requests, 'billable_requests'),
+    organizationId: text(row['organization_id'], 'organization_id'),
+    operation: text(row['operation'], 'operation'),
+    billableRequests: count(row['billable_requests'], 'billable_requests'),
     adjustmentRequests: signedCount(
-      row.adjustment_requests,
+      row['adjustment_requests'],
       'adjustment_requests',
     ),
-    totalRequests: signedCount(row.total_requests, 'total_requests'),
-    closedBy: text(row.closed_by, 'closed_by'),
-    actorSource: actorSource(row.actor_source),
-    closedAt: date(row.closed_at, 'closed_at'),
+    totalRequests: signedCount(row['total_requests'], 'total_requests'),
+    closedBy: text(row['closed_by'], 'closed_by'),
+    actorSource: actorSource(row['actor_source']),
+    closedAt: date(row['closed_at'], 'closed_at'),
   }));
 }
 

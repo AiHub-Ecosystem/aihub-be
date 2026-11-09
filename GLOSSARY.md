@@ -148,6 +148,24 @@ requires Signed User Assertions; when absent or disabled, it permits Declared
 User IDs.
 _Avoid_: JWKS health
 
+**Identity Cache Entry**:
+A temporary copy of API-key authorization data or an Organization's public
+verification keys that AIHUB uses while making an identity decision. It is
+derived from an authoritative source and never becomes a source of truth.
+_Avoid_: durable identity record
+
+**Identity Cache Integrity**:
+The guarantee that an Identity Cache Entry may affect authentication only when
+AIHUB validates its origin and original validity window. If the verification key
+is not configured, Redis entries are bypassed. An unverified entry cannot
+authenticate a request or verify an assertion.
+_Avoid_: cache trust
+
+**Identity Cache Freshness Deadline**:
+The absolute time until an Identity Cache Entry may be used. Storage expiry may
+shorten this window but cannot extend it.
+_Avoid_: cache TTL
+
 **Signed User Assertion**:
 A short-lived signed token issued by an Organization's backend that asserts an
 End-User ID under that Organization's active identity policy.

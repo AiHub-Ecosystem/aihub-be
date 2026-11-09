@@ -442,8 +442,8 @@ describe('web session HTTP boundary', () => {
 
     expect(response.statusCode).toBe(201);
     const completion = log.completion();
-    expect(typeof completion.client_ip).toBe('string');
-    expect(completion.client_ip_source).toBe('customer_web_bff');
+    expect(typeof completion['client_ip']).toBe('string');
+    expect(completion['client_ip_source']).toBe('customer_web_bff');
   });
 
   it('answers 503 with no credential when the deployment provisioned no secret', async () => {

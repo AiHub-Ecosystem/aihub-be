@@ -1,9 +1,9 @@
 import { internalError } from '@/common/errors/app-error';
+import { PostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/billing/postgres-quota-reconciliation.repository';
 import {
   type RedisQuotaReconciliationClient,
   RedisQuotaReconciliationCounter,
-} from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
-import { PostgresQuotaReconciliationRepository } from '@/modules/metering/infrastructure/billing/postgres-quota-reconciliation.repository';
+} from '@/modules/metering/infrastructure/quota/redis-quota-reconciliation.counter';
 import {
   type QuotaReconciliationEvent,
   QuotaReconciliationService,

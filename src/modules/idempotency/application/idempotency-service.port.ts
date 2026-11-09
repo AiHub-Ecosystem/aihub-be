@@ -15,6 +15,7 @@ export interface IdempotencyExecutionInput {
   readonly timeoutMs: number;
   readonly responseStatus?: number;
   readonly beforeReplay?: () => Promise<void>;
+  readonly beforeDuplicate?: () => Promise<void>;
   readonly signal: AbortSignal;
   readonly deadlineAt: Date;
   readonly backgroundLifecycle?: IdempotencyBackgroundLifecycle;

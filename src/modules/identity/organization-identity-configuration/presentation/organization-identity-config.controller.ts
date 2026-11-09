@@ -157,13 +157,13 @@ function hasInvalidInlineJwks(value: unknown): boolean {
   }
 
   return (
-    (value.jwks_url === undefined || value.jwks_url === null) &&
-    value.public_keys_jwks !== undefined &&
-    value.public_keys_jwks !== null &&
+    (value['jwks_url'] === undefined || value['jwks_url'] === null) &&
+    value['public_keys_jwks'] !== undefined &&
+    value['public_keys_jwks'] !== null &&
     !Value.Check(
       // arch-check: one nested field, checked to answer IDENTITY_JWKS_INVALID rather than INVALID_REQUEST
       PublicJsonWebKeySetSchema,
-      value.public_keys_jwks,
+      value['public_keys_jwks'],
     )
   );
 }

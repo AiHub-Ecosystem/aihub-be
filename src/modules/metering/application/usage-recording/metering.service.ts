@@ -5,7 +5,7 @@ import {
 } from '@/catalog/operation-catalog';
 import { isUsableCount } from '@/common/counts/is-usable-count';
 import type { DownstreamId } from '@/downstream/downstream.types';
-import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
+import type { QuotaCounterPort } from '@/modules/metering/application/quota/quota-counter.port';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
@@ -147,6 +147,7 @@ function usageRecord(
       ? {}
       : { aiProcessingMs: telemetry.aiProcessingMs }),
     billingBasis: input.billingBasis ?? 'response',
+    ...(input.occurredAt === undefined ? {} : { occurredAt: input.occurredAt }),
   };
 }
 
@@ -170,6 +171,9 @@ export class MeteringService implements MeteringFinalizerPort {
       try {
         await this.quotaCounter.increment({
           organizationId: input.organizationId,
+          ...(input.occurredAt === undefined
+            ? {}
+            : { occurredAt: input.occurredAt }),
         });
       } catch {
         record = { ...record, meteringStatus: 'quota_unverified' };

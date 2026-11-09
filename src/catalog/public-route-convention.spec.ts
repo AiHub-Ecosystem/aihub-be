@@ -76,8 +76,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function requires(schema: unknown, name: string): boolean {
   return (
     isRecord(schema) &&
-    Array.isArray(schema.required) &&
-    schema.required.includes(name)
+    Array.isArray(schema['required']) &&
+    schema['required'].includes(name)
   );
 }
 
@@ -89,13 +89,13 @@ function requires(schema: unknown, name: string): boolean {
  */
 function dataCarriesStatus(schema: TSchema): boolean {
   const plain: unknown = JSON.parse(JSON.stringify(schema));
-  if (!isRecord(plain) || !isRecord(plain.properties)) return false;
-  const data = plain.properties.data;
+  if (!isRecord(plain) || !isRecord(plain['properties'])) return false;
+  const data = plain['properties']['data'];
   return (
     requires(plain, 'data') &&
     isRecord(data) &&
-    isRecord(data.properties) &&
-    'status' in data.properties &&
+    isRecord(data['properties']) &&
+    'status' in data['properties'] &&
     requires(data, 'status')
   );
 }
@@ -213,6 +213,23 @@ const OPTIONAL_DATA = Type.Object({
 });
 
 describe('public route convention (ADR-0129)', () => {
+  it('accepts the grading-jobs collection as a job create (ADR-0159 decision 2)', () => {
+    const submit = route({
+      id: 'speaking.gradingJobs.create',
+      path: '/v2/ielts/speaking/grading-jobs',
+      successStatus: 202,
+    });
+    const poll = route({
+      id: 'speaking.gradingJobs.get',
+      method: 'GET',
+      path: '/v2/ielts/speaking/grading-jobs/{job_id}',
+      successStatus: 200,
+    });
+
+    // ADR-0159 decision 2 names job creation as a collection create, not a graded call.
+    expect(violations([submit, poll], {})).toEqual([]);
+  });
+
   it('names a graded route that does not end in /grade, and accepts an excused one', () => {
     const noun = route({
       id: 'x.grading',

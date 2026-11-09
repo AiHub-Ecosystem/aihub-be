@@ -156,7 +156,7 @@ describe('PostgresOrganizationAuditReadRepository', () => {
       input({ after: { occurredAt, id: 'oae_01J00000000000000000000001' } }),
     );
 
-    expect(events.map((event) => event.id)).toEqual([row().id]);
+    expect(events.map((event) => event.id)).toEqual([row()['id']]);
     expect(client.queries[0]?.values[1]).toBe(occurredAt);
     expect(client.queries[0]?.values[2]).toBe('oae_01J00000000000000000000001');
   });

@@ -48,9 +48,9 @@ function isSchema(value: unknown): value is Schema {
 
 function resolve(node: unknown, doc: Schema): Schema {
   let current = node;
-  while (isSchema(current) && typeof current.$ref === 'string') {
+  while (isSchema(current) && typeof current['$ref'] === 'string') {
     let target: unknown = doc;
-    for (const part of current.$ref.replace(/^#\//, '').split('/')) {
+    for (const part of current['$ref'].replace(/^#\//, '').split('/')) {
       target = isSchema(target) ? target[part] : undefined;
     }
     current = target;
@@ -62,9 +62,9 @@ function constants(alternatives: readonly Schema[]): string[] | undefined {
   const values: string[] = [];
   for (const alternative of alternatives) {
     if ('const' in alternative) {
-      values.push(String(alternative.const));
-    } else if (Array.isArray(alternative.enum)) {
-      values.push(...alternative.enum.map(String));
+      values.push(String(alternative['const']));
+    } else if (Array.isArray(alternative['enum'])) {
+      values.push(...alternative['enum'].map(String));
     } else {
       return undefined;
     }
@@ -74,12 +74,12 @@ function constants(alternatives: readonly Schema[]): string[] | undefined {
 
 function shapeOf(input: unknown, doc: Schema): Shape {
   const node = resolve(input, doc);
-  const alternatives = [node.anyOf, node.oneOf]
+  const alternatives = [node['anyOf'], node['oneOf']]
     .filter(Array.isArray)
     .flat()
     .map((alternative) => resolve(alternative, doc));
   const nonNull = alternatives.filter(
-    (alternative) => alternative.type !== 'null',
+    (alternative) => alternative['type'] !== 'null',
   );
   const nullable = alternatives.length > nonNull.length;
 
@@ -88,28 +88,28 @@ function shapeOf(input: unknown, doc: Schema): Shape {
     return { ...inner, nullable: inner.nullable || nullable };
   }
 
-  const types = Array.isArray(node.type)
-    ? node.type.map(String)
-    : [node.type].filter((t) => typeof t === 'string').map(String);
+  const types = Array.isArray(node['type'])
+    ? node['type'].map(String)
+    : [node['type']].filter((t) => typeof t === 'string').map(String);
   const values =
     nonNull.length > 1
       ? constants(nonNull)
-      : Array.isArray(node.enum)
-        ? node.enum.map(String)
+      : Array.isArray(node['enum'])
+        ? node['enum'].map(String)
         : 'const' in node
-          ? [String(node.const)]
+          ? [String(node['const'])]
           : undefined;
 
   return {
     kinds: types.filter((type) => type !== 'null'),
     nullable: nullable || types.includes('null'),
     values: values === undefined ? undefined : [...values].sort(),
-    properties: isSchema(node.properties) ? node.properties : {},
+    properties: isSchema(node['properties']) ? node['properties'] : {},
     required: new Set(
-      Array.isArray(node.required) ? node.required.map(String) : [],
+      Array.isArray(node['required']) ? node['required'].map(String) : [],
     ),
-    closed: node.additionalProperties === false,
-    items: node.items,
+    closed: node['additionalProperties'] === false,
+    items: node['items'],
   };
 }
 

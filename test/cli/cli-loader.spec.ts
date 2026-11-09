@@ -22,7 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isRunnerLoader(value: unknown): value is RunnerLoader {
-  return isRecord(value) && typeof value.loadCliRunner === 'function';
+  return isRecord(value) && typeof value['loadCliRunner'] === 'function';
 }
 
 const requireScript = createRequire(

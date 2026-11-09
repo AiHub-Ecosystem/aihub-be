@@ -240,13 +240,13 @@ describe('Speaking smoke request against the public contract', () => {
             child(child(child(operation, 'requestBody'), 'content'), MULTIPART),
             'schema',
           );
-          schema.required = items(schema, 'required').filter(
+          schema['required'] = items(schema, 'required').filter(
             (name) => name !== 'part',
           );
-          operation.parameters = items(operation, 'parameters').map(
+          operation['parameters'] = items(operation, 'parameters').map(
             (parameter) =>
               isRecord(parameter) &&
-              parameter.$ref === '#/components/parameters/UserIdentity'
+              parameter['$ref'] === '#/components/parameters/UserIdentity'
                 ? { name: 'X-User-Identity', in: 'header', required: false }
                 : parameter,
           );
@@ -298,7 +298,7 @@ describe('Speaking smoke request against the public contract', () => {
           child(child(child(operation, 'requestBody'), 'content'), MULTIPART),
           'schema',
         );
-        child(schema, 'properties').accent = { type: 'string' };
+        child(schema, 'properties')['accent'] = { type: 'string' };
         items(schema, 'required').push('accent');
       });
 
@@ -310,11 +310,11 @@ describe('Speaking smoke request against the public contract', () => {
     it('fails when the contract drops a header the helper still sends', () => {
       const emitted = emittedRequestFrom(runHelper());
       const document = changedDocument((operation) => {
-        operation.parameters = items(operation, 'parameters').filter(
+        operation['parameters'] = items(operation, 'parameters').filter(
           (parameter) =>
             !(
               isRecord(parameter) &&
-              parameter.$ref === '#/components/parameters/UserIdentity'
+              parameter['$ref'] === '#/components/parameters/UserIdentity'
             ),
         );
       });

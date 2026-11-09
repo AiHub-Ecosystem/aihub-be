@@ -10,15 +10,15 @@ function object(value: unknown): Json {
 }
 
 export function requestSchema(doc: Json, path: string, media: string): Json {
-  const post = object(object(object(doc.paths)[path]).post);
+  const post = object(object(object(doc['paths'])[path])['post']);
   let schema = object(
-    object(object(object(post.requestBody).content)[media]).schema,
+    object(object(object(post['requestBody'])['content'])[media])['schema'],
   );
-  while (typeof schema.$ref === 'string') {
-    if (!schema.$ref.startsWith('#/'))
+  while (typeof schema['$ref'] === 'string') {
+    if (!schema['$ref'].startsWith('#/'))
       throw new Error('external provider schema reference');
     let target: unknown = doc;
-    for (const part of schema.$ref.slice(2).split('/')) {
+    for (const part of schema['$ref'].slice(2).split('/')) {
       target = object(target)[part.replace(/~1/g, '/').replace(/~0/g, '~')];
     }
     schema = object(target);
@@ -34,7 +34,7 @@ export function requestContractFailures(
 ): string[] {
   const validate = new Ajv2020({ allErrors: true, strict: false }).compile({
     ...requestSchema(doc, path, media),
-    components: doc.components,
+    components: doc['components'],
   });
   if (validate(body)) return [];
   return (validate.errors ?? []).map(

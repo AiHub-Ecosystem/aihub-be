@@ -25,6 +25,7 @@ export interface UsageRecord {
   readonly downstreamMs?: number;
   readonly aiProcessingMs?: number;
   readonly billingBasis: BillingBasis;
+  readonly occurredAt?: Date;
 }
 
 export interface UsageRepositoryPort {

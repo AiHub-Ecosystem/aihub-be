@@ -9,6 +9,15 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.6.0] - 2026-11-08
+
+### Added
+
+- `POST /v2/ielts/speaking/grading-jobs` accepts an existing Speaking Audio
+  asset and returns a durable job ID; `GET /v2/ielts/speaking/grading-jobs/{job_id}`
+  returns its state and terminal result or safe error. Submit accepts an optional
+  `Idempotency-Key`; both routes require `speaking.grade` and are `no-store`.
+
 ## [2.5.0] - 2026-11-02
 
 ### Added

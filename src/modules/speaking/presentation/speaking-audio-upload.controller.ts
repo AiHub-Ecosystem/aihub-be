@@ -33,7 +33,7 @@ import {
   SPEAKING_AUDIO_UPLOAD_SERVICE,
   type SpeakingAudioUploadGrant,
   type SpeakingAudioUploadServicePort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import type { SpeakingAudioAsset } from '@/modules/speaking/domain/speaking-audio-asset';
 
 function requestContext(request: AuthenticatedRequest) {

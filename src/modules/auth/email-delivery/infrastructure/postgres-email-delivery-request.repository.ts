@@ -120,7 +120,10 @@ function toKnownRecords(
   const records: EmailDeliveryRequestRecord[] = [];
   let skipped = 0;
   for (const row of rows) {
-    if (typeof row.kind === 'string' && !isKnownEmailDeliveryKind(row.kind)) {
+    if (
+      typeof row['kind'] === 'string' &&
+      !isKnownEmailDeliveryKind(row['kind'])
+    ) {
       skipped += 1;
       continue;
     }
@@ -148,11 +151,11 @@ function toBacklogRow(value: unknown): EmailDeliveryBacklogRow {
     throw storeError('Email delivery backlog is invalid');
   }
   const kind =
-    value.kind === 'unknown'
+    value['kind'] === 'unknown'
       ? 'unknown'
       : oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
   const queued = integerValue(value, 'queued');
-  const oldestAgeSeconds = value.oldest_age_seconds;
+  const oldestAgeSeconds = value['oldest_age_seconds'];
   if (
     kind === undefined ||
     queued === undefined ||

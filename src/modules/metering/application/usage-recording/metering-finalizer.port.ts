@@ -56,6 +56,8 @@ export interface MeteringFinalizeInput {
   readonly modelCalled?: boolean;
   readonly quotaTracked?: boolean;
   readonly quotaUnverified?: boolean;
+  /** Event time used for billing month when work completes asynchronously. */
+  readonly occurredAt?: Date;
   /** Defaults to `response`. */
   readonly billingBasis?: BillingBasis;
   /**

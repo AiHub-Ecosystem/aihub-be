@@ -53,7 +53,7 @@ export class PostgresOrganizationEntitlementRepository
         if (!isRecord(organization))
           return { kind: 'organization_not_found' as const };
         const name = stringValue(organization, 'name');
-        const entitlements = organization.entitlements;
+        const entitlements = organization['entitlements'];
         if (
           name === undefined ||
           !Array.isArray(entitlements) ||

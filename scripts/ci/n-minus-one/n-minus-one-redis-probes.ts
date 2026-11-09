@@ -119,15 +119,16 @@ export async function verifyRedisCompatibility(input: {
     },
   );
   expectStatus(apiKeyResponse, 201, 'candidate API-key write');
-  const keyData = apiKeyResponse.body?.data as
+  const keyData = apiKeyResponse.body?.['data'] as
     | Record<string, unknown>
     | undefined;
   check(
-    typeof keyData?.api_key === 'string' && typeof keyData.id === 'string',
+    typeof keyData?.['api_key'] === 'string' &&
+      typeof keyData['id'] === 'string',
     'candidate API-key response is incomplete',
   );
-  const apiKey = keyData.api_key;
-  const apiKeyId = keyData.id;
+  const apiKey = keyData['api_key'];
+  const apiKeyId = keyData['id'];
 
   const issuerA = 'https://customer.compat.invalid';
   const identityA = identityKeys();
@@ -226,7 +227,7 @@ export async function verifyRedisCompatibility(input: {
       body: gradeBody,
     },
   );
-  const gradeError = candidateGrade.body?.error;
+  const gradeError = candidateGrade.body?.['error'];
   if (
     typeof gradeError === 'object' &&
     gradeError !== null &&

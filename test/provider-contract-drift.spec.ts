@@ -34,9 +34,9 @@ function isAllowedList(value: unknown): value is Allowed[] {
     value.every(
       (entry) =>
         isRecord(entry) &&
-        typeof entry.kind === 'string' &&
-        typeof entry.path === 'string' &&
-        typeof entry.reason === 'string',
+        typeof entry['kind'] === 'string' &&
+        typeof entry['path'] === 'string' &&
+        typeof entry['reason'] === 'string',
     )
   );
 }
@@ -91,13 +91,13 @@ describe.each([
       'schema',
     ]);
     const providerEnvelope = resolveRef(responseSchema, doc);
-    const envelopeProperties = providerEnvelope.properties as Json;
-    const providerUsage = resolveRef(envelopeProperties.usage, doc);
-    const providerMetrics = resolveRef(envelopeProperties.metrics, doc);
+    const envelopeProperties = providerEnvelope['properties'] as Json;
+    const providerUsage = resolveRef(envelopeProperties['usage'], doc);
+    const providerMetrics = resolveRef(envelopeProperties['metrics'], doc);
     // The provider wraps the result as `{ status, data }`; AIHUB's schema is the
     // `data` object, which the adapter unwraps first.
     const providerData = {
-      node: envelopeProperties.data,
+      node: envelopeProperties['data'],
       doc,
     };
     const oursNode: unknown = JSON.parse(
@@ -113,16 +113,16 @@ describe.each([
       `${entry.kind} ${entry.path}`;
 
     it('publishes root-level usage counts and AI processing time', () => {
-      expect(providerEnvelope.required).toEqual(
+      expect(providerEnvelope['required']).toEqual(
         expect.arrayContaining(['data', 'usage', 'metrics']),
       );
-      expect(envelopeProperties.status).toMatchObject({
+      expect(envelopeProperties['status']).toMatchObject({
         type: 'string',
         default: 'success',
       });
 
-      const usageProperties = providerUsage.properties as Json;
-      expect(providerUsage.required).toEqual(
+      const usageProperties = providerUsage['properties'] as Json;
+      expect(providerUsage['required']).toEqual(
         expect.arrayContaining([
           'input_tokens',
           'output_tokens',
@@ -131,17 +131,17 @@ describe.each([
       );
       for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
         const property = usageProperties[field];
-        if (!isRecord(property) || !Array.isArray(property.anyOf)) {
+        if (!isRecord(property) || !Array.isArray(property['anyOf'])) {
           throw new Error(`${field} has no nullable type list`);
         }
-        expect(property.anyOf).toEqual(
+        expect(property['anyOf']).toEqual(
           expect.arrayContaining([{ type: 'integer' }, { type: 'null' }]),
         );
       }
 
-      expect(providerMetrics.required).toContain('ai_processing_ms');
+      expect(providerMetrics['required']).toContain('ai_processing_ms');
       expect(
-        (providerMetrics.properties as Json).ai_processing_ms,
+        (providerMetrics['properties'] as Json)['ai_processing_ms'],
       ).toMatchObject({ type: 'integer' });
     });
 
@@ -189,22 +189,22 @@ it('reports a JSON-only response change against the JSON operation', () => {
   ]) as Json;
   const envelope = structuredClone(resolveRef(jsonResponse, document));
   const data = structuredClone(
-    resolveRef((envelope.properties as Json).data, document),
+    resolveRef((envelope['properties'] as Json)['data'], document),
   );
   const feedback = structuredClone(
-    resolveRef((data.properties as Json).feedback, document),
+    resolveRef((data['properties'] as Json)['feedback'], document),
   );
-  (feedback.properties as Json).summary_vi = { type: 'integer' };
-  (data.properties as Json).feedback = {
+  (feedback['properties'] as Json)['summary_vi'] = { type: 'integer' };
+  (data['properties'] as Json)['feedback'] = {
     $ref: '#/components/schemas/JsonOnlyFeedback',
   };
-  (envelope.properties as Json).data = {
+  (envelope['properties'] as Json)['data'] = {
     $ref: '#/components/schemas/JsonOnlyData',
   };
-  components.JsonOnlyFeedback = feedback;
-  components.JsonOnlyData = data;
-  components.JsonOnlyEnvelope = envelope;
-  jsonResponse.$ref = '#/components/schemas/JsonOnlyEnvelope';
+  components['JsonOnlyFeedback'] = feedback;
+  components['JsonOnlyData'] = data;
+  components['JsonOnlyEnvelope'] = envelope;
+  jsonResponse['$ref'] = '#/components/schemas/JsonOnlyEnvelope';
   const allowed = readJson<Allowed[]>(
     'ai-speaking/provider-drift.allowed.json',
     isAllowedList,
@@ -226,7 +226,7 @@ it('reports a JSON-only response change against the JSON operation', () => {
     ]);
     const provider = resolveRef(schema, document);
     return schemaDrift(
-      { node: (provider.properties as Json).data, doc: document },
+      { node: (provider['properties'] as Json)['data'], doc: document },
       {
         node: JSON.parse(JSON.stringify(SpeakingGradeResponseSchema)),
         doc: {},
@@ -254,8 +254,8 @@ describe('AI Speaking: a field the provider stops declaring', () => {
   }
 
   function withoutField(schema: Json, field: string): void {
-    delete (schema.properties as Json)[field];
-    schema.required = (schema.required as string[]).filter(
+    delete (schema['properties'] as Json)[field];
+    schema['required'] = (schema['required'] as string[]).filter(
       (name) => name !== field,
     );
   }
@@ -277,7 +277,7 @@ describe('AI Speaking: a field the provider stops declaring', () => {
 
   function refusal(mutate: (data: Json) => void): unknown {
     const body = readJson<Json>('ai-speaking/grading.response.json', isRecord);
-    mutate(body.data as Json);
+    mutate(body['data'] as Json);
     try {
       parseSpeakingGradeResponse(body);
     } catch (error) {
@@ -292,7 +292,7 @@ describe('AI Speaking: a field the provider stops declaring', () => {
       schema: 'PartnerAssessData',
       key: 'feedback',
       mutate: (data: Json) => {
-        delete data.feedback;
+        delete data['feedback'];
       },
     },
     {
@@ -300,7 +300,7 @@ describe('AI Speaking: a field the provider stops declaring', () => {
       schema: 'FeedbackInfo',
       key: 'summary_vi',
       mutate: (data: Json) => {
-        delete (data.feedback as Json).summary_vi;
+        delete (data['feedback'] as Json)['summary_vi'];
       },
     },
   ])(
@@ -322,10 +322,10 @@ describe('AI Speaking: a field the provider stops declaring', () => {
 
 function resolveRef(node: unknown, document: Json): Json {
   let current = node as Json;
-  while (typeof current.$ref === 'string') {
+  while (typeof current['$ref'] === 'string') {
     current = dig(
       document,
-      current.$ref.replace(/^#\//, '').split('/'),
+      current['$ref'].replace(/^#\//, '').split('/'),
     ) as Json;
   }
   return current;

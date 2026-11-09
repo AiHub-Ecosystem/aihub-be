@@ -2,7 +2,7 @@ import { isUsableCount } from '@/common/counts/is-usable-count';
 import {
   parseQuotaMonth,
   quotaPeriod,
-} from '@/modules/gateway/public/quota-period';
+} from '@/modules/metering/public/quota-counter';
 import type {
   QuotaCounterOverwritePort,
   QuotaOrganizationSnapshot,

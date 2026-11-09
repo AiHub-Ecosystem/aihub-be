@@ -46,21 +46,21 @@ function snapshotFromRow(value: unknown): QuotaOrganizationSnapshot {
   }
   const row = value;
   if (
-    typeof row.organization_id !== 'string' ||
-    row.organization_id.length === 0
+    typeof row['organization_id'] !== 'string' ||
+    row['organization_id'].length === 0
   ) {
     throw internalError('quota reconciliation organization is invalid');
   }
 
-  const quota = row.quota ?? row.monthly_request_quota;
+  const quota = row['quota'] ?? row['monthly_request_quota'];
   return {
-    organizationId: row.organization_id,
+    organizationId: row['organization_id'],
     monthlyRequestQuota:
       quota === null || quota === undefined
         ? null
         : safeNonNegativeInteger(quota, 'quota'),
     billableRequestCount: safeNonNegativeInteger(
-      row.billable_count,
+      row['billable_count'],
       'billable_count',
     ),
   };

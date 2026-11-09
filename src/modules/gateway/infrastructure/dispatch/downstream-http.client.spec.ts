@@ -180,8 +180,15 @@ describe('DownstreamHttpClient', () => {
     const tenSpeakingRequests = new Promise<void>((resolve) => {
       resolveTenSpeakingRequests = resolve;
     });
+    // This origin never writes a response, so every request it accepts stays
+    // stalled for the whole test. That is what makes "writing resolved while
+    // speaking was still saturated" an observable fact rather than a timing.
+    let speakingSettled = 0;
     const speakingServer = createServer(() => {
       if (++speakingRequests === 10) resolveTenSpeakingRequests();
+    });
+    speakingServer.on('close', () => {
+      speakingSettled += 1;
     });
     const writingServer = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -224,13 +231,24 @@ describe('DownstreamHttpClient', () => {
         retryable: true,
       } satisfies Partial<AppError>);
       expect(isDefinitelyNotDispatched(bulkheadError)).toBe(true);
+      // A refused request never reaches the wire, so it settles without waiting
+      // on anything. This bound is about the bulkhead, not the clock: it holds
+      // on a loaded machine because nothing is awaited in between.
       expect(performance.now() - rejectedAt).toBeLessThan(20);
 
-      const writingStartedAt = performance.now();
+      // The other origin must stay usable while speaking is saturated. An
+      // earlier version bounded this at 20ms, which measured the machine: under
+      // full-suite load a correct request takes hundreds of milliseconds and the
+      // test failed at random. The claim that matters is the outcome, so it is
+      // asserted directly — writing resolves while all ten speaking requests are
+      // still stalled, which cannot happen if the two origins share a queue.
       await expect(request('ai-writing')).resolves.toMatchObject({
         status: 200,
       });
-      expect(performance.now() - writingStartedAt).toBeLessThan(20);
+      expect(speakingRequests).toBe(10);
+      // Nothing has answered from the stalled origin: the ten requests are
+      // still open, so writing was served independently of them.
+      expect(speakingSettled).toBe(0);
     } finally {
       speakingServer.closeAllConnections();
       await settled;

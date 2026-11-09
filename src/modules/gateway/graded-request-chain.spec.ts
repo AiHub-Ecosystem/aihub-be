@@ -96,24 +96,24 @@ function fixture(name: string): Record<string, unknown> {
 function providerFailureSample(name: string) {
   const sample = fixture(name);
   if (
-    typeof sample.status !== 'number' ||
-    typeof sample.headers !== 'object' ||
-    sample.headers === null ||
-    Array.isArray(sample.headers) ||
-    typeof sample.body !== 'object' ||
-    sample.body === null ||
-    Array.isArray(sample.body)
+    typeof sample['status'] !== 'number' ||
+    typeof sample['headers'] !== 'object' ||
+    sample['headers'] === null ||
+    Array.isArray(sample['headers']) ||
+    typeof sample['body'] !== 'object' ||
+    sample['body'] === null ||
+    Array.isArray(sample['body'])
   ) {
     throw new Error('provider failure sample is incomplete');
   }
   const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(sample.headers)) {
+  for (const [key, value] of Object.entries(sample['headers'])) {
     if (typeof value !== 'string') {
       throw new Error('provider failure sample has an invalid header');
     }
     headers[key] = value;
   }
-  return { status: sample.status, headers, body: sample.body };
+  return { status: sample['status'], headers, body: sample['body'] };
 }
 
 const task1Request = fixture('grade-task1.request.json') as {

@@ -54,9 +54,9 @@ export class PostgresUserAccountRepository
         )[0];
         const pendingId =
           existing !== undefined &&
-          existing.status === 'pending_verification' &&
-          typeof existing.id === 'string'
-            ? existing.id
+          existing['status'] === 'pending_verification' &&
+          typeof existing['id'] === 'string'
+            ? existing['id']
             : undefined;
         if (existing !== undefined && pendingId === undefined) {
           throw new AuthIdentityConflictError();

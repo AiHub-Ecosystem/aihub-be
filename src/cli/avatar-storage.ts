@@ -9,15 +9,15 @@ import { createCliSeaweedFsClient } from './seaweedfs-client';
  */
 export function createCliAvatarStorage(): S3AvatarStorage {
   return new S3AvatarStorage(createCliSeaweedFsClient(), {
-    ...(process.env.SEAWEEDFS_USER_ASSET_BUCKET === undefined
+    ...(process.env['SEAWEEDFS_USER_ASSET_BUCKET'] === undefined
       ? {}
-      : { bucket: process.env.SEAWEEDFS_USER_ASSET_BUCKET }),
+      : { bucket: process.env['SEAWEEDFS_USER_ASSET_BUCKET'] }),
     environment:
-      process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+      process.env['AIHUB_RUNTIME_DATABASE_SCOPE'] === 'sandbox'
         ? 'sandbox'
         : 'production',
-    ...(process.env.SEAWEEDFS_USER_ASSET_STAGING_BUCKET === undefined
+    ...(process.env['SEAWEEDFS_USER_ASSET_STAGING_BUCKET'] === undefined
       ? {}
-      : { stagingBucket: process.env.SEAWEEDFS_USER_ASSET_STAGING_BUCKET }),
+      : { stagingBucket: process.env['SEAWEEDFS_USER_ASSET_STAGING_BUCKET'] }),
   });
 }

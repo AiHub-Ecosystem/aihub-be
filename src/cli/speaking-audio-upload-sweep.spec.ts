@@ -1,7 +1,7 @@
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   type SpeakingAudioUploadIntent,
   speakingAudioStagingObjectKey,
@@ -96,6 +96,10 @@ class FakeStorage implements SpeakingAudioAssetStoragePort {
 
   async close(): Promise<void> {
     this.closed = true;
+  }
+
+  async readObject(): Promise<never> {
+    throw new Error('not used by cleanup');
   }
 
   async createUploadUrl(): Promise<never> {

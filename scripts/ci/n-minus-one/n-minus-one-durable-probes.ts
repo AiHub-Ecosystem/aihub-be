@@ -33,8 +33,8 @@ async function organizationConstraintRejectsZeroWidthSpace(
     } catch (error) {
       return (
         isRecord(error) &&
-        error.code === '23514' &&
-        error.constraint === 'organizations_name_display_text_check'
+        error['code'] === '23514' &&
+        error['constraint'] === 'organizations_name_display_text_check'
       );
     }
     return false;
@@ -136,9 +136,9 @@ export async function verifyDurableReads(input: {
     { token: userToken },
   );
   expect2xx(audit, 'N-1 audit read');
-  const auditData = audit.body?.data as Record<string, unknown> | undefined;
+  const auditData = audit.body?.['data'] as Record<string, unknown> | undefined;
   check(
-    Array.isArray(auditData?.events) && auditData.events.length > 0,
+    Array.isArray(auditData?.['events']) && auditData['events'].length > 0,
     'N-1 did not read candidate audit data',
   );
   report.push(

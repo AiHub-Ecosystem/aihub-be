@@ -44,15 +44,15 @@ interface UsageReportRow {
 function snapshotFromRow(value: unknown): UsageReportSnapshotRow {
   if (
     !isRecord(value) ||
-    typeof value.operation !== 'string' ||
-    value.operation.length === 0
+    typeof value['operation'] !== 'string' ||
+    value['operation'].length === 0
   ) {
     throw new UsageReportSnapshotError();
   }
   return {
-    operation: value.operation,
-    successfulCount: countFromRow(value.successful_count),
-    missingUsageCount: countFromRow(value.missing_usage_count),
+    operation: value['operation'],
+    successfulCount: countFromRow(value['successful_count']),
+    missingUsageCount: countFromRow(value['missing_usage_count']),
   };
 }
 

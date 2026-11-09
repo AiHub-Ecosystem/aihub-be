@@ -31,10 +31,10 @@ export function parseWritingV3ProviderError(
   if (status === 504) {
     return TIMEOUT;
   }
-  if (!isRecord(body) || typeof body.error_code !== 'string') {
+  if (!isRecord(body) || typeof body['error_code'] !== 'string') {
     return undefined;
   }
-  switch (body.error_code) {
+  switch (body['error_code']) {
     case 'gateway_timeout':
       return TIMEOUT;
     case 'payload_too_large':

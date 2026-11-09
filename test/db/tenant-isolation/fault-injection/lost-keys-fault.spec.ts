@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import { RedisConcurrencyLimiter } from '@/modules/gateway/infrastructure/redis-concurrency-limiter';
 import {
@@ -9,11 +8,14 @@ import {
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import { quotaKeyForMonth } from '@/modules/gateway/infrastructure/redis-quota-counter';
-import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
 import type { MonthlyBillableUsagePort } from '@/modules/metering/application/billing/monthly-billable-usage.port';
 import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/billing/postgres-monthly-billable-usage';
+import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-quota-seed';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+import {
+  quotaKeyForMonth,
+  quotaPeriod,
+} from '@/modules/metering/public/quota-counter';
 import {
   type PrismaClientHolder,
   createPrismaClient,

@@ -2,7 +2,7 @@ const {
   DEFAULT_MAX_WORKERS,
   REQUEST_VARIABLE,
   resolveUnitLaneWorkers,
-} = require('./scripts/checks/jest-worker-cap.cjs');
+} = require('./scripts/checks/jest/jest-worker-cap.cjs');
 
 const unitLane = resolveUnitLaneWorkers({});
 if (unitLane.capped) {
@@ -46,9 +46,9 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '<rootDir>/test/db/',
-    '<rootDir>/test/cli/pgbouncer-(budget|exporter)\\.spec\\.ts',
+    '<rootDir>/test/cli/pgbouncer/.+\\.spec\\.ts',
     '<rootDir>/scripts/runtime/dev-runner\\.spec\\.ts',
-    '<rootDir>/scripts/checks/check-architecture\\.spec\\.ts',
+    '<rootDir>/scripts/checks/architecture/check-architecture\\.spec\\.ts',
   ],
   // NestJS 12 and @nestjs/config ship ESM packages. Node loads them through
   // own module loader does not, so SWC compiles it to CommonJS here. The two

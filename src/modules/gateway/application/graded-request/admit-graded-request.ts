@@ -6,8 +6,8 @@ import type {
   GradedAdmissionPort,
   GradedAdmissionRefusal,
 } from '@/modules/gateway/application/graded-admission.port';
-import { quotaExceededError } from '@/modules/gateway/application/quota-period';
 import { rateLimitedError } from '@/modules/gateway/application/rate-limited-error';
+import { quotaExceededError } from '@/modules/metering/public/quota-counter';
 
 /**
  * How long a same-key repeat is refused for: one window of first attempts. The
@@ -23,6 +23,7 @@ export const RETRY_BUDGET_WINDOW_MS = 60_000;
  * budget.
  */
 export const RETRY_BUDGET_OPERATIONS = [
+  'speaking.v2.question-grading',
   'writing.task1.grade',
   'writing.task2.grade',
   'writing.v2.task1.grade',

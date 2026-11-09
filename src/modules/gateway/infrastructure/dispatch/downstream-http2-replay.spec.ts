@@ -240,7 +240,7 @@ const retryBudget: DownstreamRetryBudgetPort = {
 
 // Bun's HTTP/2 server shim does not deliver REFUSED_STREAM resets to Undici.
 const describeWithNativeHttp2RefusedStream =
-  process.versions.bun === undefined ? describe : describe.skip;
+  process.versions['bun'] === undefined ? describe : describe.skip;
 
 describe('Undici HTTP/2 protocol replays', () => {
   describeWithNativeHttp2RefusedStream('REFUSED_STREAM replay', () => {

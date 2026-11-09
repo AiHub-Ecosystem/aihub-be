@@ -20,7 +20,7 @@ import type {
   SpeakingMultipartFilePart,
   SpeakingMultipartParserPort,
   SpeakingMultipartSource,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 
 const MULTIPART_LIMITS = {
@@ -76,7 +76,7 @@ function extensionOf(filename: string): string {
 }
 
 function isFileTooLarge(error: unknown): boolean {
-  return isRecord(error) && error.code === 'FST_REQ_FILE_TOO_LARGE';
+  return isRecord(error) && error['code'] === 'FST_REQ_FILE_TOO_LARGE';
 }
 
 // The chunks are the stream's own buffers, kept by reference; building the

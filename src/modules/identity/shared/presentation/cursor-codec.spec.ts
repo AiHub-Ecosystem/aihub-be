@@ -17,7 +17,8 @@ function isTestPosition(value: unknown): value is TestPosition {
   }
   const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.username === 'string' && candidate.username.length > 0
+    typeof candidate['username'] === 'string' &&
+    candidate['username'].length > 0
   );
 }
 

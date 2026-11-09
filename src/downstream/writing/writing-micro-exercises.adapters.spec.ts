@@ -122,10 +122,10 @@ function providerResponse(name: string) {
 
 function providerErrorSample(name: string) {
   const sample = fixtureRecord(name);
-  if (typeof sample.status !== 'number' || !Object.hasOwn(sample, 'body')) {
+  if (typeof sample['status'] !== 'number' || !Object.hasOwn(sample, 'body')) {
     throw new Error('provider error sample is incomplete');
   }
-  return { status: sample.status, body: sample.body };
+  return { status: sample['status'], body: sample['body'] };
 }
 
 const exerciseAdapters = [
@@ -164,7 +164,7 @@ describe('createMicroExerciseAdapter', () => {
     );
     const body = request.body as Record<string, unknown>;
 
-    expect(body.criterion).toBe('grammar_range_accuracy');
+    expect(body['criterion']).toBe('grammar_range_accuracy');
     expect(body).not.toHaveProperty('exercise_type');
   });
 
@@ -191,8 +191,8 @@ describe('createMicroExerciseAdapter', () => {
 
   it('removes provider-only additions from the public response', () => {
     const response = fixtureRecord('micro-gap_filling.response.json');
-    const data = response.data as Record<string, unknown>;
-    const meta = data.meta as Record<string, unknown>;
+    const data = response['data'] as Record<string, unknown>;
+    const meta = data['meta'] as Record<string, unknown>;
     const sanitized = createMicroExerciseAdapter.parseResponse({
       status: 200,
       headers: {},
@@ -202,10 +202,12 @@ describe('createMicroExerciseAdapter', () => {
           ...data,
           provider_private: 'discard',
           meta: { ...meta, provider_private: 'discard' },
-          exercise: (data.exercise as Record<string, unknown>[]).map((row) => ({
-            ...row,
-            provider_private: 'discard',
-          })),
+          exercise: (data['exercise'] as Record<string, unknown>[]).map(
+            (row) => ({
+              ...row,
+              provider_private: 'discard',
+            }),
+          ),
         },
       },
     });

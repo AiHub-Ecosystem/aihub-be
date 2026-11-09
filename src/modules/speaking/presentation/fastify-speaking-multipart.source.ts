@@ -4,7 +4,7 @@ import type {
   SpeakingMultipartLimits,
   SpeakingMultipartPart,
   SpeakingMultipartSource,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 
 interface FastifyFileStream {
   readonly truncated?: boolean;
@@ -39,7 +39,7 @@ interface FastifyMultipartRequest {
 function isFastifyMultipartRequest(
   value: unknown,
 ): value is FastifyMultipartRequest {
-  return isRecord(value) && typeof value.parts === 'function';
+  return isRecord(value) && typeof value['parts'] === 'function';
 }
 
 async function* mapFileBytes(

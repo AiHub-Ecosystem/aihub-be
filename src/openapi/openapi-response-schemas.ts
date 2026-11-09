@@ -7,12 +7,12 @@ function extendSchema(schema: unknown): void {
   }
   if (!isRecord(schema)) return;
 
-  if (schema.type === 'object' || isRecord(schema.properties)) {
-    schema.additionalProperties = true;
+  if (schema['type'] === 'object' || isRecord(schema['properties'])) {
+    schema['additionalProperties'] = true;
   }
 
-  if (isRecord(schema.properties)) {
-    for (const property of Object.values(schema.properties)) {
+  if (isRecord(schema['properties'])) {
+    for (const property of Object.values(schema['properties'])) {
       extendSchema(property);
     }
   }
@@ -33,13 +33,13 @@ function extendSchema(schema: unknown): void {
 }
 
 function extendResponse(response: unknown): void {
-  if (!isRecord(response) || !isRecord(response.content)) return;
+  if (!isRecord(response) || !isRecord(response['content'])) return;
 
-  for (const media of Object.values(response.content)) {
-    if (isRecord(media) && media.schema !== undefined) {
+  for (const media of Object.values(response['content'])) {
+    if (isRecord(media) && media['schema'] !== undefined) {
       // Response and request TypeBox schemas can share references.
-      media.schema = JSON.parse(JSON.stringify(media.schema)) as unknown;
-      extendSchema(media.schema);
+      media['schema'] = JSON.parse(JSON.stringify(media['schema'])) as unknown;
+      extendSchema(media['schema']);
     }
   }
 }
@@ -51,8 +51,8 @@ export function extendPublicResponseSchemas(document: {
   for (const pathItem of Object.values(document.paths)) {
     if (!isRecord(pathItem)) continue;
     for (const operation of Object.values(pathItem)) {
-      if (!isRecord(operation) || !isRecord(operation.responses)) continue;
-      for (const response of Object.values(operation.responses)) {
+      if (!isRecord(operation) || !isRecord(operation['responses'])) continue;
+      for (const response of Object.values(operation['responses'])) {
         extendResponse(response);
       }
     }

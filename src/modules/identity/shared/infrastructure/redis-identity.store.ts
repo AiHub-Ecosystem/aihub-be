@@ -161,9 +161,9 @@ function parseJwksCacheEntry(serialized: string): JwksCacheEntry | undefined {
   }
 
   const record = value as Record<string, unknown>;
-  const jwks = parsePublicJsonWebKeySet(record.jwks);
-  const freshUntil = record.freshUntil;
-  const staleUntil = record.staleUntil;
+  const jwks = parsePublicJsonWebKeySet(record['jwks']);
+  const freshUntil = record['freshUntil'];
+  const staleUntil = record['staleUntil'];
   if (
     jwks === undefined ||
     typeof freshUntil !== 'number' ||

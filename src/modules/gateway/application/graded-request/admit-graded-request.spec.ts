@@ -7,7 +7,7 @@ import type {
 import {
   QUOTA_ROLLOVER_SPREAD_MS,
   quotaUnverifiableError,
-} from '@/modules/gateway/application/quota-period';
+} from '@/modules/metering/public/quota-counter';
 import {
   admitGradedRequest,
   gradedAdmissionPolicy,

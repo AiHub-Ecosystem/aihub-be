@@ -15,6 +15,7 @@ import { AppModule } from '@/app.module';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
+import { stableOffsetMs } from '@/common/stable-offset';
 import {
   type RuntimeConnectionConfiguration,
   appConfig,
@@ -26,8 +27,22 @@ import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
+import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
+import {
+  RATE_WINDOW_MS,
+  rateLimitWindow,
+} from '@/modules/gateway/application/rate-limit-window';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import {
+  REDIS_GATEWAY_CLIENT,
+  type RedisGatewayClient,
+} from '@/modules/gateway/infrastructure/redis-gateway.client';
+import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
 import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import {
+  QUOTA_COUNTER_SEED,
+  type QuotaCounterSeedPort,
+} from '@/modules/metering/public/quota-counter';
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
 import {
@@ -130,6 +145,34 @@ let controlPlaneReaderRole: string;
 let ownerUserId: string;
 let adminUserId: string;
 let memberUserId: string;
+
+/**
+ * The rate-limit test must not depend on when it runs (#295). The limiter
+ * counts in fixed one-minute windows, so six requests that straddle a minute
+ * boundary split across two buckets, neither reaches five, and the sixth comes
+ * back `200`. This is the instant the gateway computes the window from instead
+ * of the wall clock; `undefined` means read the real one.
+ */
+let rateLimitClock: number | undefined;
+
+/**
+ * A time at the end of `keyId`'s *next* window, which no earlier request in
+ * this suite has counted against. A key's window starts at its own offset into
+ * the minute, not at the top of it (#403), so the instant is derived from the
+ * key rather than assumed. Landing on the window's last millisecond also
+ * covers the boundary that failed on CI.
+ */
+function unusedRateLimitWindow(keyId: string): number {
+  const current = rateLimitWindow(keyId, Date.now());
+  // Window `k` covers real time `[k * W + offset, (k + 1) * W + offset)`, so
+  // the last millisecond of window `current.index + 1` is derived from the
+  // index rather than from `resetInMs`: adding the remaining time twice lands
+  // one window too early on a key whose offset is large.
+  const nextWindowEnd =
+    (current.index + 2) * RATE_WINDOW_MS +
+    stableOffsetMs(keyId, RATE_WINDOW_MS);
+  return nextWindowEnd - 1;
+}
 
 beforeAll(async () => {
   controlPlane = createTestPool();
@@ -310,6 +353,26 @@ beforeAll(async () => {
     .useValue(appConnectionConfiguration)
     .overrideProvider(DownstreamHttpClient)
     .useValue(downstreamStub)
+    // Graded requests are admitted by the pipeline's admission, not by the
+    // plain RateLimitGuard, so this is the clock the per-key window is derived
+    // from. Everything else stays real: the Redis client, the counter, the Lua
+    // script. Only the instant the window is computed from is the test's to
+    // decide (#295).
+    .overrideProvider(GRADED_ADMISSION)
+    .useFactory({
+      factory: (
+        client: RedisGatewayClient | undefined,
+        seeder: QuotaCounterSeedPort | undefined,
+      ) =>
+        new RedisGradedAdmission(
+          client,
+          () => rateLimitClock ?? Date.now(),
+          undefined,
+          undefined,
+          seeder,
+        ),
+      inject: [REDIS_GATEWAY_CLIENT, QUOTA_COUNTER_SEED],
+    })
     .compile();
   app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ genReqId: () => generateRequestId() }),
@@ -753,18 +816,29 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
   });
 
   it('limits a Sandbox API key to five requests per minute', async () => {
-    const responses = [];
-    for (let index = 0; index < 6; index += 1) {
-      responses.push(await grade(`sandbox-http-rate-${String(index)}`));
-    }
+    // Fix the admission clock inside one of this key's windows, so the six
+    // requests cannot straddle a minute boundary and split across two buckets
+    // (#295). The instant is the last millisecond of the window, which is the
+    // case that failed on CI.
+    rateLimitClock = unusedRateLimitWindow(apiKey.id);
+    try {
+      const responses = [];
+      for (let index = 0; index < 6; index += 1) {
+        responses.push(await grade(`sandbox-http-rate-${String(index)}`));
+      }
 
-    expect(responses.map((response) => response.statusCode)).toEqual([
-      200, 200, 200, 200, 200, 429,
-    ]);
-    expect(responses[5]?.json()).toMatchObject({
-      error: { code: 'RATE_LIMITED' },
-    });
-    expect(downstreamCalls).toBe(5);
+      expect(responses.map((response) => response.statusCode)).toEqual([
+        200, 200, 200, 200, 200, 429,
+      ]);
+      expect(responses[5]?.json()).toMatchObject({
+        error: { code: 'RATE_LIMITED' },
+      });
+      expect(downstreamCalls).toBe(5);
+    } finally {
+      // Every later test keeps real time, and this key's counter is left to
+      // expire on its own rather than being read at a fixed instant.
+      rateLimitClock = undefined;
+    }
   });
 
   it('honors API-key revocation on the next request without a successful-key cache', async () => {

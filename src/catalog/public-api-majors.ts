@@ -53,7 +53,7 @@ export const PUBLIC_API_MAJORS: readonly PublicApiMajorDef[] = [
   },
   {
     major: 2,
-    contractVersion: '2.5.0',
+    contractVersion: '2.6.0',
     status: 'supported',
     releasedAt: '2026-11-02',
   },

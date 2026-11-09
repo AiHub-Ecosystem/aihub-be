@@ -25,14 +25,14 @@ import {
 import type {
   SpeakingAudioCeilingDecision,
   SpeakingAudioOrganizationHolding,
-} from '@/modules/speaking/application/speaking-audio-org-ceiling.policy';
+} from '@/modules/speaking/application/audio/speaking-audio-org-ceiling.policy';
 import {
   SPEAKING_AUDIO_ASSET_STORAGE,
   SPEAKING_AUDIO_UPLOAD_CLOCK,
   SPEAKING_AUDIO_UPLOAD_REPOSITORY,
   type SpeakingAudioAssetStoragePort,
   type SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   SPEAKING_AUDIO_MAX_BYTES,
   type SpeakingAudioAsset,
@@ -237,6 +237,10 @@ class FakeAudioAssetStorage implements SpeakingAudioAssetStoragePort {
   readonly described: string[] = [];
   deleteFails = false;
   unavailable = false;
+
+  async readObject(): Promise<never> {
+    throw new Error('not used by upload controller tests');
+  }
 
   async createUploadUrl(input: {
     readonly environment: 'production' | 'sandbox';

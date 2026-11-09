@@ -53,7 +53,7 @@ describe('production trusted-proxy Compose alignment', () => {
 
   it('rejects an app service detached from the backend network', () => {
     const compose = config();
-    Reflect.deleteProperty(compose.services.app!.networks, 'backend');
+    Reflect.deleteProperty(compose.services['app']!.networks, 'backend');
     expect(() => validateTrustedProxyCompose(compose)).toThrow(
       /app.*backend network/,
     );

@@ -73,8 +73,8 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   // to select: the filter belongs in one place, and a mapper that contradicts
   // a widened query would fail the request instead of reporting the row.
   const status =
-    value.status === 'active' || value.status === 'revoked'
-      ? value.status
+    value['status'] === 'active' || value['status'] === 'revoked'
+      ? value['status']
       : undefined;
 
   if (
@@ -218,11 +218,11 @@ export class PostgresOrganizationApiKeyRepository
           throw invalidIdentityData();
         }
 
-        if (key.status !== 'active' && key.status !== 'revoked') {
+        if (key['status'] !== 'active' && key['status'] !== 'revoked') {
           return { kind: 'key_not_rotatable' as const };
         }
         if (
-          apiKeyStatus({ status: key.status, expiresAt }, input.now) !==
+          apiKeyStatus({ status: key['status'], expiresAt }, input.now) !==
           'active'
         ) {
           return { kind: 'key_not_rotatable' as const };
@@ -374,7 +374,7 @@ export class PostgresOrganizationApiKeyRepository
         // repeat that finds it already withdrawn changed nothing, and a trail
         // that records deliveries is diluted by the retries this boundary
         // deliberately invites.
-        if (row.status === 'active') {
+        if (row['status'] === 'active') {
           await recordOrganizationAuditEvent(
             transaction,
             auditStamp(input, input.actorUserId, input.now),

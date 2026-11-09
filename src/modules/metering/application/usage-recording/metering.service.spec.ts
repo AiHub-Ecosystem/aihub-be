@@ -1,5 +1,5 @@
 import type { MeteringMode } from '@/catalog/operation-catalog';
-import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
+import type { QuotaCounterPort } from '@/modules/metering/application/quota/quota-counter.port';
 import type {
   MeteringFinalizeInput,
   MeteringStatus,
@@ -45,17 +45,22 @@ class FakeFailureLogger implements MeteringFailureLoggerPort {
 
 class FakeQuotaCounter implements QuotaCounterPort {
   readonly increments: string[] = [];
+  readonly occurredAt: Date[] = [];
   shouldFail = false;
 
   read(): Promise<number> {
     return Promise.resolve(0);
   }
 
-  async increment(input: { readonly organizationId: string }): Promise<void> {
+  async increment(input: {
+    readonly organizationId: string;
+    readonly occurredAt?: Date;
+  }): Promise<void> {
     if (this.shouldFail) {
       throw new Error('quota counter unavailable');
     }
     this.increments.push(input.organizationId);
+    if (input.occurredAt !== undefined) this.occurredAt.push(input.occurredAt);
   }
 }
 
@@ -301,6 +306,18 @@ describe('MeteringService', () => {
 
     expect(counter.increments).toEqual(['org_acme']);
     expect(repository.records).toHaveLength(1);
+  });
+
+  it('uses asynchronous event time for usage record and quota month', async () => {
+    const repository = new FakeUsageRepository();
+    const counter = new FakeQuotaCounter();
+    const service = new MeteringService(repository, undefined, counter);
+    const occurredAt = new Date('2026-10-31T23:59:59.000Z');
+
+    await service.finalize({ ...input, quotaTracked: true, occurredAt });
+
+    expect(repository.records[0]?.occurredAt).toBe(occurredAt);
+    expect(counter.occurredAt).toEqual([occurredAt]);
   });
 
   it('does not increment the quota counter for a replay', async () => {

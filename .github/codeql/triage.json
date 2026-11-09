@@ -68,7 +68,7 @@
     },
     {
       "ruleId": "js/insufficient-password-hash",
-      "path": "src/modules/gateway/application/stable-offset.ts",
+      "path": "src/common/stable-offset.ts",
       "fingerprint": "b5e87e26937e9486:1",
       "reason": "Derives a stable scheduling offset from a key id; no secret is stored or compared."
     },
@@ -104,7 +104,7 @@
     },
     {
       "ruleId": "js/insecure-temporary-file",
-      "path": "scripts/checks/verify-summary.cjs",
+      "path": "scripts/checks/changed/verify-summary.cjs",
       "fingerprint": "97ee09b50099a7cd:1",
       "reason": "Developer verify log under the OS temp dir; holds no secret and its path is printed for the same user."
     },

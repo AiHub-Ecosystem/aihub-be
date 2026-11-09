@@ -23,7 +23,7 @@ export const DATABASE_LANE_POSTGRES_TIMEOUTS = {
   statement_timeout: 25_000,
   lock_timeout: 15_000,
 };
-const configuredTestDatabaseName = process.env.DB_LANE_DATABASE_NAME?.trim();
+const configuredTestDatabaseName = process.env['DB_LANE_DATABASE_NAME']?.trim();
 const TEST_DATABASE_NAME =
   configuredTestDatabaseName !== undefined &&
   configuredTestDatabaseName.length > 0
@@ -40,7 +40,7 @@ if (
 }
 
 export function adminDatabaseUrl(): string {
-  const configured = process.env.DB_LANE_ADMIN_URL?.trim();
+  const configured = process.env['DB_LANE_ADMIN_URL']?.trim();
   return configured !== undefined && configured.length > 0
     ? configured
     : DEFAULT_ADMIN_URL;
@@ -87,7 +87,8 @@ export function createSandboxTestPool(): Pool {
 
 export function sandboxTestRedisUrl(): string {
   const url = new URL(
-    process.env.SANDBOX_TEST_REDIS_URL?.trim() || 'redis://127.0.0.1:6379/14',
+    process.env['SANDBOX_TEST_REDIS_URL']?.trim() ||
+      'redis://127.0.0.1:6379/14',
   );
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (

@@ -7,15 +7,15 @@ export function parseSpeakingV2ProviderError(
 ): DownstreamErrorHint | undefined {
   if (
     !isRecord(body) ||
-    body.status !== 'error' ||
-    body.usage !== null ||
-    body.data !== null ||
-    !isRecord(body.error) ||
-    typeof body.error.code !== 'string'
+    body['status'] !== 'error' ||
+    body['usage'] !== null ||
+    body['data'] !== null ||
+    !isRecord(body['error']) ||
+    typeof body['error']['code'] !== 'string'
   ) {
     return undefined;
   }
-  switch (body.error.code) {
+  switch (body['error']['code']) {
     case 'audio_unreadable':
       return {
         code: 'AUDIO_UNREADABLE',

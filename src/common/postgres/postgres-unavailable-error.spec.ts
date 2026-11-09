@@ -58,7 +58,7 @@ describe('isPostgresUnavailable', () => {
 
   it('stops on a cause cycle', () => {
     const error: Record<string, unknown> = { message: 'loop' };
-    error.cause = error;
+    error['cause'] = error;
     expect(isPostgresUnavailable(error)).toBe(false);
   });
 });

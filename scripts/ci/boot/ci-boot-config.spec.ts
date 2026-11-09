@@ -77,14 +77,14 @@ describe('CI boot configuration', () => {
     const env = readBootEnv(directory);
 
     const provider = new ConfiguredRuntimeSecretProvider({
-      nodeEnv: env.NODE_ENV,
-      source: env.AIHUB_RUNTIME_SECRET_SOURCE,
+      nodeEnv: env['NODE_ENV'],
+      source: env['AIHUB_RUNTIME_SECRET_SOURCE'],
       secretsFile: join(directory, 'runtime-secrets.json'),
       values: {},
     });
 
-    expect(env.NODE_ENV).toBe('production');
-    expect(env.AIHUB_WEB_SESSION_CLIENT_SECRET).toBeUndefined();
+    expect(env['NODE_ENV']).toBe('production');
+    expect(env['AIHUB_WEB_SESSION_CLIENT_SECRET']).toBeUndefined();
     expect(provider.getSnapshot().webSession?.clientSecret).toBeTruthy();
     expect(provider.getSnapshot().userAccessJwt.privateKeyPem).toContain(
       'BEGIN PRIVATE KEY',
@@ -105,17 +105,17 @@ describe('CI boot configuration', () => {
     loadRuntimeConnectionEnvironment({ env });
 
     expect(() => loadRuntimeConfiguration(env)).not.toThrow();
-    expect(env.DATABASE_URL).toMatch(/^postgres:\/\//);
-    expect(env.REDIS_URL).toMatch(/^redis:\/\//);
-    expect(env.AIHUB_EMAIL_WAL_DATABASE_URL).toMatch(/^postgres:\/\//);
-    expect(env.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY).toBeUndefined();
+    expect(env['DATABASE_URL']).toMatch(/^postgres:\/\//);
+    expect(env['REDIS_URL']).toMatch(/^redis:\/\//);
+    expect(env['AIHUB_EMAIL_WAL_DATABASE_URL']).toMatch(/^postgres:\/\//);
+    expect(env['AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY']).toBeUndefined();
   });
 
   it('writes a separate MFA keyring the auth cipher accepts', () => {
     writeBootConfig(directory);
     const env = readBootEnv(directory);
     const cipher = createAuthMfaCipher({
-      source: env.AIHUB_RUNTIME_SECRET_SOURCE,
+      source: env['AIHUB_RUNTIME_SECRET_SOURCE'],
       secretsFile: join(directory, 'auth-mfa-secrets.json'),
       values: {},
     });
@@ -164,7 +164,7 @@ describe('CI boot configuration', () => {
   it('sets a valid Customer Web URL for production startup', () => {
     writeBootConfig(directory);
 
-    expect(readBootEnv(directory).CUSTOMER_WEB_BASE_URL).toBe(
+    expect(readBootEnv(directory)['CUSTOMER_WEB_BASE_URL']).toBe(
       'https://customer.ci-boot.invalid',
     );
   });

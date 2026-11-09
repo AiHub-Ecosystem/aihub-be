@@ -11,10 +11,14 @@ export const ORGANIZATION_INVITATION_CREATE_OPERATION =
 
 export const ORGANIZATION_CREATE_OPERATION = 'organizations.create' as const;
 
+export const SPEAKING_GRADING_JOB_CREATE_OPERATION =
+  'speaking.grading-jobs.create' as const;
+
 export type IdempotencyOperation =
   | OperationId
   | typeof ORGANIZATION_INVITATION_CREATE_OPERATION
-  | typeof ORGANIZATION_CREATE_OPERATION;
+  | typeof ORGANIZATION_CREATE_OPERATION
+  | typeof SPEAKING_GRADING_JOB_CREATE_OPERATION;
 
 export function idempotencyMode(
   operation: string,
@@ -34,7 +38,8 @@ export function idempotencyMode(
 
   if (
     operation === ORGANIZATION_INVITATION_CREATE_OPERATION ||
-    operation === ORGANIZATION_CREATE_OPERATION
+    operation === ORGANIZATION_CREATE_OPERATION ||
+    operation === SPEAKING_GRADING_JOB_CREATE_OPERATION
   ) {
     return 'optional';
   }

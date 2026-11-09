@@ -10,17 +10,19 @@ import type { DispatchResult } from './operation-dispatcher.port';
 export function readDispatchTelemetry(
   value: Record<string, unknown>,
 ): MeteringTelemetry {
-  const usageValue = value.usage;
+  const usageValue = value['usage'];
   const usage = isRecord(usageValue)
     ? normalizeMeteringUsage({
-        input_tokens: usageValue.inputTokens,
-        output_tokens: usageValue.outputTokens,
-        total_tokens: usageValue.totalTokens,
+        input_tokens: usageValue['inputTokens'],
+        output_tokens: usageValue['outputTokens'],
+        total_tokens: usageValue['totalTokens'],
       })
     : undefined;
-  const models = normalizeMeteringModels(value.models);
+  const models = normalizeMeteringModels(value['models']);
   const aiProcessingMs =
-    typeof value.aiProcessingMs === 'number' ? value.aiProcessingMs : undefined;
+    typeof value['aiProcessingMs'] === 'number'
+      ? value['aiProcessingMs']
+      : undefined;
 
   return normalizeMeteringTelemetry({
     ...(usage === undefined ? {} : { usage }),

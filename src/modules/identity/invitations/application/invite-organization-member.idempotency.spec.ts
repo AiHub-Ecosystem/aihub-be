@@ -169,7 +169,7 @@ function decodeInvitation(value: unknown): InvitedOrganizationMember {
     typeof organizationId !== 'string' ||
     typeof email !== 'string' ||
     (role !== 'owner' && role !== 'admin' && role !== 'member') ||
-    value.emailDeliveryStatus !== 'queued'
+    value['emailDeliveryStatus'] !== 'queued'
   ) {
     throw new Error('invalid stored invitation');
   }

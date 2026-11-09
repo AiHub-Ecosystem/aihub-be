@@ -36,7 +36,7 @@ The entry-count limits in ADR-0082 remain documented conventions rather than aut
 
 ## Confirmation
 
-The dependency rule is held by machine checks, not by this record. `.dependency-cruiser.cjs` forbids `domain → application|infrastructure|presentation`, `application → infrastructure|presentation`, `application → @nestjs`, `presentation → infrastructure`, `infrastructure → presentation`, and any non-infrastructure module code importing a module's `infrastructure/`; it also forbids circular and unresolvable imports. `scripts/checks/check-architecture.mjs` adds the operation-catalog completeness check, the ban on host literals under `src/downstream/`, the confinement of `process.env` reads to the configuration boundary, the confinement of Vault-specific code to the Secrets module's infrastructure, and the requirement that a controller validates a request body through `parseRequestBody` rather than TypeBox directly.
+The dependency rule is held by machine checks, not by this record. `.dependency-cruiser.cjs` forbids `domain → application|infrastructure|presentation`, `application → infrastructure|presentation`, `application → @nestjs`, `presentation → infrastructure`, `infrastructure → presentation`, and any non-infrastructure module code importing a module's `infrastructure/`; it also forbids circular and unresolvable imports. `scripts/checks/architecture/check-architecture.mjs` adds the operation-catalog completeness check, the ban on host literals under `src/downstream/`, the confinement of `process.env` reads to the configuration boundary, the confinement of Vault-specific code to the Secrets module's infrastructure, and the requirement that a controller validates a request body through `parseRequestBody` rather than TypeBox directly.
 
 On 2026-10-09 `pnpm arch-check` reported no dependency violations across 573 modules and 2,223 dependencies. `.github/workflows/ci.yml` runs `pnpm arch-check` as its own step, and `package.json` includes it in `pnpm verify`.
 
@@ -48,11 +48,11 @@ This record is Accepted because the layering was implemented and enforced before
 
 ## Update: shared request primitive exemption narrowed (#674)
 
-`sharedPrimitivePaths()` in `.dependency-cruiser.cjs` now exempts only files under a `presentation/` folder. An `application/` or `domain/` file containing `declare module 'fastify'` fails `pnpm arch-check` via a text check in `scripts/checks/check-architecture.mjs`. Metering evidence's Fastify augmentation moved to `src/modules/metering/presentation/metering-evidence.ts`; the callable functions are published through `src/modules/metering/public/metering-evidence.ts`.
+`sharedPrimitivePaths()` in `.dependency-cruiser.cjs` now exempts only files under a `presentation/` folder. An `application/` or `domain/` file containing `declare module 'fastify'` fails `pnpm arch-check` via a text check in `scripts/checks/architecture/check-architecture.mjs`. Metering evidence's Fastify augmentation moved to `src/modules/metering/presentation/metering-evidence.ts`; the callable functions are published through `src/modules/metering/public/metering-evidence.ts`.
 
 ## Update: mappers-not-casts convention is now checked (#673)
 
-`scripts/checks/check-architecture.mjs` now fails when an `src/modules/**/infrastructure/**` file contains `as unknown as <Type>` where `<Type>` is declared under an `application/` path. The eight former cast sites at the Prisma-to-application-port seam were replaced by a thin `EmailDeliveryTransactionAdapter` (in `auth/email-delivery/infrastructure/`) plus a single cast to that infrastructure type; the application port stays free of Prisma-shaped concepts.
+`scripts/checks/architecture/check-architecture.mjs` now fails when an `src/modules/**/infrastructure/**` file contains `as unknown as <Type>` where `<Type>` is declared under an `application/` path. The eight former cast sites at the Prisma-to-application-port seam were replaced by a thin `EmailDeliveryTransactionAdapter` (in `auth/email-delivery/infrastructure/`) plus a single cast to that infrastructure type; the application port stays free of Prisma-shaped concepts.
 
 ## Update: domain framework-free rule now covers Node core modules (#668)
 
@@ -60,4 +60,4 @@ This record is Accepted because the layering was implemented and enforced before
 
 ## Update: domain bare globals are now checked (#807)
 
-`scripts/checks/check-domain-globals.mjs` (wired into `pnpm verify`) refuses `Date.now()`, `new Date()` without an argument, `Math.random()`, `fetch`, `crypto.randomUUID()`, and `process.*` in any `src/**/domain/**` file. The dependency-cruiser rule cannot see bare globals, so this text check closes the gap #668 left open.
+`scripts/checks/data/check-domain-globals.mjs` (wired into `pnpm verify`) refuses `Date.now()`, `new Date()` without an argument, `Math.random()`, `fetch`, `crypto.randomUUID()`, and `process.*` in any `src/**/domain/**` file. The dependency-cruiser rule cannot see bare globals, so this text check closes the gap #668 left open.

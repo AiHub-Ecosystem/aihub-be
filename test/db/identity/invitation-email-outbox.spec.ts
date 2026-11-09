@@ -126,7 +126,7 @@ let cipher: EmailPayloadCipherPort;
 const ownerId = `usr_${ulid()}`;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL = testDatabaseUrl();
+  process.env['DATABASE_URL'] = testDatabaseUrl();
   pool = createTestPool();
 
   sender = new RecordingSender();

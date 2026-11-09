@@ -136,10 +136,12 @@ describe('SeaweedFS S3 transport', () => {
         $metadata: { attempts: 1 },
       },
     });
-    if (!isRecord(failure) || !isRecord(failure.cause)) {
+    if (!isRecord(failure) || !isRecord(failure['cause'])) {
       throw new Error('expected a timeout cause');
     }
-    expect(failure.cause.message).toContain('did not establish a connection');
+    expect(failure['cause']['message']).toContain(
+      'did not establish a connection',
+    );
   });
 
   it('fails a refused connection immediately with a retryable 503', async () => {
@@ -183,8 +185,8 @@ describe('SeaweedFS S3 transport', () => {
         requestTimeout: workload === 'request' ? 5_000 : 30_000,
         throwOnRequestTimeout: true,
       });
-      expect(config.httpAgent).toHaveProperty('maxSockets', 16);
-      expect(config.httpsAgent).toHaveProperty('maxSockets', 16);
+      expect(config['httpAgent']).toHaveProperty('maxSockets', 16);
+      expect(config['httpsAgent']).toHaveProperty('maxSockets', 16);
       expect(await client.config.maxAttempts()).toBe(1);
     },
   );

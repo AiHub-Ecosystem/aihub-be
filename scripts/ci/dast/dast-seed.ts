@@ -67,14 +67,14 @@ function outDirectory(): string {
 
 async function seed(): Promise<DastCredentials> {
   if (
-    process.env.DATABASE_URL === undefined ||
-    process.env.DATABASE_URL.length === 0
+    process.env['DATABASE_URL'] === undefined ||
+    process.env['DATABASE_URL'].length === 0
   ) {
     throw new Error('DATABASE_URL is required for the DAST seed');
   }
 
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env['DATABASE_URL'],
     max: 1,
     application_name: 'aihub-dast-seed',
   });

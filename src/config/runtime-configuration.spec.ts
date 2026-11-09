@@ -331,52 +331,54 @@ describe('runtime configuration', () => {
   });
 
   it('records the type, default, required mode, and secret status in one schema', () => {
-    expect(runtimeEnvironmentMetadata.PORT).toMatchObject({
+    expect(runtimeEnvironmentMetadata['PORT']).toMatchObject({
       type: 'number',
       defaultValue: 3000,
     });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_QUOTA_SCRUBBER_INTERVAL_MS,
+      runtimeEnvironmentMetadata['AIHUB_QUOTA_SCRUBBER_INTERVAL_MS'],
     ).toMatchObject({ type: 'number', defaultValue: 300_000 });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS,
+      runtimeEnvironmentMetadata['AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_ABS'],
     ).toMatchObject({ type: 'number', defaultValue: 0 });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT,
+      runtimeEnvironmentMetadata[
+        'AIHUB_QUOTA_SCRUBBER_DRIFT_THRESHOLD_PERCENT'
+      ],
     ).toMatchObject({ type: 'number', defaultValue: 5 });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_DATABASE_POOLER_ENABLED,
+      runtimeEnvironmentMetadata['AIHUB_DATABASE_POOLER_ENABLED'],
     ).toMatchObject({ type: 'boolean', defaultValue: false });
-    expect(runtimeEnvironmentMetadata.SEAWEEDFS_ACCESS_KEY_ID?.secret).toBe(
+    expect(runtimeEnvironmentMetadata['SEAWEEDFS_ACCESS_KEY_ID']?.secret).toBe(
       true,
     );
     expect(
-      runtimeEnvironmentMetadata.DOWNSTREAM_AI_WRITING_URL?.requiredIn,
+      runtimeEnvironmentMetadata['DOWNSTREAM_AI_WRITING_URL']?.requiredIn,
     ).toEqual(['staging', 'production']);
     expect(
-      runtimeEnvironmentMetadata.AIHUB_EMAIL_SEND_RATE_LIMIT,
+      runtimeEnvironmentMetadata['AIHUB_EMAIL_SEND_RATE_LIMIT'],
     ).toMatchObject({
       type: 'number',
       requiredIn: ['staging', 'production'],
     });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_EMAIL_SEND_RATE_DURATION_MS,
+      runtimeEnvironmentMetadata['AIHUB_EMAIL_SEND_RATE_DURATION_MS'],
     ).toMatchObject({ type: 'number', requiredIn: ['staging', 'production'] });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_EMAIL_SEND_RATE_REDIS_URL,
+      runtimeEnvironmentMetadata['AIHUB_EMAIL_SEND_RATE_REDIS_URL'],
     ).toMatchObject({
       type: 'string',
       secret: true,
       requiredIn: ['staging', 'production'],
     });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_EMAIL_DAILY_SEND_BUDGET,
+      runtimeEnvironmentMetadata['AIHUB_EMAIL_DAILY_SEND_BUDGET'],
     ).toMatchObject({
       type: 'number',
       requiredIn: ['staging', 'production'],
     });
     expect(
-      runtimeEnvironmentMetadata.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL,
+      runtimeEnvironmentMetadata['AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL'],
     ).toMatchObject({
       type: 'string',
       secret: true,
@@ -385,7 +387,8 @@ describe('runtime configuration', () => {
   });
 
   it('requires the BFF environment secret only for the environment secret source', () => {
-    const secret = runtimeEnvironmentMetadata.AIHUB_WEB_SESSION_CLIENT_SECRET;
+    const secret =
+      runtimeEnvironmentMetadata['AIHUB_WEB_SESSION_CLIENT_SECRET'];
 
     expect(secret).toMatchObject({
       type: 'string',
@@ -486,11 +489,11 @@ describe('runtime configuration', () => {
   });
 
   it('keeps secret values out of the Nest application config provider', () => {
-    const previousProxyIp = process.env.AIHUB_TRUSTED_PROXY_IP;
-    process.env.AIHUB_TRUSTED_PROXY_IP ??= '127.0.0.1';
+    const previousProxyIp = process.env['AIHUB_TRUSTED_PROXY_IP'];
+    process.env['AIHUB_TRUSTED_PROXY_IP'] ??= '127.0.0.1';
     const configuration = appConfig();
     if (previousProxyIp === undefined) {
-      delete process.env.AIHUB_TRUSTED_PROXY_IP;
+      delete process.env['AIHUB_TRUSTED_PROXY_IP'];
     }
 
     expect(configuration).not.toHaveProperty('DATABASE_URL');

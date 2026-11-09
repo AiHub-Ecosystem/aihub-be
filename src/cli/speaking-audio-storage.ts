@@ -8,10 +8,10 @@ import { createCliSeaweedFsClient } from './seaweedfs-client';
  * operator SeaweedFS client plus the per-scope asset bucket.
  */
 export function createCliSpeakingAudioAssetStorage(): S3SpeakingAudioAssetStorage {
-  const bucket = process.env.SEAWEEDFS_AUDIO_ASSET_BUCKET;
+  const bucket = process.env['SEAWEEDFS_AUDIO_ASSET_BUCKET'];
   return new S3SpeakingAudioAssetStorage(
     createCliSeaweedFsClient(),
-    process.env.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+    process.env['AIHUB_RUNTIME_DATABASE_SCOPE'] === 'sandbox'
       ? bucket === undefined
         ? {}
         : { sandboxBucket: bucket }

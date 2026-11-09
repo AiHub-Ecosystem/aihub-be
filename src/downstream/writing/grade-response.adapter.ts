@@ -55,17 +55,17 @@ function toAnnotations(value: unknown): GradeResponse['annotations'] {
     }
 
     for (const [issue, body] of Object.entries(issues)) {
-      if (!isRecord(body) || !Array.isArray(body.comments)) {
+      if (!isRecord(body) || !Array.isArray(body['comments'])) {
         continue;
       }
 
-      for (const comment of body.comments) {
+      for (const comment of body['comments']) {
         if (!isRecord(comment)) {
           continue;
         }
 
-        const quote = toText(comment.quote);
-        const explanation = toText(comment.explanation);
+        const quote = toText(comment['quote']);
+        const explanation = toText(comment['explanation']);
 
         if (quote.length > 0) {
           annotations.push({ criterion, issue, quote, explanation });
@@ -94,17 +94,17 @@ function toCriteria(value: unknown): GradeResponse['criteria'] {
         throw contractViolation('unknown criterion key');
       }
 
-      if (!isRecord(entry) || typeof entry.band_score !== 'number') {
+      if (!isRecord(entry) || typeof entry['band_score'] !== 'number') {
         throw contractViolation(`criterion ${key} has no numeric band_score`);
       }
 
       return {
         id,
         name: CRITERION_NAMES[id],
-        band: entry.band_score,
-        band_reason: toText(entry.band_reason),
-        strengths: toStringList(entry.strengths),
-        improvements: toStringList(entry.areas_for_improvement),
+        band: entry['band_score'],
+        band_reason: toText(entry['band_reason']),
+        strengths: toStringList(entry['strengths']),
+        improvements: toStringList(entry['areas_for_improvement']),
       };
     });
 }
@@ -126,17 +126,17 @@ export function parseGradeResponse(body: unknown): GradeResponse {
     throw contractViolation('response body is not an object');
   }
 
-  const data = body.data;
+  const data = body['data'];
 
   if (!isRecord(data)) {
     throw contractViolation('missing data');
   }
 
-  if (typeof data.overall_band !== 'number') {
+  if (typeof data['overall_band'] !== 'number') {
     throw contractViolation('missing numeric data.overall_band');
   }
 
-  const criteria = toCriteria(data.evaluation);
+  const criteria = toCriteria(data['evaluation']);
 
   if (criteria.length !== 4) {
     throw contractViolation(`expected 4 criteria, received ${criteria.length}`);
@@ -146,12 +146,12 @@ export function parseGradeResponse(body: unknown): GradeResponse {
   const overall = isRecord(assessment) ? assessment : {};
 
   return {
-    overall_band: data.overall_band,
+    overall_band: data['overall_band'],
     language: 'vi',
     criteria,
-    summary: toText(overall.Summary),
+    summary: toText(overall['Summary']),
     suggestions: toStringList(overall['Specific Suggestions']),
     next_steps: toStringList(overall['Next Steps']),
-    annotations: toAnnotations(body.data_micro),
+    annotations: toAnnotations(body['data_micro']),
   };
 }

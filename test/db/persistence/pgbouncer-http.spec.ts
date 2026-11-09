@@ -15,7 +15,7 @@ import { ulid } from 'ulid';
 
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 
-const PGBOUNCER_URL = process.env.AIHUB_PGBOUNCER_TEST_URL?.trim();
+const PGBOUNCER_URL = process.env['AIHUB_PGBOUNCER_TEST_URL']?.trim();
 const HTTP_PROBE_SQL = 'aihub_pgbouncer_http_probe';
 const BACKEND_HOLDER_SQL = 'aihub_pgbouncer_backend_wait_probe';
 const POOLER_APPLICATION_NAME = 'aihub_pgbouncer_http_test';

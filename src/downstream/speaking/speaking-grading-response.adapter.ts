@@ -90,7 +90,7 @@ function normalizePronunciationDetail(value: unknown): unknown {
   }
 
   const words = requiredCollection(
-    value.words,
+    value['words'],
     'pronunciation_detail.words',
   ).map((word, index) => {
     if (!isRecord(word)) {
@@ -99,11 +99,11 @@ function normalizePronunciationDetail(value: unknown): unknown {
     return {
       ...word,
       syllables: requiredCollection(
-        word.syllables,
+        word['syllables'],
         `pronunciation_detail.words[${index}].syllables`,
       ),
       phonemes: requiredCollection(
-        word.phonemes,
+        word['phonemes'],
         `pronunciation_detail.words[${index}].phonemes`,
       ),
     };
@@ -120,11 +120,11 @@ function normalizeLanguageAnalysis(value: unknown): unknown {
   return {
     ...value,
     grammar_errors: requiredCollection(
-      value.grammar_errors,
+      value['grammar_errors'],
       'language_analysis.grammar_errors',
     ),
     vocabulary_upgrades: requiredCollection(
-      value.vocabulary_upgrades,
+      value['vocabulary_upgrades'],
       'language_analysis.vocabulary_upgrades',
     ),
   };
@@ -140,11 +140,15 @@ function normalizeLanguageAnalysis(value: unknown): unknown {
 export function parseSpeakingGradeResponse(
   body: unknown,
 ): SpeakingGradeResponse {
-  if (!isRecord(body) || body.status !== 'success' || !isRecord(body.data)) {
+  if (
+    !isRecord(body) ||
+    body['status'] !== 'success' ||
+    !isRecord(body['data'])
+  ) {
     throw contractViolation('missing successful provider data');
   }
 
-  const data = body.data;
+  const data = body['data'];
   const testType = optionalNullableString(data, 'test_type');
   const normalized = {
     ...(testType === undefined ? {} : { test_type: testType }),
@@ -155,9 +159,9 @@ export function parseSpeakingGradeResponse(
     relevance: requiredGroup(data, 'relevance'),
     fluency_metrics: requiredNullableGroup(data, 'fluency_metrics'),
     pronunciation_detail: normalizePronunciationDetail(
-      data.pronunciation_detail,
+      data['pronunciation_detail'],
     ),
-    language_analysis: normalizeLanguageAnalysis(data.language_analysis),
+    language_analysis: normalizeLanguageAnalysis(data['language_analysis']),
     feedback: requiredGroup(data, 'feedback'),
   };
 

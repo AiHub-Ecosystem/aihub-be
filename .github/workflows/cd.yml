@@ -63,6 +63,12 @@ jobs:
             printf 'image digest mismatch: refusing to deploy %s\n' "$image" >&2
             exit 1
           fi
+          # #1814: the same digest carries an SBOM attestation in the registry
+          # (SPDX JSON, keyless cosign). Name it so an operator starts from the
+          # deployed digest; verify with cosign verify-attestation --type spdxjson.
+          # See docs/operations/image-sbom-provenance.md.
+          printf '### SBOM provenance\n\n`%s@%s`\n\nSPDX SBOM is attached as a signed attestation to this digest (CI artifact `image-sbom`, SPDX JSON). Verify from a workstation with:\n\n```bash\ncosign verify-attestation %s@%s --type spdxjson --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '\''https://github.com/%s/.github/workflows/ci.yml@refs/heads/main'\''\n```\n' \
+            "$image_name" "$actual" "$image_name" "$actual" "$REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - name: Record the digest used by this CD run

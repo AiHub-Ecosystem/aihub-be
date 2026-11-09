@@ -59,7 +59,7 @@ describe('UserAccessJwtGuard', () => {
     const guard = makeGuard();
 
     await expect(guard.canActivate(context(request))).resolves.toBe(true);
-    expect(request.aihubUser).toEqual({ userId: verified.userId });
+    expect(request['aihubUser']).toEqual({ userId: verified.userId });
   });
 
   it.each<[string, { readonly authorization?: string | string[] }]>([

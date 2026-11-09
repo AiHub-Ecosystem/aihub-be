@@ -13,7 +13,7 @@ import {
 import {
   SPEAKING_AUDIO_STORAGE,
   type SpeakingAudioStoragePort,
-} from '@/modules/speaking/application/speaking-audio-storage.port';
+} from '@/modules/speaking/application/audio/speaking-audio-storage.port';
 import { listSpeakingQuestions } from '@/modules/speaking/application/speaking-question-catalog';
 
 type SpeakingPartQueryValue = Static<

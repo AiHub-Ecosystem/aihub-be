@@ -215,7 +215,7 @@ function expectFailureLogLine(
 }
 
 function downstreamMs(payload: Record<string, unknown>): number {
-  const downstreamMs = payload.downstream_ms;
+  const downstreamMs = payload['downstream_ms'];
   if (typeof downstreamMs !== 'number') {
     throw new Error('downstream_ms is missing from the failure log');
   }

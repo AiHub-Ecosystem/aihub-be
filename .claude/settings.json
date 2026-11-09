@@ -7,7 +7,7 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/checks/issue-triage-hook.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/checks/hooks/issue-triage-hook.mjs\"",
             "timeout": 60,
             "statusMessage": "Auditing issue triage metadata"
           }

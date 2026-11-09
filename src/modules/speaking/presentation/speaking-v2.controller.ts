@@ -34,7 +34,7 @@ import { RequireOperation } from '@/modules/identity/shared/presentation/require
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 import { SpeakingV2WorkflowEngine } from '@/modules/speaking/application/speaking-v2-workflow-engine';
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
 

@@ -19,6 +19,11 @@ interface FakePolicy {
   reservedByOrganization?: Record<string, number>;
   reserved?: number;
   failReads?: boolean;
+  held?: readonly {
+    requestId: string;
+    organizationId: string;
+    status: string;
+  }[];
 }
 
 class FakeClient {
@@ -101,6 +106,14 @@ class FakeClient {
     };
     return {
       count,
+      findUnique: async ({ where }: { where: { requestId: string } }) => {
+        if (this.policy.failReads === true)
+          throw new Error('relation unavailable');
+        return (
+          this.policy.held?.find((row) => row.requestId === where.requestId) ??
+          null
+        );
+      },
       create: async ({
         data,
       }: {
@@ -185,6 +198,47 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
         organizationId: 'org_acme',
         requestId: 'req_1',
       }),
+    ).resolves.toBe(false);
+    expect(client.created).toEqual([]);
+  });
+
+  it('admits a request that already holds its reservation without taking another unit', async () => {
+    const client = new FakeClient({
+      defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],
+      reservedByOrganization: { org_acme: 5 },
+      held: [
+        { requestId: 'sgj_1', organizationId: 'org_acme', status: 'reserved' },
+      ],
+    });
+    const budget = new PostgresSandboxDispatchBudget(
+      asBudgetClient(client),
+      () => OCTOBER,
+    );
+
+    await expect(
+      budget.reserve({ organizationId: 'org_acme', requestId: 'sgj_1' }),
+    ).resolves.toBe(true);
+    expect(client.created).toEqual([]);
+  });
+
+  it('refuses a released or foreign reservation id instead of reusing it', async () => {
+    const client = new FakeClient({
+      defaults: [{ monthStart: OCTOBER_START, allowance: 5 }],
+      held: [
+        { requestId: 'sgj_1', organizationId: 'org_acme', status: 'released' },
+        { requestId: 'sgj_2', organizationId: 'org_other', status: 'reserved' },
+      ],
+    });
+    const budget = new PostgresSandboxDispatchBudget(
+      asBudgetClient(client),
+      () => OCTOBER,
+    );
+
+    await expect(
+      budget.reserve({ organizationId: 'org_acme', requestId: 'sgj_1' }),
+    ).resolves.toBe(false);
+    await expect(
+      budget.reserve({ organizationId: 'org_acme', requestId: 'sgj_2' }),
     ).resolves.toBe(false);
     expect(client.created).toEqual([]);
   });

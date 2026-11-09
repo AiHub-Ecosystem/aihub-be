@@ -19,7 +19,7 @@ export async function verifyPasswordRolloutCompatibility(input: {
   readonly report: string[];
 }): Promise<void> {
   const { database, previousSha, candidateSha, report } = input;
-  const setting = process.env.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD;
+  const setting = process.env['AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD'];
   check(
     setting === 'true' || setting === 'false',
     'AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD must be true or false in CI',
@@ -92,7 +92,7 @@ export async function verifyPasswordRolloutCompatibility(input: {
   );
   const after = result.rows[0];
   if (requiresPassword) {
-    const error = previousVerify.body?.error;
+    const error = previousVerify.body?.['error'];
     check(
       previousVerify.status === 400 &&
         typeof error === 'object' &&

@@ -1,4 +1,6 @@
+import { Readable } from 'node:stream';
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { S3SpeakingAudioAssetStorage } from './s3-speaking-audio-asset.storage';
 
 const KEY =
@@ -100,6 +102,71 @@ describe('S3SpeakingAudioAssetStorage', () => {
     expect(command).toMatchObject({
       input: { Bucket: 'aihub-sandbox-speaking-recordings', Key: KEY },
     });
+  });
+
+  it('reads bounded audio from the environment bucket into the v2 adapter shape', async () => {
+    const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({
+      ContentLength: 11,
+      Body: Readable.from([Buffer.from('audio bytes')]),
+    });
+    const adapter = storage(send);
+
+    const result = await adapter.readObject({
+      environment: 'sandbox',
+      objectKey: KEY,
+      contentType: 'audio/wav',
+    });
+
+    await expect(result.blob.arrayBuffer()).resolves.toEqual(
+      Uint8Array.from(Buffer.from('audio bytes')).buffer,
+    );
+    expect(result).toMatchObject({
+      filename: 'audio.wav',
+      contentType: 'audio/wav',
+    });
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      input: {
+        Bucket: 'aihub-sandbox-speaking-recordings',
+        Key: KEY,
+      },
+    });
+  });
+
+  it('maps a missing audio object to NOT_FOUND without exposing its key', async () => {
+    const missing = Object.assign(new Error('missing'), {
+      name: 'NotFound',
+      $metadata: { httpStatusCode: 404 },
+    });
+    const adapter = storage(
+      jest.fn<Promise<unknown>, [unknown]>().mockRejectedValue(missing),
+    );
+
+    const read = adapter.readObject({
+      environment: 'production',
+      objectKey: KEY,
+      contentType: 'audio/wav',
+    });
+    await expect(read).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(read).rejects.not.toThrow(KEY);
+  });
+
+  it('refuses an oversized object and closes its response stream', async () => {
+    const body = new Readable({ read() {} });
+    const destroy = jest.spyOn(body, 'destroy');
+    const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({
+      ContentLength: SPEAKING_AUDIO_MAX_BYTES + 1,
+      Body: body,
+    });
+    const adapter = storage(send);
+
+    await expect(
+      adapter.readObject({
+        environment: 'production',
+        objectKey: KEY,
+        contentType: 'audio/wav',
+      }),
+    ).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE' });
+    expect(destroy).toHaveBeenCalled();
   });
 
   it('treats a missing object as absent and an already-missing delete as success', async () => {

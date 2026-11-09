@@ -28,7 +28,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 check(isRecord(bootConfigModule), 'CI boot configuration helper is invalid');
-const bootConfigWriter = bootConfigModule.writeBootConfig;
+const bootConfigWriter = bootConfigModule['writeBootConfig'];
 check(
   typeof bootConfigWriter === 'function',
   'CI boot configuration helper is invalid',
@@ -105,7 +105,7 @@ export function imageConfig(
     string,
     Record<string, string>
   >;
-  runtime.resend = { api_key: apiKey };
+  runtime['resend'] = { api_key: apiKey };
   writeFileSync(runtimePath, JSON.stringify(runtime));
 
   const connectionPath = resolve(directory, 'connection-secrets.json');
@@ -161,7 +161,7 @@ globalThis.fetch = (input, init) => originalFetch(
     NODE_OPTIONS: '--require=/run/secrets/aihub/resend-fetch-stub.cjs',
     AIHUB_SELF_SERVE_MONTHLY_REQUEST_QUOTA: '100',
     AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD:
-      process.env.AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD ?? 'false',
+      process.env['AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD'] ?? 'false',
     DOWNSTREAM_AI_WRITING_URL: 'http://127.0.0.1:18080',
   });
   writeFileSync(
@@ -275,7 +275,7 @@ export async function request(
   } = {},
 ): Promise<HttpResult> {
   const headers: Record<string, string> = { host: API_HOST };
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) headers['authorization'] = `Bearer ${options.token}`;
   if (options.apiKey) headers['x-api-key'] = options.apiKey;
   if (options.assertion) headers['x-user-identity'] = options.assertion;
   if (options.idempotencyKey)
@@ -341,11 +341,11 @@ export function expect2xx(result: HttpResult, label: string): void {
 }
 
 export function organizationIdOf(result: HttpResult): string {
-  const data = result.body?.data as Record<string, unknown> | undefined;
-  const organization = data?.organization as
+  const data = result.body?.['data'] as Record<string, unknown> | undefined;
+  const organization = data?.['organization'] as
     | Record<string, unknown>
     | undefined;
-  const value = organization?.organization_id;
+  const value = organization?.['organization_id'];
   check(typeof value === 'string', 'organization creation returned no id');
   return value;
 }
@@ -409,7 +409,7 @@ export function identityKeys(): {
 }
 
 export function identityKid(identity: ReturnType<typeof identityKeys>): string {
-  const kid = identity.jwks.keys[0]?.kid;
+  const kid = identity.jwks.keys[0]?.['kid'];
   check(typeof kid === 'string', 'generated identity key has no kid');
   return kid;
 }

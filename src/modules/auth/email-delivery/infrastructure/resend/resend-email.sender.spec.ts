@@ -134,7 +134,7 @@ describe('ResendEmailSender', () => {
 
   it('does not classify sender serialization errors as provider transport failures', async () => {
     const circular: Record<string, unknown> = {};
-    circular.self = circular;
+    circular['self'] = circular;
     const fetcher = jest.fn(async () => ({
       status: 200,
       headers: { get: () => null },

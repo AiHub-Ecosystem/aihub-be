@@ -25,7 +25,7 @@ The rule is deliberately narrower than "no `../`". A parent-relative specifier
 whose resolved target lies under `src/` is an error; a sibling `./x` is fine, and
 so is a parent-relative import resolving outside `src/`, which is five call sites:
 `test/db/tenant-isolation/*.spec.ts` reaching the local `test/db/database.ts`,
-`scripts/checks/check-architecture.spec.ts` reaching `.dependency-cruiser.cjs`, and
+`scripts/checks/architecture/check-architecture.spec.ts` reaching `.dependency-cruiser.cjs`, and
 `test/cli/cli-loader.spec.ts` reaching `load-cli-runner.cjs` through a `createRequire`
 handle named `requireScript`. Scoping by resolved target rather than by spelling
 means the rule needs no allowlist and nothing to maintain, which is the same reason
@@ -54,7 +54,7 @@ scope rather than availability: oxlint 1.83.0 does ship
 `import/no-relative-parent-imports`, but it decides on spelling, so it would report
 all five legal call sites above and would have to be suppressed or narrowed. ADR-0037
 also fixes oxlint as the linter and Biome as the formatter, and adding an import
-plugin's rule set is a change to that decision. `scripts/checks/check-architecture.mjs`
+plugin's rule set is a change to that decision. `scripts/checks/architecture/check-architecture.mjs`
 already gates this repository by reading source for forbidden literals, so a
 repository script is the established shape here rather than a new mechanism. The
 source check reads the syntax tree through the TypeScript compiler rather than
@@ -65,7 +65,7 @@ appears in a specifier position at all. It is written in TypeScript and run with
 `tsx` like the other `scripts/**/*.ts` entry points, so its own spec imports it
 directly instead of needing hand-written types for a `.cjs` or `.mjs` neighbour. It
 stays in `scripts/**`, which the `infrastructure` role owns, and it is deliberately
-not folded into `scripts/checks/check-architecture.mjs`, which the `testing` role owns:
+not folded into `scripts/checks/architecture/check-architecture.mjs`, which the `testing` role owns:
 this is an infrastructure concern wearing a testing file's location.
 
 One limitation is recorded rather than closed. The check recognises `require` and
@@ -83,7 +83,7 @@ loudly rather than silently. The same option switches on TypeScript config
 extraction for the whole cruise, changing resolution for `no-circular` and for
 every path-based rule, so the `pnpm arch-check` output before and after belongs in
 the pull request; ADR-0066's warning count is a pinned assertion in
-`scripts/checks/check-architecture.spec.ts` and must not move without being reported.
+`scripts/checks/architecture/check-architecture.spec.ts` and must not move without being reported.
 And `pnpm verify` is no longer what CI runs — the lanes were split per #108 — so a
 check added only to `verify` is a local suggestion that no lane ever executes. The
 check is added to `.github/workflows/ci.yml` explicitly for that reason. The same
@@ -120,7 +120,7 @@ the rewrite the check reports zero, and the five legal parent-relative call site
 above are all that remain of the shape.
 
 `arch-check` reports 14 warnings, 0 errors, 456 modules and 1699 dependencies both
-before and after, and the pinned assertions in `scripts/checks/check-architecture.spec.ts`
+before and after, and the pinned assertions in `scripts/checks/architecture/check-architecture.spec.ts`
 hold unchanged. That is the evidence this decision did not move a boundary.
 
 `tsconfig.json` carries `paths` alone, with `"./src/*"` as the target and no

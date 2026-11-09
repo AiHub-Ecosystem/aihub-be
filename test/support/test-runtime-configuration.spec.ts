@@ -51,9 +51,9 @@ describe('useTestRuntimeConfiguration (#1551)', () => {
   it('keeps the secrets the Jest setup provides', () => {
     useTestRuntimeConfiguration({});
 
-    expect(getRuntimeSecretEnvironment().DOWNSTREAM_AI_WRITING_TOKEN).toEqual(
-      expect.any(String),
-    );
+    expect(
+      getRuntimeSecretEnvironment()['DOWNSTREAM_AI_WRITING_TOKEN'],
+    ).toEqual(expect.any(String));
   });
 
   it('runs the override through the runtime configuration validation', () => {

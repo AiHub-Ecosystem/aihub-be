@@ -1,5 +1,4 @@
 import { internalError } from '@/common/errors/app-error';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import {
   SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
   canReserveSandboxDispatch,
@@ -9,6 +8,7 @@ import type {
   SandboxDispatchBudgetPort,
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
@@ -63,6 +63,19 @@ export class PostgresSandboxDispatchBudget
     const { monthNumber, start: monthStart } = quotaPeriod(now);
 
     return this.client.$transaction(async (transaction) => {
+      // A Speaking grading job reserves at submit under its job id and the
+      // shared dispatcher reserves again under the same id (ADR-0159): a
+      // reservation this request already holds admits it without a second unit.
+      const held = await transaction.sandboxDispatchReservation.findUnique({
+        where: { requestId: input.requestId },
+      });
+      if (held !== null) {
+        return (
+          held.status === 'reserved' &&
+          held.organizationId === input.organizationId
+        );
+      }
+
       // ponytail: one lock per UTC month serializes the 500/month admission check; split by Organization if dispatch volume makes this a bottleneck.
       // Prisma's query path cannot deserialize PostgreSQL's void result.
       await transaction.$executeRawUnsafe(

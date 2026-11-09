@@ -20,12 +20,12 @@ function providerResponse(): { status: string; data: Json } {
   const parsed: unknown = JSON.parse(readFileSync(FIXTURE, 'utf8'));
   if (
     !isRecord(parsed) ||
-    typeof parsed.status !== 'string' ||
-    !isRecord(parsed.data)
+    typeof parsed['status'] !== 'string' ||
+    !isRecord(parsed['data'])
   ) {
     throw new Error('Captured speaking response has an invalid shape');
   }
-  return { status: parsed.status, data: parsed.data };
+  return { status: parsed['status'], data: parsed['data'] };
 }
 
 function violation(
@@ -46,7 +46,7 @@ function violation(
 }
 
 function firstSyllable(body: { data: Json }): Json {
-  const detail = body.data.pronunciation_detail as { words: Json[] };
+  const detail = body.data['pronunciation_detail'] as { words: Json[] };
   const word = detail.words[0] as { syllables: Json[] };
   return word.syllables[0] as Json;
 }
@@ -61,7 +61,7 @@ describe('parseSpeakingGradeResponse', () => {
   it('accepts a null predicted_stress and passes it on as null', () => {
     const body = providerResponse();
     const syllable = firstSyllable(body);
-    syllable.predicted_stress = null;
+    syllable['predicted_stress'] = null;
 
     const parsed = parseSpeakingGradeResponse(body);
 
@@ -71,7 +71,7 @@ describe('parseSpeakingGradeResponse', () => {
 
   it('still refuses a predicted_stress outside 0 to 2', () => {
     const error = violation((body) => {
-      firstSyllable(body).predicted_stress = 7;
+      firstSyllable(body)['predicted_stress'] = 7;
     });
 
     expect(error.diagnostic).toContain(
@@ -82,7 +82,7 @@ describe('parseSpeakingGradeResponse', () => {
   describe('a contract violation says where, never what', () => {
     it('names the field that broke the schema and the kind of mismatch', () => {
       const error = violation((body) => {
-        firstSyllable(body).stress_score = null;
+        firstSyllable(body)['stress_score'] = null;
       });
 
       expect(error.code).toBe('AI_SERVICE_CONTRACT_VIOLATION');
@@ -94,7 +94,7 @@ describe('parseSpeakingGradeResponse', () => {
     it('names an unexpected key without echoing its value', () => {
       const secret = 'private provider value';
       const error = violation((body) => {
-        firstSyllable(body).unexpected_field = secret;
+        firstSyllable(body)['unexpected_field'] = secret;
       });
 
       expect(error.diagnostic).toContain(
@@ -106,11 +106,11 @@ describe('parseSpeakingGradeResponse', () => {
     it('never carries the transcript or any other value from the response', () => {
       const body = providerResponse();
       const transcript = String(
-        (body.data.transcript as { text: string }).text,
+        (body.data['transcript'] as { text: string }).text,
       );
       const error = violation((mutated) => {
-        firstSyllable(mutated).stress_score = 'not a number';
-        (mutated.data.transcript as { text: string }).text = transcript;
+        firstSyllable(mutated)['stress_score'] = 'not a number';
+        (mutated.data['transcript'] as { text: string }).text = transcript;
       });
 
       expect(error.diagnostic).not.toContain(transcript);
@@ -119,10 +119,10 @@ describe('parseSpeakingGradeResponse', () => {
 
     it('lists at most three failures and keeps the line short', () => {
       const error = violation((body) => {
-        const detail = body.data.pronunciation_detail as { words: Json[] };
+        const detail = body.data['pronunciation_detail'] as { words: Json[] };
         for (const word of detail.words) {
-          for (const syllable of word.syllables as Json[]) {
-            syllable.stress_score = null;
+          for (const syllable of word['syllables'] as Json[]) {
+            syllable['stress_score'] = null;
           }
         }
       });
@@ -134,7 +134,7 @@ describe('parseSpeakingGradeResponse', () => {
 
     it('names the missing group when a required group is absent', () => {
       const error = violation((body) => {
-        body.data.feedback = undefined;
+        body.data['feedback'] = undefined;
       });
 
       expect(error.diagnostic).toBe('missing object group feedback');
@@ -142,7 +142,7 @@ describe('parseSpeakingGradeResponse', () => {
 
     it('names a collection that is not one', () => {
       const error = violation((body) => {
-        (body.data.language_analysis as Json).grammar_errors = 'none';
+        (body.data['language_analysis'] as Json)['grammar_errors'] = 'none';
       });
 
       expect(error.diagnostic).toBe(
@@ -152,7 +152,7 @@ describe('parseSpeakingGradeResponse', () => {
 
     it('keeps the public message generic', () => {
       const error = violation((body) => {
-        firstSyllable(body).stress_score = null;
+        firstSyllable(body)['stress_score'] = null;
       });
 
       expect(error.message).toBe(
