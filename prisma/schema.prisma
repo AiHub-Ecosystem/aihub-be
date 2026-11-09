@@ -635,6 +635,7 @@ model SpeakingGradingJob {
   @@index([status, dispatchStartedAt], map: "speaking_grading_jobs_dispatch_idx")
   @@index([organizationId, environment, status, createdAt], map: "speaking_grading_jobs_org_in_flight_idx")
   @@index([createdAt], map: "speaking_grading_jobs_retention_idx")
+  @@unique([organizationId, endUserId, idempotencyKey], map: "speaking_grading_jobs_org_user_key_idx", where: raw("(idempotency_key IS NOT NULL)"))
   @@map("speaking_grading_jobs")
 }
 

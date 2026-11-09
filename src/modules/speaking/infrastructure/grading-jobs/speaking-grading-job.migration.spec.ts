@@ -27,6 +27,8 @@ describe('Speaking grading jobs migration', () => {
     expect(sql).toContain('speaking_grading_jobs_dispatch_idx');
     expect(sql).toContain('speaking_grading_jobs_org_in_flight_idx');
     expect(sql).toContain('speaking_grading_jobs_retention_idx');
+    expect(sql).toContain('speaking_grading_jobs_org_user_key_idx');
+    expect(sql).toContain('idempotency_key        text');
     expect(sql).not.toContain('redis');
   });
 });
