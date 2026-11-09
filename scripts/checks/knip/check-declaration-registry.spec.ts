@@ -174,4 +174,41 @@ describe('hand-written declaration registry check', () => {
     expect(result.status).toBe(0);
     expect(result.output).toMatch(/Declaration-registry check passed/);
   });
+
+  // knip's `entry` accepts a `{path, reason}` object as well as a bare string.
+  // Reading only the string form parsed an object entry to nothing and then
+  // reported every declaration as unlisted, which is a false failure.
+  it('reads an object-form entry, reason included', () => {
+    const objectEntry = (fields: string) =>
+      runOnFixture({
+        declarations: ['scripts/cli/cli-options.d.cts'],
+        knip: `{\n  "entry": [\n    {${fields}}\n  ]\n}\n`,
+      });
+
+    // A reason inside the object satisfies the documented-entry rule.
+    expect(
+      objectEntry(
+        '"path":"scripts/cli/cli-options.d.cts","reason":"plain CJS sibling"',
+      ).status,
+    ).toBe(0);
+
+    // The object's path is what pairs with the declaration, so an object naming
+    // a different file leaves the declaration unlisted.
+    const mismatched = objectEntry(
+      '"path":"scripts/cli/other.d.cts","reason":"plain CJS sibling"',
+    );
+    expect(mismatched.status).not.toBe(0);
+    expect(mismatched.output).toMatch(/scripts\/cli\/cli-options\.d\.cts/);
+  });
+
+  it('strips a multi-line block comment without leaking its markers', () => {
+    const result = runOnFixture({
+      declarations: ['scripts/cli/cli-options.d.cts'],
+      knip:
+        '{\n  "entry": [\n    /* Hand-written types\n     * for the CLI options.\n     */\n' +
+        '    "scripts/cli/cli-options.d.cts"\n  ]\n}\n',
+    });
+
+    expect(result.status).toBe(0);
+  });
 });

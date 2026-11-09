@@ -120,18 +120,27 @@ export function parseKnipEntries(source) {
     if (text.startsWith(']')) break;
 
     if (inBlockComment) {
-      pending.push(text.replace(/^\/?\*+\/?/u, '').trim());
-      if (text.includes('*/')) inBlockComment = undefined;
+      // The continuation of a `/* ... */` comment. The closing `*/` is stripped
+      // first: stripping the leading `*` decoration first would eat the `*` of a
+      // bare `*/` and leave a stray `/` on the line.
+      const closes = text.includes('*/');
+      const body = (closes ? text.replace(/\*\/$/u, '') : text)
+        .replace(/^\*+\s*/u, '')
+        .trim();
+      if (body !== '') pending.push(body);
+      if (closes) inBlockComment = undefined;
       continue;
     }
     if (text.startsWith('/*')) {
-      pending.push(
-        text
-          .replace(/^\/\*+/u, '')
-          .replace(/\*\/$/u, '')
-          .trim(),
-      );
-      if (!text.includes('*/')) inBlockComment = true;
+      const opened = text.replace(/^\/\*+/u, '');
+      if (text.includes('*/')) {
+        pending.push(opened.replace(/\*\/$/u, '').trim());
+        continue;
+      }
+      // The comment closes on a later line, so only the opener is stripped here;
+      // each continuation line is stripped as it arrives.
+      if (opened.trim() !== '') pending.push(opened.trim());
+      inBlockComment = true;
       continue;
     }
     if (text.startsWith('//')) {
@@ -139,14 +148,22 @@ export function parseKnipEntries(source) {
       continue;
     }
 
-    const value = /^"(?<path>[^"]+)"/u.exec(text)?.groups?.path;
+    // An entry is either a bare string or, per knip's schema, a `{path, reason}`
+    // object that carries its own reason instead of a comment above it. Reading
+    // only the string form would silently parse an object entry to nothing and
+    // then report every declaration as unlisted.
+    const objectPath = /^\{\s*"path"\s*:\s*"(?<path>[^"]+)"/u.exec(text)?.groups
+      ?.path;
+    const objectReason = /"reason"\s*:\s*"(?<reason>[^"]+)"/u.exec(text)?.groups
+      ?.reason;
+    const value = objectPath ?? /^"(?<path>[^"]+)"/u.exec(text)?.groups?.path;
     if (value === undefined) {
       // A blank line ends an element either way: a comment separated from its
       // entry by one is not that entry's reason.
       if (text === '') pending = [];
       continue;
     }
-    const reason = pending.join(' ').trim();
+    const reason = (objectReason ?? pending.join(' ')).trim();
     entries.push(reason === '' ? { path: value } : { path: value, reason });
     pending = [];
   }
