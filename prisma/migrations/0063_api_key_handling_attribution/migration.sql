@@ -1,4 +1,4 @@
--- API key handling attribution (ADR-0151, #447).
+-- API key handling attribution (ADR-0159, #447).
 --
 -- A key's only attribution used to be the actor on `api_key.created` and
 -- `api_key.rotated` audit events, and those are pruned after 24 months while an

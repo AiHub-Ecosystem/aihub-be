@@ -252,6 +252,35 @@ describe('Organization Invitation inviter-authority admission (ADR-0159)', () =>
     });
   });
 
+  it('refuses a member invitation when the inviter was demoted to member', async () => {
+    // An ordinary member holds no authority to invite anyone, so a member
+    // invitation issued while the inviter was an admin or owner cannot be
+    // accepted after they have been demoted to member.
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'member', {
+      role: 'member',
+      membership_status: 'active',
+    });
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'inviter_unauthorized',
+    });
+  });
+
+  it('refuses an admin invitation when the inviter was demoted to admin', async () => {
+    // Only an owner can invite an admin; an admin may only invite members.
+    // An owner invitation for the admin role is refused once the inviter becomes an admin.
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'admin', {
+      role: 'admin',
+      membership_status: 'active',
+    });
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'inviter_unauthorized',
+    });
+  });
+
   it('still accepts a lawful member invitation from an inviter now an admin', async () => {
     // Positive control: the transfer left the inviter an active admin, and an
     // active admin may grant member, so this invitation remains valid.
@@ -268,6 +297,23 @@ describe('Organization Invitation inviter-authority admission (ADR-0159)', () =>
       role: 'member',
     });
     expect(prisma.opened).toBe(1);
+  });
+
+  it('preserves the existing role of an active recipient when accepting a lower-role invitation', async () => {
+    // Acceptance must never demote an active member: if an active admin accepts
+    // an invitation for role 'member', the upsert keeps their current 'admin' role.
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'member', {
+      role: 'owner',
+      membership_status: 'active',
+    });
+    scriptRows(prisma, UPSERT_MEMBERSHIP_SQL, { role: 'admin' });
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'accepted',
+      organizationId: 'org_acme',
+      role: 'admin',
+    });
   });
 
   it('still accepts an owner invitation from an inviter still an owner', async () => {

@@ -3,7 +3,7 @@ import {
   type OrganizationApiKeyCallerRefusal,
   lockedCallerAuthority,
   organizationApiKeyCallerRefusal,
-} from '@/modules/identity/api-keys/application/caller-authority/organization-api-key-caller-authority';
+} from '@/modules/identity/api-keys/application/organization-api-key-policy';
 import type { OrganizationApiKeySurface } from '@/modules/identity/membership/application/organization-admission';
 import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 import { identityRows } from '@/modules/identity/shared/infrastructure/postgres-identity.client';

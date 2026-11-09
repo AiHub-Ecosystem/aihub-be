@@ -1,7 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
-import { type OrganizationApiKeyCallerRefusal } from '@/modules/identity/api-keys/application/caller-authority/organization-api-key-caller-authority';
 import {
+  type OrganizationApiKeyCallerRefusal,
   hasRequiredOrganizationApiKeyEntitlements,
   reachedOrganizationApiKeyLimit,
 } from '@/modules/identity/api-keys/application/organization-api-key-policy';
@@ -39,95 +39,13 @@ import {
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import {
-  API_KEY_ATTRIBUTION_JOINS_SQL,
-  ATTRIBUTION_COLUMNS_SQL,
-  handlingUserId,
-  handlingUsername,
+  INVENTORY_SELECT,
+  LOCK_API_KEY_FOR_REVOKE_SQL,
+  LOCK_API_KEY_SQL,
+  LOCK_ORGANIZATION_SQL,
+  handlingAttributionValue,
 } from './organization-api-key-attribution';
 import { organizationApiKeyCallerRefusalFor } from './organization-api-key-caller-authority';
-
-/**
- * Locking the Organization row is what makes the active-key limit hold: two
- * concurrent creations would otherwise both read the same count and both
- * insert. The lock also re-reads `status` and `entitlements` for free, so the
- * suspension and Entitlement guards see the same Organization the limit does.
- */
-const LOCK_ORGANIZATION_SQL = `
-  SELECT id, status, entitlements
-  FROM organizations
-  WHERE id = $1
-  FOR UPDATE
-`;
-
-/**
- * The columns an inventory entry is built from. The list query selects exactly
- * these, and the revoke path's locked row is aliased to the same names, so one
- * mapper serves both.
- */
-const INVENTORY_SELECT = {
-  id: true,
-  name: true,
-  keyPrefix: true,
-  scopes: true,
-  allowedEnvironments: true,
-  status: true,
-  expiresAt: true,
-  lastUsedAt: true,
-  createdAt: true,
-  createdByAccount: { select: { username: true } },
-  lastRotatedByAccount: { select: { username: true } },
-} as const;
-
-/**
- * Claims the key being retired. Without this lock two concurrent rotations
- * both read it as active, both revoke it, and both insert, leaving the
- * Organization with two live replacements where one was asked for.
- *
- * The rotatability guard runs here, under the lock, but against the clock the
- * application passes in: the canonical form of the rule is `apiKeyStatus` in
- * the domain, and the database's own clock never decides it.
- */
-const LOCK_API_KEY_SQL = `
-  SELECT
-    encode(api_key.key_hash, 'hex') AS key_hash_hex,
-    api_key.name,
-    api_key.key_prefix,
-    api_key.scopes,
-    api_key.allowed_environments,
-    api_key.status,
-    api_key.expires_at,
-    ${ATTRIBUTION_COLUMNS_SQL}
-  FROM api_keys AS api_key
-  ${API_KEY_ATTRIBUTION_JOINS_SQL}
-  WHERE api_key.id = $1
-    AND api_key.organization_id = $2
-  FOR UPDATE OF api_key
-`;
-
-/**
- * Claims the key so a withdrawal cannot read a row that rotation is in the
- * middle of replacing. Two concurrent withdrawals need no protection — they
- * agree — so this lock is here for the race against rotation, not for itself.
- */
-const LOCK_API_KEY_FOR_REVOKE_SQL = `
-  SELECT
-    encode(api_key.key_hash, 'hex') AS key_hash_hex,
-    api_key.id,
-    api_key.name,
-    api_key.key_prefix AS "keyPrefix",
-    api_key.scopes,
-    api_key.allowed_environments AS "allowedEnvironments",
-    api_key.status,
-    api_key.expires_at AS "expiresAt",
-    api_key.last_used_at AS "lastUsedAt",
-    api_key.created_at AS "createdAt",
-    ${ATTRIBUTION_COLUMNS_SQL}
-  FROM api_keys AS api_key
-  ${API_KEY_ATTRIBUTION_JOINS_SQL}
-  WHERE api_key.id = $1
-    AND api_key.organization_id = $2
-  FOR UPDATE OF api_key
-`;
 
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   if (!isRecord(value)) {
@@ -142,8 +60,11 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   const expiresAt = dateValue(value, 'expiresAt');
   const lastUsedAt = dateValue(value, 'lastUsedAt');
   const createdAt = dateValue(value, 'createdAt');
-  const createdByUsername = handlingUsername(value, 'createdByUsername');
-  const lastRotatedByUsername = handlingUsername(
+  const createdByUsername = handlingAttributionValue(
+    value,
+    'createdByUsername',
+  );
+  const lastRotatedByUsername = handlingAttributionValue(
     value,
     'lastRotatedByUsername',
   );
@@ -275,8 +196,14 @@ export class PostgresOrganizationApiKeyRepository
           'allowed_environments',
         );
         const expiresAt = dateValue(key, 'expires_at');
-        const createdByUsername = handlingUsername(key, 'createdByUsername');
-        const storedCreatedBy = handlingUserId(key, 'createdByUserId');
+        const createdByUsername = handlingAttributionValue(
+          key,
+          'createdByUsername',
+        );
+        const storedCreatedBy = handlingAttributionValue(
+          key,
+          'createdByUserId',
+        );
         if (
           retiredKeyHash === undefined ||
           retiredKeyPrefix === undefined ||

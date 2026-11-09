@@ -1,3 +1,4 @@
+import type { OrganizationApiKey } from '@/contracts/organization/api-key';
 import type { ApiKeyStatus } from '@/modules/identity/domain/api-key';
 
 interface PublishedApiKey {
@@ -16,7 +17,7 @@ interface PublishedApiKey {
 }
 
 /** One key in the wire shape every Organization API-key route answers with. */
-export function apiKeyResponse(key: PublishedApiKey) {
+export function apiKeyResponse(key: PublishedApiKey): OrganizationApiKey {
   return {
     id: key.id,
     name: key.name,
@@ -32,12 +33,16 @@ export function apiKeyResponse(key: PublishedApiKey) {
   };
 }
 
+export interface MintedApiKeyResponse extends OrganizationApiKey {
+  readonly api_key: string;
+}
+
 /** A key just minted: active, never used, and carrying its one-time secret. */
 export function mintedApiKeyResponse(
   minted: Omit<PublishedApiKey, 'status' | 'lastUsedAt'> & {
     readonly apiKey: string;
   },
-) {
+): MintedApiKeyResponse {
   return {
     api_key: minted.apiKey,
     ...apiKeyResponse({ ...minted, status: 'active', lastUsedAt: null }),

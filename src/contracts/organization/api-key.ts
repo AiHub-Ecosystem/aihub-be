@@ -73,6 +73,8 @@ export const OrganizationApiKeySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export type OrganizationApiKey = Static<typeof OrganizationApiKeySchema>;
+
 /**
  * The response of every operation that mints a credential: creation and
  * rotation both return it, which is why the name says neither.

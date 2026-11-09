@@ -320,6 +320,21 @@ describe('API key mutations refuse an authority that ended before their locks (A
     expect(await keyRows()).toEqual([{ id: apiKeyId, status: 'active' }]);
   });
 
+  it('refuses a rotate that queued behind a committed disable', async () => {
+    const apiKeyId = await seedKeyRow();
+    const holder = await holdAuthorityChange({
+      memberId: caller,
+      status: 'disabled',
+    });
+
+    const outcome = await raceBehindAuthorityChange(holder, () =>
+      rotateMutation(repository, caller, apiKeyId),
+    );
+
+    expect(outcome).toEqual({ kind: 'caller_not_authorized' });
+    expect(await keyRows()).toEqual([{ id: apiKeyId, status: 'active' }]);
+  });
+
   it('refuses a revoke that queued behind a committed demotion to member', async () => {
     const apiKeyId = await seedKeyRow();
     const holder = await holdAuthorityChange({
@@ -418,6 +433,36 @@ describe('Invitation send and revoke re-read the caller under the Organization l
     );
 
     expect(outcome).toEqual({ kind: 'caller_not_authorized' });
+    const invitations = await pool.query(
+      'SELECT id FROM organization_invitations WHERE organization_id = $1',
+      [ORGANIZATION_ID],
+    );
+    expect(invitations.rows).toEqual([]);
+    expect(outbox.queued).toEqual([]);
+  });
+
+  it('refuses a send when the organization is suspended before the lock', async () => {
+    // A suspension committed before the send boundary prevents both the invitation
+    // row and its email outbox request (ADR-0159, decision 3).
+    await pool.query(
+      `UPDATE organizations SET status = 'suspended' WHERE id = $1`,
+      [ORGANIZATION_ID],
+    );
+
+    const outcome = await creations.createInvitation({
+      context: managementContext(inviter),
+      invitationId: `oiv_${ulid()}`,
+      organizationId: ORGANIZATION_ID,
+      email: INVITED_EMAIL,
+      role: 'member',
+      invitedBy: inviter,
+      tokenHash: tokenHash(),
+      expiresAt: EXPIRES_AT,
+      emailDelivery: { token: 'raw-invite-token', createdAt: NOW },
+      now: NOW,
+    });
+
+    expect(outcome).toEqual({ kind: 'organization_suspended' });
     const invitations = await pool.query(
       'SELECT id FROM organization_invitations WHERE organization_id = $1',
       [ORGANIZATION_ID],
