@@ -48,6 +48,7 @@ const BATCHED_GATES = [
   'check:deprecation',
   'check:tenant-global',
   'check:data-ownership',
+  'check:migration-exemptions',
   'validate:openapi',
   'test:capacity-benchmark',
   'test:check-changed',

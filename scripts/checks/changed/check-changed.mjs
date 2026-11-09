@@ -86,6 +86,7 @@ export const GATE_COMMANDS = {
   'check:compose': 'check:compose',
   'check:tenant-global': 'check:tenant-global',
   'check:data-ownership': 'check:data-ownership',
+  'check:migration-exemptions': 'check:migration-exemptions',
   'format:check': 'format:check',
   knip: 'knip',
   lint: 'lint',
@@ -242,9 +243,11 @@ function classifyPathGates(p) {
   if (path === 'nest-cli.json' || path === 'tsconfig.build.json') {
     return ['build'];
   }
-  // squawk lints the migration SQL that `check:migrations` runs.
+  // squawk lints the migration SQL that `check:migrations` runs. The exemption
+  // list in this same file is what #1810 keeps inside the historical baseline,
+  // so a change to it selects both:
   if (path === '.squawk.toml') {
-    return ['check:migrations'];
+    return ['check:migrations', 'check:migration-exemptions'];
   }
   if (path === '.prettierrc' || path === '.prettierignore') {
     return ['format:check'];

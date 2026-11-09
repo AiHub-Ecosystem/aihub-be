@@ -364,7 +364,13 @@ const pathCases = [
   { path: '.oxlintrc.json', gates: ['lint'] },
   { path: 'nest-cli.json', gates: ['build'] },
   { path: 'tsconfig.build.json', gates: ['build'] },
-  { path: '.squawk.toml', gates: ['check:migrations'] },
+  {
+    // #1810: this file carries both the squawk config and the exemption list,
+    // so a change to it selects the linter and the gate that keeps that list
+    // inside the historical baseline.
+    path: '.squawk.toml',
+    gates: ['check:migration-exemptions', 'check:migrations'],
+  },
   {
     // #1777: the spec that pins the cached format:check command and proves
     // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
