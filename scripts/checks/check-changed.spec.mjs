@@ -213,6 +213,13 @@ const pathCases = [
   { path: 'tsconfig.build.json', gates: ['build'] },
   { path: '.squawk.toml', gates: ['check:migrations'] },
   { path: '.prettierrc', gates: ['format:check'] },
+  {
+    // #1777: the spec that pins the cached format:check command and proves
+    // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
+    // so the gate set is widened by that layer.
+    path: 'scripts/checks/format-check-cache.spec.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:format-check'],
+  },
   { path: '.prettierignore', gates: ['format:check'] },
   { path: '.lintstagedrc', gates: ['test:lint-staged'] },
   // #1767: each husky hook selects the gate that asserts its content.

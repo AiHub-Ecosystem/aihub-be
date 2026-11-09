@@ -91,6 +91,7 @@ export const GATE_COMMANDS = {
   'test:check-changed': 'test:check-changed',
   'test:check-app-errors': 'test:check-app-errors',
   'test:commit-message': 'test:commit-message',
+  'test:format-check': 'test:format-check',
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
   'test:issue-triage': 'test:issue-triage',
@@ -351,6 +352,11 @@ function classifyPathGates(p) {
   }
   if (path.includes('lint-staged-config')) {
     return ['lint', 'test:lint-staged'];
+  }
+  // #1777: the spec pins the format:check command shape and proves the cache
+  // cannot mask a real finding, so a change to it runs itself.
+  if (path.includes('format-check-cache')) {
+    return ['lint', 'test:format-check'];
   }
 
   if (path.includes('nginx')) {
