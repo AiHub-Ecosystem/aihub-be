@@ -1233,7 +1233,7 @@ jobs:
       # so the "which image contains CVE X" question (#1814) has one answer.
       - name: Generate SBOM for the pushed image digest
         id: sbom
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
         with:
           image: ${{ env.IMAGE_REF }}
           format: spdx-json
@@ -1284,7 +1284,7 @@ jobs:
       # at or above high is found (threshold recorded in docs/operations/image-sbom-provenance.md).
       # The SBOM attestation is already in the registry above so findings are inspectable.
       - name: Scan SBOM for vulnerabilities (Grype)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
         with:
           sbom: image-sbom.spdx.json
           format: table
