@@ -89,6 +89,7 @@ export const GATE_COMMANDS = {
   test: 'test',
   'test:capacity-benchmark': 'test:capacity-benchmark',
   'test:check-changed': 'test:check-changed',
+  'test:secret-scan': 'test:secret-scan',
   'test:check-app-errors': 'test:check-app-errors',
   'test:commit-message': 'test:commit-message',
   'test:format-check': 'test:format-check',
@@ -304,6 +305,13 @@ function classifyPathGates(p) {
     return ['format:check', 'test:monitoring-config'];
   }
 
+  // A workflow edit can break the scan range selection, so the job that reads
+  // ci.yml is asserted by its own suite. This precedes the generic YAML rule
+  // below, which would otherwise stop at `format:check`.
+  if (path === '.github/workflows/ci.yml') {
+    return ['format:check', 'test:secret-scan'];
+  }
+
   if (/\.(?:md|ya?ml)$/.test(path)) {
     return ['format:check'];
   }
@@ -357,6 +365,11 @@ function classifyPathGates(p) {
   // cannot mask a real finding, so a change to it runs itself.
   if (path.includes('format-check-cache')) {
     return ['lint', 'test:format-check'];
+  }
+  // #1779: the plan the secret-scan job applies, and the spec that pins both
+  // the decision and the workflow wiring.
+  if (path.includes('secret-scan-plan')) {
+    return ['lint', 'test:secret-scan'];
   }
 
   if (path.includes('nginx')) {

@@ -159,7 +159,10 @@ const pathCases = [
     path: 'docs/operations/runbook.md',
     gates: ['check:doc-drift', 'format:check'],
   },
-  { path: '.github/workflows/ci.yml', gates: ['format:check'] },
+  {
+    path: '.github/workflows/ci.yml',
+    gates: ['format:check', 'test:secret-scan'],
+  },
   {
     path: 'ops/nginx/site.conf',
     gates: ['check:doc-drift', 'check:nginx-headers', 'lint'],
@@ -212,7 +215,6 @@ const pathCases = [
   { path: 'nest-cli.json', gates: ['build'] },
   { path: 'tsconfig.build.json', gates: ['build'] },
   { path: '.squawk.toml', gates: ['check:migrations'] },
-  { path: '.prettierrc', gates: ['format:check'] },
   {
     // #1777: the spec that pins the cached format:check command and proves
     // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
@@ -220,6 +222,17 @@ const pathCases = [
     path: 'scripts/checks/format-check-cache.spec.mjs',
     gates: ['check:doc-drift', 'lint', 'test:format-check'],
   },
+  {
+    // #1779: the tested secret-scan plan, and the spec that pins both the
+    // decision and the workflow wiring that applies it.
+    path: 'scripts/ci/secret-scan/secret-scan-plan.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:secret-scan'],
+  },
+  {
+    path: 'scripts/ci/secret-scan/secret-scan-plan.spec.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:secret-scan'],
+  },
+  { path: '.prettierrc', gates: ['format:check'] },
   { path: '.prettierignore', gates: ['format:check'] },
   { path: '.lintstagedrc', gates: ['test:lint-staged'] },
   // #1767: each husky hook selects the gate that asserts its content.

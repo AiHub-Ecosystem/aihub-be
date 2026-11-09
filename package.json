@@ -84,6 +84,7 @@
     "check:batch": "node scripts/checks/check-batch.cjs",
     "test:check-app-errors": "jest --runTestsByPath scripts/checks/check-app-errors.spec.ts",
     "test:check-changed": "node --test scripts/checks/check-changed.spec.mjs",
+    "test:secret-scan": "node --test scripts/ci/secret-scan/secret-scan-plan.spec.mjs",
     "test:shell-specs": "node scripts/checks/run-shell-specs.mjs"
   },
   "dependencies": {

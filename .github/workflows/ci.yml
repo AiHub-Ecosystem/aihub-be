@@ -75,18 +75,39 @@ jobs:
       - name: Scan changed commits
         shell: bash
         env:
+          EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && \
-            "$BASE_SHA" != 0000000000000000000000000000000000000000 && \
-            "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$BASE_SHA" != "$HEAD_SHA" ]]; then
-            gitleaks git --config .gitleaks.toml --redact --no-banner \
-              --log-opts="$BASE_SHA..$HEAD_SHA"
-          else
-            gitleaks git --config .gitleaks.toml --redact --no-banner
-          fi
+          # #1779: which commits to scan is a tested decision, not an inline
+          # branch. A manual run has no range of its own, so it is refused
+          # rather than falling through to a scan of the whole history.
+          # Parsed with node, which this step already needs, so the job gains
+          # no jq dependency it does not otherwise declare.
+          plan=$(node scripts/ci/secret-scan/secret-scan-plan.mjs)
+          mode=$(node -p 'JSON.parse(process.argv[1]).mode' "$plan")
+
+          case "$mode" in
+            range)
+              range=$(node -p 'JSON.parse(process.argv[1]).range' "$plan")
+              echo "Scanning $range"
+              gitleaks git --config .gitleaks.toml --redact --no-banner \
+                --log-opts="$range"
+              ;;
+            full-history)
+              echo "Scanning the whole history: this push carried no usable base."
+              gitleaks git --config .gitleaks.toml --redact --no-banner
+              ;;
+            refused)
+              echo "::error::$(node -p 'JSON.parse(process.argv[1]).message' "$plan")"
+              exit 1
+              ;;
+            *)
+              echo "::error::unexpected secret-scan plan: $mode"
+              exit 1
+              ;;
+          esac
 
   static:
     name: Static checks
