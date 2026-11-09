@@ -1,8 +1,9 @@
 # ADR-0159: Pending invitation authority lifetime and the management serialization boundary
 
 - Status: Accepted
-- Date: 2026-11-12
-- Related: [#447](https://github.com/AiHub-Ecosystem/aihub-be/issues/447), [#302](https://github.com/AiHub-Ecosystem/aihub-be/issues/302), [#854](https://github.com/AiHub-Ecosystem/aihub-be/issues/854), [#1040](https://github.com/AiHub-Ecosystem/aihub-be/issues/1040), [ADR-0027](0027-organization-membership-and-key-management.md), [ADR-0043](0043-organization-rename-boundary.md), [ADR-0049](0049-owner-managed-organization-identity-configuration.md), [ADR-0107](0107-user-accounts-read-contract-and-lock-order.md)
+- Date: 2026-11-09
+- Amends: [ADR-0027](0027-organization-membership-and-key-management.md), [ADR-0049](0049-owner-managed-organization-identity-configuration.md)
+- Related: [#447](https://github.com/AiHub-Ecosystem/aihub-be/issues/447), [#302](https://github.com/AiHub-Ecosystem/aihub-be/issues/302), [#854](https://github.com/AiHub-Ecosystem/aihub-be/issues/854), [#1040](https://github.com/AiHub-Ecosystem/aihub-be/issues/1040), [ADR-0043](0043-organization-rename-boundary.md), [ADR-0107](0107-user-accounts-read-contract-and-lock-order.md)
 
 ## Context
 
@@ -20,11 +21,11 @@ A STRIDE threat model of self-serve Organization management ([#447](https://gith
 
 5. **The identity configuration audit event records the RFC 7638 thumbprints of the public keys the configuration trusts after the change**, computed from the inline JWKS or from the key set the URL validation fetched. Swapping keys under the same issuer therefore leaves a record of which keys were trusted when; a key that cannot be thumbprinted is refused rather than trusted unrecorded.
 
-6. **Lock order stays inversion-free.** Acceptance locks the invitation row and then reads memberships without taking new locks ahead of it; invitation send and revoke lock the Organization row and then the membership rows, matching disable and demotion. #854's `FOR NO KEY UPDATE` refinement applies where the locked rows' keys do not change. The single documented order is: Organization row, then membership rows, then invitation rows when an operation touches one.
+6. **Lock order stays inversion-free.** Acceptance holds the Organization row `FOR SHARE` first, then locks the invitation row `FOR UPDATE`, keeping one consistent lock order: Organization row, then membership rows, then invitation rows when an operation touches one. Invitation send and revoke lock the Organization row `FOR UPDATE` and then the membership rows, matching disable and demotion. #854's `FOR NO KEY UPDATE` refinement applies where the locked rows' keys do not change.
 
 ## Consequences
 
 - A removed manager's authority ends everywhere at once: pending invitations above their new authority cannot be converted by acceptance, and queued management mutations that serialize after the authority change are refused.
-- Acceptance gains one extra unlocked read of the inviter's Membership per redemption; refusal keeps the token unconsumed, so a remaining owner can re-invite.
+- Acceptance holds the Organization row shared and re-reads the inviter's Membership per redemption; refusal keeps the token unconsumed, so a remaining owner can re-invite.
 - The audit trail grows attribution columns on API keys and thumbprints on identity configuration events, both durable control-plane data.
 - Real-database regression tests with two connections and explicit barriers cover the refusal and the positive controls; the scripted suites cover the decision logic without a database.

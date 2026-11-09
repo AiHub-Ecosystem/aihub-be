@@ -5,6 +5,7 @@ import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import type {
   CreateOrganizationApiKeyRecordResult,
@@ -12,10 +13,7 @@ import type {
   RotateOrganizationApiKeyRecordResult,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
-import type {
-  CreateOrganizationInvitationResult,
-  RevokeOrganizationInvitationResult,
-} from '@/modules/identity/invitations/application/organization-invitation.port';
+import type { CreateOrganizationInvitationResult } from '@/modules/identity/invitations/application/organization-invitation.port';
 import { PostgresOrganizationInvitationAcceptRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-accept.repository';
 import { PostgresOrganizationInvitationCreateRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-create.repository';
 import { PostgresOrganizationInvitationRevokeRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-revoke.repository';
@@ -81,8 +79,8 @@ function tokenHash(): string {
 
 async function seedOrganization(): Promise<void> {
   await pool.query(
-    'INSERT INTO organizations (id, name, status) VALUES ($1, $2, $3)',
-    [ORGANIZATION_ID, `Organization ${ORGANIZATION_ID}`, 'active'],
+    'INSERT INTO organizations (id, name, status, entitlements) VALUES ($1, $2, $3, $4)',
+    [ORGANIZATION_ID, `Organization ${ORGANIZATION_ID}`, 'active', ['writing']],
   );
 }
 
@@ -98,7 +96,7 @@ async function seedAccount(email: string): Promise<string> {
        id, user_account_id, provider, canonical_email, password_hash,
        created_at, updated_at
      ) VALUES ($1, $2, 'password', $3, $4, $5, $5)`,
-    [`auth_${ulid()}`, id, email, 'argon2id-dummy', NOW],
+    [`auth_${ulid()}`, id, email, ARGON2ID_DUMMY_HASH, NOW],
   );
   return id;
 }
@@ -448,7 +446,7 @@ describe('Invitation send and revoke re-read the caller under the Organization l
         emailDelivery: { token: 'raw-invite-token', createdAt: NOW },
         now: NOW,
       }),
-    ).resolves.toMatchObject({ kind: 'queued' });
+    ).resolves.toMatchObject({ kind: 'created' });
     expect(outbox.queued).toHaveLength(1);
   });
 
@@ -476,19 +474,17 @@ describe('Invitation send and revoke re-read the caller under the Organization l
       role: 'member',
     });
 
-    const outcome = await raceBehindAuthorityChange(
-      holder,
-      () =>
-        revocations.revokeInvitation({
-          context: managementContext(inviter),
-          actorUserId: inviter,
-          organizationId: ORGANIZATION_ID,
-          invitationId,
-          now: NOW,
-        }) as Promise<RevokeOrganizationInvitationResult>,
+    const pending = raceBehindAuthorityChange(holder, () =>
+      revocations.revokeInvitation({
+        context: managementContext(inviter),
+        actorUserId: inviter,
+        organizationId: ORGANIZATION_ID,
+        invitationId,
+        now: NOW,
+      }),
     );
 
-    expect(outcome).toEqual({ kind: 'caller_not_authorized' });
+    await expect(pending).rejects.toMatchObject({ code: 'FORBIDDEN' });
     const open = await pool.query<{ consumed_at: Date | null }>(
       'SELECT consumed_at FROM organization_invitations WHERE id = $1',
       [invitationId],
@@ -642,17 +638,23 @@ describe('Acceptance admission against the inviter current authority (ADR-0159)'
   });
 
   it('runs a demotion and an acceptance concurrently without a lock-order inversion', async () => {
-    // The demotion takes the Organization row and then the inviter's
-    // membership row; acceptance takes the invitation row and then reads
-    // memberships unlocked, writing only the recipient's row. The orders
-    // share no edge in opposite directions, so both commit (ADR-0159,
-    // decision 6, coordinated with #854 and ADR-0107).
-    const holder = await holdAuthorityChange({
-      memberId: inviter,
-      role: 'member',
-    });
+    // Both operations share one lock order: Organization row first, then
+    // membership/invitation rows (ADR-0159, decision 6). Acceptance takes
+    // the Organization row FOR SHARE before it reads or grants; a concurrent
+    // demotion attempts Organization FOR UPDATE and serializes behind it.
+    // Both commit cleanly without deadlock.
+    const gated = pauseAtStatement(
+      mutations as unknown as PostgresAuthClient,
+      (statement) =>
+        statement.kind === 'raw' &&
+        statement.text.includes('FROM organization_invitations') &&
+        statement.text.includes('FOR UPDATE'),
+    );
+    const acceptance = new PostgresOrganizationInvitationAcceptRepository(
+      gated.client,
+    );
 
-    const pending = acceptances.acceptInvitation({
+    const pending = acceptance.acceptInvitation({
       context: createRequestContext({
         requestId: `req_${ulid()}`,
         receivedAt: NOW,
@@ -664,13 +666,32 @@ describe('Acceptance admission against the inviter current authority (ADR-0159)'
       tokenHash: hash,
       now: NOW,
     });
-    // Acceptance reads the inviter's still-committed owner row, so the grant
-    // is lawful at its serialization point; the demotion commits after.
+    await gated.reached;
+
+    const demoteConn = await pool.connect();
+    await demoteConn.query('BEGIN');
+    const demoteQuery = demoteConn.query(
+      'SELECT id FROM organizations WHERE id = $1 FOR UPDATE',
+      [ORGANIZATION_ID],
+    );
+
+    // Acceptance holds FOR SHARE; demote queues behind it for FOR UPDATE.
+    // Acceptance resumes, grants owner, and commits.
+    gated.resume();
     await expect(pending).resolves.toMatchObject({
       kind: 'accepted',
       role: 'owner',
     });
-    await holder.commit();
+
+    // Now demote acquires the lock and finishes cleanly.
+    await demoteQuery;
+    await demoteConn.query(
+      `UPDATE organization_members SET role = 'member', updated_at = now()
+       WHERE organization_id = $1 AND user_account_id = $2`,
+      [ORGANIZATION_ID, inviter],
+    );
+    await demoteConn.query('COMMIT');
+    demoteConn.release();
 
     expect(await membershipRole(recipient)).toBe('owner');
     expect(await membershipRole(inviter)).toBe('member');

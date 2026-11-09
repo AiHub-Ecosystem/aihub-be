@@ -66,7 +66,7 @@ model ApiKey {
   createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   /// A key AIHUB itself uses; left off customer statements (migration 0039).
   internal             Boolean      @default(false)
-  /// Who created the key, for as long as the key lives (migration 0063, ADR-0151).
+  /// Who created the key, for as long as the key lives (migration 0063, ADR-0159).
   createdBy            String?      @map("created_by")
   /// Who last rotated the key; absent for a key nobody rotated (migration 0063).
   lastRotatedBy        String?      @map("last_rotated_by")
