@@ -443,10 +443,12 @@ inline JWKS, update the saved configuration before signing with a new key.
 
 ### Staging and production rules
 
-The API key determines the organization and is also restricted to one or more
-allowed environments, which the create request states in its required
-`allowed_environments` field; there is no default environment. The hostname
-determines the environment; clients do not select it with a request header. Keep staging and production credentials in
+The API key determines the organization. A new key is restricted to one
+environment, `production` or `sandbox`, specified in the required
+`allowed_environments` array. There is no default environment. Legacy keys
+can be restricted to more than one environment. The hostname determines the
+environment; clients do not select it with a request header. Keep staging and
+production credentials in
 separate secret-manager entries and configure the base URL alongside the
 matching key.
 
