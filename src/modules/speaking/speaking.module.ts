@@ -6,8 +6,8 @@ import { internalError } from '@/common/errors/app-error';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
-import { GatewayGradedRequestModule } from '@/modules/gateway/gateway-graded-request.module';
 import { GatewayModule } from '@/modules/gateway/gateway.module';
+import { SuccessEnvelopeInterceptor } from '@/modules/gateway/presentation/success-envelope.interceptor';
 import {
   GRADED_PIPELINE_ENGINE,
   type GradedPipelineEnginePort,
@@ -15,7 +15,6 @@ import {
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { MeteringModule } from '@/modules/metering/metering.module';
-import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import {
   PersistenceModule,
   type PrismaClientHolder,
@@ -23,7 +22,7 @@ import {
 } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
-import { SPEAKING_AUDIO_STORAGE } from './application/speaking-audio-storage.port';
+import { SPEAKING_AUDIO_STORAGE } from './application/audio/speaking-audio-storage.port';
 import {
   SPEAKING_AUDIO_ASSET_STORAGE,
   SPEAKING_AUDIO_UPLOAD_CLOCK,
@@ -31,11 +30,11 @@ import {
   SPEAKING_AUDIO_UPLOAD_SERVICE,
   type SpeakingAudioAssetStoragePort,
   type SpeakingAudioUploadRepositoryPort,
-} from './application/speaking-audio-upload.port';
-import { SpeakingAudioUploadService } from './application/speaking-audio-upload.service';
-import { SpeakingAudioUploadSweep } from './application/speaking-audio-upload.sweep';
-import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/speaking-audio-url-rejection-recorder.port';
-import { SPEAKING_MULTIPART_PARSER } from './application/speaking-multipart-parser.port';
+} from './application/audio/speaking-audio-upload.port';
+import { SpeakingAudioUploadService } from './application/audio/speaking-audio-upload.service';
+import { SpeakingAudioUploadSweep } from './application/audio/speaking-audio-upload.sweep';
+import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/audio/speaking-audio-url-rejection-recorder.port';
+import { SPEAKING_MULTIPART_PARSER } from './application/audio/speaking-multipart-parser.port';
 import {
   InFlightCeiling,
   SPEAKING_UPLOADS_IN_FLIGHT_MAX,
@@ -280,7 +279,6 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
 @Module({
   imports: [
     RuntimeConfigurationModule,
-    GatewayGradedRequestModule,
     GatewayModule,
     IdempotencyModule,
     IdentityModule,

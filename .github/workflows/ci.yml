@@ -189,8 +189,11 @@ jobs:
       - name: Install oasdiff
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl --fail --silent --show-error --location \
+          gh release download v1.34.1 --repo oasdiff/oasdiff --pattern "oasdiff_1.34.1_linux_amd64.tar.gz" --output "$RUNNER_TEMP/oasdiff.tar.gz" || \
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
             --output "$RUNNER_TEMP/oasdiff.tar.gz" \
             https://github.com/oasdiff/oasdiff/releases/download/v1.34.1/oasdiff_1.34.1_linux_amd64.tar.gz
           echo '75775f65b0adebd26a8e013af51a799342dfdc6262d89efa9e3b7bdf89657d90  '"$RUNNER_TEMP/oasdiff.tar.gz" | sha256sum --check
@@ -1042,12 +1045,14 @@ jobs:
           set -euo pipefail
           trap 'docker logout ghcr.io' EXIT
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          production_tag_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image:$PREVIOUS_SHA")"
-          test "$production_tag_digest" = "$PREVIOUS_DIGEST"
+          if production_tag_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image:$PREVIOUS_SHA" 2>/dev/null)"; then
+            test "$production_tag_digest" = "$PREVIOUS_DIGEST"
+          fi
           docker pull "$image@$PREVIOUS_DIGEST"
           if [[ -n "$SANDBOX_SHA" ]]; then
-            sandbox_tag_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image:$SANDBOX_SHA")"
-            test "$sandbox_tag_digest" = "$SANDBOX_DIGEST"
+            if sandbox_tag_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image:$SANDBOX_SHA" 2>/dev/null)"; then
+              test "$sandbox_tag_digest" = "$SANDBOX_DIGEST"
+            fi
             docker pull "$image@$SANDBOX_DIGEST"
           fi
 

@@ -1,4 +1,4 @@
-import { validatePgBouncerBundle } from '../../ops/vault/pgbouncer-budget.mjs';
+import { validatePgBouncerBundle } from '../../../ops/vault/pgbouncer-budget.mjs';
 
 function applicationBudget(application: string) {
   return {

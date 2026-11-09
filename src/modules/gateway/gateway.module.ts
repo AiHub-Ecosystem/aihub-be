@@ -35,15 +35,18 @@ import {
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { IdempotencyModule } from '@/modules/idempotency/idempotency.module';
 import {
+  METERING_FINALIZER,
+  type MeteringFinalizerPort,
+} from '@/modules/metering/application/usage-recording/metering-finalizer.port';
+import { MeteringModule } from '@/modules/metering/metering.module';
+import {
   DISPATCH_ATTEMPT_RECORD,
-  DispatchAttemptModule,
   type DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
 import {
-  MONTHLY_BILLABLE_USAGE,
-  MonthlyBillableUsageModule,
-  type MonthlyBillableUsagePort,
-} from '@/modules/metering/public/quota-reconciliation';
+  QUOTA_COUNTER_SEED,
+  type QuotaCounterSeedPort,
+} from '@/modules/metering/public/quota-counter';
 import {
   PersistenceModule,
   type PrismaClientHolder,
@@ -72,15 +75,20 @@ import {
   OPERATION_DISPATCHER,
   type OperationDispatcherPort,
 } from './application/dispatch/operation-dispatcher.port';
-import { GRADED_ADMISSION } from './application/graded-admission.port';
-import { GradingOrchestrator } from './application/graded-request/grading-orchestrator';
-import { GRADING_ORCHESTRATOR } from './application/graded-request/grading-orchestrator.port';
 import {
-  QUOTA_COUNTER,
-  QUOTA_COUNTER_OVERWRITE,
-  type QuotaCounterOverwritePort,
-  type QuotaCounterPort,
-} from './application/quota-counter.port';
+  GRADED_ADMISSION,
+  type GradedAdmissionPort,
+} from './application/graded-admission.port';
+import { GradedPipelineEngine } from './application/graded-request/graded-pipeline-engine';
+import {
+  GRADED_PIPELINE_ENGINE,
+  type GradedPipelineEnginePort,
+} from './application/graded-request/graded-pipeline.port';
+import { GradingOrchestrator } from './application/graded-request/grading-orchestrator';
+import {
+  GRADING_ORCHESTRATOR,
+  type GradingOrchestratorPort,
+} from './application/graded-request/grading-orchestrator.port';
 import { RATE_LIMITER } from './application/rate-limiter.port';
 import { SandboxAdmission } from './application/sandbox-admission';
 import {
@@ -104,19 +112,16 @@ import {
   createRedisGatewayClient,
 } from './infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
-import { RedisQuotaCounter } from './infrastructure/redis-quota-counter';
-import { RedisQuotaReconciliationCounter } from './infrastructure/redis-quota-reconciliation.counter';
-import { RedisQuotaSeeder } from './infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
+import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
 @Module({
   imports: [
     RuntimeConfigurationModule,
     SecretsModule,
     IdempotencyModule,
-    DispatchAttemptModule,
-    MonthlyBillableUsageModule,
+    MeteringModule,
     PersistenceModule,
   ],
   providers: [
@@ -179,19 +184,10 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
       inject: [REDIS_GATEWAY_CLIENT],
     },
     {
-      provide: RedisQuotaSeeder,
-      inject: [REDIS_GATEWAY_CLIENT, MONTHLY_BILLABLE_USAGE],
-      useFactory: (
-        client: RedisGatewayClient | undefined,
-        source: MonthlyBillableUsagePort,
-      ): RedisQuotaSeeder | undefined =>
-        client === undefined ? undefined : new RedisQuotaSeeder(client, source),
-    },
-    {
       provide: GRADED_ADMISSION,
       useFactory: (
         client: RedisGatewayClient | undefined,
-        seeder: RedisQuotaSeeder | undefined,
+        seeder: QuotaCounterSeedPort | undefined,
       ): RedisGradedAdmission =>
         new RedisGradedAdmission(
           client,
@@ -200,7 +196,7 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
           undefined,
           seeder,
         ),
-      inject: [REDIS_GATEWAY_CLIENT, RedisQuotaSeeder],
+      inject: [REDIS_GATEWAY_CLIENT, QUOTA_COUNTER_SEED],
     },
     {
       provide: DOWNSTREAM_RETRY_BUDGET,
@@ -216,23 +212,6 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         client: RedisGatewayClient | undefined,
       ): ConcurrencyLimiterPort => new RedisConcurrencyLimiter(client),
       inject: [REDIS_GATEWAY_CLIENT],
-    },
-    {
-      provide: QUOTA_COUNTER,
-      useFactory: (
-        client: RedisGatewayClient | undefined,
-        seeder: RedisQuotaSeeder | undefined,
-      ): QuotaCounterPort =>
-        new RedisQuotaCounter(client, undefined, undefined, seeder),
-      inject: [REDIS_GATEWAY_CLIENT, RedisQuotaSeeder],
-    },
-    {
-      provide: QUOTA_COUNTER_OVERWRITE,
-      inject: [REDIS_GATEWAY_CLIENT],
-      useFactory: (
-        client: RedisGatewayClient | undefined,
-      ): QuotaCounterOverwritePort =>
-        new RedisQuotaReconciliationCounter(client),
     },
     {
       provide: SANDBOX_DISPATCH_BUDGET,
@@ -302,6 +281,31 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
         new GradingOrchestrator(dispatcher, idempotency),
       inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
     },
+    {
+      provide: GRADED_PIPELINE_ENGINE,
+      inject: [
+        GRADING_ORCHESTRATOR,
+        METERING_FINALIZER,
+        GRADED_ADMISSION,
+        CONCURRENCY_LIMITER,
+        IDEMPOTENCY_SERVICE,
+      ],
+      useFactory: (
+        orchestrator: GradingOrchestratorPort,
+        finalizer: MeteringFinalizerPort,
+        admission: GradedAdmissionPort,
+        concurrencyLimiter: ConcurrencyLimiterPort,
+        idempotency: IdempotencyServicePort,
+      ): GradedPipelineEnginePort =>
+        new GradedPipelineEngine(
+          orchestrator,
+          finalizer,
+          admission,
+          concurrencyLimiter,
+          idempotency,
+        ),
+    },
+    SuccessEnvelopeInterceptor,
     RateLimitGuard,
   ],
   exports: [
@@ -310,12 +314,12 @@ import { RateLimitGuard } from './presentation/rate-limit.guard';
     DOWNSTREAM_RETRY_BUDGET,
     OPERATION_DISPATCHER,
     GRADING_ORCHESTRATOR,
+    GRADED_PIPELINE_ENGINE,
     DownstreamHttpClient,
     RATE_LIMITER,
     GRADED_ADMISSION,
     RateLimitGuard,
-    QUOTA_COUNTER,
-    QUOTA_COUNTER_OVERWRITE,
+    SuccessEnvelopeInterceptor,
     CONCURRENCY_LIMITER,
   ],
 })

@@ -8,7 +8,7 @@ import type { MeteringFinalizerPort } from '@/modules/metering/application/usage
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import type { SpeakingV2ResultOwnershipPort } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 import {

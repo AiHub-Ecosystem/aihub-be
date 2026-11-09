@@ -5,7 +5,7 @@ import {
 } from '@/catalog/operation-catalog';
 import { isUsableCount } from '@/common/counts/is-usable-count';
 import type { DownstreamId } from '@/downstream/downstream.types';
-import type { QuotaCounterPort } from '@/modules/gateway/application/quota-counter.port';
+import type { QuotaCounterPort } from '@/modules/metering/application/quota/quota-counter.port';
 import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,

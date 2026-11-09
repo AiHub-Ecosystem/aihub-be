@@ -1,13 +1,13 @@
-import {
-  type RedisQuotaReconciliationClient,
-  RedisQuotaReconciliationCounter,
-} from '@/modules/gateway/infrastructure/redis-quota-reconciliation.counter';
 import type {
   QuotaCounterOverwritePort,
   QuotaOrganizationSnapshot,
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/billing/quota-reconciliation.port';
+import {
+  type RedisQuotaReconciliationClient,
+  RedisQuotaReconciliationCounter,
+} from '@/modules/metering/infrastructure/quota/redis-quota-reconciliation.counter';
 import {
   type QuotaReconciliationEvent,
   QuotaReconciliationService,

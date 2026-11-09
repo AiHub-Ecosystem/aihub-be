@@ -1,7 +1,7 @@
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 
+import { stableOffsetMs } from '@/common/stable-offset';
 import type { RateLimitDecision, RateLimitStanding } from './rate-limiter.port';
-import { stableOffsetMs } from './stable-offset';
 
 export const RATE_WINDOW_MS = 60_000;
 

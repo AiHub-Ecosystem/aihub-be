@@ -2,7 +2,7 @@ import {
   aggregatePgbouncerRows,
   createExporter,
   databaseAliases,
-} from '../../scripts/ops/monitoring/pgbouncer-exporter.mjs';
+} from '../../../scripts/ops/monitoring/pgbouncer-exporter.mjs';
 
 const ALIASES = ['aihub_be', 'ai_writing', 'ai_speaking', 'ai_portal'];
 

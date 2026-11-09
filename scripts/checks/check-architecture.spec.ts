@@ -481,9 +481,6 @@ describe('restricted-edge import rules', () => {
     expect(matches(pathNot, 'src/modules/gateway/gateway.module.ts')).toBe(
       true,
     );
-    expect(
-      matches(pathNot, 'src/modules/gateway/gateway-graded-request.module.ts'),
-    ).toBe(true);
 
     // Gateway internals stay private to writing and speaking.
     expect(
@@ -1769,6 +1766,111 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.output).toContain('casts an application-declared type');
     expect(result.status).not.toBe(0);
   }, 30_000);
+});
+
+describe('Nest module import cycles (#1576)', () => {
+  const moduleFile = (owner: string, imported: string): string =>
+    `import { ${imported}Module } from '@/modules/${imported}/${imported}.module';\nimport { ${owner}Module } from './${owner}.module';\nexport class ${owner}Module {}\n`;
+  const cycleFixture = (owner: string, imported: string): [string, string] => [
+    `src/modules/${owner}/${owner}.module.ts`,
+    moduleFile(owner, imported),
+  ];
+
+  it('fails on a direct cycle between two modules, naming both', () => {
+    const result = checkFixtures([
+      cycleFixture('gateway', 'metering'),
+      cycleFixture('metering', 'gateway'),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Nest module import cycle');
+    expect(result.output).toContain('gateway -> metering -> gateway');
+  });
+
+  it('fails on a cycle through a third module, naming every module in it', () => {
+    const result = checkFixtures([
+      cycleFixture('identity', 'gateway'),
+      cycleFixture('gateway', 'metering'),
+      cycleFixture('metering', 'identity'),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(
+      'identity -> gateway -> metering -> identity',
+    );
+  });
+
+  it('stays silent on an acyclic module import graph', () => {
+    const result = checkFixtures([
+      cycleFixture('gateway', 'metering'),
+      cycleFixture('identity', 'gateway'),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Nest module import cycle');
+  });
+
+  it('fails on a cycle reached through a public/ re-export of a module', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/writing/writing.module.ts',
+        `import { DispatchAttemptModule } from '@/modules/metering/public/dispatch-attempts';\nexport class WritingModule {}\n`,
+      ],
+      [
+        'src/modules/metering/public/dispatch-attempts.ts',
+        `export { DispatchAttemptModule } from '@/modules/metering/dispatch-attempt.module';\n`,
+      ],
+      [
+        'src/modules/metering/dispatch-attempt.module.ts',
+        `export class DispatchAttemptModule {}\n`,
+      ],
+      cycleFixture('metering', 'writing'),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Nest module import cycle');
+    expect(result.output).toContain('writing -> metering -> writing');
+  });
+
+  it('ignores import type edges', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/gateway/gateway.module.ts',
+        `import type { MeteringModule } from '@/modules/metering/metering.module';\nexport class GatewayModule {}\n`,
+      ],
+      cycleFixture('metering', 'gateway'),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Nest module import cycle');
+  });
+
+  it('detects a relative ../other/x.module import across owners', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/gateway/sub/gateway-sub.module.ts',
+        `import { MeteringModule } from '../../metering/metering.module';\nexport class GatewaySubModule {}\n`,
+      ],
+      cycleFixture('metering', 'gateway'),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Nest module import cycle');
+    expect(result.output).toContain('gateway');
+    expect(result.output).toContain('metering');
+  });
+
+  it('ignores a module importing its own module', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/gateway/gateway.module.ts',
+        `import { GatewayModule } from './gateway.module';\nexport class GatewayModule {}\n`,
+      ],
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Nest module import cycle');
+  });
 });
 
 describe('collectSourceTextFailures and the CLI agree (#1484)', () => {

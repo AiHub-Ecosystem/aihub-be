@@ -21,7 +21,9 @@ describe('branchPercent', () => {
 describe('isProductionCode', () => {
   it('keeps production sources', () => {
     expect(
-      isProductionCode('src/modules/gateway/application/quota-period.ts'),
+      isProductionCode(
+        'src/modules/metering/application/quota/quota-period.ts',
+      ),
     ).toBe(true);
   });
 
@@ -29,7 +31,9 @@ describe('isProductionCode', () => {
   // would be one number counting spec files and another not.
   it('drops spec files', () => {
     expect(
-      isProductionCode('src/modules/gateway/application/quota-period.spec.ts'),
+      isProductionCode(
+        'src/modules/metering/application/quota/quota-period.spec.ts',
+      ),
     ).toBe(false);
   });
 

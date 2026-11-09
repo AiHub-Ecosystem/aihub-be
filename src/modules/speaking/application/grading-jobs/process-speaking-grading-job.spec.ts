@@ -14,7 +14,7 @@ import type {
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import type { SpeakingV2ResultOwnershipPort } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import type { SpeakingAudioAsset } from '@/modules/speaking/domain/speaking-audio-asset';
 import { ProcessSpeakingGradingJob } from './process-speaking-grading-job';

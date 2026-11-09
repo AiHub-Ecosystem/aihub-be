@@ -27,10 +27,6 @@ import {
   type OperationDispatcherPort,
 } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import {
-  QUOTA_COUNTER,
-  type QuotaCounterPort,
-} from '@/modules/gateway/application/quota-counter.port';
 import type {
   CompleteIdempotencyInput,
   IdempotencyAttemptInput,
@@ -47,6 +43,10 @@ import {
   type IdempotencyServicePort,
   type IdempotencyWork,
 } from '@/modules/idempotency/application/idempotency-service.port';
+import {
+  QUOTA_COUNTER,
+  type QuotaCounterPort,
+} from '@/modules/metering/application/quota/quota-counter.port';
 import {
   USAGE_REPOSITORY,
   type UsageRecord,

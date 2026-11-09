@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { checkRelease } from '../../scripts/ci/api-compatibility/check-release.mjs';
+import { checkRelease } from '../../../scripts/ci/api-compatibility/check-release.mjs';
 
 /** @typedef {{type?: string, enum?: string[], 'x-extensible-enum'?: string[], properties?: Record<string, Schema>, required?: string[], additionalProperties?: boolean, $ref?: string}} Schema */
 /** @typedef {{schema: Schema}} MediaType */
@@ -23,7 +23,7 @@ import { checkRelease } from '../../scripts/ci/api-compatibility/check-release.m
 /** @typedef {{openapi: string, info: {title: string, version: string}, paths: Record<string, PathItem>, components: {responses: Record<string, unknown>, schemas?: Record<string, Schema>}}} OpenApiDocument */
 /** @typedef {Record<string, unknown>} SpecFiles */
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const TEMP_ROOT = join(ROOT, 'temp');
 
 /** @param {string} version @param {number} [major] @returns {OpenApiDocument} */

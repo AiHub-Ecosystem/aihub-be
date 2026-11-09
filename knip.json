@@ -118,18 +118,10 @@
     "vault"
   ],
   "ignoreDependencies": [
-    // Invoked as the `depcruise` binary from the architecture-check script
-    // (spawned, not imported); knip cannot follow that edge from package scripts.
-    "dependency-cruiser",
     // Referenced by nest-cli.json `collection`; shipped for Nest schematics,
     // not imported by application code.
     "@nestjs/schematics",
     // Grafana k6 resolves its built-in modules inside the pinned runner image.
     "k6"
-  ],
-  "ignoreUnresolved": [
-    // These image paths are supplied by the Dockerfile; their local sources
-    // are mounted/imported only inside the benchmark container.
-    "^/app/scripts/(cli/cli|runtime/runtime-entrypoint)\\.mjs$"
   ]
 }

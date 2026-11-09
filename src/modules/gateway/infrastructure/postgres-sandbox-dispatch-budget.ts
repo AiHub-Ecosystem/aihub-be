@@ -1,5 +1,4 @@
 import { internalError } from '@/common/errors/app-error';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
 import {
   SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
   canReserveSandboxDispatch,
@@ -9,6 +8,7 @@ import type {
   SandboxDispatchBudgetPort,
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
+import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';

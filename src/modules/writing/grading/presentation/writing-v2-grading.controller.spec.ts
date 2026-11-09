@@ -17,13 +17,13 @@ import { WritingV2GradeResponseSchema } from '@/contracts/writing/v2/grading';
 import { providerOrganizationId } from '@/downstream/writing/writing-v3-organization-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
 import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
+import { QUOTA_COUNTER } from '@/modules/metering/public/quota-counter';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
 const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');

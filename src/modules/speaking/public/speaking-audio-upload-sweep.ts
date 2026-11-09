@@ -1,5 +1,5 @@
-export { SpeakingAudioUploadSweep } from '@/modules/speaking/application/speaking-audio-upload.sweep';
+export { SpeakingAudioUploadSweep } from '@/modules/speaking/application/audio/speaking-audio-upload.sweep';
 export type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';

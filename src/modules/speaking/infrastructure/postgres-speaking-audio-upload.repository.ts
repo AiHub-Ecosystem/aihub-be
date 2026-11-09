@@ -4,17 +4,17 @@ import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/
 import {
   SPEAKING_AUDIO_COMPLETION_IDLE_TRANSACTION_TIMEOUT_MS,
   SPEAKING_AUDIO_COMPLETION_TRANSACTION_TIMEOUT_MS,
-} from '@/modules/speaking/application/speaking-audio-completion-timeouts';
+} from '@/modules/speaking/application/audio/speaking-audio-completion-timeouts';
 import {
   SPEAKING_AUDIO_ORG_ISSUANCE_WINDOW_MS,
   type SpeakingAudioCeilingDecision,
   type SpeakingAudioOrganizationHolding,
-} from '@/modules/speaking/application/speaking-audio-org-ceiling.policy';
+} from '@/modules/speaking/application/audio/speaking-audio-org-ceiling.policy';
 import type {
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   type SpeakingAudioAsset,
   type SpeakingAudioEnvironment,

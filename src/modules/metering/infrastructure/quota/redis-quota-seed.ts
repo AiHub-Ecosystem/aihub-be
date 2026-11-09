@@ -1,11 +1,12 @@
 import { Counter } from '@prometheus-io/client';
 
 import { registry } from '@/common/observability/metrics';
-import type { QuotaCounterSeedPort } from '@/modules/gateway/application/quota-counter.port';
-import { quotaPeriod } from '@/modules/gateway/application/quota-period';
+import type { QuotaCounterSeedPort } from '@/modules/metering/application/quota/quota-counter.port';
+import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
+import { quotaPeriod } from '@/modules/metering/application/quota/quota-period';
 import type { MonthlyBillableUsagePort } from '@/modules/metering/public/quota-reconciliation';
-import type { RedisGatewayClient } from './redis-gateway.client';
-import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
+import type { RedisMeteringClient } from './redis-metering.client';
+import { QUOTA_TTL_SECONDS } from './redis-quota-counter';
 
 // Only the first writer seeds: a counter another request already rebuilt, or
 // one reconciliation restored meanwhile, is never overwritten.
@@ -21,7 +22,7 @@ const quotaCounterSeeds = new Counter({
   registers: [registry],
 });
 
-export type QuotaSeedClient = Pick<RedisGatewayClient, 'eval'>;
+export type QuotaSeedClient = Pick<RedisMeteringClient, 'eval'>;
 
 /**
  * Rebuilds a monthly quota counter that Redis lost from durable usage, so a

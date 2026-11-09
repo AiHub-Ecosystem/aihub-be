@@ -16,7 +16,6 @@ import {
   gradedAdmissionPolicy,
   gradedAdmissionRefusal,
 } from '@/modules/gateway/public/graded-pipeline';
-import { quotaPeriod } from '@/modules/gateway/public/quota-period';
 import { type SandboxDispatchBudgetPort } from '@/modules/gateway/public/sandbox-dispatch-budget';
 import { type IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import {
@@ -24,10 +23,11 @@ import {
   resolveIdempotencyKey,
 } from '@/modules/idempotency/public/idempotency-operation';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import type {
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 import {
   type NewSpeakingGradingJob,

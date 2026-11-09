@@ -5,6 +5,11 @@ import { type AppError, internalError } from '@/common/errors/app-error';
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
 import { IDEMPOTENCY_RETENTION_MS } from '@/modules/idempotency/public/idempotency-key';
 import type {
+  SpeakingAudioUploadLookup,
+  SpeakingAudioUploadOwner,
+  SpeakingAudioUploadRepositoryPort,
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
+import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
   SpeakingGradingJobError,
@@ -15,11 +20,6 @@ import type {
   SpeakingGradingJobQueuePort,
   SpeakingGradingJobRepositoryPort,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
-import type {
-  SpeakingAudioUploadLookup,
-  SpeakingAudioUploadOwner,
-  SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
 import type {
   SpeakingAudioAsset,
   SpeakingAudioEnvironment,

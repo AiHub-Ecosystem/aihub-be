@@ -38,6 +38,10 @@ import type { AuthenticatedRequest } from '@/modules/identity/shared/presentatio
 import type { MeteringFinalizerPort } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
+import {
+  SPEAKING_AUDIO_UPLOAD_REPOSITORY,
+  type SpeakingAudioAssetStoragePort,
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import { GetSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/get-speaking-grading-job';
 import { ProcessSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/process-speaking-grading-job';
 import {
@@ -46,10 +50,6 @@ import {
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
 import { SpeakingGradingJobSweep } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.sweep';
 import { SubmitSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/submit-speaking-grading-job';
-import {
-  SPEAKING_AUDIO_UPLOAD_REPOSITORY,
-  type SpeakingAudioAssetStoragePort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
 import { SpeakingGradingJobsController } from './speaking-grading-jobs.controller';
 import {
   ASSET_ID,

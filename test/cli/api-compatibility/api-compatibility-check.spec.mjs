@@ -13,7 +13,7 @@ import {
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { parseChanges } from '../../scripts/ci/api-compatibility/check.mjs';
+import { parseChanges } from '../../../scripts/ci/api-compatibility/check.mjs';
 
 /** @typedef {{type?: string, properties?: Record<string, Schema>, required?: string[], enum?: string[], 'x-extensible-enum'?: string[], anyOf?: Schema[], items?: Schema, const?: string}} Schema */
 /** @typedef {{schema: Schema}} MediaType */
@@ -23,7 +23,7 @@ import { parseChanges } from '../../scripts/ci/api-compatibility/check.mjs';
 /** @typedef {{paths: Record<string, PathItem>, components: {responses: Record<string, ApiResponse>}}} OpenApiDocument */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, '../..');
+const ROOT = join(HERE, '../../..');
 const TEMP_ROOT = join(ROOT, 'temp');
 const CHECKER = join(ROOT, 'scripts/ci/api-compatibility/check.mjs');
 const BASELINE_PATH = join(
