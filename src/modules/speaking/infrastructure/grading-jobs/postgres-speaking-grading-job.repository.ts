@@ -1,47 +1,29 @@
-import { AppError, internalError } from '@/common/errors/app-error';
+import { AppError } from '@/common/errors/app-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
-import { SpeakingV2QuestionResultSchema } from '@/contracts/speaking/v2/question-result';
-import type { SpeakingV2TestType } from '@/contracts/speaking/v2/response.shared';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
   SpeakingGradingJobError,
   SpeakingGradingJobOwner,
-  SpeakingGradingJobStatus,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
-import type { SpeakingGradingJobRepositoryPort } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
+import type {
+  SpeakingGradingJobCreationOutcome,
+  SpeakingGradingJobRepositoryPort,
+} from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
-import { Prisma, type PrismaClient } from '@prisma-client/client';
-import { Value } from '@sinclair/typebox/value';
+import type { Prisma, PrismaClient } from '@prisma-client/client';
 
-interface SpeakingGradingJobRow {
-  readonly jobId: string;
-  readonly organizationId: string;
-  readonly endUserId: string;
-  readonly environment: string;
-  readonly identityMode: string;
-  readonly apiKeyId: string;
-  readonly maxConcurrent: number;
-  readonly quotaTracked: boolean;
-  readonly quotaUnverified: boolean;
-  readonly audioAssetId: string;
-  readonly part: number;
-  readonly questionId: string;
-  readonly promptText: string | null;
-  readonly testType: string | null;
-  readonly testCode: string | null;
-  readonly partResultId: string | null;
-  readonly status: string;
-  readonly leaseExpiresAt: Date | null;
-  readonly dispatchStartedAt: Date | null;
-  readonly result: unknown;
-  readonly errorCode: string | null;
-  readonly errorMessage: string | null;
-  readonly errorRetryable: boolean | null;
-  readonly createdAt: Date;
-  readonly completedAt: Date | null;
-}
+import {
+  type InFlightCountInput,
+  type SpeakingGradingJobRow,
+  countInFlight,
+  isKeyUniquenessViolation,
+  mapIdEnvironment,
+  mapJob,
+  requiredJob,
+  selectKeyedJob,
+} from './speaking-grading-job-row';
 
 const JOB_COLUMNS = `
   job_id AS "jobId",
@@ -60,6 +42,7 @@ const JOB_COLUMNS = `
   test_type AS "testType",
   test_code AS "testCode",
   part_result_id AS "partResultId",
+  idempotency_key AS "idempotencyKey",
   status,
   lease_expires_at AS "leaseExpiresAt",
   dispatch_started_at AS "dispatchStartedAt",
@@ -73,18 +56,12 @@ const JOB_COLUMNS = `
 const SPEAKING_GRADING_QUOTA_LOCK_SQL =
   'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
 
-interface InFlightCountInput {
-  readonly organizationId: string;
-  readonly environment: SpeakingAudioEnvironment;
-  readonly since: Date;
-}
-
 async function insertJob(
   client: PrismaClient | Prisma.TransactionClient,
   job: NewSpeakingGradingJob,
 ): Promise<void> {
   await client.$executeRawUnsafe(
-    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, quota_unverified, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, status, created_at, identity_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'queued', $16, $17)`,
+    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, quota_unverified, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, idempotency_key, status, created_at, identity_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'queued', $17, $18)`,
     job.jobId,
     job.organizationId,
     job.endUserId,
@@ -100,149 +77,10 @@ async function insertJob(
     job.request.testType ?? null,
     job.request.testCode ?? null,
     job.request.partResultId ?? null,
+    job.idempotencyKey ?? null,
     job.createdAt,
     job.identityMode,
   );
-}
-
-async function countInFlight(
-  client: PrismaClient | Prisma.TransactionClient,
-  input: InFlightCountInput,
-): Promise<number> {
-  const rows = await client.$queryRawUnsafe<
-    readonly { readonly count: bigint }[]
-  >(
-    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running') AND created_at >= $3`,
-    input.organizationId,
-    input.environment,
-    input.since,
-  );
-  return Number(rows[0]?.count ?? 0n);
-}
-
-function invalidStoredJob(): never {
-  throw internalError('Speaking grading job store is invalid');
-}
-
-function requiredEnvironment(value: string): SpeakingAudioEnvironment {
-  if (value !== 'production' && value !== 'sandbox') {
-    return invalidStoredJob();
-  }
-  return value;
-}
-
-function requiredIdentityMode(
-  value: string,
-): SpeakingGradingJob['identityMode'] {
-  if (value !== 'declared_id' && value !== 'signed_assertion') {
-    return invalidStoredJob();
-  }
-  return value;
-}
-
-function requiredStatus(value: string): SpeakingGradingJobStatus {
-  if (
-    value !== 'queued' &&
-    value !== 'running' &&
-    value !== 'succeeded' &&
-    value !== 'failed'
-  ) {
-    return invalidStoredJob();
-  }
-  return value;
-}
-
-function mapJob(
-  row: SpeakingGradingJobRow | undefined,
-): SpeakingGradingJob | undefined {
-  if (row === undefined) return undefined;
-  if (!Number.isSafeInteger(row.maxConcurrent) || row.maxConcurrent < 1) {
-    return invalidStoredJob();
-  }
-
-  let testType: SpeakingV2TestType | undefined;
-  if (row.testType !== null) {
-    if (row.testType !== 'practice' && row.testType !== 'full_test') {
-      return invalidStoredJob();
-    }
-    testType = row.testType;
-  }
-
-  let result: SpeakingGradingJob['result'];
-  if (row.result !== null) {
-    if (!Value.Check(SpeakingV2QuestionResultSchema, row.result)) {
-      return invalidStoredJob();
-    }
-    result = Value.Parse(SpeakingV2QuestionResultSchema, row.result);
-  }
-
-  let error: SpeakingGradingJobError | undefined;
-  const hasErrorField =
-    row.errorCode !== null ||
-    row.errorMessage !== null ||
-    row.errorRetryable !== null;
-  if (hasErrorField) {
-    if (
-      row.errorCode === null ||
-      row.errorMessage === null ||
-      row.errorRetryable === null
-    ) {
-      return invalidStoredJob();
-    }
-    error = {
-      code: row.errorCode,
-      message: row.errorMessage,
-      retryable: row.errorRetryable,
-    };
-  }
-
-  return {
-    jobId: row.jobId,
-    organizationId: row.organizationId,
-    endUserId: row.endUserId,
-    environment: requiredEnvironment(row.environment),
-    identityMode: requiredIdentityMode(row.identityMode),
-    apiKeyId: row.apiKeyId,
-    maxConcurrent: row.maxConcurrent,
-    quotaTracked: row.quotaTracked,
-    quotaUnverified: row.quotaUnverified,
-    audioAssetId: row.audioAssetId,
-    request: {
-      part: row.part,
-      questionId: row.questionId,
-      ...(row.promptText === null ? {} : { promptText: row.promptText }),
-      ...(testType === undefined ? {} : { testType }),
-      ...(row.testCode === null ? {} : { testCode: row.testCode }),
-      ...(row.partResultId === null ? {} : { partResultId: row.partResultId }),
-    },
-    status: requiredStatus(row.status),
-    createdAt: row.createdAt,
-    ...(row.leaseExpiresAt === null
-      ? {}
-      : { leaseExpiresAt: row.leaseExpiresAt }),
-    ...(row.dispatchStartedAt === null
-      ? {}
-      : { dispatchStartedAt: row.dispatchStartedAt }),
-    ...(row.completedAt === null ? {} : { completedAt: row.completedAt }),
-    ...(result === undefined ? {} : { result }),
-    ...(error === undefined ? {} : { error }),
-  };
-}
-
-function requiredJob(row: SpeakingGradingJobRow): SpeakingGradingJob {
-  const job = mapJob(row);
-  if (job === undefined) return invalidStoredJob();
-  return job;
-}
-
-function mapIdEnvironment(row: {
-  readonly jobId: string;
-  readonly environment: string;
-}): { readonly jobId: string; readonly environment: SpeakingAudioEnvironment } {
-  return {
-    jobId: row.jobId,
-    environment: requiredEnvironment(row.environment),
-  };
 }
 
 export class PostgresSpeakingGradingJobRepository
@@ -259,46 +97,84 @@ export class PostgresSpeakingGradingJobRepository
     readonly since: Date;
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
-  }): Promise<boolean> {
+  }): Promise<SpeakingGradingJobCreationOutcome> {
+    const existing =
+      input.job.idempotencyKey === undefined
+        ? undefined
+        : await selectKeyedJob(this.client, {
+            organizationId: input.job.organizationId,
+            endUserId: input.job.endUserId,
+            idempotencyKey: input.job.idempotencyKey,
+          });
+    if (existing !== undefined) {
+      return { created: false, existingJobId: existing.jobId };
+    }
+
     if (input.monthlyQuota === null) {
-      if (!(await input.admit(null))) return false;
+      const admitted = await input.admit(null);
+      if (!admitted) {
+        return { created: false, existingJobId: input.job.jobId };
+      }
       await this.create(input.job);
-      return true;
+      return { created: true };
     }
 
     const monthlyQuota = input.monthlyQuota;
     let admissionFailed = false;
     let admissionError: unknown;
     try {
-      return await this.client.$transaction(async (transaction) => {
-        await transaction.$executeRawUnsafe(
-          SPEAKING_GRADING_QUOTA_LOCK_SQL,
-          `speaking-grading-quota:${input.job.organizationId}:${input.since.toISOString().slice(0, 7)}`,
-        );
-        const inFlight = await countInFlight(transaction, {
-          organizationId: input.job.organizationId,
-          environment: input.job.environment,
-          since: input.since,
-        });
-        let admitted: boolean;
-        try {
-          admitted = await input.admit(Math.max(0, monthlyQuota - inFlight));
-        } catch (error) {
-          admissionFailed = true;
-          admissionError = error;
-          throw error;
-        }
-        if (!admitted) return false;
-        await insertJob(transaction, input.job);
-        return true;
-      }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+      return await this.client.$transaction(
+        async (transaction): Promise<SpeakingGradingJobCreationOutcome> => {
+          await transaction.$executeRawUnsafe(
+            SPEAKING_GRADING_QUOTA_LOCK_SQL,
+            `speaking-grading-quota:${input.job.organizationId}:${input.since.toISOString().slice(0, 7)}`,
+          );
+          const inFlight = await countInFlight(transaction, {
+            organizationId: input.job.organizationId,
+            environment: input.job.environment,
+            since: input.since,
+          });
+          let admitted: boolean;
+          try {
+            admitted = await input.admit(Math.max(0, monthlyQuota - inFlight));
+          } catch (error) {
+            admissionFailed = true;
+            admissionError = error;
+            throw error;
+          }
+          if (!admitted) {
+            return { created: false, existingJobId: input.job.jobId };
+          }
+          await insertJob(transaction, input.job);
+          return { created: true };
+        },
+        CONTROL_PLANE_TRANSACTION_OPTIONS,
+      );
     } catch (error) {
       if (admissionFailed) throw admissionError;
-      if (error instanceof AppError) throw error;
-      throw databaseUnavailableError(
-        error,
-        'Speaking grading job store is unavailable',
-      );
+      if (!isKeyUniquenessViolation(error)) {
+        if (error instanceof AppError) throw error;
+        throw databaseUnavailableError(
+          error,
+          'Speaking grading job store is unavailable',
+        );
+      }
+      const existingAfter =
+        input.job.idempotencyKey === undefined
+          ? undefined
+          : await selectKeyedJob(this.client, {
+              organizationId: input.job.organizationId,
+              endUserId: input.job.endUserId,
+              idempotencyKey: input.job.idempotencyKey,
+            });
+      if (existingAfter === undefined) {
+        if (error instanceof AppError) throw error;
+        throw databaseUnavailableError(
+          error,
+          'Speaking grading job store is unavailable',
+        );
+      }
+      return { created: false, existingJobId: existingAfter.jobId };
     }
   }
 
@@ -318,6 +194,14 @@ export class PostgresSpeakingGradingJobRepository
       );
       return mapJob(rows[0]);
     });
+  }
+
+  async findByIdempotencyKey(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+    readonly idempotencyKey: string;
+  }): Promise<SpeakingGradingJob | undefined> {
+    return this.run(() => selectKeyedJob(this.client, input));
   }
 
   async claim(input: {

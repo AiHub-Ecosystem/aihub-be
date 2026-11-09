@@ -618,6 +618,7 @@ model SpeakingGradingJob {
   testType          String?   @map("test_type")
   testCode          String?   @map("test_code")
   partResultId      String?   @map("part_result_id")
+  idempotencyKey    String?   @map("idempotency_key")
   status            String    @default("queued")
   leaseExpiresAt    DateTime? @map("lease_expires_at") @db.Timestamptz(6)
   dispatchStartedAt DateTime? @map("dispatch_started_at") @db.Timestamptz(6)

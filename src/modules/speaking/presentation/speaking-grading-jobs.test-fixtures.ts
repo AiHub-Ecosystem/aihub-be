@@ -10,6 +10,7 @@ import type {
   SpeakingGradingJobOwner,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import type {
+  SpeakingGradingJobCreationOutcome,
   SpeakingGradingJobQueuePort,
   SpeakingGradingJobRepositoryPort,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
@@ -61,7 +62,19 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     readonly since: Date;
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
-  }): Promise<boolean> {
+  }): Promise<SpeakingGradingJobCreationOutcome> {
+    const existing =
+      input.job.idempotencyKey === undefined
+        ? undefined
+        : [...this.jobs.values()].find(
+            (job) =>
+              job.organizationId === input.job.organizationId &&
+              job.endUserId === input.job.endUserId &&
+              job.idempotencyKey === input.job.idempotencyKey,
+          );
+    if (existing !== undefined) {
+      return { created: false, existingJobId: existing.jobId };
+    }
     const inFlight =
       input.monthlyQuota === null
         ? 0
@@ -74,9 +87,24 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
       input.monthlyQuota === null
         ? null
         : Math.max(0, input.monthlyQuota - inFlight);
-    if (!(await input.admit(monthlyQuota))) return false;
+    if (!(await input.admit(monthlyQuota))) {
+      return { created: false, existingJobId: input.job.jobId };
+    }
     await this.create(input.job);
-    return true;
+    return { created: true };
+  }
+
+  async findByIdempotencyKey(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+    readonly idempotencyKey: string;
+  }) {
+    return [...this.jobs.values()].find(
+      (job) =>
+        job.organizationId === input.organizationId &&
+        job.endUserId === input.endUserId &&
+        job.idempotencyKey === input.idempotencyKey,
+    );
   }
 
   async findOwned(owner: SpeakingGradingJobOwner, jobId: string) {

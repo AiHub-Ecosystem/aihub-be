@@ -157,6 +157,7 @@ export class SubmitSpeakingGradingJob {
             request,
             admissionInput,
             identityMode,
+            idempotencyKey,
           ),
         (value) => Value.Parse(SpeakingGradingJobAcceptedDataSchema, value),
       );
@@ -188,6 +189,7 @@ export class SubmitSpeakingGradingJob {
     request: SpeakingGradingJobSubmitRequest,
     admissionInput: AdmitGradedRequestInput,
     identityMode: NonNullable<RequestContext['identityMode']>,
+    idempotencyKey?: string,
   ): Promise<SpeakingGradingJobAcceptedData> {
     const now = this.now();
     const assetOwner: SpeakingAudioUploadOwner = {
@@ -225,6 +227,7 @@ export class SubmitSpeakingGradingJob {
       get quotaUnverified() {
         return quotaUnverified;
       },
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       audioAssetId: request.audio_asset_id,
       request: questionRequest(request),
       createdAt: now,
@@ -232,7 +235,7 @@ export class SubmitSpeakingGradingJob {
     let decision: Awaited<ReturnType<typeof admitGradedRequest>> | undefined;
     let sandboxReserved = false;
     try {
-      const created = await this.repository.createWithAdmission({
+      const admission = await this.repository.createWithAdmission({
         job,
         since: quotaPeriod(now).start,
         monthlyQuota: environment === 'sandbox' ? null : quota,
@@ -276,7 +279,14 @@ export class SubmitSpeakingGradingJob {
           return true;
         },
       });
-      if (!created) {
+
+      if (admission.created === false) {
+        if (sandboxReserved) {
+          await this.sandboxBudget.release(jobId).catch(() => undefined);
+        }
+        if (admission.existingJobId !== jobId) {
+          return { job_id: admission.existingJobId, status: 'queued' };
+        }
         if (decision === undefined || decision.stage === 'admitted') {
           throw internalError('Speaking grading job admission is unavailable');
         }

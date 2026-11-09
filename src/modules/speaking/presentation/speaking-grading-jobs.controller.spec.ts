@@ -75,6 +75,7 @@ describe('Speaking grading jobs HTTP flow', () => {
   let admissionDecision: GradedAdmissionDecision | undefined;
   let admissionCalls: GradedAdmissionRequest[];
   let pollRateLimitCalls: number;
+  let idempotencyRepo: InMemoryIdempotencyRepository;
   let idempotency: IdempotencyServicePort;
   let sandboxReservations: string[];
   let nextKey = 0;
@@ -86,7 +87,8 @@ describe('Speaking grading jobs HTTP flow', () => {
     admissionCalls = [];
     pollRateLimitCalls = 0;
     sandboxReservations = [];
-    idempotency = new IdempotencyService(new InMemoryIdempotencyRepository());
+    idempotencyRepo = new InMemoryIdempotencyRepository();
+    idempotency = new IdempotencyService(idempotencyRepo);
     const admission: GradedAdmissionPort = {
       consume: async (request) => {
         admissionCalls.push(request);
@@ -401,6 +403,41 @@ describe('Speaking grading jobs HTTP flow', () => {
       null,
     ]);
     expect(sandboxReservations).toHaveLength(1);
+  });
+
+  it('recovers the original job when idempotency completion failed and retry reclaims reservation', async () => {
+    const idempotencyKey = key();
+    let failComplete = true;
+    const originalComplete = idempotencyRepo.complete.bind(idempotencyRepo);
+    idempotencyRepo.complete = async (completeInput) => {
+      if (failComplete) {
+        failComplete = false;
+        throw new Error('idempotency storage unavailable');
+      }
+      return originalComplete(completeInput);
+    };
+
+    try {
+      const first = await submit(
+        REQUEST_BODY,
+        headers({ 'idempotency-key': idempotencyKey }),
+      );
+      expect(first.statusCode).toBe(500);
+      expect(repository.jobs.size).toBe(1);
+      const originalJobId = [...repository.jobs.values()][0]?.jobId;
+
+      const retry = await submit(
+        REQUEST_BODY,
+        headers({ 'idempotency-key': idempotencyKey }),
+      );
+      expect(retry.statusCode).toBe(202);
+      expect(json(retry)).toMatchObject({
+        data: { job_id: originalJobId, status: 'queued' },
+      });
+      expect(repository.jobs.size).toBe(1);
+    } finally {
+      idempotencyRepo.complete = originalComplete;
+    }
   });
 
   it('answers 202 if enqueue fails after the durable job is created', async () => {

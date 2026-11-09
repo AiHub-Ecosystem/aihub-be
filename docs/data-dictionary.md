@@ -33,7 +33,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | PublicApiMajorUnattributedUsage    | metering    | 6       |
 | DispatchAttempt                    | metering    | 7       |
 | SpeakingAudioAsset                 | speaking    | 9       |
-| SpeakingGradingJob                 | speaking    | 25      |
+| SpeakingGradingJob                 | speaking    | 26      |
 | SpeakingV2ResultOwnership          | speaking    | 7       |
 | SpeakingAudioUploadIntent          | speaking    | 10      |
 | WritingChartUpload                 | writing     | 15      |
@@ -489,6 +489,7 @@ Owner: `speaking`
 | testType          | String?   | @map("test_type")                                     |
 | testCode          | String?   | @map("test_code")                                     |
 | partResultId      | String?   | @map("part_result_id")                                |
+| idempotencyKey    | String?   | @map("idempotency_key")                               |
 | status            | String    | @default("queued")                                    |
 | leaseExpiresAt    | DateTime? | @map("lease_expires_at") @db.Timestamptz(6)           |
 | dispatchStartedAt | DateTime? | @map("dispatch_started_at") @db.Timestamptz(6)        |

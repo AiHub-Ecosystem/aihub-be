@@ -14,17 +14,28 @@ import type {
  * slots running the sweep, can never both win. A method that reports `false`,
  * `undefined` or an empty list changed nothing.
  */
+export type SpeakingGradingJobCreationOutcome =
+  | { created: true }
+  | { created: false; existingJobId: string };
+
 export interface SpeakingGradingJobRepositoryPort {
   /** Commits a new job as `queued`. */
   create(job: NewSpeakingGradingJob): Promise<void>;
 
-  /** Serializes quota check, graded admission and job creation for one Organization-month. */
+  /** Serializes quota check, graded admission, key recovery and job creation for one Organization-month. */
   createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
     readonly since: Date;
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
-  }): Promise<boolean>;
+  }): Promise<SpeakingGradingJobCreationOutcome>;
+
+  /** The non-terminal job whichever holds this idempotency key, if any. */
+  findByIdempotencyKey(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+    readonly idempotencyKey: string;
+  }): Promise<SpeakingGradingJob | undefined>;
 
   /** The job only when it belongs to this Organization, End-User ID and Environment. */
   findOwned(

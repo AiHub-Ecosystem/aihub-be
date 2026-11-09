@@ -18,6 +18,7 @@ CREATE TABLE speaking_grading_jobs (
   test_type              text,
   test_code              text,
   part_result_id         text,
+  idempotency_key        text,
   status                 text NOT NULL DEFAULT 'queued'
                          CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
   lease_expires_at       timestamptz,
@@ -47,3 +48,7 @@ CREATE INDEX speaking_grading_jobs_org_in_flight_idx
 
 CREATE INDEX speaking_grading_jobs_retention_idx
   ON speaking_grading_jobs (created_at);
+
+CREATE UNIQUE INDEX speaking_grading_jobs_org_user_key_idx
+  ON speaking_grading_jobs (organization_id, end_user_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

@@ -355,7 +355,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       ),
     );
 
-    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.filter((result) => result.created)).toHaveLength(1);
     await expect(
       repository.countInFlight({
         organizationId,
@@ -363,6 +363,38 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         since,
       }),
     ).resolves.toBe(1);
+  });
+
+  it('recovers an existing job on duplicate idempotency key admission', async () => {
+    const organizationId = 'org_' + ulid();
+    const idempotencyKey = 'key_' + ulid();
+    const firstJob = makeJob({ organizationId, idempotencyKey });
+    const since = new Date('2026-11-01T00:00:00.000Z');
+
+    const first = await repository.createWithAdmission({
+      job: firstJob,
+      since,
+      monthlyQuota: 10,
+      admit: async () => true,
+    });
+    expect(first).toEqual({ created: true });
+
+    const duplicateJob = makeJob({ organizationId, idempotencyKey });
+    const second = await repository.createWithAdmission({
+      job: duplicateJob,
+      since,
+      monthlyQuota: 10,
+      admit: async () => true,
+    });
+    expect(second).toEqual({ created: false, existingJobId: firstJob.jobId });
+
+    await expect(
+      repository.findByIdempotencyKey({
+        organizationId,
+        endUserId: firstJob.endUserId,
+        idempotencyKey,
+      }),
+    ).resolves.toMatchObject({ jobId: firstJob.jobId });
   });
 
   it('stores a successful result and refuses to fail a terminal job', async () => {

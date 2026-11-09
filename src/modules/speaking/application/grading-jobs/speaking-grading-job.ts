@@ -71,6 +71,7 @@ export interface SpeakingGradingJob extends SpeakingGradingJobOwner {
    * metering evidence like the synchronous pipeline's `quotaUnverified`.
    */
   readonly quotaUnverified: boolean;
+  readonly idempotencyKey?: string;
   readonly audioAssetId: string;
   readonly request: SpeakingGradingJobRequest;
   readonly status: SpeakingGradingJobStatus;
