@@ -15,8 +15,8 @@ import type {
   UsageRepositoryPort,
 } from '@/modules/metering/application/usage-recording/usage-repository.port';
 import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
-import { SuccessEnvelopeInterceptor } from '@/modules/metering/presentation/success-envelope.interceptor';
 import { openMeteringEvidence } from '@/modules/metering/public/metering-evidence';
+import { SuccessEnvelopeInterceptor } from './success-envelope.interceptor';
 
 class FakeQuotaCounter {
   unavailable = false;
