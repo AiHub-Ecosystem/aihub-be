@@ -68,6 +68,7 @@
     "check:commit-messages": "node scripts/ci/commit-messages/check-commit-messages.mjs",
     "test:commit-messages": "node --test scripts/ci/commit-messages/check-commit-messages.spec.mjs",
     "check:log-redaction": "node scripts/checks/architecture/check-log-redaction.mjs",
+    "check:declaration-registry": "node scripts/checks/knip/check-declaration-registry.mjs",
     "test:log-redaction": "node --test scripts/checks/architecture/check-log-redaction.spec.mjs",
     "knip": "bun run generate:prisma-client && node scripts/checks/knip/knip.mjs",
     "verify:summary": "node scripts/checks/changed/verify-summary.cjs",

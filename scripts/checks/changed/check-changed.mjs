@@ -100,6 +100,7 @@ export const GATE_COMMANDS = {
   'test:doc-drift': 'test:doc-drift',
   'test:commit-messages': 'test:commit-messages',
   'test:generated-drift': 'test:generated-drift',
+  'check:declaration-registry': 'check:declaration-registry',
   'check:log-redaction': 'check:log-redaction',
   'test:log-redaction': 'test:log-redaction',
   'test:issue-triage': 'test:issue-triage',
@@ -129,6 +130,9 @@ const BATCHABLE = new Set(BATCHED_GATES);
 
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+
+/** A hand-written declaration, one half of the pair #1787 keeps in agreement. */
+const DECLARATION_FILE = /\.d\.(?:cts|mts)$/;
 const DOC_DRIFT_INPUT = /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/)/;
 
 /**
@@ -211,7 +215,16 @@ function classifyPathGates(p) {
     return ['type-check:scripts'];
   }
   if (path === 'knip.json') {
-    return ['knip'];
+    // The declaration registry pairs every hand-written `.d.*` file with its
+    // knip entry, so the config change that can break that pairing selects it
+    // (#1787).
+    return ['check:declaration-registry', 'knip'];
+  }
+  // #1787: a declaration is one half of the pair the registry checks, so adding,
+  // renaming or deleting one must fail with the change that broke it rather than
+  // only on the next full knip run.
+  if (DECLARATION_FILE.test(path)) {
+    return ['check:declaration-registry', 'type-check'];
   }
   if (path === 'biome.json') {
     return ['lint'];

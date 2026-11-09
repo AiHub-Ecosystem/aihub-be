@@ -342,7 +342,22 @@ const pathCases = [
   },
   { path: 'tsconfig.json', gates: ['type-check'] },
   { path: 'tsconfig.scripts.json', gates: ['type-check:scripts'] },
-  { path: 'knip.json', gates: ['knip'] },
+  // #1787: knip.json carries the entry side of the declaration pairing.
+  { path: 'knip.json', gates: ['check:declaration-registry', 'knip'] },
+  // #1787: a declaration is the file side of that same pairing.
+  {
+    path: 'scripts/cli/cli-options.d.cts',
+    gates: [
+      'check:declaration-registry',
+      'check:doc-drift',
+      'check:folder-entries',
+      'type-check',
+    ],
+  },
+  {
+    path: 'ops/vault/pgbouncer-budget.d.mts',
+    gates: ['check:declaration-registry', 'check:doc-drift', 'type-check'],
+  },
   { path: 'biome.json', gates: ['lint'] },
   // #1768: the remaining gate-tool configuration files follow the same rule.
   { path: '.dependency-cruiser.cjs', gates: ['arch-check'] },

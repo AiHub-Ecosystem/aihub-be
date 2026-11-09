@@ -57,6 +57,7 @@ const BATCHED_GATES = [
   'test:doc-drift',
   'check:log-redaction',
   'test:log-redaction',
+  'check:declaration-registry',
 ];
 
 /** @param {{freeBytes?: number}} [options] @returns {number} */
