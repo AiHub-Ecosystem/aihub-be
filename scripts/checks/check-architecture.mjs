@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import tsModule from 'typescript';
@@ -1172,6 +1172,161 @@ export function collectSourceTextFailures(options) {
       fail(
         `${relativePath}: \`as unknown as ${typeName}\` casts an application-declared type in infrastructure; introduce a thin adapter instead.`,
       );
+    }
+  }
+
+  // #1576: Nest module imports must not cycle. For every
+  // src/modules/<owner>/**/*.module.ts, collect imports of other
+  // modules' *.module.ts files, build the owner graph, and fail on a
+  // cycle naming the modules in it.
+  /** @param {string} file */
+  function moduleOwnerOf(file) {
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    const match = /^src\/modules\/([^/]+)\//.exec(relativePath);
+    return match?.[1];
+  }
+
+  /** @type {Map<string, Set<string>>} */
+  const moduleGraph = new Map();
+  /** @param {string} owner */
+  function moduleEdges(owner) {
+    let edges = moduleGraph.get(owner);
+    if (edges === undefined) {
+      edges = new Set();
+      moduleGraph.set(owner, edges);
+    }
+    return edges;
+  }
+
+  /**
+   * Owner of a specifier resolved through public/ re-exports of
+   * *.module files. A `.module` specifier counts itself; a
+   * `public/`-facade import counts when that facade re-exports a
+   * `*.module.ts` file; `import type` never counts.
+   * @param {string} specifier @param {string} importerDir @param {boolean} typeOnly
+   * @returns {string | undefined}
+   */
+  function moduleOwnerOfSpecifier(specifier, importerDir, typeOnly) {
+    if (typeOnly) return undefined;
+    let resolved;
+    const aliased = /^@\/modules\/([^/]+)\//.exec(specifier);
+    if (aliased !== null) {
+      resolved = `src/modules/${aliased[1]}/${specifier.slice(
+        `@/modules/${aliased[1]}/`.length,
+      )}`;
+    } else if (specifier.startsWith('.')) {
+      resolved = relative(root, join(importerDir, specifier))
+        .replace(/\\/g, '/')
+        .replace(/\.module$/, '');
+    } else if (/^@\/(?!modules\/)/.test(specifier)) {
+      resolved = `src/${specifier.slice(2)}`;
+    }
+    if (resolved === undefined) return undefined;
+    if (specifier.endsWith('.module') || resolved.endsWith('.module.ts')) {
+      return /^src\/modules\/([^/]+)\//.exec(resolved)?.[1];
+    }
+    const facadePath = join(root, resolved.replace(/\.(?:ts|js)$/, '') + '.ts');
+    const facadeReal = [facadePath, join(root, resolved + '.ts')].find(
+      (candidate) => sourceFiles.includes(candidate),
+    );
+    if (facadeReal === undefined) return undefined;
+    if (!resolved.replace(/\\/g, '/').includes('/public/')) return undefined;
+    const facadeText = sourceText(facadeReal);
+    const facadeSourceFile = ts.createSourceFile(
+      facadeReal,
+      facadeText,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    for (const statement of facadeSourceFile.statements) {
+      const reExported = moduleSpecifierOf(statement);
+      if (reExported === undefined || !reExported.endsWith('.module')) continue;
+      const reOwner = moduleOwnerOfSpecifier(
+        reExported,
+        dirname(facadeReal),
+        false,
+      );
+      if (reOwner !== undefined) return reOwner;
+    }
+    return undefined;
+  }
+
+  for (const file of sourceFiles.filter(
+    (candidate) =>
+      !candidate.endsWith('.spec.ts') &&
+      candidate.endsWith('.module.ts') &&
+      moduleOwnerOf(candidate) !== undefined,
+  )) {
+    const owner = /** @type {string} */ (moduleOwnerOf(file));
+    const sourceFile = ts.createSourceFile(
+      file,
+      sourceText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    for (const statement of sourceFile.statements) {
+      const specifier = moduleSpecifierOf(statement);
+      if (specifier === undefined) {
+        continue;
+      }
+      const typeOnly =
+        (ts.isImportDeclaration(statement) &&
+          statement.importClause?.isTypeOnly === true) ||
+        (ts.isExportDeclaration(statement) &&
+          statement.exportClause !== undefined &&
+          ts.isNamedExports(statement.exportClause) &&
+          statement.exportClause.elements.length > 0 &&
+          statement.exportClause.elements.every(
+            (element) => element.isTypeOnly,
+          ));
+      const imported = moduleOwnerOfSpecifier(
+        specifier,
+        dirname(file),
+        typeOnly,
+      );
+      if (imported !== undefined && imported !== owner) {
+        moduleEdges(owner).add(imported);
+      }
+    }
+    moduleEdges(owner);
+  }
+
+  /** @type {Map<string, 'visiting' | 'done'>} */
+  const moduleVisitState = new Map();
+  /** @type {string[]} */
+  const moduleStack = [];
+  /** @type {Set<string>} */
+  const reportedModuleCycles = new Set();
+
+  /** @param {string} owner */
+  function visitModule(owner) {
+    moduleVisitState.set(owner, 'visiting');
+    moduleStack.push(owner);
+    for (const imported of moduleGraph.get(owner) ?? []) {
+      const state = moduleVisitState.get(imported);
+      if (state === 'visiting') {
+        const cycleStart = moduleStack.indexOf(imported);
+        const cycle = [...moduleStack.slice(cycleStart), imported];
+        const key = cycle.join(' -> ');
+        if (!reportedModuleCycles.has(key)) {
+          reportedModuleCycles.add(key);
+          fail(
+            `Nest module import cycle: ${cycle.join(' -> ')}; break the cycle by moving the shared behaviour behind an application port at the owning boundary`,
+          );
+        }
+      } else if (state === undefined) {
+        visitModule(imported);
+      }
+    }
+    moduleStack.pop();
+    moduleVisitState.set(owner, 'done');
+  }
+
+  for (const owner of moduleGraph.keys()) {
+    if (!moduleVisitState.has(owner)) {
+      visitModule(owner);
     }
   }
 
