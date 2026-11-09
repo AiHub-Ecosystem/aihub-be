@@ -248,6 +248,15 @@ function mutationResponse(
       username: result.username,
       role: result.role,
       status: result.status,
+      ...(result.handledApiKeys === undefined
+        ? {}
+        : {
+            handled_api_keys: result.handledApiKeys.map((key) => ({
+              id: key.id,
+              name: key.name,
+              key_prefix: key.keyPrefix,
+            })),
+          }),
     },
     meta: { request_id: requestId },
   };

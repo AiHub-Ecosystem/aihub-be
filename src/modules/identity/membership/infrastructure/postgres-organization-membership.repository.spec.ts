@@ -618,6 +618,72 @@ describe('PostgresOrganizationMembershipRepository', () => {
     });
   });
 
+  it('surfaces the disabled member’s active API keys in the same transaction', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, targetMemberRow],
+      [{ role: 'member', membership_status: 'disabled' }],
+      [],
+      [
+        { id: 'key_1', name: 'CI key', key_prefix: 'ak_live_01' },
+        { id: 'key_2', name: 'Batch key', key_prefix: 'ak_live_02' },
+      ],
+    ];
+
+    const result = await new PostgresOrganizationMembershipRepository(
+      prismaFromQueryFake(client),
+    ).disable(mutationInput());
+
+    expect(result.handledApiKeys).toEqual([
+      { id: 'key_1', name: 'CI key', keyPrefix: 'ak_live_01' },
+      { id: 'key_2', name: 'Batch key', keyPrefix: 'ak_live_02' },
+    ]);
+    expect(client.transactionQueries[4]?.values).toEqual([
+      'org_acme',
+      targetMemberRow.user_account_id,
+    ]);
+  });
+
+  it('fails the disable when a handled key row cannot be read', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, targetMemberRow],
+      [{ role: 'member', membership_status: 'disabled' }],
+      [],
+      [{ id: 'key_1', name: 'CI key' }],
+    ];
+
+    await expect(
+      new PostgresOrganizationMembershipRepository(
+        prismaFromQueryFake(client),
+      ).disable(mutationInput()),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+  });
+
+  it('surfaces the demoted member’s active API keys in the same transaction', async () => {
+    const client = new FakePostgres();
+    client.transactionRows = [
+      [organizationRow],
+      [callerOwnerRow, { ...targetMemberRow, role: 'admin' }],
+      [{ role: 'member', membership_status: 'active' }],
+      [],
+      [{ id: 'key_1', name: 'CI key', key_prefix: 'ak_live_01' }],
+    ];
+
+    const result = await new PostgresOrganizationMembershipRepository(
+      prismaFromQueryFake(client),
+    ).changeRole({
+      ...mutationInput(),
+      role: 'member',
+    });
+
+    expect(result.handledApiKeys).toEqual([
+      { id: 'key_1', name: 'CI key', keyPrefix: 'ak_live_01' },
+    ]);
+  });
+
   it('returns an already-disabled target without reactivating or deleting it', async () => {
     const client = new FakePostgres();
     const disabled = { ...targetMemberRow, membership_status: 'disabled' };

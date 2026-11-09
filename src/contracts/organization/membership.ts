@@ -136,12 +136,29 @@ export const EmptyOrganizationMembershipMutationRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const HandledOrganizationApiKeySchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+    key_prefix: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 const OrganizationMembershipMutationDataSchema = Type.Object(
   {
     organization_id: Type.String({ minLength: 1 }),
     username: Type.String({ minLength: 1 }),
     role: OrganizationMembershipRoleSchema,
     status: OrganizationMembershipStatusSchema,
+    /**
+     * Active API keys the member created or last rotated, present when the
+     * mutation removed their authority (a disable, or a demotion), so the
+     * caller reviews or revokes them without a separate lookup.
+     */
+    handled_api_keys: Type.Optional(
+      Type.Array(HandledOrganizationApiKeySchema),
+    ),
   },
   { additionalProperties: false },
 );

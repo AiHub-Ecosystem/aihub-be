@@ -6330,6 +6330,28 @@
                               "type": "string"
                             }
                           ]
+                        },
+                        "handled_api_keys": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": ["id", "name", "key_prefix"],
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "key_prefix": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          }
                         }
                       }
                     },
@@ -6457,6 +6479,28 @@
                               "type": "string"
                             }
                           ]
+                        },
+                        "handled_api_keys": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": ["id", "name", "key_prefix"],
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "key_prefix": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          }
                         }
                       }
                     },
@@ -6586,6 +6630,28 @@
                               "type": "string"
                             }
                           ]
+                        },
+                        "handled_api_keys": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": ["id", "name", "key_prefix"],
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "key_prefix": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          }
                         }
                       }
                     },
