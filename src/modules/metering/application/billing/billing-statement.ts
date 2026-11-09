@@ -1,5 +1,5 @@
 import { canonicalJson } from '@/common/serialization/canonical-json';
-import { parseQuotaMonth } from '@/modules/gateway/public/quota-period';
+import { parseQuotaMonth } from '@/modules/metering/public/quota-counter';
 
 export type BillingActorSource =
   | 'authenticated_user'

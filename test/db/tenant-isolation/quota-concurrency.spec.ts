@@ -4,12 +4,10 @@ import {
   RedisGradedAdmission,
   type RedisGradedAdmissionClient,
 } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import {
-  RedisQuotaCounter,
-  quotaKeyForMonth,
-} from '@/modules/gateway/infrastructure/redis-quota-counter';
-import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { RedisQuotaCounter } from '@/modules/metering/infrastructure/quota/redis-quota-counter';
+import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-quota-seed';
+import { quotaKeyForMonth } from '@/modules/metering/public/quota-counter';
 
 import { createTestPool } from '../shared/database';
 

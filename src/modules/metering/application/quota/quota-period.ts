@@ -1,7 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
-
-import { stableOffsetMs } from './stable-offset';
+import { stableOffsetMs } from '@/common/stable-offset';
 
 /**
  * How far past the month boundary a quota refusal's hint may point. Each

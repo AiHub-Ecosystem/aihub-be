@@ -1,4 +1,5 @@
-import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
+import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
+import { QUOTA_TTL_SECONDS } from './redis-quota-counter';
 import {
   type RedisQuotaReconciliationClient,
   RedisQuotaReconciliationCounter,

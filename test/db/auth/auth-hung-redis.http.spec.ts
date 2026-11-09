@@ -12,9 +12,10 @@ import { TcpFaultProxy } from '../tenant-isolation/fault-injection/tcp-fault-pro
 // Scenario 3 of #328 (2026-10-09): hang the Redis the auth rate limiters use
 // and assert that login, refresh, and registration still answer within a
 // stated bound, and that the sockets and memory they hold do not accumulate.
+// Includes Metering's dedicated Redis client connection introduced in #1576.
 const AUTH_BOUND_MS = 2_000;
 const ROUNDS = 5;
-const MAX_REDIS_CONNECTIONS = 6;
+const MAX_REDIS_CONNECTIONS = 7;
 
 async function timedCall(
   run: () => Promise<HttpAnswer | undefined>,

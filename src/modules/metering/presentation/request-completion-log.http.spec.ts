@@ -33,7 +33,6 @@ import {
   OPERATION_DISPATCHER,
 } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
-import { QUOTA_COUNTER } from '@/modules/gateway/application/quota-counter.port';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyExecution,
@@ -51,6 +50,7 @@ import {
   USAGE_REPOSITORY,
   type UsageRecord,
 } from '@/modules/metering/application/usage-recording/usage-repository.port';
+import { QUOTA_COUNTER } from '@/modules/metering/public/quota-counter';
 import { registerRequestHooks } from '@/register-request-hooks';
 import { getOwnPrototypeMethod } from '../../../../test/support/own-prototype-method';
 

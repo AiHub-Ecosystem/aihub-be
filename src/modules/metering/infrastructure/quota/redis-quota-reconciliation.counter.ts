@@ -4,12 +4,13 @@ import type {
   QuotaCounterOverwritePort,
   QuotaCounterOverwriteRequest,
   QuotaCounterReadRequest,
-} from '@/modules/gateway/application/quota-counter.port';
-import type { RedisGatewayClient } from './redis-gateway.client';
-import { QUOTA_TTL_SECONDS, quotaKeyForMonth } from './redis-quota-counter';
+} from '@/modules/metering/application/quota/quota-counter.port';
+import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
+import type { RedisMeteringClient } from './redis-metering.client';
+import { QUOTA_TTL_SECONDS } from './redis-quota-counter';
 
 export type RedisQuotaReconciliationClient = Pick<
-  RedisGatewayClient,
+  RedisMeteringClient,
   'get' | 'set' | 'quit'
 >;
 

@@ -11,8 +11,8 @@ import {
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import { RedisQuotaSeeder } from '@/modules/gateway/infrastructure/redis-quota-seed';
 import { RedisRateLimiter } from '@/modules/gateway/infrastructure/redis-rate-limiter';
+import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-quota-seed';
 
 import { createTenantIsolationRedis } from '../fixtures';
 

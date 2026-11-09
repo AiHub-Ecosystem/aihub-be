@@ -12,6 +12,16 @@ export interface RedisClientOptions {
  * `commandTimeoutMs` instead of queueing behind a dead socket. Each caller
  * states its own timeouts, since they come from its measured round trip.
  */
+/**
+ * Shared Redis client options for request-path adapters: a mutating EVAL
+ * must never replay after a reconnect (it double-counts), so replay stays
+ * off, and a connect that cannot finish fails in 1 s.
+ */
+export const REDIS_NO_REPLAY_OPTIONS = {
+  connectTimeoutMs: 1_000,
+  autoResendUnfulfilledCommands: false,
+} as const;
+
 export function createRedisClient(
   url: string,
   options: RedisClientOptions,
