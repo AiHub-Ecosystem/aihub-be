@@ -232,8 +232,30 @@ const pathCases = [
     gates: ['check:doc-drift', 'format:check'],
   },
   {
+    // #1789: the workflow also wires the generated-artifact drift check, so
+    // its spec runs beside the secret-scan suite it already selected.
     path: '.github/workflows/ci.yml',
-    gates: ['format:check', 'test:secret-scan'],
+    gates: ['format:check', 'test:generated-drift', 'test:secret-scan'],
+  },
+  {
+    // #1789: the drift check and its spec select each other. The check itself
+    // is CI-only (the static job), so no local check gate maps here.
+    path: 'scripts/ci/generated-drift/check-generated-drift.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:generated-drift',
+    ],
+  },
+  {
+    path: 'scripts/ci/generated-drift/check-generated-drift.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:generated-drift',
+    ],
   },
   {
     path: 'ops/nginx/site.conf',

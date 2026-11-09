@@ -98,6 +98,7 @@ export const GATE_COMMANDS = {
   'test:format-check': 'test:format-check',
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
+  'test:generated-drift': 'test:generated-drift',
   'check:log-redaction': 'check:log-redaction',
   'test:log-redaction': 'test:log-redaction',
   'test:issue-triage': 'test:issue-triage',
@@ -319,9 +320,10 @@ function classifyPathGates(p) {
 
   // A workflow edit can break the scan range selection, so the job that reads
   // ci.yml is asserted by its own suite. This precedes the generic YAML rule
-  // below, which would otherwise stop at `format:check`.
+  // below, which would otherwise stop at `format:check`. #1789: the workflow
+  // also wires the generated-artifact drift check, so its spec runs too.
   if (path === '.github/workflows/ci.yml') {
-    return ['format:check', 'test:secret-scan'];
+    return ['format:check', 'test:generated-drift', 'test:secret-scan'];
   }
 
   // #1766: a compose change selects the validators CI runs over the rendered
@@ -415,6 +417,12 @@ function classifyPathGates(p) {
   // the decision and the workflow wiring.
   if (path.includes('secret-scan-plan')) {
     return ['lint', 'test:secret-scan'];
+  }
+  // #1789: the generated-artifact drift check and its spec select each other.
+  // The check itself runs only in CI's static job - regenerating rewrites the
+  // artifact files, so it must never run over a developer's uncommitted work.
+  if (path.includes('generated-drift')) {
+    return ['lint', 'test:generated-drift'];
   }
 
   if (path.includes('nginx')) {
