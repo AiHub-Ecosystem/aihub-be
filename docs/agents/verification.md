@@ -26,3 +26,18 @@ Run one full loop at a time on a machine. Concurrent agents double the resident 
 5. Remove the container, then run `bun run lint` before any `bun run verify`: the lane regenerates `dist/generated/prisma` in runtime mode, and lint regenerates the plain client that type-aware lint needs.
 
 Specs that need Redis fail with `ECONNREFUSED` when no throwaway Redis exists; that is the environment, not the code. Do not run the lane while `bun run verify` runs, since both write `dist/generated/prisma`.
+
+## Multi-commit branch verification
+
+When a pull request delivers multiple ordered commits, every intermediate commit must remain bisect-friendly and compile independently. Run `git rebase --exec "bunx tsc --noEmit" <base>` across the branch range before opening the pull request to verify that intermediate commits do not have broken imports.
+
+## Windows cross-drive worktrees and lint-staged backup
+
+On Windows, when a Git worktree sits on a different drive than the primary repository Git directory (e.g. `C:\...` worktree pointing to `D:\aihub-be\.git`), `lint-staged`'s automatic stash backup in Husky's pre-commit hook can fail with `✖ Failed to back up original state!`.
+
+When this happens:
+
+1. Verify staged files directly: `bunx lint-staged`.
+2. Run `bun run check:changed`.
+3. Commit with `--no-verify`.
+4. Validate the commit message immediately with `git log -1 --format=%B | node scripts/checks/hooks/commit-message.mjs`.

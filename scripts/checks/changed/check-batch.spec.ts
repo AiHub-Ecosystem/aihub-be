@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Reached through require because the module under test is plain CommonJS run by
 // node, the same shape `scripts/ci/image/host-job-image-check.spec.ts` uses.
@@ -181,5 +181,24 @@ describe('check batch', () => {
     for (const gate of BATCHED_GATES) {
       expect(verifyGates).not.toContain(gate);
     }
+  });
+
+  it('keeps every explicit script file argument in package.json a real file on disk', () => {
+    const { scripts } = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    const missing: { script: string; file: string }[] = [];
+    for (const [name, command] of Object.entries(scripts)) {
+      const matches = command.matchAll(
+        /(?:^|\s)(scripts\/[^\s]+|test\/[^\s]+|ops\/[^\s]+)/g,
+      );
+      for (const m of matches) {
+        const file = m[1]!.replace(/['"]/g, '');
+        if (!existsSync(file)) {
+          missing.push({ script: name, file });
+        }
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });
