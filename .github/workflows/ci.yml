@@ -120,6 +120,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # #1777: `format:check` runs prettier with `--cache`. Without this the
+      # CI job always ran cold (~25s); with it an unchanged tree re-checks only
+      # the files a commit touched. The key carries the lockfile and the
+      # prettier config, because an option change invalidates every entry.
+      - name: Cache prettier
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.cache/prettier
+          key: prettier-${{ runner.os }}-${{ hashFiles('bun.lock', '.prettierrc', '.prettierignore') }}
+          restore-keys: prettier-${{ runner.os }}-
+
       - name: Check unused exports
         run: bun run knip
 
