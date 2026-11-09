@@ -81,6 +81,7 @@ export const GATE_COMMANDS = {
   'check:imports:dist': 'check:imports:dist',
   'check:migrations': 'check:migrations',
   'check:nginx-headers': 'check:nginx-headers',
+  'check:folder-entries': 'check:folder-entries',
   'check:compose': 'check:compose',
   'check:tenant-global': 'check:tenant-global',
   'check:data-ownership': 'check:data-ownership',
@@ -124,6 +125,13 @@ const BATCHABLE = new Set(BATCHED_GATES);
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const DOC_DRIFT_INPUT = /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/)/;
+
+/**
+ * The trees the folder-entry ceilings measure (#1347): everything under
+ * src/modules/, under the six scripts roots, and under test/.
+ */
+const FOLDER_ENTRIES_INPUT =
+  /^(?:src\/modules\/|scripts\/(?:ci|cli|generate|checks|ops|runtime)\/|test\/)/;
 
 /** @param {string} dir @returns {string[]} */
 function listDirEntries(dir) {
@@ -422,14 +430,22 @@ function classifyPathGates(p) {
 export function classifyPath(p) {
   const path = norm(p);
   const gates = classifyPathGates(path);
+  if (gates === undefined) return undefined;
+  // #1347: a change inside a tree the folder-entry ceilings measure selects
+  // the check that counts them, so a folder that grows past its ceiling or
+  // its recorded baseline fails with the change that grew it. Empty no-gate
+  // answers stay empty: the folder count is not a content gate, and adding it
+  // to a recorded no-gate answer would replace the full loop with a count.
+  const withFolderEntries =
+    gates.length > 0 && FOLDER_ENTRIES_INPUT.test(path)
+      ? sorted(new Set([...gates, 'check:folder-entries']))
+      : gates;
   if (
-    gates === undefined ||
     !DOC_DRIFT_INPUT.test(path) ||
-    gates.includes('check:doc-drift')
-  ) {
-    return gates;
-  }
-  return sorted(new Set([...gates, 'check:doc-drift']));
+    withFolderEntries.includes('check:doc-drift')
+  )
+    return withFolderEntries;
+  return sorted(new Set([...withFolderEntries, 'check:doc-drift']));
 }
 
 /** @param {Set<string>} gates @returns {string[]} */

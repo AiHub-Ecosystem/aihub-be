@@ -26,6 +26,7 @@ const pathCases = [
       'check:doc-drift',
       'check:domain-globals',
       'check:file-size',
+      'check:folder-entries',
       'check:imports',
       'check:imports:dist',
       'check:tenant-global',
@@ -45,6 +46,7 @@ const pathCases = [
       'check:deprecation',
       'check:doc-drift',
       'check:file-size',
+      'check:folder-entries',
       'check:imports',
       'check:imports:dist',
       'check:tenant-global',
@@ -58,6 +60,7 @@ const pathCases = [
     path: 'src/modules/example/application/use-case.spec.ts',
     gates: [
       'check:doc-drift',
+      'check:folder-entries',
       'lint',
       'test:jest-specs',
       'test:related',
@@ -68,6 +71,7 @@ const pathCases = [
     path: 'src/modules/example/domain/policy.spec.ts',
     gates: [
       'check:doc-drift',
+      'check:folder-entries',
       'lint',
       'test:jest-specs',
       'test:related',
@@ -76,28 +80,41 @@ const pathCases = [
   },
   {
     path: 'src/modules/example/application/use-case.test.ts',
-    gates: ['check:doc-drift', 'lint', 'test:related', 'type-check'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:related',
+      'type-check',
+    ],
   },
   {
     path: 'test/unit/example.spec.ts',
-    gates: ['lint', 'test:jest-specs', 'test:related', 'type-check'],
+    gates: [
+      'check:folder-entries',
+      'lint',
+      'test:jest-specs',
+      'test:related',
+      'type-check',
+    ],
   },
   {
     path: 'test/support/helper.ts',
-    gates: ['lint', 'test:related', 'type-check'],
+    gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
   },
   {
     path: 'test/fixtures/ai-speaking/grading-no-speech.200.json',
-    gates: ['lint', 'test:related', 'type-check'],
+    gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
   },
   {
     path: 'test/cli/request-log-lookup.spec.sh',
-    gates: ['lint', 'test:related', 'type-check'],
+    gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
   },
   {
     path: 'scripts/checks/check-app-errors.spec.ts',
     gates: [
       'check:doc-drift',
+      'check:folder-entries',
       'lint',
       'test:jest-specs',
       'test:related',
@@ -109,33 +126,64 @@ const pathCases = [
     gates: [
       'check:app-errors',
       'check:doc-drift',
+      'check:folder-entries',
       'lint',
       'test:check-app-errors',
     ],
   },
   {
     path: 'scripts/checks/check-changed.spec.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:check-changed'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:check-changed',
+    ],
   },
   {
     path: 'scripts/checks/issue-triage-hook.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:issue-triage'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:issue-triage',
+    ],
   },
   {
     path: 'scripts/checks/check-doc-drift.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:doc-drift'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:doc-drift',
+    ],
   },
   {
     path: 'scripts/checks/lint-staged-config.spec.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:lint-staged'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:lint-staged',
+    ],
   },
   {
     path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:capacity-benchmark'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:capacity-benchmark',
+    ],
   },
   {
     path: 'scripts/ops/monitoring/check-monitoring-config.cjs',
-    gates: ['check:doc-drift', 'lint', 'test:monitoring-config'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:monitoring-config',
+    ],
   },
   {
     path: 'prisma/schema.prisma',
@@ -192,12 +240,22 @@ const pathCases = [
   { path: 'openapi/v2.json', gates: ['lint', 'validate:openapi'] },
   {
     path: 'scripts/ci/api-compatibility/accepted-breaking-changes.json',
-    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:api-compatibility',
+    ],
   },
   { path: 'jest.config.cjs', gates: ['coverage:unit', 'lint'] },
   {
     path: 'scripts/cli/run-bun-test.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:check-changed'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:check-changed',
+    ],
   },
   {
     // #1460: the gate configuration files select the gate whose behaviour
@@ -220,17 +278,32 @@ const pathCases = [
     // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
     // so the gate set is widened by that layer.
     path: 'scripts/checks/format-check-cache.spec.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:format-check'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:format-check',
+    ],
   },
   {
     // #1779: the tested secret-scan plan, and the spec that pins both the
     // decision and the workflow wiring that applies it.
     path: 'scripts/ci/secret-scan/secret-scan-plan.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:secret-scan'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:secret-scan',
+    ],
   },
   {
     path: 'scripts/ci/secret-scan/secret-scan-plan.spec.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:secret-scan'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:secret-scan',
+    ],
   },
   { path: '.prettierrc', gates: ['format:check'] },
   { path: '.prettierignore', gates: ['format:check'] },
@@ -242,15 +315,30 @@ const pathCases = [
   // not only its accepted-breaking-changes list.
   {
     path: 'scripts/ci/api-compatibility/check-release.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:api-compatibility',
+    ],
   },
   {
     path: 'scripts/ci/api-compatibility/check.mjs',
-    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:api-compatibility',
+    ],
   },
   {
     path: 'scripts/ci/api-compatibility/fixtures/example.json',
-    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:api-compatibility',
+    ],
   },
   { path: '.swcrc', gates: ['build'] },
   {
@@ -259,15 +347,30 @@ const pathCases = [
   },
   {
     path: 'scripts/ops/host-jobs/container-watchdog.sh',
-    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
   },
   {
     path: 'scripts/ops/backups/restore-postgres-rehearsal.sh',
-    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
   },
   {
     path: 'scripts/ops/monitoring/probe-sandbox-mint.sh',
-    gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
   },
   {
     path: 'docker-compose.production.yml',
@@ -283,11 +386,13 @@ const pathCases = [
   },
   {
     path: 'scripts/ci/image/image-boot-check.sh',
+    // The #1766 no-gate answer stays empty of content gates; the folder count
+    // is not added to it (#1347), so this maps to documentation drift only.
     gates: ['check:doc-drift'],
   },
   {
     path: 'scripts/ci/image/host-job-image-check.cjs',
-    gates: ['check:doc-drift', 'lint', 'test:related'],
+    gates: ['check:doc-drift', 'check:folder-entries', 'lint', 'test:related'],
   },
 ];
 
@@ -330,6 +435,7 @@ await test('a mixed diff keeps the full union of gates (#1634)', () => {
     'check:deprecation',
     'check:doc-drift',
     'check:file-size',
+    'check:folder-entries',
     'check:imports',
     'check:imports:dist',
     'check:tenant-global',
