@@ -59,6 +59,7 @@
     "check:issue-triage": "node scripts/checks/check-issue-triage.mjs",
     "test:issue-triage": "node --test scripts/checks/check-issue-triage.spec.mjs scripts/checks/issue-triage-hook.spec.mjs",
     "test:lint-staged": "node --test scripts/checks/lint-staged-config.spec.mjs",
+    "test:commit-message": "jest --runTestsByPath scripts/checks/commit-message.spec.ts",
     "check:doc-drift": "node scripts/checks/check-doc-drift.mjs",
     "test:doc-drift": "node --test scripts/checks/check-doc-drift.spec.mjs",
     "knip": "bun run generate:prisma-client && node scripts/checks/knip.mjs",

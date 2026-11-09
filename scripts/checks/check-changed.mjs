@@ -90,6 +90,7 @@ export const GATE_COMMANDS = {
   'test:capacity-benchmark': 'test:capacity-benchmark',
   'test:check-changed': 'test:check-changed',
   'test:check-app-errors': 'test:check-app-errors',
+  'test:commit-message': 'test:commit-message',
   'check:doc-drift': 'check:doc-drift',
   'test:doc-drift': 'test:doc-drift',
   'test:issue-triage': 'test:issue-triage',
@@ -222,6 +223,31 @@ function classifyPathGates(p) {
   if (path === '.lintstagedrc') {
     return ['test:lint-staged'];
   }
+  // #1767: each husky hook selects the gate that asserts its content. The
+  // pre-commit hook's content is pinned by the lint-staged suite; the
+  // commit-msg hook delegates to the commit-message rule, whose spec runs
+  // through `test:commit-message`.
+  if (path === '.husky/pre-commit') {
+    return ['test:lint-staged'];
+  }
+  if (path === '.husky/commit-msg') {
+    return ['test:commit-message'];
+  }
+  // #1767: provisioning is a deploy action, so no local gate reads a Vault
+  // policy or template. Recorded as an explicit no-gate answer so a mixed
+  // diff does not force the full loop.
+  if (
+    /^ops\/vault\/(?:agent|policies)\/.*\.hcl$/.test(path) ||
+    /^ops\/vault\/templates\/.*\.ctmpl$/.test(path)
+  ) {
+    return [];
+  }
+  // #1767: the whole checker directory selects the suite that exercises it.
+  // This must precede the accepted-breaking-changes branch below, which is the
+  // narrower claim on one file in the same directory.
+  if (path.startsWith('scripts/ci/api-compatibility/')) {
+    return ['lint', 'test:api-compatibility'];
+  }
   if (path === '.swcrc') {
     return ['build'];
   }
@@ -230,12 +256,9 @@ function classifyPathGates(p) {
     return ['coverage:unit', 'lint'];
   }
 
-  // The accepted-breaks list feeds the N-1 compatibility check; its loader
-  // throws on a malformed list and its specs fail when an entry stops
-  // matching a real break (#1460).
-  if (path === 'scripts/ci/api-compatibility/accepted-breaking-changes.json') {
-    return ['lint', 'test:api-compatibility'];
-  }
+  // #1460 kept a narrower claim on the accepted-breaks list; #1767 widened it
+  // to the whole directory above, which returns the same gates, so the
+  // narrower branch is gone rather than left unreachable.
 
   if (path.includes('check-app-errors')) {
     return ['check:app-errors', 'lint', 'test:check-app-errors'];

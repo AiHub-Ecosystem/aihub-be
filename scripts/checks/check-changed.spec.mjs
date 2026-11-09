@@ -215,6 +215,23 @@ const pathCases = [
   { path: '.prettierrc', gates: ['format:check'] },
   { path: '.prettierignore', gates: ['format:check'] },
   { path: '.lintstagedrc', gates: ['test:lint-staged'] },
+  // #1767: each husky hook selects the gate that asserts its content.
+  { path: '.husky/pre-commit', gates: ['test:lint-staged'] },
+  { path: '.husky/commit-msg', gates: ['test:commit-message'] },
+  // #1767: the whole checker directory selects the suite that exercises it,
+  // not only its accepted-breaking-changes list.
+  {
+    path: 'scripts/ci/api-compatibility/check-release.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
+  {
+    path: 'scripts/ci/api-compatibility/check.mjs',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
+  {
+    path: 'scripts/ci/api-compatibility/fixtures/example.json',
+    gates: ['check:doc-drift', 'lint', 'test:api-compatibility'],
+  },
   { path: '.swcrc', gates: ['build'] },
   {
     path: 'ops/monitoring/alert.rules.yml',
@@ -417,6 +434,32 @@ await test('a no-gate path does not force the full loop onto its mixed diff (#14
   assert.deepEqual(
     planChangedFiles(['.github/codeql/triage.json', 'docs/guide.md']).gates,
     ['format:check'],
+  );
+});
+
+await test('Vault policies and templates select no local gate and say so (#1767)', () => {
+  // Provisioning is a deploy action: no local gate reads these files, so the
+  // recorded answer is a no-gate diff rather than an unclassified fall-through.
+  // `ops/` is also a documentation-drift input, so the answer is doc drift
+  // alone, and `check:doc-drift` passing means every other gate is genuinely
+  // unaffected by the change.
+  for (const path of [
+    'ops/vault/policies/aihub-production-runtime.hcl',
+    'ops/vault/agent/aihub-runtime.hcl',
+    'ops/vault/templates/runtime-secrets.json.ctmpl',
+    'ops/vault/templates/pgbouncer.ini.ctmpl',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
+  }
+});
+
+await test('a Vault template change does not force the full loop onto its mixed diff (#1767)', () => {
+  assert.deepEqual(
+    planChangedFiles([
+      'ops/vault/templates/runtime-secrets.json.ctmpl',
+      'docs/guide.md',
+    ]).gates,
+    ['check:doc-drift', 'format:check'],
   );
 });
 
