@@ -14,7 +14,7 @@ import type {
   MeteringFinalizeInput,
   MeteringFinalizerPort,
 } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
-import { HttpExceptionFilter } from './http-exception.filter';
+import { HttpExceptionFilter } from '@/modules/metering/presentation/http-exception.filter';
 import { SuccessEnvelopeInterceptor } from './success-envelope.interceptor';
 
 function httpContextFor(

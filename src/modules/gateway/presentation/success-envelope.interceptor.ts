@@ -17,17 +17,17 @@ import {
 } from '@/common/http/success-envelope';
 import { isRequestId } from '@/common/request-context/request-id';
 import { completeGradedPipelineResponse } from '@/modules/gateway/public/graded-pipeline';
-import { completeRequestMetering } from '@/modules/metering/application/usage-recording/metering-completion';
-import {
-  addMeteringEvidence,
-  getMeteringEvidence,
-} from '@/modules/metering/application/usage-recording/metering-evidence';
 import {
   METERING_FINALIZER,
   type MeteringFinalizerPort,
   type MeteringModel,
   type MeteringUsage,
 } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
+import { completeRequestMetering } from '@/modules/metering/public/metering-completion';
+import {
+  addMeteringEvidence,
+  getMeteringEvidence,
+} from '@/modules/metering/public/metering-evidence';
 
 interface DispatchResultLike {
   readonly operation: string;
