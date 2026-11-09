@@ -413,8 +413,8 @@ async function main(): Promise<void> {
     // .env is optional in CI/production where env vars are injected directly.
   }
 
-  const writingUrl = process.env.DOWNSTREAM_AI_WRITING_URL;
-  const webhookUrl = process.env.CANARY_WEBHOOK_URL;
+  const writingUrl = process.env['DOWNSTREAM_AI_WRITING_URL'];
+  const webhookUrl = process.env['CANARY_WEBHOOK_URL'];
   const resolvedWebhookUrl =
     webhookUrl && webhookUrl.trim().length > 0 ? webhookUrl.trim() : undefined;
 

@@ -14,14 +14,14 @@ export function createCliWritingChartStorage(
   const { env } = process;
   return new S3WritingChartUploadStorage(createCliSeaweedFsClient(), {
     environment,
-    ...(env.SEAWEEDFS_CHART_STAGING_BUCKET === undefined
+    ...(env['SEAWEEDFS_CHART_STAGING_BUCKET'] === undefined
       ? {}
-      : { stagingBucket: env.SEAWEEDFS_CHART_STAGING_BUCKET }),
-    ...(env.SEAWEEDFS_CHART_PUBLIC_BUCKET === undefined
+      : { stagingBucket: env['SEAWEEDFS_CHART_STAGING_BUCKET'] }),
+    ...(env['SEAWEEDFS_CHART_PUBLIC_BUCKET'] === undefined
       ? {}
-      : { publicBucket: env.SEAWEEDFS_CHART_PUBLIC_BUCKET }),
-    ...(env.AIHUB_CHART_PUBLIC_BASE_URL === undefined
+      : { publicBucket: env['SEAWEEDFS_CHART_PUBLIC_BUCKET'] }),
+    ...(env['AIHUB_CHART_PUBLIC_BASE_URL'] === undefined
       ? {}
-      : { publicBaseUrl: env.AIHUB_CHART_PUBLIC_BASE_URL }),
+      : { publicBaseUrl: env['AIHUB_CHART_PUBLIC_BASE_URL'] }),
   });
 }

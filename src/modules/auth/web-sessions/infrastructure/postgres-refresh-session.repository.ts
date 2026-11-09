@@ -186,7 +186,7 @@ export class PostgresRefreshSessionRepository
         `,
         [input.tokenHash],
       );
-      const familyId = rows[0]?.family_id;
+      const familyId = rows[0]?.['family_id'];
       if (typeof familyId !== 'string') {
         return;
       }

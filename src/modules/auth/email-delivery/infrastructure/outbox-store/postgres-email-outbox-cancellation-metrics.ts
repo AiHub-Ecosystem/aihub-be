@@ -32,7 +32,7 @@ function toSample(value: unknown): EmailOutboxCancellationSample {
   if (!isRecord(value)) return invalid();
   const kind = oneOf(value, 'kind', EMAIL_DELIVERY_KINDS);
   const reason = oneOf(value, 'reason', EMAIL_DELIVERY_CANCEL_REASONS);
-  const timestampSeconds = value.timestamp_seconds;
+  const timestampSeconds = value['timestamp_seconds'];
   if (
     kind === undefined ||
     reason === undefined ||

@@ -15,20 +15,20 @@ import type {
 
 function toJwk(key: PublicJsonWebKey): JWK {
   if (
-    key.kty === 'RSA' &&
-    typeof key.n === 'string' &&
-    typeof key.e === 'string'
+    key['kty'] === 'RSA' &&
+    typeof key['n'] === 'string' &&
+    typeof key['e'] === 'string'
   ) {
-    return { kty: 'RSA', n: key.n, e: key.e };
+    return { kty: 'RSA', n: key['n'], e: key['e'] };
   }
 
   if (
-    key.kty === 'EC' &&
-    typeof key.crv === 'string' &&
-    typeof key.x === 'string' &&
-    typeof key.y === 'string'
+    key['kty'] === 'EC' &&
+    typeof key['crv'] === 'string' &&
+    typeof key['x'] === 'string' &&
+    typeof key['y'] === 'string'
   ) {
-    return { kty: 'EC', crv: key.crv, x: key.x, y: key.y };
+    return { kty: 'EC', crv: key['crv'], x: key['x'], y: key['y'] };
   }
 
   throw internalError('JWKS key material is invalid');

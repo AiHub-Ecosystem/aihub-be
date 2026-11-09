@@ -71,8 +71,9 @@ export function createAuthMfaCipher(
 
 function loadKeyring(options: AuthMfaCipherOptions): AuthMfaKeyring {
   if (options.source === 'env') {
-    const currentKeyId = options.values.AIHUB_AUTH_MFA_CURRENT_KEY_ID?.trim();
-    const rawKeys = options.values.AIHUB_AUTH_MFA_KEYS;
+    const currentKeyId =
+      options.values['AIHUB_AUTH_MFA_CURRENT_KEY_ID']?.trim();
+    const rawKeys = options.values['AIHUB_AUTH_MFA_KEYS'];
     if (!currentKeyId || !rawKeys)
       throw internalError('Auth MFA keyring is incomplete');
     let keys: unknown;
@@ -101,12 +102,12 @@ function loadKeyring(options: AuthMfaCipherOptions): AuthMfaKeyring {
     throw internalError('Auth MFA secret file is invalid');
   }
   if (
-    typeof parsed.current_key_id !== 'string' ||
-    !isStringRecord(parsed.keys)
+    typeof parsed['current_key_id'] !== 'string' ||
+    !isStringRecord(parsed['keys'])
   ) {
     throw internalError('Auth MFA secret file is invalid');
   }
-  return { currentKeyId: parsed.current_key_id, keys: parsed.keys };
+  return { currentKeyId: parsed['current_key_id'], keys: parsed['keys'] };
 }
 
 function isStringRecord(

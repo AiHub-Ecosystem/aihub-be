@@ -36,11 +36,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toJwk(key: PublicJsonWebKey): JWK {
   if (
-    key.kty === 'RSA' &&
-    typeof key.n === 'string' &&
-    typeof key.e === 'string'
+    key['kty'] === 'RSA' &&
+    typeof key['n'] === 'string' &&
+    typeof key['e'] === 'string'
   ) {
-    return { kty: 'RSA', n: key.n, e: key.e };
+    return { kty: 'RSA', n: key['n'], e: key['e'] };
   }
 
   throw new Error('test key is invalid');

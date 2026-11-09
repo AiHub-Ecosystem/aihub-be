@@ -25,7 +25,7 @@ function findPostmanItem(
   if (!isRecord(value)) {
     return undefined;
   }
-  return value.name === name ? value : findPostmanItem(value.item, name);
+  return value['name'] === name ? value : findPostmanItem(value['item'], name);
 }
 
 describe('Speaking sample answer artifacts', () => {
@@ -57,9 +57,9 @@ describe('Speaking sample answer artifacts', () => {
       collection,
       'Grade the published Speaking sample answer',
     );
-    const request = scenario?.request;
-    const body = isRecord(request) ? request.body : undefined;
-    const rawBody = isRecord(body) ? body.raw : undefined;
+    const request = scenario?.['request'];
+    const body = isRecord(request) ? request['body'] : undefined;
+    const rawBody = isRecord(body) ? body['raw'] : undefined;
 
     if (typeof rawBody !== 'string') {
       throw new Error('Postman sample-answer request body is missing');

@@ -67,7 +67,7 @@ describe('Fastify proxy trust over a local listener', () => {
       ? `\\\\.\\pipe\\aihub-proxy-trust-${process.pid}`
       : join(tmpdir(), `aihub-proxy-trust-${process.pid}.sock`);
   const bunOnWindows =
-    process.platform === 'win32' && process.versions.bun !== undefined;
+    process.platform === 'win32' && process.versions['bun'] !== undefined;
   let target: { socketPath: string } | { host: string; port: number } = {
     socketPath,
   };

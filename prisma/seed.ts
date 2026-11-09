@@ -12,13 +12,13 @@ const localHosts = new Set(['localhost', '127.0.0.1', 'postgres']);
 const localDatabases = new Set(['aihub', 'aihub_benchmark']);
 
 function localDatabaseUrl(): string {
-  if (process.env.AIHUB_BENCHMARK_SEED !== '1') {
+  if (process.env['AIHUB_BENCHMARK_SEED'] !== '1') {
     throw new Error(
       'Set AIHUB_BENCHMARK_SEED=1 to run the local benchmark seed',
     );
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env['DATABASE_URL'];
   if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
     throw new Error('DATABASE_URL is required for the local benchmark seed');
   }

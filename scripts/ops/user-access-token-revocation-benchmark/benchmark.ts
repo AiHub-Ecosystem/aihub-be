@@ -43,8 +43,8 @@ const COMBINED_STATUS_SQL = `
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, '../../..');
-const repetition = Number(process.env.BENCHMARK_REPETITION ?? '1');
-const databaseUrl = process.env.BENCHMARK_DATABASE_URL;
+const repetition = Number(process.env['BENCHMARK_REPETITION'] ?? '1');
+const databaseUrl = process.env['BENCHMARK_DATABASE_URL'];
 
 if (!Number.isSafeInteger(repetition) || repetition < 1 || repetition > 3) {
   throw new Error('BENCHMARK_REPETITION must be 1, 2, or 3');

@@ -203,7 +203,7 @@ describe('metering request boundary', () => {
     expect(finalizer.inputs).toHaveLength(1);
     expect(finalizer.inputs[0]).toEqual(
       expect.objectContaining({
-        requestId: request.id,
+        requestId: request['id'],
         outcome: 'success',
         usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
       }),

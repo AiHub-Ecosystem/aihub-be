@@ -288,8 +288,8 @@ export async function previousDeployedRelease({
 }
 
 async function main(): Promise<void> {
-  const repository = process.env.GITHUB_REPOSITORY;
-  const token = process.env.GITHUB_TOKEN;
+  const repository = process.env['GITHUB_REPOSITORY'];
+  const token = process.env['GITHUB_TOKEN'];
   if (!repository || !token) {
     throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN are required');
   }
@@ -297,11 +297,11 @@ async function main(): Promise<void> {
   const release = await previousDeployedRelease({
     repository,
     token,
-    activeProductionSha: process.env.ACTIVE_PRODUCTION_SHA || undefined,
-    activeSandboxSha: process.env.ACTIVE_SANDBOX_SHA || undefined,
-    activeSandboxDisabled: process.env.ACTIVE_SANDBOX_DISABLED === 'true',
+    activeProductionSha: process.env['ACTIVE_PRODUCTION_SHA'] || undefined,
+    activeSandboxSha: process.env['ACTIVE_SANDBOX_SHA'] || undefined,
+    activeSandboxDisabled: process.env['ACTIVE_SANDBOX_DISABLED'] === 'true',
   });
-  const output = process.env.GITHUB_OUTPUT;
+  const output = process.env['GITHUB_OUTPUT'];
   if (output) {
     appendFileSync(
       output,

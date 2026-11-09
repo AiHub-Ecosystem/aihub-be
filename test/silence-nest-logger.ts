@@ -12,6 +12,6 @@ import { TestingLogger } from '@nestjs/testing/services/testing-logger.service';
 // the logger or installs its own, and is unaffected.
 //
 // Set AIHUB_TEST_LOGS=1 to see the lines while debugging a failing spec.
-if (process.env.AIHUB_TEST_LOGS !== '1') {
+if (process.env['AIHUB_TEST_LOGS'] !== '1') {
   TestingLogger.prototype.error = (): void => undefined;
 }

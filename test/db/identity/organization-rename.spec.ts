@@ -133,7 +133,9 @@ describe('Organization rename against PostgreSQL', () => {
       monthly_request_quota: 100,
       hard_stop_on_quota: true,
     });
-    expect((await organization()).updated_at).not.toEqual(before.updated_at);
+    expect((await organization())['updated_at']).not.toEqual(
+      before['updated_at'],
+    );
     expect(await events()).toEqual([
       expect.objectContaining({
         actor_user_account_id: ownerId,
@@ -188,7 +190,7 @@ describe('Organization rename against PostgreSQL', () => {
         ),
       ).resolves.toEqual({ kind: 'forbidden' });
 
-      expect((await organization()).name).toBe('Acme');
+      expect((await organization())['name']).toBe('Acme');
       expect(await events()).toEqual([
         expect.objectContaining({
           actor_user_account_id: callerId,
@@ -208,7 +210,7 @@ describe('Organization rename against PostgreSQL', () => {
     await expect(
       repository.renameOrganization(input({ userId: disabledOwner })),
     ).resolves.toEqual({ kind: 'forbidden' });
-    expect((await organization()).name).toBe('Acme');
+    expect((await organization())['name']).toBe('Acme');
     expect(await events()).toEqual([]);
   });
 
@@ -244,7 +246,7 @@ describe('Organization rename against PostgreSQL', () => {
         repository.renameOrganization(input({ userId })),
       ).resolves.toEqual({ kind: 'forbidden' });
     }
-    expect((await organization()).name).toBe('Acme');
+    expect((await organization())['name']).toBe('Acme');
     expect(await events()).toEqual([]);
   });
 
@@ -263,7 +265,7 @@ describe('Organization rename against PostgreSQL', () => {
     await expect(failingAudit.renameOrganization(input())).rejects.toThrow(
       'Identity store is unavailable',
     );
-    expect((await organization()).name).toBe('Acme');
+    expect((await organization())['name']).toBe('Acme');
     expect(await events()).toEqual([]);
   });
 
@@ -293,7 +295,7 @@ describe('Organization rename against PostgreSQL', () => {
       holder.release();
     }
 
-    expect((await organization()).name).toBe('Acme');
+    expect((await organization())['name']).toBe('Acme');
     expect(await events()).toEqual([
       expect.objectContaining({ outcome: 'denied' }),
     ]);
@@ -304,10 +306,10 @@ describe('Audit redaction of a rename', () => {
   async function renamedEventId(): Promise<string> {
     await repository.renameOrganization(input());
     const [event] = await events();
-    if (event === undefined || typeof event.id !== 'string') {
+    if (event === undefined || typeof event['id'] !== 'string') {
       throw new Error('rename event is missing');
     }
-    return event.id;
+    return event['id'];
   }
 
   it('removes the new and the previous name together and leaves the event standing', async () => {
@@ -391,7 +393,7 @@ describe('Audit redaction of a rename', () => {
         `UPDATE organization_audit_events
          SET target_label = NULL, detail = '{}'::jsonb
          WHERE id = $1`,
-        [denied?.id],
+        [denied?.['id']],
       ),
     ).rejects.toThrow(/only target_label redaction/);
 

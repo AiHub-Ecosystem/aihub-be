@@ -22,9 +22,9 @@ export function isInvitationCursorPosition(
 ): value is InvitationCursorPosition {
   return (
     isRecord(value) &&
-    typeof value.id === 'string' &&
-    value.id.length > 0 &&
-    isMintedTimestamp(value.createdAt)
+    typeof value['id'] === 'string' &&
+    value['id'].length > 0 &&
+    isMintedTimestamp(value['createdAt'])
   );
 }
 

@@ -34,7 +34,7 @@ function safeDependencies(
   return Object.fromEntries(
     Object.entries(details).map(([name, value]) => [
       name,
-      isRecord(value) && value.status === 'up' ? 'up' : 'down',
+      isRecord(value) && value['status'] === 'up' ? 'up' : 'down',
     ]),
   );
 }
@@ -90,8 +90,8 @@ export class HealthController {
       reply.status(HttpStatus.SERVICE_UNAVAILABLE);
       const response = error.getResponse();
       const details =
-        isRecord(response) && isRecord(response.details)
-          ? response.details
+        isRecord(response) && isRecord(response['details'])
+          ? response['details']
           : {};
       return {
         status: 'error',

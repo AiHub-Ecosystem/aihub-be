@@ -39,7 +39,7 @@ interface FastifyMultipartRequest {
 function isFastifyMultipartRequest(
   value: unknown,
 ): value is FastifyMultipartRequest {
-  return isRecord(value) && typeof value.parts === 'function';
+  return isRecord(value) && typeof value['parts'] === 'function';
 }
 
 async function* mapFileBytes(

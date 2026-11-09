@@ -156,25 +156,25 @@ function totalFromRow(row: unknown): PublicApiMajorTotalRow {
     throw new PublicApiMajorSnapshotError();
   }
   return {
-    environment: text(row.environment),
-    major: count(row.major),
-    requestCount: count(row.request_count),
-    failureCount: count(row.failure_count),
-    unattributedCount: count(row.unattributed_count),
-    unattributedFailureCount: count(row.unattributed_failure_count),
+    environment: text(row['environment']),
+    major: count(row['major']),
+    requestCount: count(row['request_count']),
+    failureCount: count(row['failure_count']),
+    unattributedCount: count(row['unattributed_count']),
+    unattributedFailureCount: count(row['unattributed_failure_count']),
   };
 }
 
 function organizationFromRow(row: unknown): PublicApiMajorOrganizationRow {
-  if (!isRecord(row) || !(row.last_seen_at instanceof Date)) {
+  if (!isRecord(row) || !(row['last_seen_at'] instanceof Date)) {
     throw new PublicApiMajorSnapshotError();
   }
   return {
-    environment: text(row.environment),
-    major: count(row.major),
-    organizationId: text(row.organization_id),
-    requestCount: count(row.request_count),
-    lastSeenAt: row.last_seen_at,
+    environment: text(row['environment']),
+    major: count(row['major']),
+    organizationId: text(row['organization_id']),
+    requestCount: count(row['request_count']),
+    lastSeenAt: row['last_seen_at'],
   };
 }
 
@@ -183,29 +183,34 @@ function unattributedFromRow(row: unknown): PublicApiMajorUnattributedTotalRow {
     throw new PublicApiMajorSnapshotError();
   }
   return {
-    environment: text(row.environment),
-    major: count(row.major),
-    callerKind: text(row.caller_kind),
-    requestCount: count(row.request_count),
-    failureCount: count(row.failure_count),
+    environment: text(row['environment']),
+    major: count(row['major']),
+    callerKind: text(row['caller_kind']),
+    requestCount: count(row['request_count']),
+    failureCount: count(row['failure_count']),
   };
 }
 
 function collectorFromRow(row: unknown): PublicApiMajorCollectorRow {
   if (
     !isRecord(row) ||
-    !(row.started_at instanceof Date) ||
-    !(row.covered_through instanceof Date) ||
-    !(row.stopped_cleanly_at === null || row.stopped_cleanly_at instanceof Date)
+    !(row['started_at'] instanceof Date) ||
+    !(row['covered_through'] instanceof Date) ||
+    !(
+      row['stopped_cleanly_at'] === null ||
+      row['stopped_cleanly_at'] instanceof Date
+    )
   ) {
     throw new PublicApiMajorSnapshotError();
   }
   return {
-    environment: text(row.environment),
-    startedAt: row.started_at,
-    coveredThrough: row.covered_through,
+    environment: text(row['environment']),
+    startedAt: row['started_at'],
+    coveredThrough: row['covered_through'],
     stoppedCleanlyAt:
-      row.stopped_cleanly_at instanceof Date ? row.stopped_cleanly_at : null,
+      row['stopped_cleanly_at'] instanceof Date
+        ? row['stopped_cleanly_at']
+        : null,
   };
 }
 
@@ -214,15 +219,15 @@ function droppedIntervalFromRow(
 ): PublicApiMajorUsageDroppedInterval {
   if (
     !isRecord(row) ||
-    !(row.dropped_from instanceof Date) ||
-    !(row.dropped_through instanceof Date)
+    !(row['dropped_from'] instanceof Date) ||
+    !(row['dropped_through'] instanceof Date)
   ) {
     throw new PublicApiMajorSnapshotError();
   }
   return {
-    environment: text(row.environment),
-    droppedFrom: row.dropped_from,
-    droppedThrough: row.dropped_through,
+    environment: text(row['environment']),
+    droppedFrom: row['dropped_from'],
+    droppedThrough: row['dropped_through'],
   };
 }
 
@@ -322,14 +327,14 @@ export class PostgresPublicApiMajorUsageRepository
         window.toDay,
       );
       const [start] = await read(PUBLIC_API_MAJOR_COVERAGE_SQL);
-      if (!isRecord(asOf) || !(asOf.as_of instanceof Date)) {
+      if (!isRecord(asOf) || !(asOf['as_of'] instanceof Date)) {
         throw new PublicApiMajorSnapshotError();
       }
       return {
-        asOf: asOf.as_of,
+        asOf: asOf['as_of'],
         coverageStartDay:
-          isRecord(start) && typeof start.coverage_start_day === 'string'
-            ? start.coverage_start_day
+          isRecord(start) && typeof start['coverage_start_day'] === 'string'
+            ? start['coverage_start_day']
             : undefined,
         totals: totals.map(totalFromRow),
         organizations: organizations.map(organizationFromRow),

@@ -344,10 +344,10 @@ export class PostgresApiKeyNearExpiryNotices
         ])
       )[0];
       const outcome = {
-        inactive: isRecord(row) && row.inactive === true,
+        inactive: isRecord(row) && row['inactive'] === true,
         remaining:
-          isRecord(row) && typeof row.remaining === 'number'
-            ? row.remaining
+          isRecord(row) && typeof row['remaining'] === 'number'
+            ? row['remaining']
             : 0,
       };
       if (outcome.inactive) {

@@ -51,7 +51,7 @@ export function withFailureClaims(
   rows: readonly Record<string, unknown>[],
   records: readonly EmailDeliveryRequestRecord[],
 ): readonly ClaimedFailureReport[] {
-  const claims = new Map(rows.map((row) => [row.id, row.claim]));
+  const claims = new Map(rows.map((row) => [row['id'], row['claim']]));
   return records.map((record) => {
     const claim = asDate(claims.get(record.id));
     if (claim === undefined) {

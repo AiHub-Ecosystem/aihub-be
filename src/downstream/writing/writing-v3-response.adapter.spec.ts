@@ -48,7 +48,7 @@ describe('parseWritingV3Response', () => {
   it('renames keys to snake_case and keeps provider strings verbatim, leading "- " included', () => {
     const body = fixture('grade-v3-task2.response.json');
     const result = parseWritingV3Response(body);
-    const data = body.data as {
+    const data = body['data'] as {
       overall_band: number;
       'Overall Assessment': {
         Summary: { Overall: string; Detail: string[]; CTA: string };
@@ -88,7 +88,7 @@ describe('parseWritingV3Response', () => {
       'improved_version',
       'quote',
     ]);
-    expect(result.data_micro).toEqual(body.data_micro);
+    expect(result.data_micro).toEqual(body['data_micro']);
   });
 
   it('never publishes usage, metrics or the chain of thought', () => {
@@ -130,7 +130,7 @@ describe('parseWritingV3Response', () => {
 
   it('throws a contract violation when a criterion has no numeric band', () => {
     const body = fixture('grade-v3-task2.response.json');
-    const data = body.data as { evaluation: Record<string, unknown> };
+    const data = body['data'] as { evaluation: Record<string, unknown> };
     const broken = {
       ...body,
       data: {

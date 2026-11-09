@@ -377,7 +377,7 @@ describe('runUsagePruneCommand', () => {
         .map(parseJsonLine)
         .find(
           (event) =>
-            event.event === 'writing_chart_revocation_audit_prune_completed',
+            event['event'] === 'writing_chart_revocation_audit_prune_completed',
         ),
     ).toMatchObject({ deleted: 1, status: 'completed' });
     expect(auditRepository.close).toHaveBeenCalledTimes(1);

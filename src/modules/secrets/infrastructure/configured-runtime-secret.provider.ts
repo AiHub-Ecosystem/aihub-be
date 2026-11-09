@@ -207,7 +207,7 @@ function loadFromAgentFile(
   const aiWriting: AiWritingRuntimeSecrets = {
     token: requiredRecordString(aiWritingRecord, 'token', 'ai-writing token'),
   };
-  const resendRecord = asRecord(root.resend, 'Resend runtime secret bundle');
+  const resendRecord = asRecord(root['resend'], 'Resend runtime secret bundle');
   assertAllowedKeys(resendRecord, ['api_key'], 'Resend runtime secret bundle');
   const resend: ResendRuntimeSecrets = {
     apiKey: requiredRecordString(resendRecord, 'api_key', 'Resend API key'),
@@ -235,7 +235,7 @@ function loadFromAgentFile(
     ),
   };
 
-  const seaweedfsValue = root.seaweedfs;
+  const seaweedfsValue = root['seaweedfs'];
   const seaweedfs =
     seaweedfsValue === undefined
       ? undefined
@@ -292,8 +292,8 @@ function loadFromAgentFile(
 function loadEmailOutboxFromEnvironment(
   values: SecretValues,
 ): EmailOutboxRuntimeSecrets {
-  const currentKeyId = values.EMAIL_OUTBOX_CURRENT_KEY_ID;
-  const keysJson = values.EMAIL_OUTBOX_KEYS;
+  const currentKeyId = values['EMAIL_OUTBOX_CURRENT_KEY_ID'];
+  const keysJson = values['EMAIL_OUTBOX_KEYS'];
   if (!hasValue(currentKeyId) || !hasValue(keysJson)) {
     throw configurationError(
       'required runtime secret is missing: email-outbox key bundle',
@@ -330,7 +330,7 @@ function loadEmailOutboxRecord(
     'current_key_id',
     'email-outbox current key id',
   );
-  const keysValue = record.keys;
+  const keysValue = record['keys'];
   if (!isRecord(keysValue)) {
     throw configurationError('email-outbox keys have an invalid shape');
   }
@@ -357,15 +357,15 @@ function loadEmailOutboxRecord(
 function loadOptionalWebSession(
   values: SecretValues,
 ): WebSessionRuntimeSecrets | undefined {
-  const clientSecret = values.AIHUB_WEB_SESSION_CLIENT_SECRET;
+  const clientSecret = values['AIHUB_WEB_SESSION_CLIENT_SECRET'];
   return hasValue(clientSecret) ? { clientSecret } : undefined;
 }
 
 function loadOptionalSeaweedFs(
   values: SecretValues,
 ): SeaweedFsRuntimeSecrets | undefined {
-  const accessKeyId = values.SEAWEEDFS_ACCESS_KEY_ID;
-  const secretAccessKey = values.SEAWEEDFS_SECRET_ACCESS_KEY;
+  const accessKeyId = values['SEAWEEDFS_ACCESS_KEY_ID'];
+  const secretAccessKey = values['SEAWEEDFS_SECRET_ACCESS_KEY'];
   if (!hasValue(accessKeyId) && !hasValue(secretAccessKey)) {
     return undefined;
   }

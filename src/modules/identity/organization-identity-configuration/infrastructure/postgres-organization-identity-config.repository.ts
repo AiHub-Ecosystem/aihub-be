@@ -188,10 +188,10 @@ export function identityConfigFromRow(
   }
 
   const organizationId = stringValue(value, 'organizationId');
-  const jwksCacheVersion = bigintDigitsValue(value.jwksCacheVersion);
+  const jwksCacheVersion = bigintDigitsValue(value['jwksCacheVersion']);
   const issuer = stringValue(value, 'issuer');
   const jwksUrl = nullableStringValue(value, 'jwksUrl');
-  const rawPublicKeys = value.publicKeysJwks;
+  const rawPublicKeys = value['publicKeysJwks'];
   const publicKeysJwks =
     rawPublicKeys === null ? null : parsePublicJsonWebKeySet(rawPublicKeys);
   const allowedAlgorithms = algorithmArrayValue(value, 'allowedAlgorithms');
@@ -240,7 +240,7 @@ export function storedIdentityConfigFromRow(
 
   const config = identityConfigFromRow(value);
   const updatedAt = dateValue(value, 'updatedAt');
-  const revision = bigintDigitsValue(value.revision);
+  const revision = bigintDigitsValue(value['revision']);
   return config === undefined || updatedAt == null || revision === undefined
     ? undefined
     : { ...config, updatedAt, revision };
@@ -346,7 +346,7 @@ export class PostgresOrganizationIdentityConfigRepository
             )) as readonly IdentityConfigRow[]
           )[0];
           const currentRevision = isRecord(current)
-            ? bigintDigitsValue(current.revision)
+            ? bigintDigitsValue(current['revision'])
             : undefined;
           if (!identityConfigPreconditionHolds(precondition, currentRevision)) {
             return { kind: 'precondition_failed' as const };
@@ -455,19 +455,19 @@ function isIssuerConflict(error: unknown): boolean {
     }
     seen.add(failure);
 
-    const constraint = failure.constraint;
+    const constraint = failure['constraint'];
     const constraintName =
       typeof constraint === 'string'
         ? constraint
-        : isRecord(constraint) && typeof constraint.index === 'string'
-          ? constraint.index
+        : isRecord(constraint) && typeof constraint['index'] === 'string'
+          ? constraint['index']
           : undefined;
     if (
-      (failure.code === '23505' &&
+      (failure['code'] === '23505' &&
         (constraintName === 'oic_issuer_uq' ||
-          (typeof failure.message === 'string' &&
-            failure.message.includes('oic_issuer_uq')))) ||
-      (failure.kind === 'UniqueConstraintViolation' &&
+          (typeof failure['message'] === 'string' &&
+            failure['message'].includes('oic_issuer_uq')))) ||
+      (failure['kind'] === 'UniqueConstraintViolation' &&
         constraintName === 'oic_issuer_uq')
     ) {
       return true;

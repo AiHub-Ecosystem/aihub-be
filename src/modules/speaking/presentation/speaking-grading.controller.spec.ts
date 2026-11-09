@@ -678,14 +678,14 @@ describe('Speaking grading HTTP flow', () => {
 
   it('preserves a null fluency_metrics group from the provider', async () => {
     const providerBody = fixture('grading.response.json');
-    if (!isRecord(providerBody.data)) {
+    if (!isRecord(providerBody['data'])) {
       throw new Error('Fixture data must be an object');
     }
     providerResponse = {
       statusCode: 200,
       body: {
         ...providerBody,
-        data: { ...providerBody.data, fluency_metrics: null },
+        data: { ...providerBody['data'], fluency_metrics: null },
       },
     };
 

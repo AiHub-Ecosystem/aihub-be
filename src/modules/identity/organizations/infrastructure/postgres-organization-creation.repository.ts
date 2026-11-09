@@ -51,7 +51,7 @@ export class PostgresOrganizationCreationRepository
           input.creatorUserId,
         ]);
         const account = accountRows[0];
-        if (!isRecord(account) || account.status !== 'active') {
+        if (!isRecord(account) || account['status'] !== 'active') {
           return { kind: 'account_inactive' as const };
         }
 

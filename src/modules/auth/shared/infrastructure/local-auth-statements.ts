@@ -131,9 +131,9 @@ export async function lockIssuableIdentity(
   const row = rows[0];
   if (
     row === undefined ||
-    row.status !== acceptedStatus ||
-    typeof row.id !== 'string' ||
-    typeof row.canonical_email !== 'string'
+    row['status'] !== acceptedStatus ||
+    typeof row['id'] !== 'string' ||
+    typeof row['canonical_email'] !== 'string'
   ) {
     return undefined;
   }
@@ -147,7 +147,7 @@ export async function lockIssuableIdentity(
   ) {
     return undefined;
   }
-  return { id: row.id, email: row.canonical_email };
+  return { id: row['id'], email: row['canonical_email'] };
 }
 
 /**

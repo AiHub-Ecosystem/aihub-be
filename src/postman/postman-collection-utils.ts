@@ -24,26 +24,26 @@ function itemIdentity(item: unknown): string | undefined {
     return undefined;
   }
 
-  if (isRecord(item.request)) {
-    const { method, url } = item.request;
+  if (isRecord(item['request'])) {
+    const { method, url } = item['request'];
     if (typeof method !== 'string' || !isRecord(url)) {
       return undefined;
     }
 
-    const path = Array.isArray(url.path)
-      ? url.path.every((part) => typeof part === 'string')
-        ? url.path.join('/')
+    const path = Array.isArray(url['path'])
+      ? url['path'].every((part) => typeof part === 'string')
+        ? url['path'].join('/')
         : undefined
-      : typeof url.raw === 'string'
-        ? url.raw
+      : typeof url['raw'] === 'string'
+        ? url['raw']
         : undefined;
     return path === undefined
       ? undefined
       : JSON.stringify(['request', method.toUpperCase(), path]);
   }
 
-  return typeof item.name === 'string' && Array.isArray(item.item)
-    ? JSON.stringify(['folder', item.name])
+  return typeof item['name'] === 'string' && Array.isArray(item['item'])
+    ? JSON.stringify(['folder', item['name']])
     : undefined;
 }
 
@@ -68,14 +68,14 @@ function preserveItemIds(
     const previous =
       identity === undefined ? undefined : previousByIdentity.get(identity);
     const result = { ...item };
-    if (typeof previous?.id === 'string') {
-      result.id = previous.id;
+    if (typeof previous?.['id'] === 'string') {
+      result['id'] = previous['id'];
     }
 
-    if (Array.isArray(item.item)) {
-      result.item = preserveItemIds(
-        item.item,
-        Array.isArray(previous?.item) ? previous.item : [],
+    if (Array.isArray(item['item'])) {
+      result['item'] = preserveItemIds(
+        item['item'],
+        Array.isArray(previous?.['item']) ? previous['item'] : [],
       );
     }
 
@@ -94,15 +94,18 @@ export function preservePostmanIds(
 
   const result = { ...generated };
   if (
-    isRecord(generated.info) &&
-    isRecord(previous.info) &&
-    typeof previous.info._postman_id === 'string'
+    isRecord(generated['info']) &&
+    isRecord(previous['info']) &&
+    typeof previous['info']['_postman_id'] === 'string'
   ) {
-    result.info = { ...generated.info, _postman_id: previous.info._postman_id };
+    result['info'] = {
+      ...generated['info'],
+      _postman_id: previous['info']['_postman_id'],
+    };
   }
 
-  if (Array.isArray(generated.item) && Array.isArray(previous.item)) {
-    result.item = preserveItemIds(generated.item, previous.item);
+  if (Array.isArray(generated['item']) && Array.isArray(previous['item'])) {
+    result['item'] = preserveItemIds(generated['item'], previous['item']);
   }
 
   return result;

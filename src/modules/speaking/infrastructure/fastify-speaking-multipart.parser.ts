@@ -76,7 +76,7 @@ function extensionOf(filename: string): string {
 }
 
 function isFileTooLarge(error: unknown): boolean {
-  return isRecord(error) && error.code === 'FST_REQ_FILE_TOO_LARGE';
+  return isRecord(error) && error['code'] === 'FST_REQ_FILE_TOO_LARGE';
 }
 
 // The chunks are the stream's own buffers, kept by reference; building the

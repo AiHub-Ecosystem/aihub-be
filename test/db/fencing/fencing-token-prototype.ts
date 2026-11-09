@@ -96,7 +96,7 @@ export async function readProtectedValue(
 }
 
 async function runPausedWorker(resourceId: string): Promise<void> {
-  const connectionString = process.env.FENCING_TEST_DATABASE_URL;
+  const connectionString = process.env['FENCING_TEST_DATABASE_URL'];
   if (connectionString === undefined) {
     throw new Error('fencing test database is not configured');
   }

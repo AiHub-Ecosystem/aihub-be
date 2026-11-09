@@ -35,18 +35,18 @@ function parseDependencyCruiserViolations(
   if (!isRecord(value)) {
     throw new Error('dependency-cruiser output has no summary');
   }
-  const summary = value.summary;
-  if (!isRecord(summary) || !Array.isArray(summary.violations)) {
+  const summary = value['summary'];
+  if (!isRecord(summary) || !Array.isArray(summary['violations'])) {
     throw new Error('dependency-cruiser output has no violations list');
   }
 
-  return summary.violations.map((violation) => {
-    if (!isRecord(violation) || !isRecord(violation.rule)) {
+  return summary['violations'].map((violation) => {
+    if (!isRecord(violation) || !isRecord(violation['rule'])) {
       throw new Error(
         'dependency-cruiser output contains a malformed violation',
       );
     }
-    const { name } = violation.rule;
+    const { name } = violation['rule'];
     const { from, to } = violation;
     if (
       typeof name !== 'string' ||

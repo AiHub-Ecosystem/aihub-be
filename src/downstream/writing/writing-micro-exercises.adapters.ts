@@ -63,10 +63,10 @@ function providerReference(error: {
 }
 
 function parseData<T extends TSchema>(schema: T, body: unknown): Static<T> {
-  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) {
+  if (!isRecord(body) || body['success'] !== true || !isRecord(body['data'])) {
     throw contractViolation('response is missing a successful data object');
   }
-  const data = Value.Clean(schema, body.data);
+  const data = Value.Clean(schema, body['data']);
   if (!Value.Check(schema, data)) {
     const firstError = Value.Errors(schema, data).First();
     throw contractViolation(
@@ -88,18 +88,18 @@ function requireQuestionCount(data: {
 }
 
 function parseMicroExerciseResponse(body: unknown): MicroExerciseResponse {
-  const rawData = isRecord(body) ? body.data : undefined;
-  const rawMeta = isRecord(rawData) ? rawData.meta : undefined;
+  const rawData = isRecord(body) ? body['data'] : undefined;
+  const rawMeta = isRecord(rawData) ? rawData['meta'] : undefined;
   if (
     !isRecord(rawMeta) ||
-    typeof rawMeta.type !== 'string' ||
-    !Object.hasOwn(MICRO_EXERCISE_RESPONSE_SCHEMAS, rawMeta.type)
+    typeof rawMeta['type'] !== 'string' ||
+    !Object.hasOwn(MICRO_EXERCISE_RESPONSE_SCHEMAS, rawMeta['type'])
   ) {
     throw contractViolation('response has an unknown micro exercise type');
   }
   const schema =
     MICRO_EXERCISE_RESPONSE_SCHEMAS[
-      rawMeta.type as keyof typeof MICRO_EXERCISE_RESPONSE_SCHEMAS
+      rawMeta['type'] as keyof typeof MICRO_EXERCISE_RESPONSE_SCHEMAS
     ];
   const data = parseData(schema, body);
   requireQuestionCount(data);
@@ -127,7 +127,7 @@ function parseWritingExerciseError(
   }
   return status === 400 &&
     isRecord(body) &&
-    body.error_code === 'invalid_request'
+    body['error_code'] === 'invalid_request'
     ? {
         code: 'INVALID_REQUEST',
         message: 'Writing exercise request was refused by the AI service',

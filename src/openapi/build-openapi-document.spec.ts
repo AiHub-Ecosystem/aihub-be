@@ -85,10 +85,10 @@ function requestProperty(
   property: string,
 ): Record<string, unknown> | undefined {
   const schema = operation?.requestBody?.content['application/json']?.schema;
-  if (!isRecord(schema) || !isRecord(schema.properties)) {
+  if (!isRecord(schema) || !isRecord(schema['properties'])) {
     return undefined;
   }
-  const value = schema.properties[property];
+  const value = schema['properties'][property];
   return isRecord(value) ? value : undefined;
 }
 
@@ -188,12 +188,14 @@ describe('buildOpenApiDocument', () => {
       },
     );
     const paths =
-      isRecord(document) && isRecord(document.paths) ? document.paths : {};
+      isRecord(document) && isRecord(document['paths'])
+        ? document['paths']
+        : {};
     const candidatePathItem = paths[retrieval.path];
     const pathItem = isRecord(candidatePathItem) ? candidatePathItem : {};
-    const get = isRecord(pathItem.get) ? pathItem.get : {};
+    const get = isRecord(pathItem['get']) ? pathItem['get'] : {};
 
-    expect(get.parameters).toContainEqual({
+    expect(get['parameters']).toContainEqual({
       name: 'response_id',
       in: 'path',
       required: true,
@@ -262,18 +264,18 @@ describe('buildOpenApiDocument', () => {
   it('publishes Organization ID syntax on every Organization path route', () => {
     const document = build();
 
-    const organizationIdSchema = document.components.schemas.OrganizationId;
+    const organizationIdSchema = document.components.schemas['OrganizationId'];
     expect(organizationIdSchema).toMatchObject({
       type: 'string',
       pattern: '^org_[A-Za-z0-9][A-Za-z0-9_-]*$',
     });
     if (
       !isRecord(organizationIdSchema) ||
-      typeof organizationIdSchema.description !== 'string'
+      typeof organizationIdSchema['description'] !== 'string'
     ) {
       throw new Error('OrganizationId schema has no description');
     }
-    expect(organizationIdSchema.description).toContain('Organization ID');
+    expect(organizationIdSchema['description']).toContain('Organization ID');
 
     for (const route of Object.values(PUBLIC_ROUTES)) {
       if (route.organizationResolution !== 'path') continue;
@@ -391,13 +393,13 @@ describe('buildOpenApiDocument', () => {
           continue;
         }
 
-        const parameters = Array.isArray(operation.parameters)
-          ? operation.parameters
+        const parameters = Array.isArray(operation['parameters'])
+          ? operation['parameters']
           : [];
         const consumesUserIdentity = parameters.some(
           (parameter) =>
             isRecord(parameter) &&
-            parameter.$ref === '#/components/parameters/UserIdentity',
+            parameter['$ref'] === '#/components/parameters/UserIdentity',
         );
         const claimsUser = operation['x-identity-scope'] === 'user';
 
@@ -799,7 +801,7 @@ describe('buildOpenApiDocument', () => {
     const operation = build().paths[ORGANIZATION_AUDIT_EVENT_PATH]?.get;
     const parameters = operation?.parameters ?? [];
     const named = (name: string) =>
-      parameters.find((parameter) => parameter?.name === name);
+      parameters.find((parameter) => parameter?.['name'] === name);
 
     expect(operation?.operationId).toBe(ORGANIZATION_AUDIT_EVENT_OPERATION_ID);
     expect(operation?.security).toEqual([{ BearerAuth: [] }]);
@@ -807,30 +809,30 @@ describe('buildOpenApiDocument', () => {
 
     // The server reads a repeated key, so a client that comma-joined these
     // would send something no parameter here accepts.
-    expect(named('action')?.explode).toBe(true);
-    expect(named('action')?.style).toBe('form');
-    const actionSchema = named('action')?.schema;
+    expect(named('action')?.['explode']).toBe(true);
+    expect(named('action')?.['style']).toBe('form');
+    const actionSchema = named('action')?.['schema'];
     expect(actionSchema).toMatchObject({ type: 'array' });
     if (
       !isRecord(actionSchema) ||
-      !isRecord(actionSchema.items) ||
-      !Array.isArray(actionSchema.items.enum)
+      !isRecord(actionSchema['items']) ||
+      !Array.isArray(actionSchema['items']['enum'])
     ) {
       throw new Error('audit action schema has no enum');
     }
-    expect(actionSchema.items.enum).toContain('api_key.revoked');
-    expect(named('outcome')?.schema).toEqual({
+    expect(actionSchema['items']['enum']).toContain('api_key.revoked');
+    expect(named('outcome')?.['schema']).toEqual({
       type: 'string',
       enum: ['applied', 'denied'],
     });
-    expect(named('limit')?.schema).toEqual({
+    expect(named('limit')?.['schema']).toEqual({
       type: 'integer',
       minimum: 1,
       maximum: 200,
       default: 50,
     });
     for (const name of ['from', 'to', 'cursor']) {
-      expect(named(name)?.in).toBe('query');
+      expect(named(name)?.['in']).toBe('query');
     }
 
     // A rejected cursor, window, action, or page size is a client error, so
@@ -951,7 +953,7 @@ describe('buildOpenApiDocument', () => {
         maxLength: 128,
         description: '12–128 Unicode code points; no normalization.',
       });
-      expect(password?.format).toBeUndefined();
+      expect(password?.['format']).toBeUndefined();
     }
 
     expect(login?.responses['409']).toBeUndefined();
@@ -1042,7 +1044,7 @@ describe('buildOpenApiDocument', () => {
         'post /v1/auth/reset-password',
       ]),
     );
-    expect(doc.components.responses.AuthRateLimited).toMatchObject({
+    expect(doc.components.responses['AuthRateLimited']).toMatchObject({
       headers: {
         'Retry-After': {
           schema: { type: 'string', pattern: '^[0-9]+$' },
@@ -1066,7 +1068,7 @@ describe('buildOpenApiDocument', () => {
       true,
     );
     const serviceUnavailable = JSON.stringify(
-      doc.components.responses.Error503,
+      doc.components.responses['Error503'],
     );
     expect(serviceUnavailable).toContain('AUTH_ARGON2_CAPACITY');
     expect(serviceUnavailable).toContain('Retry-After');
@@ -1082,7 +1084,7 @@ describe('buildOpenApiDocument', () => {
     expect(operation?.responses['429']).toEqual({
       $ref: '#/components/responses/Error429',
     });
-    expect(JSON.stringify(doc.components.responses.Error429)).toContain(
+    expect(JSON.stringify(doc.components.responses['Error429'])).toContain(
       'Retry-After',
     );
   });
@@ -1102,7 +1104,7 @@ describe('buildOpenApiDocument', () => {
   it('labels the Web Session route as server-to-server for the Customer Web BFF', () => {
     const doc = build();
     const operation = doc.paths['/v1/auth/web-sessions']?.post;
-    const scheme = doc.components.securitySchemes?.BffClientSecret as
+    const scheme = doc.components.securitySchemes?.['BffClientSecret'] as
       | Record<string, unknown>
       | undefined;
 
@@ -1122,8 +1124,8 @@ describe('buildOpenApiDocument', () => {
       in: 'header',
       name: 'X-AIHUB-Client-Secret',
     });
-    expect(scheme?.description).toContain('Server-to-server only');
-    expect(scheme?.description).toContain('Customer Web BFF');
+    expect(scheme?.['description']).toContain('Server-to-server only');
+    expect(scheme?.['description']).toContain('Customer Web BFF');
   });
 
   it('documents Verification Sign-in as the same server-to-server group', () => {
@@ -1150,8 +1152,8 @@ describe('buildOpenApiDocument', () => {
     };
     const properties =
       requestBody.content['application/json'].schema.properties;
-    expect(properties.password).toBeDefined();
-    expect(properties.password).not.toHaveProperty('format');
+    expect(properties['password']).toBeDefined();
+    expect(properties['password']).not.toHaveProperty('format');
     expect(JSON.stringify(operation?.responses['400'])).toContain(
       'AUTH_VERIFICATION_PASSWORD_INVALID',
     );
@@ -1200,7 +1202,7 @@ describe('buildOpenApiDocument', () => {
       | Record<string, unknown>
       | undefined;
     expect(noContent).toBeDefined();
-    expect(noContent?.content).toBeUndefined();
+    expect(noContent?.['content']).toBeUndefined();
     expect(JSON.stringify(operation?.responses['204'])).toContain('no-store');
     const refused = JSON.stringify(operation?.responses['401']);
     expect(refused).toContain('UNAUTHORIZED');
@@ -1220,7 +1222,7 @@ describe('buildOpenApiDocument', () => {
   it('mints without an assertion, because issuing one is what it does', () => {
     const mint = build().paths[SANDBOX_MINT_PATH]?.post;
     const parameterRefs = (mint?.parameters ?? []).map(
-      (parameter) => parameter.$ref,
+      (parameter) => parameter['$ref'],
     );
 
     expect(parameterRefs).not.toContain('#/components/parameters/UserIdentity');
@@ -1256,7 +1258,7 @@ describe('buildOpenApiDocument', () => {
 
       expect(operation?.operationId).toBe(operationId);
       expect(
-        operation?.parameters.map((parameter) => parameter.$ref),
+        operation?.parameters.map((parameter) => parameter['$ref']),
       ).toContain('#/components/parameters/CorrelationId');
       // A GET reads by path parameter and carries no body; a POST must.
       expect(operation?.requestBody === undefined).toBe(
@@ -1302,18 +1304,18 @@ describe('buildOpenApiDocument', () => {
     const doc = build();
     const operation = doc.paths['/v1/ielts/speaking/grading']?.post;
     const names = operation?.parameters.map(
-      (parameter) => parameter.name ?? parameter.$ref,
+      (parameter) => parameter['name'] ?? parameter['$ref'],
     );
 
     expect(names).toContain('Idempotency-Key');
     const idempotencyKey = operation?.parameters.find(
-      (parameter) => parameter.name === 'Idempotency-Key',
+      (parameter) => parameter['name'] === 'Idempotency-Key',
     );
     expect(idempotencyKey).toMatchObject({ required: false });
-    if (typeof idempotencyKey?.description !== 'string') {
+    if (typeof idempotencyKey?.['description'] !== 'string') {
       throw new Error('Speaking Idempotency-Key has no description');
     }
-    expect(idempotencyKey.description).toContain('Ignored');
+    expect(idempotencyKey['description']).toContain('Ignored');
   });
 
   it('marks Idempotency-Key required for grading operations', () => {
@@ -1321,14 +1323,14 @@ describe('buildOpenApiDocument', () => {
     const required = doc.paths[
       '/v1/ielts/writing/task1/grade'
     ]?.post?.parameters.find(
-      (parameter) => parameter.name === 'Idempotency-Key',
+      (parameter) => parameter['name'] === 'Idempotency-Key',
     );
     const none = doc.paths['/v1/ielts/speaking/grading']?.post?.parameters.find(
-      (parameter) => parameter.name === 'Idempotency-Key',
+      (parameter) => parameter['name'] === 'Idempotency-Key',
     );
 
-    expect(required?.required).toBe(true);
-    expect(none?.required).toBe(false);
+    expect(required?.['required']).toBe(true);
+    expect(none?.['required']).toBe(false);
   });
 
   it('references the correlation id header on every operation', () => {
@@ -1337,7 +1339,7 @@ describe('buildOpenApiDocument', () => {
     for (const operationId of V1_OPERATION_IDS) {
       const path = OPERATION_CATALOG[operationId].path;
       const refs = doc.paths[path]?.post?.parameters.map(
-        (parameter) => parameter.$ref,
+        (parameter) => parameter['$ref'],
       );
 
       expect(refs).toContain('#/components/parameters/CorrelationId');
@@ -1356,7 +1358,7 @@ describe('buildOpenApiDocument', () => {
     expect(speakingParameters).toContainEqual({
       $ref: '#/components/parameters/UserIdentity',
     });
-    expect(build().components.parameters.UserIdentity).toMatchObject({
+    expect(build().components.parameters['UserIdentity']).toMatchObject({
       name: 'X-User-Identity',
       in: 'header',
       required: true,
@@ -1366,13 +1368,13 @@ describe('buildOpenApiDocument', () => {
   it('declares the organization API key as a security scheme, not a bare header parameter', () => {
     const doc = build();
 
-    expect(doc.components.securitySchemes.ApiKeyAuth).toMatchObject({
+    expect(doc.components.securitySchemes['ApiKeyAuth']).toMatchObject({
       type: 'apiKey',
       in: 'header',
       name: 'X-API-Key',
     });
     expect(doc.security).toEqual([{ ApiKeyAuth: [] }]);
-    expect(doc.components.securitySchemes.BearerAuth).toMatchObject({
+    expect(doc.components.securitySchemes['BearerAuth']).toMatchObject({
       type: 'http',
       scheme: 'bearer',
       bearerFormat: 'JWT',
@@ -1399,16 +1401,16 @@ describe('buildOpenApiDocument', () => {
         '504',
       ].sort(),
     );
-    expect(doc.components.responses.Error503).toBeDefined();
-    expect(doc.components.responses.Error404).toBeDefined();
-    expect(doc.components.responses.Error409).toBeDefined();
-    expect(JSON.stringify(doc.components.responses.Error404)).toContain(
+    expect(doc.components.responses['Error503']).toBeDefined();
+    expect(doc.components.responses['Error404']).toBeDefined();
+    expect(doc.components.responses['Error409']).toBeDefined();
+    expect(JSON.stringify(doc.components.responses['Error404'])).toContain(
       'NOT_FOUND',
     );
-    expect(JSON.stringify(doc.components.responses.Error429)).toContain(
+    expect(JSON.stringify(doc.components.responses['Error429'])).toContain(
       'CONCURRENCY_LIMIT',
     );
-    expect(JSON.stringify(doc.components.responses.Error403)).not.toContain(
+    expect(JSON.stringify(doc.components.responses['Error403'])).not.toContain(
       'IDENTITY_CONFIG_REQUIRED',
     );
   });
@@ -1432,14 +1434,14 @@ describe('buildOpenApiDocument', () => {
     ]) {
       expect(doc.paths[path]?.post?.responses['503']).toBeDefined();
     }
-    expect(JSON.stringify(doc.components.responses.Error503)).toContain(
+    expect(JSON.stringify(doc.components.responses['Error503'])).toContain(
       'EMAIL_DELIVERY_BACKLOGGED',
     );
   });
 
   it('documents stable retry fields on every error response', () => {
     const doc = build();
-    const response = doc.components.responses.Error429;
+    const response = doc.components.responses['Error429'];
 
     expect(response).toMatchObject({
       content: {
@@ -1501,7 +1503,7 @@ describe('buildOpenApiDocument', () => {
   it('documents the unauthenticated Speaking questions route as implemented', () => {
     const operation = build().paths[SPEAKING_QUESTIONS_PATH]?.get;
     const partParameter = operation?.parameters.find(
-      (parameter) => parameter.name === 'part',
+      (parameter) => parameter['name'] === 'part',
     );
     const success = operation?.responses['200'] as {
       readonly headers?: Record<string, unknown>;
@@ -1520,9 +1522,9 @@ describe('buildOpenApiDocument', () => {
       in: 'query',
       required: false,
     });
-    expect(JSON.stringify(partParameter?.schema)).toContain('"1"');
-    expect(JSON.stringify(partParameter?.schema)).toContain('"2"');
-    expect(JSON.stringify(partParameter?.schema)).toContain('"3"');
+    expect(JSON.stringify(partParameter?.['schema'])).toContain('"1"');
+    expect(JSON.stringify(partParameter?.['schema'])).toContain('"2"');
+    expect(JSON.stringify(partParameter?.['schema'])).toContain('"3"');
     expect(responseSchema).toContain('"part"');
     expect(responseSchema).toContain('"questions"');
     expect(responseSchema).toContain('"question_id"');

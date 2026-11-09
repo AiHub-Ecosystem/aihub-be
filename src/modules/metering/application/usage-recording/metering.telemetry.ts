@@ -26,9 +26,9 @@ export function normalizeMeteringUsage(
     return undefined;
   }
 
-  const inputTokens = nonNegativeInteger(value.input_tokens);
-  const outputTokens = nonNegativeInteger(value.output_tokens);
-  const totalTokens = nonNegativeInteger(value.total_tokens);
+  const inputTokens = nonNegativeInteger(value['input_tokens']);
+  const outputTokens = nonNegativeInteger(value['output_tokens']);
+  const totalTokens = nonNegativeInteger(value['total_tokens']);
 
   if (
     inputTokens === undefined &&
@@ -57,8 +57,8 @@ export function normalizeMeteringModels(
       return [];
     }
 
-    const provider = boundedText(item.provider);
-    const name = boundedText(item.name);
+    const provider = boundedText(item['provider']);
+    const name = boundedText(item['name']);
     return provider === undefined || name === undefined
       ? []
       : [{ provider, name }];
@@ -78,10 +78,10 @@ export function extractDownstreamTelemetry(
     return undefined;
   }
 
-  const usage = normalizeMeteringUsage(body.usage);
-  const models = normalizeMeteringModels(body.models);
-  const metrics = isRecord(body.metrics) ? body.metrics : undefined;
-  const aiProcessingMs = normalizeAiProcessingMs(metrics?.ai_processing_ms);
+  const usage = normalizeMeteringUsage(body['usage']);
+  const models = normalizeMeteringModels(body['models']);
+  const metrics = isRecord(body['metrics']) ? body['metrics'] : undefined;
+  const aiProcessingMs = normalizeAiProcessingMs(metrics?.['ai_processing_ms']);
 
   if (
     usage === undefined &&

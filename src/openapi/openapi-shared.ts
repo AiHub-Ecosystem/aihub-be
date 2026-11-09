@@ -340,8 +340,8 @@ export function operationToPathItem(
     operation.method === 'GET'
       ? [...operation.path.matchAll(/\{([^}]+)\}/g)].map(([, name]) => {
           if (name === undefined) throw new Error('Invalid path parameter');
-          const properties = isRecord(operation.pathParamsSchema.properties)
-            ? operation.pathParamsSchema.properties
+          const properties = isRecord(operation.pathParamsSchema['properties'])
+            ? operation.pathParamsSchema['properties']
             : {};
           const schema = properties[name];
           if (schema === undefined) {

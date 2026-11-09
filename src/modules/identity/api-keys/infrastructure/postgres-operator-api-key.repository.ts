@@ -162,7 +162,7 @@ export class PostgresOperatorApiKeyRepository implements OperatorApiKeyPort {
         }
 
         // A repeat is a delivery, not an act: it records nothing.
-        if (row.status !== 'active') {
+        if (row['status'] !== 'active') {
           return { kind: 'unchanged' as const, keyHash };
         }
 

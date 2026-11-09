@@ -94,7 +94,7 @@ describe('UserIdentityGuard', () => {
         AIHUB_SANDBOX_HOST: undefined,
       }).canActivate(context(request)),
     ).resolves.toBe(true);
-    expect(request.aihubIdentity).toEqual({
+    expect(request['aihubIdentity']).toEqual({
       userId: 'local-development',
       organizationId: 'local-development',
       scopes: [],
@@ -112,7 +112,7 @@ describe('UserIdentityGuard', () => {
     await expect(
       guard('writing.task1.grade').canActivate(context(request)),
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY', httpStatus: 401 });
-    expect(request.aihubIdentity).toBeUndefined();
+    expect(request['aihubIdentity']).toBeUndefined();
     expect(await rejectedAuthCount()).toBe(before);
   });
 });

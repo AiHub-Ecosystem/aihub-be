@@ -72,7 +72,9 @@ function item(request: V2Request): Record<string, unknown> {
     ? []
     : [
         IDENTITY_HEADER,
-        ...(writes && request.body?.mode === 'raw' ? [JSON_BODY_HEADER] : []),
+        ...(writes && request.body?.['mode'] === 'raw'
+          ? [JSON_BODY_HEADER]
+          : []),
         ...(writes ? [IDEMPOTENCY_HEADER] : []),
       ];
   return {

@@ -120,7 +120,7 @@ export class PostgresOrganizationInvitationRevokeRepository
         const role = membershipRoleValue(invitation, 'role');
         const expiresAt = dateValue(invitation, 'expires_at');
         const consumedAt =
-          invitation.consumed_at === null
+          invitation['consumed_at'] === null
             ? null
             : dateValue(invitation, 'consumed_at');
         if (
@@ -129,7 +129,7 @@ export class PostgresOrganizationInvitationRevokeRepository
           email === undefined ||
           role === undefined ||
           expiresAt == null ||
-          (invitation.consumed_at !== null && consumedAt === undefined)
+          (invitation['consumed_at'] !== null && consumedAt === undefined)
         ) {
           throw invalidIdentityData();
         }

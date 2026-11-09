@@ -87,7 +87,7 @@ function speakingResponseFixture(): SpeakingGradeResponse {
   if (!isRecord(value) || !('data' in value)) {
     throw new Error('Speaking response fixture must contain data');
   }
-  return Value.Parse(SpeakingGradeResponseSchema, value.data);
+  return Value.Parse(SpeakingGradeResponseSchema, value['data']);
 }
 
 function metadata(signal: AbortSignal): GradingRequestMetadata {

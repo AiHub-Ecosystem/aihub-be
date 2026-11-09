@@ -49,17 +49,17 @@ const UNRESOLVED_DISPATCH_ATTEMPTS_SQL = `
 `;
 
 function countFromRow(value: unknown): DispatchAttemptUnresolvedSample {
-  if (!isRecord(value) || typeof value.operation !== 'string') {
+  if (!isRecord(value) || typeof value['operation'] !== 'string') {
     throw internalError('dispatch attempt metric row is invalid');
   }
-  const count = safeNonNegativeCount(value.unresolved_count);
+  const count = safeNonNegativeCount(value['unresolved_count']);
   if (
-    (!isOperationId(value.operation) && value.operation !== 'other') ||
+    (!isOperationId(value['operation']) && value['operation'] !== 'other') ||
     count === undefined
   ) {
     throw internalError('dispatch attempt metric row is invalid');
   }
-  return { operation: value.operation, count };
+  return { operation: value['operation'], count };
 }
 
 interface DispatchAttemptUnresolvedRow {

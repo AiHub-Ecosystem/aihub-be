@@ -326,17 +326,17 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
   let storage: FakeStorage;
   let currentTime = new Date('2026-10-14T00:00:00.000Z');
   const oldEnvironment = {
-    nodeEnv: process.env.NODE_ENV,
-    sandboxHost: process.env.AIHUB_SANDBOX_HOST,
-    writingUrl: process.env.DOWNSTREAM_AI_WRITING_URL,
-    writingToken: process.env.DOWNSTREAM_AI_WRITING_TOKEN,
+    nodeEnv: process.env['NODE_ENV'],
+    sandboxHost: process.env['AIHUB_SANDBOX_HOST'],
+    writingUrl: process.env['DOWNSTREAM_AI_WRITING_URL'],
+    writingToken: process.env['DOWNSTREAM_AI_WRITING_TOKEN'],
   };
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.AIHUB_SANDBOX_HOST = 'sandbox.test';
-    process.env.DOWNSTREAM_AI_WRITING_URL = 'https://ai-writing.test';
-    process.env.DOWNSTREAM_AI_WRITING_TOKEN = 'writing-token';
+    process.env['NODE_ENV'] = 'test';
+    process.env['AIHUB_SANDBOX_HOST'] = 'sandbox.test';
+    process.env['DOWNSTREAM_AI_WRITING_URL'] = 'https://ai-writing.test';
+    process.env['DOWNSTREAM_AI_WRITING_TOKEN'] = 'writing-token';
     mockAgent = new MockAgent();
     mockAgent.disableNetConnect();
     const authenticator: ApiKeyAuthenticatorPort = {
@@ -405,17 +405,18 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
-    if (oldEnvironment.nodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = oldEnvironment.nodeEnv;
+    if (oldEnvironment.nodeEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = oldEnvironment.nodeEnv;
     if (oldEnvironment.sandboxHost === undefined)
-      delete process.env.AIHUB_SANDBOX_HOST;
-    else process.env.AIHUB_SANDBOX_HOST = oldEnvironment.sandboxHost;
+      delete process.env['AIHUB_SANDBOX_HOST'];
+    else process.env['AIHUB_SANDBOX_HOST'] = oldEnvironment.sandboxHost;
     if (oldEnvironment.writingUrl === undefined)
-      delete process.env.DOWNSTREAM_AI_WRITING_URL;
-    else process.env.DOWNSTREAM_AI_WRITING_URL = oldEnvironment.writingUrl;
+      delete process.env['DOWNSTREAM_AI_WRITING_URL'];
+    else process.env['DOWNSTREAM_AI_WRITING_URL'] = oldEnvironment.writingUrl;
     if (oldEnvironment.writingToken === undefined)
-      delete process.env.DOWNSTREAM_AI_WRITING_TOKEN;
-    else process.env.DOWNSTREAM_AI_WRITING_TOKEN = oldEnvironment.writingToken;
+      delete process.env['DOWNSTREAM_AI_WRITING_TOKEN'];
+    else
+      process.env['DOWNSTREAM_AI_WRITING_TOKEN'] = oldEnvironment.writingToken;
   });
 
   beforeEach(() => {

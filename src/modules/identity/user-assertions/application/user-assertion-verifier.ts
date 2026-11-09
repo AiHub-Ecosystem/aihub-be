@@ -55,11 +55,11 @@ function matchesAlgorithm(
   algorithm: 'RS256' | 'ES256',
 ): boolean {
   const expectedKty = algorithm === 'RS256' ? 'RSA' : 'EC';
-  if (key.kty !== expectedKty) {
+  if (key['kty'] !== expectedKty) {
     return false;
   }
 
-  if (key.alg !== undefined && key.alg !== algorithm) {
+  if (key['alg'] !== undefined && key['alg'] !== algorithm) {
     return false;
   }
 
@@ -81,7 +81,7 @@ function selectKey(
       return false;
     }
 
-    return kid === undefined || key.kid === kid;
+    return kid === undefined || key['kid'] === kid;
   });
 
   return matches.length === 1 ? matches[0] : undefined;
@@ -133,22 +133,24 @@ function validateClaims(
   allowSandboxAudience: boolean,
 ): { userId: string } {
   if (
-    payload.iss !== config.issuer ||
-    (payload.aud !== 'aihub' &&
-      !(allowSandboxAudience && payload.aud === SANDBOX_ASSERTION_AUDIENCE)) ||
-    !isEndUserId(payload.sub) ||
-    !isBoundedString(payload.jti) ||
-    !isIntegerSeconds(payload.iat) ||
-    !isIntegerSeconds(payload.exp) ||
-    payload.exp <= payload.iat ||
-    payload.exp - payload.iat > config.maxAssertionTtlSeconds ||
-    payload.exp <= nowSeconds - ASSERTION_CLOCK_SKEW_SECONDS ||
-    payload.iat >= nowSeconds + ASSERTION_CLOCK_SKEW_SECONDS
+    payload['iss'] !== config.issuer ||
+    (payload['aud'] !== 'aihub' &&
+      !(
+        allowSandboxAudience && payload['aud'] === SANDBOX_ASSERTION_AUDIENCE
+      )) ||
+    !isEndUserId(payload['sub']) ||
+    !isBoundedString(payload['jti']) ||
+    !isIntegerSeconds(payload['iat']) ||
+    !isIntegerSeconds(payload['exp']) ||
+    payload['exp'] <= payload['iat'] ||
+    payload['exp'] - payload['iat'] > config.maxAssertionTtlSeconds ||
+    payload['exp'] <= nowSeconds - ASSERTION_CLOCK_SKEW_SECONDS ||
+    payload['iat'] >= nowSeconds + ASSERTION_CLOCK_SKEW_SECONDS
   ) {
     throw invalidSignedUserAssertion();
   }
 
-  return { userId: payload.sub };
+  return { userId: payload['sub'] };
 }
 
 export class UserAssertionVerifier {

@@ -13,8 +13,8 @@ export function isMemberCursorPosition(
 ): value is MemberCursorPosition {
   return (
     isRecord(value) &&
-    typeof value.username === 'string' &&
-    value.username.length > 0
+    typeof value['username'] === 'string' &&
+    value['username'].length > 0
   );
 }
 

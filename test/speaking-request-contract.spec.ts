@@ -86,8 +86,8 @@ async function onWire(request: DownstreamRequest): Promise<{
             };
         }
         // Multipart encodes scalar fields as text; the provider parses part as an integer.
-        if (typeof body.part === 'string' && /^\d+$/.test(body.part))
-          body.part = Number(body.part);
+        if (typeof body['part'] === 'string' && /^\d+$/.test(body['part']))
+          body['part'] = Number(body['part']);
       } else {
         body = jsonObject(JSON.parse(bytes.toString('utf8')));
       }
@@ -213,7 +213,7 @@ describe.each(cases)(
           mode: 'declared_id',
         });
         expect(wire.file).toEqual(file);
-        expect(wire.body.user_id).toBe('server-derived-user');
+        expect(wire.body['user_id']).toBe('server-derived-user');
         expect(
           requestContractFailures(doc, request.path, media, wire.body),
         ).toEqual([]);
@@ -234,7 +234,7 @@ describe.each(cases)(
       expect(wire.body).not.toHaveProperty('prompt_text');
       expect(wire.body).not.toHaveProperty('test_code');
       expect(wire.body).not.toHaveProperty('transcript');
-      expect(wire.body.test_type).toBe(
+      expect(wire.body['test_type']).toBe(
         operation === 'speaking.grading-json' ? 'Practice' : undefined,
       );
       expect(Object.hasOwn(wire.body, 'test_type')).toBe(
@@ -260,8 +260,8 @@ describe.each(cases)(
       const wire = await onWire(request);
       const changed: Json = structuredClone(doc);
       const schema = requestSchema(changed, request.path, media);
-      schema.required = [
-        ...(schema.required as string[]),
+      schema['required'] = [
+        ...(schema['required'] as string[]),
         'new_required_field',
       ];
       expect(
@@ -269,18 +269,18 @@ describe.each(cases)(
       ).toContain(
         ": required must have required property 'new_required_field'",
       );
-      schema.required = (schema.required as string[]).filter(
+      schema['required'] = (schema['required'] as string[]).filter(
         (field) => field !== 'new_required_field',
       );
-      const properties = schema.properties as Json;
-      properties.test_type = { type: 'string', enum: ['Practice'] };
+      const properties = schema['properties'] as Json;
+      properties['test_type'] = { type: 'string', enum: ['Practice'] };
       expect(
         requestContractFailures(changed, request.path, media, wire.body),
       ).toContain(
         '/test_type: enum must be equal to one of the allowed values',
       );
-      properties.test_type = { type: 'string' };
-      properties.new_optional_field = { type: 'string' };
+      properties['test_type'] = { type: 'string' };
+      properties['new_optional_field'] = { type: 'string' };
       expect(
         requestContractFailures(changed, request.path, media, wire.body),
       ).toEqual([]);
@@ -292,9 +292,9 @@ it('relies on the provider Practice default when multipart omits test_type', () 
   const request = cases[0]?.requests[0];
   if (request === undefined) throw new Error('missing multipart request');
   const properties = jsonObject(
-    requestSchema(doc, request.path, 'multipart/form-data').properties,
+    requestSchema(doc, request.path, 'multipart/form-data')['properties'],
   );
-  expect(jsonObject(properties.test_type).default).toBe('Practice');
+  expect(jsonObject(properties['test_type'])['default']).toBe('Practice');
 });
 
 it('preserves nullable optional metadata in JSON', async () => {

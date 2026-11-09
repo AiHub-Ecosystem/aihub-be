@@ -15,6 +15,10 @@
     "outDir": "dist",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    // #1775: an index-signature read must be spelled out in brackets, so a
+    // misspelled key on a JSON document, a row shape or an env map fails the
+    // type check instead of silently reading undefined.
+    "noPropertyAccessFromIndexSignature": true,
     "exactOptionalPropertyTypes": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,

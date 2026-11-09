@@ -55,32 +55,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** A triage entry waives one alert, named by its fingerprint, and must say why. */
 export function parseTriage(text: string): Triage {
   const parsed: unknown = JSON.parse(text);
-  if (!isRecord(parsed) || !Array.isArray(parsed.entries)) {
+  if (!isRecord(parsed) || !Array.isArray(parsed['entries'])) {
     throw new Error(`${TRIAGE_FILE} needs an "entries" array`);
   }
-  const entries = parsed.entries.map((entry: unknown): TriageEntry => {
+  const entries = parsed['entries'].map((entry: unknown): TriageEntry => {
     if (
       !isRecord(entry) ||
-      typeof entry.ruleId !== 'string' ||
-      typeof entry.path !== 'string'
+      typeof entry['ruleId'] !== 'string' ||
+      typeof entry['path'] !== 'string'
     ) {
       throw new Error(`${TRIAGE_FILE} entry needs a ruleId and a path`);
     }
-    if (typeof entry.fingerprint !== 'string' || entry.fingerprint === '') {
+    if (
+      typeof entry['fingerprint'] !== 'string' ||
+      entry['fingerprint'] === ''
+    ) {
       throw new Error(
-        `${TRIAGE_FILE} entry ${entry.ruleId} at ${entry.path} needs a fingerprint`,
+        `${TRIAGE_FILE} entry ${entry['ruleId']} at ${entry['path']} needs a fingerprint`,
       );
     }
-    if (typeof entry.reason !== 'string' || entry.reason.trim() === '') {
+    if (typeof entry['reason'] !== 'string' || entry['reason'].trim() === '') {
       throw new Error(
-        `${TRIAGE_FILE} entry ${entry.ruleId} at ${entry.path} needs a reason`,
+        `${TRIAGE_FILE} entry ${entry['ruleId']} at ${entry['path']} needs a reason`,
       );
     }
     return {
-      ruleId: entry.ruleId,
-      path: entry.path,
-      fingerprint: entry.fingerprint,
-      reason: entry.reason,
+      ruleId: entry['ruleId'],
+      path: entry['path'],
+      fingerprint: entry['fingerprint'],
+      reason: entry['reason'],
     };
   });
   return { entries };
@@ -138,14 +141,14 @@ export function parseRuns(
   const parsed: unknown = JSON.parse(text);
   if (
     !isRecord(parsed) ||
-    !Array.isArray(parsed.runs) ||
-    parsed.runs.length === 0
+    !Array.isArray(parsed['runs']) ||
+    parsed['runs'].length === 0
   ) {
     throw new Error(
       `${file} has no SARIF runs; the scan did not produce results`,
     );
   }
-  return parsed.runs as NonNullable<Sarif['runs']>;
+  return parsed['runs'] as NonNullable<Sarif['runs']>;
 }
 
 function readRuns(file: string): NonNullable<Sarif['runs']> {
