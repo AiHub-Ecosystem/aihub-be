@@ -202,7 +202,12 @@ describe('a suspended Organization closes every management surface', () => {
     });
 
     it('closes invitation acceptance at the organization lock', async () => {
+      // The new acceptance order: unlocked pre-read, shared Organization
+      // lock, locked invitation, accepting account — and the closure is
+      // decided at the locked status, before any write.
       const db = scriptedLocks([
+        [{ id: INVITATION_ID, organization_id: ORGANIZATION_ID }],
+        [{ id: ORGANIZATION_ID, status: 'suspended' }],
         [
           {
             id: INVITATION_ID,
@@ -210,14 +215,12 @@ describe('a suspended Organization closes every management surface', () => {
             email: INVITED_EMAIL,
             role: 'member',
             invited_by: 'usr_inviter',
+            token_hash: TOKEN_HASH,
+            consumed_at: null,
+            expires_at: new Date(NOW.getTime() + 60_000),
           },
         ],
-        [
-          {
-            organization_status: 'suspended',
-            canonical_email: INVITED_EMAIL,
-          },
-        ],
+        [{ canonical_email: INVITED_EMAIL }],
       ]);
       const repository = new PostgresOrganizationInvitationAcceptRepository(db);
 

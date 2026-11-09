@@ -19,8 +19,6 @@ import { organizationSuspensionClosesSurface } from '@/modules/identity/membersh
 import {
   identityStoreUnavailable,
   invalidIdentityData,
-  membershipRoleValue,
-  membershipStatusValue,
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -31,27 +29,22 @@ import {
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { invalidInvitationInput } from './organization-invitation-input';
+import {
+  LOCK_MEMBERSHIP_AUTHORITY_SQL,
+  membershipAuthority,
+} from './organization-invitation-membership-authority';
 
 /**
  * Locking the organization row serializes concurrent invitations for the same
  * organization, so the active-member check and the partial unique index cannot
  * be raced by two requests arriving together. The status is read under the
- * same lock so a suspension that commits first closes this surface (ADR-0027
- * as amended, #447).
+ * same lock so a suspension that commits first closes this surface (ADR-0159,
+ * decision 3).
  */
 const LOCK_ORGANIZATION_SQL = `
   SELECT id, name, status
   FROM organizations
   WHERE id = $1
-  FOR UPDATE
-`;
-
-/** The inviter's current Membership, read under the Organization lock. */
-const LOCK_INVITER_MEMBERSHIP_SQL = `
-  SELECT role, status
-  FROM organization_members
-  WHERE organization_id = $1
-    AND user_account_id = $2
   FOR UPDATE
 `;
 
@@ -126,25 +119,18 @@ export class PostgresOrganizationInvitationCreateRepository
         // The inviter's authority is re-evaluated under the Organization lock:
         // a disable or demotion that committed while this request waited
         // refuses the send, so a pending invitation cannot outlive the
-        // authority that issued it (ADR-0027 as amended, #447).
+        // authority that issued it (ADR-0159, decision 1).
         const inviterMembershipRows = await identityRows(
           transaction,
-          LOCK_INVITER_MEMBERSHIP_SQL,
+          LOCK_MEMBERSHIP_AUTHORITY_SQL,
           [input.organizationId, input.invitedBy],
         );
-        const inviterMembership = inviterMembershipRows[0];
-        const inviterRole = isRecord(inviterMembership)
-          ? membershipRoleValue(inviterMembership, 'role')
-          : undefined;
-        const inviterStatus = isRecord(inviterMembership)
-          ? membershipStatusValue(inviterMembership, 'membership_status')
-          : undefined;
+        const inviterAuthority = membershipAuthority(inviterMembershipRows[0]);
         if (
-          inviterRole === undefined ||
-          inviterStatus === undefined ||
-          inviterStatus !== 'active' ||
+          inviterAuthority === undefined ||
+          inviterAuthority.status !== 'active' ||
           !mayGrantInvitationRole({
-            callerRole: inviterRole,
+            callerRole: inviterAuthority.role,
             invitedRole: input.role,
           })
         ) {

@@ -21,7 +21,6 @@ import {
   identityStoreUnavailable,
   invalidIdentityData,
   membershipRoleValue,
-  membershipStatusValue,
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -32,6 +31,10 @@ import {
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { invalidInvitationInput } from './organization-invitation-input';
+import {
+  LOCK_MEMBERSHIP_AUTHORITY_SQL,
+  membershipAuthority,
+} from './organization-invitation-membership-authority';
 
 const LOCK_ORGANIZATION_FOR_REVOKE_SQL = `
   SELECT id, status
@@ -45,15 +48,6 @@ const LOCK_INVITATION_FOR_REVOKE_SQL = `
   FROM organization_invitations
   WHERE id = $1
     AND organization_id = $2
-  FOR UPDATE
-`;
-
-/** The caller's current Membership, read under the Organization lock. */
-const LOCK_CALLER_MEMBERSHIP_FOR_REVOKE_SQL = `
-  SELECT role, status
-  FROM organization_members
-  WHERE organization_id = $1
-    AND user_account_id = $2
   FOR UPDATE
 `;
 
@@ -144,29 +138,23 @@ export class PostgresOrganizationInvitationRevokeRepository
           throw invalidIdentityData();
         }
 
-        // ADR-0027 as amended (#447): the caller's role is re-read under the
+        // ADR-0159 (decision 2): the caller's role is re-read under the
         // Organization lock rather than trusting the role captured before the
         // transaction, so a disable or demotion that committed while this
         // request waited cannot close an invitation it no longer has authority
         // over.
         const callerRows = await identityRows(
           transaction,
-          LOCK_CALLER_MEMBERSHIP_FOR_REVOKE_SQL,
+          LOCK_MEMBERSHIP_AUTHORITY_SQL,
           [input.organizationId, input.actorUserId],
         );
-        const callerMembership = callerRows[0];
-        const callerRole = isRecord(callerMembership)
-          ? membershipRoleValue(callerMembership, 'role')
-          : undefined;
-        const callerStatus = isRecord(callerMembership)
-          ? membershipStatusValue(callerMembership, 'membership_status')
-          : undefined;
+        const caller = membershipAuthority(callerRows[0]);
 
         const callerAdmitted =
-          callerRole !== undefined &&
-          callerStatus === 'active' &&
+          caller !== undefined &&
+          caller.status === 'active' &&
           mayRevokeOrganizationInvitation({
-            actorRole: callerRole,
+            actorRole: caller.role,
             invitedRole: role,
           });
 
@@ -174,7 +162,7 @@ export class PostgresOrganizationInvitationRevokeRepository
           // A caller who no longer actively belongs is refused without a
           // denial record; an active caller whose role lacks authority earns
           // the recorded denial, as before.
-          if (callerRole !== undefined && callerStatus === 'active') {
+          if (caller !== undefined && caller.status === 'active') {
             refused = {
               action: 'invitation.revoked',
               invitationId,

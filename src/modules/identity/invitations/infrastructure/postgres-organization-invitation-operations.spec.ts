@@ -2,7 +2,15 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
-import { PostgresOrganizationInvitationAcceptRepository } from './postgres-organization-invitation-accept.repository';
+import { SHARE_MEMBERSHIP_AUTHORITY_SQL } from './organization-invitation-membership-authority';
+import {
+  ACCEPTING_ACCOUNT_SQL,
+  FIND_INVITATION_SQL,
+  LOCK_INVITATION_SQL,
+  LOCK_ORGANIZATION_FOR_ACCEPTANCE_SQL,
+  PostgresOrganizationInvitationAcceptRepository,
+  UPSERT_MEMBERSHIP_SQL,
+} from './postgres-organization-invitation-accept.repository';
 import { PostgresOrganizationInvitationCreateRepository } from './postgres-organization-invitation-create.repository';
 import { PostgresOrganizationInvitationReadRepository } from './postgres-organization-invitation-read.repository';
 import { PostgresOrganizationInvitationRevokeRepository } from './postgres-organization-invitation-revoke.repository';
@@ -127,31 +135,84 @@ describe('Organization Invitation operation repositories', () => {
 });
 
 /**
- * Scripts the three reads acceptance makes before any grant: the locked
- * invitation, the accepting account, and the inviter's current Membership
- * (ADR-0027 as amended, #447).
+ * The columns one raw SELECT returns, read from its text: the identifiers and
+ * `AS` aliases of the select (or returning) list. A scripted row must name
+ * exactly these, so a mock cannot hand a reader a column the statement never
+ * returns — the masking that hid the unaliased `status` column #447 fixed.
+ */
+function returnedColumns(sql: string): readonly string[] {
+  const returning = /\bRETURNING\b([\s\S]*)$/i.exec(sql);
+  const select =
+    returning === null
+      ? /(?:^|\n)\s*SELECT\b([\s\S]*?)(?:\n\s*FROM\b|\n\s*$)/i.exec(sql)
+      : undefined;
+  const segment = returning?.[1] ?? select?.[1];
+  if (segment === undefined) {
+    throw new Error(`spec cannot read the returned columns of: ${sql}`);
+  }
+  return segment
+    .split(',')
+    .map((part) => /([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(part.trim())?.[1])
+    .filter((column): column is string => column !== undefined);
+}
+
+/**
+ * Scripts one raw statement's rows after checking the mock names exactly the
+ * columns the SQL really returns. Rows must be pushed in statement order.
+ */
+function scriptRows(
+  prisma: ScriptedPrisma,
+  sql: string,
+  ...rows: readonly Record<string, unknown>[]
+): void {
+  const columns = [...returnedColumns(sql)].sort();
+  for (const row of rows) {
+    expect(Object.keys(row).sort()).toEqual(columns);
+  }
+  prisma.inside.push(...rows.map((row) => [row]));
+}
+
+const OPEN_INVITATION_ROW = {
+  id: 'oin_01J00000000000000000000000',
+  organization_id: 'org_acme',
+  email: 'member@example.test',
+  invited_by: 'usr_inviter',
+  token_hash: 'a'.repeat(64),
+  consumed_at: null,
+  expires_at: new Date(now.getTime() + 60_000),
+};
+
+/**
+ * Scripts the reads acceptance makes before any grant: the unlocked
+ * pre-read, the shared Organization lock, the locked invitation, the
+ * accepting account, and the inviter's current Membership (ADR-0159).
  */
 function acceptScenario(
   prisma: ScriptedPrisma,
   invitationRole: string,
   inviterMembership: Record<string, unknown> | undefined,
 ): void {
-  prisma.inside.push(
-    [
-      {
-        id: 'oin_01J00000000000000000000000',
-        organization_id: 'org_acme',
-        email: 'member@example.test',
-        role: invitationRole,
-        invited_by: 'usr_inviter',
-      },
-    ],
-    [{ organization_status: 'active', canonical_email: 'member@example.test' }],
-    ...(inviterMembership === undefined ? [] : [[inviterMembership]]),
-  );
+  scriptRows(prisma, FIND_INVITATION_SQL, {
+    id: OPEN_INVITATION_ROW.id,
+    organization_id: OPEN_INVITATION_ROW.organization_id,
+  });
+  scriptRows(prisma, LOCK_ORGANIZATION_FOR_ACCEPTANCE_SQL, {
+    id: 'org_acme',
+    status: 'active',
+  });
+  scriptRows(prisma, LOCK_INVITATION_SQL, {
+    ...OPEN_INVITATION_ROW,
+    role: invitationRole,
+  });
+  scriptRows(prisma, ACCEPTING_ACCOUNT_SQL, {
+    canonical_email: 'member@example.test',
+  });
+  if (inviterMembership !== undefined) {
+    scriptRows(prisma, SHARE_MEMBERSHIP_AUTHORITY_SQL, inviterMembership);
+  }
 }
 
-describe('Organization Invitation inviter-authority admission (ADR-0027 as amended)', () => {
+describe('Organization Invitation inviter-authority admission (ADR-0159)', () => {
   it('refuses an invitation whose inviter can no longer grant its role', async () => {
     // Transfer-then-accept: the inviter was an owner when the invitation was
     // issued, then transferred ownership and became an admin. An admin cannot
@@ -166,7 +227,7 @@ describe('Organization Invitation inviter-authority admission (ADR-0027 as amend
       kind: 'inviter_unauthorized',
     });
     expect(prisma.opened).toBe(1);
-    expect(prisma.statements).toHaveLength(3);
+    expect(prisma.statements).toHaveLength(5);
   });
 
   it('refuses an invitation whose inviter was disabled', async () => {
@@ -179,7 +240,7 @@ describe('Organization Invitation inviter-authority admission (ADR-0027 as amend
     await expect(accept(prisma, context())).resolves.toEqual({
       kind: 'inviter_unauthorized',
     });
-    expect(prisma.statements).toHaveLength(3);
+    expect(prisma.statements).toHaveLength(5);
   });
 
   it('refuses an invitation whose inviter no longer belongs', async () => {
@@ -199,7 +260,7 @@ describe('Organization Invitation inviter-authority admission (ADR-0027 as amend
       role: 'admin',
       membership_status: 'active',
     });
-    prisma.inside.push([{ role: 'member' }]); // UPSERT_MEMBERSHIP_SQL
+    scriptRows(prisma, UPSERT_MEMBERSHIP_SQL, { role: 'member' });
 
     await expect(accept(prisma, context())).resolves.toEqual({
       kind: 'accepted',
@@ -215,12 +276,36 @@ describe('Organization Invitation inviter-authority admission (ADR-0027 as amend
       role: 'owner',
       membership_status: 'active',
     });
-    prisma.inside.push([{ role: 'owner' }]);
+    scriptRows(prisma, UPSERT_MEMBERSHIP_SQL, { role: 'owner' });
 
     await expect(accept(prisma, context())).resolves.toEqual({
       kind: 'accepted',
       organizationId: 'org_acme',
       role: 'owner',
     });
+  });
+
+  it('refuses a consumed token without touching the membership', async () => {
+    // The pre-read only sees unconsumed tokens, so a token consumed between
+    // the pre-read and the locked re-read is refused at the lock.
+    const prisma = new ScriptedPrisma();
+    scriptRows(prisma, FIND_INVITATION_SQL, {
+      id: OPEN_INVITATION_ROW.id,
+      organization_id: OPEN_INVITATION_ROW.organization_id,
+    });
+    scriptRows(prisma, LOCK_ORGANIZATION_FOR_ACCEPTANCE_SQL, {
+      id: 'org_acme',
+      status: 'active',
+    });
+    scriptRows(prisma, LOCK_INVITATION_SQL, {
+      ...OPEN_INVITATION_ROW,
+      role: 'member',
+      consumed_at: now,
+    });
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'token_invalid',
+    });
+    expect(prisma.statements).toHaveLength(3);
   });
 });
