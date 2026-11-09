@@ -80,7 +80,7 @@ export async function countInFlight(
   const rows = await client.$queryRawUnsafe<
     readonly { readonly count: bigint }[]
   >(
-    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running') AND created_at >= $3`,
+    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running', 'succeeded') AND quota_reservation_active = true AND created_at >= $3`,
     input.organizationId,
     input.environment,
     input.since,

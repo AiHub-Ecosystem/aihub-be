@@ -49,13 +49,23 @@ function ownerKey(owner: SpeakingGradingJobOwner): string {
 
 export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
   readonly jobs = new Map<string, SpeakingGradingJob>();
+  readonly quotaReservations = new Set<string>();
 
   seed(job: SpeakingGradingJob): void {
     this.jobs.set(job.jobId, job);
+    if (
+      job.quotaTracked &&
+      (job.status === 'queued' || job.status === 'running')
+    ) {
+      this.quotaReservations.add(job.jobId);
+    } else {
+      this.quotaReservations.delete(job.jobId);
+    }
   }
 
   async create(job: NewSpeakingGradingJob): Promise<void> {
     this.jobs.set(job.jobId, { ...job, status: 'queued' });
+    if (job.quotaTracked) this.quotaReservations.add(job.jobId);
   }
 
   async createWithAdmission(input: {
@@ -181,6 +191,12 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     return true;
   }
 
+  async releaseQuotaReservation(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (job === undefined || job.status !== 'succeeded') return false;
+    return this.quotaReservations.delete(jobId);
+  }
+
   async fail(input: {
     readonly jobId: string;
     readonly error: SpeakingGradingJobError;
@@ -199,6 +215,7 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
       error: input.error,
       completedAt: input.completedAt,
     });
+    this.quotaReservations.delete(input.jobId);
     return true;
   }
 
@@ -212,7 +229,7 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
         job.organizationId === input.organizationId &&
         job.environment === input.environment &&
         job.createdAt >= input.since &&
-        (job.status === 'queued' || job.status === 'running'),
+        this.quotaReservations.has(job.jobId),
     ).length;
   }
 

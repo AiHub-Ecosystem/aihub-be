@@ -33,7 +33,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | PublicApiMajorUnattributedUsage    | metering    | 6       |
 | DispatchAttempt                    | metering    | 7       |
 | SpeakingAudioAsset                 | speaking    | 9       |
-| SpeakingGradingJob                 | speaking    | 26      |
+| SpeakingGradingJob                 | speaking    | 27      |
 | SpeakingV2ResultOwnership          | speaking    | 7       |
 | SpeakingAudioUploadIntent          | speaking    | 10      |
 | WritingChartUpload                 | writing     | 15      |
@@ -471,34 +471,35 @@ Owner: `speaking`
 
 Owner: `speaking`
 
-| Column            | Type      | Attributes                                            |
-| ----------------- | --------- | ----------------------------------------------------- |
-| jobId             | String    | @id @map("job_id")                                    |
-| organizationId    | String    | @map("organization_id")                               |
-| endUserId         | String    | @map("end_user_id")                                   |
-| environment       | String    |                                                       |
-| identityMode      | String    | @map("identity_mode")                                 |
-| apiKeyId          | String    | @map("api_key_id")                                    |
-| maxConcurrent     | Int       | @map("max_concurrent")                                |
-| quotaTracked      | Boolean   | @map("quota_tracked")                                 |
-| quotaUnverified   | Boolean   | @map("quota_unverified")                              |
-| audioAssetId      | String    | @map("audio_asset_id")                                |
-| part              | Int       |                                                       |
-| questionId        | String    | @map("question_id")                                   |
-| promptText        | String?   | @map("prompt_text")                                   |
-| testType          | String?   | @map("test_type")                                     |
-| testCode          | String?   | @map("test_code")                                     |
-| partResultId      | String?   | @map("part_result_id")                                |
-| idempotencyKey    | String?   | @map("idempotency_key")                               |
-| status            | String    | @default("queued")                                    |
-| leaseExpiresAt    | DateTime? | @map("lease_expires_at") @db.Timestamptz(6)           |
-| dispatchStartedAt | DateTime? | @map("dispatch_started_at") @db.Timestamptz(6)        |
-| result            | Json?     | @db.JsonB                                             |
-| errorCode         | String?   | @map("error_code")                                    |
-| errorMessage      | String?   | @map("error_message")                                 |
-| errorRetryable    | Boolean?  | @map("error_retryable")                               |
-| createdAt         | DateTime  | @default(now()) @map("created_at") @db.Timestamptz(6) |
-| completedAt       | DateTime? | @map("completed_at") @db.Timestamptz(6)               |
+| Column                 | Type      | Attributes                                            |
+| ---------------------- | --------- | ----------------------------------------------------- |
+| jobId                  | String    | @id @map("job_id")                                    |
+| organizationId         | String    | @map("organization_id")                               |
+| endUserId              | String    | @map("end_user_id")                                   |
+| environment            | String    |                                                       |
+| identityMode           | String    | @map("identity_mode")                                 |
+| apiKeyId               | String    | @map("api_key_id")                                    |
+| maxConcurrent          | Int       | @map("max_concurrent")                                |
+| quotaTracked           | Boolean   | @map("quota_tracked")                                 |
+| quotaUnverified        | Boolean   | @map("quota_unverified")                              |
+| quotaReservationActive | Boolean   | @default(false) @map("quota_reservation_active")      |
+| audioAssetId           | String    | @map("audio_asset_id")                                |
+| part                   | Int       |                                                       |
+| questionId             | String    | @map("question_id")                                   |
+| promptText             | String?   | @map("prompt_text")                                   |
+| testType               | String?   | @map("test_type")                                     |
+| testCode               | String?   | @map("test_code")                                     |
+| partResultId           | String?   | @map("part_result_id")                                |
+| idempotencyKey         | String?   | @map("idempotency_key")                               |
+| status                 | String    | @default("queued")                                    |
+| leaseExpiresAt         | DateTime? | @map("lease_expires_at") @db.Timestamptz(6)           |
+| dispatchStartedAt      | DateTime? | @map("dispatch_started_at") @db.Timestamptz(6)        |
+| result                 | Json?     | @db.JsonB                                             |
+| errorCode              | String?   | @map("error_code")                                    |
+| errorMessage           | String?   | @map("error_message")                                 |
+| errorRetryable         | Boolean?  | @map("error_retryable")                               |
+| createdAt              | DateTime  | @default(now()) @map("created_at") @db.Timestamptz(6) |
+| completedAt            | DateTime? | @map("completed_at") @db.Timestamptz(6)               |
 
 ## SpeakingV2ResultOwnership
 

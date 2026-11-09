@@ -611,6 +611,7 @@ model SpeakingGradingJob {
   maxConcurrent     Int       @map("max_concurrent")
   quotaTracked      Boolean   @map("quota_tracked")
   quotaUnverified   Boolean   @map("quota_unverified")
+  quotaReservationActive Boolean @default(false) @map("quota_reservation_active")
   audioAssetId      String    @map("audio_asset_id")
   part              Int
   questionId        String    @map("question_id")

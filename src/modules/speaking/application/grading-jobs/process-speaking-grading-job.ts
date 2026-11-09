@@ -32,7 +32,12 @@ const AUDIO_ASSET_EXPIRED: SpeakingGradingJobError = {
 export interface ProcessSpeakingGradingJobDependencies {
   readonly repository: Pick<
     SpeakingGradingJobRepositoryPort,
-    'claim' | 'returnToQueue' | 'markDispatchStarted' | 'succeed' | 'fail'
+    | 'claim'
+    | 'returnToQueue'
+    | 'markDispatchStarted'
+    | 'succeed'
+    | 'releaseQuotaReservation'
+    | 'fail'
   >;
   readonly queue: Pick<SpeakingGradingJobQueuePort, 'enqueue'>;
   readonly audioRepository: Pick<
@@ -281,11 +286,12 @@ export class ProcessSpeakingGradingJob {
           job.request.partResultId,
         );
       }
-      await this.dependencies.repository.succeed({
+      const succeeded = await this.dependencies.repository.succeed({
         jobId: job.jobId,
         result: result.data,
         completedAt: this.now(),
       });
+      if (!succeeded) return;
     } catch (error) {
       const failure = jobError(error);
       await this.dependencies.repository.fail({
@@ -307,6 +313,7 @@ export class ProcessSpeakingGradingJob {
         ? {}
         : { aiProcessingMs: result.aiProcessingMs }),
     });
+    await this.dependencies.repository.releaseQuotaReservation(job.jobId);
   }
 
   private async finalize(

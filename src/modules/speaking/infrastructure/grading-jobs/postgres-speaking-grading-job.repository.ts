@@ -63,7 +63,7 @@ async function insertJob(
   job: NewSpeakingGradingJob,
 ): Promise<void> {
   await client.$executeRawUnsafe(
-    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, quota_unverified, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, idempotency_key, status, created_at, identity_mode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'queued', $17, $18)`,
+    `INSERT INTO speaking_grading_jobs (job_id, organization_id, end_user_id, environment, api_key_id, quota_tracked, quota_unverified, max_concurrent, audio_asset_id, part, question_id, prompt_text, test_type, test_code, part_result_id, idempotency_key, status, created_at, identity_mode, quota_reservation_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'queued', $17, $18, $19)`,
     job.jobId,
     job.organizationId,
     job.endUserId,
@@ -82,6 +82,7 @@ async function insertJob(
     job.idempotencyKey ?? null,
     job.createdAt,
     job.identityMode,
+    job.quotaTracked,
   );
 }
 
@@ -279,6 +280,18 @@ export class PostgresSpeakingGradingJobRepository
     });
   }
 
+  async releaseQuotaReservation(jobId: string): Promise<boolean> {
+    return this.run(async () => {
+      const rows = await this.client.$queryRawUnsafe<
+        readonly { readonly jobId: string }[]
+      >(
+        `UPDATE speaking_grading_jobs SET quota_reservation_active = false WHERE job_id = $1 AND status = 'succeeded' AND quota_reservation_active = true RETURNING job_id AS "jobId"`,
+        jobId,
+      );
+      return rows.length === 1;
+    });
+  }
+
   async fail(input: {
     readonly jobId: string;
     readonly error: SpeakingGradingJobError;
@@ -288,7 +301,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await this.client.$queryRawUnsafe<
         readonly { readonly jobId: string }[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE job_id = $1 AND status IN ('queued', 'running') RETURNING job_id AS "jobId"`,
+        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE job_id = $1 AND status IN ('queued', 'running') RETURNING job_id AS "jobId"`,
         input.jobId,
         input.completedAt,
         input.error.code,
@@ -350,7 +363,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await this.client.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'running' AND dispatch_started_at < $1 RETURNING ${JOB_COLUMNS}`,
+        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'running' AND dispatch_started_at < $1 RETURNING ${JOB_COLUMNS}`,
         input.startedBefore,
         input.completedAt,
         input.error.code,
@@ -370,7 +383,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await this.client.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'queued' AND created_at < $1 RETURNING ${JOB_COLUMNS}`,
+        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'queued' AND created_at < $1 RETURNING ${JOB_COLUMNS}`,
         input.createdBefore,
         input.completedAt,
         input.error.code,

@@ -62,12 +62,15 @@ export interface SpeakingGradingJobRepositoryPort {
   /** Records that the AI Service call is about to start; only on a `running` job not yet marked. */
   markDispatchStarted(jobId: string, now: Date): Promise<boolean>;
 
-  /** `running` -> `succeeded` with the result. */
+  /** `running` -> `succeeded` with the result; quota reservation remains active. */
   succeed(input: {
     readonly jobId: string;
     readonly result: SpeakingV2QuestionResult;
     readonly completedAt: Date;
   }): Promise<boolean>;
+
+  /** Releases successful job's monthly-quota reservation after metering handoff. */
+  releaseQuotaReservation(jobId: string): Promise<boolean>;
 
   /** Any non-terminal state -> `failed` with the error. */
   fail(input: {

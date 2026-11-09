@@ -9,7 +9,7 @@ import {
 
 function testRedisUrl(): string {
   const url = new URL(
-    process.env.SPEAKING_GRADING_JOB_TEST_REDIS_URL ??
+    process.env['SPEAKING_GRADING_JOB_TEST_REDIS_URL'] ??
       'redis://127.0.0.1:6379/13',
   );
   if (

@@ -94,10 +94,16 @@ function harness(
       async () => options.markDispatchStarted ?? true,
     ),
     succeed: jest.fn(async () => true),
+    releaseQuotaReservation: jest.fn(async () => true),
     fail: jest.fn(async () => true),
   } satisfies Pick<
     SpeakingGradingJobRepositoryPort,
-    'claim' | 'returnToQueue' | 'markDispatchStarted' | 'succeed' | 'fail'
+    | 'claim'
+    | 'returnToQueue'
+    | 'markDispatchStarted'
+    | 'succeed'
+    | 'releaseQuotaReservation'
+    | 'fail'
   >;
   const queue = {
     enqueue: jest.fn(async () => undefined),
@@ -309,6 +315,15 @@ describe('ProcessSpeakingGradingJob', () => {
         modelCalled: true,
         totalMs: 321,
       }),
+    );
+    expect(subject.repository.releaseQuotaReservation).toHaveBeenCalledWith(
+      job.jobId,
+    );
+    expect(subject.repository.succeed.mock.invocationCallOrder[0]).toBeLessThan(
+      subject.finalize.mock.invocationCallOrder[0]!,
+    );
+    expect(subject.finalize.mock.invocationCallOrder[0]).toBeLessThan(
+      subject.repository.releaseQuotaReservation.mock.invocationCallOrder[0]!,
     );
     expect(subject.release).toHaveBeenCalledTimes(1);
   });

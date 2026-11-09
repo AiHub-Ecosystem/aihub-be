@@ -338,6 +338,53 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBe(2);
   });
 
+  it('keeps a successful job reserved until metering handoff completes', async () => {
+    const organizationId = 'org_' + ulid();
+    const since = new Date('2026-11-01T00:00:00.000Z');
+    const job = makeJob({ organizationId });
+    await repository.create(job);
+    await repository.claim({
+      jobId: job.jobId,
+      now: NOW,
+      leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
+    });
+    await repository.succeed({
+      jobId: job.jobId,
+      result: RESULT,
+      completedAt: NOW,
+    });
+
+    const duringMetering = makeJob({ organizationId });
+    await expect(
+      repository.createWithAdmission({
+        job: duringMetering,
+        since,
+        monthlyQuota: 1,
+        admit: async (monthlyQuota) =>
+          monthlyQuota !== null && monthlyQuota > 0,
+      }),
+    ).resolves.toEqual({
+      created: false,
+      existingJobId: duringMetering.jobId,
+    });
+
+    await expect(repository.releaseQuotaReservation(job.jobId)).resolves.toBe(
+      true,
+    );
+
+    const afterMetering = makeJob({ organizationId });
+    await expect(
+      repository.createWithAdmission({
+        job: afterMetering,
+        since,
+        monthlyQuota: 1,
+        admit: async (monthlyQuota) =>
+          monthlyQuota !== null && monthlyQuota > 0,
+      }),
+    ).resolves.toEqual({ created: true });
+  });
+
   it('serializes concurrent admission against monthly in-flight quota', async () => {
     const organizationId = 'org_' + ulid();
     const jobs = [makeJob({ organizationId }), makeJob({ organizationId })];
