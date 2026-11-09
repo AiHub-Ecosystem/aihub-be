@@ -20,7 +20,7 @@ import type {
   SpeakingMultipartFilePart,
   SpeakingMultipartParserPort,
   SpeakingMultipartSource,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 
 const MULTIPART_LIMITS = {

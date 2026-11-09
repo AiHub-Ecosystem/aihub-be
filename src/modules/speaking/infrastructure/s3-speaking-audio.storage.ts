@@ -3,7 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/speaking-audio-storage.port';
+import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/audio/speaking-audio-storage.port';
 
 export const SPEAKING_AUDIO_URL_TTL_SECONDS = 15 * 60;
 

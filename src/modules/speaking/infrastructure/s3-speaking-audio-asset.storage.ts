@@ -12,7 +12,7 @@ import {
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
-import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
+import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   SPEAKING_AUDIO_BUCKETS,
   SPEAKING_AUDIO_UPLOAD_URL_TTL_SECONDS,

@@ -28,7 +28,7 @@ import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-disp
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 import {
   type InFlightCeiling,
   SPEAKING_UPLOADS_IN_FLIGHT_MAX,

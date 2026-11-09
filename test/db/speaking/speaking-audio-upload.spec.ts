@@ -2,8 +2,8 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/speaking-audio-upload.port';
-import { SpeakingAudioUploadService } from '@/modules/speaking/application/speaking-audio-upload.service';
+import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
+import { SpeakingAudioUploadService } from '@/modules/speaking/application/audio/speaking-audio-upload.service';
 import {
   type SpeakingAudioAsset,
   type SpeakingAudioUploadIntent,

@@ -21,7 +21,7 @@ import {
 } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
-import { SPEAKING_AUDIO_STORAGE } from './application/speaking-audio-storage.port';
+import { SPEAKING_AUDIO_STORAGE } from './application/audio/speaking-audio-storage.port';
 import {
   SPEAKING_AUDIO_ASSET_STORAGE,
   SPEAKING_AUDIO_UPLOAD_CLOCK,
@@ -29,11 +29,11 @@ import {
   SPEAKING_AUDIO_UPLOAD_SERVICE,
   type SpeakingAudioAssetStoragePort,
   type SpeakingAudioUploadRepositoryPort,
-} from './application/speaking-audio-upload.port';
-import { SpeakingAudioUploadService } from './application/speaking-audio-upload.service';
-import { SpeakingAudioUploadSweep } from './application/speaking-audio-upload.sweep';
-import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/speaking-audio-url-rejection-recorder.port';
-import { SPEAKING_MULTIPART_PARSER } from './application/speaking-multipart-parser.port';
+} from './application/audio/speaking-audio-upload.port';
+import { SpeakingAudioUploadService } from './application/audio/speaking-audio-upload.service';
+import { SpeakingAudioUploadSweep } from './application/audio/speaking-audio-upload.sweep';
+import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/audio/speaking-audio-url-rejection-recorder.port';
+import { SPEAKING_MULTIPART_PARSER } from './application/audio/speaking-multipart-parser.port';
 import {
   InFlightCeiling,
   SPEAKING_UPLOADS_IN_FLIGHT_MAX,

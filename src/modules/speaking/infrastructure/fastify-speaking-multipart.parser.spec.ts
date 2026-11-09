@@ -3,7 +3,7 @@ import type {
   SpeakingMultipartFilePart,
   SpeakingMultipartPart,
   SpeakingMultipartSource,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 import { FastifySpeakingMultipartParser } from './fastify-speaking-multipart.parser';
 
 const AUDIO_BYTES = Buffer.alloc(1_024, 1);

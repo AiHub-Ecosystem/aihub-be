@@ -4,7 +4,7 @@ import type {
   SpeakingMultipartLimits,
   SpeakingMultipartPart,
   SpeakingMultipartSource,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 
 interface FastifyFileStream {
   readonly truncated?: boolean;

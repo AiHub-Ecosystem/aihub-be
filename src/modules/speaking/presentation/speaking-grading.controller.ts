@@ -34,12 +34,12 @@ import { RequireOperation } from '@/modules/identity/shared/presentation/require
 import {
   SPEAKING_AUDIO_URL_REJECTION_RECORDER,
   type SpeakingAudioUrlRejectionRecorderPort,
-} from '@/modules/speaking/application/speaking-audio-url-rejection-recorder.port';
-import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/speaking-audio-url.policy';
+} from '@/modules/speaking/application/audio/speaking-audio-url-rejection-recorder.port';
+import { isApprovedSpeakingAudioUrl } from '@/modules/speaking/application/audio/speaking-audio-url.policy';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
-} from '@/modules/speaking/application/speaking-multipart-parser.port';
+} from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
 import {
   type InFlightCeiling,
   SPEAKING_UPLOAD_CEILING,

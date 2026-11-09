@@ -1,7 +1,7 @@
 import { Counter } from '@prometheus-io/client';
 
 import { registry } from '@/common/observability/metrics';
-import type { SpeakingAudioUrlRejectionReason } from '@/modules/speaking/application/speaking-audio-url.policy';
+import type { SpeakingAudioUrlRejectionReason } from '@/modules/speaking/application/audio/speaking-audio-url.policy';
 
 const REASONS: readonly SpeakingAudioUrlRejectionReason[] = [
   'malformed',

@@ -1,7 +1,7 @@
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
-} from '@/modules/speaking/application/speaking-audio-upload.port';
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   type SpeakingAudioUploadIntent,
   speakingAudioStagingObjectKey,
