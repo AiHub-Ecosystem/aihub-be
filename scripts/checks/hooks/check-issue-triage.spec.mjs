@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
@@ -137,4 +138,14 @@ await test('parses narrow paginated GraphQL pages', () => {
       milestone: { number: 12 },
     },
   ]);
+});
+
+await test('the static job runs this suite in CI (#1786)', () => {
+  const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const start = workflow.indexOf('\n  static:');
+  const staticJob = workflow.slice(start, workflow.indexOf('\n  test:', start));
+  assert.ok(
+    staticJob.includes('bun run test:issue-triage'),
+    'the static job must run bun run test:issue-triage',
+  );
 });

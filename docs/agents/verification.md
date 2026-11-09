@@ -31,6 +31,16 @@ Specs that need Redis fail with `ECONNREFUSED` when no throwaway Redis exists; t
 
 When a pull request delivers multiple ordered commits, every intermediate commit must remain bisect-friendly and compile independently. Run `git rebase --exec "bunx tsc --noEmit" <base>` across the branch range before opening the pull request to verify that intermediate commits do not have broken imports.
 
+## What verify leaves to CI (#1786)
+
+A green `bun run verify` is not the whole gate. Three areas deliberately stay CI-side, each with a named owner; a contributor green on `verify` can still fail CI on them:
+
+- **The database lane** — `test:db`, `test:tenant-isolation`, `coverage:db`, `coverage:tenant-isolation` — and **`check:prisma-drift`** run in CI's `database` job, not in `verify`. They need a Postgres the lane can prove is AIHUB's (see "Running one database-lane spec" above) and would make the default loop fragile on machines whose Postgres and Redis belong to another project. Run the lane by hand before handoff when the change touches a database path; `check:changed` selects `test` for Prisma and migration changes.
+- **The Jest coverage thresholds** — the `coverageThreshold` in `jest.config.cjs` (lines 83 / branches 72) is enforced by `bun run coverage:unit`, which CI's `coverage` job runs. The decision recorded here is that the threshold stays CI-side: `verify` runs the unit lane without coverage, and adding an Istanbul instrumented run to every local loop would roughly double its cost and run the memory-bound lane on every developer machine for a number the merged-coverage gate already answers. The `coverage` job fails a drop past the agreed margin against the committed baseline, not the absolute floor; the floor still bounds the baseline itself.
+- **The commit-message range** — the `.husky/commit-msg` gate runs at hook time, and `bun run verify` never re-checks committed history. CI's `static` job lints the pull request range or the push range through the hook script itself (`scripts/ci/commit-messages/check-commit-messages.mjs`), so a `--no-verify` commit is caught there.
+
+Everything else `verify` covers stays as it is; nothing above removes, weakens, or makes optional a step `verify` already runs.
+
 ## Windows cross-drive worktrees and lint-staged backup
 
 On Windows, when a Git worktree sits on a different drive than the primary repository Git directory (e.g. `C:\...` worktree pointing to `D:\aihub-be\.git`), `lint-staged`'s automatic stash backup in Husky's pre-commit hook can fail with `✖ Failed to back up original state!`.

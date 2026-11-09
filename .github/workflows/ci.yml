@@ -122,6 +122,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # #1786: the commit-message range check lints base..head, so the
+          # checkout needs the base commit a shallow clone would not have.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -175,6 +178,23 @@ jobs:
 
       - name: Check import style
         run: bun run check:imports
+
+      # #1786: these suites ran only inside the local check:batch loop, so a
+      # regression in the checkers they pin stayed invisible in CI.
+      - name: Check the hook and drift suites CI owns
+        run: bun run test:issue-triage && bun run test:lint-staged && bun run test:doc-drift && bun run test:commit-message
+
+      # #1786: the commit-message gate exists only at hook time, so a
+      # --no-verify commit landed a non-Conventional header with nothing to
+      # catch it. This lints exactly the range the trigger changes, through
+      # the hook script itself; a range-less trigger is skipped with a reason.
+      - name: Check commit messages on the changed range
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        env:
+          COMMIT_EVENT: ${{ github.event_name }}
+          COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          COMMIT_HEAD: ${{ github.sha }}
+        run: node scripts/ci/commit-messages/check-commit-messages.mjs
 
       - name: Generate and validate OpenAPI
         run: bun run generate:openapi && bun run validate:openapi

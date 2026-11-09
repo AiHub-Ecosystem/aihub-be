@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { test } from 'node:test';
@@ -104,5 +104,18 @@ await test('requires every ADR to have a status line', async (/** @type {import(
     findDocDriftViolations(root).some((message) =>
       message.includes('ADR-0001 has no Status line'),
     ),
+  );
+});
+
+await test('the static job runs this suite in CI (#1786)', async () => {
+  const workflow = await readFile(
+    new URL('../../../.github/workflows/ci.yml', import.meta.url),
+    'utf8',
+  );
+  const start = workflow.indexOf('\n  static:');
+  const staticJob = workflow.slice(start, workflow.indexOf('\n  test:', start));
+  assert.ok(
+    staticJob.includes('bun run test:doc-drift'),
+    'the static job must run bun run test:doc-drift',
   );
 });

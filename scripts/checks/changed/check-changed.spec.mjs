@@ -232,10 +232,40 @@ const pathCases = [
     gates: ['check:doc-drift', 'format:check'],
   },
   {
-    // #1789: the workflow also wires the generated-artifact drift check, so
-    // its spec runs beside the secret-scan suite it already selected.
+    // #1786: the workflow runs the hook and drift suites and the commit
+    // range check, so their specs run beside the secret-scan suite it
+    // already selected. #1789: the generated-artifact drift check too.
     path: '.github/workflows/ci.yml',
-    gates: ['format:check', 'test:generated-drift', 'test:secret-scan'],
+    gates: [
+      'format:check',
+      'test:commit-message',
+      'test:commit-messages',
+      'test:doc-drift',
+      'test:generated-drift',
+      'test:issue-triage',
+      'test:lint-staged',
+      'test:secret-scan',
+    ],
+  },
+  {
+    // #1786: the commit-message range checker and its spec select each
+    // other. The checker is CI-only (the static job owns the range).
+    path: 'scripts/ci/commit-messages/check-commit-messages.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:commit-messages',
+    ],
+  },
+  {
+    path: 'scripts/ci/commit-messages/check-commit-messages.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:commit-messages',
+    ],
   },
   {
     // #1789: the drift check and its spec select each other. The check itself
