@@ -66,6 +66,13 @@ async function seedMember(
   return id;
 }
 
+const DEFAULT_KEY = { kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1' };
+const rawThumbprint = jsonWebKeyThumbprint(DEFAULT_KEY);
+if (rawThumbprint === undefined) {
+  throw new Error('default test key cannot be thumbprinted');
+}
+const DEFAULT_THUMBPRINT: string = rawThumbprint;
+
 function input(
   overrides: Omit<
     Partial<SaveOrganizationIdentityConfigInput>,
@@ -86,12 +93,12 @@ function input(
     issuer: 'https://acme.edu',
     jwksUrl: null,
     publicKeysJwks: {
-      keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1' }],
+      keys: [DEFAULT_KEY],
     },
     allowedAlgorithms: ['RS256', 'ES256'],
     maxAssertionTtlSeconds: 300,
     sourceKind: 'inline',
-    keyThumbprints: [],
+    keyThumbprints: [DEFAULT_THUMBPRINT],
     ...overrides,
   };
 }
@@ -212,9 +219,7 @@ describe('Organization identity configuration against PostgreSQL', () => {
         detail: {
           issuer: 'https://acme.edu',
           sourceKind: 'inline',
-          keyThumbprints: [
-            jsonWebKeyThumbprint({ kty: 'RSA', n: 'AQAB', e: 'AQAB' }),
-          ],
+          keyThumbprints: [DEFAULT_THUMBPRINT],
         },
       },
     ]);

@@ -156,9 +156,13 @@ async function holdAuthorityChange(options: {
       options.status ?? null,
     ],
   );
-  const pid = (
+  const pidRow = (
     await connection.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
-  ).rows[0]!.pid;
+  ).rows[0];
+  if (pidRow === undefined) {
+    throw new Error('the holding connection reported no backend pid');
+  }
+  const pid = pidRow.pid;
   return {
     pid,
     commit: async () => {

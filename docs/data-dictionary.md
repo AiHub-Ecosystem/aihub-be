@@ -70,8 +70,8 @@ Owner: `identity`
 | createdBy            | String?             | @map("created_by")                                                                                                  |
 | lastRotatedBy        | String?             | @map("last_rotated_by")                                                                                             |
 | organization         | Organization        | @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)                       |
-| createdByAccount     | UserAccount?        | @relation("ApiKeyCreatedBy", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)         |
-| lastRotatedByAccount | UserAccount?        | @relation("ApiKeyLastRotatedBy", fields: [lastRotatedBy], references: [id], onDelete: NoAction, onUpdate: NoAction) |
+| createdByAccount     | UserAccount?        | @relation("ApiKeyCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: NoAction)         |
+| lastRotatedByAccount | UserAccount?        | @relation("ApiKeyLastRotatedBy", fields: [lastRotatedBy], references: [id], onDelete: Restrict, onUpdate: NoAction) |
 | notificationEvents   | NotificationEvent[] |                                                                                                                     |
 
 ## OperatorRedisFailure
