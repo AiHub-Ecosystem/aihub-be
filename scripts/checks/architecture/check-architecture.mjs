@@ -1358,6 +1358,9 @@ function main() {
       readFileSync(join(root, 'tsconfig.json'), 'utf8'),
       readFileSync(join(root, 'package.json'), 'utf8'),
       readFileSync(join(root, 'bun.lock'), 'utf8'),
+      // #1438: the generated Prisma client is what makes `@prisma-client/*`
+      // resolvable, so "missing" and "present" must not share a cache entry.
+      cacheHelpers.generatedPrismaClientFingerprint(root),
     ]);
   const result = spawnSync(
     process.execPath,

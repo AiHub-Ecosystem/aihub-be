@@ -3,6 +3,7 @@ declare const cacheHelpers: {
     root: string,
     inputs: readonly string[],
   ): string;
+  generatedPrismaClientFingerprint(root: string): string;
 };
 
 export = cacheHelpers;
