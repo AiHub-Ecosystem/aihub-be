@@ -68,7 +68,7 @@
     },
     {
       "ruleId": "js/insufficient-password-hash",
-      "path": "src/modules/gateway/application/stable-offset.ts",
+      "path": "src/common/stable-offset.ts",
       "fingerprint": "b5e87e26937e9486:1",
       "reason": "Derives a stable scheduling offset from a key id; no secret is stored or compared."
     },
