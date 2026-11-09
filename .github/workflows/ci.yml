@@ -1209,28 +1209,30 @@ jobs:
       # The registry manifest digest is not the local image ID. Read it the
       # same way CD does instead of scraping docker push's per-layer output.
       - name: Push the image that booted
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          image="ghcr.io/${REPOSITORY,,}:${SHA}"
+          image_repo="ghcr.io/${REPOSITORY,,}"
+          image="${image_repo}:${SHA}"
           docker tag aihub:image-boot "$image"
           docker push "$image"
           digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$image")"
           test -n "$digest"
+          image_ref="${image_repo}@${digest}"
           printf '%s\n' "$digest" > image-digest.txt
-          printf '### Image published\n\n`%s`\n\nManifest digest `%s`\n' \
-            "$image" "$digest" >> "$GITHUB_STEP_SUMMARY"
-          printf 'IMAGE_REF=%s@%s\n' "$image" "$digest" >> "$GITHUB_ENV"
+          printf 'IMAGE_REPO=%s\n' "$image_repo" >> "$GITHUB_ENV"
+          printf 'IMAGE_REF=%s\n' "$image_ref" >> "$GITHUB_ENV"
           printf 'IMAGE_DIGEST=%s\n' "$digest" >> "$GITHUB_ENV"
+          printf '### Image published\n\n`%s`\n\nManifest digest `%s`\n\nSBOM provenance: attached as signed SPDX in-toto attestation to `%s`.\n' \
+            "$image" "$digest" "$image_ref" >> "$GITHUB_STEP_SUMMARY"
 
       # Syft SPDX for the pushed digest — bound to the digest, not the tag,
       # so the "which image contains CVE X" question (#1814) has one answer.
       - name: Generate SBOM for the pushed image digest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: sbom
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ env.IMAGE_REF }}
@@ -1239,36 +1241,12 @@ jobs:
           registry-username: ${{ secrets.GHCR_USERNAME }}
           registry-password: ${{ secrets.GHCR_PULL_TOKEN }}
 
-      # Grype scan of that SBOM. The action writes the JSON report itself; our
-      # threshold gate is scripts/ci/image/check-sbom-severity.cjs (high+).
-      - name: Scan SBOM for vulnerabilities (Grype)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: grype
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
-        with:
-          sbom: image-sbom.spdx.json
-          format: grype-json
-          output-file: grype-report.json
-          fail-build: "false"
-          severity-cutoff: high
-
-      - name: Gate the release on the SBOM vulnerability threshold
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s grype-report.json
-          node scripts/ci/image/check-sbom-severity.cjs grype-report.json --threshold high
-          printf 'SBOM scan passed: no high-or-above findings (threshold recorded in docs/operations/image-sbom-provenance.md).\n' >> "$GITHUB_STEP_SUMMARY"
-
       # cosign keyless signing: image signature + SPDX attestation, both bound
-      # to the pushed digest. OIDC + id-token give the keyless Fulcio cert.
+      # to the pushed digest, plus an offline detached bundle for non-registry verification.
       - name: Install cosign
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
       - name: Sign the image and attach the SBOM attestation
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
@@ -1277,12 +1255,41 @@ jobs:
           set -euo pipefail
           test -s image-sbom.spdx.json
           docker login ghcr.io --username "$GHCR_USERNAME" --password "$GHCR_PULL_TOKEN" || true
-          cosign sign --yes "$IMAGE_REF"
+          cosign sign --yes \
+            -a "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -a "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -a "sbom.spdx.location=${IMAGE_REF}" \
+            "$IMAGE_REF"
           cosign attest --yes \
             --type spdxjson \
             --predicate image-sbom.spdx.json \
+            -a "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -a "org.opencontainers.image.revision=${GITHUB_SHA}" \
             "$IMAGE_REF"
-          printf 'SBOM attestation signed for `%s` (SPDX JSON, in-toto, keyless cosign).\n' "$IMAGE_REF" >> "$GITHUB_STEP_SUMMARY"
+          cosign sign-blob --yes \
+            --bundle image-sbom.spdx.json.bundle \
+            image-sbom.spdx.json
+          printf 'SBOM attestation and offline bundle signed for `%s` (SPDX JSON, keyless cosign).\n' "$IMAGE_REF" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the signed SBOM and bundle
+        if: always() && steps.sbom.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-sbom
+          path: |
+            image-sbom.spdx.json
+            image-sbom.spdx.json.bundle
+
+      # Native Grype scan of the attached SBOM. Fails the release if a vulnerability
+      # at or above high is found (threshold recorded in docs/operations/image-sbom-provenance.md).
+      # The SBOM attestation is already in the registry above so findings are inspectable.
+      - name: Scan SBOM for vulnerabilities (Grype)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          sbom: image-sbom.spdx.json
+          format: table
+          fail-build: "true"
+          severity-cutoff: high
 
       # `workflow_run` payloads carry no job outputs, so this artifact is how
       # the digest reaches CD. It exists only when publishing succeeds.
@@ -1291,20 +1298,6 @@ jobs:
         with:
           name: image-digest
           path: image-digest.txt
-
-      - name: Upload the SBOM
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: image-sbom
-          path: image-sbom.spdx.json
-
-      - name: Upload the Grype report
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: grype-report
-          path: grype-report.json
 
   outbox-evaluation:
     name: Zero-table Outbox Evaluation

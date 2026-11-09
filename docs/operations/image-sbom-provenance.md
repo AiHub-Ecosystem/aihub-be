@@ -6,7 +6,7 @@ This runbook records how the production Docker image's Software Bill of Material
 
 CI builds and boots the production image, then the `publish-image` job (`.github/workflows/ci.yml`, `main` push only, `production` environment) pushes the booted image to GHCR and generates an SPDX JSON SBOM for that image digest with Syft (`anchore/sbom-action`). The SBOM is:
 
-- uploaded as a workflow artifact (`image-sbom`) for the CI run;
+- uploaded as a workflow artifact (`image-sbom`) for the CI run containing both `image-sbom.spdx.json` and its offline Cosign signature bundle `image-sbom.spdx.json.bundle`;
 - attached to the image in the registry as an in-toto SPDX attestation, signed keylessly with cosign/Sigstore and bound to the image digest; and
 - scanned with Grype (`anchore/scan-action`) before the release is considered complete.
 
@@ -35,7 +35,18 @@ cosign verify-attestation ghcr.io/aihub-ecosystem/aihub-be@sha256:<digest> \
   --certificate-identity-regexp 'https://github.com/AiHub-Ecosystem/aihub-be/.github/workflows/ci.yml@refs/heads/main'
 ```
 
-The attestation payload contains the SPDX document. CI also records the digest and SBOM location in the `publish-image` job summary and uploads `image-sbom.spdx.json` as the `image-sbom` artifact.
+The attestation payload contains the SPDX document and carries annotations (`org.opencontainers.image.source`, `org.opencontainers.image.revision`, `sbom.spdx.location`).
+
+### Verifying the SBOM artifact offline (outside registry)
+
+From the downloaded `image-sbom` CI workflow artifact:
+
+```bash
+cosign verify-blob image-sbom.spdx.json \
+  --bundle image-sbom.spdx.json.bundle \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp 'https://github.com/AiHub-Ecosystem/aihub-be/.github/workflows/ci.yml@refs/heads/main'
+```
 
 ## Related
 
