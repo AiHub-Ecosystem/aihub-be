@@ -14,7 +14,7 @@
       "@prisma-client/*": ["./dist/generated/prisma/*"]
     },
     "types": ["node"],
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "strict": false
   },
   "include": ["scripts/**/*.mjs", "scripts/**/*.cjs", "scripts/**/*.js"],
