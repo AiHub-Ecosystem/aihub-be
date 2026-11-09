@@ -125,7 +125,7 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse refs/remotes/origin/main)"
           reason_file="$(mktemp)"
-          outcome="$(node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" --classify 2>"$reason_file")" || {
+          outcome="$(node scripts/ci/deploy/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" --classify 2>"$reason_file")" || {
             cat "$reason_file" >&2
             exit 1
           }
@@ -249,7 +249,7 @@ jobs:
           main_sha="$(git rev-parse refs/remotes/origin/main)"
           previous_shas="$(paste -sd, "$GITHUB_WORKSPACE/previous-release.txt")"
           test -n "$previous_shas"
-          printf '%s\n' "$state" | node scripts/ci/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" "$previous_shas"
+          printf '%s\n' "$state" | node scripts/ci/deploy/deploy-target-guard.cjs "$DEPLOY_SHA" "$main_sha" "$previous_shas"
 
       - name: Stage host job installer
         if: ${{ steps.stale_guard.outputs.outcome == 'deploy' }}

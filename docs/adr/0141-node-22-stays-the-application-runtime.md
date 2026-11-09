@@ -12,7 +12,7 @@ The suggestion to run the application on Bun returns every few months. [ADR-0139
 
 ### Measurement
 
-CI run 41264830728 on `ubuntu-latest` (Linux 7.0.0-azure, 4 vCPU, 16 GB), Node 22.23.4 against Bun 1.4.4, one build of `dist/` from `8d382b26`, a throwaway workflow on a branch that was never merged and has been deleted. The boot configuration is `scripts/ci/ci-boot-config.cjs`: every value is fake and nothing is contacted at boot, as in the Image boot job.
+CI run 41264830728 on `ubuntu-latest` (Linux 7.0.0-azure, 4 vCPU, 16 GB), Node 22.23.4 against Bun 1.4.4, one build of `dist/` from `8d382b26`, a throwaway workflow on a branch that was never merged and has been deleted. The boot configuration is `scripts/ci/boot/ci-boot-config.cjs`: every value is fake and nothing is contacted at boot, as in the Image boot job.
 
 | Measure                                                   | Node 22.23.4 median (range) | Bun 1.4.4 median (range) |
 | --------------------------------------------------------- | --------------------------- | ------------------------ |

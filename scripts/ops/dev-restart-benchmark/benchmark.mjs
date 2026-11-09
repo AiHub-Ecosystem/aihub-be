@@ -306,7 +306,7 @@ function createRuntimeEnvironment(workspaceRoot, markersPath) {
   const require = createRequire(import.meta.url);
   const ciBootConfig =
     /** @type {{writeBootConfig(directory: string): void}} */ (
-      require(path.join(repositoryRoot, 'scripts/ci/ci-boot-config.cjs'))
+      require(path.join(repositoryRoot, 'scripts/ci/boot/ci-boot-config.cjs'))
     );
   ciBootConfig.writeBootConfig(runtimeDirectory);
 

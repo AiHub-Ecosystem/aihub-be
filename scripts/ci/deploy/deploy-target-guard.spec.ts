@@ -393,7 +393,7 @@ describe('CD deployment target after commits CI skips', () => {
 
   it('deploys only runs whose CI succeeded', () => {
     const cd = readFileSync(
-      join(__dirname, '../../.github/workflows/cd.yml'),
+      join(__dirname, '../../../.github/workflows/cd.yml'),
       'utf8',
     );
     expect(cd).toContain("github.event.workflow_run.conclusion == 'success'");

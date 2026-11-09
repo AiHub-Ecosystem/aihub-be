@@ -1,6 +1,6 @@
 # The AIHUB DAST plan template (issue #319).
 #
-# ZAP never sees this file. `scripts/ci/dast-render-plan.ts` renders it before
+# ZAP never sees this file. `scripts/ci/dast/dast-render-plan.ts` renders it before
 # every run: it substitutes the disposable CI target and the credentials minted
 # inside the job, injects the rules from `ops/dast/zap-rules.ts` at the
 # `@dast-rules` markers, and, for the passive pull-request run, strips the

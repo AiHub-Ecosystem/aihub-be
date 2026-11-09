@@ -4,7 +4,7 @@ name: DAST
 # OpenAPI document (issue #319). Every pull request gets a passive API scan
 # that reports without failing the build; the weekly scheduled run adds active
 # scanning, where the injection-class rules fail the job
-# (scripts/ci/dast-gate.ts).
+# (scripts/ci/dast/dast-gate.ts).
 #
 # The scan never targets Sandbox or Production. Its only target is the image
 # this job builds and boots on the runner's loopback, against a disposable
@@ -145,7 +145,7 @@ jobs:
           AIHUB_DAST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aihub
           AIHUB_DAST_REDIS_URL: redis://127.0.0.1:6379
         run: |
-          node scripts/ci/dast-boot-config.cjs "$DAST_DIR/config"
+          node scripts/ci/dast/dast-boot-config.cjs "$DAST_DIR/config"
           chmod 0755 "$DAST_DIR/config"
           chmod 0644 "$DAST_DIR/config"/*
 
@@ -165,7 +165,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aihub
         run: |
-          node --import tsx scripts/ci/dast-seed.ts --out "$DAST_DIR"
+          node --import tsx scripts/ci/dast/dast-seed.ts --out "$DAST_DIR"
 
       - name: Boot the image for the scan
         run: |
@@ -218,7 +218,7 @@ jobs:
           AIHUB_DAST_BEARER: ${{ steps.login.outputs.bearer }}
         run: |
           api_key="$(jq -r .apiKey "$DAST_DIR/dast-credentials.json")"
-          node --import tsx scripts/ci/dast-render-plan.ts \
+          node --import tsx scripts/ci/dast/dast-render-plan.ts \
             --mode "${{ steps.mode.outputs.mode }}" \
             --target "$DAST_TARGET" \
             --api-key "$api_key" \
@@ -241,7 +241,7 @@ jobs:
       - name: Gate the active scan on injection-class findings
         if: steps.mode.outputs.mode == 'active'
         # The sarif-json report template appends .json to reportFile.
-        run: node --import tsx scripts/ci/dast-gate.ts "$DAST_DIR/zap-results.sarif.json"
+        run: node --import tsx scripts/ci/dast/dast-gate.ts "$DAST_DIR/zap-results.sarif.json"
 
       - name: Upload the SARIF artifact
         if: always()

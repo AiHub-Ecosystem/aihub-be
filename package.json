@@ -34,7 +34,7 @@
     "benchmark:control-plane": "node scripts/ops/capacity-benchmark/benchmark-control-plane.mjs",
     "benchmark:kysely-spike": "bun run build && node scripts/ops/kysely-evaluation/benchmark.mjs",
     "benchmark:kysely-database": "bun run build && node scripts/ops/kysely-evaluation/benchmark-database.mjs",
-    "measure:public-api-major-usage-buffer": "node --expose-gc scripts/ops/measure-public-api-major-usage-buffer.mjs",
+    "measure:public-api-major-usage-buffer": "node --expose-gc scripts/ops/capacity-benchmark/measure-public-api-major-usage-buffer.mjs",
     "vault:provision": "node ops/vault/provision-runtime-secrets.mjs",
     "vault:smoke": "node scripts/ops/vault/vault-smoke.mjs",
     "test": "node scripts/generate/generate-prisma-client.mjs --runtime && node scripts/cli/run-bun-test.mjs",

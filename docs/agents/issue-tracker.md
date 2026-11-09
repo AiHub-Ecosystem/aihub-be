@@ -20,7 +20,7 @@ Bodies go in a file, never in `--body`, and the shell reason why is in the globa
 
 ### Documentation-only pushes
 
-Pull requests always run CI. Pushes to `main` skip Markdown unless a tracked spec reads that file. Keep those input paths in `.github/workflows/ci.yml`; `scripts/ci/ci-push-paths.spec.ts` checks the allowlist against tracked specs.
+Pull requests always run CI. Pushes to `main` skip Markdown unless a tracked spec reads that file. Keep those input paths in `.github/workflows/ci.yml`; `scripts/ci/push/ci-push-paths.spec.ts` checks the allowlist against tracked specs.
 
 The Public API release gate (`bun run check:api-compatibility`) runs on pull requests and on pushes to `main`. A push is compared with the last revision CD deployed (the commit before it when CD has never succeeded), so `CHANGELOG.md` stays in the push allowlist. A red gate on `main` skips the deploy (#1398).
 

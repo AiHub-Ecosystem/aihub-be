@@ -2,7 +2,7 @@
  * The gate for the scheduled active DAST scan (issue #319): an alert from an
  * injection-class rule fails the run.
  *
- *   node --import tsx scripts/ci/dast-gate.ts <zap-results.sarif>
+ *   node --import tsx scripts/ci/dast/dast-gate.ts <zap-results.sarif>
  *
  * Matches the SARIF rule ids in `DAST_FAILING_RULE_IDS` and, as a fallback
  * against rule-id drift, the rule names in `DAST_FAILING_RULE_NAMES`. Every
@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import {
   DAST_FAILING_RULE_IDS,
   DAST_FAILING_RULE_NAMES,
-} from '../../ops/dast/zap-rules';
+} from '../../../ops/dast/zap-rules';
 
 interface SarifResult {
   readonly ruleId?: string;
@@ -54,7 +54,9 @@ function failingReason(
 
 const sarifPath = process.argv[2];
 if (sarifPath === undefined || sarifPath.length === 0) {
-  console.error('usage: node --import tsx scripts/ci/dast-gate.ts <sarif>');
+  console.error(
+    'usage: node --import tsx scripts/ci/dast/dast-gate.ts <sarif>',
+  );
   process.exit(2);
 }
 

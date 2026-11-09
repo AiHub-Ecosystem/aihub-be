@@ -192,7 +192,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/u;
  * and 4.07 MiB heap at 16,384 keys. During 1,228,800 outage requests, a process
  * retained up to 2 × 16,384 keys (one pending batch and one live buffer):
  * +9.01 MiB heap, 80.52 MiB RSS, and 1,065,040 drops. Reproduce with
- * scripts/ops/measure-public-api-major-usage-buffer.mjs.
+ * scripts/ops/capacity-benchmark/measure-public-api-major-usage-buffer.mjs.
  *
  * Why 16,384: two buffers cost about 9 MiB, 1.2% of the 768 MiB limit, and a
  * key is one UTC day of one major for one Organization, so a buffer holds four

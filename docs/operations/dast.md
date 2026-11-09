@@ -17,7 +17,7 @@ document instead of a spider.
   `workflow_dispatch` with `mode: active`. The same plan plus an active scan
   bounded to 12 minutes. An alert from an injection-class rule (SQL injection,
   reflected XSS, OS command injection, SSRF — `DAST_FAILING_RULE_IDS` in
-  `ops/dast/zap-rules.ts`) fails the job through `scripts/ci/dast-gate.ts`.
+  `ops/dast/zap-rules.ts`) fails the job through `scripts/ci/dast/dast-gate.ts`.
   Every other finding stays report-only.
 
 Results are published twice: as a workflow artifact (`dast-sarif-<mode>`,
@@ -34,7 +34,7 @@ failed scan.
   so it cannot reach the deploy boundary (#314) or a real host (#298).
 - The scan's PostgreSQL and Redis are the job's own service containers;
   migrations and seed data are thrown away with the job.
-- Credentials are minted inside the job (`scripts/ci/dast-seed.ts`): one
+- Credentials are minted inside the job (`scripts/ci/dast/dast-seed.ts`): one
   Organization with a gateway API key, one User Account with a random
   password, and no Organization membership. Organization-scoped management
   routes therefore answer the safe authorization denial, which bounds what a
@@ -50,16 +50,16 @@ failed scan.
 
 ## Files
 
-| Path                                  | Role                                                                                           |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `ops/dast/zap-plan.template.yaml`     | The plan template; the renderer fills the placeholders and markers                             |
-| `ops/dast/zap-rules.ts`               | The rules configuration: every IGNORE with its reason, the active policy, the failing rule ids |
-| `scripts/ci/dast-render-plan.ts`      | Renders the plan for one run; refuses placeholders or markers left behind                      |
-| `scripts/ci/dast-render-plan.spec.ts` | Proves both renders, the substitutions, and the exclusions                                     |
-| `scripts/ci/dast-boot-config.cjs`     | The boot configuration, repointed at the disposable databases                                  |
-| `scripts/ci/dast-seed.ts`             | Mints and seeds the scan credentials                                                           |
-| `scripts/ci/dast-gate.ts`             | Fails the active scan on injection-class alerts                                                |
-| `.github/workflows/dast.yml`          | The job itself                                                                                 |
+| Path                                       | Role                                                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `ops/dast/zap-plan.template.yaml`          | The plan template; the renderer fills the placeholders and markers                             |
+| `ops/dast/zap-rules.ts`                    | The rules configuration: every IGNORE with its reason, the active policy, the failing rule ids |
+| `scripts/ci/dast/dast-render-plan.ts`      | Renders the plan for one run; refuses placeholders or markers left behind                      |
+| `scripts/ci/dast/dast-render-plan.spec.ts` | Proves both renders, the substitutions, and the exclusions                                     |
+| `scripts/ci/dast/dast-boot-config.cjs`     | The boot configuration, repointed at the disposable databases                                  |
+| `scripts/ci/dast/dast-seed.ts`             | Mints and seeds the scan credentials                                                           |
+| `scripts/ci/dast/dast-gate.ts`             | Fails the active scan on injection-class alerts                                                |
+| `.github/workflows/dast.yml`               | The job itself                                                                                 |
 
 ## Triaging a finding
 
@@ -81,7 +81,7 @@ failed scan.
 3. Re-run locally against a booted image when adjusting rules:
 
    ```sh
-   node --import tsx scripts/ci/dast-render-plan.ts --mode passive \
+   node --import tsx scripts/ci/dast/dast-render-plan.ts --mode passive \
      --target http://dast.aihub.invalid:3000 \
      --api-key <seeded key> --bearer <token> \
      --out temp/dast/zap-plan.yaml

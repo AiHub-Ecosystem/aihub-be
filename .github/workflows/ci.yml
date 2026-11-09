@@ -924,7 +924,7 @@ jobs:
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
-            | node scripts/ci/check-production-compose-logs.cjs
+            | node scripts/ci/compose/check-production-compose-logs.cjs
 
       - name: Validate production Compose defaults and trusted proxy
         env:
@@ -936,7 +936,7 @@ jobs:
         run: |
           set -o pipefail
           docker compose --profile "*" --env-file .env.production.example -f docker-compose.production.yml config --format json \
-            | node scripts/ci/check-trusted-proxy-compose.cjs
+            | node scripts/ci/compose/check-trusted-proxy-compose.cjs
 
       # Built and loaded into this runner's daemon, not pushed: the boot check
       # below has to start the exact image, and buildx cannot both load an image
@@ -960,7 +960,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Check scheduled job paths in the shipped image
-        run: node scripts/ci/host-job-image-check.cjs aihub:image-boot
+        run: node scripts/ci/image/host-job-image-check.cjs aihub:image-boot
 
       # ADR-0088: the generated client is Rust-free and the `prisma` CLI is a
       # devDependency, so neither it nor its engines may reach the runtime image.
@@ -970,7 +970,7 @@ jobs:
           'test ! -e node_modules/prisma && test ! -e node_modules/.bin/prisma'
 
       - name: Boot the image and wait for its health check
-        run: bash scripts/ci/image-boot-check.sh aihub:image-boot
+        run: bash scripts/ci/image/image-boot-check.sh aihub:image-boot
 
       - name: Select active per-tier release revisions
         id: previous_release
