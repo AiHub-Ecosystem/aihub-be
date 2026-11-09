@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { jsonWebKeyThumbprint } from '@/modules/identity/organization-identity-configuration/application/jwk-thumbprint';
 import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -66,7 +67,10 @@ async function seedMember(
 }
 
 function input(
-  overrides: Partial<SaveOrganizationIdentityConfigInput> = {},
+  overrides: Omit<
+    Partial<SaveOrganizationIdentityConfigInput>,
+    'keyThumbprints'
+  > = {},
 ): SaveOrganizationIdentityConfigInput {
   const userId = overrides.userId ?? ownerId;
   return {
@@ -87,6 +91,7 @@ function input(
     allowedAlgorithms: ['RS256', 'ES256'],
     maxAssertionTtlSeconds: 300,
     sourceKind: 'inline',
+    keyThumbprints: [],
     ...overrides,
   };
 }
@@ -204,7 +209,13 @@ describe('Organization identity configuration against PostgreSQL', () => {
         target_type: 'organization',
         target_id: organizationId,
         target_label: 'Identity configuration',
-        detail: { issuer: 'https://acme.edu', sourceKind: 'inline' },
+        detail: {
+          issuer: 'https://acme.edu',
+          sourceKind: 'inline',
+          keyThumbprints: [
+            jsonWebKeyThumbprint({ kty: 'RSA', n: 'AQAB', e: 'AQAB' }),
+          ],
+        },
       },
     ]);
     expect(JSON.stringify(await auditEvents())).not.toContain('rsa-1');

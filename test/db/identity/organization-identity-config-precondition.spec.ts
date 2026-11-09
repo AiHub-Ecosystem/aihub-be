@@ -61,7 +61,10 @@ async function seedMember(role: 'owner' | 'admin'): Promise<string> {
 }
 
 function save(
-  overrides: Partial<SaveOrganizationIdentityConfigInput> & {
+  overrides: Omit<
+    Partial<SaveOrganizationIdentityConfigInput>,
+    'keyThumbprints'
+  > & {
     readonly precondition?: IdentityConfigPrecondition;
   } = {},
 ): Promise<SaveOrganizationIdentityConfigResult> {
@@ -84,6 +87,7 @@ function save(
     allowedAlgorithms: ['RS256', 'ES256'],
     maxAssertionTtlSeconds: 300,
     sourceKind: 'inline',
+    keyThumbprints: [],
     ...overrides,
   });
 }

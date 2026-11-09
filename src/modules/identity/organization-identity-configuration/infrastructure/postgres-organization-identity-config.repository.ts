@@ -393,6 +393,7 @@ export class PostgresOrganizationIdentityConfigRepository
             organizationId: input.organizationId,
             issuer: input.issuer,
             sourceKind: input.sourceKind,
+            keyThumbprints: input.keyThumbprints,
           });
         }
 
