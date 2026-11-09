@@ -101,7 +101,13 @@ export type AcceptOrganizationInvitationResult =
       readonly role: OrganizationMembershipRole;
     }
   | { readonly kind: 'token_invalid' }
-  | { readonly kind: 'organization_suspended' };
+  | { readonly kind: 'organization_suspended' }
+  /**
+   * The inviter's current authority no longer covers the role the invitation
+   * grants (ADR-0027 as amended, #447). Mapped to the generic token rejection
+   * so the response reveals nothing about the Organization or its members.
+   */
+  | { readonly kind: 'inviter_unauthorized' };
 
 /**
  * Durable invitation records, one port per consumer. Each names the operation

@@ -4,6 +4,7 @@ import {
   auditStamp,
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
+import { mayGrantInvitationRole } from '@/modules/identity/invitations/application/organization-invitation.grant-authority.policy';
 import type {
   AcceptOrganizationInvitationInput,
   AcceptOrganizationInvitationResult,
@@ -14,6 +15,7 @@ import {
   identityStoreUnavailable,
   invalidIdentityData,
   membershipRoleValue,
+  membershipStatusValue,
   organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -27,15 +29,25 @@ import { invalidInvitationInput } from './organization-invitation-input';
 
 /**
  * Locks the invitation, not the organization: the real contention is two
- * requests redeeming one token, and this is the row both of them find.
+ * requests redeeming one token, and this is the row both of them find. The
+ * inviter is read with the row so acceptance can re-evaluate the inviter's
+ * current authority (ADR-0027 as amended, #447).
  */
 const LOCK_INVITATION_SQL = `
-  SELECT id, organization_id, email, role
+  SELECT id, organization_id, email, role, invited_by
   FROM organization_invitations
   WHERE token_hash = $1
     AND consumed_at IS NULL
     AND expires_at > $2
   FOR UPDATE
+`;
+
+/** The inviter's current Membership, read under this transaction's locks. */
+const INVITER_MEMBERSHIP_SQL = `
+  SELECT role, status
+  FROM organization_members
+  WHERE organization_id = $1
+    AND user_account_id = $2
 `;
 
 /**
@@ -108,11 +120,13 @@ export class PostgresOrganizationInvitationAcceptRepository
         const organizationId = stringValue(invitation, 'organization_id');
         const invitedEmail = stringValue(invitation, 'email');
         const invitedRole = membershipRoleValue(invitation, 'role');
+        const inviterId = stringValue(invitation, 'invited_by');
         if (
           invitationId === undefined ||
           organizationId === undefined ||
           invitedEmail === undefined ||
-          invitedRole === undefined
+          invitedRole === undefined ||
+          inviterId === undefined
         ) {
           throw invalidIdentityData();
         }
@@ -142,6 +156,36 @@ export class PostgresOrganizationInvitationAcceptRepository
         }
         if (organizationSuspensionClosesSurface(organizationStatus)) {
           return { kind: 'organization_suspended' };
+        }
+
+        // ADR-0027 as amended (#447): the invitation's authority is only as
+        // good as the inviter's current Membership. An inviter who was
+        // disabled, demoted, or has transferred ownership since the invitation
+        // was issued can no longer grant the named role, so acceptance refuses
+        // here — in the same transaction that would grant it — rather than
+        // letting a stale grant through. The refusal is the generic token
+        // rejection, so it reveals nothing about the Organization's members.
+        const inviterRows = await identityRows(
+          transaction,
+          INVITER_MEMBERSHIP_SQL,
+          [organizationId, inviterId],
+        );
+        const inviterMembership = inviterRows[0];
+        const inviterRole = isRecord(inviterMembership)
+          ? membershipRoleValue(inviterMembership, 'role')
+          : undefined;
+        const inviterStatus = isRecord(inviterMembership)
+          ? membershipStatusValue(inviterMembership, 'membership_status')
+          : undefined;
+        if (
+          inviterRole === undefined ||
+          inviterStatus !== 'active' ||
+          !mayGrantInvitationRole({
+            callerRole: inviterRole,
+            invitedRole,
+          })
+        ) {
+          return { kind: 'inviter_unauthorized' };
         }
 
         const membershipRows = await identityRows(

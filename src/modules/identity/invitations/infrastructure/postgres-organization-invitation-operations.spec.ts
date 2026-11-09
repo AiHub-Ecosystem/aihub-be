@@ -125,3 +125,102 @@ describe('Organization Invitation operation repositories', () => {
     expect(prisma.statements).toHaveLength(1);
   });
 });
+
+/**
+ * Scripts the three reads acceptance makes before any grant: the locked
+ * invitation, the accepting account, and the inviter's current Membership
+ * (ADR-0027 as amended, #447).
+ */
+function acceptScenario(
+  prisma: ScriptedPrisma,
+  invitationRole: string,
+  inviterMembership: Record<string, unknown> | undefined,
+): void {
+  prisma.inside.push(
+    [
+      {
+        id: 'oin_01J00000000000000000000000',
+        organization_id: 'org_acme',
+        email: 'member@example.test',
+        role: invitationRole,
+        invited_by: 'usr_inviter',
+      },
+    ],
+    [{ organization_status: 'active', canonical_email: 'member@example.test' }],
+    ...(inviterMembership === undefined ? [] : [[inviterMembership]]),
+  );
+}
+
+describe('Organization Invitation inviter-authority admission (ADR-0027 as amended)', () => {
+  it('refuses an invitation whose inviter can no longer grant its role', async () => {
+    // Transfer-then-accept: the inviter was an owner when the invitation was
+    // issued, then transferred ownership and became an admin. An admin cannot
+    // grant owner, so acceptance refuses before any membership is written.
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'owner', {
+      role: 'admin',
+      membership_status: 'active',
+    });
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'inviter_unauthorized',
+    });
+    expect(prisma.opened).toBe(1);
+    expect(prisma.statements).toHaveLength(3);
+  });
+
+  it('refuses an invitation whose inviter was disabled', async () => {
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'admin', {
+      role: 'owner',
+      membership_status: 'disabled',
+    });
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'inviter_unauthorized',
+    });
+    expect(prisma.statements).toHaveLength(3);
+  });
+
+  it('refuses an invitation whose inviter no longer belongs', async () => {
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'owner', undefined);
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'inviter_unauthorized',
+    });
+  });
+
+  it('still accepts a lawful member invitation from an inviter now an admin', async () => {
+    // Positive control: the transfer left the inviter an active admin, and an
+    // active admin may grant member, so this invitation remains valid.
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'member', {
+      role: 'admin',
+      membership_status: 'active',
+    });
+    prisma.inside.push([{ role: 'member' }]); // UPSERT_MEMBERSHIP_SQL
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'accepted',
+      organizationId: 'org_acme',
+      role: 'member',
+    });
+    expect(prisma.opened).toBe(1);
+  });
+
+  it('still accepts an owner invitation from an inviter still an owner', async () => {
+    const prisma = new ScriptedPrisma();
+    acceptScenario(prisma, 'owner', {
+      role: 'owner',
+      membership_status: 'active',
+    });
+    prisma.inside.push([{ role: 'owner' }]);
+
+    await expect(accept(prisma, context())).resolves.toEqual({
+      kind: 'accepted',
+      organizationId: 'org_acme',
+      role: 'owner',
+    });
+  });
+});

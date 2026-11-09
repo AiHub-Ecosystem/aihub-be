@@ -209,6 +209,7 @@ describe('a suspended Organization closes every management surface', () => {
             organization_id: ORGANIZATION_ID,
             email: INVITED_EMAIL,
             role: 'member',
+            invited_by: 'usr_inviter',
           },
         ],
         [
