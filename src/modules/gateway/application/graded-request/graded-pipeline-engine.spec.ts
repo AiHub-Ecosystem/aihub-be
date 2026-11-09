@@ -10,6 +10,7 @@ import {
   completeGradedPipelineResponse,
 } from './graded-pipeline.port';
 import type { GradingOrchestratorPort } from './grading-orchestrator.port';
+import type { OutstandingQuotaReservationsPort } from './outstanding-quota-reservations';
 
 const operation = 'writing.task1.grade' as const;
 const input = {
@@ -71,6 +72,7 @@ function engineWith(
     readonly concurrency?: ConcurrencyLimiterPort;
     readonly idempotency?: IdempotencyServicePort;
     readonly orchestrator?: GradingOrchestratorPort;
+    readonly reservations?: OutstandingQuotaReservationsPort;
     readonly now?: () => Date;
   } = {},
 ) {
@@ -92,6 +94,7 @@ function engineWith(
       acquire: async () => ({ allowed: true, lease: { release } }),
     },
     options.idempotency ?? ({} as IdempotencyServicePort),
+    options.reservations ?? { count: async () => 0 },
     options.now ?? (() => new Date()),
   );
   return { engine, release };
@@ -137,6 +140,82 @@ describe('GradedPipelineEngine', () => {
       code: 'RATE_LIMITED',
     });
     expect(acquire).not.toHaveBeenCalled();
+  });
+
+  it('subtracts outstanding job reservations from the monthly quota before admission', async () => {
+    const consume = jest.fn(async () => ({ stage: 'admitted' as const }));
+    const count = jest.fn(async () => 4);
+    const { engine } = engineWith({
+      admission: { consume },
+      reservations: { count },
+    });
+
+    await engine.execute(pipelineContext());
+
+    expect(count).toHaveBeenCalledWith({
+      organizationId: 'org_acme',
+      environment: 'production',
+    });
+    expect(consume).toHaveBeenCalledWith(
+      expect.objectContaining({ monthlyRequestQuota: 6 }),
+    );
+  });
+
+  it('refuses on quota when reservations exhaust it', async () => {
+    const consume = jest.fn(
+      async (input: { readonly monthlyRequestQuota: number | null }) =>
+        input.monthlyRequestQuota === 0
+          ? { stage: 'quota' as const, quota: 10 }
+          : { stage: 'admitted' as const },
+    );
+    const { engine } = engineWith({
+      admission: { consume },
+      reservations: { count: async () => 10 },
+    });
+
+    await expect(engine.execute(pipelineContext())).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+    });
+  });
+
+  it('admits as quota-unverified when the reservation count is unavailable', async () => {
+    const consume = jest.fn(async () => ({ stage: 'admitted' as const }));
+    const { engine } = engineWith({
+      admission: { consume },
+      reservations: {
+        count: async () => {
+          throw new Error('store unavailable');
+        },
+      },
+    });
+    const addEvidence = jest.fn();
+    const base = pipelineContext();
+    const context = {
+      ...base,
+      metering: { ...base.metering, addEvidence },
+    };
+
+    await engine.execute(context);
+
+    expect(consume).toHaveBeenCalledWith(
+      expect.objectContaining({ monthlyRequestQuota: 10 }),
+    );
+    expect(addEvidence).toHaveBeenCalledWith({
+      quotaUnverified: true,
+    });
+  });
+
+  it('does not read reservations for a sandbox key', async () => {
+    const count = jest.fn(async () => 5);
+    const { engine } = engineWith({ reservations: { count } });
+    const context = pipelineContext();
+
+    await engine.execute({
+      ...context,
+      authenticated: { ...context.authenticated, environment: 'sandbox' },
+    });
+
+    expect(count).not.toHaveBeenCalled();
   });
 
   it('keeps invalid input behind an exhausted quota', async () => {
