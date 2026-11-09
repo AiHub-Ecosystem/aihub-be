@@ -45,7 +45,6 @@ function createUseCase(allowedEnvironments: readonly string[]) {
     status: 'active',
     createdByUsername: null,
     lastRotatedByUsername: null,
-    createdByUserId: null,
     expiresAt: null,
     lastUsedAt: null,
     createdAt: NOW,

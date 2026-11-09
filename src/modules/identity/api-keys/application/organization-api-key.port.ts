@@ -58,8 +58,6 @@ export interface OrganizationApiKeyRecord {
   readonly createdAt: Date;
   readonly createdByUsername: string | null;
   readonly lastRotatedByUsername: string | null;
-  /** The creator's account, so a rotation can carry the attribution forward. */
-  readonly createdByUserId: string | null;
 }
 
 export interface RotateOrganizationApiKeyRecordInput {
@@ -77,10 +75,12 @@ export interface RotateOrganizationApiKeyRecordInput {
   readonly retiredAllowedEnvironments: readonly string[];
   /** The environments the replacement keeps. */
   readonly replacementAllowedEnvironments: readonly string[];
-  /** The retired key's creator, so the replacement carries the same attribution. */
-  readonly createdBy: string | null;
-  /** The acting account's username, reported as the replacement's last rotator. */
-  readonly rotatedByUsername: string;
+  /**
+   * The acting account's username, reported as the replacement's last rotator.
+   * Null when the store does not publish the caller's username; the view then
+   * reports unknown rather than naming an account.
+   */
+  readonly rotatedByUsername: string | null;
   /**
    * The application's clock. The store decides rotatability under its lock but
    * against this moment, so the expiry rule is never settled by the database's

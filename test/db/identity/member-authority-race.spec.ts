@@ -255,7 +255,6 @@ function rotateMutation(
     keyPrefix: replacement.prefix,
     retiredAllowedEnvironments: ['production'],
     replacementAllowedEnvironments: ['production'],
-    createdBy: null,
     rotatedByUsername: 'rotator',
     now: NOW,
   });

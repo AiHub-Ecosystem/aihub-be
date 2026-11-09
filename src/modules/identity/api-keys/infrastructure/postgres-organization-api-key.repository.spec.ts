@@ -63,7 +63,6 @@ const methods = [
         keyPrefix: 'aik_next',
         retiredAllowedEnvironments: ['production'],
         replacementAllowedEnvironments: ['production'],
-        createdBy: null,
         rotatedByUsername: 'rotator',
         now,
       }),

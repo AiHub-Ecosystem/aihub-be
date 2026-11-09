@@ -26,7 +26,7 @@ export const API_KEY_ATTRIBUTION_JOINS_SQL = `
  * `undefined` only when the value is malformed. Keeping the two apart is what
  * lets the published view say "unknown" instead of naming the wrong account.
  */
-export function handlingUsername(
+function handlingValue(
   value: Record<string, unknown>,
   key: string,
 ): string | null | undefined {
@@ -35,4 +35,20 @@ export function handlingUsername(
     return null;
   }
   return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
+}
+
+/** The username of an account that handled the key, as the joined row reports it. */
+export function handlingUsername(
+  value: Record<string, unknown>,
+  key: string,
+): string | null | undefined {
+  return handlingValue(value, key);
+}
+
+/** The User Account ID of an account that handled the key, as the row reports it. */
+export function handlingUserId(
+  value: Record<string, unknown>,
+  key: string,
+): string | null | undefined {
+  return handlingValue(value, key);
 }

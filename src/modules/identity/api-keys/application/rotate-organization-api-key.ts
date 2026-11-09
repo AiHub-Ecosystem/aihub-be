@@ -84,7 +84,6 @@ export class RotateOrganizationApiKey {
       })
     ).find((key) => key.apiKeyId === input.apiKeyId);
     const retiredAllowedEnvironments = retired?.allowedEnvironments ?? [];
-    const retiredCreatedBy = retired?.createdByUserId ?? null;
     const replacementAllowedEnvironments = rotatedKeyEnvironments(
       retiredAllowedEnvironments,
     );
@@ -106,8 +105,7 @@ export class RotateOrganizationApiKey {
       keyPrefix: generated.prefix,
       retiredAllowedEnvironments,
       replacementAllowedEnvironments,
-      createdBy: retiredCreatedBy,
-      rotatedByUsername: rotatedByUsername ?? '',
+      rotatedByUsername,
       now,
     });
 
