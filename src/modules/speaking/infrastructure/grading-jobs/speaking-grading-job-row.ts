@@ -94,15 +94,44 @@ export async function selectKeyedJob(
     readonly organizationId: string;
     readonly endUserId: string;
     readonly idempotencyKey: string;
+    readonly unexpiredSince?: Date;
   },
 ): Promise<SpeakingGradingJob | undefined> {
+  if (input.unexpiredSince === undefined) {
+    const rows = await client.$queryRawUnsafe<readonly SpeakingGradingJobRow[]>(
+      `SELECT ${JOB_COLUMNS} FROM speaking_grading_jobs WHERE organization_id = $1 AND end_user_id = $2 AND idempotency_key = $3`,
+      input.organizationId,
+      input.endUserId,
+      input.idempotencyKey,
+    );
+    return mapJob(rows[0]);
+  }
   const rows = await client.$queryRawUnsafe<readonly SpeakingGradingJobRow[]>(
-    `SELECT ${JOB_COLUMNS} FROM speaking_grading_jobs WHERE organization_id = $1 AND end_user_id = $2 AND idempotency_key = $3`,
+    `SELECT ${JOB_COLUMNS} FROM speaking_grading_jobs WHERE organization_id = $1 AND end_user_id = $2 AND idempotency_key = $3 AND created_at >= $4`,
     input.organizationId,
     input.endUserId,
     input.idempotencyKey,
+    input.unexpiredSince,
   );
   return mapJob(rows[0]);
+}
+
+export async function clearExpiredKeyedJobs(
+  client: PrismaClient | Prisma.TransactionClient,
+  input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+    readonly idempotencyKey: string;
+    readonly expiredBefore: Date;
+  },
+): Promise<void> {
+  await client.$executeRawUnsafe(
+    `UPDATE speaking_grading_jobs SET idempotency_key = NULL WHERE organization_id = $1 AND end_user_id = $2 AND idempotency_key = $3 AND created_at < $4`,
+    input.organizationId,
+    input.endUserId,
+    input.idempotencyKey,
+    input.expiredBefore,
+  );
 }
 
 export function isKeyUniquenessViolation(error: unknown): boolean {

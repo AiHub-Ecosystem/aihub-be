@@ -397,6 +397,48 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toMatchObject({ jobId: firstJob.jobId });
   });
 
+  it('creates a new job when the idempotency key binding is past 24 hours', async () => {
+    const organizationId = 'org_' + ulid();
+    const idempotencyKey = 'key_' + ulid();
+    const firstCreatedAt = new Date('2026-11-01T00:00:00.000Z');
+    const firstJob = makeJob({
+      organizationId,
+      idempotencyKey,
+      createdAt: firstCreatedAt,
+    });
+    const since = new Date('2026-11-01T00:00:00.000Z');
+
+    const first = await repository.createWithAdmission({
+      job: firstJob,
+      since,
+      monthlyQuota: 10,
+      admit: async () => true,
+    });
+    expect(first).toEqual({ created: true });
+
+    const secondCreatedAt = new Date('2026-11-02T01:00:00.000Z'); // 25 hours later
+    const secondJob = makeJob({
+      organizationId,
+      idempotencyKey,
+      createdAt: secondCreatedAt,
+    });
+    const second = await repository.createWithAdmission({
+      job: secondJob,
+      since,
+      monthlyQuota: 10,
+      admit: async () => true,
+    });
+    expect(second).toEqual({ created: true });
+
+    await expect(
+      repository.findByIdempotencyKey({
+        organizationId,
+        endUserId: secondJob.endUserId,
+        idempotencyKey,
+      }),
+    ).resolves.toMatchObject({ jobId: secondJob.jobId });
+  });
+
   it('stores a successful result and refuses to fail a terminal job', async () => {
     const job = makeJob();
     await repository.create(job);

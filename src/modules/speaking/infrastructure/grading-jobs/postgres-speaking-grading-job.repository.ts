@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
+import { IDEMPOTENCY_RETENTION_MS } from '@/modules/idempotency/public/idempotency-key';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type {
   NewSpeakingGradingJob,
@@ -17,6 +18,7 @@ import type { Prisma, PrismaClient } from '@prisma-client/client';
 import {
   type InFlightCountInput,
   type SpeakingGradingJobRow,
+  clearExpiredKeyedJobs,
   countInFlight,
   isKeyUniquenessViolation,
   mapIdEnvironment,
@@ -98,16 +100,25 @@ export class PostgresSpeakingGradingJobRepository
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
   }): Promise<SpeakingGradingJobCreationOutcome> {
-    const existing =
-      input.job.idempotencyKey === undefined
-        ? undefined
-        : await selectKeyedJob(this.client, {
-            organizationId: input.job.organizationId,
-            endUserId: input.job.endUserId,
-            idempotencyKey: input.job.idempotencyKey,
-          });
-    if (existing !== undefined) {
-      return { created: false, existingJobId: existing.jobId };
+    const unexpiredSince = new Date(
+      input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
+    );
+    if (input.job.idempotencyKey !== undefined) {
+      const existing = await selectKeyedJob(this.client, {
+        organizationId: input.job.organizationId,
+        endUserId: input.job.endUserId,
+        idempotencyKey: input.job.idempotencyKey,
+        unexpiredSince,
+      });
+      if (existing !== undefined) {
+        return { created: false, existingJobId: existing.jobId };
+      }
+      await clearExpiredKeyedJobs(this.client, {
+        organizationId: input.job.organizationId,
+        endUserId: input.job.endUserId,
+        idempotencyKey: input.job.idempotencyKey,
+        expiredBefore: unexpiredSince,
+      });
     }
 
     if (input.monthlyQuota === null) {
@@ -166,6 +177,7 @@ export class PostgresSpeakingGradingJobRepository
               organizationId: input.job.organizationId,
               endUserId: input.job.endUserId,
               idempotencyKey: input.job.idempotencyKey,
+              unexpiredSince,
             });
       if (existingAfter === undefined) {
         if (error instanceof AppError) throw error;

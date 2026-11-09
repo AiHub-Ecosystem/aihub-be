@@ -75,6 +75,7 @@ function harness(
     readonly audioAsset?: SpeakingAudioAsset | null;
     readonly readError?: unknown;
     readonly dispatchError?: unknown;
+    readonly recordError?: unknown;
     readonly permit?: 'allowed' | 'denied';
     readonly markDispatchStarted?: boolean;
     readonly advanceClockMs?: number;
@@ -136,7 +137,10 @@ function harness(
     };
   });
   const orchestrator = { execute } as unknown as GradingOrchestratorPort;
-  const record = jest.fn(async () => undefined);
+  const record = jest.fn(async () => {
+    if (options.recordError !== undefined) throw options.recordError;
+    return undefined;
+  });
   const resultOwnership = { record } satisfies Pick<
     SpeakingV2ResultOwnershipPort,
     'record'
@@ -388,5 +392,27 @@ describe('ProcessSpeakingGradingJob', () => {
     expect(subject.execute).not.toHaveBeenCalled();
     expect(subject.finalize).not.toHaveBeenCalled();
     expect(subject.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses metering and fails the job when result ownership recording fails', async () => {
+    const subject = harness({
+      recordError: new Error('Ownership write failed'),
+    });
+
+    await subject.processor.execute({
+      jobId: job.jobId,
+      environment: job.environment,
+    });
+
+    expect(subject.repository.succeed).not.toHaveBeenCalled();
+    expect(subject.finalize).not.toHaveBeenCalled();
+    expect(subject.repository.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: job.jobId,
+        error: expect.objectContaining({
+          code: 'INTERNAL_ERROR',
+        }) as unknown as SpeakingGradingJobError,
+      }),
+    );
   });
 });

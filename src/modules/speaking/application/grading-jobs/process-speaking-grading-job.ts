@@ -263,6 +263,39 @@ export class ProcessSpeakingGradingJob {
       return;
     }
 
+    const owner = {
+      organizationId: job.organizationId,
+      endUserId: job.endUserId,
+      environment: job.environment,
+    };
+    try {
+      await this.dependencies.resultOwnership.record(
+        owner,
+        'response',
+        result.data.meta.response_id,
+      );
+      if (job.request.partResultId !== undefined) {
+        await this.dependencies.resultOwnership.record(
+          owner,
+          'part',
+          job.request.partResultId,
+        );
+      }
+      await this.dependencies.repository.succeed({
+        jobId: job.jobId,
+        result: result.data,
+        completedAt: this.now(),
+      });
+    } catch (error) {
+      const failure = jobError(error);
+      await this.dependencies.repository.fail({
+        jobId: job.jobId,
+        error: failure,
+        completedAt: this.now(),
+      });
+      return;
+    }
+
     await this.finalize(job, dispatchStartedAt, {
       outcome: 'success',
       httpStatus: 200,
@@ -273,28 +306,6 @@ export class ProcessSpeakingGradingJob {
       ...(result.aiProcessingMs === undefined
         ? {}
         : { aiProcessingMs: result.aiProcessingMs }),
-    });
-    const owner = {
-      organizationId: job.organizationId,
-      endUserId: job.endUserId,
-      environment: job.environment,
-    };
-    await this.dependencies.resultOwnership.record(
-      owner,
-      'response',
-      result.data.meta.response_id,
-    );
-    if (job.request.partResultId !== undefined) {
-      await this.dependencies.resultOwnership.record(
-        owner,
-        'part',
-        job.request.partResultId,
-      );
-    }
-    await this.dependencies.repository.succeed({
-      jobId: job.jobId,
-      result: result.data,
-      completedAt: this.now(),
     });
   }
 

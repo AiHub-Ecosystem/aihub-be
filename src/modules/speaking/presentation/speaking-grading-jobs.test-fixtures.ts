@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { type AppError, internalError } from '@/common/errors/app-error';
 
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
+import { IDEMPOTENCY_RETENTION_MS } from '@/modules/idempotency/public/idempotency-key';
 import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
@@ -63,6 +64,9 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
   }): Promise<SpeakingGradingJobCreationOutcome> {
+    const unexpiredSince = new Date(
+      input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
+    );
     const existing =
       input.job.idempotencyKey === undefined
         ? undefined
@@ -70,7 +74,8 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
             (job) =>
               job.organizationId === input.job.organizationId &&
               job.endUserId === input.job.endUserId &&
-              job.idempotencyKey === input.job.idempotencyKey,
+              job.idempotencyKey === input.job.idempotencyKey &&
+              job.createdAt.getTime() >= unexpiredSince.getTime(),
           );
     if (existing !== undefined) {
       return { created: false, existingJobId: existing.jobId };
