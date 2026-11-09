@@ -26,7 +26,7 @@ import {
 } from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
-import { isAllowedTask1ImageUrl } from '@/modules/writing/grading/application/task1-image-url.policy';
+import { isAllowedTask1ImageUrl } from '@/modules/writing/grading/domain/task1-image-url.policy';
 
 const TASK1_OPERATION = 'writing.task1.grade' as const;
 const TASK2_OPERATION = 'writing.task2.grade' as const;
