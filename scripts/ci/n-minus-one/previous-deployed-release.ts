@@ -106,7 +106,10 @@ export async function previousDeployedRelease({
     return jobs;
   }
 
-  async function digestArtifactRunFor(run: WorkflowRun): Promise<number> {
+  async function digestArtifactRunFor(
+    run: WorkflowRun,
+    releaseSha = run.head_sha,
+  ): Promise<number> {
     const cdArtifacts = await getJson(
       `${baseUrl}/actions/runs/${run.id}/artifacts?per_page=100&page=1`,
     );
@@ -118,12 +121,12 @@ export async function previousDeployedRelease({
       return run.id;
     }
 
-    let ciRuns = ciRunsBySha.get(run.head_sha);
+    let ciRuns = ciRunsBySha.get(releaseSha);
     if (ciRuns === undefined) {
       const found: WorkflowRun[] = [];
       for (let page = 1; page <= 100; page += 1) {
         const result = await getJson(
-          `${baseUrl}/actions/workflows/ci.yml/runs?branch=main&head_sha=${run.head_sha}&per_page=100&page=${page}`,
+          `${baseUrl}/actions/workflows/ci.yml/runs?branch=main&head_sha=${releaseSha}&per_page=100&page=${page}`,
         );
         const pageRuns = result.workflow_runs ?? [];
         found.push(...pageRuns);
@@ -133,7 +136,7 @@ export async function previousDeployedRelease({
         }
       }
       ciRuns = found;
-      ciRunsBySha.set(run.head_sha, ciRuns);
+      ciRunsBySha.set(releaseSha, ciRuns);
     }
 
     const matchingCiRuns = ciRuns
@@ -141,7 +144,7 @@ export async function previousDeployedRelease({
         (ciRun) =>
           ciRun.event === 'push' &&
           ciRun.head_branch === 'main' &&
-          ciRun.head_sha === run.head_sha &&
+          ciRun.head_sha === releaseSha &&
           ciRun.status === 'completed' &&
           ciRun.conclusion === 'success' &&
           Date.parse(ciRun.updated_at) <= Date.parse(run.created_at),
@@ -152,10 +155,36 @@ export async function previousDeployedRelease({
       );
     if (matchingCiRuns.length !== 1) {
       throw new Error(
-        `CI image digest cannot be uniquely recovered for deployed release ${run.head_sha}`,
+        `CI image digest cannot be uniquely recovered for deployed release ${releaseSha}`,
       );
     }
     return matchingCiRuns[0]!.id;
+  }
+
+  let successfulCiRuns: readonly WorkflowRun[] | undefined;
+  async function successfulMainCiRuns(): Promise<readonly WorkflowRun[]> {
+    if (successfulCiRuns !== undefined) return successfulCiRuns;
+
+    const found: WorkflowRun[] = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const result = await getJson(
+        `${baseUrl}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=100&page=${page}`,
+      );
+      const pageRuns = result.workflow_runs ?? [];
+      found.push(...pageRuns);
+      if (pageRuns.length < 100) break;
+      if (page === 100) {
+        throw new Error('CI history exceeds the safe lookup limit');
+      }
+    }
+    successfulCiRuns = found.filter(
+      (ciRun) =>
+        ciRun.event === 'push' &&
+        ciRun.head_branch === 'main' &&
+        ciRun.status === 'completed' &&
+        ciRun.conclusion === 'success',
+    );
+    return successfulCiRuns;
   }
 
   async function selectTierRelease(
@@ -172,15 +201,7 @@ export async function previousDeployedRelease({
     // active revision as its head_sha; the CD run that deployed it is the first
     // one created right after that revision's CI finished.
     async function correlatedRun(sha: string): Promise<WorkflowRun | null> {
-      const ciRuns: WorkflowRun[] = [];
-      for (let page = 1; page <= 100; page += 1) {
-        const result = await getJson(
-          `${baseUrl}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=100&page=${page}`,
-        );
-        const pageRuns = result.workflow_runs ?? [];
-        ciRuns.push(...pageRuns);
-        if (pageRuns.length < 100) break;
-      }
+      const ciRuns = await successfulMainCiRuns();
       const ci = ciRuns
         .filter((ciRun) => ciRun.head_sha === sha)
         .sort(
@@ -202,6 +223,38 @@ export async function previousDeployedRelease({
         );
       const first = candidates[0];
       return first === undefined ? null : { ...first, head_sha: sha };
+    }
+
+    async function sourceRevisionFor(run: WorkflowRun): Promise<string | null> {
+      const runCreatedAt = Date.parse(run.created_at);
+      const matching = (await successfulMainCiRuns())
+        .filter((ciRun) => {
+          const finishedAt = Date.parse(ciRun.updated_at);
+          return (
+            runCreatedAt >= finishedAt && runCreatedAt - finishedAt <= 300_000
+          );
+        })
+        .filter((ciRun) => {
+          const finishedAt = Date.parse(ciRun.updated_at);
+          const firstCdRun = runs
+            .filter(
+              (candidate) =>
+                candidate.event === 'workflow_run' &&
+                Date.parse(candidate.created_at) >= finishedAt &&
+                Date.parse(candidate.created_at) - finishedAt <= 300_000,
+            )
+            .sort(
+              (left, right) =>
+                Date.parse(left.created_at) - Date.parse(right.created_at),
+            )[0];
+          return firstCdRun?.id === run.id;
+        })
+        .sort(
+          (left, right) =>
+            Date.parse(right.updated_at) - Date.parse(left.updated_at),
+        );
+      if (matching.length > 1) return null;
+      return matching[0]?.head_sha ?? null;
     }
 
     const scan = async (
@@ -249,10 +302,14 @@ export async function previousDeployedRelease({
           );
         }
 
+        const releaseSha =
+          activeSha === undefined ? await sourceRevisionFor(run) : activeSha;
+        if (releaseSha === null || releaseSha === undefined) continue;
+
         return {
           runId: run.id,
-          sha: run.head_sha,
-          digestRunId: await digestArtifactRunFor(run),
+          sha: releaseSha,
+          digestRunId: await digestArtifactRunFor(run, releaseSha),
         };
       }
       return null;

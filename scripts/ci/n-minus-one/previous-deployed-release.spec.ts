@@ -99,6 +99,8 @@ describe('previousDeployedRelease', () => {
       previousDeployedRelease({
         repository: 'AiHub-Ecosystem/aihub-be',
         token: 'test-token',
+        activeProductionSha: '3'.repeat(40),
+        activeSandboxSha: '2'.repeat(40),
         fetchImpl,
       }),
     ).resolves.toEqual({
@@ -144,6 +146,7 @@ describe('previousDeployedRelease', () => {
         repository: 'AiHub-Ecosystem/aihub-be',
         token: 'test-token',
         activeProductionSha,
+        activeSandboxSha: latestSha,
         fetchImpl,
       }),
     ).resolves.toEqual({
@@ -191,6 +194,45 @@ describe('previousDeployedRelease', () => {
       }),
     ).resolves.toEqual({
       production: { runId: 7, sha: activeProductionSha, digestRunId: 7 },
+      sandbox: null,
+    });
+  });
+
+  it('uses the CI revision when CD run head moved after its image build', async () => {
+    const deployedSha = '2'.repeat(40);
+    const fetchImpl = queuedFetch(
+      {
+        workflow_runs: [
+          {
+            ...workflowRun(7, '9'.repeat(40)),
+            created_at: '2026-10-28T03:00:05Z',
+          },
+        ],
+      },
+      {
+        jobs: [
+          {
+            name: 'Blue-green deploy to VPS',
+            conclusion: 'success',
+            steps: [productionStep('success'), finalHealth('success')],
+          },
+        ],
+      },
+      {
+        workflow_runs: [ciRun(1, deployedSha, '2026-10-28T03:00:00Z')],
+      },
+      { artifacts: [{ name: 'image-digest', expired: false }] },
+    );
+
+    await expect(
+      previousDeployedRelease({
+        repository: 'AiHub-Ecosystem/aihub-be',
+        token: 'test-token',
+        activeSandboxDisabled: true,
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      production: { runId: 7, sha: deployedSha, digestRunId: 7 },
       sandbox: null,
     });
   });
@@ -309,6 +351,7 @@ describe('previousDeployedRelease', () => {
       previousDeployedRelease({
         repository: 'AiHub-Ecosystem/aihub-be',
         token: 'test-token',
+        activeProductionSha: '3'.repeat(40),
         activeSandboxSha: 'unknown',
         fetchImpl,
       }),
@@ -320,7 +363,10 @@ describe('previousDeployedRelease', () => {
       {
         workflow_runs: [
           workflowRun(3, '3'.repeat(40), 'completed', 'failure'),
-          workflowRun(2, '2'.repeat(40)),
+          {
+            ...workflowRun(2, '2'.repeat(40)),
+            created_at: '2026-10-28T02:58:05Z',
+          },
         ],
       },
       {
@@ -345,9 +391,12 @@ describe('previousDeployedRelease', () => {
           },
         ],
       },
+      {
+        workflow_runs: [ciRun(1, '2'.repeat(40), '2026-10-28T02:58:00Z')],
+      },
       { artifacts: [] },
       {
-        workflow_runs: [ciRun(1, '2'.repeat(40), '2026-10-28T02:59:00Z')],
+        workflow_runs: [ciRun(1, '2'.repeat(40), '2026-10-28T02:58:00Z')],
       },
       { artifacts: [] },
     );
@@ -418,6 +467,8 @@ describe('previousDeployedRelease', () => {
       previousDeployedRelease({
         repository: 'AiHub-Ecosystem/aihub-be',
         token: 'test-token',
+        activeProductionSha: '3'.repeat(40),
+        activeSandboxSha: '3'.repeat(40),
         fetchImpl,
       }),
     ).resolves.toEqual({
@@ -450,6 +501,7 @@ describe('previousDeployedRelease', () => {
       previousDeployedRelease({
         repository: 'AiHub-Ecosystem/aihub-be',
         token: 'test-token',
+        activeProductionSha: '3'.repeat(40),
         fetchImpl,
       }),
     ).rejects.toThrow(
@@ -488,6 +540,7 @@ describe('previousDeployedRelease', () => {
       previousDeployedRelease({
         repository: 'AiHub-Ecosystem/aihub-be',
         token: 'test-token',
+        activeProductionSha: sha,
         fetchImpl,
       }),
     ).rejects.toThrow(
