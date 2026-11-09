@@ -23,6 +23,7 @@ export const RETRY_BUDGET_WINDOW_MS = 60_000;
  * budget.
  */
 export const RETRY_BUDGET_OPERATIONS = [
+  'speaking.v2.question-grading',
   'writing.task1.grade',
   'writing.task2.grade',
   'writing.v2.task1.grade',

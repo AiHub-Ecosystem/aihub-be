@@ -95,6 +95,16 @@ paths = [
 ]
 
 [[rules.allowlists]]
+description = "The Postman variable name v2GradingJobId (#1718) is the same false positive; it is scoped to the exact name and the two Postman files because its commit did not exist when the rule was written."
+condition = "AND"
+regexTarget = "match"
+regexes = ['v2GradingJobId']
+paths = [
+  '(^|/)src/postman/postman-speaking-v2-requests\.ts$',
+  '(^|/)aihub\.postman_collection\.json$',
+]
+
+[[rules.allowlists]]
 description = "Only the documented placeholder in the production example file is allowed; real values remain detectable."
 condition = "AND"
 regexTarget = "match"

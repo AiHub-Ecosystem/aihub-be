@@ -20,7 +20,11 @@ function serviceFinding(result: unknown) {
 }
 
 describe('findCompletedWritingReplay', () => {
-  it.each(RETRY_BUDGET_OPERATIONS)(
+  it.each(
+    RETRY_BUDGET_OPERATIONS.filter((operation) =>
+      operation.startsWith('writing.'),
+    ),
+  )(
     'looks up %s with the complete replay identity and validated body',
     async (operation) => {
       const { service, findCompletedReplay } = serviceFinding(replay);
@@ -42,7 +46,7 @@ describe('findCompletedWritingReplay', () => {
     await expect(
       findCompletedWritingReplay(service, {
         ...attempt,
-        operation: 'speaking.grading',
+        operation: 'speaking.v2.question-grading',
       }),
     ).resolves.toBeUndefined();
     await expect(

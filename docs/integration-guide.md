@@ -829,6 +829,8 @@ read-back routes are `GET`. Writing and Speaking JSON-by-URL use
 | `/v2/ielts/writing/micro-exercises`          | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           45s |
 | `/v2/ielts/writing/long-writing-exercises`   | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           35s |
 | `/v2/ielts/writing/micro-exercises/grade`    | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           20s |
+| `/v2/ielts/speaking/grading-jobs`            | Required; plain ID or JWT by Organization mode | Optional          |   256 KB |           10s |
+| `/v2/ielts/speaking/grading-jobs/{job_id}`   | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
 | `/v2/ielts/speaking/questions/grade`         | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
 | `/v2/ielts/speaking/parts/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
 | `/v2/ielts/speaking/tests/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
@@ -988,9 +990,10 @@ the provider owns retrieval and does not follow redirects.
 
 ### Moving Speaking from `/v1` to `/v2`
 
-`/v2` adds Speaking grading and stored-result retrieval. It uses the same API
-key, `speaking.grade` scope, and `X-User-Identity` as `/v1`; the End-User comes
-from that identity, not a `user_id` field. The six routes are:
+`/v2` adds Speaking grading, stored-result retrieval, and asynchronous grading
+jobs. It uses the same API key, `speaking.grade` scope, and `X-User-Identity` as
+`/v1`; the End-User comes from that identity, not a `user_id` field. The six
+synchronous routes are:
 
 | Method | Route                                        | Request                                                                                                                 |
 | ------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -1000,6 +1003,29 @@ from that identity, not a `user_id` field. The six routes are:
 | `GET`  | `/v2/ielts/speaking/responses/{response_id}` | Read a stored question result                                                                                           |
 | `GET`  | `/v2/ielts/speaking/parts/{part_result_id}`  | Read a stored Part result                                                                                               |
 | `GET`  | `/v2/ielts/speaking/tests/{test_id}`         | Read a stored Test result                                                                                               |
+
+### Async Speaking grading jobs
+
+After completing an Audio upload, submit its `audio_asset_id` with the same
+question fields used by v2 question grading. `POST /v2/ielts/speaking/grading-jobs`
+answers `202` with `{ "job_id", "status": "queued" }` without calling the AI
+Service. You may send an `Idempotency-Key` to replay that acceptance after a
+lost response; reusing it with a different body answers `409`.
+
+Poll `GET /v2/ielts/speaking/grading-jobs/{job_id}` until `status` is
+`succeeded` or `failed`. A successful job includes the usual v2 question result
+and its `response_id`; a failed job includes a safe `error` object. Jobs must
+be polled by the same Organization, End-User ID, and environment that submitted
+them. Both responses use `Cache-Control: no-store`.
+
+```bash
+curl -sS -X POST "$AIHUB_BASE_URL/v2/ielts/speaking/grading-jobs" \
+  -H "X-API-Key: $AIHUB_API_KEY" \
+  -H "X-User-Identity: $AIHUB_USER_IDENTITY" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: speaking-answer-001' \
+  -d '{"audio_asset_id":"aud_01JQ8Z5R3M7T2VXK4YB6HD8C0E","part":1,"question_id":"p1_hometown"}'
+```
 
 Stored-result ownership is scoped to the Organization, the exact End-User ID
 from `X-User-Identity`, and the selected environment (`production` or

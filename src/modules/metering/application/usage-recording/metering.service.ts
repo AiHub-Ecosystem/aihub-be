@@ -147,6 +147,7 @@ function usageRecord(
       ? {}
       : { aiProcessingMs: telemetry.aiProcessingMs }),
     billingBasis: input.billingBasis ?? 'response',
+    ...(input.occurredAt === undefined ? {} : { occurredAt: input.occurredAt }),
   };
 }
 
@@ -170,6 +171,9 @@ export class MeteringService implements MeteringFinalizerPort {
       try {
         await this.quotaCounter.increment({
           organizationId: input.organizationId,
+          ...(input.occurredAt === undefined
+            ? {}
+            : { occurredAt: input.occurredAt }),
         });
       } catch {
         record = { ...record, meteringStatus: 'quota_unverified' };

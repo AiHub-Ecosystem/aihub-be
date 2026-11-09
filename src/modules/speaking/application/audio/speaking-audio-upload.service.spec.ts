@@ -131,6 +131,10 @@ class Storage implements SpeakingAudioAssetStoragePort {
   beforeCopyComplete: (() => Promise<void>) | undefined;
   copyCount = 0;
 
+  async readObject(): Promise<never> {
+    throw new Error('not used by upload tests');
+  }
+
   async createUploadUrl(input: { readonly objectKey: string }) {
     this.signed.push(input.objectKey);
     return {

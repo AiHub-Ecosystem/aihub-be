@@ -63,6 +63,19 @@ export class PostgresSandboxDispatchBudget
     const { monthNumber, start: monthStart } = quotaPeriod(now);
 
     return this.client.$transaction(async (transaction) => {
+      // A Speaking grading job reserves at submit under its job id and the
+      // shared dispatcher reserves again under the same id (ADR-0159): a
+      // reservation this request already holds admits it without a second unit.
+      const held = await transaction.sandboxDispatchReservation.findUnique({
+        where: { requestId: input.requestId },
+      });
+      if (held !== null) {
+        return (
+          held.status === 'reserved' &&
+          held.organizationId === input.organizationId
+        );
+      }
+
       // ponytail: one lock per UTC month serializes the 500/month admission check; split by Organization if dispatch volume makes this a bottleneck.
       // Prisma's query path cannot deserialize PostgreSQL's void result.
       await transaction.$executeRawUnsafe(

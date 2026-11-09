@@ -200,17 +200,18 @@ describe('IdempotencyService', () => {
     );
   });
 
-  it('turns a fingerprint or pending collision into a conflict', async () => {
+  it('runs duplicate admission before returning fingerprint and pending conflicts', async () => {
     const repository = new FakeRepository();
     repository.nextReservations.push(
       { kind: 'conflict', reason: 'fingerprint' },
       { kind: 'conflict', reason: 'pending' },
     );
     const service = new IdempotencyService(repository);
+    const beforeDuplicate = jest.fn(async () => undefined);
 
     await expect(
       service.execute(
-        input(),
+        { ...input(), beforeDuplicate },
         async () => ({ value: 'unused' }),
         () => ({ value: 'unused' }),
       ),
@@ -222,7 +223,7 @@ describe('IdempotencyService', () => {
     });
     await expect(
       service.execute(
-        input(),
+        { ...input(), beforeDuplicate },
         async () => ({ value: 'unused' }),
         () => ({ value: 'unused' }),
       ),
@@ -231,6 +232,8 @@ describe('IdempotencyService', () => {
       httpStatus: 409,
       retryable: true,
     });
+
+    expect(beforeDuplicate).toHaveBeenCalledTimes(2);
   });
 
   it('tells callers refused while the same request runs different instants within the jitter range', async () => {
@@ -791,7 +794,13 @@ describe('IdempotencyService', () => {
       responseBody: { invitationId: 'oiv_1' },
     });
     const service = new IdempotencyService(repository);
-    const authorize = jest.fn(async () => undefined);
+    const order: string[] = [];
+    const authorize = jest.fn(async () => {
+      order.push('authorize');
+    });
+    const admit = jest.fn(async () => {
+      order.push('admit');
+    });
     const work = jest.fn(async () => ({ invitationId: 'unexpected' }));
 
     const result = await service.execute(
@@ -801,6 +810,7 @@ describe('IdempotencyService', () => {
         scope: 'management',
         responseStatus: 201,
         beforeReplay: authorize,
+        beforeDuplicate: admit,
       },
       work,
       (value) => {
@@ -821,6 +831,8 @@ describe('IdempotencyService', () => {
       replay: true,
     });
     expect(authorize).toHaveBeenCalledTimes(1);
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['authorize', 'admit']);
     expect(work).not.toHaveBeenCalled();
   });
 

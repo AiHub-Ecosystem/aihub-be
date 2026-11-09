@@ -143,6 +143,25 @@ describe('RedisQuotaCounter', () => {
     expect(redis.values.get('aihub:v1:quota:org_acme:2026-09')).toBe('10');
   });
 
+  it('increments the event month when completion crosses a month boundary', async () => {
+    const redis = new FakeRedis();
+    redis.values.set('aihub:v1:quota:org_acme:2026-10', '9');
+    redis.values.set('aihub:v1:quota:org_acme:2026-11', '2');
+    const counter = new RedisQuotaCounter(redis, now);
+
+    await counter.increment({
+      organizationId: 'org_acme',
+      occurredAt: new Date('2026-10-31T23:59:59.000Z'),
+    });
+
+    expect(redis.values).toEqual(
+      new Map([
+        ['aihub:v1:quota:org_acme:2026-10', '10'],
+        ['aihub:v1:quota:org_acme:2026-11', '2'],
+      ]),
+    );
+  });
+
   it('does not restart a missing counter at one', async () => {
     const redis = new FakeRedis();
     const counter = new RedisQuotaCounter(redis, now);

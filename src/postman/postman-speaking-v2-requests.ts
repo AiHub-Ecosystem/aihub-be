@@ -1,7 +1,7 @@
 import { assertStatus } from './postman-scenarios';
 
 /**
- * The Public API /v2 Speaking walkthrough: seven requests to run in order, each
+ * The Public API /v2 Speaking walkthrough: requests to run in order, each
  * feeding the next through collection variables. It is written by hand, not
  * converted from `openapi/v2.json`, because the converter leaves `<string>`
  * placeholders and no way to chain ids. The routes themselves are in the
@@ -42,6 +42,17 @@ export const SPEAKING_V2_VARIABLES = [
     key: 'v2PromptText',
     value: 'Do you enjoy living in your city or hometown?',
     description: 'Prompt of the question in v2QuestionId. Step 0 replaces it.',
+  },
+  {
+    key: 'v2AudioAssetId',
+    value: 'aud_01J00000000000000000000000',
+    description:
+      'Replace this placeholder with an Audio asset ID you uploaded and completed for the same End-User and environment.',
+  },
+  {
+    key: 'v2GradingJobId',
+    value: '',
+    description: 'The asynchronous Speaking grading job ID captured in step 7.',
   },
 ] as const;
 
@@ -187,13 +198,35 @@ export const SPEAKING_V2_REQUESTS: readonly V2Request[] = [
     path: '/v2/ielts/speaking/tests/{{v2TestId}}',
     testScript: [assertStatus(200)],
   },
+  {
+    name: '7. Submit an asynchronous question grade',
+    description:
+      'Submits a completed Audio asset for asynchronous grading and captures the queued job ID. Replace the placeholder in `v2AudioAssetId` with an asset owned by the declared End-User in the current environment. The `Idempotency-Key` header is optional; reuse its value when retrying this request.',
+    method: 'POST',
+    path: '/v2/ielts/speaking/grading-jobs',
+    body: jsonBody(
+      '{\n  "audio_asset_id": "{{v2AudioAssetId}}",\n  "part": 1,\n  "question_id": "{{v2QuestionId}}",\n  "prompt_text": "{{v2PromptText}}",\n  "test_type": "practice"\n}',
+    ),
+    testScript: [
+      assertStatus(202),
+      "pm.collectionVariables.set('v2GradingJobId', pm.response.json().data.job_id);",
+    ],
+  },
+  {
+    name: '8. Poll the asynchronous question grade',
+    description:
+      'Returns the current state of the job submitted in step 7. Repeat until the status is `succeeded` or `failed`.',
+    method: 'GET',
+    path: '/v2/ielts/speaking/grading-jobs/{{v2GradingJobId}}',
+    testScript: [assertStatus(200)],
+  },
 ];
 
 export function speakingV2Folder(): Record<string, unknown> {
   return {
     name: SPEAKING_V2_FOLDER_NAME,
     description:
-      'Run the requests in order. Set `apiKey` and `baseUrl` first. Each step stores the ids the next one needs in collection variables (`v2*`). To grade another Test, clear `v2TestId`, `v2PartResultId` and `v2ResponseIds`.',
+      'Run the requests in order. Set `apiKey` and `baseUrl` first. Each step stores the ids the next one needs in collection variables (`v2*`). To grade another Test, clear `v2TestId`, `v2PartResultId` and `v2ResponseIds`; replace the placeholder `v2AudioAssetId` with an owned, completed Audio upload before step 7.',
     event: [
       {
         listen: 'prerequest',
