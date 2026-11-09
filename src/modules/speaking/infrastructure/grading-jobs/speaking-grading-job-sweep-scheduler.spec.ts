@@ -15,6 +15,7 @@ describe('SpeakingGradingJobSweepScheduler', () => {
       interrupted: 0,
       expired: 0,
       sandboxReservationsReleased: 0,
+      quotaReservationsReleased: 0,
       deleted: 0,
       failedSteps: [],
     }));
@@ -47,6 +48,7 @@ describe('SpeakingGradingJobSweepScheduler', () => {
         interrupted: 0,
         expired: 0,
         sandboxReservationsReleased: 0,
+        quotaReservationsReleased: 0,
         deleted: 0,
         failedSteps: [],
       };

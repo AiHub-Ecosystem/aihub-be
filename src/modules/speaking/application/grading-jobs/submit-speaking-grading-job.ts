@@ -23,7 +23,6 @@ import {
   resolveIdempotencyKey,
 } from '@/modules/idempotency/public/idempotency-operation';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
-import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import type {
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
@@ -237,7 +236,6 @@ export class SubmitSpeakingGradingJob {
     try {
       const admission = await this.repository.createWithAdmission({
         job,
-        since: quotaPeriod(now).start,
         monthlyQuota: environment === 'sandbox' ? null : quota,
         admit: async (monthlyRequestQuota) => {
           const admissionDecision = await admitGradedRequest(this.admission, {

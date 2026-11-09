@@ -22,10 +22,9 @@ export interface SpeakingGradingJobRepositoryPort {
   /** Commits a new job as `queued`. */
   create(job: NewSpeakingGradingJob): Promise<void>;
 
-  /** Serializes quota check, graded admission, key recovery and job creation for one Organization-month. */
+  /** Serializes quota check, graded admission, key recovery and job creation for one Organization. */
   createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
-    readonly since: Date;
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
   }): Promise<SpeakingGradingJobCreationOutcome>;
@@ -79,11 +78,10 @@ export interface SpeakingGradingJobRepositoryPort {
     readonly completedAt: Date;
   }): Promise<boolean>;
 
-  /** Jobs `queued` or `running` for the Organization and Environment created at or after `since`. */
+  /** Active quota reservations (`queued`, `running`, or `succeeded` awaiting metering handoff) for the Organization and Environment, whatever month they were created in. */
   countInFlight(input: {
     readonly organizationId: string;
     readonly environment: SpeakingAudioEnvironment;
-    readonly since: Date;
   }): Promise<number>;
 
   // Sweep steps (ADR-0159 decision 6). Each is one conditional statement.
@@ -116,6 +114,9 @@ export interface SpeakingGradingJobRepositoryPort {
     readonly error: SpeakingGradingJobError;
     readonly completedAt: Date;
   }): Promise<readonly SpeakingGradingJob[]>;
+
+  /** `succeeded` jobs completed before `completedBefore` that still hold a quota reservation (metering handoff never released it) -> reservation released; returns how many. */
+  releaseSettledQuotaReservations(completedBefore: Date): Promise<number>;
 
   /** Deletes jobs created before `createdBefore`; returns how many. */
   deleteCreatedBefore(createdBefore: Date): Promise<number>;

@@ -97,7 +97,6 @@ export class PostgresSpeakingGradingJobRepository
 
   async createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
-    readonly since: Date;
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
   }): Promise<SpeakingGradingJobCreationOutcome> {
@@ -137,14 +136,15 @@ export class PostgresSpeakingGradingJobRepository
     try {
       return await this.client.$transaction(
         async (transaction): Promise<SpeakingGradingJobCreationOutcome> => {
+          // One lock per Organization, not per month: reservations carry over a
+          // month boundary, so admissions on either side must serialize.
           await transaction.$executeRawUnsafe(
             SPEAKING_GRADING_QUOTA_LOCK_SQL,
-            `speaking-grading-quota:${input.job.organizationId}:${input.since.toISOString().slice(0, 7)}`,
+            `speaking-grading-quota:${input.job.organizationId}`,
           );
           const inFlight = await countInFlight(transaction, {
             organizationId: input.job.organizationId,
             environment: input.job.environment,
-            since: input.since,
           });
           let admitted: boolean;
           try {
@@ -391,6 +391,20 @@ export class PostgresSpeakingGradingJobRepository
         input.error.retryable,
       );
       return rows.map(requiredJob);
+    });
+  }
+
+  async releaseSettledQuotaReservations(
+    completedBefore: Date,
+  ): Promise<number> {
+    return this.run(async () => {
+      const rows = await this.client.$queryRawUnsafe<
+        readonly { readonly jobId: string }[]
+      >(
+        `UPDATE speaking_grading_jobs SET quota_reservation_active = false WHERE status = 'succeeded' AND quota_reservation_active = true AND completed_at < $1 RETURNING job_id AS "jobId"`,
+        completedBefore,
+      );
+      return rows.length;
     });
   }
 

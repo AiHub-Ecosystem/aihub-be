@@ -47,6 +47,10 @@ CREATE INDEX speaking_grading_jobs_dispatch_idx
 CREATE INDEX speaking_grading_jobs_org_in_flight_idx
   ON speaking_grading_jobs (organization_id, environment, status, created_at);
 
+CREATE INDEX speaking_grading_jobs_reservation_idx
+  ON speaking_grading_jobs (completed_at)
+  WHERE status = 'succeeded' AND quota_reservation_active;
+
 CREATE INDEX speaking_grading_jobs_retention_idx
   ON speaking_grading_jobs (created_at);
 

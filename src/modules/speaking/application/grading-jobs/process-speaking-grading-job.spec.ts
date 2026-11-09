@@ -328,6 +328,23 @@ describe('ProcessSpeakingGradingJob', () => {
     expect(subject.release).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves a failed reservation release to the sweep instead of failing the worker', async () => {
+    const subject = harness({ advanceClockMs: 321 });
+    subject.repository.releaseQuotaReservation.mockRejectedValueOnce(
+      new Error('store unavailable'),
+    );
+
+    await expect(
+      subject.processor.execute({
+        jobId: job.jobId,
+        environment: job.environment,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(subject.repository.releaseQuotaReservation).toHaveBeenCalledTimes(1);
+    expect(subject.release).toHaveBeenCalledTimes(1);
+  });
+
   it('records Part ownership when the job is linked to a Part result', async () => {
     const linkedJob: SpeakingGradingJob = {
       ...job,

@@ -313,7 +313,11 @@ export class ProcessSpeakingGradingJob {
         ? {}
         : { aiProcessingMs: result.aiProcessingMs }),
     });
-    await this.dependencies.repository.releaseQuotaReservation(job.jobId);
+    // A failed release is not fatal: the sweep releases a settled reservation
+    // once the grace window passes.
+    await this.dependencies.repository
+      .releaseQuotaReservation(job.jobId)
+      .catch(() => undefined);
   }
 
   private async finalize(

@@ -31,7 +31,7 @@ const job = (
 });
 
 describe('SpeakingGradingJobSweep', () => {
-  it('runs all five recovery steps with the policy thresholds', async () => {
+  it('runs all six recovery steps with the policy thresholds', async () => {
     const interruptedJob = job('sgj_01J00000000000000000000001', 'production');
     const expiredSandboxJob = job('sgj_01J00000000000000000000002', 'sandbox');
     const expiredProductionJob = job(
@@ -56,6 +56,7 @@ describe('SpeakingGradingJobSweep', () => {
         expiredSandboxJob,
         expiredProductionJob,
       ]),
+      releaseSettledQuotaReservations: jest.fn(async () => 3),
       deleteCreatedBefore: jest.fn(async () => 7),
     } satisfies Pick<
       SpeakingGradingJobRepositoryPort,
@@ -63,6 +64,7 @@ describe('SpeakingGradingJobSweep', () => {
       | 'releaseExpiredLeases'
       | 'interruptStaleDispatches'
       | 'expireQueued'
+      | 'releaseSettledQuotaReservations'
       | 'deleteCreatedBefore'
     >;
     const queue = {
@@ -81,6 +83,7 @@ describe('SpeakingGradingJobSweep', () => {
       interrupted: 1,
       expired: 2,
       sandboxReservationsReleased: 1,
+      quotaReservationsReleased: 3,
       deleted: 7,
       failedSteps: [],
     });
@@ -117,9 +120,46 @@ describe('SpeakingGradingJobSweep', () => {
     );
     expect(release).toHaveBeenCalledWith(expiredSandboxJob.jobId);
     expect(release).toHaveBeenCalledTimes(1);
+    expect(repository.releaseSettledQuotaReservations).toHaveBeenCalledWith(
+      new Date(
+        NOW.getTime() -
+          SPEAKING_GRADING_JOB_POLICY.quotaReservationReleaseAfterMs,
+      ),
+    );
     expect(repository.deleteCreatedBefore).toHaveBeenCalledWith(
       new Date(NOW.getTime() - SPEAKING_GRADING_JOB_POLICY.retentionMs),
     );
+  });
+
+  it('keeps sweeping when the settled-reservation release fails', async () => {
+    const repository = {
+      listStaleQueued: jest.fn(async () => []),
+      releaseExpiredLeases: jest.fn(async () => []),
+      interruptStaleDispatches: jest.fn(async () => []),
+      expireQueued: jest.fn(async () => []),
+      releaseSettledQuotaReservations: jest.fn(async () => {
+        throw new Error('temporary database failure');
+      }),
+      deleteCreatedBefore: jest.fn(async () => 0),
+    } satisfies Pick<
+      SpeakingGradingJobRepositoryPort,
+      | 'listStaleQueued'
+      | 'releaseExpiredLeases'
+      | 'interruptStaleDispatches'
+      | 'expireQueued'
+      | 'releaseSettledQuotaReservations'
+      | 'deleteCreatedBefore'
+    >;
+
+    const summary = await new SpeakingGradingJobSweep(
+      repository,
+      { enqueue: jest.fn(async () => undefined) },
+      { release: jest.fn(async () => undefined) },
+    ).run(NOW);
+
+    expect(summary.failedSteps).toEqual(['releaseSettledQuotaReservations']);
+    expect(summary.quotaReservationsReleased).toBe(0);
+    expect(repository.deleteCreatedBefore).toHaveBeenCalled();
   });
 
   it('continues remaining steps if one repository step throws', async () => {
@@ -130,6 +170,7 @@ describe('SpeakingGradingJobSweep', () => {
       releaseExpiredLeases: jest.fn(async () => []),
       interruptStaleDispatches: jest.fn(async () => []),
       expireQueued: jest.fn(async () => []),
+      releaseSettledQuotaReservations: jest.fn(async () => 0),
       deleteCreatedBefore: jest.fn(async () => 0),
     } satisfies Pick<
       SpeakingGradingJobRepositoryPort,
@@ -137,6 +178,7 @@ describe('SpeakingGradingJobSweep', () => {
       | 'releaseExpiredLeases'
       | 'interruptStaleDispatches'
       | 'expireQueued'
+      | 'releaseSettledQuotaReservations'
       | 'deleteCreatedBefore'
     >;
     const queue = { enqueue: jest.fn(async () => undefined) } satisfies Pick<
@@ -175,6 +217,7 @@ describe('SpeakingGradingJobSweep', () => {
       releaseExpiredLeases: jest.fn(async () => []),
       interruptStaleDispatches: jest.fn(async () => []),
       expireQueued: jest.fn(async () => []),
+      releaseSettledQuotaReservations: jest.fn(async () => 0),
       deleteCreatedBefore: jest.fn(async () => 0),
     } satisfies Pick<
       SpeakingGradingJobRepositoryPort,
@@ -182,6 +225,7 @@ describe('SpeakingGradingJobSweep', () => {
       | 'releaseExpiredLeases'
       | 'interruptStaleDispatches'
       | 'expireQueued'
+      | 'releaseSettledQuotaReservations'
       | 'deleteCreatedBefore'
     >;
     const queue = {

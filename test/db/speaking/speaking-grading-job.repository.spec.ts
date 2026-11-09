@@ -290,9 +290,8 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     );
   });
 
-  it('counts queued and running jobs only for the requested Organization, Environment and date', async () => {
+  it('counts active reservations only for the requested Organization and Environment, across month boundaries', async () => {
     const organizationId = 'org_' + ulid();
-    const since = new Date(NOW.getTime() - 60_000);
     const queued = makeJob({ organizationId, createdAt: NOW });
     const running = makeJob({ organizationId, createdAt: NOW });
     const terminal = makeJob({ organizationId, createdAt: NOW });
@@ -302,9 +301,10 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       createdAt: NOW,
     });
     const otherOrganization = makeJob({ createdAt: NOW });
-    const old = makeJob({
+    // Submitted just before a UTC month boundary, still queued after it.
+    const beforeBoundary = makeJob({
       organizationId,
-      createdAt: new Date(since.getTime() - 1),
+      createdAt: new Date('2026-10-31T23:59:59.000Z'),
     });
 
     for (const job of [
@@ -313,7 +313,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       terminal,
       sandbox,
       otherOrganization,
-      old,
+      beforeBoundary,
     ]) {
       await repository.create(job);
     }
@@ -333,14 +333,12 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.countInFlight({
         organizationId,
         environment: 'production',
-        since,
       }),
-    ).resolves.toBe(2);
+    ).resolves.toBe(3);
   });
 
   it('keeps a successful job reserved until metering handoff completes', async () => {
     const organizationId = 'org_' + ulid();
-    const since = new Date('2026-11-01T00:00:00.000Z');
     const job = makeJob({ organizationId });
     await repository.create(job);
     await repository.claim({
@@ -359,7 +357,6 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     await expect(
       repository.createWithAdmission({
         job: duringMetering,
-        since,
         monthlyQuota: 1,
         admit: async (monthlyQuota) =>
           monthlyQuota !== null && monthlyQuota > 0,
@@ -377,7 +374,6 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     await expect(
       repository.createWithAdmission({
         job: afterMetering,
-        since,
         monthlyQuota: 1,
         admit: async (monthlyQuota) =>
           monthlyQuota !== null && monthlyQuota > 0,
@@ -385,16 +381,52 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toEqual({ created: true });
   });
 
+  it('releases a successful job whose metering handoff never completed once the grace window passes', async () => {
+    const organizationId = 'org_' + ulid();
+    const settled = makeJob({ organizationId });
+    const recent = makeJob({ organizationId });
+    for (const [job, completedAt] of [
+      [settled, new Date(NOW.getTime() - 300_000)],
+      [recent, NOW],
+    ] as const) {
+      await repository.create(job);
+      await repository.claim({
+        jobId: job.jobId,
+        now: NOW,
+        leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+        expireBefore: new Date(NOW.getTime() - 15 * 60_000),
+      });
+      await repository.succeed({
+        jobId: job.jobId,
+        result: RESULT,
+        completedAt,
+      });
+    }
+
+    await expect(
+      repository.releaseSettledQuotaReservations(
+        new Date(NOW.getTime() - 120_000),
+      ),
+    ).resolves.toBeGreaterThanOrEqual(1);
+    await expect(
+      repository.countInFlight({ organizationId, environment: 'production' }),
+    ).resolves.toBe(1);
+    await expect(
+      repository.releaseQuotaReservation(settled.jobId),
+    ).resolves.toBe(false);
+    await expect(
+      repository.releaseQuotaReservation(recent.jobId),
+    ).resolves.toBe(true);
+  });
+
   it('serializes concurrent admission against monthly in-flight quota', async () => {
     const organizationId = 'org_' + ulid();
     const jobs = [makeJob({ organizationId }), makeJob({ organizationId })];
-    const since = new Date('2026-11-01T00:00:00.000Z');
 
     const results = await Promise.all(
       jobs.map((job) =>
         repository.createWithAdmission({
           job,
-          since,
           monthlyQuota: 1,
           admit: async (monthlyQuota) =>
             monthlyQuota !== null && monthlyQuota > 0,
@@ -407,7 +439,6 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.countInFlight({
         organizationId,
         environment: 'production',
-        since,
       }),
     ).resolves.toBe(1);
   });
@@ -416,11 +447,9 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const organizationId = 'org_' + ulid();
     const idempotencyKey = 'key_' + ulid();
     const firstJob = makeJob({ organizationId, idempotencyKey });
-    const since = new Date('2026-11-01T00:00:00.000Z');
 
     const first = await repository.createWithAdmission({
       job: firstJob,
-      since,
       monthlyQuota: 10,
       admit: async () => true,
     });
@@ -429,7 +458,6 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const duplicateJob = makeJob({ organizationId, idempotencyKey });
     const second = await repository.createWithAdmission({
       job: duplicateJob,
-      since,
       monthlyQuota: 10,
       admit: async () => true,
     });
@@ -453,11 +481,9 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       idempotencyKey,
       createdAt: firstCreatedAt,
     });
-    const since = new Date('2026-11-01T00:00:00.000Z');
 
     const first = await repository.createWithAdmission({
       job: firstJob,
-      since,
       monthlyQuota: 10,
       admit: async () => true,
     });
@@ -471,7 +497,6 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     });
     const second = await repository.createWithAdmission({
       job: secondJob,
-      since,
       monthlyQuota: 10,
       admit: async () => true,
     });

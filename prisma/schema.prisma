@@ -635,6 +635,7 @@ model SpeakingGradingJob {
   @@index([status, leaseExpiresAt], map: "speaking_grading_jobs_lease_idx")
   @@index([status, dispatchStartedAt], map: "speaking_grading_jobs_dispatch_idx")
   @@index([organizationId, environment, status, createdAt], map: "speaking_grading_jobs_org_in_flight_idx")
+  @@index([completedAt], map: "speaking_grading_jobs_reservation_idx", where: raw("((status = 'succeeded'::text) AND quota_reservation_active)"))
   @@index([createdAt], map: "speaking_grading_jobs_retention_idx")
   @@unique([organizationId, endUserId, idempotencyKey], map: "speaking_grading_jobs_org_user_key_idx", where: raw("(idempotency_key IS NOT NULL)"))
   @@map("speaking_grading_jobs")

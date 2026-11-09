@@ -27,6 +27,7 @@ export interface SpeakingGradingJobSweepSummary {
   readonly interrupted: number;
   readonly expired: number;
   readonly sandboxReservationsReleased: number;
+  readonly quotaReservationsReleased: number;
   readonly deleted: number;
   readonly failedSteps: readonly string[];
 }
@@ -40,6 +41,7 @@ export class SpeakingGradingJobSweep {
       | 'releaseExpiredLeases'
       | 'interruptStaleDispatches'
       | 'expireQueued'
+      | 'releaseSettledQuotaReservations'
       | 'deleteCreatedBefore'
     >,
     private readonly queue: Pick<SpeakingGradingJobQueuePort, 'enqueue'>,
@@ -53,6 +55,7 @@ export class SpeakingGradingJobSweep {
     let interrupted = 0;
     let expired = 0;
     let sandboxReservationsReleased = 0;
+    let quotaReservationsReleased = 0;
     let deleted = 0;
 
     await this.step(failedSteps, 'staleQueued', async () => {
@@ -110,6 +113,20 @@ export class SpeakingGradingJobSweep {
       }
     });
 
+    await this.step(
+      failedSteps,
+      'releaseSettledQuotaReservations',
+      async () => {
+        quotaReservationsReleased =
+          await this.repository.releaseSettledQuotaReservations(
+            new Date(
+              now.getTime() -
+                SPEAKING_GRADING_JOB_POLICY.quotaReservationReleaseAfterMs,
+            ),
+          );
+      },
+    );
+
     await this.step(failedSteps, 'deleteCreatedBefore', async () => {
       deleted = await this.repository.deleteCreatedBefore(
         new Date(now.getTime() - SPEAKING_GRADING_JOB_POLICY.retentionMs),
@@ -122,6 +139,7 @@ export class SpeakingGradingJobSweep {
       interrupted,
       expired,
       sandboxReservationsReleased,
+      quotaReservationsReleased,
       deleted,
       failedSteps: [...new Set(failedSteps)],
     };

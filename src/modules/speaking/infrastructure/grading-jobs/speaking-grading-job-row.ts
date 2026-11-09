@@ -70,9 +70,15 @@ export const JOB_COLUMNS = `
 export interface InFlightCountInput {
   readonly organizationId: string;
   readonly environment: SpeakingAudioEnvironment;
-  readonly since: Date;
 }
 
+/**
+ * Counts every active quota reservation regardless of `created_at`: a job
+ * submitted just before a UTC month boundary is metered in the month it
+ * dispatches, so its reservation must still count after the boundary. Active
+ * reservations are short-lived (queue expiry, dispatch interrupt, settlement
+ * sweep), so the unbounded range stays small.
+ */
 export async function countInFlight(
   client: PrismaClient | Prisma.TransactionClient,
   input: InFlightCountInput,
@@ -80,10 +86,9 @@ export async function countInFlight(
   const rows = await client.$queryRawUnsafe<
     readonly { readonly count: bigint }[]
   >(
-    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running', 'succeeded') AND quota_reservation_active = true AND created_at >= $3`,
+    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running', 'succeeded') AND quota_reservation_active = true`,
     input.organizationId,
     input.environment,
-    input.since,
   );
   return Number(rows[0]?.count ?? 0n);
 }

@@ -13,6 +13,12 @@ export const SPEAKING_GRADING_JOB_POLICY = {
    * `DISPATCH_INTERRUPTED`: the 60-second question-grading deadline plus margin.
    */
   dispatchInterruptedAfterMs: 2 * 60_000,
+  /**
+   * A `succeeded` job still holding its quota reservation this long after
+   * completion is released by the sweep: the metering handoff either finished or
+   * was lost, and the reservation must not block the Organization's quota.
+   */
+  quotaReservationReleaseAfterMs: 2 * 60_000,
   /** Delay before a worker that found no Concurrency permit retries. */
   permitRetryDelayMs: 5_000,
   /** Jobs and their results are deleted this long after creation. */

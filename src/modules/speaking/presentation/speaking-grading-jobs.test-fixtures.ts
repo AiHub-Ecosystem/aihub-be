@@ -70,7 +70,6 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
 
   async createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
-    readonly since: Date;
     readonly monthlyQuota: number | null;
     readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
   }): Promise<SpeakingGradingJobCreationOutcome> {
@@ -96,7 +95,6 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
         : await this.countInFlight({
             organizationId: input.job.organizationId,
             environment: input.job.environment,
-            since: input.since,
           });
     const monthlyQuota =
       input.monthlyQuota === null
@@ -222,13 +220,11 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
   async countInFlight(input: {
     readonly organizationId: string;
     readonly environment: SpeakingAudioEnvironment;
-    readonly since: Date;
   }): Promise<number> {
     return [...this.jobs.values()].filter(
       (job) =>
         job.organizationId === input.organizationId &&
         job.environment === input.environment &&
-        job.createdAt >= input.since &&
         this.quotaReservations.has(job.jobId),
     ).length;
   }
@@ -314,6 +310,23 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
       expired.push(failed);
     }
     return expired;
+  }
+
+  async releaseSettledQuotaReservations(
+    completedBefore: Date,
+  ): Promise<number> {
+    let released = 0;
+    for (const job of this.jobs.values()) {
+      if (
+        job.status === 'succeeded' &&
+        job.completedAt !== undefined &&
+        job.completedAt < completedBefore &&
+        this.quotaReservations.delete(job.jobId)
+      ) {
+        released += 1;
+      }
+    }
+    return released;
   }
 
   async deleteCreatedBefore(createdBefore: Date): Promise<number> {
