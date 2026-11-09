@@ -81,6 +81,7 @@ export const GATE_COMMANDS = {
   'check:imports:dist': 'check:imports:dist',
   'check:migrations': 'check:migrations',
   'check:nginx-headers': 'check:nginx-headers',
+  'check:compose': 'check:compose',
   'check:tenant-global': 'check:tenant-global',
   'check:data-ownership': 'check:data-ownership',
   'format:check': 'format:check',
@@ -310,6 +311,34 @@ function classifyPathGates(p) {
   // below, which would otherwise stop at `format:check`.
   if (path === '.github/workflows/ci.yml') {
     return ['format:check', 'test:secret-scan'];
+  }
+
+  // #1766: a compose change selects the validators CI runs over the rendered
+  // production config, instead of falling through to the generic YAML rule or
+  // the full loop. Both compose files map here: production is what the
+  // validators read, and a dev-compose change rides along because the two
+  // files drift together.
+  if (
+    path === 'docker-compose.production.yml' ||
+    path === 'docker-compose.yml'
+  ) {
+    return ['check:compose', 'format:check'];
+  }
+  // #1766: an image change has no local gate. The gate CI runs — build the
+  // production image, check the shipped paths, boot it and wait for health —
+  // needs a docker daemon and a multi-minute production build, which proves
+  // unrunnable on the dev hosts this repo is edited on. Recorded as an
+  // explicit no-gate answer the way the firewall guard is, instead of being
+  // selected and left to fail everywhere: the full loop still answers for
+  // these files, and the documentation drift gate still covers path
+  // references to them. #1482 strengthens what the boot check asserts, and
+  // that stays a CI-only assertion too.
+  if (
+    path === 'Dockerfile' ||
+    /^ops\/.+\.Dockerfile$/.test(path) ||
+    path === 'scripts/ci/image/image-boot-check.sh'
+  ) {
+    return [];
   }
 
   if (/\.(?:md|ya?ml)$/.test(path)) {

@@ -269,6 +269,26 @@ const pathCases = [
     path: 'scripts/ops/monitoring/probe-sandbox-mint.sh',
     gates: ['check:doc-drift', 'lint', 'test:shell-specs'],
   },
+  {
+    path: 'docker-compose.production.yml',
+    gates: ['check:compose', 'format:check'],
+  },
+  {
+    path: 'docker-compose.yml',
+    gates: ['check:compose', 'format:check'],
+  },
+  {
+    path: 'ops/firewall/guard.Dockerfile',
+    gates: ['check:doc-drift'],
+  },
+  {
+    path: 'scripts/ci/image/image-boot-check.sh',
+    gates: ['check:doc-drift'],
+  },
+  {
+    path: 'scripts/ci/image/host-job-image-check.cjs',
+    gates: ['check:doc-drift', 'lint', 'test:related'],
+  },
 ];
 
 for (const { path, gates } of pathCases) {
@@ -775,4 +795,48 @@ await test('check:changed stays out of verify and CI', () => {
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
   assert.ok(!packageJson.scripts.verify.includes('check:changed'));
   assert.ok(!workflow.includes('check:changed'));
+});
+
+// #1766: the compose gate runs the same two validators CI runs, over the same
+// rendered production config, so a compose change exercises locally what CI
+// would catch.
+await test('check:compose runs the validators CI runs over the rendered config', () => {
+  const packageJson = /** @type {{scripts: Record<string, string>}} */ (
+    JSON.parse(readFileSync('package.json', 'utf8'))
+  );
+  const command = packageJson.scripts[GATE_COMMANDS['check:compose']] ?? '';
+  assert.ok(
+    command.includes('docker-compose.production.yml'),
+    'the compose gate must render the production compose file',
+  );
+  assert.ok(
+    command.includes('scripts/ci/compose/check-production-compose-logs.cjs'),
+    'the compose gate must run the log-bounds validator',
+  );
+  assert.ok(
+    command.includes('scripts/ci/compose/check-trusted-proxy-compose.cjs'),
+    'the compose gate must run the trusted-proxy validator',
+  );
+});
+
+// #1766: the image gate CI runs — build the production image, check the
+// shipped paths, boot it and wait for health — needs a docker daemon and a
+// multi-minute production build, so it proves unrunnable on the dev hosts
+// this repo is edited on. The no-gate answer is recorded instead of a gate
+// that fails everywhere; the full loop still answers for these files.
+await test('image inputs select no local gate and say so (#1766)', () => {
+  // The root Dockerfile is not a documentation-drift input, so its no-gate
+  // answer is observable as its own full-verify reason, distinct from an
+  // unclassified path naming the file.
+  assert.deepEqual(planChangedFiles(['Dockerfile']), {
+    fullVerify: true,
+    reason: 'no gate can break the changed files',
+  });
+  for (const path of [
+    'ops/firewall/guard.Dockerfile',
+    'ops/monitoring/ssh-tunnel.Dockerfile',
+    'scripts/ci/image/image-boot-check.sh',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
+  }
 });
