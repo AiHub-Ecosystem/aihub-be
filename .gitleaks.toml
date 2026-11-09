@@ -18,6 +18,7 @@ condition = "AND"
 commits = [
   "00d97c5dd44cc43dcc465ecf8889b7742ff9f22a",
   "018a66f2808e87b24ec5160b002d5393411a2087",
+  "04bb67e5b1c91e6717e23c96ee6649d46e1052bc",
   "06b41e6f445e2058cfc567976cf60169d6382db5",
   "0a3d18bc1ba270b64f45cde7503fb68487450b4e",
   "0d602d193cbf39efc1044017433871cad9b61ef9",
@@ -26,13 +27,18 @@ commits = [
   "1c440eeaba2ed23f19974b18e8ecb279e1e046ff",
   "25909a26a5e6e81b168a1c704e587b7fd92ecffd",
   "28be4d241fc8f4241f21ef051b3f6bae995781b3",
+  "41168d7d4e12fe1b1d4fc7376735a107ea67c93e",
   "437ccab316121eb718ba755706e8b4849b716d9d",
+  "461e6faaac92bb407432320c51735c2832a07079",
   "49d6b6bbf500f54614e2e44facbe793264e5aa8d",
+  "503095f05271b510a6f931fcb0868771c8e645a0",
   "556a19bbd5c218f02cd6616626dccc114951aaa4",
   "5cf744f1f71d0cca88404a7ed7e8db7bf64d0a10",
   "6034be40a3ba7b1b2e23e295c041c4ee546a1815",
+  "606f7dee61e014afec3ca551b71b2bedcb7a219c",
   "67d81bc2fc4d275bbefb3aecbf28ebc7752ec4ac",
   "6933d63f918ea3de3290a5225fa5d329062581ae",
+  "6c62f266a65d4a1cadb80058efab9d62e44cb579",
   "6da8ae3be308d9e9d36803291a308abbfb4a36f3",
   "7e70afcf99f5daa2ed835133c21f74fd59126195",
   "7f145a37c0975b57c493dfef3858d65d1d37a4f3",
@@ -40,36 +46,49 @@ commits = [
   "87771200a9da44dd7500d018261da1ee51530226",
   "8c3c885037268e2b7a374bf2cc5179431743dbe9",
   "9323aaf40350f1081112b067a8afedf5e9eba963",
+  "93e041dea7b8a9c5b1d45ceebed679b817dc66fc",
   "94ff2f2a12d47d887db729b6fa3c5215ab172f97",
   "9a129515ad3e844c291b6a91b1f929f6884183f9",
   "a6b4e79005792b05906954ed6d53391662db87d8",
   "a84af5a88e503f7faaf02531340c3c714df9f781",
   "aaf9e5aa2b28b2e49a819ffedab91ecf9dafd3ba",
   "ae9be2a1be43016469a6dc68e0f5fd34f19df8c0",
+  "b45bd900f375dc822d61519a2b97e55b74c85627",
   "b4d019360015384b1a6845eeb860bdcbb3de36ef",
   "bc813a7f28d92f7816c47274bfecb4d58aa1cf67",
+  "c0a7685856b1ded53a9fc9425665812688398d4c",
+  "ce080fecbe1349de2ec0aab1a4c683783d3b5ec2",
   "d1a6a9eef19c0b76d070f94809ef709a20ac6a2c",
+  "d5a6a66a67508a9bb17715b1d86ab3bbf871cac9",
+  "d6cf189666a1cb8853cca097d659e580dd0e4b73",
   "d99e50866f1d1f899b08a706e2787187b092297a",
   "dc67383a8050cf956bdc46a9bccd437fd58cb4f2",
+  "e3604649cc814401c416ecf909f442ee9d3d5fc2",
+  "e63d3622a359f23b81cb7d5221db5d4342a216e8",
   "e80578f13b4550d38b314b273a5d6b4dbcdee30c",
   "eae35a23a5d315241d759fa7019131db15885986",
   "eb316f25dbfcb20e99fd546e7e63ab8560685cf4",
   "eda383a3e4e445df67a8365698907805d1fb549e",
   "f6516731e6e12ab5f6ad592c23e793053430072d",
+  "fbaa4ca2bf6e5376cd4d421e4309a0272fd896b6",
   "fcfe369935cad96216098f02ed5ae84dea7e2cb9",
+  "ffc2207b4d11eaa270fc537fd2df034b7ae39b5e",
 ]
 paths = [
   '(^|/)src/modules/auth/mfa/application/auth-mfa\.service\.spec\.ts$',
   '(^|/)src/modules/auth/mfa/application/mfa-policy\.spec\.ts$',
+  '(^|/)src/modules/auth/auth-pre-verification-rate-limit\.spec\.ts$',
+  '(^|/)src/modules/auth/application/auth-mfa\.service\.spec\.ts$',
+  '(^|/)src/modules/auth/application/mfa-policy\.spec\.ts$',
   '(^|/)test/integration/auth-pre-verification-rate-limit\.spec\.ts$',
 ]
 
+
 [[rules.allowlists]]
-description = "Only the two Postman variable-name false positives in their introduction commit are allowlisted; later changes to these files stay detectable."
+description = "Only the Postman variable-name false positives are allowlisted, scoped by path and by the exact names. A commit pin went stale here once: the list named c35215e3 while the names actually appear in 17 other commits, so every scan reported all 66 findings. Any other value in these files stays detectable."
 condition = "AND"
-commits = ["c35215e3aca9e55d3e29ff3de3af63a094a65cb3"]
 regexTarget = "match"
-regexes = ['v2PartResultId|v2QuestionId']
+regexes = ['v2PartResultId|v2QuestionId|v2GradingJobId']
 paths = [
   '(^|/)src/postman/postman-speaking-v2-requests\.ts$',
   '(^|/)aihub\.postman_collection\.json$',
