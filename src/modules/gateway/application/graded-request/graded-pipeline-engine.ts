@@ -39,6 +39,7 @@ import {
   type PreparedGradedInput,
 } from './graded-pipeline.port';
 import type { GradingOrchestratorPort } from './grading-orchestrator.port';
+import type { OutstandingQuotaReservationsPort } from './outstanding-quota-reservations';
 
 interface ConcurrencyPermitLifecycle extends IdempotencyBackgroundLifecycle {
   requestFinished(): Promise<void>;
@@ -128,6 +129,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
     private readonly admission: GradedAdmissionPort,
     private readonly concurrencyLimiter: ConcurrencyLimiterPort,
     private readonly idempotency: IdempotencyServicePort,
+    private readonly reservations: OutstandingQuotaReservationsPort,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -153,7 +155,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
         operation,
         context.idempotencyKey,
       );
-      const admissionInput: AdmitGradedRequestInput = {
+      const requestedInput: AdmitGradedRequestInput = {
         apiKeyId: authenticated.apiKeyId,
         rateLimitRpm: authenticated.rateLimitRpm,
         organizationId: authenticated.organizationId,
@@ -167,7 +169,26 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
         monthlyRequestQuota: authenticated.monthlyRequestQuota,
         hardStopOnQuota: authenticated.hardStopOnQuota,
       };
-      const policy = gradedAdmissionPolicy(admissionInput);
+      const policy = gradedAdmissionPolicy(requestedInput);
+      // Quota held by accepted work that is not metered yet (async jobs) is
+      // already spoken for; an unreadable count admits as quota-unverified.
+      let reservationsUnverified = false;
+      let reserved = 0;
+      if (policy.quota !== null) {
+        try {
+          reserved = await this.reservations.count({
+            organizationId: authenticated.organizationId,
+            environment: requestedInput.environment,
+          });
+        } catch {
+          reservationsUnverified = true;
+        }
+      }
+      const admissionInput: AdmitGradedRequestInput = {
+        ...requestedInput,
+        monthlyRequestQuota:
+          policy.quota === null ? null : Math.max(0, policy.quota - reserved),
+      };
       metering.setDimensions({
         operation,
         identityMode: identity.mode ?? 'unknown',
@@ -217,7 +238,7 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
             () => this.now(),
           );
         }
-      } else if (decision.quotaUnverified) {
+      } else if (decision.quotaUnverified || reservationsUnverified) {
         metering.addEvidence({ quotaUnverified: true });
       }
 

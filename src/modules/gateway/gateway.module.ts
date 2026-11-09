@@ -89,6 +89,11 @@ import {
   GRADING_ORCHESTRATOR,
   type GradingOrchestratorPort,
 } from './application/graded-request/grading-orchestrator.port';
+import {
+  OUTSTANDING_QUOTA_RESERVATIONS,
+  OutstandingQuotaReservationRegistry,
+  type OutstandingQuotaReservationsPort,
+} from './application/graded-request/outstanding-quota-reservations';
 import { RATE_LIMITER } from './application/rate-limiter.port';
 import { SandboxAdmission } from './application/sandbox-admission';
 import {
@@ -282,6 +287,11 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       inject: [OPERATION_DISPATCHER, IDEMPOTENCY_SERVICE],
     },
     {
+      provide: OUTSTANDING_QUOTA_RESERVATIONS,
+      useFactory: (): OutstandingQuotaReservationRegistry =>
+        new OutstandingQuotaReservationRegistry(),
+    },
+    {
       provide: GRADED_PIPELINE_ENGINE,
       inject: [
         GRADING_ORCHESTRATOR,
@@ -289,6 +299,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
         GRADED_ADMISSION,
         CONCURRENCY_LIMITER,
         IDEMPOTENCY_SERVICE,
+        OUTSTANDING_QUOTA_RESERVATIONS,
       ],
       useFactory: (
         orchestrator: GradingOrchestratorPort,
@@ -296,6 +307,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
         admission: GradedAdmissionPort,
         concurrencyLimiter: ConcurrencyLimiterPort,
         idempotency: IdempotencyServicePort,
+        reservations: OutstandingQuotaReservationsPort,
       ): GradedPipelineEnginePort =>
         new GradedPipelineEngine(
           orchestrator,
@@ -303,6 +315,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
           admission,
           concurrencyLimiter,
           idempotency,
+          reservations,
         ),
     },
     SuccessEnvelopeInterceptor,
@@ -315,6 +328,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
     OPERATION_DISPATCHER,
     GRADING_ORCHESTRATOR,
     GRADED_PIPELINE_ENGINE,
+    OUTSTANDING_QUOTA_RESERVATIONS,
     DownstreamHttpClient,
     RATE_LIMITER,
     GRADED_ADMISSION,

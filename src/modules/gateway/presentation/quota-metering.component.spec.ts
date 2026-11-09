@@ -159,6 +159,7 @@ function runEngine(
     admission,
     concurrency,
     idempotency,
+    { count: async () => 0 },
   );
   return engine.execute(engineContext);
 }
