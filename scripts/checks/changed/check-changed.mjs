@@ -134,7 +134,10 @@ const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
 /** A hand-written declaration, one half of the pair #1787 keeps in agreement. */
 const DECLARATION_FILE = /\.d\.(?:cts|mts)$/;
-const DOC_DRIFT_INPUT = /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/)/;
+const DOC_DRIFT_INPUT =
+  /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/|AGENTS\.md$|\.claude\/(?:agents|rules)\/.*\.md$|\.coderabbit\.yaml$)/;
+const CODERABBIT_CONFIG_INPUT =
+  /^(?:AGENTS\.md|\.claude\/(?:agents|rules)\/.*\.md|\.coderabbit\.yaml)$/;
 
 /**
  * The trees the folder-entry ceilings measure (#1347): everything under
@@ -198,6 +201,9 @@ function classifyPathGates(p) {
     return sorted(gates);
   }
 
+  if (CODERABBIT_CONFIG_INPUT.test(path)) {
+    return ['check:doc-drift', 'format:check', 'test:doc-drift'];
+  }
   if (path === 'openapi.json' || /^openapi\/v\d+\.json$/.test(path)) {
     return ['lint', 'validate:openapi'];
   }
@@ -235,6 +241,12 @@ function classifyPathGates(p) {
   // branch a `.cjs` change selects only the generic code gates.
   if (path === '.dependency-cruiser.cjs') {
     return ['arch-check'];
+  }
+  if (
+    path === 'scripts/generate/coderabbit-config.mjs' ||
+    path === 'scripts/generate/generate-coderabbit-config.mjs'
+  ) {
+    return [...TS_GATES, 'test:doc-drift'];
   }
   if (path === '.oxlintrc.json') {
     return ['lint'];
@@ -352,6 +364,9 @@ function classifyPathGates(p) {
       'test:lint-staged',
       'test:secret-scan',
     ];
+  }
+  if (path === '.github/workflows/coderabbit-review-opt-in.yml') {
+    return ['format:check', 'test:doc-drift'];
   }
 
   // #1766: a compose change selects the validators CI runs over the rendered

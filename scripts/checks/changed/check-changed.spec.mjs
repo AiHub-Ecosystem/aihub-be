@@ -609,6 +609,31 @@ await test('changed source paths keep the documentation path check selected', ()
   );
 });
 
+await test('CodeRabbit config inputs select drift, formatting and behavior checks', () => {
+  for (const path of [
+    'AGENTS.md',
+    '.claude/agents/api.md',
+    '.claude/rules/security.md',
+    '.coderabbit.yaml',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, [
+      'check:doc-drift',
+      'format:check',
+      'test:doc-drift',
+    ]);
+  }
+  assert.deepEqual(
+    planChangedFiles(['.github/workflows/coderabbit-review-opt-in.yml']).gates,
+    ['format:check', 'test:doc-drift'],
+  );
+  for (const path of [
+    'scripts/generate/coderabbit-config.mjs',
+    'scripts/generate/generate-coderabbit-config.mjs',
+  ]) {
+    assert.ok(planChangedFiles([path]).gates.includes('test:doc-drift'));
+  }
+});
+
 await test('the Bun runner defaults to TypeScript unit specs', () => {
   assert.equal(buildBunTestArgs([]).at(-1), '.spec.ts');
 });

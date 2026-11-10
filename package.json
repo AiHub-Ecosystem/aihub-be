@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node scripts/generate/compile-auth-email-template.mjs && node scripts/generate/clean-dist.cjs && nest build && node scripts/generate/generate-prisma-client.mjs --runtime",
     "generate:prisma-client": "node scripts/generate/generate-prisma-client.mjs",
+    "generate:coderabbit-config": "bun scripts/generate/generate-coderabbit-config.mjs",
     "generate:migration": "node scripts/generate/generate-migration.mjs",
     "dev": "node scripts/generate/generate-prisma-client.mjs --runtime && node scripts/runtime/dev-runner.mjs",
     "start": "node dist/main.js",

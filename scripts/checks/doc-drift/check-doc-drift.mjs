@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { codeRabbitConfigDrift } from '../../generate/coderabbit-config.mjs';
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 /** @typedef {{relation: string, id: string}} AdrTarget */
@@ -204,7 +206,10 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  const violations = findDocDriftViolations();
+  const violations = [
+    ...findDocDriftViolations(),
+    ...codeRabbitConfigDrift(REPO_ROOT),
+  ];
   if (violations.length > 0) {
     console.error(violations.join('\n'));
     process.exitCode = 1;
