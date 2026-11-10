@@ -147,11 +147,13 @@ class RateLimiterFake implements AuthRateLimiterPort {
 }
 
 /**
- * A fixed shape keeps this suite on the outbox pairing rather than on argon2's
- * cost. The `auth_identities` constraint accepts this order, and the real
- * hasher is exercised in registration-password-hash.spec.ts.
+ * Fixed hashes keep this suite focused on transaction behavior, not Argon2
+ * cost. Both match the current profile; the real hasher is exercised in
+ * registration-password-hash.spec.ts.
  */
 const STORED_PASSWORD_HASH = ARGON2ID_DUMMY_HASH;
+const REPLACEMENT_PASSWORD_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=1$2FroPuSkgXi8CeUFxVPcBw$yd46vd1DvFVETUVMIQx6/7bdofAj7jPoKxlXWWW0LWw';
 
 class PasswordHasherFake implements PasswordHasherPort {
   async hash(): Promise<string> {
@@ -832,7 +834,7 @@ function passwordChangeInput(target: PasswordChangeTarget) {
   return {
     userId: target.userId,
     expectedPasswordHash: STORED_PASSWORD_HASH,
-    passwordHash: '$argon2id$replacement',
+    passwordHash: REPLACEMENT_PASSWORD_HASH,
     session: { kind: 'refresh' as const, id: target.currentFamilyId },
     now: new Date(target.now.getTime() + 1_000),
     emailDelivery: {
@@ -856,7 +858,7 @@ describe('password change PostgreSQL transaction', () => {
        WHERE user_account_id = $1 AND provider = 'password'`,
       [target.userId],
     );
-    expect(identity.rows[0]?.password_hash).toBe('$argon2id$replacement');
+    expect(identity.rows[0]?.password_hash).toBe(REPLACEMENT_PASSWORD_HASH);
     const refreshTokens = await pool.query<{
       family_id: string;
       revoked_at: Date | null;
@@ -908,7 +910,7 @@ describe('password change PostgreSQL transaction', () => {
       }),
     );
     expect(payload).toEqual({ email: target.email });
-    expect(JSON.stringify(payload)).not.toContain('$argon2id$replacement');
+    expect(JSON.stringify(payload)).not.toContain(REPLACEMENT_PASSWORD_HASH);
   });
 
   it('preserves the current Web Session and revokes every Refresh Token Family', async () => {
