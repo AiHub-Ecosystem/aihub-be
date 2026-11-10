@@ -1,8 +1,20 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  rmdir,
+  writeFile,
+} from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-await test('type-aware Oxlint runs from the repository root for staged source', async () => {
+const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+
+await test('staged autofix and the full type-aware Oxlint check run in pre-commit', async () => {
   const config = await readFile(
     new URL('../../../.lintstagedrc', import.meta.url),
     'utf8',
@@ -11,12 +23,85 @@ await test('type-aware Oxlint runs from the repository root for staged source', 
     new URL('../../../.husky/pre-commit', import.meta.url),
     'utf8',
   );
-  const taskStart = config.indexOf('"*.{ts,mts,cts,js,mjs,cjs}"');
-  const taskEnd = config.indexOf('],', taskStart);
+  const stagedFix = hook.indexOf('GOMAXPROCS=1 bunx lint-staged --hide-all');
+  const fullTypeAwareLint = hook.indexOf(
+    'GOMAXPROCS=1 bun run oxlint --threads=1 .',
+  );
 
-  assert.ok(taskStart >= 0 && taskEnd > taskStart);
-  assert.ok(config.slice(taskStart, taskEnd).includes('"oxlint --fix ."'));
-  assert.ok(hook.includes('lint-staged --hide-all'));
+  assert.match(
+    config,
+    /"\*\.\{ts,mts,cts,js,mjs,cjs\}": \[\s*"oxlint --fix --disable-typescript-plugin"/,
+  );
+  assert.ok(stagedFix >= 0 && fullTypeAwareLint > stagedFix);
+});
+
+await test('type-aware Oxlint rejects floating promises in staged TypeScript and JavaScript', async () => {
+  const tempRoot = join(repositoryRoot, 'temp');
+  let createdTempRoot = false;
+  try {
+    await mkdir(tempRoot);
+    createdTempRoot = true;
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+
+  const fixtureRoot = await mkdtemp(join(tempRoot, 'lint-staged-type-aware-'));
+  try {
+    const tsconfig = join(fixtureRoot, 'tsconfig.json');
+    const typescript = join(fixtureRoot, 'floating-promise.ts');
+    const javascript = join(fixtureRoot, 'floating-promise.mjs');
+    await Promise.all([
+      writeFile(
+        tsconfig,
+        JSON.stringify({
+          compilerOptions: {
+            target: 'ES2022',
+            module: 'preserve',
+            moduleResolution: 'bundler',
+            allowJs: true,
+            checkJs: true,
+            strict: true,
+            noEmit: true,
+          },
+          include: ['./*.ts', './*.mjs'],
+        }),
+      ),
+      writeFile(typescript, 'Promise.resolve();'),
+      writeFile(javascript, 'Promise.resolve();'),
+    ]);
+
+    const result = spawnSync(
+      'bun',
+      [
+        'run',
+        'oxlint',
+        '--type-aware',
+        '--threads=1',
+        '--tsconfig',
+        tsconfig,
+        typescript,
+        javascript,
+      ],
+      { cwd: repositoryRoot, encoding: 'utf8' },
+    );
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.error, undefined, output);
+    assert.equal(result.status, 1, output);
+    assert.match(
+      output,
+      /floating-promise\.ts:1:1: error typescript\(no-floating-promises\)/,
+    );
+    assert.match(
+      output,
+      /floating-promise\.mjs:1:1: error typescript\(no-floating-promises\)/,
+    );
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true });
+    if (createdTempRoot) {
+      await rmdir(tempRoot).catch(() => {});
+    }
+  }
 });
 
 await test('the static job runs this suite in CI (#1786)', async () => {

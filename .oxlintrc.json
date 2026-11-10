@@ -55,8 +55,8 @@
     "import/no-named-as-default-member": "error",
     // Type-aware rules for #110 — gateway defect class. `no-floating-promises`,
     // `no-misused-promises`, and `await-thenable` are the direct gateway failure
-    // modes. They are `error` with 0 findings. Runtime measured at 2.6s (<8s),
-    // so this set stays in `bun run verify`.
+    // modes. They are `error` with 0 findings and run in both `bun run lint`
+    // and the pre-commit whole-project check.
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/await-thenable": "error",
