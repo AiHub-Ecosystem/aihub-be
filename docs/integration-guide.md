@@ -149,6 +149,29 @@ the generic invalid-token `401`. A Postgres outage returns retryable
 claims, never the compact JWT. Do not put either JWT in a URL, browser storage,
 telemetry, or logs.
 
+### Change password and end other sessions
+
+An authenticated user can change the AIHUB account password with
+`POST /v1/auth/change-password`:
+
+```http
+POST /v1/auth/change-password
+Authorization: Bearer <user-access-jwt>
+Content-Type: application/json
+
+{"current_password":"<current-password>","new_password":"<new-password>"}
+```
+
+The endpoint returns a bodyless `204` on success. It preserves the session used
+for the request and revokes every other Refresh Token Family and Web Session.
+Open password-reset links are consumed, and a security notification is queued
+without including either password. A wrong current password returns the generic
+authentication error and makes no change. Password policy, login-attempt limits,
+and Argon2 capacity limits apply as they do during login.
+
+Keep both passwords only in transient form memory; never place them in a URL,
+storage, telemetry, or logs.
+
 ## AIHUB account registration and email verification
 
 `POST /v1/auth/register` creates an AIHUB User Account that stays pending until

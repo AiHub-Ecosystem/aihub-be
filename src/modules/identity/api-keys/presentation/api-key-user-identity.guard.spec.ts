@@ -81,6 +81,7 @@ function guard(
     {
       NODE_ENV: 'test',
       AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
       AIHUB_PRODUCTION_HOST: 'api.acme-real-domain.com',
       AIHUB_STAGING_HOST: undefined,
       AIHUB_DEVELOPMENT_HOST: undefined,

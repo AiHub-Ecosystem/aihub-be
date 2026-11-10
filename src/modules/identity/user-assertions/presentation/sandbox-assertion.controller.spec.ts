@@ -254,11 +254,23 @@ describe('Sandbox assertion HTTP flow', () => {
   });
 
   it.each([
-    ['the production host', 'sandbox', 'api.aihub.test'],
-    ['a production process', 'production', 'sandbox.aihub.test'],
+    [
+      'the production host',
+      'sandbox',
+      'api.aihub.test',
+      403,
+      'ENVIRONMENT_NOT_ALLOWED',
+    ],
+    [
+      'a production process',
+      'production',
+      'sandbox.aihub.test',
+      404,
+      'NOT_FOUND',
+    ],
   ] as const)(
-    'answers 404 before authenticating when the mint route is reached from %s',
-    async (_label, scope, host) => {
+    'refuses the mint route before authenticating when reached from %s',
+    async (_label, scope, host, status, code) => {
       runtimeConfiguration.AIHUB_RUNTIME_DATABASE_SCOPE = scope;
       authenticationError = new AppError({
         code: 'UNAUTHORIZED',
@@ -268,9 +280,9 @@ describe('Sandbox assertion HTTP flow', () => {
 
       const response = await mint({ user_id: 'student_456' }, host);
 
-      expect(response.statusCode).toBe(404);
+      expect(response.statusCode).toBe(status);
       expect(response.json()).toMatchObject({
-        error: { code: 'NOT_FOUND' },
+        error: { code },
       });
     },
   );

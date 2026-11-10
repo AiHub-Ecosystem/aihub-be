@@ -18,6 +18,7 @@ import { authenticateApiKey } from './authenticate-api-key';
 const REQUEST_CONFIG: RequestEnvironmentConfig = {
   NODE_ENV: 'test',
   AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+  AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
   AIHUB_PRODUCTION_HOST: undefined,
   AIHUB_STAGING_HOST: undefined,
   AIHUB_DEVELOPMENT_HOST: undefined,

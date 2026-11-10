@@ -6,10 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import {
-  type RuntimeConfiguration,
-  appConfig,
-} from '@/config/runtime-configuration';
+import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -33,9 +30,6 @@ function notFound(): AppError {
     retryable: false,
   });
 }
-
-type SandboxApiKeyGuardConfig = RequestEnvironmentConfig &
-  Pick<RuntimeConfiguration, 'AIHUB_RUNTIME_DATABASE_SCOPE'>;
 
 /**
  * Authenticates a sandbox mint request.
@@ -66,7 +60,7 @@ export class SandboxApiKeyGuard implements CanActivate {
     @Inject(SANDBOX_ASSERTION_POLICY)
     private readonly policy: SandboxAssertionPolicyPort,
     @Inject(appConfig.KEY)
-    private readonly configuration: SandboxApiKeyGuardConfig,
+    private readonly configuration: RequestEnvironmentConfig,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -77,9 +71,13 @@ export class SandboxApiKeyGuard implements CanActivate {
     // build that never had the route.
     if (
       this.configuration.AIHUB_RUNTIME_DATABASE_SCOPE !== 'sandbox' ||
-      !this.policy.isEnabled() ||
-      resolveAihubEnvironment(request, this.configuration) !== 'sandbox'
+      !this.policy.isEnabled()
     ) {
+      throw notFound();
+    }
+
+    const environment = resolveAihubEnvironment(request, this.configuration);
+    if (environment !== 'sandbox') {
       throw notFound();
     }
 

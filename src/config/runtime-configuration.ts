@@ -102,6 +102,7 @@ const fields = {
     kind: 'enum',
     values: ['production', 'sandbox'],
     defaultValue: 'production',
+    requiredIn: PROD_MODES,
   },
   AIHUB_DATABASE_POOLER_ENABLED: {
     kind: 'boolean',
@@ -133,7 +134,6 @@ const fields = {
   },
   AIHUB_PRODUCTION_HOST: {
     kind: 'string',
-    requiredIn: PROD_MODES,
     format: 'hostname',
   },
   AIHUB_TRUSTED_PROXY_IP: {
@@ -587,14 +587,12 @@ function loadRuntimeFieldGroup(
       }
     }
 
-    if (
-      value === undefined &&
-      (field.requiredWhenSecretSource
-        ? context.secretSource === 'env' &&
-          (field.requiredIn === undefined ||
-            field.requiredIn.includes(context.modeValue as RuntimeMode))
-        : field.requiredIn?.includes(context.modeValue as RuntimeMode))
-    ) {
+    const required = field.requiredWhenSecretSource
+      ? context.secretSource === 'env' &&
+        (field.requiredIn === undefined ||
+          field.requiredIn.includes(context.modeValue as RuntimeMode))
+      : field.requiredIn?.includes(context.modeValue as RuntimeMode);
+    if (required && (rawValue === undefined || rawValue === '')) {
       problems.push(name);
     }
 
@@ -673,7 +671,6 @@ function loadRuntimeSettings(
   ) {
     step.problems.push('AIHUB_RUNTIME_SECRET_SOURCE');
   }
-
   return step;
 }
 
@@ -927,6 +924,24 @@ function validateHostBindings(
   config: RuntimeConfiguration,
   problems: string[],
 ): void {
+  if (isProductionLike(config.NODE_ENV)) {
+    if (config.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox') {
+      if (
+        config.AIHUB_SANDBOX_HOST === undefined ||
+        config.AIHUB_SANDBOX_HOST.trim().length === 0
+      ) {
+        problems.push('AIHUB_SANDBOX_HOST');
+      }
+    } else {
+      if (
+        config.AIHUB_PRODUCTION_HOST === undefined ||
+        config.AIHUB_PRODUCTION_HOST.trim().length === 0
+      ) {
+        problems.push('AIHUB_PRODUCTION_HOST');
+      }
+    }
+  }
+
   const names = [
     'AIHUB_PRODUCTION_HOST',
     'AIHUB_STAGING_HOST',
@@ -940,6 +955,18 @@ function validateHostBindings(
     const normalized = value.trim().toLowerCase().replace(/\.$/, '');
     if (seen.has(normalized)) problems.push(name);
     seen.add(normalized);
+    for (const server of PUBLIC_API_SERVERS) {
+      if (
+        normalized === server.hostname.toLowerCase() &&
+        !(
+          (name === 'AIHUB_PRODUCTION_HOST' &&
+            server.environment === 'production') ||
+          (name === 'AIHUB_SANDBOX_HOST' && server.environment === 'sandbox')
+        )
+      ) {
+        problems.push(name);
+      }
+    }
     if (
       config.NODE_ENV !== 'development' &&
       config.NODE_ENV !== 'test' &&

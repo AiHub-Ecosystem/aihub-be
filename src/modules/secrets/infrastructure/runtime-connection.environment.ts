@@ -35,7 +35,7 @@ export function loadRuntimeConnectionEnvironment(
   options: RuntimeConnectionEnvironmentOptions,
 ): void {
   const env = options.env;
-  const scope = resolveScope(env['AIHUB_RUNTIME_DATABASE_SCOPE']);
+  const scope = resolveScope(env);
   if (scope === 'production') {
     delete env['AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY'];
     delete env['AIHUB_SANDBOX_ASSERTION_KID'];
@@ -221,8 +221,23 @@ export function loadRuntimeConnectionEnvironment(
   );
 }
 
-function resolveScope(value: string | undefined): RuntimeConnectionScope {
-  const scope = value?.trim() || 'production';
+function resolveScope(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): RuntimeConnectionScope {
+  const rawScope = env['AIHUB_RUNTIME_DATABASE_SCOPE']?.trim();
+  const nodeEnv = env['NODE_ENV']?.trim();
+  const isDeployed = nodeEnv === 'production' || nodeEnv === 'staging';
+
+  if (rawScope === undefined || rawScope.length === 0) {
+    if (isDeployed) {
+      throw configurationError(
+        'AIHUB_RUNTIME_DATABASE_SCOPE is required in deployed modes',
+      );
+    }
+    return 'production';
+  }
+
+  const scope = rawScope;
   if (scope !== 'production' && scope !== 'sandbox') {
     throw configurationError('AIHUB_RUNTIME_DATABASE_SCOPE is invalid');
   }

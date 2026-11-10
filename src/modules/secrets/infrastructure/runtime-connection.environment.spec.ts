@@ -109,6 +109,33 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(env['AIHUB_SANDBOX_ASSERTION_KID']).toBe('sandbox-key');
   });
 
+  it('fails startup in deployed modes when database scope is missing or blank', () => {
+    for (const mode of ['production', 'staging']) {
+      const env: NodeJS.ProcessEnv = {
+        NODE_ENV: mode,
+        AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      };
+      expect(() =>
+        loadRuntimeConnectionEnvironment({
+          env,
+          readFile: readRuntimeSecret,
+        }),
+      ).toThrow(RuntimeConnectionConfigurationError);
+
+      const blankEnv: NodeJS.ProcessEnv = {
+        NODE_ENV: mode,
+        AIHUB_RUNTIME_DATABASE_SCOPE: '   ',
+        AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      };
+      expect(() =>
+        loadRuntimeConnectionEnvironment({
+          env: blankEnv,
+          readFile: readRuntimeSecret,
+        }),
+      ).toThrow(RuntimeConnectionConfigurationError);
+    }
+  });
+
   it('uses Vault-provided PgBouncer URLs for runtime and direct URLs for operators', () => {
     const runtimeEnv: NodeJS.ProcessEnv = {
       AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',

@@ -15,6 +15,7 @@ const CONFIG = {
   AIHUB_STAGING_HOST: undefined,
   AIHUB_DEVELOPMENT_HOST: undefined,
   AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
+  AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
 } satisfies RequestEnvironmentConfig;
 
 const AUTHENTICATED = {

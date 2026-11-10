@@ -28,6 +28,7 @@ describe('runtime configuration', () => {
     AIHUB_USER_ACCESS_ISSUER: 'https://api.test.invalid',
     AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
     AIHUB_PRODUCTION_HOST: 'api.test.invalid',
+    AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
     DOWNSTREAM_AI_WRITING_URL: 'https://writing.test.invalid',
     DOWNSTREAM_AI_SPEAKING_URL: 'https://speaking.test.invalid',
     RESEND_FROM: 'no-reply@test.invalid',
@@ -330,6 +331,124 @@ describe('runtime configuration', () => {
     expect((caught as Error).message).not.toContain('test.invalid');
   });
 
+  it('requires explicit AIHUB_RUNTIME_DATABASE_SCOPE in deployed modes and rejects absent or blank', () => {
+    for (const mode of ['production', 'staging'] as const) {
+      let caught: unknown;
+      try {
+        loadRuntimeConfiguration({
+          ...deployedEnvironment,
+          NODE_ENV: mode,
+          AIHUB_RUNTIME_DATABASE_SCOPE: undefined,
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+      expect((caught as RuntimeConfigurationError).variableNames).toContain(
+        'AIHUB_RUNTIME_DATABASE_SCOPE',
+      );
+
+      let blankCaught: unknown;
+      try {
+        loadRuntimeConfiguration({
+          ...deployedEnvironment,
+          NODE_ENV: mode,
+          AIHUB_RUNTIME_DATABASE_SCOPE: '   ',
+        });
+      } catch (error) {
+        blankCaught = error;
+      }
+      expect(blankCaught).toBeInstanceOf(RuntimeConfigurationError);
+      expect(
+        (blankCaught as RuntimeConfigurationError).variableNames,
+      ).toContain('AIHUB_RUNTIME_DATABASE_SCOPE');
+    }
+  });
+
+  it('enforces scope-specific hostname requirements in deployed modes', () => {
+    // Production scope requires AIHUB_PRODUCTION_HOST
+    let productionCaught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...deployedEnvironment,
+        NODE_ENV: 'production',
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
+        AIHUB_PRODUCTION_HOST: undefined,
+      });
+    } catch (error) {
+      productionCaught = error;
+    }
+    expect(productionCaught).toBeInstanceOf(RuntimeConfigurationError);
+    expect(
+      (productionCaught as RuntimeConfigurationError).variableNames,
+    ).toContain('AIHUB_PRODUCTION_HOST');
+
+    // Sandbox scope requires AIHUB_SANDBOX_HOST, not AIHUB_PRODUCTION_HOST
+    let sandboxMissingCaught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...deployedEnvironment,
+        NODE_ENV: 'production',
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+        AIHUB_PRODUCTION_HOST: undefined,
+        AIHUB_SANDBOX_HOST: undefined,
+      });
+    } catch (error) {
+      sandboxMissingCaught = error;
+    }
+    expect(sandboxMissingCaught).toBeInstanceOf(RuntimeConfigurationError);
+    expect(
+      (sandboxMissingCaught as RuntimeConfigurationError).variableNames,
+    ).toContain('AIHUB_SANDBOX_HOST');
+    expect(
+      (sandboxMissingCaught as RuntimeConfigurationError).variableNames,
+    ).not.toContain('AIHUB_PRODUCTION_HOST');
+
+    // Sandbox scope succeeds when AIHUB_SANDBOX_HOST is provided
+    const sandboxConfig = loadRuntimeConfiguration({
+      ...deployedEnvironment,
+      NODE_ENV: 'production',
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+      AIHUB_PRODUCTION_HOST: undefined,
+      AIHUB_SANDBOX_HOST: 'sandbox.test.invalid',
+    });
+    expect(sandboxConfig.AIHUB_SANDBOX_HOST).toBe('sandbox.test.invalid');
+  });
+
+  it('rejects host bindings that collide with hard-coded server hostnames of another environment', () => {
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...deployedEnvironment,
+        NODE_ENV: 'production',
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+        AIHUB_SANDBOX_HOST: 'api.aihubproduction.com',
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    expect((caught as RuntimeConfigurationError).variableNames).toContain(
+      'AIHUB_SANDBOX_HOST',
+    );
+
+    let productionCaught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...deployedEnvironment,
+        NODE_ENV: 'production',
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
+        AIHUB_PRODUCTION_HOST: 'sandbox.aihubproduction.com',
+      });
+    } catch (error) {
+      productionCaught = error;
+    }
+    expect(productionCaught).toBeInstanceOf(RuntimeConfigurationError);
+    expect(
+      (productionCaught as RuntimeConfigurationError).variableNames,
+    ).toContain('AIHUB_PRODUCTION_HOST');
+  });
+
   it('records the type, default, required mode, and secret status in one schema', () => {
     expect(runtimeEnvironmentMetadata['PORT']).toMatchObject({
       type: 'number',
@@ -349,6 +468,13 @@ describe('runtime configuration', () => {
     expect(
       runtimeEnvironmentMetadata['AIHUB_DATABASE_POOLER_ENABLED'],
     ).toMatchObject({ type: 'boolean', defaultValue: false });
+    expect(
+      runtimeEnvironmentMetadata['AIHUB_RUNTIME_DATABASE_SCOPE'],
+    ).toMatchObject({
+      type: 'enum',
+      defaultValue: 'production',
+      requiredIn: ['staging', 'production'],
+    });
     expect(runtimeEnvironmentMetadata['SEAWEEDFS_ACCESS_KEY_ID']?.secret).toBe(
       true,
     );
@@ -431,6 +557,7 @@ describe('runtime configuration', () => {
     (mode) => {
       const config = loadRuntimeConfiguration({
         NODE_ENV: mode,
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
         AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
         AIHUB_RUNTIME_SECRETS_FILE: 'runtime-secrets.json',
         AIHUB_AUTH_MFA_SECRETS_FILE: 'auth-mfa-secrets.json',

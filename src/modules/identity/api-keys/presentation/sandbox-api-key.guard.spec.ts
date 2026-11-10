@@ -1,6 +1,5 @@
 import type { ExecutionContext } from '@nestjs/common';
 
-import type { RuntimeConfiguration } from '@/config/runtime-configuration';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,
@@ -50,6 +49,7 @@ function guard(
   options: {
     readonly policy?: SandboxAssertionPolicyPort;
     readonly authenticator?: ApiKeyAuthenticatorPort;
+    readonly productionHost?: string;
   } = {},
 ) {
   return new SandboxApiKeyGuard(
@@ -58,13 +58,12 @@ function guard(
     {
       NODE_ENV: 'test',
       AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
-      AIHUB_PRODUCTION_HOST: undefined,
+      AIHUB_PRODUCTION_HOST: options.productionHost,
       AIHUB_STAGING_HOST: undefined,
       AIHUB_DEVELOPMENT_HOST: undefined,
       AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
       AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
-    } satisfies RequestEnvironmentConfig &
-      Pick<RuntimeConfiguration, 'AIHUB_RUNTIME_DATABASE_SCOPE'>,
+    } satisfies RequestEnvironmentConfig,
   );
 }
 
@@ -143,5 +142,24 @@ describe('SandboxApiKeyGuard', () => {
         ),
       ),
     ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
+  });
+
+  it('rejects the configured Production host before API-key authentication', async () => {
+    const authenticate = jest.fn(async () => authenticated);
+    const value = request({
+      hostname: 'api.aihub.test',
+      headers: {
+        host: 'api.aihub.test',
+        'x-api-key': 'aihub_sk_value',
+      },
+    });
+
+    await expect(
+      guard({
+        productionHost: 'api.aihub.test',
+        authenticator: { authenticate },
+      }).canActivate(context(value)),
+    ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
+    expect(authenticate).not.toHaveBeenCalled();
   });
 });

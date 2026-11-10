@@ -22,20 +22,56 @@ function configuration(
     AIHUB_STAGING_HOST: undefined,
     AIHUB_DEVELOPMENT_HOST: undefined,
     AIHUB_SANDBOX_HOST: undefined,
+    AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
     ...overrides,
   } as RuntimeConfiguration;
 }
 
 describe('resolveAihubEnvironment', () => {
   it('resolves the published Production and Sandbox hostnames', () => {
-    const config = configuration();
-
     expect(
-      resolveAihubEnvironment(request('api.aihubproduction.com'), config),
+      resolveAihubEnvironment(
+        request('api.aihubproduction.com'),
+        configuration(),
+      ),
     ).toBe('production');
     expect(
-      resolveAihubEnvironment(request('sandbox.aihubproduction.com'), config),
+      resolveAihubEnvironment(
+        request('sandbox.aihubproduction.com'),
+        configuration({ AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox' }),
+      ),
     ).toBe('sandbox');
+  });
+
+  it('refuses cross-environment hostnames before authentication', () => {
+    const productionConfig = configuration();
+    const sandboxConfig = configuration({
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+      AIHUB_PRODUCTION_HOST: 'api.acme.test',
+      AIHUB_SANDBOX_HOST: 'sandbox.acme.test',
+    });
+
+    // Production process rejects Sandbox hosts
+    expect(() =>
+      resolveAihubEnvironment(
+        request('sandbox.aihubproduction.com'),
+        productionConfig,
+      ),
+    ).toThrow(AppError);
+    expect(() =>
+      resolveAihubEnvironment(request('sandbox.acme.test'), productionConfig),
+    ).toThrow(AppError);
+
+    // Sandbox process rejects Production hosts
+    expect(() =>
+      resolveAihubEnvironment(
+        request('api.aihubproduction.com'),
+        sandboxConfig,
+      ),
+    ).toThrow(AppError);
+    expect(() =>
+      resolveAihubEnvironment(request('api.acme.test'), sandboxConfig),
+    ).toThrow(AppError);
   });
 
   it('uses the routed Host header instead of a forwarded hostname', () => {
@@ -52,7 +88,6 @@ describe('resolveAihubEnvironment', () => {
       AIHUB_PRODUCTION_HOST: 'api.acme-real-domain.com',
       AIHUB_STAGING_HOST: 'staging-api.acme-real-domain.com',
       AIHUB_DEVELOPMENT_HOST: 'dev-api.acme-real-domain.com',
-      AIHUB_SANDBOX_HOST: 'sandbox.acme-real-domain.com',
     });
 
     expect(
@@ -68,7 +103,13 @@ describe('resolveAihubEnvironment', () => {
       resolveAihubEnvironment(request('dev-api.acme-real-domain.com'), config),
     ).toBe('development');
     expect(
-      resolveAihubEnvironment(request('sandbox.acme-real-domain.com'), config),
+      resolveAihubEnvironment(
+        request('sandbox.acme-real-domain.com'),
+        configuration({
+          AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+          AIHUB_SANDBOX_HOST: 'sandbox.acme-real-domain.com',
+        }),
+      ),
     ).toBe('sandbox');
   });
 
@@ -76,7 +117,10 @@ describe('resolveAihubEnvironment', () => {
     expect(() =>
       resolveAihubEnvironment(
         request('sandbox.aihub.example.com'),
-        configuration({ AIHUB_PRODUCTION_HOST: 'api.acme-real-domain.com' }),
+        configuration({
+          AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+          AIHUB_PRODUCTION_HOST: 'api.acme-real-domain.com',
+        }),
       ),
     ).toThrow(AppError);
   });
@@ -101,6 +145,16 @@ describe('resolveAihubEnvironment', () => {
     ).toBe('development');
     expect(() =>
       resolveAihubEnvironment(request('localhost'), configuration()),
+    ).toThrow(AppError);
+    // Sandbox process never allows localhost even in dev
+    expect(() =>
+      resolveAihubEnvironment(
+        request('localhost'),
+        configuration({
+          NODE_ENV: 'development',
+          AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+        }),
+      ),
     ).toThrow(AppError);
   });
 

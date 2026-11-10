@@ -57,6 +57,8 @@ x-app-environment: &app-environment
   AIHUB_EMAIL_DAILY_SEND_BUDGET: ${AIHUB_EMAIL_DAILY_SEND_BUDGET:?AIHUB_EMAIL_DAILY_SEND_BUDGET is required}
   AIHUB_TRUSTED_PROXY_IP: ${AIHUB_TRUSTED_PROXY_IP:?AIHUB_TRUSTED_PROXY_IP is required}
   AIHUB_USER_ACCESS_ISSUER: ${AIHUB_USER_ACCESS_ISSUER:?AIHUB_USER_ACCESS_ISSUER is required}
+  # Keep both bindings in the shared anchor so every process can validate host
+  # collisions. The request resolver admits only hosts allowed for its scope.
   AIHUB_PRODUCTION_HOST: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}
   AIHUB_STAGING_HOST: ${AIHUB_STAGING_HOST:-}
   AIHUB_DEVELOPMENT_HOST: ${AIHUB_DEVELOPMENT_HOST:-}

@@ -9,6 +9,14 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.7.0] - 2026-11-10
+
+### Added
+
+- `POST /v1/auth/change-password` lets a signed-in user change the account
+  password and revoke every other Refresh Token Family and Web Session while
+  preserving the current session. Success queues a security notification.
+
 ## [2.6.0] - 2026-11-08
 
 ### Added

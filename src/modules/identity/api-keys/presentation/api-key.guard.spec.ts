@@ -72,6 +72,7 @@ function guard(
   authenticator: ApiKeyAuthenticatorPort,
   secret?: WebSessionClientSecretPort,
   additionalScopes: readonly string[] = [],
+  configOverrides: Partial<RequestEnvironmentConfig> = {},
 ): ApiKeyGuard {
   return new ApiKeyGuard(
     reflector(additionalScopes),
@@ -83,6 +84,8 @@ function guard(
       AIHUB_STAGING_HOST: undefined,
       AIHUB_DEVELOPMENT_HOST: undefined,
       AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
+      ...configOverrides,
     } satisfies RequestEnvironmentConfig,
     secret,
   );
@@ -131,8 +134,57 @@ describe('ApiKeyGuard scope check', () => {
     };
 
     await expect(
-      guard(authenticator).canActivate(context(value)),
+      guard(authenticator, undefined, [], {
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+      }).canActivate(context(value)),
     ).resolves.toBe(true);
+  });
+
+  it('refuses a Sandbox request sent to the Production deployment before authentication', async () => {
+    const authenticate = jest.fn();
+    const value = request({
+      headers: {
+        host: 'sandbox.aihub.test',
+        'x-api-key': 'aihub_sk_value',
+      },
+      hostname: 'sandbox.aihub.test',
+    });
+
+    await expect(
+      guard({ authenticate }, undefined, [], {
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
+        AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
+      }).canActivate(context(value)),
+    ).rejects.toMatchObject({
+      code: 'ENVIRONMENT_NOT_ALLOWED',
+    });
+    expect(authenticate).not.toHaveBeenCalled();
+    expect(value).not.toHaveProperty('aihubAuth');
+    expect(value).not.toHaveProperty('aihubMeteringEvidence');
+  });
+
+  it('refuses a Production request sent to the Sandbox deployment before authentication', async () => {
+    const authenticate = jest.fn();
+    const value = request({
+      headers: {
+        host: 'api.aihub.test',
+        'x-api-key': 'aihub_sk_value',
+      },
+      hostname: 'api.aihub.test',
+    });
+
+    await expect(
+      guard({ authenticate }, undefined, [], {
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+        AIHUB_PRODUCTION_HOST: 'api.aihub.test',
+        AIHUB_SANDBOX_HOST: 'sandbox.aihub.test',
+      }).canActivate(context(value)),
+    ).rejects.toMatchObject({
+      code: 'ENVIRONMENT_NOT_ALLOWED',
+    });
+    expect(authenticate).not.toHaveBeenCalled();
+    expect(value).not.toHaveProperty('aihubAuth');
+    expect(value).not.toHaveProperty('aihubMeteringEvidence');
   });
 
   it('uses the trusted visitor IP for authenticated demo BFF grading', async () => {

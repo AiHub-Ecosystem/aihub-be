@@ -48,6 +48,7 @@ function guard(
   configuration: RequestEnvironmentConfig = {
     NODE_ENV: 'production',
     AIHUB_ALLOW_UNAUTHENTICATED_DEV: false,
+    AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
     AIHUB_PRODUCTION_HOST: undefined,
     AIHUB_STAGING_HOST: undefined,
     AIHUB_DEVELOPMENT_HOST: undefined,
@@ -88,6 +89,7 @@ describe('UserIdentityGuard', () => {
       guard('writing.task1.grade', undefined, {
         NODE_ENV: 'test',
         AIHUB_ALLOW_UNAUTHENTICATED_DEV: true,
+        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
         AIHUB_PRODUCTION_HOST: undefined,
         AIHUB_STAGING_HOST: undefined,
         AIHUB_DEVELOPMENT_HOST: undefined,
