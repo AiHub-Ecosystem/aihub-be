@@ -107,6 +107,26 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.11.0] - 2026-11-09
+
+### Changed
+
+- `/v1/organizations/{organization_id}/api-keys` create now requires
+  `allowed_environments` in the request body. The environment a credential is
+  bound to is part of its authority, so the caller states it instead of
+  receiving a Production default (ADR-0159).
+
+### Added
+
+- `/v1/organizations/{organization_id}/api-keys` responses carry `created_by`
+  and `last_rotated_by`, the immutable usernames of the account that created
+  the key and of its last rotator. Either is `null` when nobody is recorded,
+  and the list reports unknown rather than naming an account.
+- Disabling a member or demoting them now returns `handled_api_keys` in the
+  mutation response: the active API keys they created or last rotated, so the
+  caller reviews or revokes them without a separate lookup. The field is
+  absent when the mutation removed no authority.
+
 ## [1.10.0] - 2026-11-08
 
 ### Added

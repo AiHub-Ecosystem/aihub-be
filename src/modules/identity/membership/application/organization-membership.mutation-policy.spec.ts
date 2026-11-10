@@ -1,5 +1,6 @@
 import {
   authorizeOrganizationMembershipMutation,
+  demotesOrganizationMembershipRole,
   hasOrganizationMembershipRouteAuthority,
 } from './organization-membership.mutation-policy';
 
@@ -119,4 +120,17 @@ describe('hasOrganizationMembershipRouteAuthority', () => {
       ).toBe(expected);
     },
   );
+});
+
+describe('demotesOrganizationMembershipRole', () => {
+  it.each([
+    ['owner', 'admin', true],
+    ['owner', 'member', true],
+    ['admin', 'member', true],
+    ['member', 'admin', false],
+    ['admin', 'owner', false],
+    ['owner', 'owner', false],
+  ] as const)('changing %s to %s demotes: %s', (from, to, expected) => {
+    expect(demotesOrganizationMembershipRole(from, to)).toBe(expected);
+  });
 });

@@ -9,7 +9,10 @@ import {
 } from 'jose';
 
 import { getMetrics } from '@/common/observability/metrics';
-import type { PublicJsonWebKey } from '@/modules/identity/domain/organization-identity-config';
+import type {
+  PublicJsonWebKey,
+  PublicJsonWebKeySet,
+} from '@/modules/identity/domain/organization-identity-config';
 import type { OrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { JwksKeyProviderPort } from './jwks-key-provider.port';
 import type {
@@ -98,8 +101,8 @@ class FakeKeyProvider implements JwksKeyProviderPort {
   validateRemote(_input: {
     readonly organizationId: string;
     readonly url: string;
-  }): Promise<void> {
-    return Promise.resolve();
+  }): Promise<PublicJsonWebKeySet> {
+    return Promise.resolve({ keys: [] });
   }
 }
 

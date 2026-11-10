@@ -98,7 +98,6 @@ describe('RevokeOrganizationInvitation', () => {
       expect(invitations.revokeInvitation).toHaveBeenCalledWith({
         context: input.context,
         actorUserId: USER_ID,
-        actorRole: role,
         organizationId: ORGANIZATION_ID,
         invitationId: INVITATION_ID,
         now: NOW,
@@ -214,9 +213,7 @@ describe('RevokeOrganizationInvitation', () => {
       code: 'FORBIDDEN',
       message: FORBIDDEN_MESSAGE,
     });
-    expect(invitations.revokeInvitation).toHaveBeenCalledWith(
-      expect.objectContaining({ actorRole: 'member' }),
-    );
+    expect(invitations.revokeInvitation).toHaveBeenCalledTimes(1);
   });
 
   it('denies a missing membership before reading the invitation', async () => {

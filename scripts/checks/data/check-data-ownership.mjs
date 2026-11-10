@@ -95,6 +95,10 @@ const allowlist = new Map([
     'near-expiry notice recipients must hold an active account (ADR-0120)',
   ],
   [
+    'src/modules/identity/api-keys/infrastructure/organization-api-key-attribution.ts::user_accounts',
+    'joins creator/rotator usernames for key handling attribution (ADR-0027 as amended, #447)',
+  ],
+  [
     'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts::auth_identities',
     'near-expiry notice reads the recipient email at dispatch (ADR-0120)',
   ],

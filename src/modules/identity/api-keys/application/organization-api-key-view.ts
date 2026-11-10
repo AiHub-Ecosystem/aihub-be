@@ -20,6 +20,13 @@ export interface OrganizationApiKeyView {
   readonly expiresAt: Date | null;
   readonly lastUsedAt: Date | null;
   readonly createdAt: Date;
+  /**
+   * Who created the key and who last rotated it, by immutable username
+   * (ADR-0027 as amended). Null for a key minted before migration 0063 or
+   * one nobody has rotated: the list reports unknown rather than guessing.
+   */
+  readonly createdByUsername: string | null;
+  readonly lastRotatedByUsername: string | null;
 }
 
 /**
@@ -40,5 +47,7 @@ export function organizationApiKeyView(
     expiresAt: key.expiresAt,
     lastUsedAt: key.lastUsedAt,
     createdAt: key.createdAt,
+    createdByUsername: key.createdByUsername,
+    lastRotatedByUsername: key.lastRotatedByUsername,
   };
 }

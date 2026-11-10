@@ -173,7 +173,6 @@ async function accept(options: {
 
 async function revoke(options: {
   readonly actorId: string;
-  readonly actorRole: OrganizationMembershipRole;
   readonly invitationId: string;
   readonly organizationId?: string;
   readonly now?: Date;
@@ -189,7 +188,6 @@ async function revoke(options: {
       scopes: [],
     }),
     actorUserId: options.actorId,
-    actorRole: options.actorRole,
     organizationId,
     invitationId: options.invitationId,
     now: options.now ?? NOW,
@@ -478,7 +476,7 @@ describe('organization invitation revocation against PostgreSQL', () => {
     await invite({ inviterId, invitationId: id, tokenHash: token });
 
     await expect(
-      revoke({ actorId: inviterId, actorRole: 'owner', invitationId: id }),
+      revoke({ actorId: inviterId, invitationId: id }),
     ).resolves.toEqual({ kind: 'closed' });
 
     expect((await invitationByHash(token))?.consumed_at).not.toBeNull();
@@ -527,14 +525,12 @@ describe('organization invitation revocation against PostgreSQL', () => {
     await expect(
       revoke({
         actorId: inviterId,
-        actorRole: 'owner',
         invitationId: closedId,
       }),
     ).resolves.toEqual({ kind: 'closed' });
     await expect(
       revoke({
         actorId: inviterId,
-        actorRole: 'owner',
         invitationId: expiredId,
       }),
     ).resolves.toEqual({ kind: 'closed' });
@@ -552,7 +548,6 @@ describe('organization invitation revocation against PostgreSQL', () => {
     await expect(
       revoke({
         actorId: inviterId,
-        actorRole: 'owner',
         invitationId: invitationId(),
       }),
     ).resolves.toEqual({ kind: 'not_found' });
@@ -578,7 +573,6 @@ describe('organization invitation revocation against PostgreSQL', () => {
     await expect(
       revoke({
         actorId: inviterId,
-        actorRole: 'owner',
         invitationId: foreignId,
       }),
     ).resolves.toEqual({ kind: 'not_found' });
@@ -596,7 +590,7 @@ describe('organization invitation revocation against PostgreSQL', () => {
     await invite({ inviterId, invitationId: id, role: 'admin' });
 
     await expect(
-      revoke({ actorId: adminId, actorRole: 'admin', invitationId: id }),
+      revoke({ actorId: adminId, invitationId: id }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect((await openInvitations())[0]?.id).toBe(id);
 
@@ -623,7 +617,7 @@ describe('organization invitation revocation against PostgreSQL', () => {
     await invite({ inviterId, invitationId: id, tokenHash: token });
 
     await expect(
-      revoke({ actorId: memberId, actorRole: 'member', invitationId: id }),
+      revoke({ actorId: memberId, invitationId: id }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect((await invitationByHash(token))?.consumed_at).toBeNull();
   });
@@ -638,7 +632,7 @@ describe('organization invitation revocation against PostgreSQL', () => {
     );
 
     await expect(
-      revoke({ actorId: inviterId, actorRole: 'owner', invitationId: id }),
+      revoke({ actorId: inviterId, invitationId: id }),
     ).resolves.toEqual({ kind: 'organization_suspended' });
     expect((await invitationByHash(token))?.consumed_at).toBeNull();
   });
@@ -662,7 +656,6 @@ describe('organization invitation revocation against PostgreSQL', () => {
       let settled = false;
       const revocation = revoke({
         actorId: inviterId,
-        actorRole: 'owner',
         invitationId: id,
       }).then((result) => {
         settled = true;

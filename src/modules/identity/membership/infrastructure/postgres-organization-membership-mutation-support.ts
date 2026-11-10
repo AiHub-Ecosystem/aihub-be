@@ -20,6 +20,7 @@ import {
   hasOrganizationMembershipRouteAuthority,
 } from '@/modules/identity/membership/application/organization-membership.mutation-policy';
 import type {
+  HandledOrganizationApiKey,
   OrganizationMembershipMutationInput,
   OrganizationMembershipMutationResult,
   OrganizationMembershipRole,
@@ -116,6 +117,20 @@ export const DEMOTE_TRANSFER_CALLER_SQL = `
     AND status = 'active'
   RETURNING role
 `;
+
+/**
+ * The active API keys the member created or last rotated, read in the same
+ * transaction that removed their authority. Both columns are indexed, so the
+ * read is two index probes behind the membership write it follows.
+ */
+export const MEMBER_HANDLED_API_KEYS_SQL = `
+  SELECT id, name, key_prefix
+  FROM api_keys
+  WHERE organization_id = $1
+    AND status = 'active'
+    AND (created_by = $2 OR last_rotated_by = $2)
+  ORDER BY created_at DESC, id ASC
+`;
 interface MutationMembershipRow {
   readonly organizationId: string;
   readonly userId: string;
@@ -185,13 +200,35 @@ export function mutationResult(
   target: MutationMembershipRow,
   role: OrganizationMembershipRole = target.role,
   status: OrganizationMembershipStatus = target.status,
+  handledApiKeys?: readonly HandledOrganizationApiKey[],
 ): OrganizationMembershipMutationResult {
   return {
     organizationId: target.organizationId,
     username: target.username,
     role,
     status,
+    ...(handledApiKeys === undefined ? {} : { handledApiKeys }),
   };
+}
+
+/**
+ * Maps the handled-key rows the mutation read. A malformed row is store
+ * corruption, not an empty list: the mutation fails rather than reporting
+ * fewer keys than the member holds.
+ */
+export function mapHandledApiKeys(
+  rows: readonly unknown[],
+): HandledOrganizationApiKey[] {
+  return rows.map((row) => {
+    if (!isRecord(row)) throw invalidIdentityData();
+    const id = stringValue(row, 'id');
+    const name = stringValue(row, 'name');
+    const keyPrefix = stringValue(row, 'key_prefix');
+    if (id === undefined || name === undefined || keyPrefix === undefined) {
+      throw invalidIdentityData();
+    }
+    return { id, name, keyPrefix };
+  });
 }
 
 export function roleChangedAuditDraft(

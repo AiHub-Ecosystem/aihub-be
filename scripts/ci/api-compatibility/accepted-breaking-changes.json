@@ -47,5 +47,12 @@
       "response property `data/criteria/pronunciation/diagnostics/anyOf[subschema #2]/items/improvement` list-of-types was widened by adding types `null` to media type `application/json` of response `200`",
       "response property `data/criteria/pronunciation/diagnostics/anyOf[subschema #2]/items/improvement_vi` list-of-types was widened by adding types `null` to media type `application/json` of response `200`"
     ]
+  },
+  {
+    "major": 1,
+    "baseVersion": "1.10.0",
+    "candidateVersion": "1.11.0",
+    "decision": "docs/adr/0159-pending-invitation-authority-and-management-serialization.md",
+    "changes": ["the request property `allowed_environments` became required"]
   }
 ]

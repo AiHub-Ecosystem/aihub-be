@@ -85,7 +85,7 @@ describe('Writing user identity HTTP flow', () => {
     },
   };
   const keyProvider: JwksKeyProviderPort = {
-    validateRemote: async () => undefined,
+    validateRemote: async () => ({ keys: [] }),
     resolve: async () => {
       if (providerUnavailable) {
         throw new AppError({

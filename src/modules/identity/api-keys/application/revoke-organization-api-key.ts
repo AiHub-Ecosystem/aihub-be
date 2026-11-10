@@ -73,6 +73,11 @@ export class RevokeOrganizationApiKey {
     if (result.kind === 'organization_unavailable') {
       throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_revoke.refusal);
     }
+    if (result.kind === 'caller_not_authorized') {
+      // The caller lost the authority this act needs while it waited for its
+      // locks. Nothing was withdrawn, and the refusal matches a fresh request.
+      throw forbidden(ORGANIZATION_API_KEY_ADMISSION.api_key_revoke.refusal);
+    }
 
     // Purged on the repeat request too, not only when this call changed
     // something: an earlier purge can have failed without telling anyone, and

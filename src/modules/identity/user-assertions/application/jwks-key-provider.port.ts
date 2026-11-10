@@ -11,10 +11,14 @@ export interface JwksKeyProviderInput {
 
 export interface JwksKeyProviderPort {
   resolve(input: JwksKeyProviderInput): Promise<PublicJsonWebKeySet>;
+  /**
+   * Fetches and caches the JWKS at the URL, and returns the key set it
+   * validated so the caller can record which keys it trusted (#447).
+   */
   validateRemote(input: {
     readonly organizationId: string;
     readonly url: string;
-  }): Promise<void>;
+  }): Promise<PublicJsonWebKeySet>;
 }
 
 export const JWKS_KEY_PROVIDER = Symbol('JWKS_KEY_PROVIDER');

@@ -63,6 +63,7 @@ const methods = [
         keyPrefix: 'aik_next',
         retiredAllowedEnvironments: ['production'],
         replacementAllowedEnvironments: ['production'],
+        rotatedByUsername: 'rotator',
         now,
       }),
   },
@@ -103,4 +104,75 @@ describe('PostgresOrganizationApiKeyRepository organization context', () => {
       }
     },
   );
+
+  it('maps attribution from nested Prisma relations on listApiKeys', async () => {
+    const prisma = new ScriptedPrisma();
+    prisma.outside = [
+      [
+        {
+          id: 'ak_01J00000000000000000000000',
+          name: 'Prod key',
+          keyPrefix: 'aihub_prod_abcd',
+          scopes: ['writing:grade'],
+          allowedEnvironments: ['production'],
+          status: 'active',
+          expiresAt: null,
+          lastUsedAt: null,
+          createdAt: now,
+          createdByAccount: { username: 'alice' },
+          lastRotatedByAccount: { username: 'bob' },
+        },
+        {
+          id: 'ak_01J00000000000000000000001',
+          name: 'Legacy key',
+          keyPrefix: 'aihub_prod_efgh',
+          scopes: ['writing:grade'],
+          allowedEnvironments: ['production'],
+          status: 'active',
+          expiresAt: null,
+          lastUsedAt: null,
+          createdAt: now,
+          createdByAccount: null,
+          lastRotatedByAccount: null,
+        },
+      ],
+    ];
+
+    const repository = new PostgresOrganizationApiKeyRepository(
+      prisma.client(),
+    );
+    const keys = await repository.listApiKeys({
+      context: context('org_acme'),
+      organizationId: 'org_acme',
+    });
+
+    expect(keys).toEqual([
+      {
+        apiKeyId: 'ak_01J00000000000000000000000',
+        name: 'Prod key',
+        keyPrefix: 'aihub_prod_abcd',
+        scopes: ['writing:grade'],
+        allowedEnvironments: ['production'],
+        status: 'active',
+        expiresAt: null,
+        lastUsedAt: null,
+        createdAt: now,
+        createdByUsername: 'alice',
+        lastRotatedByUsername: 'bob',
+      },
+      {
+        apiKeyId: 'ak_01J00000000000000000000001',
+        name: 'Legacy key',
+        keyPrefix: 'aihub_prod_efgh',
+        scopes: ['writing:grade'],
+        allowedEnvironments: ['production'],
+        status: 'active',
+        expiresAt: null,
+        lastUsedAt: null,
+        createdAt: now,
+        createdByUsername: null,
+        lastRotatedByUsername: null,
+      },
+    ]);
+  });
 });

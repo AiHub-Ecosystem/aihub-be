@@ -1,6 +1,6 @@
 # ADR-0049: Owner-managed Organization identity configuration
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR-0159](0159-pending-invitation-authority-and-management-serialization.md)
 - Related issue: #157
 - Related ADR: ADR-0035
 

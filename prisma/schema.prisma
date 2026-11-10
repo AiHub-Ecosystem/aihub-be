@@ -66,10 +66,18 @@ model ApiKey {
   createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   /// A key AIHUB itself uses; left off customer statements (migration 0039).
   internal             Boolean      @default(false)
+  /// Who created the key, for as long as the key lives (migration 0063, ADR-0159).
+  createdBy            String?      @map("created_by")
+  /// Who last rotated the key; absent for a key nobody rotated (migration 0063).
+  lastRotatedBy        String?      @map("last_rotated_by")
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdByAccount     UserAccount? @relation("ApiKeyCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lastRotatedByAccount UserAccount? @relation("ApiKeyLastRotatedBy", fields: [lastRotatedBy], references: [id], onDelete: Restrict, onUpdate: NoAction)
   notificationEvents   NotificationEvent[]
 
   @@index([organizationId], map: "api_keys_org_idx")
+  @@index([createdBy], map: "api_keys_created_by_idx")
+  @@index([lastRotatedBy], map: "api_keys_last_rotated_by_idx")
   @@map("api_keys")
 }
 
@@ -795,6 +803,8 @@ model UserAccount {
   writingChartRevocationAudits WritingChartRevocationAudit[]
   statusAuditsAsTarget UserAccountStatusAudit[] @relation("target_status_audits")
   statusAuditsAsActor  UserAccountStatusAudit[] @relation("actor_status_audits")
+  apiKeysCreated       ApiKey[]                    @relation("ApiKeyCreatedBy")
+  apiKeysLastRotated   ApiKey[]                    @relation("ApiKeyLastRotatedBy")
 
   @@map("user_accounts")
 }

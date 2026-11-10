@@ -61,6 +61,8 @@ function rotated() {
     allowedEnvironments: ['production'] as readonly string[],
     expiresAt: INHERITED_EXPIRY,
     createdAt: CREATED_AT,
+    createdByUsername: null,
+    lastRotatedByUsername: 'rotator',
   };
 }
 
@@ -211,6 +213,8 @@ describe('Organization API key rotation HTTP flow', () => {
       expires_at: INHERITED_EXPIRY.toISOString(),
       last_used_at: null,
       created_at: CREATED_AT.toISOString(),
+      created_by: null,
+      last_rotated_by: 'rotator',
     });
     expect(body.data.api_key).toMatch(/^aihub_sk_[A-Za-z0-9]{43}$/);
     expect(body.data.id).toMatch(/^ak_[0-9A-HJKMNP-TV-Z]{26}$/);

@@ -42,7 +42,7 @@ const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const IDENTITY_CONFIG_URL = `/v1/organizations/${ORGANIZATION_ID}/identity-config`;
 const purgeJwks = jest.fn(async (_organizationId: string) => undefined);
-const validateRemote = jest.fn(async (_url: string) => undefined);
+const validateRemote = jest.fn(async (_url: string) => ({ keys: [] }));
 
 import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
@@ -231,7 +231,7 @@ describe('Organization identity configuration HTTP flow', () => {
     auditWrites = 0;
     refusePrecondition = false;
     purgeJwks.mockReset().mockResolvedValue(undefined);
-    validateRemote.mockReset().mockResolvedValue(undefined);
+    validateRemote.mockReset().mockResolvedValue({ keys: [] });
     jest.clearAllMocks();
   });
 

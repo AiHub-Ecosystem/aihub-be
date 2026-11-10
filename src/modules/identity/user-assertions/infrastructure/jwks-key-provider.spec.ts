@@ -496,7 +496,7 @@ describe('JwksKeyProvider', () => {
         organizationId: 'org_acme',
         url: remoteConfig.jwksUrl ?? '',
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(jwks);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(cancel).toHaveBeenCalledTimes(1);
   });
@@ -521,7 +521,7 @@ describe('JwksKeyProvider', () => {
         organizationId: 'org_acme',
         url: remoteConfig.jwksUrl ?? '',
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(jwks);
   });
 
   it('does not let an in-flight old-config fetch repopulate the new cache version', async () => {
@@ -753,7 +753,7 @@ describe('JwksKeyProvider', () => {
           url: remoteConfig.jwksUrl ?? '',
         }),
       ]),
-    ).resolves.toEqual([jwks, undefined]);
+    ).resolves.toEqual([jwks, jwks]);
     expect(fetches).toBe(1);
   });
 

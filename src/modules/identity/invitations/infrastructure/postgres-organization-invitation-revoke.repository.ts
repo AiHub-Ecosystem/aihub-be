@@ -31,6 +31,10 @@ import {
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { invalidInvitationInput } from './organization-invitation-input';
+import {
+  LOCK_MEMBERSHIP_AUTHORITY_SQL,
+  membershipAuthority,
+} from './organization-invitation-membership-authority';
 
 const LOCK_ORGANIZATION_FOR_REVOKE_SQL = `
   SELECT id, status
@@ -134,19 +138,39 @@ export class PostgresOrganizationInvitationRevokeRepository
           throw invalidIdentityData();
         }
 
-        if (
-          !mayRevokeOrganizationInvitation({
-            actorRole: input.actorRole,
+        // ADR-0159 (decision 2): the caller's role is re-read under the
+        // Organization lock rather than trusting the role captured before the
+        // transaction, so a disable or demotion that committed while this
+        // request waited cannot close an invitation it no longer has authority
+        // over.
+        const callerRows = await identityRows(
+          transaction,
+          LOCK_MEMBERSHIP_AUTHORITY_SQL,
+          [input.organizationId, input.actorUserId],
+        );
+        const caller = membershipAuthority(callerRows[0]);
+
+        const callerAdmitted =
+          caller !== undefined &&
+          caller.status === 'active' &&
+          mayRevokeOrganizationInvitation({
+            actorRole: caller.role,
             invitedRole: role,
-          })
-        ) {
-          refused = {
-            action: 'invitation.revoked',
-            invitationId,
-            email,
-            role,
-            denial: 'insufficient_authority',
-          };
+          });
+
+        if (!callerAdmitted) {
+          // A caller who no longer actively belongs is refused without a
+          // denial record; an active caller whose role lacks authority earns
+          // the recorded denial, as before.
+          if (caller !== undefined && caller.status === 'active') {
+            refused = {
+              action: 'invitation.revoked',
+              invitationId,
+              email,
+              role,
+              denial: 'insufficient_authority',
+            };
+          }
           throw forbidden('Organization invitation revocation is forbidden');
         }
 

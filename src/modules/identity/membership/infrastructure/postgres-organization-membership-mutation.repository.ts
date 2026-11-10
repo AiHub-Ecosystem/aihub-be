@@ -1,5 +1,6 @@
 import { isRecord } from '@/common/is-record';
 import { recordOrganizationAuditEvent } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
+import { demotesOrganizationMembershipRole } from '@/modules/identity/membership/application/organization-membership.mutation-policy';
 import type {
   ChangeOrganizationMemberRoleInput,
   OrganizationMembershipMutationInput,
@@ -18,8 +19,10 @@ import {
   CHANGE_ROLE_SQL,
   DEMOTE_TRANSFER_CALLER_SQL,
   DISABLE_MEMBERSHIP_SQL,
+  MEMBER_HANDLED_API_KEYS_SQL,
   PROMOTE_TRANSFER_TARGET_SQL,
   isLastActiveOwner,
+  mapHandledApiKeys,
   mapUpdatedMembership,
   membershipDisabledAuditDraft,
   mutationResult,
@@ -67,7 +70,25 @@ export class PostgresOrganizationMembershipMutationRepository
           stamp,
           roleChangedAuditDraft(target, updated.role),
         );
-        return mutationResult(target, updated.role, updated.status);
+        // A demotion removes authority the member's API keys still act with;
+        // the same transaction surfaces those keys for review or revocation.
+        const handledApiKeys = demotesOrganizationMembershipRole(
+          target.role,
+          updated.role,
+        )
+          ? mapHandledApiKeys(
+              await identityRows(transaction, MEMBER_HANDLED_API_KEYS_SQL, [
+                input.organizationId,
+                target.userId,
+              ]),
+            )
+          : undefined;
+        return mutationResult(
+          target,
+          updated.role,
+          updated.status,
+          handledApiKeys,
+        );
       },
     );
   }
@@ -106,7 +127,20 @@ export class PostgresOrganizationMembershipMutationRepository
           stamp,
           membershipDisabledAuditDraft(target),
         );
-        return mutationResult(target, updated.role, updated.status);
+        // The disabled member's API keys still act with the authority the
+        // disable removed; the same transaction surfaces them for review or
+        // revocation.
+        return mutationResult(
+          target,
+          updated.role,
+          updated.status,
+          mapHandledApiKeys(
+            await identityRows(transaction, MEMBER_HANDLED_API_KEYS_SQL, [
+              input.organizationId,
+              target.userId,
+            ]),
+          ),
+        );
       },
     );
   }

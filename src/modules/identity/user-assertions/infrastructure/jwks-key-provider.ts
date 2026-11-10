@@ -93,9 +93,9 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
   async validateRemote(input: {
     readonly organizationId: string;
     readonly url: string;
-  }): Promise<void> {
+  }): Promise<PublicJsonWebKeySet> {
     const snapshot = await this.cache.getJwks(input.organizationId, '1');
-    await this.fetchRemoteForOrganization(
+    return this.fetchRemoteForOrganization(
       input.organizationId,
       input.url,
       JSON.stringify(['1', snapshot.generation, input.url]),

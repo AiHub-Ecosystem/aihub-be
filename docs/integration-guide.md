@@ -327,9 +327,10 @@ AIHUB and your team complete these steps in order:
    create your Organization through `POST /v1/organizations`. A new
    Organization receives every currently available capability, so no sales
    conversation or emailed request is needed. Create a key under
-   `/v1/organizations/{organization_id}/api-keys`; a key is shown only once,
-   so save it in your server-side secret manager immediately. Keep each
-   environment's key and base URL paired. Inviting teammates and recovering
+   `/v1/organizations/{organization_id}/api-keys`; the request body must name
+   the environments the key may call in `allowed_environments`, and the key is
+   shown only once, so save it in your server-side secret manager immediately.
+   Keep each environment's key and base URL paired. Inviting teammates and recovering
    access are self-serve too, so you only need an AIHUB administrator when
    you want commercial limits or an entitlement changed on an existing
    Organization.
@@ -442,9 +443,12 @@ inline JWKS, update the saved configuration before signing with a new key.
 
 ### Staging and production rules
 
-The API key determines the organization and is also restricted to one or more
-allowed environments. The hostname determines the environment; clients do not
-select it with a request header. Keep staging and production credentials in
+The API key determines the organization. A new key is restricted to one
+environment, `production` or `sandbox`, specified in the required
+`allowed_environments` array. There is no default environment. Legacy keys
+can be restricted to more than one environment. The hostname determines the
+environment; clients do not select it with a request header. Keep staging and
+production credentials in
 separate secret-manager entries and configure the base URL alongside the
 matching key.
 
@@ -478,6 +482,12 @@ Both routes take the signed-in user's Bearer User Access token, not an API key.
 Prefer rotation: it replaces the key in one step, with no moment when the leaked
 key still works and no replacement missing. Deploy the new key to your clients
 right away; clients still sending the old key are refused.
+
+Key responses also name who created the key and who last rotated it
+(`created_by` and `last_rotated_by`, immutable usernames; `null` when nobody is
+recorded), so a manager who left can have their keys reviewed. When a member is
+disabled or demoted, the mutation response carries `handled_api_keys`: the
+active keys they created or last rotated, ready to rotate or revoke.
 
 ---
 
