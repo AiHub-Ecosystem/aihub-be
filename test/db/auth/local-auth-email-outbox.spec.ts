@@ -767,8 +767,8 @@ async function seedPasswordChangeTarget(): Promise<PasswordChangeTarget> {
   const userId = `usr_${ulid()}`;
   const currentFamilyId = `rfs_${ulid()}`;
   const otherFamilyId = `rfs_${ulid()}`;
-  const currentWebSessionId = `wss_${ulid()}`;
-  const otherWebSessionId = `wss_${ulid()}`;
+  const currentWebSessionId = `wbs_${ulid()}`;
+  const otherWebSessionId = `wbs_${ulid()}`;
   const email = `password-change-${userId.slice(4, 14)}@example.com`;
   await pool.query(
     `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
