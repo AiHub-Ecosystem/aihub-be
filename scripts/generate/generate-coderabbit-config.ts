@@ -8,7 +8,7 @@ const outputPath = resolve(rootDir, '.coderabbit.yaml');
 const expected = renderCodeRabbitConfig(rootDir);
 
 if (process.argv.includes('--check')) {
-  let actual;
+  let actual: string;
   try {
     actual = readFileSync(outputPath, 'utf8');
   } catch {
