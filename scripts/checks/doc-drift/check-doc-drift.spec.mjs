@@ -141,7 +141,7 @@ await test('CodeRabbit config is generated and has disjoint owner scopes', async
     ...config
       .slice(start, end)
       .matchAll(
-        /^    - path: ("(?:\\.|[^"])*")\r?\n      instructions: ("(?:\\.|[^"])*")$/gmu,
+        /^    - path: ("(?:\\.|[^"\\])*")\r?\n      instructions: ("(?:\\.|[^"\\])*")$/gmu,
       ),
   ].map((match) => {
     /** @type {unknown} */
