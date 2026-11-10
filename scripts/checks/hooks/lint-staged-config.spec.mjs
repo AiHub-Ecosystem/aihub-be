@@ -77,6 +77,10 @@ await test('type-aware Oxlint rejects floating promises in staged TypeScript and
         'oxlint',
         '--type-aware',
         '--threads=1',
+        // Pin one format: oxlint otherwise picks it from the environment
+        // (`::error` annotations under GITHUB_ACTIONS, another shape under a
+        // coding agent), and the match below reads only this one.
+        '--format=unix',
         '--tsconfig',
         tsconfig,
         typescript,
@@ -90,11 +94,11 @@ await test('type-aware Oxlint rejects floating promises in staged TypeScript and
     assert.equal(result.status, 1, output);
     assert.match(
       output,
-      /floating-promise\.ts:1:1: error typescript\(no-floating-promises\)/,
+      /floating-promise\.ts:1:1: .*\[Error\/typescript\(no-floating-promises\)\]/,
     );
     assert.match(
       output,
-      /floating-promise\.mjs:1:1: error typescript\(no-floating-promises\)/,
+      /floating-promise\.mjs:1:1: .*\[Error\/typescript\(no-floating-promises\)\]/,
     );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
