@@ -628,9 +628,11 @@ await test('CodeRabbit config inputs select drift, formatting and behavior check
   );
   for (const path of [
     'scripts/generate/coderabbit-config.mjs',
-    'scripts/generate/generate-coderabbit-config.mjs',
+    'scripts/generate/generate-coderabbit-config.ts',
   ]) {
-    assert.ok(planChangedFiles([path]).gates.includes('test:doc-drift'));
+    const gates = planChangedFiles([path]).gates;
+    assert.ok(gates.includes('test:doc-drift'));
+    assert.ok(gates.includes('type-check:scripts'));
   }
 });
 

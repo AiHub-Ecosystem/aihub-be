@@ -244,9 +244,9 @@ function classifyPathGates(p) {
   }
   if (
     path === 'scripts/generate/coderabbit-config.mjs' ||
-    path === 'scripts/generate/generate-coderabbit-config.mjs'
+    path === 'scripts/generate/generate-coderabbit-config.ts'
   ) {
-    return [...TS_GATES, 'test:doc-drift'];
+    return [...TS_GATES, 'test:doc-drift', 'type-check:scripts'];
   }
   if (path === '.oxlintrc.json') {
     return ['lint'];
