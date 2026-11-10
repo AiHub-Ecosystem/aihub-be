@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -786,7 +788,7 @@ async function seedPasswordChangeTarget(): Promise<PasswordChangeTarget> {
         id: `rft_${ulid()}`,
         familyId,
         userAccountId: userId,
-        tokenHash: `refresh-hash-${ulid()}`,
+        tokenHash: createHash('sha256').update(familyId).digest('hex'),
         issuedAt: now,
         expiresAt: new Date(now.getTime() + 86_400_000),
       },
@@ -797,7 +799,7 @@ async function seedPasswordChangeTarget(): Promise<PasswordChangeTarget> {
       data: {
         id: sessionId,
         userAccountId: userId,
-        tokenHash: `web-hash-${ulid()}`,
+        tokenHash: createHash('sha256').update(sessionId).digest('hex'),
         createdAt: now,
         lastRenewedAt: now,
         expiresAt: new Date(now.getTime() + 86_400_000),
@@ -809,7 +811,7 @@ async function seedPasswordChangeTarget(): Promise<PasswordChangeTarget> {
     data: {
       id: resetTokenId,
       userAccountId: userId,
-      tokenHash: `reset-hash-${ulid()}`,
+      tokenHash: createHash('sha256').update(resetTokenId).digest('hex'),
       expiresAt: new Date(now.getTime() + 86_400_000),
       createdAt: now,
     },

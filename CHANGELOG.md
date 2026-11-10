@@ -107,6 +107,14 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.12.0] - 2026-11-10
+
+### Added
+
+- `POST /v1/auth/change-password` lets a signed-in user change their password,
+  revoking all other Refresh Token Families and Web Sessions while preserving
+  the current session. Success queues a security notification.
+
 ## [1.11.0] - 2026-11-09
 
 ### Changed
