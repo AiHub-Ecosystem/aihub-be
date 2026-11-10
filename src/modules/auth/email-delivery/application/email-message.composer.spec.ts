@@ -2,6 +2,7 @@ import {
   composeApiKeyNearExpiryNotification,
   composeMfaSecurityNotification,
   composeOrganizationInviteEmail,
+  composePasswordChangedNotification,
   composePasswordResetEmail,
   composeVerificationEmail,
   normalizeCustomerWebBaseUrl,
@@ -337,5 +338,16 @@ describe('Auth email message composition', () => {
         false,
       ),
     ).toThrow('CUSTOMER_WEB_BASE_URL must be an absolute http(s) URL');
+  });
+  it('notifies the account without including password values', () => {
+    const message = composePasswordChangedNotification({
+      email: 'person@example.com',
+    });
+
+    expect(message.recipient).toBe('person@example.com');
+    expect(message.subject).toContain('password');
+    expect(message.text).toContain('changed');
+    expect(message.text).not.toContain('old-password');
+    expect(message.text).not.toContain('new-password');
   });
 });
