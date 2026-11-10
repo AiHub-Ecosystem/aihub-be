@@ -7,11 +7,17 @@ export interface UserAccessTokenIssuerPort {
   issue(userId: string): Promise<IssuedUserAccessToken>;
 }
 
+export type UserAccessSession =
+  | { readonly kind: 'refresh'; readonly id: string }
+  | { readonly kind: 'web'; readonly id: string };
+
 export interface VerifiedUserAccessToken {
   readonly userId: string;
   readonly issuer: string;
   readonly jti: string;
   readonly validUntil: Date;
+  /** Optional until the later release starts writing the session claim. */
+  readonly session?: UserAccessSession;
 }
 
 export interface UserAccessTokenVerifierPort {

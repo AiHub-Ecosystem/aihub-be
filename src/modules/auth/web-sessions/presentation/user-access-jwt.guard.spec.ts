@@ -62,6 +62,25 @@ describe('UserAccessJwtGuard', () => {
     expect(request['aihubUser']).toEqual({ userId: verified.userId });
   });
 
+  it('exposes a verified session identity to authenticated routes', async () => {
+    const session = {
+      kind: 'refresh',
+      id: 'rtf_01J00000000000000000000000',
+    } as const;
+    const request: Record<string, unknown> = {
+      headers: { authorization: 'Bearer compact.token.value' },
+    };
+    const guard = makeGuard({
+      verify: async () => ({ ...verified, session }),
+    });
+
+    await expect(guard.canActivate(context(request))).resolves.toBe(true);
+    expect(request['aihubUser']).toEqual({
+      userId: verified.userId,
+      session,
+    });
+  });
+
   it.each<[string, { readonly authorization?: string | string[] }]>([
     ['missing', {}],
     ['duplicate', { authorization: ['Bearer one', 'Bearer two'] }],
