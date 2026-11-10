@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, matchesGlob, resolve, sep } from 'node:path';
 import { test } from 'node:test';
-import { runInNewContext } from 'node:vm';
 
 import { findDocDriftViolations } from './check-doc-drift.mjs';
 
@@ -128,6 +127,11 @@ await test('CodeRabbit config is generated and has disjoint owner scopes', async
   });
 
   const config = await readFile('.coderabbit.yaml', 'utf8');
+  assert.match(
+    config,
+    /^  auto_review:\r?\n    enabled: true\r?\n    drafts: true\r?\n  path_instructions:/mu,
+    'CodeRabbit must review every PR, including drafts, without label or author filters',
+  );
   const start = config.indexOf('  path_instructions:\n');
   const end = config.indexOf('knowledge_base:\n', start);
   assert.notEqual(start, -1, 'CodeRabbit path instructions must exist');
@@ -250,39 +254,4 @@ await test('CodeRabbit config is generated and has disjoint owner scopes', async
       .find(({ instructions }) => instructions.includes('scripts/checks'))
       ?.instructions.includes('check:changed and `bun run verify`'),
   );
-  assert.match(config, /enabled: false/u);
-  assert.match(config, /drafts: false/u);
-  assert.match(config, /coderabbit-review/u);
-  assert.match(config, /dependabot\[bot\]/u);
-  assert.match(config, /github-actions\[bot\]/u);
-});
-
-await test('CodeRabbit workflow opts in only non-member PR authors', async () => {
-  const workflow = await readFile(
-    new URL(
-      '../../../.github/workflows/coderabbit-review-opt-in.yml',
-      import.meta.url,
-    ),
-    'utf8',
-  );
-  const declaration = workflow.match(
-    /const shouldRequestCodeRabbitReview = \(association\) =>\s*([\s\S]*?);\r?\n/u,
-  );
-  assert.ok(declaration, 'workflow must declare its author-association policy');
-  const shouldRequestReview = /** @type {(association: string) => unknown} */ (
-    runInNewContext(`((association) => ${declaration[1]})`)
-  );
-
-  assert.equal(shouldRequestReview('OWNER'), false);
-  assert.equal(shouldRequestReview('MEMBER'), false);
-  assert.equal(shouldRequestReview('COLLABORATOR'), false);
-  assert.equal(shouldRequestReview('CONTRIBUTOR'), true);
-  assert.equal(shouldRequestReview('FIRST_TIME_CONTRIBUTOR'), true);
-  assert.equal(shouldRequestReview('NONE'), true);
-  assert.match(workflow, /pull_request_target:/u);
-  assert.match(workflow, /pull-requests: write/u);
-  assert.doesNotMatch(workflow, /contents:\s*read/u);
-  assert.doesNotMatch(workflow, /actions\/checkout/u);
-  assert.match(workflow, /createLabel/u);
-  assert.match(workflow, /addLabels/u);
 });
