@@ -55,6 +55,14 @@ const EXPECTED_POLICIES: readonly {
     backpressureLifetimeMs: null,
   },
   {
+    kind: 'password_changed_notification',
+    priorityTier: 2,
+    dailyBudgetBucket: 'priority',
+    staleCutoffMs: DAY_MS,
+    staleCancellationReason: 'not_actionable',
+    backpressureLifetimeMs: null,
+  },
+  {
     kind: 'api_key_near_expiry_notification',
     priorityTier: 4,
     dailyBudgetBucket: 'invitation',

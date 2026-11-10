@@ -34,6 +34,10 @@ export interface MfaSecurityNotificationInput {
   readonly action: 'enabled' | 'removed';
 }
 
+export interface PasswordChangedNotificationInput {
+  readonly email: string;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function escapeHtml(value: string): string {
@@ -347,5 +351,19 @@ export function composeMfaSecurityNotification(
     text: enabled
       ? 'A TOTP second factor was enabled on your AIHUB account. If you did not make this change, contact AIHUB support immediately.'
       : 'The TOTP second factor was removed from your AIHUB account and all refresh and web sessions were ended. If you did not make this change, contact AIHUB support immediately.',
+  };
+}
+
+export function composePasswordChangedNotification(
+  input: PasswordChangedNotificationInput,
+): EmailMessage {
+  return {
+    recipient: input.email,
+    subject: 'Your AIHUB password was changed',
+    text: [
+      'The password for your AIHUB account was changed.',
+      '',
+      'If you did not make this change, use Password Recovery to secure your account and contact AIHUB support.',
+    ].join('\n'),
   };
 }

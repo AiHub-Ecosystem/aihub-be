@@ -107,6 +107,7 @@ describe('EmailDeliveryPoller near-expiry notices', () => {
           'organization_invite_email',
           'mfa_enabled_notification',
           'mfa_removed_notification',
+          'password_changed_notification',
         ],
       },
       {
