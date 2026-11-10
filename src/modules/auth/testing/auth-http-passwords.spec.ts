@@ -16,10 +16,18 @@ const RequestIdEnvelopeSchema = Type.Object({
   error: Type.Object({ request_id: Type.String({ pattern: '^req_' }) }),
 });
 
+const CLIENT_SECRET = 'test-bff-client-secret';
+const END_USER_IP = '203.0.113.7';
+
 describe('local auth HTTP boundary - passwords and reset', () => {
   let c: LocalAuthTestContext;
   beforeAll(async () => {
-    c = await createLocalAuthTestContext();
+    c = await createLocalAuthTestContext(
+      undefined,
+      undefined,
+      undefined,
+      CLIENT_SECRET,
+    );
   });
   afterAll(async () => {
     await c.app.close();
@@ -323,6 +331,67 @@ describe('local auth HTTP boundary - passwords and reset', () => {
     });
     expect(firstRefresh.statusCode).toBe(401);
     expect(secondRefresh.statusCode).toBe(401);
+  });
+
+  it('rate-limits a BFF password-change failure against the authenticated end-user IP', async () => {
+    seedActiveAccount();
+    c.hasher.result = false;
+    c.accessTokenIssuer.lastSession = {
+      kind: 'refresh',
+      id: 'rfs_01J00000000000000000000001',
+    };
+
+    const response = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/change-password',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer valid.user.access',
+        'x-aihub-client-secret': CLIENT_SECRET,
+        'x-aihub-end-user-ip': END_USER_IP,
+      },
+      payload: {
+        current_password: 'wrong password',
+        new_password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(
+      c.limiter.calls.some(
+        (call) => call.scope === 'login_ip' && call.key === END_USER_IP,
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores a forwarded end-user IP from direct password-change callers', async () => {
+    seedActiveAccount();
+    c.hasher.result = false;
+    c.accessTokenIssuer.lastSession = {
+      kind: 'refresh',
+      id: 'rfs_01J00000000000000000000001',
+    };
+
+    const response = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/change-password',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer valid.user.access',
+        'x-aihub-end-user-ip': END_USER_IP,
+      },
+      payload: {
+        current_password: 'wrong password',
+        new_password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(
+      c.limiter.calls.some(
+        (call) => call.scope === 'login_ip' && call.key === END_USER_IP,
+      ),
+    ).toBe(false);
   });
 
   it('changes the password, preserves the current refresh family, and queues a safe notice', async () => {

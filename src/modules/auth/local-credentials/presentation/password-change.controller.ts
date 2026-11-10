@@ -21,9 +21,12 @@ import {
 } from '@/modules/auth/local-credentials/application/password-change.port';
 import {
   authenticatedUserId,
-  requestIp,
+  credentialIp,
 } from '@/modules/auth/shared/presentation/auth-request';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
+import {
+  OptionalWebSessionClientGuard,
+  UserAccessJwtGuard,
+} from '@/modules/auth/web-sessions/public';
 
 @Controller()
 export class PasswordChangeController {
@@ -33,7 +36,7 @@ export class PasswordChangeController {
   ) {}
 
   @Post(PUBLIC_ROUTES['auth.change_password'].path)
-  @UseGuards(UserAccessJwtGuard)
+  @UseGuards(UserAccessJwtGuard, OptionalWebSessionClientGuard)
   @HttpCode(PUBLIC_ROUTES['auth.change_password'].successStatus)
   async changePassword(
     @Req() request: FastifyRequest,
@@ -49,7 +52,7 @@ export class PasswordChangeController {
       session: request.aihubUser?.session,
       currentPassword: input.current_password,
       newPassword: input.new_password,
-      ip: requestIp(request),
+      ip: credentialIp(request),
     });
   }
 }
