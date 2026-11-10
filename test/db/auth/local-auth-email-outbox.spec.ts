@@ -955,7 +955,7 @@ describe('password change PostgreSQL transaction', () => {
 
     await expect(
       passwordChanges.changePassword(passwordChangeInput(target)),
-    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    ).rejects.toThrow('email delivery request store is unavailable');
 
     const identity = await pool.query<{ password_hash: string }>(
       `SELECT password_hash FROM auth_identities
