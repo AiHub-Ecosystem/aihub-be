@@ -8740,6 +8740,79 @@
         }
       }
     },
+    "/v1/auth/change-password": {
+      "post": {
+        "operationId": "auth.change_password",
+        "summary": "Change the signed-in account password",
+        "description": "Requires the current password and ends every other Refresh Token Family and Web Session while preserving the session that made the request.",
+        "x-identity-scope": "none",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["current_password", "new_password"],
+                "properties": {
+                  "current_password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "The current password for the signed-in account.",
+                    "type": "string"
+                  },
+                  "new_password": {
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "format": "aihub-password-policy",
+                    "description": "12–128 Unicode code points; no normalization.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The password was changed, other sessions were revoked, and a security notification was queued.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "429": {
+            "$ref": "#/components/responses/AuthRateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/v1/auth/user-access-tokens/revoke": {
       "post": {
         "operationId": "auth.user_access_tokens.revoke",

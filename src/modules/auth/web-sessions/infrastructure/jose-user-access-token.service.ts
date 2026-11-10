@@ -85,7 +85,10 @@ export class JoseUserAccessTokenService
     }
   }
 
-  async issue(userId: string): Promise<IssuedUserAccessToken> {
+  async issue(
+    userId: string,
+    session?: UserAccessSession,
+  ): Promise<IssuedUserAccessToken> {
     if (!/^usr_[0-9A-HJKMNP-TV-Z]{26}$/u.test(userId)) {
       throw new AppError({
         code: 'INTERNAL_ERROR',
@@ -95,7 +98,7 @@ export class JoseUserAccessTokenService
     }
 
     const issuedAt = this.now();
-    const token = await new SignJWT({})
+    const token = await new SignJWT(session === undefined ? {} : { session })
       .setProtectedHeader({ alg: 'RS256', kid: this.config.keyId })
       .setIssuer(this.config.issuer)
       .setAudience(this.config.audience)

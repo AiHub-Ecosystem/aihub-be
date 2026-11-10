@@ -378,8 +378,13 @@ describe('web session HTTP boundary', () => {
         'iat',
         'iss',
         'jti',
+        'session',
         'sub',
       ]);
+      expect(claims['session']).toEqual({
+        kind: 'web',
+        id: storedSession().sessionId,
+      });
       expect(claims.sub).toBe(USER_ID);
       expect(claims.iss).toBe(ACCESS_TOKEN_ISSUER);
       expect(claims.aud).toBe(ACCESS_TOKEN_AUDIENCE);

@@ -36,6 +36,7 @@ import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '@/modules/auth/local-credentials/application/password-hasher.port';
+import { PostgresPasswordChangeRepository } from '@/modules/auth/local-credentials/infrastructure/postgres-password-change.repository';
 import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/password-reset/application/password-reset-token-repository.port';
 import { PostgresPasswordResetTokenRepository } from '@/modules/auth/password-reset/infrastructure/postgres-password-reset-token.repository';
 import {
@@ -177,6 +178,7 @@ let authClient: PostgresAuthClient;
 let outbox: SwitchableEmailDeliveryRequests;
 let sender: RecordingSender;
 let cipher: EmailPayloadCipherPort;
+let passwordChanges: PostgresPasswordChangeRepository;
 
 beforeAll(async () => {
   process.env['DATABASE_URL'] = testDatabaseUrl();
@@ -192,6 +194,7 @@ beforeAll(async () => {
   const queue = new EmailOutbox(outbox, cipher, prefixedIdGenerator('edr_'), {
     admit: async () => undefined,
   });
+  passwordChanges = new PostgresPasswordChangeRepository(authClient, queue);
   const accounts = new PostgresUserAccountRepository(authClient, queue);
   const verification = new PostgresVerificationTokenRepository(
     authClient,
@@ -743,5 +746,233 @@ describe('local auth email outbox over HTTP', () => {
     expect(response.statusCode).toBe(500);
     expect(await countRows('password_reset_tokens')).toBe(0);
     expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
+  });
+});
+
+interface PasswordChangeTarget {
+  readonly now: Date;
+  readonly userId: string;
+  readonly email: string;
+  readonly currentFamilyId: string;
+  readonly otherFamilyId: string;
+  readonly currentWebSessionId: string;
+  readonly otherWebSessionId: string;
+  readonly resetTokenId: string;
+}
+
+async function seedPasswordChangeTarget(): Promise<PasswordChangeTarget> {
+  const now = new Date('2026-11-11T00:00:00.000Z');
+  const userId = `usr_${ulid()}`;
+  const currentFamilyId = `rfs_${ulid()}`;
+  const otherFamilyId = `rfs_${ulid()}`;
+  const currentWebSessionId = `wss_${ulid()}`;
+  const otherWebSessionId = `wss_${ulid()}`;
+  const email = `password-change-${userId.slice(4, 14)}@example.com`;
+  await pool.query(
+    `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
+     VALUES ($1, $2, 'active', $3, $3)`,
+    [userId, `user-${userId.slice(4, 16).toLowerCase()}`, now],
+  );
+  await pool.query(
+    `INSERT INTO auth_identities (
+       id, user_account_id, provider, canonical_email, password_hash,
+       created_at, updated_at
+     ) VALUES ($1, $2, 'password', $3, $4, $5, $5)`,
+    [`auth_${ulid()}`, userId, email, STORED_PASSWORD_HASH, now],
+  );
+  for (const familyId of [currentFamilyId, otherFamilyId]) {
+    await authClient.refreshToken.create({
+      data: {
+        id: `rft_${ulid()}`,
+        familyId,
+        userAccountId: userId,
+        tokenHash: `refresh-hash-${ulid()}`,
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 86_400_000),
+      },
+    });
+  }
+  for (const sessionId of [currentWebSessionId, otherWebSessionId]) {
+    await authClient.webSession.create({
+      data: {
+        id: sessionId,
+        userAccountId: userId,
+        tokenHash: `web-hash-${ulid()}`,
+        createdAt: now,
+        lastRenewedAt: now,
+        expiresAt: new Date(now.getTime() + 86_400_000),
+      },
+    });
+  }
+  const resetTokenId = `prt_${ulid()}`;
+  await authClient.passwordResetToken.create({
+    data: {
+      id: resetTokenId,
+      userAccountId: userId,
+      tokenHash: `reset-hash-${ulid()}`,
+      expiresAt: new Date(now.getTime() + 86_400_000),
+      createdAt: now,
+    },
+  });
+  return {
+    now,
+    userId,
+    email,
+    currentFamilyId,
+    otherFamilyId,
+    currentWebSessionId,
+    otherWebSessionId,
+    resetTokenId,
+  };
+}
+
+function passwordChangeInput(target: PasswordChangeTarget) {
+  return {
+    userId: target.userId,
+    expectedPasswordHash: STORED_PASSWORD_HASH,
+    passwordHash: '$argon2id$replacement',
+    session: { kind: 'refresh' as const, id: target.currentFamilyId },
+    now: new Date(target.now.getTime() + 1_000),
+    emailDelivery: {
+      kind: 'password_changed_notification' as const,
+      payload: { email: target.email },
+      createdAt: new Date(target.now.getTime() + 1_000),
+    },
+  };
+}
+
+describe('password change PostgreSQL transaction', () => {
+  it('updates the hash, preserves the current family, revokes other sessions, and queues a safe notice atomically', async () => {
+    const target = await seedPasswordChangeTarget();
+
+    await expect(
+      passwordChanges.changePassword(passwordChangeInput(target)),
+    ).resolves.toBe(true);
+
+    const identity = await pool.query<{ password_hash: string }>(
+      `SELECT password_hash FROM auth_identities
+       WHERE user_account_id = $1 AND provider = 'password'`,
+      [target.userId],
+    );
+    expect(identity.rows[0]?.password_hash).toBe('$argon2id$replacement');
+    const refreshTokens = await pool.query<{
+      family_id: string;
+      revoked_at: Date | null;
+    }>(
+      `SELECT family_id, revoked_at FROM refresh_tokens
+       WHERE user_account_id = $1 ORDER BY family_id`,
+      [target.userId],
+    );
+    const currentFamily = refreshTokens.rows.find(
+      (row) => row.family_id === target.currentFamilyId,
+    );
+    const otherFamily = refreshTokens.rows.find(
+      (row) => row.family_id === target.otherFamilyId,
+    );
+    expect(currentFamily?.revoked_at).toBeNull();
+    expect(otherFamily?.revoked_at).toBeInstanceOf(Date);
+    const webSessions = await pool.query<{
+      id: string;
+      revoked_at: Date | null;
+    }>(
+      `SELECT id, revoked_at FROM web_sessions
+       WHERE user_account_id = $1 ORDER BY id`,
+      [target.userId],
+    );
+    expect(webSessions.rows).toHaveLength(2);
+    expect(webSessions.rows.every((row) => row.revoked_at !== null)).toBe(true);
+    const resetToken = await authClient.passwordResetToken.findUniqueOrThrow({
+      where: { id: target.resetTokenId },
+      select: { consumedAt: true },
+    });
+    expect(resetToken.consumedAt).toEqual(
+      new Date(target.now.getTime() + 1_000),
+    );
+
+    const requests = await pool.query<SealedRequest>(
+      `SELECT id, kind, status, payload_ciphertext
+       FROM email_delivery_requests WHERE kind = 'password_changed_notification'`,
+    );
+    expect(requests.rows).toHaveLength(1);
+    const row = requests.rows[0];
+    if (row?.payload_ciphertext === null || row === undefined) {
+      throw new Error('password-change notice has no encrypted payload');
+    }
+    expect(row.status).toBe('queued');
+    const payload: unknown = JSON.parse(
+      cipher.decrypt(row.payload_ciphertext, {
+        id: row.id,
+        kind: 'password_changed_notification',
+      }),
+    );
+    expect(payload).toEqual({ email: target.email });
+    expect(JSON.stringify(payload)).not.toContain('$argon2id$replacement');
+  });
+
+  it('preserves the current Web Session and revokes every Refresh Token Family', async () => {
+    const target = await seedPasswordChangeTarget();
+    const input = passwordChangeInput(target);
+
+    await expect(
+      passwordChanges.changePassword({
+        ...input,
+        session: { kind: 'web', id: target.currentWebSessionId },
+      }),
+    ).resolves.toBe(true);
+
+    const refreshTokens = await pool.query<{ revoked_at: Date | null }>(
+      `SELECT revoked_at FROM refresh_tokens WHERE user_account_id = $1`,
+      [target.userId],
+    );
+    expect(refreshTokens.rows).toHaveLength(2);
+    expect(
+      refreshTokens.rows.every((row) => row.revoked_at instanceof Date),
+    ).toBe(true);
+
+    const webSessions = await pool.query<{
+      id: string;
+      revoked_at: Date | null;
+    }>(`SELECT id, revoked_at FROM web_sessions WHERE user_account_id = $1`, [
+      target.userId,
+    ]);
+    const currentSession = webSessions.rows.find(
+      (row) => row.id === target.currentWebSessionId,
+    );
+    const otherSession = webSessions.rows.find(
+      (row) => row.id === target.otherWebSessionId,
+    );
+    expect(currentSession?.revoked_at).toBeNull();
+    expect(otherSession?.revoked_at).toBeInstanceOf(Date);
+  });
+
+  it('rolls back the password and all revocations when the outbox insert fails', async () => {
+    const target = await seedPasswordChangeTarget();
+    outbox.failInserts = true;
+
+    await expect(
+      passwordChanges.changePassword(passwordChangeInput(target)),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+
+    const identity = await pool.query<{ password_hash: string }>(
+      `SELECT password_hash FROM auth_identities
+       WHERE user_account_id = $1 AND provider = 'password'`,
+      [target.userId],
+    );
+    expect(identity.rows[0]?.password_hash).toBe(STORED_PASSWORD_HASH);
+    const revocations = await pool.query<{
+      revoked_at: Date | null;
+    }>(
+      `SELECT revoked_at FROM refresh_tokens WHERE user_account_id = $1
+       UNION ALL
+       SELECT revoked_at FROM web_sessions WHERE user_account_id = $1`,
+      [target.userId],
+    );
+    expect(revocations.rows.every((row) => row.revoked_at === null)).toBe(true);
+    expect(
+      await pool.query(
+        `SELECT id FROM email_delivery_requests
+         WHERE kind = 'password_changed_notification'`,
+      ),
+    ).toMatchObject({ rows: [] });
   });
 });

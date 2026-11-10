@@ -325,6 +325,188 @@ describe('local auth HTTP boundary - passwords and reset', () => {
     expect(secondRefresh.statusCode).toBe(401);
   });
 
+  it('changes the password, preserves the current refresh family, and queues a safe notice', async () => {
+    c.hasher.verifyByHash = true;
+    seedAccount(c.state, {
+      userId: USER_ID,
+      email: EMAIL,
+      passwordHash: await c.hasher.hash('old password'),
+    });
+    const firstLogin = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'old password' },
+    });
+    const currentLogin = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'old password' },
+    });
+    expect(firstLogin.statusCode).toBe(200);
+    expect(currentLogin.statusCode).toBe(200);
+    const currentFamily = c.accessTokenIssuer.lastSession;
+    expect(currentFamily?.kind).toBe('refresh');
+    const otherFamilyId = [...c.state.refreshTokens.values()].find(
+      (token) => token.familyId !== currentFamily?.id,
+    )?.familyId;
+    expect(otherFamilyId).toBeDefined();
+    c.state.webSessions.set('hash:web-other', {
+      sessionId: 'wss_01J00000000000000000000001',
+      userId: USER_ID,
+      tokenHash: 'hash:web-other',
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      lastRenewedAt: new Date(),
+      revokedAt: undefined,
+    });
+
+    const response = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/change-password',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer valid.user.access',
+      },
+      payload: {
+        current_password: 'old password',
+        new_password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.payload).toBe('');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(account().passwordHash).toBe(
+      await c.hasher.hash('new password that works'),
+    );
+    expect(
+      [...c.state.refreshTokens.values()]
+        .filter((token) => token.familyId === currentFamily?.id)
+        .every((token) => token.revokedAt === undefined),
+    ).toBe(true);
+    expect(
+      [...c.state.refreshTokens.values()]
+        .filter((token) => token.familyId === otherFamilyId)
+        .every((token) => token.revokedAt !== undefined),
+    ).toBe(true);
+    expect(c.state.webSessions.get('hash:web-other')?.revokedAt).toBeInstanceOf(
+      Date,
+    );
+    expect(c.state.emailDeliveryRequests).toHaveLength(1);
+    expect(c.state.emailDeliveryRequests[0]).toMatchObject({
+      kind: 'password_changed_notification',
+      payload: { email: EMAIL },
+    });
+    expect(c.state.emailDeliveryRequests[0]?.createdAt).toBeInstanceOf(Date);
+    expect(JSON.stringify(c.state.emailDeliveryRequests)).not.toContain(
+      'old password',
+    );
+    expect(JSON.stringify(c.state.emailDeliveryRequests)).not.toContain(
+      'new password that works',
+    );
+  });
+
+  it('preserves the current Web Session and revokes every Refresh Token Family', async () => {
+    c.hasher.verifyByHash = true;
+    seedAccount(c.state, {
+      userId: USER_ID,
+      email: EMAIL,
+      passwordHash: await c.hasher.hash('old password'),
+    });
+    const login = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'old password' },
+    });
+    expect(login.statusCode).toBe(200);
+    c.accessTokenIssuer.lastSession = {
+      kind: 'web',
+      id: 'wss_01J00000000000000000000001',
+    };
+    for (const sessionId of [
+      'wss_01J00000000000000000000001',
+      'wss_01J00000000000000000000002',
+    ]) {
+      c.state.webSessions.set(sessionId, {
+        sessionId,
+        userId: USER_ID,
+        tokenHash: `hash:${sessionId}`,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        lastRenewedAt: new Date(),
+        revokedAt: undefined,
+      });
+    }
+
+    const response = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/change-password',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer valid.user.access',
+      },
+      payload: {
+        current_password: 'old password',
+        new_password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(
+      c.state.webSessions.get('wss_01J00000000000000000000001')?.revokedAt,
+    ).toBeUndefined();
+    expect(
+      c.state.webSessions.get('wss_01J00000000000000000000002')?.revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      [...c.state.refreshTokens.values()].every(
+        (token) => token.revokedAt !== undefined,
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects a wrong current password generically without changing account or sessions', async () => {
+    c.hasher.verifyByHash = true;
+    seedAccount(c.state, {
+      userId: USER_ID,
+      email: EMAIL,
+      passwordHash: await c.hasher.hash('old password'),
+    });
+    const beforeHash = account().passwordHash;
+    c.accessTokenIssuer.lastSession = {
+      kind: 'refresh',
+      id: 'rfs_01J00000000000000000000001',
+    };
+    const response = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/change-password',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer valid.user.access',
+      },
+      payload: {
+        current_password: 'wrong password',
+        new_password: 'new password that works',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json<unknown>()).toMatchObject({
+      error: {
+        code: 'AUTH_CREDENTIALS_INVALID',
+        message: 'Email or password is invalid',
+      },
+    });
+    expect(account().passwordHash).toBe(beforeHash);
+    expect(c.state.emailDeliveryRequests).toHaveLength(0);
+    expect(c.limiter.calls.map(({ scope }) => scope)).toEqual(
+      expect.arrayContaining(['login_ip', 'login_email']),
+    );
+  });
+
   it('maps a replayed reset token to the public invalid-token error', async () => {
     seedActiveAccount();
     const token = await openResetToken();

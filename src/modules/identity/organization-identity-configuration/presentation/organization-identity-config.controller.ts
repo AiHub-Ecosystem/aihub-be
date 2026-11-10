@@ -22,7 +22,7 @@ import {
   type SetOrganizationIdentityConfigRequest,
   SetOrganizationIdentityConfigRequestSchema,
 } from '@/contracts/organization/identity-config';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
 import type { StoredOrganizationIdentityConfig } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import {
   READ_ORGANIZATION_IDENTITY_CONFIG,

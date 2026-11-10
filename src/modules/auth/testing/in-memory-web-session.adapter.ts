@@ -90,7 +90,7 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     ) {
       return undefined;
     }
-    return { userId: row.userId };
+    return { sessionId: row.sessionId, userId: row.userId };
   }
 
   async renewWebSession(input: RenewWebSessionInput): Promise<boolean> {

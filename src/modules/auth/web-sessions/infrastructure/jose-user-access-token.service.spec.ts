@@ -94,6 +94,26 @@ describe('JoseUserAccessTokenService', () => {
     expect(verified.jti).toEqual(expect.any(String));
   });
 
+  it('issues the durable session identity as a JWT claim', async () => {
+    const keys = await keyPair();
+    const service = new JoseUserAccessTokenService(config(keys.privateKeyPem));
+    const issued = await service.issue('usr_01J00000000000000000000000', {
+      kind: 'web',
+      id: 'wss_01J00000000000000000000000',
+    });
+
+    expect(decodeJwt(issued.token)['session']).toEqual({
+      kind: 'web',
+      id: 'wss_01J00000000000000000000000',
+    });
+    await expect(service.verify(issued.token)).resolves.toMatchObject({
+      session: {
+        kind: 'web',
+        id: 'wss_01J00000000000000000000000',
+      },
+    });
+  });
+
   it('maps malformed, expired, and claim-tampered tokens to one safe error', async () => {
     const keys = await keyPair();
     const service = new JoseUserAccessTokenService(
