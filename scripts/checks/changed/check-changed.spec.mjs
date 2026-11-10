@@ -622,10 +622,6 @@ await test('CodeRabbit config inputs select drift, formatting and behavior check
       'test:doc-drift',
     ]);
   }
-  assert.deepEqual(
-    planChangedFiles(['.github/workflows/coderabbit-review-opt-in.yml']).gates,
-    ['format:check', 'test:doc-drift'],
-  );
   for (const path of [
     'scripts/generate/coderabbit-config.mjs',
     'scripts/generate/generate-coderabbit-config.ts',

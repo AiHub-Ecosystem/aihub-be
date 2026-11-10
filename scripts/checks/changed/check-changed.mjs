@@ -365,10 +365,6 @@ function classifyPathGates(p) {
       'test:secret-scan',
     ];
   }
-  if (path === '.github/workflows/coderabbit-review-opt-in.yml') {
-    return ['format:check', 'test:doc-drift'];
-  }
-
   // #1766: a compose change selects the validators CI runs over the rendered
   // production config, instead of falling through to the generic YAML rule or
   // the full loop. Both compose files map here: production is what the

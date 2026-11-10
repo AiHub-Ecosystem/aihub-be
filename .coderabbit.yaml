@@ -1,13 +1,8 @@
 version: 2
 reviews:
   auto_review:
-    enabled: false
-    drafts: false
-    labels:
-      - "coderabbit-review"
-    ignore_usernames:
-      - "dependabot[bot]"
-      - "github-actions[bot]"
+    enabled: true
+    drafts: true
   path_instructions:
     - path: "{src/**/presentation/**,src/**/*.controller.ts}"
       instructions: "Review under the api role in .claude/agents/api.md. Apply AGENTS.md and all matching .claude/rules/*.md. Keep controllers thin, validate request bodies with parseRequestBody, and prevent direct database, Redis, downstream calls, or secret and raw-body exposure."
