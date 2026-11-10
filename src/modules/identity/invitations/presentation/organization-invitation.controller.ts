@@ -30,7 +30,7 @@ import {
   type ListOpenOrganizationInvitationsResponse,
 } from '@/contracts/organization/invitation';
 import { normalizeEmail } from '@/modules/auth/public/local-auth';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,

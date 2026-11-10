@@ -4,7 +4,10 @@ export interface IssuedUserAccessToken {
 }
 
 export interface UserAccessTokenIssuerPort {
-  issue(userId: string): Promise<IssuedUserAccessToken>;
+  issue(
+    userId: string,
+    session?: UserAccessSession,
+  ): Promise<IssuedUserAccessToken>;
 }
 
 export type UserAccessSession =

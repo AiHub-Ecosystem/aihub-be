@@ -62,9 +62,11 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
         revokedAt: null,
         expiresAt: { gt: input.now },
       },
-      select: { userAccountId: true },
+      select: { id: true, userAccountId: true },
     });
-    return session === null ? undefined : { userId: session.userAccountId };
+    return session === null
+      ? undefined
+      : { sessionId: session.id, userId: session.userAccountId };
   }
 
   /**

@@ -17,6 +17,7 @@ export interface FindExchangeableWebSessionInput {
 }
 
 export interface ExchangeableWebSession {
+  readonly sessionId: string;
   readonly userId: string;
 }
 
