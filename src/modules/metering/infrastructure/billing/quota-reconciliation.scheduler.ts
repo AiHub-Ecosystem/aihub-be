@@ -4,6 +4,11 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 
+import {
+  JITTER_FRACTION,
+  JitteredTimer,
+  staggerMs,
+} from '@/common/jittered-timer';
 import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import type { QuotaReconciliationService } from '@/modules/metering/public/quota-reconciliation';
 
@@ -19,8 +24,7 @@ export class QuotaReconciliationScheduler
   implements OnModuleInit, BeforeApplicationShutdown
 {
   private readonly logger = new Logger(QuotaReconciliationScheduler.name);
-  private initialTimer: NodeJS.Timeout | undefined;
-  private intervalTimer: NodeJS.Timeout | undefined;
+  private readonly timer: JitteredTimer;
   private running: Promise<void> | undefined;
 
   constructor(
@@ -30,30 +34,33 @@ export class QuotaReconciliationScheduler
     private readonly driftThresholdFraction: number,
     private readonly enabled: boolean,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.timer = new JitteredTimer(
+      () => void this.pass(),
+      intervalMs,
+      () => this.nextDelay(),
+    );
+  }
 
   onModuleInit(): void {
     if (!this.enabled) return;
-    this.initialTimer = setTimeout(
-      () => {
-        this.initialTimer = undefined;
-        void this.pass();
-        this.intervalTimer = setInterval(
-          () => void this.pass(),
-          this.intervalMs,
-        );
-        this.intervalTimer.unref();
-      },
-      nextQuotaReconciliationDelay(this.now(), this.intervalMs),
+    this.timer.start(this.nextDelay());
+  }
+
+  /**
+   * Each pass stays after its interval boundary, so a period rollover is still
+   * reconciled right after it starts, but lands up to a tenth of the interval
+   * past it, so replicas do not reconcile in the same instant (#1869).
+   */
+  private nextDelay(): number {
+    return (
+      nextQuotaReconciliationDelay(this.now(), this.intervalMs) +
+      staggerMs(this.intervalMs * JITTER_FRACTION)
     );
-    this.initialTimer.unref();
   }
 
   async beforeApplicationShutdown(): Promise<void> {
-    if (this.initialTimer !== undefined) clearTimeout(this.initialTimer);
-    if (this.intervalTimer !== undefined) clearInterval(this.intervalTimer);
-    this.initialTimer = undefined;
-    this.intervalTimer = undefined;
+    this.timer.stop();
     await this.running;
   }
 

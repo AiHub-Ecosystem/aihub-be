@@ -11,6 +11,7 @@ import {
   backgroundWorkStarted,
 } from '@/common/background-work-tracker';
 import { isShuttingDown } from '@/common/http/background-work-drain';
+import { JitteredTimer, jitteredDelayMs } from '@/common/jittered-timer';
 import {
   type EmailDeliveryKindLabel,
   type EmailOutboxBacklogSample,
@@ -94,8 +95,8 @@ export class EmailOutboxPollerScheduler
     | (() => Promise<readonly string[]>)
     | undefined;
   private readonly walSlotHealth?: EmailOutboxPollerSchedulerOptions['walSlotHealth'];
-  private timer: NodeJS.Timeout | undefined;
-  private cleanupTimer: NodeJS.Timeout | undefined;
+  private readonly timer: JitteredTimer;
+  private readonly cleanupTimer: JitteredTimer;
   private running = false;
   private pruning = false;
   private recipientKeyGatePassed = false;
@@ -119,6 +120,14 @@ export class EmailOutboxPollerScheduler
     this.verifyRecipientKeyVersions = options.verifyRecipientKeyVersions;
     this.readMissingQueuedKeyVersions = options.readMissingQueuedKeyVersions;
     this.walSlotHealth = options.walSlotHealth;
+    // Jittered rather than a fixed grid, so replicas that boot together do not
+    // poll the shared database in the same instant (#1869). A pending tick
+    // never holds the process open; the lease releases a claim once it lapses.
+    this.timer = new JitteredTimer(() => void this.pass(), this.intervalMs);
+    this.cleanupTimer = new JitteredTimer(
+      () => void this.pruneExpiredRecipientCounters(),
+      AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS,
+    );
   }
 
   /**
@@ -149,19 +158,15 @@ export class EmailOutboxPollerScheduler
     }
     await this.reportMissingQueuedKeyVersions();
     await this.runRecipientKeyGate(true);
-    this.timer = setInterval(() => {
-      void this.pass();
-    }, this.intervalMs);
+    this.timer.start();
     if (this.pruneExpiredRecipientLimits !== undefined) {
+      // The startup prune already ran, so the first cleanup tick waits a
+      // jittered full interval rather than a stagger within one.
       void this.pruneExpiredRecipientCounters();
-      this.cleanupTimer = setInterval(() => {
-        void this.pruneExpiredRecipientCounters();
-      }, AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS);
-      this.cleanupTimer.unref();
+      this.cleanupTimer.start(
+        jitteredDelayMs(AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS),
+      );
     }
-    // A pending claim must not hold the process open on shutdown; the lease
-    // releases it once it lapses.
-    this.timer.unref();
   }
 
   /**
@@ -210,14 +215,8 @@ export class EmailOutboxPollerScheduler
   }
 
   onApplicationShutdown(): void {
-    if (this.timer !== undefined) {
-      clearInterval(this.timer);
-      this.timer = undefined;
-    }
-    if (this.cleanupTimer !== undefined) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = undefined;
-    }
+    this.timer.stop();
+    this.cleanupTimer.stop();
     if (this.backlog !== undefined) {
       setEmailOutboxBacklogSource(undefined);
     }

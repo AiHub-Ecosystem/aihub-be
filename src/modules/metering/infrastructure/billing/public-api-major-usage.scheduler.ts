@@ -1,8 +1,9 @@
 import type { BeforeApplicationShutdown, OnModuleInit } from '@nestjs/common';
 
+import { JitteredTimer } from '@/common/jittered-timer';
 import type { PublicApiMajorUsageFlusher } from '@/modules/metering/application/billing/public-api-major-usage-flusher';
 
-/** How often buffered counts reach the database. */
+/** How often buffered counts reach the database, jittered per flush (#1869). */
 export const PUBLIC_API_MAJOR_USAGE_FLUSH_INTERVAL_MS = 30_000;
 
 /**
@@ -14,27 +15,23 @@ export const PUBLIC_API_MAJOR_USAGE_FLUSH_INTERVAL_MS = 30_000;
 export class PublicApiMajorUsageScheduler
   implements OnModuleInit, BeforeApplicationShutdown
 {
-  private timer: NodeJS.Timeout | undefined;
+  private readonly timer: JitteredTimer;
 
   constructor(
     private readonly flusher: PublicApiMajorUsageFlusher,
     private readonly enabled: boolean,
-    private readonly intervalMs: number = PUBLIC_API_MAJOR_USAGE_FLUSH_INTERVAL_MS,
-  ) {}
+    intervalMs: number = PUBLIC_API_MAJOR_USAGE_FLUSH_INTERVAL_MS,
+  ) {
+    this.timer = new JitteredTimer(() => void this.flusher.flush(), intervalMs);
+  }
 
   onModuleInit(): void {
     if (!this.enabled) return;
-    this.timer = setInterval(() => {
-      void this.flusher.flush();
-    }, this.intervalMs);
-    this.timer.unref();
+    this.timer.start();
   }
 
   async beforeApplicationShutdown(): Promise<void> {
-    if (this.timer !== undefined) {
-      clearInterval(this.timer);
-      this.timer = undefined;
-    }
+    this.timer.stop();
     if (this.enabled) {
       await this.flusher.finish();
     }

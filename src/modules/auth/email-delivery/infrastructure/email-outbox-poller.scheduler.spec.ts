@@ -367,6 +367,40 @@ describe('EmailOutboxPollerScheduler', () => {
 
     expect(poller.calls).toBe(beforeShutdown);
   });
+
+  it('staggers its first pass, jitters each pass and the hourly cleanup, and leaves no timer after shutdown', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    const poller = new ControllablePoller();
+    const cleanup = jest.fn().mockResolvedValue(0);
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: 60_000,
+      pruneExpiredRecipientLimits: cleanup,
+    });
+
+    try {
+      await subject.onModuleInit();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(29_999);
+      expect(poller.calls).toBe(0);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(poller.calls).toBe(1);
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(poller.calls).toBe(2);
+
+      await jest.advanceTimersByTimeAsync(3_600_000 - 90_000);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+
+      subject.onApplicationShutdown();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      subject.onApplicationShutdown();
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    }
+  });
 });
 
 describe('reportTerminalEmailDeliveryFailure', () => {
