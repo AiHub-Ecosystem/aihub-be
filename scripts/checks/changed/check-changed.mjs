@@ -157,10 +157,9 @@ function listDirEntries(dir) {
 }
 
 /**
- * The co-located `*.spec.sh` suites for changed wrappers under `scripts/ops/`
- * (#1460). Selection is per directory: CI exercises each wrapper directory's
- * stub suites, and a directory-level match keeps helpers such as
- * `install-host-jobs.sh` covered by the suite that drives it.
+ * The `*.spec.sh` suites for changed wrappers under `scripts/ops/` (#1460, #1764).
+ * Co-located suites are selected per directory. Cross-cutting suites under `test/`
+ * are selected for wrappers whose suites live outside `scripts/ops/`.
  *
  * @param {readonly string[]} files changed `.sh` paths under `scripts/ops/`
  * @param {(dir: string) => readonly string[]} [listDir]
@@ -170,9 +169,23 @@ export function selectShellSpecs(files, listDir = listDirEntries) {
   /** @type {Set<string>} */
   const specs = new Set();
   for (const file of files) {
-    const dir = file.slice(0, file.lastIndexOf('/'));
-    for (const entry of listDir(dir)) {
-      if (entry.endsWith('.spec.sh')) specs.add(`${dir}/${entry}`);
+    if (file === 'scripts/ops/blue-green/blue-green-host.sh') {
+      for (const entry of listDir('test/ops')) {
+        if (entry.startsWith('blue-green-') && entry.endsWith('.spec.sh')) {
+          specs.add(`test/ops/${entry}`);
+        }
+      }
+    } else if (file === 'scripts/ops/logs/request-log-lookup.sh') {
+      for (const entry of listDir('test/cli')) {
+        if (entry === 'request-log-lookup.spec.sh') {
+          specs.add(`test/cli/${entry}`);
+        }
+      }
+    } else {
+      const dir = file.slice(0, file.lastIndexOf('/'));
+      for (const entry of listDir(dir)) {
+        if (entry.endsWith('.spec.sh')) specs.add(`${dir}/${entry}`);
+      }
     }
   }
   return sorted(specs);
@@ -409,10 +422,10 @@ function classifyPathGates(p) {
 
   // #1460: recorded no-gate answers, not silent fall-throughs. The firewall
   // guard's suite needs a Linux network namespace and runs only in CI; the
-  // speaking, blue-green and logs wrappers have no co-located suite. The
-  // documentation drift gate still covers path references to them. These must
-  // precede the general `scripts/ops` wrapper rule below.
-  if (/^(?:scripts\/ops\/(?:firewall|speaking|blue-green|logs)\/)/.test(path)) {
+  // speaking wrapper has no suite yet (#1765). The documentation drift gate still
+  // covers path references to them. These must precede the general `scripts/ops`
+  // wrapper rule below.
+  if (/^(?:scripts\/ops\/(?:firewall|speaking)\/)/.test(path)) {
     return [];
   }
 

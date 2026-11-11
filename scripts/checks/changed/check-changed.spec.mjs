@@ -493,6 +493,24 @@ const pathCases = [
     ],
   },
   {
+    path: 'scripts/ops/blue-green/blue-green-host.sh',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
+  },
+  {
+    path: 'scripts/ops/logs/request-log-lookup.sh',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
+  },
+  {
     path: 'docker-compose.production.yml',
     gates: ['check:compose', 'format:check'],
   },
@@ -700,11 +718,62 @@ await test('wrappers whose directory has no co-located suite select documentatio
   for (const path of [
     'scripts/ops/firewall/docker-user-guard.sh',
     'scripts/ops/speaking/speaking-gateway-smoke.sh',
-    'scripts/ops/blue-green/blue-green-host.sh',
-    'scripts/ops/logs/request-log-lookup.sh',
   ]) {
     assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
   }
+});
+
+await test('the shell-spec gate selects test/ suites for blue-green and log wrappers (#1764)', () => {
+  const listDir = (/** @type {string} */ dir) => {
+    if (dir === 'test/ops') {
+      return [
+        'blue-green-readiness.spec.sh',
+        'blue-green-config-retention.spec.sh',
+        'blue-green-resume.spec.sh',
+        'blue-green-rollback-image.spec.sh',
+        'blue-green-upstream.spec.sh',
+        'blue-green-edge-monitor.spec.sh',
+        'other.spec.sh',
+      ];
+    }
+    if (dir === 'test/cli') {
+      return ['request-log-lookup.spec.sh', 'other.spec.sh'];
+    }
+    return [];
+  };
+
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/blue-green/blue-green-host.sh'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: [
+        'test/ops/blue-green-config-retention.spec.sh',
+        'test/ops/blue-green-edge-monitor.spec.sh',
+        'test/ops/blue-green-readiness.spec.sh',
+        'test/ops/blue-green-resume.spec.sh',
+        'test/ops/blue-green-rollback-image.spec.sh',
+        'test/ops/blue-green-upstream.spec.sh',
+      ],
+    },
+  );
+
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/logs/request-log-lookup.sh'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/cli/request-log-lookup.spec.sh'],
+    },
+  );
 });
 
 await test('SAST-only CodeQL inputs select no local gate and say so (#1460)', () => {
