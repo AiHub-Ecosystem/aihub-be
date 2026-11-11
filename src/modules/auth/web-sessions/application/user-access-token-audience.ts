@@ -1,3 +1,5 @@
-export function userAccessTokenAudience(databaseScope: string): string {
+export function userAccessTokenAudience(
+  databaseScope: 'production' | 'sandbox',
+): string {
   return `aihub-user-api:${databaseScope}`;
 }
