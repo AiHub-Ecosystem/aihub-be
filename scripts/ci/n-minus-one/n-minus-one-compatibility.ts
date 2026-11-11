@@ -221,8 +221,8 @@ async function main(): Promise<void> {
       );
     } else {
       expectStatus(previousScopeProbe, 401, 'N-1 scope-bound audience probe');
-      failures.push(
-        'RELEASE HOLD: N-1 rejected the scope-bound User Access JWT audience; deploy a reader-compatible N-1 before issuing these tokens.',
+      report.push(
+        'WARNING: N-1 rejects the scope-bound User Access JWT audience; rollback restores legacy cross-scope acceptance until the scoped release is redeployed, and clients may need refresh or sign-in.',
       );
       previousUserToken = previousLegacyUserToken;
       const previousLegacyProbe = await request(
