@@ -165,6 +165,9 @@ async function main(): Promise<void> {
       userAccessKey['user-access-jwt'].private_key_pem,
       'aihub-user-api:production',
     );
+    const previousLegacyUserToken = jwt(
+      userAccessKey['user-access-jwt'].private_key_pem,
+    );
 
     // Hold the shared poller lock so only N-1 can consume this candidate write.
     outboxClaimLock = await database.connect();
@@ -221,7 +224,7 @@ async function main(): Promise<void> {
       failures.push(
         'RELEASE HOLD: N-1 rejected the scope-bound User Access JWT audience; deploy a reader-compatible N-1 before issuing these tokens.',
       );
-      previousUserToken = jwt(userAccessKey['user-access-jwt'].private_key_pem);
+      previousUserToken = previousLegacyUserToken;
       const previousLegacyProbe = await request(
         PREVIOUS_PORT,
         'GET',
@@ -244,6 +247,13 @@ async function main(): Promise<void> {
 
     startImage(candidateImage, 'aihub-compat-candidate', candidateDirectory);
     await waitReady(CANDIDATE_PORT, 'restarted candidate image');
+    const previousTokenProbe = await request(CANDIDATE_PORT, 'GET', '/v1/me', {
+      token: previousLegacyUserToken,
+    });
+    expectStatus(previousTokenProbe, 401, 'candidate predecessor token probe');
+    report.push(
+      'PASS: candidate rejects the predecessor legacy User Access JWT audience.',
+    );
 
     await verifyIncompatibleJwksKeyFormat({
       redis,
