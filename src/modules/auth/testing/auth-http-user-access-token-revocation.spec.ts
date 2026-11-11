@@ -13,7 +13,7 @@ import { JoseUserAccessTokenService } from '@/modules/auth/web-sessions/infrastr
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const ISSUER = 'https://api.test.aihub.example.com';
-const AUDIENCE = 'aihub-user-api';
+const AUDIENCE = 'aihub-user-api:production';
 const KEY_ID = 'user-access-test';
 const OTHER_USER_ID = 'usr_01J00000000000000000000001';
 
@@ -77,10 +77,11 @@ describe('User Access JWT revocation HTTP boundary', () => {
   beforeAll(async () => {
     const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
     privateKey = keys.privateKey;
+    const privateKeyPem = keys.privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString();
     verifier = new JoseUserAccessTokenService({
-      privateKeyPem: keys.privateKey
-        .export({ type: 'pkcs8', format: 'pem' })
-        .toString(),
+      privateKeyPem,
       keyId: KEY_ID,
       issuer: ISSUER,
       audience: AUDIENCE,
@@ -192,6 +193,9 @@ describe('User Access JWT revocation HTTP boundary', () => {
         issuer: 'https://other.test.example.com',
       }),
       await signedToken(privateKey, USER_ID, { audience: 'other-api' }),
+      await signedToken(privateKey, USER_ID, {
+        audience: 'aihub-user-api:sandbox',
+      }),
       beyondSkew,
       'not-a-compact-jwt',
     ];

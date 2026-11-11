@@ -77,11 +77,12 @@ export function classifyZeroWidthOrganizationWrite(
   };
 }
 
+/** Confirms the predecessor can replay candidate writes from durable storage. */
 export async function verifyDurableReads(input: {
   readonly database: Pool;
   readonly organizationCreateKey: string;
   readonly organizationId: string;
-  readonly userToken: string;
+  readonly previousUserToken: string;
   readonly previousSha: string;
   readonly candidateSha: string;
   readonly report: string[];
@@ -91,7 +92,7 @@ export async function verifyDurableReads(input: {
     database,
     organizationCreateKey,
     organizationId,
-    userToken,
+    previousUserToken,
     previousSha,
     candidateSha,
     report,
@@ -119,7 +120,7 @@ export async function verifyDurableReads(input: {
   }
 
   const replay = await request(PREVIOUS_PORT, 'POST', '/v1/organizations', {
-    token: userToken,
+    token: previousUserToken,
     idempotencyKey: organizationCreateKey,
     body: { name: 'Release compatibility fixture' },
   });
@@ -133,7 +134,7 @@ export async function verifyDurableReads(input: {
     PREVIOUS_PORT,
     'GET',
     `/v1/organizations/${organizationId}/audit-events`,
-    { token: userToken },
+    { token: previousUserToken },
   );
   expect2xx(audit, 'N-1 audit read');
   const auditData = audit.body?.['data'] as Record<string, unknown> | undefined;
@@ -150,7 +151,7 @@ export async function verifyDurableReads(input: {
     'POST',
     '/v1/organizations',
     {
-      token: userToken,
+      token: previousUserToken,
       idempotencyKey: `compat-unicode-${randomUUID()}`,
       body: { name: 'Rollback\u200bProbe' },
     },
