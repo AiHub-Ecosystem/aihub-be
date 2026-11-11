@@ -30,6 +30,8 @@ edge_monitor_pid=""
 edge_monitor_flag=""
 edge_monitor_offset=0
 edge_monitor_failures=""
+edge_monitor_phase="idle"
+EDGE_MONITOR_FAILURE_THRESHOLD="${EDGE_MONITOR_FAILURE_THRESHOLD:-3}"
 app_container_baseline_ids=()
 app_container_baseline_restarts=()
 # The nginx config the next apply_slots uses for a tier: empty keeps the live
@@ -433,11 +435,22 @@ probe_container_dependencies() {
 }
 
 probe_host() {
-  local tier="$1" hostname="$2" status started_at
+  local tier="$1" hostname="$2" phase="${3:-${edge_monitor_phase:-idle}}"
+  local started_at ended_at raw code status duration
   started_at="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
-  status="$(curl --silent --show-error --max-time 4 -o /dev/null -w '%{http_code}' \
-    "https://${hostname}/health" 2>/dev/null || printf request_error)"
-  printf '%s\t%s\t%s\t%s\n' "$started_at" "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" "$tier" "$status" \
+  raw="$(curl --silent --show-error --max-time 4 -o /dev/null -w '%{http_code}\t%{time_total}' \
+    "https://${hostname}/health" 2>/dev/null || true)"
+  [[ -n "$raw" ]] || raw=$'000request_error\t4.000'
+  ended_at="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+  code="${raw%%$'\t'*}"
+  duration="${raw#*$'\t'}"
+  if [[ "$code" == "000" || -z "$code" ]]; then
+    status="000request_error"
+  else
+    status="$code"
+  fi
+  [[ -n "$duration" && "$duration" != "$code" ]] || duration="0.000"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$started_at" "$ended_at" "$tier" "$status" "$duration" "$phase" \
     >>"$STATE_DIR/edge-probes.tsv" || {
     printf 'could not record public edge probe for %s\n' "$tier" >&2
     return 1
@@ -445,16 +458,16 @@ probe_host() {
   if [[ "$status" =~ ^2[0-9][0-9]$ ]]; then
     return 0
   fi
-  printf 'public /health failed for %s: %s\n' "$tier" "$status" >&2
+  printf 'public /health failed for %s: %s (phase=%s duration=%ss)\n' "$tier" "$status" "$phase" "$duration" >&2
   return 1
 }
 
 probe_all() {
-  local failed=0 production_pid sandbox_pid=
-  probe_host production "$production_host" &
+  local phase="${1:-preflight}" failed=0 production_pid sandbox_pid=
+  probe_host production "$production_host" "$phase" &
   production_pid="$!"
   if [[ "$sandbox_routed" == true ]]; then
-    probe_host sandbox "$sandbox_host" &
+    probe_host sandbox "$sandbox_host" "$phase" &
     sandbox_pid="$!"
   fi
   wait "$production_pid" || failed=1
@@ -467,18 +480,21 @@ probe_window() {
   # already launched has appended its sample; otherwise a shutdown could race
   # an in-flight curl and lose the failure it recorded. With a stop file, a
   # zero-second window runs until that file appears.
-  local seconds="$1" stop_file="${2:-}" failed=0 attempt=0 next_at delay running_pids pid
-  local -a probe_pids=() pending_pids=()
+  local seconds="$1" stop_file="${2:-}" phase="${3:-${edge_monitor_phase:-window}}"
+  local attempt=0 next_at delay running_pids pid
+  local log="$STATE_DIR/edge-probes.tsv" offset=0
+  [[ -f "$log" ]] && offset="$(stat -c %s "$log")"
+  local -a probe_pids=() pending_pids=() failed_tiers=()
   next_at=$SECONDS
   while [[ -n "$stop_file" && ! -f "$stop_file" ]] ||
     { [[ -z "$stop_file" ]] && ((attempt < seconds)); }; do
     delay=$((next_at - SECONDS))
     if ((delay > 0)); then sleep "$delay"; fi
     if [[ -z "$stop_file" || ! -f "$stop_file" ]]; then
-      probe_host production "$production_host" &
+      probe_host production "$production_host" "$phase" &
       probe_pids+=("$!")
       if [[ "$sandbox_routed" == true ]]; then
-        probe_host sandbox "$sandbox_host" &
+        probe_host sandbox "$sandbox_host" "$phase" &
         probe_pids+=("$!")
       fi
     fi
@@ -488,8 +504,8 @@ probe_window() {
     for pid in "${probe_pids[@]}"; do
       if [[ "$running_pids" == *" $pid "* ]]; then
         pending_pids+=("$pid")
-      elif ! wait "$pid"; then
-        failed=1
+      else
+        wait "$pid" || true
       fi
     done
     probe_pids=("${pending_pids[@]}")
@@ -499,9 +515,13 @@ probe_window() {
     attempt=$((attempt + 1))
   done
   for pid in "${probe_pids[@]}"; do
-    wait "$pid" || failed=1
+    wait "$pid" || true
   done
-  return "$failed"
+  mapfile -t failed_tiers < <(failed_edge_tiers "$offset")
+  for tier in "${failed_tiers[@]}"; do
+    [[ -n "$tier" ]] && return 1
+  done
+  return 0
 }
 
 # The upstream nginx reaches a slot through.
@@ -832,14 +852,16 @@ wait_service_ready() {
 # pull, a drain). start/stop own the lifecycle so no caller has to reap a
 # monitor by hand; edge_monitor_failures then names the tiers that failed.
 edge_monitor_start() {
+  local window="${1:-0}" phase="${2:-edge-monitor}"
   local log="$STATE_DIR/edge-probes.tsv"
+  edge_monitor_phase="$phase"
   edge_monitor_pid=""
   edge_monitor_flag="$STATE_DIR/edge-monitor.stop"
   edge_monitor_failures=""
   edge_monitor_offset=0
   [[ -f "$log" ]] && edge_monitor_offset="$(stat -c %s "$log")"
   rm -f "$edge_monitor_flag"
-  probe_window "$1" "$edge_monitor_flag" &
+  probe_window "$window" "$edge_monitor_flag" "$phase" &
   edge_monitor_pid="$!"
 }
 
@@ -850,6 +872,7 @@ edge_monitor_stop() {
   rm -f "$edge_monitor_flag"
   edge_monitor_pid=""
   edge_monitor_failures="$(failed_edge_tiers "$edge_monitor_offset")"
+  edge_monitor_phase="idle"
 }
 
 start_candidate() {
@@ -857,7 +880,7 @@ start_candidate() {
   # Only monitor where the active edge is expected to be healthy: the manual
   # rollback starts its candidate while the public edge is known to be failing.
   if [[ "$check_edge" == true ]]; then
-    edge_monitor_start 0
+    edge_monitor_start 0 "candidate-${service}"
   else
     edge_monitor_failures=""
   fi
@@ -908,7 +931,7 @@ drain_old_slot() {
   local service="$1" status=0
   # Compose waits out stop_grace_period (280s) on in-flight work, so the edge
   # monitor has to span the drain and record_release has to see its samples.
-  edge_monitor_start 0
+  edge_monitor_start 0 "drain-${service}"
   "${compose[@]}" stop "$service" || status=$?
   edge_monitor_stop
   return "$status"
@@ -936,7 +959,7 @@ rollback_current_tier() {
     sandbox_slot="$old_slot"
   fi
   apply_slots "$api_slot" "$sandbox_slot" || return 1
-  if ! probe_window 10; then
+  if ! probe_window 10 "" "rollback-smoke-${tier}"; then
     printf 'rollback could not be confirmed; both slots remain available\n' >&2
     return 1
   fi
@@ -1010,7 +1033,7 @@ deploy_tier() {
   apply_slots "$api_slot" "$sandbox_slot"
   new_id="$(container_id "$new_service")"
   failed=0
-  probe_window 15 || failed=1
+  probe_window 15 "" "cutover-smoke-${tier}" || failed=1
   if [[ "$inject_failure" == true ]]; then
     printf 'rehearsal: injecting a failed post-cutover smoke for %s\n' "$tier" >&2
     failed=1
@@ -1104,7 +1127,7 @@ bootstrap_sandbox() {
   fi
   sandbox_routed=true
 
-  probe_window 15 || failed=1
+  probe_window 15 "" "bootstrap-sandbox" || failed=1
   candidate_state_safe "$id" "$candidate_restart_baseline" || failed=1
   app_containers_safe "" "$id" || failed=1
   capture_resources post-cutover-sandbox-bootstrap || failed=1
@@ -1202,37 +1225,76 @@ check_vault_agent() {
 }
 
 failed_edge_tiers() {
-  local log="$STATE_DIR/edge-probes.tsv" offset="$1" tier host
+  local log="$STATE_DIR/edge-probes.tsv" offset="${1:-0}" tier host
+  local threshold="${EDGE_MONITOR_FAILURE_THRESHOLD:-3}"
   local -a tiers=()
-  mapfile -t tiers < <(
-    tail -c "+$((offset + 1))" "$log" 2>/dev/null \
-      | awk -F '\t' '$4 !~ /^2[0-9][0-9]$/ { print $3 }' | sort -u
-  )
-  if [[ "${#tiers[@]}" -eq 0 ]]; then
-    # No attributable sample, so probe each host once rather than leave a tier live.
-    for tier in production sandbox; do
-      if [[ "$tier" == sandbox && "$sandbox_routed" != true ]]; then
-        continue
+  local -A seen_tiers=()
+  local kind name
+  if [[ -f "$log" ]]; then
+    while read -r kind name; do
+      if [[ "$kind" == "SEEN" ]]; then
+        seen_tiers["$name"]=1
+      elif [[ "$kind" == "FAILED" ]]; then
+        tiers+=("$name")
       fi
+    done < <(
+      tail -c "+$((offset + 1))" "$log" 2>/dev/null | awk -F '\t' -v threshold="$threshold" '
+        NF >= 4 {
+          tier = $3
+          status = $4
+          seen[tier]++
+          if (status !~ /^2[0-9][0-9]$/) {
+            consecutive[tier]++
+            if (consecutive[tier] >= threshold) {
+              failed[tier] = 1
+            }
+          } else {
+            consecutive[tier] = 0
+          }
+        }
+        END {
+          for (t in seen) {
+            print "SEEN", t
+          }
+          for (t in failed) {
+            if (failed[t]) print "FAILED", t
+          }
+        }
+      '
+    )
+  fi
+  # Fallback: if an active tier had no samples in this window, probe it once
+  for tier in production sandbox; do
+    if [[ "$tier" == sandbox && "$sandbox_routed" != true ]]; then
+      continue
+    fi
+    if [[ -z "${seen_tiers[$tier]:-}" ]]; then
       host="$production_host"
       if [[ "$tier" == sandbox ]]; then
         host="$sandbox_host"
       fi
-      probe_host "$tier" "$host" || tiers+=("$tier")
-    done
+      probe_host "$tier" "$host" fallback || tiers+=("$tier")
+    fi
+  done
+  local -a unique_tiers=()
+  if [[ "${#tiers[@]}" -gt 0 ]]; then
+    mapfile -t unique_tiers < <(printf '%s\n' "${tiers[@]}" | grep -v '^$' | sort -u)
   fi
-  [[ "${#tiers[@]}" -eq 0 ]] || printf '%s\n' "${tiers[@]}"
+  for tier in "${unique_tiers[@]}"; do
+    [[ -n "$tier" ]] && printf '%s\n' "$tier"
+  done
 }
 
 final_edge_window() {
   local seconds="$1" log="$STATE_DIR/edge-probes.tsv" offset=0 tier
   local -a failing_tiers=()
   [[ -f "$log" ]] && offset="$(stat -c %s "$log")"
-  probe_window "$seconds" && return 0
+  probe_window "$seconds" "" "final-window" && return 0
   # Both tiers already stopped their old services, so a failure here has to
   # restore the recorded release instead of exiting with the outage live.
   mapfile -t failing_tiers < <(failed_edge_tiers "$offset")
   for tier in "${failing_tiers[@]}"; do
+    [[ -n "$tier" ]] || continue
     printf 'final edge probe failed for %s; rolling that tier back\n' "$tier" >&2
     rollback "$tier" || printf '%s rollback was not confirmed; preserve both slots for operator repair\n' "$tier" >&2
   done
@@ -1323,7 +1385,7 @@ deploy() {
   capture_running_app_baseline || return 1
   if [[ "$tier" != sandbox ]]; then
     compose_migrate=("${compose[@]}" --profile migration)
-    edge_monitor_start 0
+    edge_monitor_start 0 migration
     migration_status=0
     "${compose_migrate[@]}" run --pull always --no-deps --rm migrate </dev/null || migration_status=$?
     if [[ "$sandbox_enabled" == true && "$migration_status" -eq 0 ]]; then
@@ -1394,7 +1456,7 @@ restore_active_after_rollback_failure() {
     nginx_override_sandbox="$STATE_DIR/live-before-rollback-sandbox.conf"
   fi
   apply_slots "$api_slot" "$sandbox_slot" || return 1
-  probe_window 10 || return 1
+  probe_window 10 "" "recover-active" || return 1
   probe_container_dependencies "$id" true
 }
 
@@ -1415,14 +1477,14 @@ rollback_sandbox_to_disabled() {
   write_pending sandbox "$slot" "$sha" disabled disabled
   apply_slots "$api_slot" "$slot" false || return 1
   sandbox_routed=false
-  if ! probe_window 10; then
+  if ! probe_window 10 "" "withdraw-sandbox"; then
     if ! container_running "$id"; then
       "${compose[@]}" start "$service" || return 1
       wait_service_ready "$service" 120 "" "" false || return 1
     fi
     apply_slots "$api_slot" "$slot" true || return 1
     sandbox_routed=true
-    if probe_window 10; then
+    if probe_window 10 "" "recover-sandbox"; then
       clear_pending
     fi
     printf 'Production probe failed; Sandbox route was restored\n' >&2
@@ -1532,7 +1594,7 @@ rollback() {
     return 1
   fi
   failed=0
-  probe_window 15 || failed=1
+  probe_window 15 "" "rollback-smoke-${tier}" || failed=1
   probe_container_dependencies "$candidate_id" true || failed=1
   if ! container_ready "$candidate_id" "$(sudo -n docker inspect --format '{{.State.Health.Status}}' "$candidate_id")"; then
     failed=1

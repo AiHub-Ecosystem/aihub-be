@@ -360,6 +360,9 @@ jobs:
       - name: Exercise blue-green readiness probes across image revisions
         run: bash test/ops/blue-green-readiness.spec.sh
 
+      - name: Exercise edge probe failure tolerance and sustained outage detection
+        run: bash test/ops/blue-green-edge-monitor.spec.sh
+
       - name: Exercise Speaking gateway smoke identity handling with stubs
         run: bash test/ops/speaking-gateway-smoke.spec.sh
 
