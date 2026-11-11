@@ -169,6 +169,12 @@ fi
 if [[ "${FAKE_DOCKER_HANG_SERVICE:-}" == "$service" ]]; then
   exec sleep 30
 fi
+if [[ "${FAKE_DOCKER_FAIL_ONCE_SERVICE:-}" == "$service" &&
+  ! -e "${FAKE_DOCKER_FAIL_ONCE_FILE:-}" ]]; then
+  : >"$FAKE_DOCKER_FAIL_ONCE_FILE"
+  printf 'transient failure\n' >&2
+  exit 7
+fi
 if [[ "${FAKE_DOCKER_FAIL_SERVICE:-}" == "$service" ]] ||
   { [[ -n "${FAKE_DOCKER_FAIL_AFTER_CALLS:-}" ]] &&
     ((call_count > FAKE_DOCKER_FAIL_AFTER_CALLS)); }; then
@@ -422,10 +428,9 @@ chmod 755 "$bin_dir/pgrep"
 export FAKE_CRONTAB_FILE="$test_root/crontab"
 export FAKE_PGREP_REMAINING_FILE="$test_root/pgrep-remaining"
 export FAKE_PGREP_PATTERN_FILE="$test_root/pgrep-pattern"
+# CD suspends legacy AIHUB jobs before the installer smoke runs.
 cat >"$FAKE_CRONTAB_FILE" <<'CRON'
 0 3 * * * /home/operator/wispace-vault/snapshot.sh
-0 2 * * * /home/operator/aihub-ops-job.sh quota
-30 3 * * * /home/operator/aihub-avatar-sweep.sh
 CRON
 cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before"
 cat >"$app_dir/ops/host-jobs/aihub.crontab" <<'CRON'
@@ -433,6 +438,7 @@ old template must be restored after failed smoke
 CRON
 
 assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'old wrapper must remain active'
+: >"$FAKE_DOCKER_CALLS"
 set +e
 FAKE_DOCKER_FAIL_SERVICE=app-slot-b APP_DIR="$app_dir" \
   bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" >"$test_root/install-failed.out" 2>&1
@@ -442,8 +448,39 @@ set -e
 assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'old wrapper must remain active'
 assert_contains "$app_dir/ops/host-jobs/aihub.crontab" 'old template must be restored'
 cmp -s "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
+assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
+assert_not_contains "$FAKE_CRONTAB_FILE" 'BEGIN AIHUB MANAGED JOBS'
 assert_contains "$test_root/install-failed.out" 'candidate scheduled-job smoke failed before wrapper promotion'
 assert_not_contains "$test_root/install-failed.out" 'restoring previous state'
+[[ "$(grep -c '^app-slot-b ' "$FAKE_DOCKER_CALLS")" == 3 ]]
+[[ "$(grep -c '^app-sandbox ' "$FAKE_DOCKER_CALLS")" == 3 ]]
+
+# A transient candidate report failure is retried before wrapper promotion.
+: >"$FAKE_DOCKER_CALLS"
+set +e
+FAKE_DOCKER_FAIL_ONCE_SERVICE=app-slot-b \
+  FAKE_DOCKER_FAIL_ONCE_FILE="$test_root/report-failure-once" APP_DIR="$app_dir" \
+  bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" \
+  >"$test_root/install-smoke-retried.out" 2>&1
+install_status=$?
+set -e
+[[ "$install_status" == 0 ]]
+[[ -e "$test_root/report-failure-once" ]]
+assert_contains "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" 'CONTAINER_CLI'
+assert_contains "$FAKE_CRONTAB_FILE" 'BEGIN AIHUB MANAGED JOBS'
+[[ "$(grep -c '^app-slot-b ' "$FAKE_DOCKER_CALLS")" == 3 ]]
+
+# Restore initial fixture state for the persistent post-promotion failure case.
+cat >"$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" <<'STUB'
+#!/usr/bin/env bash
+printf 'old wrapper must remain active until promotion\n'
+STUB
+chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh"
+cat >"$app_dir/ops/host-jobs/aihub.crontab" <<'CRON'
+old template must be restored after failed smoke
+CRON
+cp "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
+: >"$FAKE_DOCKER_CALLS"
 
 docker_call_count="$(wc -l <"$FAKE_DOCKER_CALLS")"
 fail_after_calls=$((docker_call_count + 2))

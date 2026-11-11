@@ -3,6 +3,7 @@ import { PostgresUsageCompletenessReportRepository } from '@/modules/metering/in
 import {
   type UsageCompletenessReport,
   UsageCompletenessReportService,
+  UsageReportDatabaseError,
   UsageReportError,
   type UsageReportErrorCode,
   type UsageReportOperationDefinition,
@@ -153,11 +154,8 @@ export async function runUsageReportCommand(
       new PostgresUsageCompletenessReportRepository(
         await createOperatorMeteringClient(input.databaseUrl),
       );
-  } catch {
-    const error = new UsageReportError(
-      'USAGE_REPORT_DATABASE_FAILURE',
-      'usage report database setup failed',
-    );
+  } catch (cause) {
+    const error = new UsageReportDatabaseError(cause, 'setup');
     emit(formatUsageReportFailure(window, error.code));
     throw error;
   }
@@ -177,12 +175,9 @@ export async function runUsageReportCommand(
 
   try {
     await repository.close?.();
-  } catch {
+  } catch (cause) {
     if (operationError === undefined) {
-      operationError = new UsageReportError(
-        'USAGE_REPORT_DATABASE_FAILURE',
-        'usage report database shutdown failed',
-      );
+      operationError = new UsageReportDatabaseError(cause, 'shutdown');
     }
   }
 

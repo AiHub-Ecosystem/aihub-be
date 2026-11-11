@@ -257,11 +257,27 @@ awk -v app_dir="$APP_DIR" '
   exit 1
 }
 
-if APP_DIR="$APP_DIR" bash "$candidate_wrapper" report; then
+run_candidate_report_smoke() {
+  local attempt code=1
+  for attempt in 1 2 3; do
+    if APP_DIR="$APP_DIR" bash "$candidate_wrapper" report; then
+      return 0
+    else
+      code=$?
+    fi
+    if ((attempt < 3)); then
+      printf 'candidate scheduled-job smoke failed (attempt %s/3); retrying\n' "$attempt" >&2
+      sleep 2
+    fi
+  done
+  printf 'candidate scheduled-job smoke failed before wrapper promotion\n' >&2
+  return "$code"
+}
+
+if run_candidate_report_smoke; then
   :
 else
   code=$?
-  printf 'candidate scheduled-job smoke failed before wrapper promotion\n' >&2
   exit "$code"
 fi
 

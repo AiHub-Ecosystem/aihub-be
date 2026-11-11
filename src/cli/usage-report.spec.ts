@@ -25,7 +25,19 @@ class FakeUsageReportRepository implements UsageReportRepositoryPort {
 
 class FailingUsageReportRepository implements UsageReportRepositoryPort {
   async snapshot(): Promise<readonly UsageReportSnapshotRow[]> {
-    throw new Error('raw database failure');
+    const error = new Error('database failure with SENSITIVE_MARKER');
+    error.name = 'PrismaClientKnownRequestError';
+    Object.assign(error, { code: 'P1001' });
+    throw error;
+  }
+}
+
+class FailingCloseUsageReportRepository extends FakeUsageReportRepository {
+  async close(): Promise<void> {
+    const error = new Error('database failure with SENSITIVE_MARKER');
+    error.name = 'PrismaClientKnownRequestError';
+    Object.assign(error, { code: 'P1001' });
+    throw error;
   }
 }
 
@@ -107,8 +119,9 @@ describe('usage report CLI boundary', () => {
   it('emits no partial success rows when Postgres fails', async () => {
     const lines: string[] = [];
 
-    await expect(
-      runUsageReportCommand({
+    let failure: unknown;
+    try {
+      await runUsageReportCommand({
         databaseUrl: 'postgres://test',
         from,
         to,
@@ -116,8 +129,16 @@ describe('usage report CLI boundary', () => {
         operations,
         repository: new FailingUsageReportRepository(),
         emit: (line) => lines.push(line),
-      }),
-    ).rejects.toMatchObject({ code: 'USAGE_REPORT_DATABASE_FAILURE' });
+      });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
+      code: 'USAGE_REPORT_DATABASE_FAILURE',
+    });
+    const failureMessage = failure instanceof Error ? failure.message : '';
+    expect(failureMessage.includes('P1001')).toBe(true);
+    expect(failureMessage.includes('SENSITIVE_MARKER')).toBe(false);
 
     expect(lines).toEqual([
       JSON.stringify({
@@ -128,6 +149,30 @@ describe('usage report CLI boundary', () => {
         error_code: 'USAGE_REPORT_DATABASE_FAILURE',
       }),
     ]);
+    expect(lines.join(' ')).not.toContain('SENSITIVE_MARKER');
+  });
+
+  it('includes only the bounded database cause when repository close fails', async () => {
+    let failure: unknown;
+    try {
+      await runUsageReportCommand({
+        databaseUrl: 'postgres://test',
+        from,
+        to,
+        now,
+        operations,
+        repository: new FailingCloseUsageReportRepository([]),
+        emit: () => undefined,
+      });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
+      code: 'USAGE_REPORT_DATABASE_FAILURE',
+    });
+    const failureMessage = failure instanceof Error ? failure.message : '';
+    expect(failureMessage.includes('P1001')).toBe(true);
+    expect(failureMessage.includes('SENSITIVE_MARKER')).toBe(false);
   });
 
   it.each([
