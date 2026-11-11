@@ -25,7 +25,7 @@ class SimulatedNetworkRevocationStore
   }): Promise<boolean> {
     this.networkCallCount++;
     // Simulate realistic network round-trip to Redis / PostgreSQL (~1ms)
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 1));
     return this.revokedTokens.has(`${input.issuer}:${input.jti}`);
   }
 
