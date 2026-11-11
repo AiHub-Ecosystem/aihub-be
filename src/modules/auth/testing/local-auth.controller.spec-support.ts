@@ -56,7 +56,10 @@ import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import {
+  USER_ACCESS_TOKEN_REVOCATION_RECORD,
+  type UserAccessTokenRevocationRecordPort,
+} from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import {
   type IssuedVerificationToken,
@@ -353,6 +356,9 @@ export async function createLocalAuthTestContext(
   requestLogStream?: RequestLogStream,
   configureFastify?: (fastify: FastifyInstance) => void,
   clientSecret?: string,
+  wrapRevocations?: (
+    underlying: InMemoryUserAccessTokenRevocationAdapter,
+  ) => UserAccessTokenRevocationRecordPort,
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -368,6 +374,7 @@ export async function createLocalAuthTestContext(
   const refreshTokenIssuer = new RefreshTokenIssuerFake();
   const accessTokenIssuer = new AccessTokenIssuerFake();
   const revocations = new InMemoryUserAccessTokenRevocationAdapter();
+  const revocationRecord = wrapRevocations?.(revocations) ?? revocations;
   const mfa = new MfaFake();
   const accessTokenVerifier: UserAccessTokenVerifierPort = {
     verify: async (token) => {
@@ -424,7 +431,7 @@ export async function createLocalAuthTestContext(
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(accessTokenVerifierOverride ?? accessTokenVerifier)
     .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(revocations)
+    .useValue(revocationRecord)
     .overrideProvider(REFRESH_TOKEN_ISSUER)
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)

@@ -9,6 +9,7 @@ import {
   USER_ID,
   createLocalAuthTestContext,
 } from '@/modules/auth/testing/local-auth.controller.spec-support';
+import { BloomFilterUserAccessTokenRevocationAdapter } from '@/modules/auth/user-access-tokens/infrastructure/bloom-filter/bloom-filter-user-access-token-revocation.adapter';
 import { JoseUserAccessTokenService } from '@/modules/auth/web-sessions/infrastructure/jose-user-access-token.service';
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
@@ -91,6 +92,9 @@ describe('User Access JWT revocation HTTP boundary', () => {
       verifier,
       requestLogs,
       registerRequestCompletionLog,
+      undefined,
+      (underlying) =>
+        new BloomFilterUserAccessTokenRevocationAdapter({ underlying }),
     );
   });
 
@@ -132,6 +136,22 @@ describe('User Access JWT revocation HTTP boundary', () => {
       headers: { authorization: `Bearer ${token}` },
     });
   }
+
+  it('rejects a committed JWT missed by the production filter and keeps its sibling usable', async () => {
+    const target = await accessToken();
+    const sibling = await accessToken();
+    const claims = await verifier.verify(target);
+
+    // Simulate another instance committing the row without delivering Pub/Sub.
+    await context.revocations.revoke({
+      issuer: claims.issuer,
+      jti: claims.jti,
+      effectiveExpiresAt: claims.validUntil,
+    });
+
+    expect((await me(target)).statusCode).toBe(401);
+    expect((await me(sibling)).statusCode).toBe(200);
+  });
 
   it('rejects only the target, allows an unaffected sibling, and replays with 204', async () => {
     const target = await accessToken();
