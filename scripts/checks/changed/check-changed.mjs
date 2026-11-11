@@ -107,6 +107,7 @@ export const GATE_COMMANDS = {
   'test:issue-triage': 'test:issue-triage',
   'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
+  'test:check-staged': 'test:check-staged',
   'test:monitoring-config': 'test:monitoring-config',
   'test:api-compatibility': 'test:api-compatibility',
   'test:shell-specs': 'test:shell-specs',
@@ -272,7 +273,7 @@ function classifyPathGates(p) {
   // commit-msg hook delegates to the commit-message rule, whose spec runs
   // through `test:commit-message`.
   if (path === '.husky/pre-commit') {
-    return ['test:lint-staged'];
+    return ['test:check-staged', 'test:lint-staged'];
   }
   if (path === '.husky/commit-msg') {
     return ['test:commit-message'];
@@ -362,6 +363,7 @@ function classifyPathGates(p) {
       'test:generated-drift',
       'test:issue-triage',
       'test:lint-staged',
+      'test:check-staged',
       'test:secret-scan',
     ];
   }
@@ -446,6 +448,9 @@ function classifyPathGates(p) {
   }
   if (path.includes('lint-staged-config')) {
     return ['lint', 'test:lint-staged'];
+  }
+  if (path.startsWith('scripts/checks/staged/')) {
+    return ['lint', 'test:check-staged'];
   }
   // #1777: the spec pins the format:check command shape and proves the cache
   // cannot mask a real finding, so a change to it runs itself.

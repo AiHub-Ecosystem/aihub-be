@@ -60,6 +60,8 @@
     "check:issue-triage": "node scripts/checks/hooks/check-issue-triage.mjs",
     "test:issue-triage": "node --test scripts/checks/hooks/check-issue-triage.spec.mjs scripts/checks/hooks/issue-triage-hook.spec.mjs",
     "test:lint-staged": "node --test scripts/checks/hooks/lint-staged-config.spec.mjs",
+    "check:staged": "bunx lint-staged --hide-all && node scripts/checks/staged/check-staged.mjs",
+    "test:check-staged": "node --test scripts/checks/staged/check-staged.spec.mjs",
     "test:commit-message": "jest --runTestsByPath scripts/checks/hooks/commit-message.spec.ts",
     "test:format-check": "node --test scripts/checks/changed/format-check-cache.spec.mjs",
     "check:doc-drift": "node scripts/checks/doc-drift/check-doc-drift.mjs",

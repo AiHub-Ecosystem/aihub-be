@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
-await test('staged autofix and the full type-aware Oxlint check run in pre-commit', async () => {
+await test('pre-commit runs the staged check lane before the staged secret scan', async () => {
   const config = await readFile(
     new URL('../../../.lintstagedrc', import.meta.url),
     'utf8',
@@ -23,19 +23,30 @@ await test('staged autofix and the full type-aware Oxlint check run in pre-commi
     new URL('../../../.husky/pre-commit', import.meta.url),
     'utf8',
   );
-  const stagedFix = hook.indexOf('GOMAXPROCS=1 bunx lint-staged --hide-all');
-  const fullTypeAwareLint = hook.indexOf(
-    'GOMAXPROCS=1 bun run oxlint --threads=1 .',
+  const packageJson = await readFile(
+    new URL('../../../package.json', import.meta.url),
+    'utf8',
   );
+  const stagedCheck = hook.indexOf('bun run check:staged');
+  const secretScan = hook.indexOf('gitleaks git --staged');
 
   assert.match(
     config,
     /"\*\.\{ts,mts,cts,js,mjs,cjs\}": \[\s*"oxlint --fix --disable-typescript-plugin"/,
   );
-  assert.ok(stagedFix >= 0 && fullTypeAwareLint > stagedFix);
+  assert.match(
+    config,
+    /"\*\.\{md,yaml,yml\}": "prettier --ignore-unknown --write"/,
+  );
+  assert.match(
+    packageJson,
+    /"check:staged": "bunx lint-staged --hide-all && node scripts\/checks\/staged\/check-staged\.mjs"/,
+  );
+  assert.ok(stagedCheck >= 0 && secretScan > stagedCheck);
+  assert.doesNotMatch(hook, /oxlint[^\n]*\s\./);
 });
 
-await test('type-aware Oxlint rejects floating promises in staged TypeScript and JavaScript', async () => {
+await test('staged type-aware Oxlint profiles reject floating promises in TypeScript and JavaScript', async () => {
   const tempRoot = join(repositoryRoot, 'temp');
   let createdTempRoot = false;
   try {
@@ -70,7 +81,7 @@ await test('type-aware Oxlint rejects floating promises in staged TypeScript and
       writeFile(javascript, 'Promise.resolve();'),
     ]);
 
-    const result = spawnSync(
+    const typeScriptResult = spawnSync(
       'bun',
       [
         'run',
@@ -84,20 +95,40 @@ await test('type-aware Oxlint rejects floating promises in staged TypeScript and
         '--tsconfig',
         tsconfig,
         typescript,
+      ],
+      { cwd: repositoryRoot, encoding: 'utf8' },
+    );
+    const typeScriptOutput = `${typeScriptResult.stdout}\n${typeScriptResult.stderr}`;
+
+    assert.equal(typeScriptResult.error, undefined, typeScriptOutput);
+    assert.equal(typeScriptResult.status, 1, typeScriptOutput);
+    assert.match(
+      typeScriptOutput,
+      /floating-promise\.ts:1:1: .*\[Error\/typescript\(no-floating-promises\)\]/,
+    );
+
+    const javaScriptResult = spawnSync(
+      'bun',
+      [
+        'run',
+        'oxlint',
+        '--type-aware',
+        '--threads=1',
+        '-A',
+        'all',
+        '-D',
+        'typescript/no-floating-promises',
+        '--format=unix',
         javascript,
       ],
       { cwd: repositoryRoot, encoding: 'utf8' },
     );
-    const output = `${result.stdout}\n${result.stderr}`;
+    const javaScriptOutput = `${javaScriptResult.stdout}\n${javaScriptResult.stderr}`;
 
-    assert.equal(result.error, undefined, output);
-    assert.equal(result.status, 1, output);
+    assert.equal(javaScriptResult.error, undefined, javaScriptOutput);
+    assert.equal(javaScriptResult.status, 1, javaScriptOutput);
     assert.match(
-      output,
-      /floating-promise\.ts:1:1: .*\[Error\/typescript\(no-floating-promises\)\]/,
-    );
-    assert.match(
-      output,
+      javaScriptOutput,
       /floating-promise\.mjs:1:1: .*\[Error\/typescript\(no-floating-promises\)\]/,
     );
   } finally {
@@ -118,5 +149,9 @@ await test('the static job runs this suite in CI (#1786)', async () => {
   assert.ok(
     staticJob.includes('bun run test:lint-staged'),
     'the static job must run bun run test:lint-staged',
+  );
+  assert.ok(
+    staticJob.includes('bun run test:check-staged'),
+    'the static job must run bun run test:check-staged',
   );
 });

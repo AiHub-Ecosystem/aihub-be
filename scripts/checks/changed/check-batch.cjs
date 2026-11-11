@@ -54,6 +54,7 @@ const BATCHED_GATES = [
   'test:check-changed',
   'test:issue-triage',
   'test:lint-staged',
+  'test:check-staged',
   'check:doc-drift',
   'test:doc-drift',
   'check:log-redaction',

@@ -192,6 +192,24 @@ const pathCases = [
     ],
   },
   {
+    path: 'scripts/checks/staged/check-staged.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:check-staged',
+    ],
+  },
+  {
+    path: 'scripts/checks/staged/check-staged.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:check-staged',
+    ],
+  },
+  {
     path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
     gates: [
       'check:doc-drift',
@@ -238,6 +256,7 @@ const pathCases = [
     path: '.github/workflows/ci.yml',
     gates: [
       'format:check',
+      'test:check-staged',
       'test:commit-message',
       'test:commit-messages',
       'test:doc-drift',
@@ -407,7 +426,10 @@ const pathCases = [
   { path: '.prettierignore', gates: ['format:check'] },
   { path: '.lintstagedrc', gates: ['test:lint-staged'] },
   // #1767: each husky hook selects the gate that asserts its content.
-  { path: '.husky/pre-commit', gates: ['test:lint-staged'] },
+  {
+    path: '.husky/pre-commit',
+    gates: ['test:check-staged', 'test:lint-staged'],
+  },
   { path: '.husky/commit-msg', gates: ['test:commit-message'] },
   // #1767: the whole checker directory selects the suite that exercises it,
   // not only its accepted-breaking-changes list.
