@@ -56,7 +56,7 @@ describe('LocalSessionService', () => {
   });
 
   it('does not rewrite a legacy hash for an incorrect password', async () => {
-    const { sessions, state, hasher } = localAuth();
+    const { sessions, state, hasher, securityEvents } = localAuth();
     seedActiveAccount(state, LEGACY_PASSWORD_HASH);
     hasher.result = false;
 
@@ -66,6 +66,14 @@ describe('LocalSessionService', () => {
         '203.0.113.7',
       ),
     ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+
+    expect(securityEvents).toEqual([
+      {
+        event: 'login_failed',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
 
     expect(state.accounts.get(USER_ID)?.passwordHash).toBe(
       LEGACY_PASSWORD_HASH,
@@ -148,6 +156,13 @@ describe('LocalSessionService', () => {
       code: 'AUTH_CREDENTIALS_INVALID',
       httpStatus: 401,
     });
+    expect(required.securityEvents).toEqual([
+      expect.objectContaining({
+        event: 'login_failed',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      }),
+    ]);
     expect(required.state.accounts.get(USER_ID)?.passwordHash).toBe(
       LEGACY_PASSWORD_HASH,
     );

@@ -221,8 +221,16 @@ export class PostgresPasswordResetTokenRepository
       // password loses every Customer Web session as well, and because both
       // revocations ride this transaction a failure anywhere rolls both back, so
       // an exchange racing it can never observe a half-revoked account.
-      await revokeUserWebSessions(transaction, inspection.userId, input.now);
-      return { kind: 'reset' };
+      const webSessionsRevoked = await revokeUserWebSessions(
+        transaction,
+        inspection.userId,
+        input.now,
+      );
+      return {
+        kind: 'reset',
+        userId: inspection.userId,
+        webSessionsRevoked,
+      };
     });
   }
 }

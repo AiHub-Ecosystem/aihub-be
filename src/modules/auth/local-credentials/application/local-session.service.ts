@@ -5,10 +5,12 @@ import type {
 } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
+import type { AuthSecurityEventRecorderPort } from '@/modules/auth/shared/application/auth-security-event.port';
 import {
   invalidRefreshToken,
   invalidUserAccessToken,
 } from '@/modules/auth/shared/application/local-auth-errors';
+import { recordCredentialLoginFailure } from '@/modules/auth/shared/application/record-credential-login-failure';
 import type { RefreshSessionRepositoryPort } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import {
   type AuthenticatedCredentials,
@@ -46,6 +48,7 @@ export class LocalSessionService implements LocalSessionPort {
     private readonly sessionIssuers: SessionTokenIssuers,
     private readonly clock: AuthClock,
     private readonly mfa: AuthMfaServicePort,
+    private readonly securityEvents: AuthSecurityEventRecorderPort,
   ) {}
 
   async currentUser(userId: string): Promise<{ readonly username: string }> {
@@ -58,33 +61,56 @@ export class LocalSessionService implements LocalSessionPort {
   }
 
   async login(input: LoginRequest, ip: string): Promise<LoginOutcome> {
-    const credentials = await authenticateCredentials(
-      this.credentials,
-      input,
-      ip,
-    );
-    const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
-    if (mfa.kind === 'required') return { kind: 'mfa-required' };
-    if (mfa.kind === 'invalid') {
-      return rejectCredentials(
-        this.credentials.rateLimiter,
+    let userAccountId: string | undefined;
+    try {
+      const credentials = await authenticateCredentials(
+        this.credentials,
+        input,
         ip,
-        credentials.email,
+        (knownUserAccountId) => {
+          userAccountId = knownUserAccountId;
+        },
       );
+      userAccountId = credentials.userId;
+      const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
+      if (mfa.kind === 'required') return { kind: 'mfa-required' };
+      if (mfa.kind === 'invalid') {
+        return await rejectCredentials(
+          this.credentials.rateLimiter,
+          ip,
+          credentials.email,
+        );
+      }
+      const proof = mfa.kind === 'proved' ? mfa.proof : undefined;
+      const now = this.clock.now();
+      const currentCredentials = await upgradePasswordHashIfNeeded(
+        this.credentials,
+        credentials,
+        input.password,
+        now,
+        ip,
+      );
+      const session = await this.startLoginSession(
+        currentCredentials,
+        now,
+        ip,
+        proof,
+      );
+      this.securityEvents.record({
+        event: 'login_succeeded',
+        userAccountId: credentials.userId,
+        occurredAt: now,
+      });
+      return { kind: 'session', session };
+    } catch (error) {
+      recordCredentialLoginFailure(
+        error,
+        userAccountId,
+        this.clock,
+        this.securityEvents,
+      );
+      throw error;
     }
-    const proof = mfa.kind === 'proved' ? mfa.proof : undefined;
-    const now = this.clock.now();
-    const currentCredentials = await upgradePasswordHashIfNeeded(
-      this.credentials,
-      credentials,
-      input.password,
-      now,
-      ip,
-    );
-    return {
-      kind: 'session',
-      session: await this.startLoginSession(currentCredentials, now, ip, proof),
-    };
   }
 
   /**
@@ -150,6 +176,13 @@ export class LocalSessionService implements LocalSessionPort {
       now,
     });
     if (rotation.kind !== 'rotated') {
+      if (rotation.reason === 'used' || rotation.reason === 'revoked') {
+        this.securityEvents.record({
+          event: 'refresh_reuse',
+          userAccountId: current.userId,
+          occurredAt: now,
+        });
+      }
       await this.enforceRefreshFailureLimits(ip, tokenHash);
       throw invalidRefreshToken();
     }

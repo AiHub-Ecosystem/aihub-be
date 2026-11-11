@@ -554,8 +554,8 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
       );
       expect(results).toEqual(
         firstOperation === 'reset'
-          ? [{ kind: 'reset' }, false]
-          : [true, { kind: 'reset' }],
+          ? [{ kind: 'reset', userId, webSessionsRevoked: 2 }, false]
+          : [true, { kind: 'reset', userId, webSessionsRevoked: 3 }],
       );
       expect(await durableState(userId)).toEqual({
         revokedSessions: firstOperation === 'reset' ? 2 : 3,
@@ -564,12 +564,12 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
         consumedResetTokens: 1,
         passwordHash: resetPasswordHash,
       });
-      expect(
-        await webSessions.findExchangeableWebSession({
-          tokenHash: hash,
-          now: RESET_AT,
-        }),
-      ).toBeUndefined();
+      const exchanged = await webSessions.findWebSessionForExchange({
+        tokenHash: hash,
+      });
+      expect(exchanged?.revokedAt).toEqual(
+        firstOperation === 'reset' ? undefined : RESET_AT,
+      );
     },
   );
 
@@ -582,7 +582,11 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
         passwordHash: resetPasswordHash,
         now: RESET_AT,
       }),
-    ).resolves.toEqual({ kind: 'reset' });
+    ).resolves.toEqual({
+      kind: 'reset',
+      userId,
+      webSessionsRevoked: 2,
+    });
 
     expect(await durableState(userId)).toEqual({
       revokedSessions: 2,
@@ -629,5 +633,63 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
       consumedResetTokens: 0,
       passwordHash: STORED_PASSWORD_HASH,
     });
+  });
+});
+
+describe('Web Session exchange reads on PostgreSQL', () => {
+  it('returns persisted session fields and reports logout revocation count', async () => {
+    const userId = await seedAccount();
+    const expiredHash = await createWebSession(userId, {
+      createdAt: new Date(NOW.getTime() - DAY),
+      expiresAt: new Date(NOW.getTime() - 1),
+    });
+    const revokedHash = await createWebSession(userId, {
+      expiresAt: new Date(NOW.getTime() + DAY),
+    });
+    const activeHash = await createWebSession(userId, {
+      expiresAt: new Date(NOW.getTime() + DAY),
+    });
+
+    expect(
+      await webSessions.findWebSessionForExchange({
+        tokenHash: tokenHash(),
+      }),
+    ).toBeUndefined();
+    expect(
+      await webSessions.findWebSessionForExchange({
+        tokenHash: expiredHash,
+      }),
+    ).toMatchObject({
+      userId,
+      expiresAt: new Date(NOW.getTime() - 1),
+      revokedAt: null,
+    });
+    expect(
+      await webSessions.findWebSessionForExchange({
+        tokenHash: revokedHash,
+      }),
+    ).toMatchObject({ userId, revokedAt: null });
+    expect(
+      await webSessions.findWebSessionForExchange({
+        tokenHash: activeHash,
+      }),
+    ).toMatchObject({ userId, revokedAt: null });
+    expect(
+      await webSessions.revokeWebSession({
+        tokenHash: revokedHash,
+        revokedAt: NOW,
+      }),
+    ).toEqual({ kind: 'revoked', userId, sessionsRevoked: 1 });
+    expect(
+      await webSessions.findWebSessionForExchange({
+        tokenHash: revokedHash,
+      }),
+    ).toMatchObject({ userId, revokedAt: NOW });
+    expect(
+      await webSessions.revokeWebSession({
+        tokenHash: revokedHash,
+        revokedAt: NOW,
+      }),
+    ).toEqual({ kind: 'not_revoked', sessionsRevoked: 0 });
   });
 });

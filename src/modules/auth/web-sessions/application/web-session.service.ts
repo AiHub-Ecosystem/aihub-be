@@ -15,7 +15,9 @@ import type {
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
+import type { AuthSecurityEventRecorderPort } from '@/modules/auth/shared/application/auth-security-event.port';
 import { invalidVerificationToken } from '@/modules/auth/shared/application/local-auth-errors';
+import { recordCredentialLoginFailure } from '@/modules/auth/shared/application/record-credential-login-failure';
 import { type VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
 import { type VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
 import {
@@ -31,6 +33,11 @@ import {
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
 import { webSessionUnavailable } from './web-session-errors';
+import {
+  type WebSessionExchangeLookup,
+  type WebSessionExchangeRefusal,
+  classifyWebSessionForExchange,
+} from './web-session-exchange-policy';
 import { WEB_SESSION_POLICY } from './web-session-policy';
 import { type WebSessionRepositoryPort } from './web-session-repository.port';
 import {
@@ -99,6 +106,7 @@ export class WebSessionService implements WebSessionServicePort {
     private readonly verificationTokens: VerificationTokenPort,
     private readonly accessTokenIssuer: UserAccessTokenIssuerPort,
     private readonly mfa: AuthMfaServicePort,
+    private readonly securityEvents: AuthSecurityEventRecorderPort,
   ) {}
 
   async createWebSession(
@@ -109,48 +117,71 @@ export class WebSessionService implements WebSessionServicePort {
     },
     endUserIp: string,
   ): Promise<CreateWebSessionOutcome> {
-    // The same check, dummy hash, and login limits login applies, so this route
-    // adds no way around them.
-    const credentials = await authenticateCredentials(
-      {
-        userAccounts: this.userAccounts,
-        passwordHasher: this.passwordHasher,
-        rateLimiter: this.rateLimiter,
-      },
-      input,
-      endUserIp,
-    );
-    const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
-    if (mfa.kind === 'required') return { kind: 'mfa-required' };
-    if (mfa.kind === 'invalid') {
-      await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
-    }
-
-    const now = this.clock.now();
-    let currentCredentials: AuthenticatedCredentials;
+    let userAccountId: string | undefined;
     try {
-      currentCredentials = await upgradePasswordHashIfNeeded(
+      // The same check, dummy hash, and login limits login applies, so this route
+      // adds no way around them.
+      const credentials = await authenticateCredentials(
         {
           userAccounts: this.userAccounts,
           passwordHasher: this.passwordHasher,
           rateLimiter: this.rateLimiter,
         },
-        credentials,
-        input.password,
+        input,
+        endUserIp,
+        (knownUserAccountId) => {
+          userAccountId = knownUserAccountId;
+        },
+      );
+      userAccountId = credentials.userId;
+      const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
+      if (mfa.kind === 'required') return { kind: 'mfa-required' };
+      if (mfa.kind === 'invalid') {
+        await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
+      }
+
+      const now = this.clock.now();
+      let currentCredentials: AuthenticatedCredentials;
+      try {
+        currentCredentials = await upgradePasswordHashIfNeeded(
+          {
+            userAccounts: this.userAccounts,
+            passwordHasher: this.passwordHasher,
+            rateLimiter: this.rateLimiter,
+          },
+          credentials,
+          input.password,
+          now,
+          endUserIp,
+        );
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw webSessionUnavailable(error);
+      }
+      const outcome = await this.commitSession(
+        currentCredentials,
+        this.tokenIssuer.issue(now),
         now,
         endUserIp,
+        mfa.kind === 'proved' ? mfa.proof : undefined,
       );
+      if (outcome.kind === 'created') {
+        this.securityEvents.record({
+          event: 'login_succeeded',
+          userAccountId: credentials.userId,
+          occurredAt: now,
+        });
+      }
+      return outcome;
     } catch (error) {
-      if (error instanceof AppError) throw error;
-      throw webSessionUnavailable(error);
+      recordCredentialLoginFailure(
+        error,
+        userAccountId,
+        this.clock,
+        this.securityEvents,
+      );
+      throw error;
     }
-    return this.commitSession(
-      currentCredentials,
-      this.tokenIssuer.issue(now),
-      now,
-      endUserIp,
-      mfa.kind === 'proved' ? mfa.proof : undefined,
-    );
   }
 
   /**
@@ -214,6 +245,17 @@ export class WebSessionService implements WebSessionServicePort {
       return undefined;
     }
 
+    this.securityEvents.record({
+      event: 'verification_sign_in',
+      userAccountId: outcome.userId,
+      occurredAt: now,
+    });
+    this.securityEvents.record({
+      event: 'web_session_created',
+      userAccountId: outcome.userId,
+      source: 'verification_sign_in',
+      occurredAt: now,
+    });
     return { token: token.raw, expiresAt: token.expiresAt };
   }
 
@@ -226,31 +268,37 @@ export class WebSessionService implements WebSessionServicePort {
     input: { readonly token: string | undefined },
     endUserIp: string | undefined,
   ): Promise<IssuedUserAccessToken> {
+    const now = this.clock.now();
     if (input.token === undefined || input.token.length === 0) {
+      this.recordExchangeRefusal({ kind: 'unknown' }, now);
       throw invalidWebSession();
     }
 
     const tokenHash = this.tokenIssuer.hash(input.token);
-    const now = this.clock.now();
 
     let userId: string;
     let sessionId: string;
     try {
-      const session = await this.webSessions.findExchangeableWebSession({
-        tokenHash,
+      const session = classifyWebSessionForExchange(
+        await this.webSessions.findWebSessionForExchange({ tokenHash }),
         now,
-      });
-      // An active account is the condition of the exchange, checked beside the
-      // session rather than inside it: disabling an account has to stop every
-      // session it owns, not revoke them.
-      if (session === undefined) {
+      );
+      if (session.kind !== 'exchangeable') {
+        this.recordExchangeRefusal(session, now);
         await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
+      // An active account is the condition of the exchange, checked beside the
+      // session rather than inside it: disabling an account has to stop every
+      // session it owns, not revoke them.
       const status = await this.userAccounts.findUserAccountStatus(
         session.userId,
       );
       if (status !== 'active') {
+        this.recordExchangeRefusal(
+          { kind: 'inactive_account', userId: session.userId },
+          now,
+        );
         await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
@@ -276,16 +324,17 @@ export class WebSessionService implements WebSessionServicePort {
     });
     const checkedAt = this.clock.now();
     await this.renewSession(tokenHash, checkedAt);
-    let stillExchangeable;
+    let stillExchangeable: WebSessionExchangeLookup;
     try {
-      stillExchangeable = await this.webSessions.findExchangeableWebSession({
-        tokenHash,
-        now: checkedAt,
-      });
+      stillExchangeable = classifyWebSessionForExchange(
+        await this.webSessions.findWebSessionForExchange({ tokenHash }),
+        checkedAt,
+      );
     } catch (error) {
       throw webSessionUnavailable(error);
     }
-    if (stillExchangeable === undefined) {
+    if (stillExchangeable.kind !== 'exchangeable') {
+      this.recordExchangeRefusal(stillExchangeable, checkedAt);
       await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
       throw invalidWebSession();
     }
@@ -303,9 +352,9 @@ export class WebSessionService implements WebSessionServicePort {
    * the exchange's `web_session_exchange_token` dimension is for, and logout
    * does not widen it: presenting a token here does not look one up.
    *
-   * Revoking by hash needs no read: the conditional update matches no row for an
-   * unknown, already-revoked, or expired session, which is the same `204` as a
-   * successful one.
+   * Revoking by hash needs no read: the conditional update reports no change
+   * for an unknown or already-revoked session. Every outcome preserves the same
+   * bodyless `204`.
    */
   async revokeWebSession(input: {
     readonly token: string | undefined;
@@ -314,11 +363,21 @@ export class WebSessionService implements WebSessionServicePort {
       return;
     }
 
+    const revokedAt = this.clock.now();
     try {
-      await this.webSessions.revokeWebSession({
+      const revocation = await this.webSessions.revokeWebSession({
         tokenHash: this.tokenIssuer.hash(input.token),
-        revokedAt: this.clock.now(),
+        revokedAt,
       });
+      if (revocation.kind === 'revoked') {
+        this.securityEvents.record({
+          event: 'web_session_revoked',
+          userAccountId: revocation.userId,
+          trigger: 'logout',
+          sessionsRevoked: revocation.sessionsRevoked,
+          occurredAt: revokedAt,
+        });
+      }
     } catch (error) {
       // The only failure logout may report. A BFF that cannot tell "could not
       // end it" from "already ended" would clear a cookie whose session is
@@ -378,11 +437,52 @@ export class WebSessionService implements WebSessionServicePort {
     if (!created) {
       await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
     }
+    this.securityEvents.record({
+      event: 'web_session_created',
+      userAccountId: credentials.userId,
+      source: 'password_login',
+      occurredAt: now,
+    });
 
     return {
       kind: 'created',
       session: { token: token.raw, expiresAt: token.expiresAt },
     };
+  }
+
+  private recordExchangeRefusal(
+    refusal: WebSessionExchangeRefusal,
+    occurredAt: Date,
+  ): void {
+    switch (refusal.kind) {
+      case 'unknown':
+        this.securityEvents.record({
+          event: 'web_session_exchange_refused_unknown',
+          occurredAt,
+        });
+        return;
+      case 'expired':
+        this.securityEvents.record({
+          event: 'web_session_exchange_refused_expired',
+          userAccountId: refusal.userId,
+          occurredAt,
+        });
+        return;
+      case 'revoked':
+        this.securityEvents.record({
+          event: 'web_session_exchange_refused_revoked',
+          userAccountId: refusal.userId,
+          occurredAt,
+        });
+        return;
+      case 'inactive_account':
+        this.securityEvents.record({
+          event: 'web_session_exchange_refused_inactive_account',
+          userAccountId: refusal.userId,
+          occurredAt,
+        });
+        return;
+    }
   }
 
   /**

@@ -49,8 +49,8 @@ export async function revokeUserWebSessions(
   userId: string,
   revokedAt: Date,
   preservedSessionId?: string,
-): Promise<void> {
-  await client.webSession.updateMany({
+): Promise<number> {
+  const revoked = await client.webSession.updateMany({
     where: {
       userAccountId: userId,
       revokedAt: null,
@@ -60,4 +60,5 @@ export async function revokeUserWebSessions(
     },
     data: { revokedAt },
   });
+  return revoked.count;
 }

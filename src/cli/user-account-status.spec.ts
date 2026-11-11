@@ -86,9 +86,23 @@ describe('runDisableUserAccountCommand', () => {
     expect(repository.disableCalls[0]?.user).toBe('targetuser');
     expect(repository.disableCalls[0]?.actorUsername).toBe('operator_alice');
     expect(repository.closed).toBe(true);
+    expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(
       /Disabled User Account targetuser \(usr_target\) and revoked 2 refresh sessions, 1 web sessions, 1 verification tokens, and 1 password reset tokens; recorded as req_/,
     );
+    const requestId = repository.disableCalls[0]?.requestId;
+    expect(requestId).toMatch(/^req_/);
+    const securityEvent: unknown = JSON.parse(lines[1] ?? 'null');
+    expect(securityEvent).toEqual({
+      event: 'web_session_revoked',
+      request_id: requestId,
+      occurred_at: '2026-11-08T10:00:00.000Z',
+      user_account_id: 'usr_target',
+      trigger: 'account_disabled',
+      sessions_revoked: 1,
+    });
+    expect(lines[1]).not.toContain('targetuser');
+    expect(lines[1]).not.toContain('operator_alice');
   });
 
   it('handles user_not_found', async () => {
@@ -103,7 +117,7 @@ describe('runDisableUserAccountCommand', () => {
     });
 
     expect(outcome).toBe('user_not_found');
-    expect(lines[0]).toBe('User Account unknown_user was not found.');
+    expect(lines).toEqual(['User Account unknown_user was not found.']);
     expect(repository.closed).toBe(true);
   });
 
@@ -119,7 +133,9 @@ describe('runDisableUserAccountCommand', () => {
     });
 
     expect(outcome).toBe('actor_invalid');
-    expect(lines[0]).toBe('bad_operator is not an active AIHUB User Account.');
+    expect(lines).toEqual([
+      'bad_operator is not an active AIHUB User Account.',
+    ]);
     expect(repository.closed).toBe(true);
   });
 
@@ -139,9 +155,9 @@ describe('runDisableUserAccountCommand', () => {
     });
 
     expect(outcome).toBe('unchanged');
-    expect(lines[0]).toBe(
+    expect(lines).toEqual([
       'User Account targetuser (usr_target) is already disabled; nothing was recorded.',
-    );
+    ]);
   });
 });
 

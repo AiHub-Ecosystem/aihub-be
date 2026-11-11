@@ -96,7 +96,11 @@ describe('PostgresPasswordResetTokenRepository', () => {
         passwordHash: input.passwordHash,
         now: input.now,
       }),
-    ).resolves.toEqual({ kind: 'reset' });
+    ).resolves.toEqual({
+      kind: 'reset',
+      userId: USER_ID,
+      webSessionsRevoked: 1,
+    });
 
     expect(script.statements.slice(3).map(({ name }) => name)).toEqual([
       'passwordResetToken.updateMany',

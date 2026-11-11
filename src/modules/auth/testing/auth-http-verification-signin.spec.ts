@@ -101,7 +101,11 @@ describe('local auth HTTP boundary - verification sign-in', () => {
         ]),
       );
       expect(first.payload).not.toContain(binding);
-      expect(c.state.refreshTokens.size).toBe(1);
+      const [registeredAccountId] = c.state.accounts.keys();
+      expect(registeredAccountId).toBeDefined();
+      expect(c.securityEvents.events).toMatchObject([
+        { event: 'verification_sign_in', userAccountId: registeredAccountId },
+      ]);
 
       const replay = await c.app.inject({
         method: 'POST',

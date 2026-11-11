@@ -1,10 +1,11 @@
 import type { InMemoryAuthState } from '@/modules/auth/testing/in-memory-auth.state';
 import type {
   CreateWebSessionInput,
-  ExchangeableWebSession,
-  FindExchangeableWebSessionInput,
+  FindWebSessionForExchangeInput,
   RenewWebSessionInput,
   RevokeWebSessionInput,
+  RevokeWebSessionResult,
+  WebSessionForExchange,
   WebSessionRepositoryPort,
 } from '@/modules/auth/web-sessions/application/web-session-repository.port';
 
@@ -12,16 +13,17 @@ import type {
  * The in-memory Web Session store, and the durable guarantees it has to hold
  * honestly or the unit lane would only be asserting them:
  *
- * - only a row that is neither revoked nor expired can be exchanged;
+ * - session reads return expiry and revocation data; application policy decides
+ *   whether a session can be exchanged;
  * - renewal writes only when the last renewal is older than the throttle the
  *   caller supplies, and only forward — an `expiresAt` at or before the stored
  *   one is refused rather than applied, which is what makes a caller-derived
  *   value safe;
  * - renewal is a single reassignment of the row's own fields, so concurrent
  *   exchanges of one session cannot interleave into a lost or doubled write;
- * - revocation is idempotent and quiet: an unknown, already-revoked, or expired
- *   session reports nothing revoked rather than throwing, which is what makes a
- *   bodyless `204` correct for all of them.
+ * - revocation is idempotent and quiet: an unknown or already-revoked session
+ *   reports nothing revoked rather than throwing; logout preserves its bodyless
+ *   `204` contract for both outcomes.
  */
 export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
   /** Fails the next durable write, as a database outage would. */
@@ -76,21 +78,21 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     return true;
   }
 
-  async findExchangeableWebSession(
-    input: FindExchangeableWebSessionInput,
-  ): Promise<ExchangeableWebSession | undefined> {
+  async findWebSessionForExchange(
+    input: FindWebSessionForExchangeInput,
+  ): Promise<WebSessionForExchange | undefined> {
     if (this.failFindWebSession) {
       throw new Error('durable store unavailable');
     }
     const row = this.state.webSessions.get(input.tokenHash);
-    if (
-      row === undefined ||
-      row.revokedAt !== undefined ||
-      row.expiresAt.getTime() <= input.now.getTime()
-    ) {
-      return undefined;
-    }
-    return { sessionId: row.sessionId, userId: row.userId };
+    return row === undefined
+      ? undefined
+      : {
+          sessionId: row.sessionId,
+          userId: row.userId,
+          expiresAt: row.expiresAt,
+          revokedAt: row.revokedAt ?? null,
+        };
   }
 
   async renewWebSession(input: RenewWebSessionInput): Promise<boolean> {
@@ -112,18 +114,17 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     return true;
   }
 
-  async revokeWebSession(input: RevokeWebSessionInput): Promise<boolean> {
+  async revokeWebSession(
+    input: RevokeWebSessionInput,
+  ): Promise<RevokeWebSessionResult> {
     if (this.failRevokeWebSession) {
       throw new Error('durable store unavailable');
     }
     const row = this.state.webSessions.get(input.tokenHash);
-    // No read-then-decide: the conditional update matches no row for a session
-    // that is unknown, already revoked, or expired, and all three are the same
-    // quiet answer to the caller.
     if (row === undefined || row.revokedAt !== undefined) {
-      return false;
+      return { kind: 'not_revoked', sessionsRevoked: 0 };
     }
     row.revokedAt = input.revokedAt;
-    return true;
+    return { kind: 'revoked', userId: row.userId, sessionsRevoked: 1 };
   }
 }

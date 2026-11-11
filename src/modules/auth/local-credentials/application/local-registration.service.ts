@@ -10,6 +10,7 @@ import {
 import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
+import type { AuthSecurityEventRecorderPort } from '@/modules/auth/shared/application/auth-security-event.port';
 import { invalidVerificationToken } from '@/modules/auth/shared/application/local-auth-errors';
 import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
 import type { VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
@@ -61,6 +62,7 @@ export class LocalRegistrationService implements LocalRegistrationPort {
     private readonly clock: AuthClock,
     /** Tokens issued from now on need the registration password (ADR-0123). */
     private readonly requireVerificationPassword: boolean,
+    private readonly securityEvents: AuthSecurityEventRecorderPort,
   ) {}
 
   async register(
@@ -172,7 +174,17 @@ export class LocalRegistrationService implements LocalRegistrationPort {
       return undefined;
     }
 
-    return issueSession(this.sessionIssuers, outcome.userId, refreshToken);
+    const session = await issueSession(
+      this.sessionIssuers,
+      outcome.userId,
+      refreshToken,
+    );
+    this.securityEvents.record({
+      event: 'verification_sign_in',
+      userAccountId: outcome.userId,
+      occurredAt: now,
+    });
+    return session;
   }
 
   async resend(

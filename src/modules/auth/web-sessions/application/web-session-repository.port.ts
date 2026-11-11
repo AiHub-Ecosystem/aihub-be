@@ -11,14 +11,15 @@ export interface CreateWebSessionInput {
   readonly mfaProof?: MfaSessionProof;
 }
 
-export interface FindExchangeableWebSessionInput {
+export interface FindWebSessionForExchangeInput {
   readonly tokenHash: string;
-  readonly now: Date;
 }
 
-export interface ExchangeableWebSession {
+export interface WebSessionForExchange {
   readonly sessionId: string;
   readonly userId: string;
+  readonly expiresAt: Date;
+  readonly revokedAt: Date | null;
 }
 
 export interface RenewWebSessionInput {
@@ -43,11 +44,19 @@ export interface RevokeWebSessionInput {
   readonly revokedAt: Date;
 }
 
+export type RevokeWebSessionResult =
+  | {
+      readonly kind: 'revoked';
+      readonly userId: string;
+      readonly sessionsRevoked: 1;
+    }
+  | { readonly kind: 'not_revoked'; readonly sessionsRevoked: 0 };
+
 /**
  * One Web Session row: the durable Customer Web login session AIHUB owns.
  *
- * `findExchangeableWebSession` answers only for a row that is neither revoked
- * nor expired, so an exchange never decides expiry for itself.
+ * `findWebSessionForExchange` returns the persisted expiry and revocation
+ * fields. Application policy decides whether the session may be exchanged.
  *
  * `renewWebSession` is the forward-only sliding expiry, and it is one
  * conditional statement: the guards live in the `WHERE` clause, the caller
@@ -56,8 +65,9 @@ export interface RevokeWebSessionInput {
  * and reported as nothing renewed. There is no read-modify-write and no lock,
  * so concurrent BFF instances can exchange the same session freely.
  *
- * Per-session revocation is idempotent. Account-wide revocation belongs to
- * the password-reset transaction, not to this port.
+ * Per-session revocation is idempotent and returns the account/count only when
+ * the conditional update changed a row. Account-wide revocation belongs to the
+ * password-reset transaction, not to this port.
  *
  * Expired and revoked rows are not purged; `0033_web_sessions.sql` carries the
  * `ponytail:` note naming the ceiling.
@@ -67,13 +77,15 @@ export interface WebSessionRepositoryPort {
    * Returns false when credentials changed; throws when persistence failed.
    */
   createWebSession(input: CreateWebSessionInput): Promise<boolean>;
-  findExchangeableWebSession(
-    input: FindExchangeableWebSessionInput,
-  ): Promise<ExchangeableWebSession | undefined>;
+  findWebSessionForExchange(
+    input: FindWebSessionForExchangeInput,
+  ): Promise<WebSessionForExchange | undefined>;
   /** Answers whether the row was renewed; `false` is normal, not a failure. */
   renewWebSession(input: RenewWebSessionInput): Promise<boolean>;
-  /** Answers whether a session was revoked; `false` is normal, not a failure. */
-  revokeWebSession(input: RevokeWebSessionInput): Promise<boolean>;
+  /** Returns the account and count only when a session row was revoked. */
+  revokeWebSession(
+    input: RevokeWebSessionInput,
+  ): Promise<RevokeWebSessionResult>;
 }
 
 export const WEB_SESSION_REPOSITORY = Symbol('WEB_SESSION_REPOSITORY');

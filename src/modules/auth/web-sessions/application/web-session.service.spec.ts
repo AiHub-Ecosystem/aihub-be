@@ -2,6 +2,10 @@ import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import type { AuthMfaServicePort } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import type {
+  AuthSecurityEvent,
+  AuthSecurityEventRecorderPort,
+} from '@/modules/auth/shared/application/auth-security-event.port';
 import {
   createInMemoryAuthState,
   seedAccount,
@@ -101,9 +105,11 @@ class VerificationTokenFake implements VerificationTokenPort {
 
 class UserAccessTokenIssuerFake implements UserAccessTokenIssuerPort {
   lastSession: UserAccessSession | undefined;
+  afterIssue: (() => void) | undefined;
 
   async issue(_userId: string, session?: UserAccessSession) {
     this.lastSession = session;
+    this.afterIssue?.();
     return { token: 'user-access-token', expiresIn: 900 };
   }
 }
@@ -121,6 +127,12 @@ function harness(
   const createWebSession = jest.spyOn(webSessions, 'createWebSession');
   const passwordHasher = new PasswordHasherFake();
   const accessTokens = new UserAccessTokenIssuerFake();
+  const securityEvents: AuthSecurityEvent[] = [];
+  const securityEventRecorder: AuthSecurityEventRecorderPort = {
+    record(event) {
+      securityEvents.push(event);
+    },
+  };
   const service = new WebSessionService(
     webSessions,
     new WebSessionTokenFake(),
@@ -133,6 +145,7 @@ function harness(
     new VerificationTokenFake(),
     accessTokens,
     new LoginMfaFake(mfaResult),
+    securityEventRecorder,
   );
 
   return {
@@ -142,7 +155,27 @@ function harness(
     accessTokens,
     createWebSession,
     updatePasswordHash,
+    securityEvents,
   };
+}
+
+const EXCHANGE_TOKEN = 'web-session-token';
+const EXCHANGE_TOKEN_HASH = `hash:${EXCHANGE_TOKEN}`;
+const EXCHANGE_SESSION_ID = 'wss_01J00000000000000000000000';
+
+function seedExchangeSession(
+  test: ReturnType<typeof harness>,
+  options: { readonly expiresAt?: Date; readonly revokedAt?: Date } = {},
+): void {
+  test.state.webSessions.set(EXCHANGE_TOKEN_HASH, {
+    sessionId: EXCHANGE_SESSION_ID,
+    userId: USER_ID,
+    tokenHash: EXCHANGE_TOKEN_HASH,
+    createdAt: NOW,
+    expiresAt: options.expiresAt ?? new Date(NOW.getTime() + 86_400_000),
+    lastRenewedAt: NOW,
+    revokedAt: options.revokedAt,
+  });
 }
 
 describe('WebSessionService.createWebSession password hash upgrade', () => {
@@ -181,6 +214,14 @@ describe('WebSessionService.createWebSession password hash upgrade', () => {
         '203.0.113.7',
       ),
     ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
+
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'login_failed',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
 
     expect(test.updatePasswordHash).not.toHaveBeenCalled();
     expect(test.createWebSession).not.toHaveBeenCalled();
@@ -243,5 +284,135 @@ describe('WebSessionService access token session identity', () => {
       kind: 'web',
       id: sessionId,
     });
+    expect(test.securityEvents).toEqual([]);
+  });
+});
+
+describe('WebSessionService exchange refusal events', () => {
+  it.each([
+    ['missing', undefined],
+    ['unknown', 'unknown-web-session-token'],
+  ] as const)(
+    'records one unknown-session event for a %s token',
+    async (_kind, token) => {
+      const test = harness();
+
+      await expect(
+        test.service.exchangeWebSession({ token }, undefined),
+      ).rejects.toMatchObject({ code: 'AUTH_WEB_SESSION_INVALID' });
+
+      expect(test.securityEvents).toEqual([
+        { event: 'web_session_exchange_refused_unknown', occurredAt: NOW },
+      ]);
+      expect(JSON.stringify(test.securityEvents)).not.toContain(
+        token ?? EXCHANGE_TOKEN,
+      );
+    },
+  );
+
+  it('records an expired-session refusal with the known account ID', async () => {
+    const test = harness();
+    seedExchangeSession(test, { expiresAt: new Date(NOW.getTime() - 1) });
+
+    await expect(
+      test.service.exchangeWebSession({ token: EXCHANGE_TOKEN }, undefined),
+    ).rejects.toMatchObject({ code: 'AUTH_WEB_SESSION_INVALID' });
+
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'web_session_exchange_refused_expired',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
+    expect(JSON.stringify(test.securityEvents)).not.toContain(EXCHANGE_TOKEN);
+  });
+
+  it('records a revoked-session refusal with the known account ID', async () => {
+    const test = harness();
+    seedExchangeSession(test, { revokedAt: NOW });
+
+    await expect(
+      test.service.exchangeWebSession({ token: EXCHANGE_TOKEN }, undefined),
+    ).rejects.toMatchObject({ code: 'AUTH_WEB_SESSION_INVALID' });
+
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'web_session_exchange_refused_revoked',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
+  });
+
+  it('records an inactive-account refusal with the known account ID', async () => {
+    const test = harness();
+    seedExchangeSession(test);
+    test.state.accounts.get(USER_ID)!.status = 'disabled';
+
+    await expect(
+      test.service.exchangeWebSession({ token: EXCHANGE_TOKEN }, undefined),
+    ).rejects.toMatchObject({ code: 'AUTH_WEB_SESSION_INVALID' });
+
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'web_session_exchange_refused_inactive_account',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
+  });
+
+  it('records a concurrent revocation after signing as one refusal', async () => {
+    const test = harness();
+    seedExchangeSession(test);
+    test.accessTokens.afterIssue = () => {
+      const session = test.state.webSessions.get(EXCHANGE_TOKEN_HASH);
+      if (session === undefined) {
+        throw new Error('expected the seeded Web Session');
+      }
+      session.revokedAt = NOW;
+    };
+
+    await expect(
+      test.service.exchangeWebSession({ token: EXCHANGE_TOKEN }, undefined),
+    ).rejects.toMatchObject({ code: 'AUTH_WEB_SESSION_INVALID' });
+
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'web_session_exchange_refused_revoked',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
+  });
+});
+
+describe('WebSessionService logout revocation events', () => {
+  it('records the account and number of sessions revoked by logout', async () => {
+    const test = harness();
+    seedExchangeSession(test);
+
+    await expect(
+      test.service.revokeWebSession({ token: EXCHANGE_TOKEN }),
+    ).resolves.toBeUndefined();
+
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'web_session_revoked',
+        userAccountId: USER_ID,
+        trigger: 'logout',
+        sessionsRevoked: 1,
+        occurredAt: NOW,
+      },
+    ]);
+  });
+
+  it('does not record a revocation event for an unknown token', async () => {
+    const test = harness();
+
+    await test.service.revokeWebSession({ token: 'unknown-web-session-token' });
+
+    expect(test.securityEvents).toEqual([]);
   });
 });

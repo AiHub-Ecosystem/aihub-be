@@ -67,6 +67,16 @@ export async function runDisableUserAccountCommand(
   emit(
     `Disabled User Account ${result.username} (${result.userId}) and revoked ${refreshTokens} refresh sessions, ${webSessions} web sessions, ${verificationTokens} verification tokens, and ${passwordResetTokens} password reset tokens; recorded as ${requestId}.`,
   );
+  emit(
+    JSON.stringify({
+      event: 'web_session_revoked',
+      request_id: requestId,
+      occurred_at: context.occurredAt.toISOString(),
+      user_account_id: result.userId,
+      trigger: 'account_disabled',
+      sessions_revoked: webSessions,
+    }),
+  );
   return result.kind;
 }
 

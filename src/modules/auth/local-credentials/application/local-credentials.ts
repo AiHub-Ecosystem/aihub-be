@@ -92,8 +92,10 @@ export async function rejectCredentials(
   rateLimiter: AuthRateLimiterPort,
   ip: string,
   email: string,
+  afterRateLimit?: () => void,
 ): Promise<never> {
   await consumeLoginFailureLimits(rateLimiter, ip, email);
+  afterRateLimit?.();
   throw invalidCredentials();
 }
 
@@ -112,6 +114,7 @@ export async function authenticateCredentials(
   ports: CredentialCheckPorts,
   input: { readonly email: string; readonly password: string },
   ip: string,
+  onInvalidCredentials?: (userAccountId: string | undefined) => void,
 ): Promise<AuthenticatedCredentials> {
   let normalized: { readonly email: string; readonly password: string };
   try {
@@ -136,7 +139,9 @@ export async function authenticateCredentials(
     !passwordMatches ||
     identity.status !== 'active'
   ) {
-    return rejectCredentials(ports.rateLimiter, ip, normalized.email);
+    return rejectCredentials(ports.rateLimiter, ip, normalized.email, () =>
+      onInvalidCredentials?.(identity?.userId),
+    );
   }
 
   return {

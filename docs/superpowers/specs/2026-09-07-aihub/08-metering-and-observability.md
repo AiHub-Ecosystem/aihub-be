@@ -178,6 +178,7 @@ aihub_argon2_queue_waits_total                      counter
 aihub_argon2_queue_refusals_total                   counter
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_rejected_total{reason}                         counter
+aihub_auth_security_events_total{event}               counter
 aihub_speaking_audio_url_rejected_total{reason}      counter
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total{seam}                   counter
@@ -194,6 +195,21 @@ aihub_downstream_pool_queued{origin}
 The Argon2 counters record process-wide queue waits and refusals without
 request or tenant labels. Refusals use their own counter; `aihub_rejected_total`
 remains owned by #200.
+
+`aihub_auth_security_events_total{event}` increments once per recorded Auth
+security event. Its fixed `event` values are `refresh_reuse`,
+`password_reset_completed`, `login_succeeded`, `login_failed`,
+`verification_sign_in`, `web_session_created`,
+`web_session_exchange_refused_unknown`,
+`web_session_exchange_refused_expired`,
+`web_session_exchange_refused_revoked`,
+`web_session_exchange_refused_inactive_account`, `web_session_revoked`, and
+`web_session_client_secret_guard_failed`. `event` is the only metric label;
+it never carries an account, user, request, credential, or IP dimension.
+Request-path events emit one structured JSON line with request ID and time,
+the account ID when known, and fixed event-specific fields. These fields are
+not metric labels. Event logs never contain email, passwords, raw tokens or
+token hashes, session cookies, raw IP addresses, or request bodies.
 
 `aihub_rejected_total` counts a request once at the admission decision that
 refuses it, not by re-deriving a reason from its response. Its fixed `reason`
@@ -230,6 +246,16 @@ incremented in fixed, zero-seeded PostgreSQL rows and exported by the existing
 PostgreSQL exporter as the same metric family on `job="aihub-postgres"`.
 Request-path samples remain process-local on the app targets; queries combining
 both sources aggregate by `seam` across jobs.
+
+One-shot account-disable commands cannot expose their process-local counter to
+a later scrape. Their `web_session_revoked` count is instead aggregated from
+the append-only `user_account_status_audits` table and exported by the
+PostgreSQL monitoring function as the same metric family on
+`job="aihub-postgres"`. This durable aggregate counts successful account
+disables, one event per disable rather than one per revoked session; the
+structured CLI event carries the actual `sessions_revoked` count. It exposes no
+account or actor identity.
+Queries combining app and PostgreSQL samples aggregate by `event`.
 
 The `operation` label comes from the bounded operation catalog. A response
 without a catalog operation uses the fixed value `unmatched`, the same sentinel

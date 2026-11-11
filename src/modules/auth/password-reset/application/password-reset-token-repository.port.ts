@@ -11,7 +11,11 @@ export type PasswordResetTokenInvalidReason =
   | 'consumed';
 
 export type PasswordResetResult =
-  | { readonly kind: 'reset' }
+  | {
+      readonly kind: 'reset';
+      readonly userId: string;
+      readonly webSessionsRevoked: number;
+    }
   | {
       readonly kind: 'invalid';
       readonly reason: PasswordResetTokenInvalidReason;
