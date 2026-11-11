@@ -14,20 +14,15 @@ const srcDir = join(root, 'src');
 
 /** @param {string} dir @returns {string[]} */
 function collectFiles(dir) {
-  /** @type {string[]} */
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectFiles(p));
-    else if (
-      entry.isFile() &&
-      p.endsWith('.ts') &&
-      !p.endsWith('.spec.ts') &&
-      !p.includes(`${sep}testing${sep}`)
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts'),
     )
-      out.push(p);
-  }
-  return out;
+    .map((entry) => join(entry.parentPath ?? entry.path, entry.name))
+    .filter((p) => !p.includes(`${sep}testing${sep}`));
 }
 
 /** @param {string} file @returns {number} */

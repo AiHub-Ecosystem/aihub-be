@@ -49,6 +49,10 @@ describe('nightly mutation testing', () => {
       resolve('.github/workflows/mutation-testing.yml'),
       'utf8',
     );
+    const generateTypesStep = workflow.indexOf(
+      'run: bun run generate:prisma-client',
+    );
+    const mutationStep = workflow.indexOf('name: Run StrykerJS');
 
     expect(config.mutate).toEqual(MUTATION_TARGETS);
     expect(config.testRunner).toBe('jest');
@@ -71,6 +75,9 @@ describe('nightly mutation testing', () => {
     expect(config.tempDirName).toBe('temp/stryker-mutation');
     expect(config.reporters).toEqual(expect.arrayContaining(['html', 'json']));
     expect(config.thresholds.break).toBe(95);
+    expect(mutationStep).toBeGreaterThanOrEqual(0);
+    expect(generateTypesStep).toBeGreaterThanOrEqual(0);
+    expect(generateTypesStep).toBeLessThan(mutationStep);
     expect(workflow).toMatch(/^  schedule:/m);
     expect(workflow).not.toMatch(/^  pull_request:/m);
   });
