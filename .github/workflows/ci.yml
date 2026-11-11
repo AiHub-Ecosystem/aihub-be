@@ -273,6 +273,9 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
 
     steps:
       - name: Check out repository
@@ -298,10 +301,39 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Find the latest completed main CI run
+        id: flaky-history-run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=20" \
+            --jq '.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure") | .id' \
+            | head -n 1)"
+          printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Restore recent flaky-test history
+        if: steps.flaky-history-run.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: flaky-test-history
+          run-id: ${{ steps.flaky-history-run.outputs.run_id }}
+          path: temp/flaky-tests
+          github-token: ${{ github.token }}
+
       # Bun owns assertions; Jest/SWC still emits the branch coverage report
       # consumed by the merged-coverage gate.
-      - name: Run unit tests with Bun
-        run: bun run test
+      - name: Generate the runtime Prisma client
+        run: node scripts/generate/generate-prisma-client.mjs --runtime
+
+      - name: Run unit tests with retries and flakiness tracking
+        run: node scripts/ci/flaky-tests/run.mjs
+        env:
+          AIHUB_FLAKY_TEST_RETRIES: 2
+          AIHUB_FLAKY_RATE_THRESHOLD: 0.05
 
       - name: Generate the unit coverage report with Jest
         run: bun run coverage:unit
@@ -365,6 +397,17 @@ jobs:
 
       - name: Exercise Speaking gateway smoke identity handling with stubs
         run: bash test/ops/speaking-gateway-smoke.spec.sh
+
+      - name: Upload flaky-test history and report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-test-history
+          path: |
+            temp/flaky-tests/history.json
+            temp/flaky-tests/report.json
+          if-no-files-found: ignore
+          retention-days: 90
 
   dev-restart-budget:
     name: Dev restart budget
