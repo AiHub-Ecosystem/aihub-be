@@ -63,7 +63,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 /** The issuer and audience this deployment publishes for User Access JWTs. */
 const ACCESS_TOKEN_ISSUER = 'https://api.test.aihub.example.com';
-const ACCESS_TOKEN_AUDIENCE = 'aihub-user-api';
+const ACCESS_TOKEN_AUDIENCE = 'aihub-user-api:production';
 
 class FakeClock {
   value = new Date(NOW.getTime());
@@ -360,9 +360,8 @@ describe('web session HTTP boundary', () => {
       expect(verified.jti.length).toBeGreaterThan(0);
     });
 
-    // The same issuer signs a login access token, so the claim set, audience,
-    // and issuer are asserted rather than inferred: the existing Bearer
-    // boundary has to accept this JWT without knowing where it came from.
+    // The exchange uses the same scope-bound issuer as login, so the claim
+    // set, audience, and issuer are asserted rather than inferred.
     it('issues the same claim set, audience, and issuer as a login access token', async () => {
       const token = await webSessionToken();
 

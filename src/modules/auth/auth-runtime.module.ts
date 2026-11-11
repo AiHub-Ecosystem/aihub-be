@@ -82,6 +82,7 @@ import {
 import { PostgresVerificationTokenRepository } from './verification/infrastructure/postgres-verification-token.repository';
 import { REFRESH_SESSION_REPOSITORY } from './web-sessions/application/refresh-session-repository.port';
 import { REFRESH_TOKEN_ISSUER } from './web-sessions/application/refresh-token.port';
+import { userAccessTokenAudience } from './web-sessions/application/user-access-token-audience';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
@@ -381,7 +382,9 @@ import { WebSessionController } from './web-sessions/presentation/web-session.co
           privateKeyPem: runtime.privateKeyPem,
           keyId: runtime.keyId,
           issuer,
-          audience: 'aihub-user-api',
+          audience: userAccessTokenAudience(
+            configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+          ),
           expiresInSeconds: 900,
           clockSkewSeconds: 60,
         });

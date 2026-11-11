@@ -13,7 +13,7 @@ import { JoseUserAccessTokenService } from '@/modules/auth/web-sessions/infrastr
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const ISSUER = 'https://api.test.aihub.example.com';
-const AUDIENCE = 'aihub-user-api';
+const AUDIENCE = 'aihub-user-api:production';
 const KEY_ID = 'user-access-test';
 const OTHER_USER_ID = 'usr_01J00000000000000000000001';
 
@@ -71,19 +71,29 @@ function invalidSignature(token: string): string {
 describe('User Access JWT revocation HTTP boundary', () => {
   let context: LocalAuthTestContext;
   let verifier: JoseUserAccessTokenService;
+  let sandboxVerifier: JoseUserAccessTokenService;
   let privateKey: KeyObject;
   const requestLogs = new CapturedLog();
 
   beforeAll(async () => {
     const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
     privateKey = keys.privateKey;
+    const privateKeyPem = keys.privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString();
     verifier = new JoseUserAccessTokenService({
-      privateKeyPem: keys.privateKey
-        .export({ type: 'pkcs8', format: 'pem' })
-        .toString(),
+      privateKeyPem,
       keyId: KEY_ID,
       issuer: ISSUER,
       audience: AUDIENCE,
+      expiresInSeconds: 900,
+      clockSkewSeconds: 60,
+    });
+    sandboxVerifier = new JoseUserAccessTokenService({
+      privateKeyPem,
+      keyId: KEY_ID,
+      issuer: ISSUER,
+      audience: 'aihub-user-api:sandbox',
       expiresInSeconds: 900,
       clockSkewSeconds: 60,
     });
@@ -106,6 +116,30 @@ describe('User Access JWT revocation HTTP boundary', () => {
       email: 'person@example.com',
       username: 'person_01',
       passwordHash: '$argon2id$fake',
+    });
+  });
+
+  it('issues and verifies User Access JWTs only within their runtime database scope', async () => {
+    const productionToken = await verifier.issue(USER_ID);
+    const sandboxToken = await sandboxVerifier.issue(USER_ID);
+
+    await expect(verifier.verify(productionToken.token)).resolves.toMatchObject(
+      {
+        userId: USER_ID,
+      },
+    );
+    await expect(
+      sandboxVerifier.verify(sandboxToken.token),
+    ).resolves.toMatchObject({
+      userId: USER_ID,
+    });
+    await expect(verifier.verify(sandboxToken.token)).rejects.toMatchObject({
+      code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+    });
+    await expect(
+      sandboxVerifier.verify(productionToken.token),
+    ).rejects.toMatchObject({
+      code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
     });
   });
 
