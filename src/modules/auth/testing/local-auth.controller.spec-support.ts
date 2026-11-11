@@ -356,9 +356,7 @@ export async function createLocalAuthTestContext(
   requestLogStream?: RequestLogStream,
   configureFastify?: (fastify: FastifyInstance) => void,
   clientSecret?: string,
-  wrapRevocations?: (
-    underlying: InMemoryUserAccessTokenRevocationAdapter,
-  ) => UserAccessTokenRevocationRecordPort,
+  revocationRecordOverride?: UserAccessTokenRevocationRecordPort,
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -374,7 +372,6 @@ export async function createLocalAuthTestContext(
   const refreshTokenIssuer = new RefreshTokenIssuerFake();
   const accessTokenIssuer = new AccessTokenIssuerFake();
   const revocations = new InMemoryUserAccessTokenRevocationAdapter();
-  const revocationRecord = wrapRevocations?.(revocations) ?? revocations;
   const mfa = new MfaFake();
   const accessTokenVerifier: UserAccessTokenVerifierPort = {
     verify: async (token) => {
@@ -431,7 +428,7 @@ export async function createLocalAuthTestContext(
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(accessTokenVerifierOverride ?? accessTokenVerifier)
     .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(revocationRecord)
+    .useValue(revocationRecordOverride ?? revocations)
     .overrideProvider(REFRESH_TOKEN_ISSUER)
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)

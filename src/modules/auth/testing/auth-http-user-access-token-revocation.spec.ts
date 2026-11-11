@@ -4,6 +4,7 @@ import { SignJWT } from 'jose';
 
 import type { RequestLogStream } from '@/common/observability/request-logger';
 import { seedAccount } from '@/modules/auth/testing/in-memory-auth.state';
+import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing/in-memory-user-access-token-revocation.adapter';
 import {
   type LocalAuthTestContext,
   USER_ID,
@@ -73,6 +74,8 @@ describe('User Access JWT revocation HTTP boundary', () => {
   let context: LocalAuthTestContext;
   let verifier: JoseUserAccessTokenService;
   let privateKey: KeyObject;
+  let revocationStore: InMemoryUserAccessTokenRevocationAdapter;
+  let productionRevocationAdapter: BloomFilterUserAccessTokenRevocationAdapter;
   const requestLogs = new CapturedLog();
 
   beforeAll(async () => {
@@ -88,22 +91,28 @@ describe('User Access JWT revocation HTTP boundary', () => {
       expiresInSeconds: 900,
       clockSkewSeconds: 60,
     });
+    revocationStore = new InMemoryUserAccessTokenRevocationAdapter();
+    productionRevocationAdapter =
+      new BloomFilterUserAccessTokenRevocationAdapter({
+        underlying: revocationStore,
+      });
     context = await createLocalAuthTestContext(
       verifier,
       requestLogs,
       registerRequestCompletionLog,
       undefined,
-      (underlying) =>
-        new BloomFilterUserAccessTokenRevocationAdapter({ underlying }),
+      productionRevocationAdapter,
     );
   });
 
   afterAll(async () => {
     await context.app.close();
+    await productionRevocationAdapter.close();
   });
 
   beforeEach(() => {
     context.reset();
+    revocationStore.reset();
     requestLogs.reset();
     seedAccount(context.state, {
       userId: USER_ID,
@@ -143,7 +152,7 @@ describe('User Access JWT revocation HTTP boundary', () => {
     const claims = await verifier.verify(target);
 
     // Simulate another instance committing the row without delivering Pub/Sub.
-    await context.revocations.revoke({
+    await revocationStore.revoke({
       issuer: claims.issuer,
       jti: claims.jti,
       effectiveExpiresAt: claims.validUntil,
@@ -168,7 +177,7 @@ describe('User Access JWT revocation HTTP boundary', () => {
     expect((await revoke(sibling, target)).statusCode).toBe(204);
 
     const claims = await verifier.verify(target);
-    const records = [...context.revocations.records.values()];
+    const records = [...revocationStore.records.values()];
     expect(records).toEqual([
       {
         issuer: claims.issuer,
@@ -223,7 +232,7 @@ describe('User Access JWT revocation HTTP boundary', () => {
         error: { code: 'AUTH_USER_ACCESS_TOKEN_INVALID' },
       });
     }
-    expect(context.revocations.records.size).toBe(0);
+    expect(revocationStore.records.size).toBe(0);
   });
 
   it('keeps a revocation active through the verifier skew boundary', async () => {
@@ -236,21 +245,21 @@ describe('User Access JWT revocation HTTP boundary', () => {
 
     const beforeBoundary = new Date(claims.validUntil.getTime() - 1);
     await expect(
-      context.revocations.isRevoked({
+      revocationStore.isRevoked({
         issuer: claims.issuer,
         jti: claims.jti,
         now: beforeBoundary,
       }),
     ).resolves.toBe(true);
     await expect(
-      context.revocations.isRevoked({
+      revocationStore.isRevoked({
         issuer: claims.issuer,
         jti: claims.jti,
         now: claims.validUntil,
       }),
     ).resolves.toBe(true);
     await expect(
-      context.revocations.isRevoked({
+      revocationStore.isRevoked({
         issuer: claims.issuer,
         jti: claims.jti,
         now: new Date(claims.validUntil.getTime() + 1),
@@ -262,21 +271,21 @@ describe('User Access JWT revocation HTTP boundary', () => {
     const caller = await accessToken();
     const target = await accessToken();
 
-    context.revocations.failLookup = true;
+    revocationStore.failLookup = true;
     const protectedRequest = await me(caller);
     expect(protectedRequest.statusCode).toBe(503);
     expect(protectedRequest.json()).toMatchObject({
       error: { code: 'DATABASE_UNAVAILABLE', retryable: true },
     });
 
-    context.revocations.failLookup = false;
-    context.revocations.failRevoke = true;
+    revocationStore.failLookup = false;
+    revocationStore.failRevoke = true;
     const revokeRequest = await revoke(caller, target);
     expect(revokeRequest.statusCode).toBe(503);
     expect(revokeRequest.json()).toMatchObject({
       error: { code: 'DATABASE_UNAVAILABLE', retryable: true },
     });
-    expect(context.revocations.records.size).toBe(0);
+    expect(revocationStore.records.size).toBe(0);
   });
 
   it('validates the request shape before writing', async () => {
@@ -289,6 +298,6 @@ describe('User Access JWT revocation HTTP boundary', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(context.revocations.records.size).toBe(0);
+    expect(revocationStore.records.size).toBe(0);
   });
 });
