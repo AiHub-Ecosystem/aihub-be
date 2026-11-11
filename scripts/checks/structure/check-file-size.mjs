@@ -6,7 +6,7 @@
  * The historical grandfather list was removed when its tracked splits landed.
  */
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import process from 'node:process';
 
 const root = process.cwd();
@@ -23,15 +23,11 @@ function collectFiles(dir) {
       entry.isFile() &&
       p.endsWith('.ts') &&
       !p.endsWith('.spec.ts') &&
-      !p.includes(`${pathSep()}testing${pathSep()}`)
+      !p.includes(`${sep}testing${sep}`)
     )
       out.push(p);
   }
   return out;
-}
-/** @returns {string} */
-function pathSep() {
-  return process.platform === 'win32' ? '\\\\' : '/';
 }
 
 /** @param {string} file @returns {number} */
