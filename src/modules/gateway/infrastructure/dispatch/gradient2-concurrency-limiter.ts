@@ -58,7 +58,9 @@ export class Gradient2Limit {
       this.warmupCount += 1;
       this.warmupSum += rttMs;
       this.longRtt = this.warmupSum / this.warmupCount;
-    } else {
+    } else if (inFlight < this.estimatedLimit / 2 || rttMs < this.longRtt) {
+      // Refresh baseline only at low load or on recovery, so sustained overload
+      // cannot drift it upward toward degraded latency.
       this.longRtt = this.longRtt * (1 - this.factor) + rttMs * this.factor;
     }
 

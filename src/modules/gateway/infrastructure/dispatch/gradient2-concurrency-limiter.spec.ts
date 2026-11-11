@@ -54,6 +54,38 @@ describe('Gradient2Limit', () => {
     limit.onSample(1_000, 10);
     expect(limit.getRttMinMs()).toBe(18_939);
   });
+  it('stays pinned at minLimit through 2000+ sustained degraded samples', () => {
+    const limit = new Gradient2Limit();
+    for (let sample = 0; sample < 12; sample += 1) {
+      limit.onSample(1_000, 0);
+    }
+    for (let sample = 0; sample < 200; sample += 1) {
+      limit.onSample(20_000, 10);
+    }
+    expect(limit.getLimit()).toBe(2);
+
+    for (let sample = 0; sample < 2_000; sample += 1) {
+      limit.onSample(20_000, 2);
+      expect(limit.getLimit()).toBe(2);
+    }
+  });
+
+  it('recovers baseline and scales back to maxLimit when latency normalizes', () => {
+    const limit = new Gradient2Limit();
+    for (let sample = 0; sample < 12; sample += 1) {
+      limit.onSample(1_000, 0);
+    }
+    for (let sample = 0; sample < 500; sample += 1) {
+      limit.onSample(20_000, 10);
+    }
+    expect(limit.getLimit()).toBe(2);
+
+    for (let sample = 0; sample < 2_000; sample += 1) {
+      limit.onSample(1_000, 10);
+    }
+    expect(limit.getLimit()).toBe(20);
+    expect(limit.getRttMinMs()).toBeLessThanOrEqual(1_100);
+  });
 });
 
 describe('Gradient2ConcurrencyLimiter', () => {
