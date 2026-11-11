@@ -217,6 +217,9 @@ async function main(): Promise<void> {
       );
     } else {
       expectStatus(previousScopeProbe, 401, 'N-1 scope-bound audience probe');
+      report.push(
+        'WARNING: N-1 rejected the scope-bound User Access JWT; after rollback, affected clients may need to refresh or sign in again.',
+      );
       previousUserToken = jwt(userAccessKey['user-access-jwt'].private_key_pem);
       const previousLegacyProbe = await request(
         PREVIOUS_PORT,
