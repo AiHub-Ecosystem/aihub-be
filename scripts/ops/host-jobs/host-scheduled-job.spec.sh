@@ -85,9 +85,11 @@ cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" \
   "$app_dir/scripts/ops/host-jobs/"
 cp "$repository_root/scripts/ops/host-jobs/install-host-jobs.sh" \
   "$app_dir/scripts/ops/host-jobs/"
+cp "$repository_root/scripts/ops/host-jobs/finish-host-jobs.sh" \
+  "$app_dir/scripts/ops/host-jobs/"
 cp "$repository_root/ops/host-jobs/aihub.crontab" \
   "$app_dir/.aihub-host-jobs-candidate/aihub.crontab"
-chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh"
+chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" "$app_dir/scripts/ops/host-jobs/finish-host-jobs.sh"
 
 cat >"$app_dir/scripts/ops/blue-green/blue-green-host.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -416,6 +418,10 @@ cat >"$bin_dir/pgrep" <<'STUB'
 #!/usr/bin/env bash
 [[ "${1:-}" == -f && "${2:-}" == *host-scheduled-job* ]]
 printf '%s\n' "$2" >"$FAKE_PGREP_PATTERN_FILE"
+if [[ -e "${FAKE_BACKUP_ACTIVE_FILE:-}" ]]; then
+  [[ "$2" == *backup-postgres* ]] && exit 0
+  exit 1
+fi
 remaining="$(cat "$FAKE_PGREP_REMAINING_FILE")"
 if ((remaining > 0)); then
   printf '%s\n' "$((remaining - 1))" >"$FAKE_PGREP_REMAINING_FILE"
@@ -542,6 +548,8 @@ assert_contains "$FAKE_PGREP_PATTERN_FILE" \
   '/scripts/ops/host-jobs/host-scheduled-job\.sh'
 assert_contains "$FAKE_PGREP_PATTERN_FILE" \
   '/scripts/ops/host-scheduled-job\.sh'
+assert_contains "$FAKE_PGREP_PATTERN_FILE" \
+  '/scripts/ops/backups/backup-postgres\.sh'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
   >"$test_root/suspend-retry.out"
 assert_contains "$test_root/suspend-retry.out" 'already suspended and drained'
@@ -572,5 +580,93 @@ assert_contains "$FAKE_CRONTAB_FILE" '# BEGIN AIHUB MANAGED JOBS'
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" restore
 cmp -s "$test_root/crontab.before-suspend" "$FAKE_CRONTAB_FILE"
 [[ ! -e "$app_dir/.aihub-host-jobs-state" ]]
+
+# A backup already running at pause time must finish before suspend returns.
+backup_active="$test_root/backup-active"
+backup_finished="$test_root/backup-finished"
+export FAKE_BACKUP_ACTIVE_FILE="$backup_active"
+: >"$backup_active"
+: >"$FAKE_PGREP_REMAINING_FILE"
+backup_started_at=$(date +%s)
+(
+  sleep 2
+  rm -f -- "$backup_active"
+  : >"$backup_finished"
+) &
+backup_pid=$!
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend
+wait "$backup_pid"
+backup_elapsed=$(( $(date +%s) - backup_started_at ))
+[[ -e "$backup_finished" && "$backup_elapsed" -ge 1 ]]
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" restore
+unset FAKE_BACKUP_ACTIVE_FILE
+
+# An incomplete backup must preserve the live crontab and explain recovery.
+mkdir "$app_dir/.aihub-host-jobs-state"
+printf '0 2 * * * unrelated-job\n' >"$FAKE_CRONTAB_FILE"
+printf 'saved but missing presence marker\n' >"$app_dir/.aihub-host-jobs-state/crontab"
+cp "$FAKE_CRONTAB_FILE" "$test_root/crontab.before-damaged-restore"
+set +e
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend \
+  >"$test_root/suspend-damaged.out" 2>&1
+suspend_status=$?
+set -e
+[[ "$suspend_status" == 1 ]]
+cmp -s "$test_root/crontab.before-damaged-restore" "$FAKE_CRONTAB_FILE"
+assert_contains "$test_root/suspend-damaged.out" 'inspect the saved backup before manual recovery'
+set +e
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" install \
+  >"$test_root/install-damaged.out" 2>&1
+install_damaged_status=$?
+set -e
+[[ "$install_damaged_status" == 1 ]]
+cmp -s "$test_root/crontab.before-damaged-restore" "$FAKE_CRONTAB_FILE"
+assert_contains "$test_root/install-damaged.out" 'inspect the saved backup before manual recovery'
+[[ -e "$app_dir/.aihub-host-jobs-state" ]]
+set +e
+APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" restore \
+  >"$test_root/restore-damaged.out" 2>&1
+restore_status=$?
+set -e
+[[ "$restore_status" == 1 ]]
+cmp -s "$test_root/crontab.before-damaged-restore" "$FAKE_CRONTAB_FILE"
+assert_contains "$test_root/restore-damaged.out" 'inspect the saved backup before manual recovery'
+[[ -e "$app_dir/.aihub-host-jobs-state" ]]
+
+# A Production-success/Sandbox-rollback outcome keeps the schedule suspended
+# and signals the operator until a retry aligns both active revisions.
+rm -rf -- "$app_dir/.aihub-host-jobs-state"
+cp "$test_root/crontab.before" "$FAKE_CRONTAB_FILE"
+AIHUB_HOST_JOB_METRICS_DIR="$test_root/metrics" APP_DIR="$app_dir" \
+  bash "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" suspend
+assert_contains "$test_root/metrics/host-jobs-suspended.prom" 'reason="deployment"'
+suspension_since=$(awk '$1 == "aihub_host_jobs_suspended_since_timestamp_seconds" { print $2 }' "$test_root/metrics/host-jobs-suspended.prom")
+cat >"$app_dir/scripts/ops/blue-green/blue-green-host.sh" <<'STATUS'
+#!/usr/bin/env bash
+printf 'production active_slot=b sha=cccccccccccccccccccccccccccccccccccccccc service=app-slot-b\n'
+printf 'sandbox active_slot=a sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb service=app-sandbox\n'
+STATUS
+set +e
+AIHUB_HOST_JOB_METRICS_DIR="$test_root/metrics" APP_DIR="$app_dir" \
+  bash "$app_dir/scripts/ops/host-jobs/finish-host-jobs.sh" finish failure \
+  cccccccccccccccccccccccccccccccccccccccc >"$test_root/mixed-revisions.out" 2>&1
+finish_status=$?
+set -e
+[[ "$finish_status" == 1 ]]
+assert_contains "$test_root/mixed-revisions.out" 'host jobs remain suspended'
+assert_not_contains "$FAKE_CRONTAB_FILE" 'host-scheduled-job.sh'
+[[ -d "$app_dir/.aihub-host-jobs-state" ]]
+assert_contains "$test_root/metrics/host-jobs-suspended.prom" 'reason="mixed_revisions"'
+[[ "$(awk '$1 == "aihub_host_jobs_suspended_since_timestamp_seconds" { print $2 }' "$test_root/metrics/host-jobs-suspended.prom")" == "$suspension_since" ]]
+cat >"$app_dir/scripts/ops/blue-green/blue-green-host.sh" <<'STATUS'
+#!/usr/bin/env bash
+printf 'production active_slot=b sha=cccccccccccccccccccccccccccccccccccccccc service=app-slot-b\n'
+printf 'sandbox active_slot=a sha=cccccccccccccccccccccccccccccccccccccccc service=app-sandbox\n'
+STATUS
+AIHUB_HOST_JOB_METRICS_DIR="$test_root/metrics" APP_DIR="$app_dir" \
+  bash "$app_dir/scripts/ops/host-jobs/finish-host-jobs.sh" finish success \
+  cccccccccccccccccccccccccccccccccccccccc
+assert_contains "$FAKE_CRONTAB_FILE" 'BEGIN AIHUB MANAGED JOBS'
+[[ ! -e "$test_root/metrics/host-jobs-suspended.prom" ]]
 
 printf 'host installer test passed: smoke rollback, schedule suspend/drain/restore\n'

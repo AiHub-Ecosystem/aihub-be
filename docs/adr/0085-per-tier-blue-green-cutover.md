@@ -2,7 +2,7 @@
 
 - Status: Accepted; amended by [ADR-0121](0121-organization-name-in-invitation-email.md) and, for the drain budget, by [ADR-0143](0143-public-v2-serves-ai-writing-v3-grading.md)
 - Date: 2026-10-09
-- Related: [#224](https://github.com/AiHub-Ecosystem/aihub-be/issues/224), [#114](https://github.com/AiHub-Ecosystem/aihub-be/issues/114), [#113](https://github.com/AiHub-Ecosystem/aihub-be/issues/113), [#289](https://github.com/AiHub-Ecosystem/aihub-be/issues/289), [#111](https://github.com/AiHub-Ecosystem/aihub-be/issues/111), [#112](https://github.com/AiHub-Ecosystem/aihub-be/issues/112), [ADR-0064](0064-ci-publishes-the-image-it-booted.md), [ADR-0076](0076-terminus-readiness-and-opossum-breakers.md), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md), [ADR-0121](0121-organization-name-in-invitation-email.md)
+- Related: [#224](https://github.com/AiHub-Ecosystem/aihub-be/issues/224), [#114](https://github.com/AiHub-Ecosystem/aihub-be/issues/114), [#113](https://github.com/AiHub-Ecosystem/aihub-be/issues/113), [#289](https://github.com/AiHub-Ecosystem/aihub-be/issues/289), [#111](https://github.com/AiHub-Ecosystem/aihub-be/issues/111), [#112](https://github.com/AiHub-Ecosystem/aihub-be/issues/112), [#709](https://github.com/AiHub-Ecosystem/aihub-be/issues/709), [ADR-0064](0064-ci-publishes-the-image-it-booted.md), [ADR-0076](0076-terminus-readiness-and-opossum-breakers.md), [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md), [ADR-0121](0121-organization-name-in-invitation-email.md)
 - Amends: [deployment roadmap §N.1–N.3](../superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md)
 
 The deployment roadmap's earlier four-vCPU, two-replica rolling design does not match the shared production host or the approved release path. The live host has two vCPUs and also runs AI Speaking and shared dependencies. Follow this ADR for deployment work; keep the roadmap's other historical architecture details out of the active rollout contract.
@@ -27,3 +27,5 @@ migrations. The narrowly scoped Organization-name constraint exception recorded
 in ADR-0121 amends this rule: its expected N-1 rejection must be reported by the
 gate, and no release may describe that result as universal write compatibility.
 This decision does not permit changes to other nginx sites or host ports 80/443.
+
+**Amended 2026-11-11 (#709).** Keep the managed host-job schedule suspended whenever active tiers run mixed revisions, including after a failed partial rollout. The shared wrapper and helpers may not be compatible with both releases. CD records any suspension that remains after its recovery steps in the node-exporter textfile metrics and alerts operators immediately. A later CD retry may resume a valid saved suspension; restore or install the schedule only after active tier revisions are aligned. Damaged or ambiguous suspension state fails closed and requires operator inspection.

@@ -16,6 +16,8 @@ candidate_template="$candidate_dir/aihub.crontab"
 wrapper="$APP_DIR/scripts/ops/host-jobs/host-scheduled-job.sh"
 template="$APP_DIR/ops/host-jobs/aihub.crontab"
 state_dir="$APP_DIR/.aihub-host-jobs-state"
+metrics_dir=${AIHUB_HOST_JOB_METRICS_DIR:-$HOME/.aihub-host-job-metrics}
+suspension_metric="$metrics_dir/host-jobs-suspended.prom"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf -- "$tmp_dir"' EXIT
 current="$tmp_dir/current"
@@ -78,6 +80,49 @@ verify_crontab() {
   cmp -s "$1" "$readback"
 }
 
+record_suspension() {
+  [[ -e "$suspension_metric" ]] && return 0
+  mkdir -p -- "$metrics_dir" && chmod 755 "$metrics_dir" || return 1
+  local now tmp
+  now=$(date +%s)
+  tmp="$suspension_metric.tmp"
+  {
+    printf 'aihub_host_jobs_suspended{reason="deployment"} 1\n'
+    printf 'aihub_host_jobs_suspended_since_timestamp_seconds %s\n' "$now"
+  } >"$tmp" && chmod 644 "$tmp" && mv -f -- "$tmp" "$suspension_metric" || {
+    rm -f -- "$tmp"
+    return 1
+  }
+}
+
+clear_suspension() {
+  rm -f -- "$suspension_metric" "$suspension_metric.tmp"
+}
+
+invalid_suspension_state() {
+  printf 'saved AIHUB host-job suspension state is invalid at %s; inspect the saved backup before manual recovery\n' \
+    "$state_dir" >&2
+  return 1
+}
+
+validate_suspension_state() {
+  [[ -d "$state_dir" && ! -L "$state_dir" &&
+    -f "$state_dir/crontab" && ! -L "$state_dir/crontab" ]] || {
+    invalid_suspension_state
+    return 1
+  }
+  if [[ -e "$state_dir/crontab-present" || -L "$state_dir/crontab-present" ]]; then
+    [[ -f "$state_dir/crontab-present" && ! -L "$state_dir/crontab-present" &&
+      ! -s "$state_dir/crontab-present" ]] || {
+      invalid_suspension_state
+      return 1
+    }
+  elif [[ -s "$state_dir/crontab" ]]; then
+    invalid_suspension_state
+    return 1
+  fi
+}
+
 restore_suspended_crontab() {
   if [[ -f "$state_dir/crontab-present" ]]; then
     crontab "$state_dir/crontab" || return 1
@@ -103,7 +148,7 @@ drain_host_jobs() {
     return 1
   }
   local app_dir_pattern="${APP_DIR//./\\.}"
-  local job_pattern="$app_dir_pattern/scripts/ops/host-jobs/host-scheduled-job\\.sh|$app_dir_pattern/scripts/ops/host-scheduled-job\\.sh|$app_dir_pattern/scripts/ops/host-jobs/container-watchdog\\.sh|(^|/)aihub-ops-job\\.sh([[:space:]]|$)|(^|/)aihub-avatar-sweep\\.sh([[:space:]]|$)"
+  local job_pattern="$app_dir_pattern/scripts/ops/host-jobs/host-scheduled-job\\.sh|$app_dir_pattern/scripts/ops/host-scheduled-job\\.sh|$app_dir_pattern/scripts/ops/host-jobs/container-watchdog\\.sh|$app_dir_pattern/scripts/ops/backups/backup-postgres\\.sh([[:space:]]|$)|(^|/)aihub-ops-job\\.sh([[:space:]]|$)|(^|/)aihub-avatar-sweep\\.sh([[:space:]]|$)"
   local drain_deadline=$((SECONDS + 900))
   while pgrep -f "$job_pattern" >/dev/null; do
     if ((SECONDS >= drain_deadline)); then
@@ -116,26 +161,15 @@ drain_host_jobs() {
 
 case "$command" in
   suspend)
-    if [[ -e "$state_dir" ]]; then
-      [[ -d "$state_dir" && ! -L "$state_dir" && -f "$state_dir/crontab" && ! -L "$state_dir/crontab" ]] || {
-        printf 'saved AIHUB host-job suspension state is invalid\n' >&2
-        exit 1
-      }
-      if [[ -e "$state_dir/crontab-present" ]]; then
-        [[ -f "$state_dir/crontab-present" && ! -L "$state_dir/crontab-present" && ! -s "$state_dir/crontab-present" ]] || {
-          printf 'saved AIHUB host-job suspension state is invalid\n' >&2
-          exit 1
-        }
-      elif [[ -s "$state_dir/crontab" ]]; then
-        printf 'saved AIHUB host-job suspension state is invalid\n' >&2
-        exit 1
-      fi
+    if [[ -e "$state_dir" || -L "$state_dir" ]]; then
+      validate_suspension_state || exit 1
       read_crontab
       filter_managed_crontab "$current" "$filtered"
       if ! cmp -s "$current" "$filtered"; then
         printf 'AIHUB host-job suspension backup exists but managed jobs remain in the crontab\n' >&2
         exit 1
       fi
+      record_suspension || exit 1
       drain_host_jobs || exit 1
       printf 'AIHUB host jobs are already suspended and drained\n'
       exit 0
@@ -152,29 +186,43 @@ case "$command" in
     if ! crontab "$next" || ! verify_crontab "$next"; then
       if restore_suspended_crontab; then
         rm -rf -- "$state_dir"
+        clear_suspension
       else
         printf 'could not restore the saved crontab; backup retained at %s\n' "$state_dir" >&2
+        record_suspension || true
       fi
       printf 'could not suspend AIHUB host jobs\n' >&2
       exit 1
     fi
-    if ! drain_host_jobs; then
+    record_suspension || {
       if restore_suspended_crontab; then rm -rf -- "$state_dir"; fi
+      printf 'could not record the AIHUB host-job suspension\n' >&2
+      exit 1
+    }
+    if ! drain_host_jobs; then
+      if restore_suspended_crontab; then
+        rm -rf -- "$state_dir"
+        clear_suspension
+      else
+        record_suspension || true
+      fi
       exit 1
     fi
     printf 'suspended and drained AIHUB host jobs\n'
     exit 0
     ;;
   restore)
-    [[ -d "$state_dir" ]] || {
+    if [[ ! -e "$state_dir" && ! -L "$state_dir" ]]; then
       printf 'no suspended AIHUB host-job schedule to restore\n'
       exit 0
-    }
+    fi
+    validate_suspension_state || exit 1
     if ! restore_suspended_crontab; then
       printf 'could not restore the saved crontab; backup retained at %s\n' "$state_dir" >&2
       exit 1
     fi
     rm -rf -- "$state_dir"
+    clear_suspension
     printf 'restored the previous AIHUB host-job crontab\n'
     exit 0
     ;;
@@ -184,6 +232,10 @@ case "$command" in
     exit 2
     ;;
 esac
+
+if [[ -e "$state_dir" || -L "$state_dir" ]]; then
+  validate_suspension_state || exit 1
+fi
 
 [[ -s "$candidate_wrapper" && -s "$candidate_template" ]] || {
   printf 'scheduled-job wrapper or crontab template is missing\n' >&2
@@ -310,4 +362,5 @@ transaction_active=false
 if [[ -d "$state_dir" ]]; then
   rm -rf -- "$state_dir"
 fi
+clear_suspension
 printf 'installed AIHUB scheduled jobs from %s\n' "$APP_DIR"

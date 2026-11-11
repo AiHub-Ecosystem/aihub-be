@@ -697,6 +697,27 @@ tests:
               description: "aihub-production-app has served customer-operation requests while its own Tempo span metric reports no new spans. Check the OTLP endpoint, HTTPS allowlist, receiver, and Tempo metrics-generator remote-write path."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#trace-delivery
 
+  # #709: a host-job suspension alerts immediately and clears after restoration.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_host_jobs_suspended{reason="mixed_revisions"}'
+        values: "1 1 0 0"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: AIHUBHostJobsSuspended
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              reason: mixed_revisions
+            exp_annotations:
+              summary: "AIHUB host-job schedule remains suspended"
+              description: "The host-job schedule suspension remains active (reason=mixed_revisions); see the deployment runbook."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/deploy-vps.md#scheduled-operator-jobs
+      - eval_time: 2m
+        alertname: AIHUBHostJobsSuspended
+        exp_alerts: []
+
   # Monitoring probes alone are not customer traffic.
   - interval: 1m
     input_series:
