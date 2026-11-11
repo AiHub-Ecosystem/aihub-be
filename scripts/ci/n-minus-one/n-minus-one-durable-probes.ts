@@ -77,6 +77,7 @@ export function classifyZeroWidthOrganizationWrite(
   };
 }
 
+/** Confirms the predecessor can replay candidate writes from durable storage. */
 export async function verifyDurableReads(input: {
   readonly database: Pool;
   readonly organizationCreateKey: string;

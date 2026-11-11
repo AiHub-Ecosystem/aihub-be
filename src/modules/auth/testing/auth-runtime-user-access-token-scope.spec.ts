@@ -1,4 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
+import { decodeJwt } from 'jose';
 
 import { appConfig } from '@/config/runtime-configuration';
 import { AuthRuntimeModule } from '@/modules/auth/auth-runtime.module';
@@ -91,6 +92,11 @@ describe('Auth runtime User Access JWT scope', () => {
       productionIssuer.issue('usr_01J00000000000000000000000'),
       sandboxIssuer.issue('usr_01J00000000000000000000000'),
     ]);
+
+    expect(decodeJwt(productionToken.token).aud).toBe(
+      'aihub-user-api:production',
+    );
+    expect(decodeJwt(sandboxToken.token).aud).toBe('aihub-user-api:sandbox');
 
     await expect(
       productionVerifier.verify(productionToken.token),

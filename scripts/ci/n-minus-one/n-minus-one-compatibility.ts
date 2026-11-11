@@ -37,6 +37,7 @@ import {
 import { verifyAdditiveVaultKeyRollback } from './n-minus-one-vault-rehearsal';
 import { requireSharedRedisEndpoints } from './redis-endpoint-compatibility';
 
+/** Compares candidate and predecessor images to guard deploy and rollback behavior. */
 async function main(): Promise<void> {
   const candidateImage = required('CANDIDATE_IMAGE');
   const previousImage = required('PREVIOUS_IMAGE');
