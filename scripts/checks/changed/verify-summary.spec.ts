@@ -41,7 +41,7 @@ describe('summarize', () => {
     const log = [
       '$ bun run knip && bun run lint',
       '$ node scripts/checks/knip.mjs',
-      '$ oxlint . && biome check .',
+      '$ bun lint --no-script --type-aware --max-warnings=0 . && biome check .',
       `src/a.spec.ts:25:5: ${ESC}[31merror${ESC}[39m jest(no-conditional-expect): Unexpected conditional expect`,
       'error: script "lint" exited with code 1',
       'error: script "verify" exited with code 1',
@@ -50,7 +50,9 @@ describe('summarize', () => {
     const text = summarize(log, 1, '/tmp/v.log');
 
     expect(text.split('\n')[0]).toBe('verify: FAIL (exit 1)');
-    expect(text).toContain('failed step: oxlint . && biome check .');
+    expect(text).toContain(
+      'failed step: bun lint --no-script --type-aware --max-warnings=0 . && biome check .',
+    );
     expect(text).toContain(
       'src/a.spec.ts:25:5: error jest(no-conditional-expect)',
     );
@@ -127,7 +129,7 @@ describe('summarize', () => {
 
   it('does not blame memory for an ordinary failure', () => {
     const log = [
-      '$ oxlint .',
+      '$ bun lint --no-script --type-aware --max-warnings=0 .',
       'error: script "verify" exited with code 1',
     ].join('\n');
 

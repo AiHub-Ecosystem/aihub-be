@@ -1,6 +1,6 @@
 # oxlint lints, Biome formats
 
-Status: accepted
+Status: accepted; linter choice superseded by ADR-0161.
 
 The repository splits static analysis between two tools. oxlint owns linting; Biome keeps formatting and `organizeImports` and has its linter switched off. A single tool would be simpler, and the split is the thing a future reader is most likely to question, so the reason is recorded here rather than left to be inferred from two config files that each look arbitrary alone.
 

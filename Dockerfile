@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Bun installs the dependencies; Node stays the runtime. Installed with npm
 # because the base image ships Node and npm, not Bun.
-RUN npm install --global bun@1.4.4
+RUN npm install --global bun@1.4.4-canary.20261109.1
 
 COPY package.json bun.lock ./
 RUN HUSKY=0 bun install --frozen-lockfile

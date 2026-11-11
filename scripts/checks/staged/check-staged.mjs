@@ -46,11 +46,12 @@ export function runStagedChecks({ stagedFiles, runCommand: run = runCommand }) {
   let exitCode = 0;
 
   if (typescriptFiles.length > 0) {
-    exitCode = run('bun', [
-      'run',
-      'oxlint',
+    exitCode = run(process.execPath, [
+      'lint',
+      '--no-script',
       '--type-aware',
       '--threads=1',
+      '--format=unix',
       '--tsconfig',
       'tsconfig.json',
       ...typescriptFiles,
@@ -59,23 +60,24 @@ export function runStagedChecks({ stagedFiles, runCommand: run = runCommand }) {
   }
 
   if (javascriptFiles.length > 0) {
-    // shortcut: JavaScript checks run no-floating-promises only until tsgolint resolves script types per staged file.
-    exitCode = run('bun', [
-      'run',
-      'oxlint',
+    // shortcut: Staged JavaScript checks only floating promises; broaden after type-aware JS parity is verified.
+    exitCode = run(process.execPath, [
+      'lint',
+      '--no-script',
       '--type-aware',
       '--threads=1',
       '-A',
       'all',
       '-D',
       'typescript/no-floating-promises',
+      '--format=unix',
       ...javascriptFiles,
     ]);
     if (exitCode !== 0) return exitCode;
   }
 
   if (sourceFiles.length > 0) {
-    exitCode = run('bun', [
+    exitCode = run(process.execPath, [
       'x',
       'jest',
       '--findRelatedTests',

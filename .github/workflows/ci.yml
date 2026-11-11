@@ -132,7 +132,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -286,7 +286,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -380,7 +380,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -418,7 +418,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -549,7 +549,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -627,7 +627,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -725,7 +725,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -778,7 +778,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -966,7 +966,7 @@ jobs:
           node-version: 22
 
       - name: Set up Bun
-        run: npm install --global bun@1.4.4
+        run: npm install --global bun@1.4.4-canary.20261109.1
 
       - name: Cache Bun packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

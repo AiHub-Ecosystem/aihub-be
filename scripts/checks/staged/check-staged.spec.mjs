@@ -27,12 +27,13 @@ await test('checks only staged source files and finds their related Jest tests',
   assert.equal(exitCode, 0);
   assert.deepEqual(calls, [
     [
-      'bun',
+      process.execPath,
       [
-        'run',
-        'oxlint',
+        'lint',
+        '--no-script',
         '--type-aware',
         '--threads=1',
+        '--format=unix',
         '--tsconfig',
         'tsconfig.json',
         'src/feature.ts',
@@ -40,21 +41,22 @@ await test('checks only staged source files and finds their related Jest tests',
       ],
     ],
     [
-      'bun',
+      process.execPath,
       [
-        'run',
-        'oxlint',
+        'lint',
+        '--no-script',
         '--type-aware',
         '--threads=1',
         '-A',
         'all',
         '-D',
         'typescript/no-floating-promises',
+        '--format=unix',
         'scripts/checks/example.mjs',
       ],
     ],
     [
-      'bun',
+      process.execPath,
       [
         'x',
         'jest',
@@ -108,12 +110,13 @@ await test('stops after the first failing staged check', () => {
   assert.equal(exitCode, 1);
   assert.deepEqual(calls, [
     [
-      'bun',
+      process.execPath,
       [
-        'run',
-        'oxlint',
+        'lint',
+        '--no-script',
         '--type-aware',
         '--threads=1',
+        '--format=unix',
         '--tsconfig',
         'tsconfig.json',
         'src/feature.ts',

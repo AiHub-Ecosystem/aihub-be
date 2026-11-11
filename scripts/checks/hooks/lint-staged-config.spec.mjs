@@ -32,7 +32,7 @@ await test('pre-commit runs the staged check lane before the staged secret scan'
 
   assert.match(
     config,
-    /"\*\.\{ts,mts,cts,js,mjs,cjs\}": \[\s*"oxlint --fix --disable-typescript-plugin"/,
+    /"\*\.\{ts,mts,cts,js,mjs,cjs\}": \[\s*"bun lint --no-script --no-type-aware --fix"/,
   );
   assert.match(
     config,
@@ -40,13 +40,13 @@ await test('pre-commit runs the staged check lane before the staged secret scan'
   );
   assert.match(
     packageJson,
-    /"check:staged": "bunx lint-staged --hide-all && node scripts\/checks\/staged\/check-staged\.mjs"/,
+    /"check:staged": "bunx lint-staged --hide-all && bun scripts\/checks\/staged\/check-staged\.mjs"/,
   );
   assert.ok(stagedCheck >= 0 && secretScan > stagedCheck);
   assert.doesNotMatch(hook, /oxlint[^\n]*\s\./);
 });
 
-await test('staged type-aware Oxlint profiles reject floating promises in TypeScript and JavaScript', async () => {
+await test('staged type-aware Bun lint profiles reject floating promises in TypeScript and JavaScript', async () => {
   const tempRoot = join(repositoryRoot, 'temp');
   let createdTempRoot = false;
   try {
@@ -84,11 +84,11 @@ await test('staged type-aware Oxlint profiles reject floating promises in TypeSc
     const typeScriptResult = spawnSync(
       'bun',
       [
-        'run',
-        'oxlint',
+        'lint',
+        '--no-script',
         '--type-aware',
         '--threads=1',
-        // Pin one format: oxlint otherwise picks it from the environment
+        // Pin one format: Bun otherwise picks it from the environment
         // (`::error` annotations under GITHUB_ACTIONS, another shape under a
         // coding agent), and the match below reads only this one.
         '--format=unix',
@@ -110,8 +110,8 @@ await test('staged type-aware Oxlint profiles reject floating promises in TypeSc
     const javaScriptResult = spawnSync(
       'bun',
       [
-        'run',
-        'oxlint',
+        'lint',
+        '--no-script',
         '--type-aware',
         '--threads=1',
         '-A',

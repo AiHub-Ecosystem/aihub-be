@@ -1,23 +1,20 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
   // `correctness` only. Every other category was measured against this
   // codebase before being left off; the numbers and the reasoning are in
   // https://github.com/AiHub-Ecosystem/aihub-be/issues/106#issuecomment-5770026510
   //
-  // Severity lives here rather than in a `--deny-warnings` flag: oxlint exits
-  // 0 on warnings, so `bun run lint` would report findings and still pass. Keeping
-  // it in the config stops `bun run lint` and `.husky/pre-commit` from drifting.
+  // Severity stays in the config so the full-repo and staged Bun lint profiles
+  // use the same rules and fail on the same findings.
   "options": {
     "typeAware": true
   },
   "categories": {
     "correctness": "error"
   },
-  // `typescript`, `unicorn` and `oxc` are on by default. The other four are the
-  // reason for adopting oxlint at all: Biome's `recommended` set has no import,
-  // promise, Node or Jest rules. `jest` accounts for 18 of the 23 findings;
-  // `import`, `promise` and `node` contribute nothing at `correctness` today;
-  // they were enabled ahead of #110, whose type-aware rules are now on below.
+  // Bun reads these Oxlint-compatible plugin namespaces as native rules.
+  // Biome's `recommended` set has no import, promise, Node or Jest rules;
+  // `jest` accounts for 18 of the 23 findings. The import, promise and node
+  // plugins were enabled ahead of #110, whose type-aware rules are below.
   "plugins": [
     "typescript",
     "unicorn",
