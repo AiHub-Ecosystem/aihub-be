@@ -351,6 +351,7 @@ export interface LocalAuthTestContext {
   reset: () => void;
 }
 
+/** Creates an isolated Auth app with in-memory adapters and optional overrides. */
 export async function createLocalAuthTestContext(
   accessTokenVerifierOverride?: UserAccessTokenVerifierPort,
   requestLogStream?: RequestLogStream,
