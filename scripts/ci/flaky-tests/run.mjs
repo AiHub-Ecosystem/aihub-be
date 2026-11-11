@@ -13,10 +13,9 @@ const {
 } = flakyTests;
 
 /**
- * @typedef {{file: string, name: string, reason: string, className?: string}} FlakyExemption
- * @typedef {{file: string, name: string, className: string, line: string, runs: number, flakyRuns: number, durationsMs: number[], lastSeenAt: string, exempt: boolean}} FlakyTestHistory
- * @typedef {{at: string, tests: number, flakes: number, attempts: number}} FlakyRunHistory
- * @typedef {{schemaVersion: 1, runs: FlakyRunHistory[], tests: Record<string, FlakyTestHistory>}} FlakyHistory
+ * @typedef {NonNullable<Parameters<typeof createFlakyReport>[1]>} FlakyReportOptions
+ * @typedef {NonNullable<FlakyReportOptions['exemptions']>[number]} FlakyExemption
+ * @typedef {NonNullable<FlakyReportOptions['history']>} FlakyHistory
  */
 
 const outputDir = resolve(
