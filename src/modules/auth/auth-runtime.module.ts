@@ -114,6 +114,28 @@ import {
 } from './web-sessions/presentation/web-session-client.guard';
 import { WebSessionController } from './web-sessions/presentation/web-session.controller';
 
+/** Binds access-token verification to the configured database scope. */
+function createUserAccessTokenCrypto(
+  provider: RuntimeSecretProvider,
+  configuration: ConfigType<typeof appConfig>,
+): JoseUserAccessTokenService {
+  const issuer = configuration.AIHUB_USER_ACCESS_ISSUER?.trim();
+  if (issuer === undefined || issuer.length === 0) {
+    throw internalError('AIHUB_USER_ACCESS_ISSUER is required');
+  }
+  const runtime = provider.getSnapshot().userAccessJwt;
+  return new JoseUserAccessTokenService({
+    privateKeyPem: runtime.privateKeyPem,
+    keyId: runtime.keyId,
+    issuer,
+    audience: userAccessTokenAudience(
+      configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+    ),
+    expiresInSeconds: 900,
+    clockSkewSeconds: 60,
+  });
+}
+
 @Module({
   imports: [
     RuntimeConfigurationModule,
@@ -369,26 +391,7 @@ import { WebSessionController } from './web-sessions/presentation/web-session.co
     },
     {
       provide: USER_ACCESS_TOKEN_CRYPTO,
-      useFactory: (
-        provider: RuntimeSecretProvider,
-        configuration: ConfigType<typeof appConfig>,
-      ): JoseUserAccessTokenService => {
-        const issuer = configuration.AIHUB_USER_ACCESS_ISSUER?.trim();
-        if (issuer === undefined || issuer.length === 0) {
-          throw internalError('AIHUB_USER_ACCESS_ISSUER is required');
-        }
-        const runtime = provider.getSnapshot().userAccessJwt;
-        return new JoseUserAccessTokenService({
-          privateKeyPem: runtime.privateKeyPem,
-          keyId: runtime.keyId,
-          issuer,
-          audience: userAccessTokenAudience(
-            configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
-          ),
-          expiresInSeconds: 900,
-          clockSkewSeconds: 60,
-        });
-      },
+      useFactory: createUserAccessTokenCrypto,
       inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
     },
     {
