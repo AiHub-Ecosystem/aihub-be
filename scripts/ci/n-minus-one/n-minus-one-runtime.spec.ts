@@ -1,9 +1,12 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { decodeJwt } from 'jose';
 
 import {
   API_HOST,
   assertNMinusOneGatePasses,
+  jwt,
   request,
   safeContainerError,
   waitReady,
@@ -27,6 +30,18 @@ it('redacts credentials from a container startup error', () => {
   ).toBe(
     'FATAL failed to connect [database URL] with Bearer [redacted] and api_key=[redacted]',
   );
+});
+
+it('signs compatibility User Access JWTs with the requested audience', () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const privateKeyPem = privateKey
+    .export({ type: 'pkcs8', format: 'pem' })
+    .toString();
+
+  expect(decodeJwt(jwt(privateKeyPem, 'aihub-user-api:production')).aud).toBe(
+    'aihub-user-api:production',
+  );
+  expect(decodeJwt(jwt(privateKeyPem)).aud).toBe('aihub-user-api');
 });
 
 it('sends the configured production host to the isolated image', async () => {

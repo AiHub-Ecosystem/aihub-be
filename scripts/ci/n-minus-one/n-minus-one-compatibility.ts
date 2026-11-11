@@ -57,7 +57,6 @@ async function main(): Promise<void> {
   let redis: Redis | undefined;
   let outboxClaimLock: PoolClient | undefined;
   let organizationId: string | undefined;
-  let userToken: string | undefined;
 
   const candidateDirectory = resolve(COMPAT_DIR, 'candidate');
   const previousDirectory = resolve(COMPAT_DIR, 'previous');
@@ -161,7 +160,10 @@ async function main(): Promise<void> {
     const userAccessKey = JSON.parse(
       readFileSync(resolve(candidateDirectory, 'runtime-secrets.json'), 'utf8'),
     ) as { 'user-access-jwt': { private_key_pem: string } };
-    userToken = jwt(userAccessKey['user-access-jwt'].private_key_pem);
+    const candidateUserToken = jwt(
+      userAccessKey['user-access-jwt'].private_key_pem,
+      'aihub-user-api:production',
+    );
 
     // Hold the shared poller lock so only N-1 can consume this candidate write.
     outboxClaimLock = await database.connect();
@@ -176,7 +178,7 @@ async function main(): Promise<void> {
     await waitReady(CANDIDATE_PORT, 'candidate image');
     const organizationCreateKey = `compat-org-${randomUUID()}`;
     const created = await request(CANDIDATE_PORT, 'POST', '/v1/organizations', {
-      token: userToken,
+      token: candidateUserToken,
       idempotencyKey: organizationCreateKey,
       body: { name: 'Release compatibility fixture' },
     });
@@ -191,7 +193,7 @@ async function main(): Promise<void> {
       'POST',
       `/v1/organizations/${organizationId}/invitations`,
       {
-        token: userToken,
+        token: candidateUserToken,
         idempotencyKey: `compat-invite-${randomUUID()}`,
         body: { email: 'rollback-compat@example.invalid', role: 'member' },
       },
@@ -205,11 +207,31 @@ async function main(): Promise<void> {
 
     startImage(previousImage, 'aihub-compat-previous', previousDirectory);
     await waitReady(PREVIOUS_PORT, `previous ${previousTier} image`);
+    const previousScopeProbe = await request(PREVIOUS_PORT, 'GET', '/v1/me', {
+      token: candidateUserToken,
+    });
+    let previousUserToken = candidateUserToken;
+    if (previousScopeProbe.status === 200) {
+      report.push(
+        'PASS: N-1 accepts the production scope-bound User Access JWT audience.',
+      );
+    } else {
+      expectStatus(previousScopeProbe, 401, 'N-1 scope-bound audience probe');
+      previousUserToken = jwt(userAccessKey['user-access-jwt'].private_key_pem);
+      const previousLegacyProbe = await request(
+        PREVIOUS_PORT,
+        'GET',
+        '/v1/me',
+        { token: previousUserToken },
+      );
+      expectStatus(previousLegacyProbe, 200, 'N-1 legacy audience probe');
+      report.push('PASS: N-1 accepts the legacy User Access JWT audience.');
+    }
     await verifyDurableReads({
       database,
       organizationCreateKey,
       organizationId,
-      userToken,
+      previousUserToken,
       previousSha,
       candidateSha,
       report,
@@ -235,7 +257,7 @@ async function main(): Promise<void> {
       database,
       redis,
       organizationId,
-      userToken,
+      userToken: candidateUserToken,
       report,
       previousSha,
     });
