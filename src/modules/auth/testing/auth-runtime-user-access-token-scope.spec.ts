@@ -64,7 +64,8 @@ describe('Auth runtime User Access JWT scope', () => {
     await productionModuleRef?.close();
   });
 
-  it('accepts same-scope tokens and rejects tokens from the other scope', async () => {
+  /** Pins the audience claims while both scopes share the same signing key. */
+  async function assertRuntimeScopeTokenBoundary(): Promise<void> {
     const productionIssuer =
       productionModuleRef?.get<UserAccessTokenIssuerPort>(
         USER_ACCESS_TOKEN_ISSUER,
@@ -110,5 +111,10 @@ describe('Auth runtime User Access JWT scope', () => {
     await expect(
       productionVerifier.verify(sandboxToken.token),
     ).rejects.toMatchObject({ code: 'AUTH_USER_ACCESS_TOKEN_INVALID' });
-  });
+  }
+
+  it(
+    'accepts same-scope tokens and rejects tokens from the other scope',
+    assertRuntimeScopeTokenBoundary,
+  );
 });
