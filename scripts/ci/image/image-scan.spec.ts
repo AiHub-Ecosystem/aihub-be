@@ -19,6 +19,9 @@ describe('container image vulnerability scanning (#331)', () => {
       "docker image inspect --format '{{.Id}}' aihub:image-boot",
     );
     expect(imageJob).toContain(
+      'docker build -t aihub-guard:scan -f ops/firewall/guard.Dockerfile scripts/ops/firewall',
+    );
+    expect(imageJob).toContain(
       "docker image inspect --format '{{.Id}}' aihub-guard:scan",
     );
     expect(imageJob).toContain(
