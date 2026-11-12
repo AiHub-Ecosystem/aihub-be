@@ -293,10 +293,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     organizationId: string,
     configVersion: string,
   ): Promise<JwksCacheSnapshot> {
-    if (this.client === undefined || this.hmacKey === undefined) {
-      // A keyless reader still advances the shared generation on deleteJwks,
-      // so a keyless get must not resurrect a locally remembered stale entry
-      // after invalidation; local entries are only used while valid.
+    if (this.client === undefined) {
       return (
         this.readLocalJwks(organizationId, configVersion) ?? {
           generation: '0',
@@ -309,6 +306,15 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
         jwksGenerationKey(organizationId),
       );
       const generation = currentGeneration ?? '0';
+      if (this.hmacKey === undefined) {
+        // Generation is invalidation metadata, not an unsigned cached entry.
+        return (
+          this.readLocalJwks(organizationId, configVersion, generation) ?? {
+            generation,
+          }
+        );
+      }
+
       const cacheKey = jwksKey(organizationId, configVersion, generation);
       const serialized = await this.client.get(cacheKey);
       if (serialized === null) {

@@ -563,6 +563,28 @@ describe('RedisIdentityStore', () => {
     expect(redis.values.get('aihub:v1:jwks-generation:org_local')).toBe('1');
   });
 
+  it('honors shared JWKS invalidation across keyless readers', async () => {
+    const redis = new FakeRedis();
+    const reader = createKeylessStore(redis);
+    const otherReader = createKeylessStore(redis);
+    const staleKey = 'aihub:v1:jwks:org_local:1:1';
+
+    await reader.setJwks('org_local', '1', '0', {
+      jwks: { keys: [{ kty: 'RSA', n: 'old-modulus', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 60_000,
+    });
+    redis.values.set(staleKey, JSON.stringify({ jwks: { keys: [] } }));
+
+    await otherReader.deleteJwks('org_local', '1');
+
+    await expect(reader.getJwks('org_local', '1')).resolves.toEqual({
+      generation: '1',
+    });
+    expect(redis.values.get('aihub:v1:jwks-generation:org_local')).toBe('1');
+    expect(redis.values.has(staleKey)).toBe(true);
+  });
+
   it('rejects and deletes a forged positive API-key entry', async () => {
     const before = await integrityRejectionCount('api_key');
     const redis = new FakeRedis();
