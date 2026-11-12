@@ -498,6 +498,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       return undefined;
     }
     if (generation !== undefined && cached.generation !== generation) {
+      this.localJwks.delete(key);
       return undefined;
     }
     return { generation: cached.generation, entry: cached.entry };

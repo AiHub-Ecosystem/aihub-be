@@ -494,6 +494,26 @@ describe('RedisIdentityStore', () => {
     });
   });
 
+  it('does not serve invalidated local JWKS after Redis becomes unavailable', async () => {
+    const redis = new FakeRedis();
+    const store = createStore(redis);
+    await store.setJwks('org_local', '7', '0', {
+      jwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 60_000,
+    });
+    redis.values.set('aihub:v1:jwks-generation:org_local', '1');
+
+    await expect(store.getJwks('org_local', '7')).resolves.toEqual({
+      generation: '1',
+    });
+    redis.failReads = true;
+
+    await expect(store.getJwks('org_local', '7')).resolves.toEqual({
+      generation: '0',
+    });
+  });
+
   it('confirms JWKS cache deletion for an Organization', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);
