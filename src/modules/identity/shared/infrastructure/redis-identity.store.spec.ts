@@ -4,6 +4,7 @@ import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api
 import {
   type ApiKeyRecord,
   apiKeyCacheKey,
+  apiKeyCacheMissKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
   generateOrganizationApiKey,
@@ -589,6 +590,55 @@ describe('RedisIdentityStore', () => {
     expect(sample).toContain('cache_kind="api_key"');
     expect(sample).not.toContain('org_attacker');
     expect(sample).not.toContain(hash);
+  });
+
+  it('rejects and deletes envelopes whose payload cannot be canonicalized', async () => {
+    const apiRejectionsBefore = await integrityRejectionCount('api_key');
+    const jwksRejectionsBefore = await integrityRejectionCount('jwks');
+    const apiUnavailableBefore = await redisUnavailableCount('api_key_cache');
+    const jwksUnavailableBefore = await redisUnavailableCount('jwks_cache');
+    const redis = new FakeRedis();
+    const positiveHash = 'c'.repeat(64);
+    const missHash = 'd'.repeat(64);
+    const organizationId = 'org_malformed';
+    const positiveKey = apiKeyCacheKey(positiveHash);
+    const missKey = apiKeyCacheMissKey(missHash);
+    const jwksKey = `aihub:v1:jwks:${organizationId}:1:0`;
+    redis.values.set(
+      positiveKey,
+      JSON.stringify({ version: 1, kind: 'api_key', mac: 'invalid' }),
+    );
+    redis.values.set(
+      missKey,
+      JSON.stringify({ version: 1, kind: 'api_key', mac: 'invalid' }),
+    );
+    redis.values.set(
+      jwksKey,
+      JSON.stringify({ version: 1, kind: 'jwks', mac: 'invalid' }),
+    );
+    const store = createStore(redis);
+
+    await expect(store.get(positiveHash)).resolves.toBeUndefined();
+    await expect(store.get(missHash)).resolves.toBeUndefined();
+    await expect(store.getJwks(organizationId, '1')).resolves.toEqual({
+      generation: '0',
+    });
+
+    expect(redis.values.has(positiveKey)).toBe(false);
+    expect(redis.values.has(missKey)).toBe(false);
+    expect(redis.values.has(jwksKey)).toBe(false);
+    expect(await integrityRejectionCount('api_key')).toBe(
+      apiRejectionsBefore + 2,
+    );
+    expect(await integrityRejectionCount('jwks')).toBe(
+      jwksRejectionsBefore + 1,
+    );
+    expect(await redisUnavailableCount('api_key_cache')).toBe(
+      apiUnavailableBefore,
+    );
+    expect(await redisUnavailableCount('jwks_cache')).toBe(
+      jwksUnavailableBefore,
+    );
   });
 
   it('rejects a tampered record inside a plausible authenticated envelope', async () => {

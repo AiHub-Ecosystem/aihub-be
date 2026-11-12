@@ -72,8 +72,14 @@ export function verifyIdentityCacheEntry(input: {
     return { authenticated: false };
   }
 
+  let macInput: string;
+  try {
+    macInput = authenticatedInput(input.kind, input.redisKey, record['data']);
+  } catch {
+    return { authenticated: false };
+  }
   const expected = createHmac('sha256', input.key)
-    .update(authenticatedInput(input.kind, input.redisKey, record['data']))
+    .update(macInput)
     .digest('base64url');
   if (!constantTimeEquals(record['mac'], expected)) {
     return { authenticated: false };
