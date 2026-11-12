@@ -311,7 +311,7 @@ jobs:
           # Keep selection in jq; piping to `head` can SIGPIPE gh under pipefail.
           run_id="$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=20" \
-            --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].id // empty')"
+            --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure") | .id][0] // empty')"
           printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Restore recent flaky-test history
