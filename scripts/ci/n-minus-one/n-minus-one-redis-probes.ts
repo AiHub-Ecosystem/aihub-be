@@ -63,11 +63,13 @@ export function mutateCandidateJwksCache(
       const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
       const { readFileSync } = require('node:fs');
       const Redis = require('ioredis');
-      const redisUrl = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis.url;
+      const redisConfig = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis;
+      const redisUrl = redisConfig.url;
+      const hmacKey = redisConfig.identity_cache_hmac_key === undefined ? undefined : Buffer.from(redisConfig.identity_cache_hmac_key, 'base64url');
       const client = new Redis(redisUrl, { lazyConnect: true, enableOfflineQueue: false });
       client.on('error', () => {});
       await client.connect();
-      const cache = new RedisIdentityStore('', client);
+      const cache = new RedisIdentityStore('', client, hmacKey);
       try {
         if (process.env.AIHUB_COMPAT_OPERATION === 'delete') {
           await cache.deleteJwks(
@@ -83,6 +85,9 @@ export function mutateCandidateJwksCache(
           );
           const readBack = await cache.getJwks(process.env.AIHUB_COMPAT_ORGANIZATION_ID, process.env.AIHUB_COMPAT_CONFIG_VERSION);
           if (!readBack.entry || readBack.generation !== process.env.AIHUB_COMPAT_GENERATION) throw new Error('candidate JWKS cache fixture cannot be read');
+          const redisKey = 'aihub:v1:jwks:' + process.env.AIHUB_COMPAT_ORGANIZATION_ID + ':' + process.env.AIHUB_COMPAT_CONFIG_VERSION + ':' + process.env.AIHUB_COMPAT_GENERATION;
+          const stored = await client.get(redisKey);
+          if (hmacKey === undefined ? stored !== null : stored === null) throw new Error('JWKS cache key configuration mismatch');
         }
       } finally {
         await cache.onModuleDestroy();
@@ -263,20 +268,28 @@ export async function verifyRedisCompatibility(input: {
     serializedJwks !== null,
     'candidate-format JWKS cache fixture was not persisted by the identity cache adapter',
   );
-  const jwksEntry = JSON.parse(serializedJwks) as {
-    freshUntil?: number;
-    staleUntil?: number;
-  };
-  const jwksTtl = await redis.pttl(initialJwksCacheKey);
-  check(
-    typeof jwksEntry.freshUntil === 'number' &&
-      typeof jwksEntry.staleUntil === 'number' &&
-      jwksEntry.staleUntil > jwksEntry.freshUntil &&
-      jwksEntry.staleUntil > Date.now() &&
-      jwksTtl > 0 &&
-      jwksTtl <= jwksEntry.staleUntil - Date.now() + 1_000,
-    'JWKS cache freshness or stale authority bounds are invalid',
-  );
+  if (serializedJwks !== null) {
+    const envelope = JSON.parse(serializedJwks) as {
+      version?: unknown;
+      kind?: unknown;
+      data?: { freshUntil?: unknown; staleUntil?: unknown };
+      mac?: unknown;
+    };
+    const jwksTtl = await redis.pttl(initialJwksCacheKey);
+    check(
+      envelope.version === 1 &&
+        envelope.kind === 'jwks' &&
+        typeof envelope.mac === 'string' &&
+        envelope.data !== undefined &&
+        typeof envelope.data.freshUntil === 'number' &&
+        typeof envelope.data.staleUntil === 'number' &&
+        envelope.data.staleUntil > envelope.data.freshUntil &&
+        envelope.data.staleUntil > Date.now() &&
+        jwksTtl > 0 &&
+        jwksTtl <= envelope.data.staleUntil - Date.now() + 1_000,
+      'authenticated JWKS cache freshness or stale authority bounds are invalid',
+    );
+  }
 
   const keyCacheKey = await verifyApiKeyCacheCompatibility({
     database,

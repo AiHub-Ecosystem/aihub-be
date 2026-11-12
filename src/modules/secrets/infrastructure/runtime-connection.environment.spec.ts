@@ -3,6 +3,9 @@ import {
   loadRuntimeConnectionEnvironment,
 } from './runtime-connection.environment';
 
+const productionCacheKey = Buffer.alloc(32, 1).toString('base64url');
+const sandboxCacheKey = Buffer.alloc(32, 2).toString('base64url');
+
 function document(): string {
   return JSON.stringify({
     database: {
@@ -28,6 +31,8 @@ function document(): string {
       url: 'redis://production/0',
       sandbox_url: 'redis://sandbox/1',
       email_send_rate_url: 'redis://shared/2',
+      identity_cache_hmac_key: productionCacheKey,
+      sandbox_identity_cache_hmac_key: sandboxCacheKey,
     },
     'sandbox-assertion': {
       private_key_pem: 'private-key',
@@ -60,6 +65,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
       AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
       AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY: 'stale-key',
       AIHUB_SANDBOX_ASSERTION_KID: 'stale-id',
+      AIHUB_IDENTITY_CACHE_HMAC_KEY: 'stale-cache-key',
     };
 
     loadRuntimeConnectionEnvironment({
@@ -77,6 +83,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
     expect(env['AIHUB_EMAIL_WAL_DATABASE_URL']).toBe('postgresql://email-wal');
     expect(env['REDIS_URL']).toBe('redis://production/0');
     expect(env['AIHUB_EMAIL_SEND_RATE_REDIS_URL']).toBe('redis://shared/2');
+    expect(env['AIHUB_IDENTITY_CACHE_HMAC_KEY']).toBe(productionCacheKey);
     expect(env['AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY']).toBeUndefined();
     expect(env['AIHUB_SANDBOX_ASSERTION_KID']).toBeUndefined();
   });
@@ -105,6 +112,7 @@ describe('loadRuntimeConnectionEnvironment', () => {
     );
     expect(env['REDIS_URL']).toBe('redis://sandbox/1');
     expect(env['AIHUB_EMAIL_SEND_RATE_REDIS_URL']).toBe('redis://shared/2');
+    expect(env['AIHUB_IDENTITY_CACHE_HMAC_KEY']).toBe(sandboxCacheKey);
     expect(env['AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY']).toBe('private-key');
     expect(env['AIHUB_SANDBOX_ASSERTION_KID']).toBe('sandbox-key');
   });
@@ -229,6 +237,25 @@ describe('loadRuntimeConnectionEnvironment', () => {
       DATABASE_URL: 'postgresql://local',
       REDIS_URL: 'redis://local/0',
     });
+  });
+
+  it('clears an environment key when the Vault bundle omits the optional key', () => {
+    const redis = JSON.parse(document()) as {
+      redis: Record<string, string>;
+    };
+    delete redis.redis['identity_cache_hmac_key'];
+    delete redis.redis['sandbox_identity_cache_hmac_key'];
+    const env: NodeJS.ProcessEnv = {
+      AIHUB_RUNTIME_CONNECTION_SECRETS_FILE: 'connections.json',
+      AIHUB_IDENTITY_CACHE_HMAC_KEY: 'stale-cache-key',
+    };
+
+    loadRuntimeConnectionEnvironment({
+      env,
+      readFile: () => JSON.stringify(redis),
+    });
+
+    expect(env['AIHUB_IDENTITY_CACHE_HMAC_KEY']).toBeUndefined();
   });
 
   it('fails without exposing a secret when a required connection is missing', () => {

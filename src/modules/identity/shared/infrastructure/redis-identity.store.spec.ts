@@ -1,11 +1,18 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
-import type { ApiKeyRecord } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
 import {
-  RedisAuthFailureCounter,
-  type RedisIdentityClient,
-  RedisIdentityStore,
-} from './redis-identity.store';
+  type ApiKeyRecord,
+  apiKeyCacheKey,
+} from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import {
+  generateOrganizationApiKey,
+  hashApiKey,
+} from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { signIdentityCacheEntry } from './identity-cache-envelope';
+import { RedisAuthFailureCounter } from './redis-auth-failure-counter';
+import type { RedisIdentityClient } from './redis-identity-client';
+import { RedisIdentityStore } from './redis-identity.store';
 
 class FakeLogger {
   readonly warnings: Record<string, unknown>[] = [];
@@ -35,11 +42,36 @@ const record: ApiKeyRecord = {
   hardStopOnQuota: false,
 };
 
+const TEST_HMAC_KEY = Buffer.alloc(32, 7);
+
+function createStore(redis: RedisIdentityClient, hmacKey?: Buffer) {
+  return new RedisIdentityStore(
+    '',
+    redis,
+    hmacKey === undefined ? TEST_HMAC_KEY : hmacKey,
+  );
+}
+
+function createKeylessStore(redis: RedisIdentityClient) {
+  return new RedisIdentityStore('', redis, undefined);
+}
+
 async function redisUnavailableCount(seam: string): Promise<number> {
   const line = (await getMetrics())
     .split('\n')
     .find((sample) =>
       sample.startsWith(`aihub_redis_unavailable_total{seam="${seam}"} `),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
+
+async function integrityRejectionCount(cacheKind: 'api_key' | 'jwks') {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith(
+        `aihub_identity_cache_integrity_rejections_total{cache_kind="${cacheKind}"} `,
+      ),
     );
   return Number(line?.split(' ').at(-1) ?? 0);
 }
@@ -151,7 +183,7 @@ class FakeRedis implements RedisIdentityClient {
 describe('RedisIdentityStore', () => {
   it('stores and reads a positive API-key cache entry with a 60-second TTL', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
 
     await store.set('a'.repeat(64), record);
 
@@ -164,12 +196,50 @@ describe('RedisIdentityStore', () => {
     ).toBeGreaterThanOrEqual(30);
   });
 
+  it('authenticates from the repository when a forged API-key cache entry is read', async () => {
+    const redis = new FakeRedis();
+    const store = createStore(redis);
+    const apiKey = generateOrganizationApiKey().raw;
+    const hash = hashApiKey(apiKey);
+    const cacheKey = apiKeyCacheKey(hash);
+    redis.values.set(
+      cacheKey,
+      signIdentityCacheEntry(Buffer.alloc(32, 8), 'api_key', cacheKey, {
+        type: 'record',
+        freshUntil: Date.now() + 60_000,
+        record: { ...record, organizationId: 'org_forged' },
+      }),
+    );
+    const repository = {
+      findByHash: jest.fn().mockResolvedValue(record),
+      touchLastUsed: jest.fn().mockResolvedValue(undefined),
+    };
+    const authenticator = new ApiKeyAuthenticator(repository, store, {
+      get: async () => 0,
+      recordFailure: async () => 1,
+    });
+
+    await expect(
+      authenticator.authenticate({
+        value: apiKey,
+        environment: 'development',
+        clientIp: '198.51.100.7',
+      }),
+    ).resolves.toMatchObject({
+      organizationId: record.organizationId,
+      scopes: record.scopes,
+    });
+
+    expect(repository.findByHash).toHaveBeenCalledWith(hash);
+    expect(redis.values.get(cacheKey)).not.toContain('org_forged');
+  });
+
   it.each(['set', 'setMiss', 'delete'] as const)(
     'counts a failed API-key cache %s once without throwing',
     async (operation) => {
       const before = await redisUnavailableCount('api_key_cache');
       const redis = new FakeRedis();
-      const store = new RedisIdentityStore('', redis);
+      const store = createStore(redis);
       let operationResult: Promise<void>;
       if (operation === 'set') {
         redis.failWrites = true;
@@ -190,7 +260,7 @@ describe('RedisIdentityStore', () => {
   it('does not count successful API-key cache commands as unavailable', async () => {
     const before = await redisUnavailableCount('api_key_cache');
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
 
     await store.set('a'.repeat(64), record);
     await store.setMiss('b'.repeat(64));
@@ -205,7 +275,7 @@ describe('RedisIdentityStore', () => {
     const genericBefore = await redisUnavailableCount('api_key_cache');
     const redis = new FakeRedis();
     redis.failDeletes = true;
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
 
     await expect(store.delete('a'.repeat(64), seam)).resolves.toBeUndefined();
 
@@ -215,7 +285,7 @@ describe('RedisIdentityStore', () => {
 
   it('stores and reads a positive API-key cache entry with an expiry date', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const dated = {
       ...record,
       expiresAt: new Date('2026-10-01T00:00:00.000Z'),
@@ -228,7 +298,7 @@ describe('RedisIdentityStore', () => {
 
   it('treats a cached entry with a malformed field as a cache miss', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     redis.values.set(
       `aihub:v1:key:${'d'.repeat(64)}`,
       JSON.stringify({ ...record, monthlyRequestQuota: 'nope' }),
@@ -240,7 +310,7 @@ describe('RedisIdentityStore', () => {
 
   it('stores and reads a negative API-key cache entry with a jittered TTL capped at 30 seconds', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
 
     await store.setMiss('b'.repeat(64));
 
@@ -257,7 +327,7 @@ describe('RedisIdentityStore', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
     jest.spyOn(Math, 'random').mockReturnValue(0);
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const hash = 'f'.repeat(64);
 
     await store.set(hash, record);
@@ -274,7 +344,7 @@ describe('RedisIdentityStore', () => {
 
   it('uses a valid local API-key entry when Redis becomes unavailable', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const hash = 'e'.repeat(64);
     await store.set(hash, record);
     redis.failReads = true;
@@ -285,7 +355,7 @@ describe('RedisIdentityStore', () => {
 
   it('purges a key from the local tier and Redis on deletion', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const hash = 'c'.repeat(64);
     await store.set(hash, record);
     await expect(store.get(hash)).resolves.toEqual(record);
@@ -360,7 +430,7 @@ describe('RedisIdentityStore', () => {
 
   it('stores JWKS metadata for the stale-cache window and gates refreshes per organization', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const entry = {
       jwks: {
         keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB', alg: 'RS256' }],
@@ -391,7 +461,7 @@ describe('RedisIdentityStore', () => {
 
   it('uses the last-good JWKS locally when Redis is unavailable, bound to config version', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const entry = {
       jwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
       freshUntil: Date.now() + 1_000,
@@ -411,7 +481,7 @@ describe('RedisIdentityStore', () => {
 
   it('confirms JWKS cache deletion for an Organization', async () => {
     const redis = new FakeRedis();
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     await store.setJwks('org_acme', '2', '0', {
       jwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
       freshUntil: Date.now() + 1_000,
@@ -437,7 +507,7 @@ describe('RedisIdentityStore', () => {
       expire: () => Promise.reject(new Error('redis down')),
       quit: () => Promise.resolve('OK'),
     };
-    const store = new RedisIdentityStore('', redis);
+    const store = createStore(redis);
     const failures = new RedisAuthFailureCounter('', redis);
 
     await expect(store.get('a'.repeat(64))).resolves.toBeUndefined();
@@ -446,5 +516,188 @@ describe('RedisIdentityStore', () => {
     );
     await expect(failures.get('203.0.113.10')).resolves.toBe(0);
     await expect(failures.recordFailure('203.0.113.10')).resolves.toBe(0);
+  });
+  it('bypasses unsigned Redis API-key entries when the integrity key is absent', async () => {
+    const redis = new FakeRedis();
+    const hash = '9'.repeat(64);
+    const store = createKeylessStore(redis);
+    redis.values.set(`aihub:v1:key:${hash}`, JSON.stringify(record));
+
+    await expect(store.get(hash)).resolves.toBeUndefined();
+    expect(redis.getCalls).toBe(0);
+    expect(redis.values.has(`aihub:v1:key:${hash}`)).toBe(true);
+  });
+
+  it('invalidates JWKS when the integrity key is absent', async () => {
+    const redis = new FakeRedis();
+    const reader = createKeylessStore(redis);
+    const hash = '8'.repeat(64);
+
+    await reader.set(hash, record);
+    await reader.setMiss('7'.repeat(64));
+    await reader.setJwks('org_local', '1', '0', {
+      jwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 60_000,
+    });
+
+    await expect(reader.get(hash)).resolves.toEqual(record);
+    await expect(reader.getJwks('org_local', '1')).resolves.toMatchObject({
+      generation: '0',
+      entry: { jwks: { keys: [{ kty: 'RSA' }] } },
+    });
+    expect(redis.values.size).toBe(0);
+    await reader.deleteJwks('org_local', '1');
+    expect(redis.values.get('aihub:v1:jwks-generation:org_local')).toBe('1');
+  });
+
+  it('rejects and deletes a forged positive API-key entry', async () => {
+    const before = await integrityRejectionCount('api_key');
+    const redis = new FakeRedis();
+    const hash = '6'.repeat(64);
+    const key = `aihub:v1:key:${hash}`;
+    const store = createStore(redis);
+    redis.values.set(
+      key,
+      JSON.stringify({
+        ...record,
+        organizationId: 'org_attacker',
+        expiresAt: null,
+      }),
+    );
+
+    await expect(store.get(hash)).resolves.toBeUndefined();
+
+    expect(redis.values.has(key)).toBe(false);
+    expect(await integrityRejectionCount('api_key')).toBe(before + 1);
+    const sample = (await getMetrics())
+      .split('\n')
+      .find((line) =>
+        line.startsWith('aihub_identity_cache_integrity_rejections_total{'),
+      );
+    expect(sample).toContain('cache_kind="api_key"');
+    expect(sample).not.toContain('org_attacker');
+    expect(sample).not.toContain(hash);
+  });
+
+  it('rejects a tampered record inside a plausible authenticated envelope', async () => {
+    const redis = new FakeRedis();
+    const hash = '1'.repeat(64);
+    const key = `aihub:v1:key:${hash}`;
+    await createStore(redis).set(hash, record);
+    const serialized = redis.values.get(key);
+    if (serialized === undefined)
+      throw new Error('expected a signed cache entry');
+    redis.values.set(key, serialized.replace('org_acme', 'org_attacker'));
+
+    await expect(createStore(redis).get(hash)).resolves.toBeUndefined();
+    expect(redis.values.has(key)).toBe(false);
+  });
+
+  it('binds API-key signatures to the exact Redis key', async () => {
+    const redis = new FakeRedis();
+    const source = createStore(redis);
+    const originalHash = '5'.repeat(64);
+    const otherHash = '4'.repeat(64);
+    await source.set(originalHash, record);
+    const serialized = redis.values.get(`aihub:v1:key:${originalHash}`);
+    if (serialized === undefined)
+      throw new Error('expected a signed cache entry');
+    redis.values.set(`aihub:v1:key:${otherHash}`, serialized);
+
+    await expect(createStore(redis).get(otherHash)).resolves.toBeUndefined();
+    expect(redis.values.has(`aihub:v1:key:${otherHash}`)).toBe(false);
+  });
+
+  it('keeps a signed entry within its original deadline when Redis TTL is extended or replayed', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const redis = new FakeRedis();
+    const hash = '3'.repeat(64);
+    const key = `aihub:v1:key:${hash}`;
+    await createStore(redis).set(hash, record);
+    redis.expiresAt.set(key, Date.now() + 60_000);
+    jest.advanceTimersByTime(30_001);
+
+    await expect(createStore(redis).get(hash)).resolves.toBeUndefined();
+    expect(redis.values.has(key)).toBe(false);
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('lets Redis shorten a signed API-key entry but never extends its local lease', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const redis = new FakeRedis();
+    const hash = '2'.repeat(64);
+    const key = `aihub:v1:key:${hash}`;
+    await createStore(redis).set(hash, record);
+    redis.expiresAt.set(key, Date.now() + 100);
+    const reader = createStore(redis);
+
+    await expect(reader.get(hash)).resolves.toEqual(record);
+    jest.advanceTimersByTime(101);
+    await expect(reader.get(hash)).resolves.toBeUndefined();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('rejects a JWKS entry signed with another environment key', async () => {
+    const before = await integrityRejectionCount('jwks');
+    const redis = new FakeRedis();
+    const attackerKey = Buffer.alloc(32, 9);
+    const entry = {
+      jwks: { keys: [{ kty: 'RSA', n: 'attacker', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 60_000,
+    };
+    await createStore(redis, attackerKey).setJwks('org_acme', '1', '0', entry);
+
+    await expect(createStore(redis).getJwks('org_acme', '1')).resolves.toEqual({
+      generation: '0',
+    });
+
+    expect(redis.values.has('aihub:v1:jwks:org_acme:1:0')).toBe(false);
+    expect(await integrityRejectionCount('jwks')).toBe(before + 1);
+  });
+
+  it('binds JWKS entries to the JWKS cache kind', async () => {
+    const redis = new FakeRedis();
+    const cacheKey = 'aihub:v1:jwks:org_acme:1:0';
+    const entry = {
+      jwks: { keys: [{ kty: 'RSA', n: 'attacker', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 60_000,
+    };
+    redis.values.set(
+      cacheKey,
+      signIdentityCacheEntry(TEST_HMAC_KEY, 'api_key', cacheKey, entry),
+    );
+    redis.expiresAt.set(cacheKey, Date.now() + 60_000);
+
+    await expect(createStore(redis).getJwks('org_acme', '1')).resolves.toEqual({
+      generation: '0',
+    });
+    expect(redis.values.has(cacheKey)).toBe(false);
+  });
+
+  it('does not extend an authenticated JWKS stale deadline when Redis TTL is extended', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+    const redis = new FakeRedis();
+    const cacheKey = 'aihub:v1:jwks:org_acme:1:0';
+    await createStore(redis).setJwks('org_acme', '1', '0', {
+      jwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
+      freshUntil: Date.now() + 10_000,
+      staleUntil: Date.now() + 30_000,
+    });
+    redis.expiresAt.set(cacheKey, Date.now() + 60_000);
+    jest.advanceTimersByTime(30_001);
+
+    await expect(createStore(redis).getJwks('org_acme', '1')).resolves.toEqual({
+      generation: '0',
+    });
+    expect(redis.values.has(cacheKey)).toBe(false);
+    jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 });

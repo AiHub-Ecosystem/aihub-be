@@ -29,10 +29,15 @@ from reintroducing trust in unsigned values.
 
 2. **Fail closed on unverified Redis values.** A missing or invalid MAC is
    deleted and treated as a cache miss. If a process starts without the key,
-   it bypasses Redis identity entries and uses the existing trusted local or
-   authoritative-source path; it does not read or write unsigned Redis
-   entries. API-key misses use Postgres. JWKS misses use the existing key
-   provider path.
+   it bypasses Redis identity reads and writes and uses the existing trusted
+   local or authoritative-source path; it does not read or write unsigned
+   Redis entries. Invalidation is not an unsigned entry write: a keyless
+   process still advances the shared JWKS generation and purges its local
+   entry, because otherwise an identity-config update would not stop a
+   stale local JWKS from being trusted. API-key misses use Postgres. JWKS
+   misses use the existing key provider path. The verification result keeps
+   `authenticated` and `data` separate, so a genuinely `undefined` payload is
+   not confused with an unauthenticated entry.
 
 3. **Authenticate original freshness.** The signed entry carries an absolute
    freshness deadline. Redis storage expiry may shorten, but never extend, that

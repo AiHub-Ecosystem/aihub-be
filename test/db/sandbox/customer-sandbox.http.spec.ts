@@ -414,6 +414,7 @@ function createConnectionConfiguration(
     emailDailyBudgetDatabaseUrl: testDatabaseUrl(),
     emailWalDatabaseUrl: testDatabaseUrl(),
     redisUrl: sandboxTestRedisUrl(),
+    identityCacheHmacKey: undefined,
     emailSendRateRedisUrl: sandboxTestRedisUrl(),
     sandboxAssertionPrivateKey: undefined,
     sandboxAssertionKeyId: undefined,

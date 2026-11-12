@@ -115,8 +115,13 @@ export function imageConfig(
       url: string;
       sandbox_url: string;
       email_send_rate_url: string;
+      identity_cache_hmac_key?: string;
     };
   };
+  // CI uses one fake environment key for both images so candidate entries stay verifiable; production keys stay in Vault.
+  connection.redis.identity_cache_hmac_key = Buffer.alloc(32, 41).toString(
+    'base64url',
+  );
   const redisEndpoints: RedisEndpoints = { ...connection.redis };
   for (const field of Object.keys(connection.database)) {
     connection.database[field] = DATABASE_URL;

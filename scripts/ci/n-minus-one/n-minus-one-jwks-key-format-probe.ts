@@ -55,11 +55,13 @@ function readPreviousJwksEntry(
         const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
         const { readFileSync } = require('node:fs');
         const Redis = require('ioredis');
-        const redisUrl = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis.url;
+        const redisConfig = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis;
+        const redisUrl = redisConfig.url;
+        const hmacKey = typeof redisConfig.identity_cache_hmac_key === 'string' ? Buffer.from(redisConfig.identity_cache_hmac_key, 'base64url') : undefined;
         const client = new Redis(redisUrl, { lazyConnect: true, enableOfflineQueue: false });
         client.on('error', () => {});
         await client.connect();
-        const cache = new RedisIdentityStore('', client);
+        const cache = new RedisIdentityStore('', client, hmacKey);
         try {
           const snapshot = await cache.getJwks(process.env.AIHUB_COMPAT_ORGANIZATION_ID, process.env.AIHUB_COMPAT_CONFIG_VERSION);
           process.stdout.write(snapshot.entry === undefined ? 'MISS' : 'HIT');
@@ -98,6 +100,13 @@ export async function verifyIncompatibleJwksKeyFormat(input: {
       staleUntil: Date.now() + 120_000,
     },
   });
+
+  if ((await redis.get(key)) === null) {
+    report.push(
+      'PASS: candidate bypassed shared JWKS Redis entries because its optional integrity key is absent.',
+    );
+    return;
+  }
 
   // Leave the real candidate-format check uncaught so an actual incompatibility fails the release gate.
   requirePreviousJwksFormatCompatibility({

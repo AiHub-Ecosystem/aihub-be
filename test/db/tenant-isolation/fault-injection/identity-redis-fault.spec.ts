@@ -6,10 +6,8 @@ import { generateOrganizationApiKey } from '@/modules/identity/api-keys/applicat
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-import {
-  RedisAuthFailureCounter,
-  RedisIdentityStore,
-} from '@/modules/identity/shared/infrastructure/redis-identity.store';
+import { RedisAuthFailureCounter } from '@/modules/identity/shared/infrastructure/redis-auth-failure-counter';
+import { RedisIdentityStore } from '@/modules/identity/shared/infrastructure/redis-identity.store';
 import { UserAssertionVerifier } from '@/modules/identity/user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from '@/modules/identity/user-assertions/application/user-identity-resolver';
 import { JoseUserAssertionCrypto } from '@/modules/identity/user-assertions/infrastructure/jose-user-assertion-crypto';
@@ -37,6 +35,7 @@ import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 // Identity Redis clients time out a command at 100 ms; the Postgres lookup
 // behind them is local to the lane.
 const FAIL_FAST_BOUND_MS = 1_500;
+const IDENTITY_CACHE_HMAC_KEY = Buffer.alloc(32, 0x5a);
 
 let pool: ReturnType<typeof createTestPool>;
 let identityClient: ReturnType<typeof createPostgresIdentityClient>;
@@ -79,7 +78,11 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
   (mode) => {
     // Each test builds fresh stores so no process-local cache answers for Redis.
     it('authenticates from Postgres and never grants an unknown key', async () => {
-      const store = new RedisIdentityStore(proxiedRedisUrl);
+      const store = new RedisIdentityStore(
+        proxiedRedisUrl,
+        undefined,
+        IDENTITY_CACHE_HMAC_KEY,
+      );
       const warnings: Record<string, unknown>[] = [];
       const failures = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
         warn: (fields: Record<string, unknown>) => warnings.push(fields),
@@ -152,7 +155,11 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
          WHERE organization_id = $1`,
         [ORGANIZATION_A, 'https://tenant-a.example.test/jwks'],
       );
-      const store = new RedisIdentityStore(proxiedRedisUrl);
+      const store = new RedisIdentityStore(
+        proxiedRedisUrl,
+        undefined,
+        IDENTITY_CACHE_HMAC_KEY,
+      );
       const fetched: string[] = [];
       const provider = new JwksKeyProvider(
         store,
@@ -248,7 +255,11 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
 it('uses organization B only for B while Redis is refused', async () => {
   // Authorization data comes from Postgres per key, so an outage cannot make
   // one Organization's key resolve to another.
-  const store = new RedisIdentityStore(proxiedRedisUrl);
+  const store = new RedisIdentityStore(
+    proxiedRedisUrl,
+    undefined,
+    IDENTITY_CACHE_HMAC_KEY,
+  );
   const failures = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
     warn: () => undefined,
     log: () => undefined,

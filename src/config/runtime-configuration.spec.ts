@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   RuntimeConfigurationError,
   appConfig,
+  getRuntimeConnectionConfiguration,
   loadRuntimeConfiguration,
   runtimeEnvironmentMetadata,
 } from './runtime-configuration';
@@ -58,6 +59,39 @@ describe('runtime configuration', () => {
     expect(config.SEAWEEDFS_ENDPOINT_URL).toBe('https://s3.wispace.app');
     expect(config.SEAWEEDFS_REGION).toBe('us-east-1');
     expect(config.AIHUB_DATABASE_POOLER_ENABLED).toBe(false);
+  });
+
+  it('decodes the optional identity-cache HMAC key at the configuration boundary', () => {
+    const key = Buffer.alloc(32, 3).toString('base64url');
+    const previous = process.env['AIHUB_IDENTITY_CACHE_HMAC_KEY'];
+    process.env['AIHUB_IDENTITY_CACHE_HMAC_KEY'] = key;
+    try {
+      const connection = getRuntimeConnectionConfiguration();
+      expect(connection.identityCacheHmacKey).toEqual(Buffer.alloc(32, 3));
+    } finally {
+      if (previous === undefined)
+        delete process.env['AIHUB_IDENTITY_CACHE_HMAC_KEY'];
+      else process.env['AIHUB_IDENTITY_CACHE_HMAC_KEY'] = previous;
+    }
+  });
+
+  it('rejects a malformed identity-cache HMAC key without exposing it', () => {
+    const malformed = 'not-a-valid-key';
+    let caught: unknown;
+    try {
+      loadRuntimeConfiguration({
+        ...deployedEnvironment,
+        NODE_ENV: 'test',
+        AIHUB_IDENTITY_CACHE_HMAC_KEY: malformed,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(RuntimeConfigurationError);
+    expect((caught as RuntimeConfigurationError).variableNames).toContain(
+      'AIHUB_IDENTITY_CACHE_HMAC_KEY',
+    );
+    expect(JSON.stringify(caught)).not.toContain(malformed);
   });
 
   it('accepts the optional Avatar staging bucket override', () => {
@@ -629,6 +663,7 @@ describe('runtime configuration', () => {
       'AIHUB_USER_ACCESS_JWT_PRIVATE_KEY',
     );
     expect(configuration).not.toHaveProperty('AIHUB_WEB_SESSION_CLIENT_SECRET');
+    expect(configuration).not.toHaveProperty('AIHUB_IDENTITY_CACHE_HMAC_KEY');
   });
 
   it.each(['production', 'staging'] as const)(

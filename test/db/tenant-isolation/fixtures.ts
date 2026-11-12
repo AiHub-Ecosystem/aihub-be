@@ -16,7 +16,7 @@ import {
 import { ORGANIZATION_INVITATION_CREATE_OPERATION } from '@/modules/idempotency/application/idempotency-operation';
 import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
 import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
-import type { RedisIdentityClient } from '@/modules/identity/shared/infrastructure/redis-identity.store';
+import type { RedisIdentityClient } from '@/modules/identity/shared/infrastructure/redis-identity-client';
 import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
 
 export const TEST_NOW = new Date('2026-09-15T12:00:00.000Z');
