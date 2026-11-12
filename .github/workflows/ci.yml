@@ -25,6 +25,7 @@ on:
       - "docs/integration-guide.md"
       - "docs/local-demo.md"
       - "docs/operations/deploy-vps.md"
+      - "docs/operations/image-sbom-provenance.md"
       - "docs/operations/image-vulnerability-scanning.md"
       - "ops/vault/README.md"
 
