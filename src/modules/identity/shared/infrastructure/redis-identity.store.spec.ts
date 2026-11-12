@@ -459,6 +459,17 @@ describe('RedisIdentityStore', () => {
     expect(redis.expirations.get('aihub:v1:jwks-refresh:org_acme')).toBe(300);
   });
 
+  it('uses process-local JWKS refresh admission without the integrity key', async () => {
+    const redis = new FakeRedis();
+    const store = createKeylessStore(redis);
+
+    await expect(store.tryAcquireRefresh('org_acme')).resolves.toEqual({
+      acquired: false,
+      available: false,
+    });
+    expect(redis.values.has('aihub:v1:jwks-refresh:org_acme')).toBe(false);
+  });
+
   it('uses the last-good JWKS locally when Redis is unavailable, bound to config version', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);

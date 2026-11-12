@@ -79,7 +79,11 @@ function parseApiKeyCacheData(value: unknown): ApiKeyCacheData | undefined {
   ) {
     return undefined;
   }
-  return data as unknown as ApiKeyCacheData;
+  return {
+    type: data['type'],
+    freshUntil: data['freshUntil'],
+    record: data['record'],
+  };
 }
 
 function localJwksKey(organizationId: string, configVersion: string): string {
@@ -418,7 +422,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   }
 
   async tryAcquireRefresh(organizationId: string): Promise<JwksRefreshLock> {
-    if (this.client === undefined) {
+    if (this.client === undefined || this.hmacKey === undefined) {
       return { acquired: false, available: false };
     }
 

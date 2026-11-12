@@ -84,7 +84,7 @@ export function imageConfig(
   port: number,
   apiKey: string,
   sharedFrom: string | undefined,
-): RedisEndpoints {
+): RedisEndpoints & { readonly identity_cache_hmac_key?: string } {
   mkdirSync(directory, { recursive: true });
   if (sharedFrom === undefined) {
     writeBootConfig(directory);
@@ -116,13 +116,15 @@ export function imageConfig(
       sandbox_url: string;
       email_send_rate_url: string;
       identity_cache_hmac_key?: string;
+      sandbox_identity_cache_hmac_key?: string;
     };
   };
-  // CI uses one fake environment key for both images so candidate entries stay verifiable; production keys stay in Vault.
-  connection.redis.identity_cache_hmac_key = Buffer.alloc(32, 41).toString(
-    'base64url',
-  );
-  const redisEndpoints: RedisEndpoints = { ...connection.redis };
+  // This gate rehearses the reader-first rollout while the Vault key is absent.
+  delete connection.redis.identity_cache_hmac_key;
+  delete connection.redis.sandbox_identity_cache_hmac_key;
+  const redisEndpoints: RedisEndpoints & {
+    readonly identity_cache_hmac_key?: string;
+  } = { ...connection.redis };
   for (const field of Object.keys(connection.database)) {
     connection.database[field] = DATABASE_URL;
   }

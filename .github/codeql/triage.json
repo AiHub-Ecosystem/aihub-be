@@ -79,6 +79,18 @@
       "reason": "SHA-256 of a 256-bit random API key, not a user-chosen password; a slow password hash adds nothing to a high-entropy secret."
     },
     {
+      "ruleId": "js/insufficient-password-hash",
+      "path": "src/modules/identity/shared/infrastructure/identity-cache-envelope.ts",
+      "fingerprint": "caa62869c81e5b68:1",
+      "reason": "The envelope uses HMAC-SHA-256 with the deployment integrity key; its Redis key contains a fingerprint of a 256-bit random API key, not a user password."
+    },
+    {
+      "ruleId": "js/insufficient-password-hash",
+      "path": "src/modules/identity/shared/infrastructure/identity-cache-envelope.ts",
+      "fingerprint": "11f19bfe75d15bb2:1",
+      "reason": "The envelope uses HMAC-SHA-256 with the deployment integrity key; its Redis key contains a fingerprint of a 256-bit random API key, not a user password."
+    },
+    {
       "ruleId": "js/file-system-race",
       "path": "scripts/cli/demo-bootstrap.mjs",
       "fingerprint": "6bcc2d49f01eeb94:1",

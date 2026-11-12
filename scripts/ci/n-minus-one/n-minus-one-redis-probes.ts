@@ -105,11 +105,19 @@ export async function verifyRedisCompatibility(input: {
   readonly redis: Redis;
   readonly organizationId: string;
   readonly userToken: string;
+  readonly candidateHasIdentityCacheHmacKey: boolean;
   readonly report: string[];
   readonly previousSha: string;
 }): Promise<void> {
-  const { database, redis, organizationId, userToken, report, previousSha } =
-    input;
+  const {
+    database,
+    redis,
+    organizationId,
+    userToken,
+    candidateHasIdentityCacheHmacKey,
+    report,
+    previousSha,
+  } = input;
   const apiKeyResponse = await request(
     CANDIDATE_PORT,
     'POST',
@@ -170,49 +178,51 @@ export async function verifyRedisCompatibility(input: {
     freshUntil: Date.now() + 15 * 60_000,
     staleUntil: Date.now() + 24 * 60 * 60_000,
   };
-  const remoteConfigFixture = await database.query(
-    `UPDATE organization_identity_configs
-       SET jwks_url = $2, public_keys_jwks = NULL
-       WHERE organization_id = $1`,
-    [organizationId, 'https://jwks.ci-boot.invalid/keys'],
-  );
-  check(
-    remoteConfigFixture.rowCount === 1,
-    'could not configure the cache-only JWKS fixture',
-  );
-  const configFixture = await database.query<{
-    organizationId: string;
-    jwksCacheVersion: string;
-    jwksUrl: string;
-    publicKeysJwks: unknown;
-    status: string;
-  }>(
-    `SELECT organization_id AS "organizationId", issuer, jwks_url AS "jwksUrl",
-            public_keys_jwks AS "publicKeysJwks", allowed_algorithms AS "allowedAlgorithms",
-            max_assertion_ttl_seconds AS "maxAssertionTtlSeconds", status,
-            jwks_cache_version::text AS "jwksCacheVersion"
-       FROM organization_identity_configs WHERE organization_id = $1`,
-    [organizationId],
-  );
-  const fixture = configFixture.rows[0];
-  check(
-    fixture?.organizationId === organizationId &&
-      fixture?.jwksCacheVersion === configVersion &&
-      fixture?.jwksUrl === 'https://jwks.ci-boot.invalid/keys' &&
-      fixture?.publicKeysJwks === null &&
-      fixture?.status === 'active',
-    'JWKS identity configuration fixture is invalid',
-  );
-  // The production resolver blocks loopback fixtures; seed through the candidate adapter and require N-1 to read this value without a fetch fallback.
-  mutateCandidateJwksCache(organizationId, configVersion, {
-    kind: 'set',
-    generation: initialGeneration,
-    entry: initialJwksEntry,
-  });
-  check(
-    (await redis.get(initialJwksCacheKey)) !== null,
-    'candidate JWKS cache fixture was not stored in Redis',
-  );
+  if (candidateHasIdentityCacheHmacKey) {
+    const remoteConfigFixture = await database.query(
+      `UPDATE organization_identity_configs
+         SET jwks_url = $2, public_keys_jwks = NULL
+         WHERE organization_id = $1`,
+      [organizationId, 'https://jwks.ci-boot.invalid/keys'],
+    );
+    check(
+      remoteConfigFixture.rowCount === 1,
+      'could not configure the cache-only JWKS fixture',
+    );
+    const configFixture = await database.query<{
+      organizationId: string;
+      jwksCacheVersion: string;
+      jwksUrl: string;
+      publicKeysJwks: unknown;
+      status: string;
+    }>(
+      `SELECT organization_id AS "organizationId", issuer, jwks_url AS "jwksUrl",
+              public_keys_jwks AS "publicKeysJwks", allowed_algorithms AS "allowedAlgorithms",
+              max_assertion_ttl_seconds AS "maxAssertionTtlSeconds", status,
+              jwks_cache_version::text AS "jwksCacheVersion"
+         FROM organization_identity_configs WHERE organization_id = $1`,
+      [organizationId],
+    );
+    const fixture = configFixture.rows[0];
+    check(
+      fixture?.organizationId === organizationId &&
+        fixture?.jwksCacheVersion === configVersion &&
+        fixture?.jwksUrl === 'https://jwks.ci-boot.invalid/keys' &&
+        fixture?.publicKeysJwks === null &&
+        fixture?.status === 'active',
+      'JWKS identity configuration fixture is invalid',
+    );
+    // The production resolver blocks loopback fixtures; seed through the candidate adapter and require N-1 to read this value without a fetch fallback.
+    mutateCandidateJwksCache(organizationId, configVersion, {
+      kind: 'set',
+      generation: initialGeneration,
+      entry: initialJwksEntry,
+    });
+    check(
+      (await redis.get(initialJwksCacheKey)) !== null,
+      'candidate JWKS cache fixture was not stored in Redis',
+    );
+  }
   const assertionA = identityA.signAssertion(issuerA, identityKid(identityA));
   const gradeBody = {
     question: gradeRequest.question,
@@ -263,31 +273,38 @@ export async function verifyRedisCompatibility(input: {
   }
   expect2xx(candidateGrade, 'candidate grade and usage write');
 
-  const serializedJwks = await redis.get(initialJwksCacheKey);
-  check(
-    serializedJwks !== null,
-    'candidate-format JWKS cache fixture was not persisted by the identity cache adapter',
-  );
-  if (serializedJwks !== null) {
-    const envelope = JSON.parse(serializedJwks) as {
-      version?: unknown;
-      kind?: unknown;
-      data?: { freshUntil?: unknown; staleUntil?: unknown };
-      mac?: unknown;
-    };
-    const jwksTtl = await redis.pttl(initialJwksCacheKey);
+  if (candidateHasIdentityCacheHmacKey) {
+    const serializedJwks = await redis.get(initialJwksCacheKey);
     check(
-      envelope.version === 1 &&
-        envelope.kind === 'jwks' &&
-        typeof envelope.mac === 'string' &&
-        envelope.data !== undefined &&
-        typeof envelope.data.freshUntil === 'number' &&
-        typeof envelope.data.staleUntil === 'number' &&
-        envelope.data.staleUntil > envelope.data.freshUntil &&
-        envelope.data.staleUntil > Date.now() &&
-        jwksTtl > 0 &&
-        jwksTtl <= envelope.data.staleUntil - Date.now() + 1_000,
-      'authenticated JWKS cache freshness or stale authority bounds are invalid',
+      serializedJwks !== null,
+      'candidate-format JWKS cache fixture was not persisted by the identity cache adapter',
+    );
+    if (serializedJwks !== null) {
+      const envelope = JSON.parse(serializedJwks) as {
+        version?: unknown;
+        kind?: unknown;
+        data?: { freshUntil?: unknown; staleUntil?: unknown };
+        mac?: unknown;
+      };
+      const jwksTtl = await redis.pttl(initialJwksCacheKey);
+      check(
+        envelope.version === 1 &&
+          envelope.kind === 'jwks' &&
+          typeof envelope.mac === 'string' &&
+          envelope.data !== undefined &&
+          typeof envelope.data.freshUntil === 'number' &&
+          typeof envelope.data.staleUntil === 'number' &&
+          envelope.data.staleUntil > envelope.data.freshUntil &&
+          envelope.data.staleUntil > Date.now() &&
+          jwksTtl > 0 &&
+          jwksTtl <= envelope.data.staleUntil - Date.now() + 1_000,
+        'authenticated JWKS cache freshness or stale authority bounds are invalid',
+      );
+    }
+  } else {
+    check(
+      (await redis.get(initialJwksCacheKey)) === null,
+      'keyless candidate wrote a shared JWKS cache entry',
     );
   }
 
@@ -305,27 +322,55 @@ export async function verifyRedisCompatibility(input: {
   });
 
   const identityB = identityA.rotate();
-  const generationBefore = await redis.get(generationKey);
-  mutateCandidateJwksCache(organizationId, configVersion, { kind: 'delete' });
-  const generationAfter = await redis.get(generationKey);
-  check(
-    generationBefore !== generationAfter && generationAfter !== null,
-    'candidate JWKS invalidation did not advance the shared generation',
-  );
-  check(
-    (await redis.get(initialJwksCacheKey)) === null,
-    'candidate JWKS invalidation left the previous-generation Redis entry',
-  );
-  const rotatedJwksEntry = {
-    jwks: identityB.jwks,
-    freshUntil: Date.now() + 15 * 60_000,
-    staleUntil: Date.now() + 24 * 60 * 60_000,
-  };
-  mutateCandidateJwksCache(organizationId, configVersion, {
-    kind: 'set',
-    generation: generationAfter,
-    entry: rotatedJwksEntry,
-  });
+  if (candidateHasIdentityCacheHmacKey) {
+    const generationBefore = await redis.get(generationKey);
+    mutateCandidateJwksCache(organizationId, configVersion, { kind: 'delete' });
+    const generationAfter = await redis.get(generationKey);
+    check(
+      generationBefore !== generationAfter && generationAfter !== null,
+      'candidate JWKS invalidation did not advance the shared generation',
+    );
+    check(
+      (await redis.get(initialJwksCacheKey)) === null,
+      'candidate JWKS invalidation left the previous-generation Redis entry',
+    );
+    const rotatedJwksEntry = {
+      jwks: identityB.jwks,
+      freshUntil: Date.now() + 15 * 60_000,
+      staleUntil: Date.now() + 24 * 60 * 60_000,
+    };
+    mutateCandidateJwksCache(organizationId, configVersion, {
+      kind: 'set',
+      generation: generationAfter,
+      entry: rotatedJwksEntry,
+    });
+  } else {
+    const nextConfig = await request(
+      CANDIDATE_PORT,
+      'PUT',
+      `/v1/organizations/${organizationId}/identity-config`,
+      {
+        token: userToken,
+        body: {
+          issuer: issuerA,
+          jwks_url: null,
+          public_keys_jwks: identityB.jwks,
+          allowed_algorithms: ['RS256'],
+          max_assertion_ttl_seconds: 300,
+        },
+      },
+    );
+    expect2xx(nextConfig, 'keyless candidate JWKS rotation');
+    const generationAfter = await redis.get(generationKey);
+    check(
+      generationAfter !== initialGeneration && generationAfter !== null,
+      'keyless candidate invalidation did not advance the shared generation',
+    );
+    check(
+      (await redis.get(initialJwksCacheKey)) === null,
+      'keyless candidate wrote a shared JWKS cache entry after rotation',
+    );
+  }
   const staleAssertion = await request(
     PREVIOUS_PORT,
     'POST',
@@ -344,7 +389,9 @@ export async function verifyRedisCompatibility(input: {
   );
   const assertionB = identityB.signAssertion(issuerA, identityKid(identityB));
   report.push(
-    'PASS: candidate JWKS generation invalidation reached the N-1 reader.',
+    candidateHasIdentityCacheHmacKey
+      ? 'PASS: candidate JWKS generation invalidation reached the N-1 reader.'
+      : 'PASS: keyless candidate bypassed Redis and the N-1 reader resolved rotated JWKS from the durable inline source.',
   );
 
   const beforeHold = (await stubState()).writingCalls;
