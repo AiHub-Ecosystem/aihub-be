@@ -9,7 +9,8 @@ import { test } from 'node:test';
 /**
  * #1777: `format:check` runs with prettier's content-addressed cache, because
  * an uncached run re-processes every Markdown and YAML file in the tree on
- * every `verify` and `check:changed` invocation.
+ * local `verify` and `check:changed` invocations. CI runs the gate but does
+ * not restore a persistent Prettier cache.
  *
  * The cache is only worth adopting if it cannot hide a real finding, so these
  * tests assert the flags and then prove the gate still fails on a mis-formatted
@@ -61,55 +62,10 @@ await test('the cache stays inside node_modules so it cannot leak into a build g
   );
 });
 
-await test('CI caches prettier so the cached gate is not cold on every run (#1777)', () => {
-  // Asserted against the workflow text rather than a parsed tree: no YAML
-  // parser is a declared dependency here, and importing one would lean on a
-  // hoisted transitive package that knip rightly flags.
+await test('CI runs the formatting gate (#1813)', () => {
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
-
-  const formatIndex = workflow.indexOf('bun run format:check');
-  assert.ok(formatIndex >= 0, 'a CI job must still run `bun run format:check`');
-
-  const cacheIndex = workflow.indexOf('node_modules/.cache/prettier');
-  assert.ok(
-    cacheIndex >= 0,
-    'CI must cache node_modules/.cache/prettier, or format:check pays the cold cache on every run',
-  );
-
-  // Restoring after a run would save a cache that is never read again.
-  assert.ok(
-    cacheIndex < formatIndex,
-    'the prettier cache must be restored before the formatting check runs',
-  );
-
-  // The path must sit inside a real actions/cache step, not a stray mention.
-  const cacheStepStart = workflow.lastIndexOf(
-    'uses: actions/cache@',
-    cacheIndex,
-  );
-  assert.ok(
-    cacheStepStart >= 0 && cacheIndex - cacheStepStart < 500,
-    'the prettier cache path must belong to an actions/cache step',
-  );
-
-  // A key that omits the config or the lockfile keeps serving entries written
-  // under options the gate no longer uses. The key step is written after the
-  // path line, so the window runs from the cache step to the next `- name:`
-  // step rather than stopping at the path.
-  const stepEnd = workflow.indexOf('\n      - name:', cacheIndex);
-  const keyLine = workflow
-    .slice(cacheStepStart, stepEnd === -1 ? undefined : stepEnd)
-    .split('\n')
-    .find((line) => line.trim().startsWith('key:'));
-  assert.ok(keyLine, 'the prettier cache step must declare a key');
-  for (const input of ['bun.lock', '.prettierrc', '.prettierignore']) {
-    assert.ok(
-      keyLine.includes(input),
-      `the cache key must include ${input} so an option change invalidates the cache`,
-    );
-  }
+  assert.match(workflow, /bun run format:check/);
 });
-
 /** @param {import('node:test').TestContext} t @returns {Promise<string>} */
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'aihub-format-cache-'));
