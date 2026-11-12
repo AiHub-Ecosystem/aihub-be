@@ -16,15 +16,14 @@ import process from 'node:process';
 
 /** @param {string} dir @returns {string[]} */
 function collectFiles(dir) {
-  /** @type {string[]} */
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectFiles(p));
-    else if (entry.isFile() && p.endsWith('.ts') && !p.endsWith('.spec.ts'))
-      out.push(p);
-  }
-  return out;
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts'),
+    )
+    .map((entry) => join(entry.parentPath ?? entry.path, entry.name));
 }
 
 /** @param {string} relativePath @param {number | undefined} line @param {string} detail @returns {string} */

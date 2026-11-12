@@ -1,0 +1,8 @@
+# Grype vulnerability scanner configuration (issue #331).
+# Ignore format:
+# ignore:
+#   - vulnerability: CVE-YYYY-XXXXX
+#     reason: "Why accepted; expires YYYY-MM-DD"
+# Grype does not support expiry fields; include expiry in reason and remove it manually.
+
+ignore: []

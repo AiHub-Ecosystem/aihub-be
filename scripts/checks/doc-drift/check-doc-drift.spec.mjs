@@ -68,6 +68,36 @@ await test('requires the target ADR status to name the amending ADR', async (/**
   );
 });
 
+await test('recognises passive supersession and amendment relations in either voice (#1462)', async (/** @type {import('node:test').TestContext} */ t) => {
+  const root = await fixture(t, {
+    'docs/adr/0001-bare-passive.md':
+      '# ADR-0001\n\nStatus: Superseded by ADR-0002\n',
+    'docs/adr/0002-bare-active.md':
+      '# ADR-0002\n\n- Status: Accepted\n- Supersedes ADR-0001\n',
+    'docs/adr/0003-link-passive.md':
+      '# ADR-0003\n\nStatus: Superseded by [ADR-0004](0004-link-active.md)\n',
+    'docs/adr/0004-link-active.md':
+      '# ADR-0004\n\n- Status: Accepted\n- Supersedes: [ADR-0003](0003-link-passive.md)\n',
+    'docs/adr/0005-amended-passive.md':
+      '# ADR-0005\n\n- Status: Accepted (identity clauses amended by [ADR-0006](0006-amender.md))\n',
+    'docs/adr/0006-amender.md':
+      '# ADR-0006\n\n- Status: Accepted\n- Amends: [ADR-0005](0005-amended-passive.md)\n',
+  });
+
+  assert.deepEqual(findDocDriftViolations(root), []);
+});
+
+await test('fails when a passive supersession has no acknowledgement in the successor (#1462)', async (/** @type {import('node:test').TestContext} */ t) => {
+  const root = await fixture(t, {
+    'docs/adr/0001-base.md': '# ADR-0001\n\nStatus: Superseded by ADR-0002\n',
+    'docs/adr/0002-successor.md': '# ADR-0002\n\n- Status: Accepted\n',
+  });
+
+  assert.deepEqual(findDocDriftViolations(root), [
+    'ADR-0002 status does not name ADR-0001, declared by ADR-0001',
+  ]);
+});
+
 await test('rejects missing ADR links and missing repository paths in operations docs', async (/** @type {import('node:test').TestContext} */ t) => {
   const root = await fixture(t, {
     'docs/adr/0001-base.md':

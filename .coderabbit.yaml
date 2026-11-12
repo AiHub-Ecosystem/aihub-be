@@ -16,7 +16,7 @@ knowledge_base:
   code_guidelines:
     filePatterns:
       - files: ".claude/agents/api.md"
-        applyTo: "src/**/presentation/**, src/modules/auth/testing/auth-http-*.spec.ts, src/**/*.controller.ts, src/catalog/**, src/contracts/**, src/main.ts, src/app.module.ts"
+        applyTo: "src/**/presentation/**, src/modules/auth/testing/http/auth-http-*.spec.ts, src/**/*.controller.ts, src/catalog/**, src/contracts/**, src/main.ts, src/app.module.ts"
       - files: ".claude/agents/auth.md"
         applyTo: "src/modules/auth/*/{application,domain,public}/**, src/modules/auth/shared/application/**, src/modules/auth/public/**, src/modules/auth/testing/**, src/modules/auth/auth.module.ts"
       - files: ".claude/agents/downstream.md"

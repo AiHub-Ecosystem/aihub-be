@@ -2,7 +2,7 @@
 
 - Status: Accepted; amended by [#1358](https://github.com/AiHub-Ecosystem/aihub-be/issues/1358) (`RETRY_BUDGET_UNAVAILABLE` is reserved and no longer emitted)
 - Related issue: #472
-- Amends: [ADR-0089](0089-ingress-based-request-timing.md) (admission labels only), [ADR-0018](0018-monthly-quota-enforcement.md) (graded Redis-control outages only), `04-redis.md` §F.5 (graded rate limit, concurrency, and quota rows; recorded 2026-10-22 by #328)
+- Amends: [ADR-0089](0089-ingress-based-request-timing.md) (admission labels only), [ADR-0018](0018-monthly-quota-enforcement.md) (graded Redis-control outages only), [ADR-0006](0006-redis-scoped-role-fail-open.md) (04-redis.md §F.5; graded rate limit, concurrency, and quota rows; recorded 2026-10-22 by #328)
 
 ## Context
 

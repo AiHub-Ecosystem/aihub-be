@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseStagedPaths, runStagedChecks } from './check-staged.mjs';
+import {
+  buildStagedCommandEnv,
+  parseStagedPaths,
+  runStagedChecks,
+} from './check-staged.mjs';
 
 await test('parses staged paths as NUL-delimited names', () => {
   assert.deepEqual(
@@ -18,8 +22,8 @@ await test('checks only staged source files and finds their related Jest tests',
       'scripts/checks/example.mjs',
       'test/feature.spec.ts',
     ],
-    runCommand: (command, args) => {
-      calls.push([command, args]);
+    runCommand: (command, args, options) => {
+      calls.push([command, args, options]);
       return 0;
     },
   });
@@ -39,6 +43,7 @@ await test('checks only staged source files and finds their related Jest tests',
         'src/feature.ts',
         'test/feature.spec.ts',
       ],
+      undefined,
     ],
     [
       process.execPath,
@@ -54,6 +59,7 @@ await test('checks only staged source files and finds their related Jest tests',
         '--format=unix',
         'scripts/checks/example.mjs',
       ],
+      undefined,
     ],
     [
       process.execPath,
@@ -68,6 +74,12 @@ await test('checks only staged source files and finds their related Jest tests',
         'scripts/checks/example.mjs',
         'test/feature.spec.ts',
       ],
+      {
+        env: {
+          REDIS_URL: undefined,
+          DATABASE_URL: undefined,
+        },
+      },
     ],
   ]);
 });
@@ -123,4 +135,37 @@ await test('stops after the first failing staged check', () => {
       ],
     ],
   ]);
+});
+
+await test('spawns Jest with REDIS_URL and DATABASE_URL stripped from env (#1894)', () => {
+  let jestOptions;
+  runStagedChecks({
+    stagedFiles: ['src/feature.ts'],
+    runCommand: (_cmd, args, options) => {
+      if (args[1] === 'jest') jestOptions = options;
+      return 0;
+    },
+  });
+
+  assert.deepEqual(jestOptions, {
+    env: {
+      REDIS_URL: undefined,
+      DATABASE_URL: undefined,
+    },
+  });
+});
+
+await test('buildStagedCommandEnv deletes keys set to undefined (#1894)', () => {
+  const customEnv = buildStagedCommandEnv({
+    env: {
+      REDIS_URL: undefined,
+      DATABASE_URL: undefined,
+      TEST_STAGED_KEY: 'preserved',
+    },
+  });
+
+  assert.equal(customEnv['REDIS_URL'], undefined);
+  assert.equal(customEnv['DATABASE_URL'], undefined);
+  assert.equal(customEnv['TEST_STAGED_KEY'], 'preserved');
+  assert.equal(customEnv['GOMAXPROCS'], '1');
 });

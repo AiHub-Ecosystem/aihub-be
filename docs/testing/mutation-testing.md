@@ -12,6 +12,9 @@ pull requests. Stryker writes JSON and HTML reports to `temp/mutation-testing/`,
 which the workflow uploads as a 90-day artifact even when the mutation step
 fails. The job has a 20-minute timeout.
 
+Before invoking the TypeScript checker, the job generates the Prisma and
+Kysely types consumed by the repository-wide `tsconfig.json`.
+
 Jest related-test selection runs tests associated with each mutated file.
 `coverageAnalysis` is disabled because the current Jest integration does not
 provide Stryker's per-test coverage map; this selection keeps the full run within

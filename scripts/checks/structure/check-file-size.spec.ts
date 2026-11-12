@@ -73,6 +73,21 @@ describe('file-size ceiling check', () => {
     expect(runOnFixture({ [EXEMPT]: codeLines(5000) }).status).toBe(0);
   });
 
+  it('excludes testing descendant paths from the ceiling', () => {
+    const result = runOnFixture({
+      'src/modules/auth/testing/big-fixture.ts': codeLines(501),
+    });
+    expect(result.status).toBe(0);
+  });
+
+  it('enforces the ceiling on non-testing paths at the same depth', () => {
+    const result = runOnFixture({
+      'src/modules/auth/application/big-file.ts': codeLines(501),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.output).toMatch(/exceeds the 500-line ceiling/);
+  });
+
   it('passes on the real tree', () => {
     expect(runCheck(process.cwd()).status).toBe(0);
   });

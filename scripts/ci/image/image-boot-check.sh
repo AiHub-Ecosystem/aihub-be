@@ -48,6 +48,12 @@ while true; do
   case "$state" in
     "running healthy")
       echo "image boot check: healthy after $((SECONDS - started))s"
+      echo "image boot check: verifying native binary addons (argon2, sharp)..."
+      probe_script="$(dirname "$0")/verify-native-addons.cjs"
+      if ! docker exec -i "$container" node - < "$probe_script"; then
+        echo "image boot check: native addons probe failed" >&2
+        exit 1
+      fi
       exit 0
       ;;
     exited* | dead* | "running unhealthy" | "inspect failed"*)

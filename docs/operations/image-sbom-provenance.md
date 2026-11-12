@@ -12,6 +12,15 @@ CI builds and boots the production image, then the `publish-image` job (`.github
 
 CD (`.github/workflows/cd.yml`) resolves the image by digest and never rebuilds it (ADR-0064). The SBOM follows the image digest, so an operator can start from the deployed digest and find the same attestation.
 
+## Pre-deployment verification gate in CD (#1839)
+
+Before CD (`.github/workflows/cd.yml`) contacts the host or touches VPS credentials, the `resolve` job installs pinned Cosign 2.4.1 and enforces cryptographic verification:
+
+1. **Keyless image signature**: `cosign verify` validates the signature against the GitHub Actions OIDC issuer (`https://token.actions.githubusercontent.com`) and workflow identity (`https://github.com/AiHub-Ecosystem/aihub-be/.github/workflows/ci.yml@refs/heads/main`).
+2. **SPDX SBOM attestation**: `cosign verify-attestation --type spdxjson` confirms the signed in-toto SPDX SBOM attestation is attached to the exact image digest.
+
+Any unsigned, re-tagged, tampered, or un-attested image aborts deployment before establishing SSH contact.
+
 ## Vulnerability threshold
 
 The release scan fails when Grype finds an actionable (fixed) vulnerability at or above **High** severity (`--only-fixed --fail-on high`). The SBOM is still generated and attached before the gate so all findings are inspectable from the registry artifact.
@@ -51,5 +60,6 @@ cosign verify-blob image-sbom.spdx.json \
 ## Related
 
 - [ADR-0064: CI publishes the image it booted](../adr/0064-ci-publishes-the-image-it-booted.md)
+- [Container Image Vulnerability Scanning](image-vulnerability-scanning.md)
 - [#1814](https://github.com/AiHub-Ecosystem/aihub-be/issues/1814) Supply chain: generate, sign, and publish an SBOM for the production Docker image
 - [#1662](https://github.com/AiHub-Ecosystem/aihub-be/issues/1662) Dependabot automation and risk-grouped approve/merge
