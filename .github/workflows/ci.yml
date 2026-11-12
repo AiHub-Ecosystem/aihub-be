@@ -24,7 +24,9 @@ on:
       - "docs/history/aihub-deliverable-1-historical-contract.md"
       - "docs/integration-guide.md"
       - "docs/local-demo.md"
+      - "docs/operations/ci-boot-check.md"
       - "docs/operations/deploy-vps.md"
+      - "docs/operations/image-sbom-provenance.md"
       - "docs/operations/image-vulnerability-scanning.md"
       - "ops/vault/README.md"
 
@@ -144,17 +146,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      # #1777: `format:check` runs prettier with `--cache`. Without this the
-      # CI job always ran cold (~25s); with it an unchanged tree re-checks only
-      # the files a commit touched. The key carries the lockfile and the
-      # prettier config, because an option change invalidates every entry.
-      - name: Cache prettier
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: node_modules/.cache/prettier
-          key: prettier-${{ runner.os }}-${{ hashFiles('bun.lock', '.prettierrc', '.prettierignore') }}
-          restore-keys: prettier-${{ runner.os }}-
 
       - name: Check unused exports
         run: bun run knip
@@ -1358,7 +1349,7 @@ jobs:
       # GITHUB_TOKEN cannot write this organization package until its package
       # setting is enabled, so keep the existing write-capable token here.
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USERNAME }}

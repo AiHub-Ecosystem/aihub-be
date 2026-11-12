@@ -105,6 +105,8 @@ existing non-secret value is caught only by the boot itself.
 - The full dependency-injection graph assembles: every provider resolves and
   every module registers.
 - The server listens and answers `/health` under the image's own Node.
+- Native binary addons (`argon2` password hashing and `sharp` image processing)
+  load and execute successfully inside the container without lifecycle scripts (#1482).
 
 ## Limits of the CI coverage
 
