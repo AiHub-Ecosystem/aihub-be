@@ -1,6 +1,6 @@
 # ADR-0115: TypeScript 7 gates CI; the TypeScript 6 API stays for tools
 
-- Status: Accepted
+- Status: Accepted (amends [ADR-0042](0042-tsgo-local-tsc-gates-ci.md))
 - Date: 2026-10-21
 - Amends: [ADR-0042](0042-tsgo-local-tsc-gates-ci.md) (supersedes its gate decision; the `moduleResolution: bundler` decision stands)
 - Related: [#955](https://github.com/AiHub-Ecosystem/aihub-be/issues/955), [#796](https://github.com/AiHub-Ecosystem/aihub-be/issues/796), [research](../research/typescript-type-checker-options.md#measured-results-2026-10-21)
