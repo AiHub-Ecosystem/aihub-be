@@ -1180,7 +1180,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker build -t aihub-guard:scan -f ops/firewall/guard.Dockerfile ops/firewall
+          docker build -t aihub-guard:scan -f ops/firewall/guard.Dockerfile scripts/ops/firewall
           image_id="$(docker image inspect --format '{{.Id}}' aihub-guard:scan)"
           [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "### Vulnerability scan: ops/firewall/guard.Dockerfile ($image_id)" >> "$GITHUB_STEP_SUMMARY"
