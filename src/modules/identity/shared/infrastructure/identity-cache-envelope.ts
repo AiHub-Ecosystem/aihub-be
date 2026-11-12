@@ -39,6 +39,14 @@ function parseEnvelope(serialized: string): unknown {
   }
 }
 
+function containsOwnProtoKey(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  return (
+    Object.hasOwn(value, '__proto__') ||
+    Object.values(value).some(containsOwnProtoKey)
+  );
+}
+
 export function signIdentityCacheEntry(
   key: Buffer,
   kind: IdentityCacheKind,
@@ -74,6 +82,7 @@ export function verifyIdentityCacheEntry(input: {
 
   let macInput: string;
   try {
+    if (containsOwnProtoKey(record['data'])) return { authenticated: false };
     macInput = authenticatedInput(input.kind, input.redisKey, record['data']);
   } catch {
     return { authenticated: false };

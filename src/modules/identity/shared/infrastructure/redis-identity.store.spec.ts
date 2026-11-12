@@ -10,7 +10,10 @@ import {
   generateOrganizationApiKey,
   hashApiKey,
 } from '@/modules/identity/api-keys/application/organization-api-key-generator';
-import { signIdentityCacheEntry } from './identity-cache-envelope';
+import {
+  signIdentityCacheEntry,
+  verifyIdentityCacheEntry,
+} from './identity-cache-envelope';
 import { RedisAuthFailureCounter } from './redis-auth-failure-counter';
 import type { RedisIdentityClient } from './redis-identity-client';
 import { RedisIdentityStore } from './redis-identity.store';
@@ -661,6 +664,28 @@ describe('RedisIdentityStore', () => {
     expect(await redisUnavailableCount('jwks_cache')).toBe(
       jwksUnavailableBefore,
     );
+  });
+
+  it('rejects a signed cache entry with a nested own __proto__ key', () => {
+    const cacheKey = apiKeyCacheKey('e'.repeat(64));
+    const data = JSON.parse(
+      '{"nested":[{"__proto__":{"polluted":true}}]}',
+    ) as unknown;
+    const serialized = signIdentityCacheEntry(
+      TEST_HMAC_KEY,
+      'api_key',
+      cacheKey,
+      data,
+    );
+
+    expect(
+      verifyIdentityCacheEntry({
+        key: TEST_HMAC_KEY,
+        kind: 'api_key',
+        redisKey: cacheKey,
+        serialized,
+      }),
+    ).toEqual({ authenticated: false });
   });
 
   it('rejects a tampered record inside a plausible authenticated envelope', async () => {
