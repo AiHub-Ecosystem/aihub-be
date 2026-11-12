@@ -179,6 +179,28 @@ jobs:
       - name: Check import style
         run: bun run check:imports
 
+      # #941: static job runs the checks verify runs so regressions cannot pass CI.
+      - name: Check application errors
+        run: bun run check:app-errors
+
+      - name: Check data dictionary
+        run: bun run check:data-dictionary
+
+      - name: Check file sizes
+        run: bun run check:file-size
+
+      - name: Check domain globals
+        run: bun run check:domain-globals
+
+      - name: Check tenant globals
+        run: bun run check:tenant-global
+
+      - name: Check data ownership
+        run: bun run check:data-ownership
+
+      - name: Check documentation drift
+        run: bun run check:doc-drift
+
       # #1786: these suites ran only inside the local check:batch loop, so a
       # regression in the checkers they pin stayed invisible in CI.
       - name: Check the hook and drift suites CI owns
@@ -268,6 +290,9 @@ jobs:
 
       - name: Verify scoped Speaking JSON gzip
         run: bash ops/nginx/check-gzip.sh
+
+      - name: Check nginx configuration headers
+        run: bun run check:nginx-headers
 
   test:
     name: Unit tests
