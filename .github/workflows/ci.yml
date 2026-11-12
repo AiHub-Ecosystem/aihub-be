@@ -352,6 +352,51 @@ jobs:
       - name: Test the changed-file gate map
         run: bun run test:check-changed
 
+      - name: Upload flaky-test history and report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-test-history
+          path: |
+            temp/flaky-tests/history.json
+            temp/flaky-tests/report.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  shell-specs:
+    name: Shell specs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4-canary.20261109.1
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate the runtime Prisma client
+        run: node scripts/generate/generate-prisma-client.mjs --runtime
+
       - name: Exercise scheduled host job wrappers with stubs
         run: bash scripts/ops/host-jobs/host-scheduled-job.spec.sh
 
@@ -396,17 +441,6 @@ jobs:
 
       - name: Exercise Speaking gateway smoke identity handling with stubs
         run: bash test/ops/speaking-gateway-smoke.spec.sh
-
-      - name: Upload flaky-test history and report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: flaky-test-history
-          path: |
-            temp/flaky-tests/history.json
-            temp/flaky-tests/report.json
-          if-no-files-found: ignore
-          retention-days: 90
 
   dev-restart-budget:
     name: Dev restart budget
@@ -1396,6 +1430,7 @@ jobs:
       - secret-scan
       - static
       - test
+      - shell-specs
       - dev-restart-budget
       - build
       - audit
@@ -1415,6 +1450,7 @@ jobs:
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          SHELL_SPECS_RESULT: ${{ needs.shell-specs.result }}
           DEV_RESTART_BUDGET_RESULT: ${{ needs.dev-restart-budget.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           AUDIT_RESULT: ${{ needs.audit.result }}
@@ -1432,6 +1468,7 @@ jobs:
           test "$SECRET_SCAN_RESULT" = success
           test "$STATIC_RESULT" = success
           test "$TEST_RESULT" = success
+          test "$SHELL_SPECS_RESULT" = success
           test "$DEV_RESTART_BUDGET_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$AUDIT_RESULT" = success
