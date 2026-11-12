@@ -14,7 +14,6 @@ export type PasswordResetResult =
   | {
       readonly kind: 'reset';
       readonly userId: string;
-      readonly webSessionsRevoked: number;
     }
   | {
       readonly kind: 'invalid';
@@ -42,8 +41,8 @@ export interface IssuePasswordResetTokenInput {
  * One Password Reset Token: issue, check, and the reset that consumes it.
  *
  * `consumePasswordReset` changes the password, consumes every open reset
- * token, and revokes every Refresh Session of the account as one durable
- * step (ADR-0025).
+ * token, and revokes every Refresh Session and Web Session of the account as
+ * one durable step (ADR-0025).
  */
 export interface PasswordResetTokenRepositoryPort {
   issuePasswordResetToken(

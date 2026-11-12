@@ -88,9 +88,7 @@ const LOCK_PASSWORD_RESET_SQL = `
  *
  * The reset changes the password, consumes every open reset token, and revokes
  * every Refresh Session and Web Session of the account as one transaction
- * (ADR-0025). The other three tables are written from here rather than through
- * their adapters, because a second transaction between them would let an
- * exchange racing it observe a half-revoked account.
+ * (ADR-0025). All writes happen here so they share that transaction.
  */
 export class PostgresPasswordResetTokenRepository
   implements PasswordResetTokenRepositoryPort
@@ -217,20 +215,8 @@ export class PostgresPasswordResetTokenRepository
         where: { userAccountId: inspection.userId, revokedAt: null },
         data: { revokedAt: input.now },
       });
-      // The same durable step, one more statement: whoever knew the old
-      // password loses every Customer Web session as well, and because both
-      // revocations ride this transaction a failure anywhere rolls both back, so
-      // an exchange racing it can never observe a half-revoked account.
-      const webSessionsRevoked = await revokeUserWebSessions(
-        transaction,
-        inspection.userId,
-        input.now,
-      );
-      return {
-        kind: 'reset',
-        userId: inspection.userId,
-        webSessionsRevoked,
-      };
+      await revokeUserWebSessions(transaction, inspection.userId, input.now);
+      return { kind: 'reset', userId: inspection.userId };
     });
   }
 }

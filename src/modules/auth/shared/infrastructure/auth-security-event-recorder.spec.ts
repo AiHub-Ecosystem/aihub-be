@@ -37,28 +37,6 @@ function eventFor(event: AuthSecurityEventName): AuthSecurityEvent {
   switch (event) {
     case 'login_failed':
       return { event, occurredAt: OCCURRED_AT, userAccountId: USER_ID };
-    case 'web_session_exchange_refused_unknown':
-      return { event, occurredAt: OCCURRED_AT };
-    case 'web_session_client_secret_guard_failed':
-      return { event, occurredAt: OCCURRED_AT };
-    case 'web_session_created':
-      return {
-        event,
-        occurredAt: OCCURRED_AT,
-        source: 'password_login',
-        userAccountId: USER_ID,
-      };
-    case 'web_session_revoked':
-      return {
-        event,
-        occurredAt: OCCURRED_AT,
-        sessionsRevoked: 2,
-        trigger: 'password_reset',
-        userAccountId: USER_ID,
-      };
-    case 'web_session_exchange_refused_expired':
-    case 'web_session_exchange_refused_revoked':
-    case 'web_session_exchange_refused_inactive_account':
     case 'refresh_reuse':
     case 'password_reset_completed':
     case 'login_succeeded':
@@ -103,6 +81,16 @@ describe('Auth security event recorder', () => {
     await moduleRef.close();
   });
 
+  it('keeps the issue-approved event names as the complete fixed set', () => {
+    expect(AUTH_SECURITY_EVENT_NAMES).toEqual([
+      'refresh_reuse',
+      'password_reset_completed',
+      'login_succeeded',
+      'login_failed',
+      'verification_sign_in',
+    ]);
+  });
+
   it('writes one bounded JSON event line and increments one fixed series per event', async () => {
     logger.runInContext(
       () => {
@@ -133,9 +121,6 @@ describe('Auth security event recorder', () => {
             'occurred_at',
             'request_id',
             'user_account_id',
-            'source',
-            'trigger',
-            'sessions_revoked',
             'level',
             'time',
             'pid',

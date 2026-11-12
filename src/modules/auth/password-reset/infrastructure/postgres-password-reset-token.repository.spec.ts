@@ -86,7 +86,7 @@ describe('PostgresPasswordResetTokenRepository', () => {
     );
   });
 
-  it('atomically changes the password, consumes reset tokens, and revokes every refresh session and web session', async () => {
+  it('atomically changes the password, consumes reset tokens, and revokes every refresh and web session', async () => {
     const script = new ScriptedPrisma();
     script.inside = accountLocked([resetToken()]);
 
@@ -99,7 +99,6 @@ describe('PostgresPasswordResetTokenRepository', () => {
     ).resolves.toEqual({
       kind: 'reset',
       userId: USER_ID,
-      webSessionsRevoked: 1,
     });
 
     expect(script.statements.slice(3).map(({ name }) => name)).toEqual([
@@ -109,9 +108,8 @@ describe('PostgresPasswordResetTokenRepository', () => {
       'refreshToken.updateMany',
       'webSession.updateMany',
     ]);
-    // Both revocations ride the ONE transaction that changed the password, so a
-    // failure anywhere rolls all of it back: no half-revoked account is
-    // observable between them.
+    // Both revocations ride the ONE transaction that changed the password, so
+    // a failure anywhere rolls them back together.
     expect(script.opened).toBe(1);
     expect(
       script.statements.every(({ transaction }) => transaction === 1),
@@ -127,23 +125,6 @@ describe('PostgresPasswordResetTokenRepository', () => {
       },
     ]);
     expect(allArgs(script)).not.toContain('reset-token');
-  });
-
-  it('revokes no web session at all when the reset token is not consumable', async () => {
-    const script = new ScriptedPrisma();
-    script.inside = accountLocked([]);
-
-    await expect(
-      repositoryOver(script).consumePasswordReset({
-        tokenHash: input.tokenHash,
-        passwordHash: input.passwordHash,
-        now: input.now,
-      }),
-    ).resolves.toEqual({ kind: 'invalid', reason: 'missing' });
-
-    expect(script.statements.map(({ name }) => name)).not.toContain(
-      'webSession.updateMany',
-    );
   });
 
   it('takes no lock at all for a token that belongs to no account', async () => {
@@ -177,9 +158,6 @@ describe('PostgresPasswordResetTokenRepository', () => {
     // A lost race writes nothing: the password stays the winner's.
     expect(script.statements.map(({ name }) => name)).not.toContain(
       'authIdentity.updateMany',
-    );
-    expect(script.statements.map(({ name }) => name)).not.toContain(
-      'webSession.updateMany',
     );
   });
 

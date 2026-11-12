@@ -308,7 +308,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Keep selection in jq; piping to `head` can SIGPIPE gh under pipefail.
           run_id="$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=20" \
             --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure") | .id][0] // empty')"

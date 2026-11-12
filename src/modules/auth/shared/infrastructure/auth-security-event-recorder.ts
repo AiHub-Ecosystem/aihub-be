@@ -24,13 +24,6 @@ export class AuthSecurityEventRecorder
     if ('userAccountId' in event) {
       fields['user_account_id'] = event.userAccountId;
     }
-    if (event.event === 'web_session_created') {
-      fields['source'] = event.source;
-    }
-    if (event.event === 'web_session_revoked') {
-      fields['trigger'] = event.trigger;
-      fields['sessions_revoked'] = event.sessionsRevoked;
-    }
 
     this.logger.logger
       .child({}, { level: 'info' })

@@ -733,7 +733,6 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
     expect(result).toEqual({
       kind: 'reset',
       userId,
-      webSessionsRevoked: 0,
     });
   });
 });

@@ -1,18 +1,16 @@
 import { authorizeMfaSession } from '@/modules/auth/shared/infrastructure/auth-mfa-session.guard';
 import {
   type AuthRepositoryClient,
-  authQueryRows,
   authTransaction,
 } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import { passwordHashIsCurrent } from '@/modules/auth/shared/infrastructure/local-auth-statements';
 import { insertWebSession } from '@/modules/auth/shared/infrastructure/web-session-statements';
 import type {
   CreateWebSessionInput,
-  FindWebSessionForExchangeInput,
+  ExchangeableWebSession,
+  FindExchangeableWebSessionInput,
   RenewWebSessionInput,
   RevokeWebSessionInput,
-  RevokeWebSessionResult,
-  WebSessionForExchange,
   WebSessionRepositoryPort,
 } from '@/modules/auth/web-sessions/application/web-session-repository.port';
 
@@ -55,26 +53,20 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
     });
   }
 
-  async findWebSessionForExchange(
-    input: FindWebSessionForExchangeInput,
-  ): Promise<WebSessionForExchange | undefined> {
+  async findExchangeableWebSession(
+    input: FindExchangeableWebSessionInput,
+  ): Promise<ExchangeableWebSession | undefined> {
     const session = await this.client.webSession.findFirst({
-      where: { tokenHash: input.tokenHash },
-      select: {
-        id: true,
-        userAccountId: true,
-        expiresAt: true,
-        revokedAt: true,
+      where: {
+        tokenHash: input.tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: input.now },
       },
+      select: { id: true, userAccountId: true },
     });
     return session === null
       ? undefined
-      : {
-          sessionId: session.id,
-          userId: session.userAccountId,
-          expiresAt: session.expiresAt,
-          revokedAt: session.revokedAt,
-        };
+      : { sessionId: session.id, userId: session.userAccountId };
   }
 
   /**
@@ -113,20 +105,11 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
    * distinguishing themselves. No read, no lock, no account-wide revocation:
    * this is the presented session and nothing else.
    */
-  async revokeWebSession(
-    input: RevokeWebSessionInput,
-  ): Promise<RevokeWebSessionResult> {
-    const rows = await authQueryRows<{ userId: string }>(
-      this.client,
-      `UPDATE web_sessions
-       SET revoked_at = $2
-       WHERE token_hash = $1 AND revoked_at IS NULL
-       RETURNING user_account_id AS "userId"`,
-      [input.tokenHash, input.revokedAt],
-    );
-    const userId = rows[0]?.userId;
-    return userId === undefined
-      ? { kind: 'not_revoked', sessionsRevoked: 0 }
-      : { kind: 'revoked', userId, sessionsRevoked: 1 };
+  async revokeWebSession(input: RevokeWebSessionInput): Promise<boolean> {
+    const revoked = await this.client.webSession.updateMany({
+      where: { tokenHash: input.tokenHash, revokedAt: null },
+      data: { revokedAt: input.revokedAt },
+    });
+    return revoked.count > 0;
   }
 }

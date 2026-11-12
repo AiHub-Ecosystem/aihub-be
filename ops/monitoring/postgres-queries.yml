@@ -9,15 +9,6 @@ aihub_redis_unavailable:
         usage: COUNTER
         description: Redis commands an AIHUB protection or cache seam could not complete, by seam.
 
-aihub_auth_security_events:
-  query: SELECT event, total FROM aihub_monitoring.auth_security_events()
-  metrics:
-    - event:
-        usage: LABEL
-        description: Fixed auth security event name
-    - total:
-        usage: COUNTER
-        description: Successful account-disable events, one event per disable.
 aihub_postgres_snapshot:
   query: SELECT metric, database_name, value FROM aihub_monitoring.snapshot()
   metrics:

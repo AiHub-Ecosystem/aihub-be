@@ -128,15 +128,6 @@ export class PasswordRecoveryService implements PasswordRecoveryPort {
       userAccountId: result.userId,
       occurredAt: now,
     });
-    if (result.webSessionsRevoked > 0) {
-      this.securityEvents.record({
-        event: 'web_session_revoked',
-        userAccountId: result.userId,
-        trigger: 'password_reset',
-        sessionsRevoked: result.webSessionsRevoked,
-        occurredAt: now,
-      });
-    }
   }
 
   private async enforceResetFailureLimits(

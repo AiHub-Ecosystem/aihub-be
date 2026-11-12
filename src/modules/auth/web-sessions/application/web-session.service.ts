@@ -33,11 +33,6 @@ import {
   type UserAccessTokenIssuerPort,
 } from './user-access-token.port';
 import { webSessionUnavailable } from './web-session-errors';
-import {
-  type WebSessionExchangeLookup,
-  type WebSessionExchangeRefusal,
-  classifyWebSessionForExchange,
-} from './web-session-exchange-policy';
 import { WEB_SESSION_POLICY } from './web-session-policy';
 import { type WebSessionRepositoryPort } from './web-session-repository.port';
 import {
@@ -250,12 +245,6 @@ export class WebSessionService implements WebSessionServicePort {
       userAccountId: outcome.userId,
       occurredAt: now,
     });
-    this.securityEvents.record({
-      event: 'web_session_created',
-      userAccountId: outcome.userId,
-      source: 'verification_sign_in',
-      occurredAt: now,
-    });
     return { token: token.raw, expiresAt: token.expiresAt };
   }
 
@@ -270,7 +259,6 @@ export class WebSessionService implements WebSessionServicePort {
   ): Promise<IssuedUserAccessToken> {
     const now = this.clock.now();
     if (input.token === undefined || input.token.length === 0) {
-      this.recordExchangeRefusal({ kind: 'unknown' }, now);
       throw invalidWebSession();
     }
 
@@ -279,12 +267,11 @@ export class WebSessionService implements WebSessionServicePort {
     let userId: string;
     let sessionId: string;
     try {
-      const session = classifyWebSessionForExchange(
-        await this.webSessions.findWebSessionForExchange({ tokenHash }),
+      const session = await this.webSessions.findExchangeableWebSession({
+        tokenHash,
         now,
-      );
-      if (session.kind !== 'exchangeable') {
-        this.recordExchangeRefusal(session, now);
+      });
+      if (session === undefined) {
         await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
@@ -295,10 +282,6 @@ export class WebSessionService implements WebSessionServicePort {
         session.userId,
       );
       if (status !== 'active') {
-        this.recordExchangeRefusal(
-          { kind: 'inactive_account', userId: session.userId },
-          now,
-        );
         await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
@@ -324,17 +307,16 @@ export class WebSessionService implements WebSessionServicePort {
     });
     const checkedAt = this.clock.now();
     await this.renewSession(tokenHash, checkedAt);
-    let stillExchangeable: WebSessionExchangeLookup;
+    let stillExchangeable;
     try {
-      stillExchangeable = classifyWebSessionForExchange(
-        await this.webSessions.findWebSessionForExchange({ tokenHash }),
-        checkedAt,
-      );
+      stillExchangeable = await this.webSessions.findExchangeableWebSession({
+        tokenHash,
+        now: checkedAt,
+      });
     } catch (error) {
       throw webSessionUnavailable(error);
     }
-    if (stillExchangeable.kind !== 'exchangeable') {
-      this.recordExchangeRefusal(stillExchangeable, checkedAt);
+    if (stillExchangeable === undefined) {
       await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
       throw invalidWebSession();
     }
@@ -352,9 +334,9 @@ export class WebSessionService implements WebSessionServicePort {
    * the exchange's `web_session_exchange_token` dimension is for, and logout
    * does not widen it: presenting a token here does not look one up.
    *
-   * Revoking by hash needs no read: the conditional update reports no change
-   * for an unknown or already-revoked session. Every outcome preserves the same
-   * bodyless `204`.
+   * Revoking by hash needs no read: the conditional update matches no row for an
+   * unknown, already-revoked, or expired session, which is the same `204` as a
+   * successful one.
    */
   async revokeWebSession(input: {
     readonly token: string | undefined;
@@ -363,21 +345,11 @@ export class WebSessionService implements WebSessionServicePort {
       return;
     }
 
-    const revokedAt = this.clock.now();
     try {
-      const revocation = await this.webSessions.revokeWebSession({
+      await this.webSessions.revokeWebSession({
         tokenHash: this.tokenIssuer.hash(input.token),
-        revokedAt,
+        revokedAt: this.clock.now(),
       });
-      if (revocation.kind === 'revoked') {
-        this.securityEvents.record({
-          event: 'web_session_revoked',
-          userAccountId: revocation.userId,
-          trigger: 'logout',
-          sessionsRevoked: revocation.sessionsRevoked,
-          occurredAt: revokedAt,
-        });
-      }
     } catch (error) {
       // The only failure logout may report. A BFF that cannot tell "could not
       // end it" from "already ended" would clear a cookie whose session is
@@ -437,52 +409,11 @@ export class WebSessionService implements WebSessionServicePort {
     if (!created) {
       await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
     }
-    this.securityEvents.record({
-      event: 'web_session_created',
-      userAccountId: credentials.userId,
-      source: 'password_login',
-      occurredAt: now,
-    });
 
     return {
       kind: 'created',
       session: { token: token.raw, expiresAt: token.expiresAt },
     };
-  }
-
-  private recordExchangeRefusal(
-    refusal: WebSessionExchangeRefusal,
-    occurredAt: Date,
-  ): void {
-    switch (refusal.kind) {
-      case 'unknown':
-        this.securityEvents.record({
-          event: 'web_session_exchange_refused_unknown',
-          occurredAt,
-        });
-        return;
-      case 'expired':
-        this.securityEvents.record({
-          event: 'web_session_exchange_refused_expired',
-          userAccountId: refusal.userId,
-          occurredAt,
-        });
-        return;
-      case 'revoked':
-        this.securityEvents.record({
-          event: 'web_session_exchange_refused_revoked',
-          userAccountId: refusal.userId,
-          occurredAt,
-        });
-        return;
-      case 'inactive_account':
-        this.securityEvents.record({
-          event: 'web_session_exchange_refused_inactive_account',
-          userAccountId: refusal.userId,
-          occurredAt,
-        });
-        return;
-    }
   }
 
   /**
