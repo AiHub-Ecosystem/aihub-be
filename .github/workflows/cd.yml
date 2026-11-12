@@ -107,7 +107,7 @@ jobs:
           echo "Verifying Cosign SPDX SBOM attestation for $image_ref..."
           cosign verify-attestation --type spdxjson "$image_ref" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp "$identity_regex"
+            --certificate-identity-regexp "$identity_regex" > "$RUNNER_TEMP/attestation.json"
 
           printf '### Cosign cryptographic verification\n\nVerified keyless signature and SPDX SBOM attestation for `%s` against workflow `ci.yml@refs/heads/main`.\n' "$image_ref" >> "$GITHUB_STEP_SUMMARY"
 
