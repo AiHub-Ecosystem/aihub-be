@@ -2,7 +2,7 @@
 
 - Status: Accepted by the AIHUB owner on 2026-11-01; decisions 3 and 9 are amended by [ADR-0146](0146-ai-writing-micro-exercises-public-contract.md) (Proposed). The provider's written contract answers are recorded in [#1457](https://github.com/AiHub-Ecosystem/aihub-be/issues/1457). The owner accepted it ahead of the isolation evidence in [#1456](https://github.com/AiHub-Ecosystem/aihub-be/issues/1456) and of a probe of `org_...` Organization IDs, which are tracked there and in a separate issue.
 - Date: 2026-11-01
-- Amends: [ADR-0138](0138-batch-ai-service-breaking-changes-into-public-v2.md) decision 2 (when and how Writing joins `/v2`)
+- Amends: [ADR-0085](0085-per-tier-blue-green-cutover.md) (drain budget), [ADR-0138](0138-batch-ai-service-breaking-changes-into-public-v2.md) decision 2 (when and how Writing joins `/v2`)
 - Related: [ADR-0085](0085-per-tier-blue-green-cutover.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0129](0129-public-route-and-response-convention.md), [ADR-0140](0140-tenant-identity-is-the-organization-and-end-user-id-pair.md), [#1452](https://github.com/AiHub-Ecosystem/aihub-be/issues/1452), [#1454](https://github.com/AiHub-Ecosystem/aihub-be/issues/1454), [#1455](https://github.com/AiHub-Ecosystem/aihub-be/issues/1455), [#70](https://github.com/AiHub-Ecosystem/aihub-be/issues/70)
 
 ## Context

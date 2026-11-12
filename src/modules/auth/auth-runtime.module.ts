@@ -84,6 +84,7 @@ import {
 import { PostgresVerificationTokenRepository } from './verification/infrastructure/postgres-verification-token.repository';
 import { REFRESH_SESSION_REPOSITORY } from './web-sessions/application/refresh-session-repository.port';
 import { REFRESH_TOKEN_ISSUER } from './web-sessions/application/refresh-token.port';
+import { userAccessTokenAudience } from './web-sessions/application/user-access-token-audience';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
@@ -114,6 +115,28 @@ import {
   WebSessionClientGuard,
 } from './web-sessions/presentation/web-session-client.guard';
 import { WebSessionController } from './web-sessions/presentation/web-session.controller';
+
+/** Binds access-token verification to the configured database scope. */
+function createUserAccessTokenCrypto(
+  provider: RuntimeSecretProvider,
+  configuration: ConfigType<typeof appConfig>,
+): JoseUserAccessTokenService {
+  const issuer = configuration.AIHUB_USER_ACCESS_ISSUER?.trim();
+  if (issuer === undefined || issuer.length === 0) {
+    throw internalError('AIHUB_USER_ACCESS_ISSUER is required');
+  }
+  const runtime = provider.getSnapshot().userAccessJwt;
+  return new JoseUserAccessTokenService({
+    privateKeyPem: runtime.privateKeyPem,
+    keyId: runtime.keyId,
+    issuer,
+    audience: userAccessTokenAudience(
+      configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
+    ),
+    expiresInSeconds: 900,
+    clockSkewSeconds: 60,
+  });
+}
 
 @Module({
   imports: [
@@ -371,24 +394,7 @@ import { WebSessionController } from './web-sessions/presentation/web-session.co
     },
     {
       provide: USER_ACCESS_TOKEN_CRYPTO,
-      useFactory: (
-        provider: RuntimeSecretProvider,
-        configuration: ConfigType<typeof appConfig>,
-      ): JoseUserAccessTokenService => {
-        const issuer = configuration.AIHUB_USER_ACCESS_ISSUER?.trim();
-        if (issuer === undefined || issuer.length === 0) {
-          throw internalError('AIHUB_USER_ACCESS_ISSUER is required');
-        }
-        const runtime = provider.getSnapshot().userAccessJwt;
-        return new JoseUserAccessTokenService({
-          privateKeyPem: runtime.privateKeyPem,
-          keyId: runtime.keyId,
-          issuer,
-          audience: 'aihub-user-api',
-          expiresInSeconds: 900,
-          clockSkewSeconds: 60,
-        });
-      },
+      useFactory: createUserAccessTokenCrypto,
       inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
     },
     {

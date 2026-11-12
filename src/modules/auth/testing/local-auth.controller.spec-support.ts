@@ -61,7 +61,10 @@ import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import {
+  USER_ACCESS_TOKEN_REVOCATION_RECORD,
+  type UserAccessTokenRevocationRecordPort,
+} from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import {
   type IssuedVerificationToken,
@@ -366,12 +369,13 @@ export interface LocalAuthTestContext {
   reset: () => void;
 }
 
-/** Builds the auth HTTP test app with isolated in-memory ports and overrides. */
+/** Creates an isolated Auth app with in-memory adapters and optional overrides. */
 export async function createLocalAuthTestContext(
   accessTokenVerifierOverride?: UserAccessTokenVerifierPort,
   requestLogStream?: RequestLogStream,
   configureFastify?: (fastify: FastifyInstance) => void,
   clientSecret?: string,
+  revocationRecordOverride?: UserAccessTokenRevocationRecordPort,
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -444,7 +448,7 @@ export async function createLocalAuthTestContext(
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(accessTokenVerifierOverride ?? accessTokenVerifier)
     .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(revocations)
+    .useValue(revocationRecordOverride ?? revocations)
     .overrideProvider(REFRESH_TOKEN_ISSUER)
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)

@@ -1,4 +1,3 @@
-import { performance } from 'node:perf_hooks';
 import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { BloomFilterUserAccessTokenRevocationAdapter } from './bloom-filter-user-access-token-revocation.adapter';
 import { InProcessBloomFilter } from './in-process-bloom-filter';
@@ -36,8 +35,8 @@ class SimulatedNetworkRevocationStore
   }
 }
 
-describe('Bloom Filter Revocation Benchmark (AC #1252)', () => {
-  it('demonstrates > 40% throughput increase and 0 network calls during steady-state auth', async () => {
+describe('Bloom Filter Revocation Lookup Contract', () => {
+  it('checks the authoritative store for every negative decision', async () => {
     const sampleSize = 50;
     const tokens = Array.from({ length: sampleSize }, (_, i) => ({
       issuer: 'https://api.aihub.example.com',
@@ -45,19 +44,7 @@ describe('Bloom Filter Revocation Benchmark (AC #1252)', () => {
       now: new Date(),
     }));
 
-    // Baseline: Direct network call per token verification
-    const baselineStore = new SimulatedNetworkRevocationStore();
-    let baselinePassed = 0;
-    const baselineStart = performance.now();
-    for (const token of tokens) {
-      if (!(await baselineStore.isRevoked(token))) {
-        baselinePassed++;
-      }
-    }
-    const baselineDuration = performance.now() - baselineStart;
-    const baselineThroughput = (sampleSize / baselineDuration) * 1_000;
-
-    // Canva In-Process Bloom Filter Adapter
+    // Bloom misses no longer authorize a token without an authoritative read.
     const bloomStore = new SimulatedNetworkRevocationStore();
     const filter = new InProcessBloomFilter({
       capacity: 100_000,
@@ -68,31 +55,12 @@ describe('Bloom Filter Revocation Benchmark (AC #1252)', () => {
       bloomFilter: filter,
     });
 
-    let bloomPassed = 0;
-    const bloomStart = performance.now();
     for (const token of tokens) {
-      if (!(await adapter.isRevoked(token))) {
-        bloomPassed++;
-      }
+      await expect(adapter.isRevoked(token)).resolves.toBe(false);
     }
-    const bloomDuration = performance.now() - bloomStart;
-    const bloomThroughput = (sampleSize / bloomDuration) * 1_000;
+    expect(bloomStore.networkCallCount).toBe(sampleSize);
 
-    // Verify all tokens correctly verified
-    expect(baselinePassed).toBe(sampleSize);
-    expect(bloomPassed).toBe(sampleSize);
-
-    // AC 3 Requirement 1: Zero network commands executed during steady-state auth
-    expect(bloomStore.networkCallCount).toBe(0);
-    expect(baselineStore.networkCallCount).toBe(sampleSize);
-
-    // AC 3 Requirement 2: Authenticated throughput increases by > 40%
-    const throughputIncreasePercent =
-      ((bloomThroughput - baselineThroughput) / baselineThroughput) * 100;
-
-    expect(throughputIncreasePercent).toBeGreaterThan(40);
-
-    // AC 1 Requirement: Memory footprint under 1MB RAM
+    // The inactive optimization's allocation remains bounded.
     expect(filter.byteLength).toBeLessThan(1024 * 1024);
   });
 

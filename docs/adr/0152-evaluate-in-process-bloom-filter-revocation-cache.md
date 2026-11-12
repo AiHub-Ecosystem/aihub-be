@@ -1,9 +1,9 @@
 # ADR-0152: Evaluate Canva-style In-Process Bloom Filter Revocation Cache
 
-- Status: Proposed
+- Status: Proposed — evaluation only; not adopted for authorization
 - Date: 2026-11-06
-- Amends: [ADR-0150](0150-revoke-individual-user-access-jwts.md) — evaluates an in-process caching tier in front of Postgres durable revocation reads to eliminate per-request network round-trips.
-- Related: [#1252](https://github.com/AiHub-Ecosystem/aihub-be/issues/1252), [#518](https://github.com/AiHub-Ecosystem/aihub-be/issues/518), [ADR-0150](0150-revoke-individual-user-access-jwts.md)
+- Amends: none — this proposal does not amend [ADR-0150](0150-revoke-individual-user-access-jwts.md).
+- Related: [#1252](https://github.com/AiHub-Ecosystem/aihub-be/issues/1252), [#518](https://github.com/AiHub-Ecosystem/aihub-be/issues/518), [#1745](https://github.com/AiHub-Ecosystem/aihub-be/issues/1745), [#1861](https://github.com/AiHub-Ecosystem/aihub-be/issues/1861), [ADR-0150](0150-revoke-individual-user-access-jwts.md)
 
 ## Context
 
@@ -16,6 +16,10 @@ Issue #1252 evaluates Canva's In-Process Revocation Filter pattern to verify JWT
 
 ## Decision & Evaluation Findings
 
+The prototype findings below do not describe the active protected-request path.
+Until a synchronization design proves complete revocation delivery, every
+protected Bearer request uses the direct Postgres lookup required by ADR-0150.
+
 - Prototype `InProcessBloomFilter`:
   - In-memory compact bitset using `Uint8Array` (< 1MB RAM for 100,000 tokens at $p < 0.001\%$).
   - Configurable false positive rate ($p < 0.001\%$).
@@ -26,19 +30,28 @@ Issue #1252 evaluates Canva's In-Process Revocation Filter pattern to verify JWT
   - Slow path: If `bloomFilter.has(key)` is `true` (true positive or false positive $< 0.001\%$), falls back to durable store (Postgres). If the durable store returns not revoked, the token is accepted. This guarantees zero false rejections.
   - Synchronization: When `revoke()` is called, writes to durable storage, updates local filter, and broadcasts to peer instances via Redis Pub/Sub (`aihub:auth:token-revocations`).
 - Benchmark verification (`bloom-filter-revocation-benchmark.spec.ts`):
-  - Valid authenticated requests execute with 0 network commands in steady-state auth.
-  - Throughput increases by $> 40\%$ compared to direct network round-trips.
-  - 100% of revoked tokens are accurately recognized without false negatives.
+  - The prior benchmark's zero-query and throughput claims applied only to the
+    local prototype and did not cover missed Pub/Sub delivery. They are not
+    production guarantees and no longer describe the active lookup path.
+  - The #1745 zero-query target applied only to the revocation lookup; the
+    Bearer guard still performs its separate account-status lookup.
 
 ## Production Adoption Requirements
 
-For production activation (to be scheduled when traffic reaches trigger):
+Before considering production activation:
 
 1. **Generational/Rolling Windows**: Use two rolling Bloom Filters rotated at token TTL (15 minutes) so expired tokens naturally age out without unbounded bitset saturation.
 2. **Cold-start Hydration**: At worker startup, pre-warm active unexpired revocations from Postgres into the current generational filter.
 
+Rolling-window rotation remains unimplemented. A filter miss must not be used
+for authorization unless a future synchronization design proves that it cannot
+omit a committed revocation.
+
 ## Consequences
 
-- Legitimate requests are verified locally in V8 memory with zero network I/O.
-- Memory overhead is negligible (< 1MB RAM per instance).
-- Durable Postgres storage remains the authoritative source of truth.
+- The proposed filter reduces memory use only; it does not currently reduce
+  revocation-query traffic on protected requests.
+- Every protected Bearer request depends on Postgres for revocation state and
+  fails closed with a retryable 503 during a database outage.
+- The prototype's memory estimate is under 1MB per instance for 100,000
+  revocations at the measured false-positive rate.

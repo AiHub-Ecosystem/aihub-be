@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-29
-- Supersedes: Stage A tracing deferral in [01-context-and-stack](../superpowers/specs/2026-09-07-aihub/01-context-and-stack.md) and [10-deployment-roadmap](../superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md)
+- Supersedes: [ADR-0012](0012-defer-distributed-tracing.md) (Stage A tracing deferral in [01-context-and-stack](../superpowers/specs/2026-09-07-aihub/01-context-and-stack.md) and [10-deployment-roadmap](../superpowers/specs/2026-09-07-aihub/10-deployment-roadmap.md))
 
 ## Context
 
