@@ -51,5 +51,6 @@ cosign verify-blob image-sbom.spdx.json \
 ## Related
 
 - [ADR-0064: CI publishes the image it booted](../adr/0064-ci-publishes-the-image-it-booted.md)
+- [Container Image Vulnerability Scanning](image-vulnerability-scanning.md)
 - [#1814](https://github.com/AiHub-Ecosystem/aihub-be/issues/1814) Supply chain: generate, sign, and publish an SBOM for the production Docker image
 - [#1662](https://github.com/AiHub-Ecosystem/aihub-be/issues/1662) Dependabot automation and risk-grouped approve/merge

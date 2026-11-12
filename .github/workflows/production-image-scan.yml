@@ -1,0 +1,111 @@
+name: Production image vulnerability scan
+
+# #331: Scheduled scan of the container image currently deployed to Production.
+# Runs daily to catch CVEs disclosed after an image has been published and deployed.
+# When a fixable Critical or High CVE appears, it opens or updates a tracking issue.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-image-scan
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Scan deployed production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install Grype 0.87.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/grype.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            https://github.com/anchore/grype/releases/download/v0.87.0/grype_0.87.0_linux_amd64.tar.gz
+          printf '%s  %s\n' \
+            'be710d15f5477e5c77ce03d14e480263415d7ab135e04b8483663f688823087d' \
+            "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" grype
+          "$RUNNER_TEMP/grype" version
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Resolve deployed production image
+        id: image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/cd.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty')"
+          if [[ -z "$sha" ]]; then
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${sha}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Scan deployed image with Grype
+        id: grype_scan
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          scan_exit=0
+          grype "$IMAGE" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "$IMAGE" --output json > scan-report.json || true
+          grype "$IMAGE" --only-fixed --fail-on high || scan_exit=$?
+          echo "exit_code=$scan_exit" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update issue on fixable Critical or High CVEs
+        if: steps.grype_scan.outputs.exit_code != '0'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          SHA: ${{ steps.image.outputs.sha }}
+        run: |
+          set -euo pipefail
+          title="Security: fixable CVE detected in deployed production image"
+          cat <<EOF > issue-text.txt
+          A scheduled vulnerability scan detected fixable Critical or High CVEs in the deployed production image \`$IMAGE\` (commit \`$SHA\`).
+
+          Please inspect the scan report and bump the base image digest in \`Dockerfile\` per \`docs/operations/image-vulnerability-scanning.md\`.
+
+          \`\`\`
+          $(jq -r '.matches[] | select(.vulnerability.fix.state == "fixed" and (.vulnerability.severity == "High" or .vulnerability.severity == "Critical")) | "\(.vulnerability.severity) \(.vulnerability.id): \(.artifact.name) \(.artifact.version) -> fixed in \(.vulnerability.fix.versions // [] | join(", "))"' scan-report.json | head -40)
+          \`\`\`
+          EOF
+
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body-file issue-text.txt
+          else
+            gh issue create \
+              --title "$title" \
+              --body-file issue-text.txt \
+              --label ready-for-agent \
+              --label P1 \
+              --milestone "Image and supply-chain integrity"
+            node scripts/checks/hooks/check-issue-triage.mjs
+          fi
+          exit 1

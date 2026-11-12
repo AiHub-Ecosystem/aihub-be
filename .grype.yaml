@@ -1,0 +1,8 @@
+# Grype vulnerability scanner configuration (issue #331).
+# Ignore format:
+# ignore:
+#   - vulnerability: CVE-YYYY-XXXXX
+#     reason: "Documented explanation why this risk is accepted"
+#     until: "YYYY-MM-DD"
+
+ignore: []

@@ -25,6 +25,7 @@ on:
       - "docs/integration-guide.md"
       - "docs/local-demo.md"
       - "docs/operations/deploy-vps.md"
+      - "docs/operations/image-vulnerability-scanning.md"
       - "ops/vault/README.md"
 
   workflow_dispatch:
@@ -1147,6 +1148,49 @@ jobs:
 
       - name: Boot the image and wait for its health check
         run: bash scripts/ci/image/image-boot-check.sh aihub:image-boot
+
+      # #331: scan the booted image and operational support images with Grype
+      # before allowing the image to be published or deployed.
+      - name: Install Grype 0.87.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/grype.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            https://github.com/anchore/grype/releases/download/v0.87.0/grype_0.87.0_linux_amd64.tar.gz
+          printf '%s  %s\n' \
+            'be710d15f5477e5c77ce03d14e480263415d7ab135e04b8483663f688823087d' \
+            "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" grype
+          "$RUNNER_TEMP/grype" version
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Scan booted production image for fixable CVEs (Grype)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "### Vulnerability scan: aihub:image-boot" >> "$GITHUB_STEP_SUMMARY"
+          grype aihub:image-boot --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype aihub:image-boot --only-fixed --fail-on high
+
+      - name: Build and scan firewall guard image (Grype)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t aihub-guard:scan -f ops/firewall/guard.Dockerfile ops/firewall
+          echo "### Vulnerability scan: ops/firewall/guard.Dockerfile" >> "$GITHUB_STEP_SUMMARY"
+          grype aihub-guard:scan --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype aihub-guard:scan --only-fixed --fail-on high
+
+      - name: Build and scan monitoring SSH tunnel image (Grype)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t aihub-ssh-tunnel:scan -f ops/monitoring/ssh-tunnel.Dockerfile ops/monitoring
+          echo "### Vulnerability scan: ops/monitoring/ssh-tunnel.Dockerfile" >> "$GITHUB_STEP_SUMMARY"
+          grype aihub-ssh-tunnel:scan --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype aihub-ssh-tunnel:scan --only-fixed --fail-on high
 
       - name: Select active per-tier release revisions
         id: previous_release
