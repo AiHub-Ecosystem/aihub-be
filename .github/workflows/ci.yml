@@ -592,10 +592,14 @@ jobs:
           path: customer-web-linked
           persist-credentials: false
 
+      # #1399: Customer Web checks run on active Node 22 LTS (Node 20 reached
+      # EOL on 2026-03-24). Both dev and linked PR paths execute under this
+      # runtime without engine restrictions (AiHub-Frontend declares no
+      # engines.node in package.json).
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Customer Web dependencies
         working-directory: customer-web
