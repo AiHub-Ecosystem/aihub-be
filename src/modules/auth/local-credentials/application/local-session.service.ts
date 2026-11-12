@@ -10,7 +10,7 @@ import {
   invalidRefreshToken,
   invalidUserAccessToken,
 } from '@/modules/auth/shared/application/local-auth-errors';
-import { recordCredentialLoginFailure } from '@/modules/auth/shared/application/record-credential-login-failure';
+import { withCredentialLoginFailureRecording } from '@/modules/auth/shared/application/record-credential-login-failure';
 import type { RefreshSessionRepositoryPort } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import {
   type AuthenticatedCredentials,
@@ -61,56 +61,52 @@ export class LocalSessionService implements LocalSessionPort {
   }
 
   async login(input: LoginRequest, ip: string): Promise<LoginOutcome> {
-    let userAccountId: string | undefined;
-    try {
-      const credentials = await authenticateCredentials(
-        this.credentials,
-        input,
-        ip,
-        (knownUserAccountId) => {
-          userAccountId = knownUserAccountId;
-        },
-      );
-      userAccountId = credentials.userId;
-      const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
-      if (mfa.kind === 'required') return { kind: 'mfa-required' };
-      if (mfa.kind === 'invalid') {
-        return await rejectCredentials(
-          this.credentials.rateLimiter,
+    return withCredentialLoginFailureRecording(
+      async (rememberUserAccountId) => {
+        const credentials = await authenticateCredentials(
+          this.credentials,
+          input,
           ip,
-          credentials.email,
+          rememberUserAccountId,
         );
-      }
-      const proof = mfa.kind === 'proved' ? mfa.proof : undefined;
-      const now = this.clock.now();
-      const currentCredentials = await upgradePasswordHashIfNeeded(
-        this.credentials,
-        credentials,
-        input.password,
-        now,
-        ip,
-      );
-      const session = await this.startLoginSession(
-        currentCredentials,
-        now,
-        ip,
-        proof,
-      );
-      this.securityEvents.record({
-        event: 'login_succeeded',
-        userAccountId: credentials.userId,
-        occurredAt: now,
-      });
-      return { kind: 'session', session };
-    } catch (error) {
-      recordCredentialLoginFailure(
-        error,
-        userAccountId,
-        this.clock,
-        this.securityEvents,
-      );
-      throw error;
-    }
+        rememberUserAccountId(credentials.userId);
+        const mfa = await this.mfa.loginProof(
+          credentials.userId,
+          input.mfa_code,
+        );
+        if (mfa.kind === 'required') return { kind: 'mfa-required' };
+        if (mfa.kind === 'invalid') {
+          return rejectCredentials(
+            this.credentials.rateLimiter,
+            ip,
+            credentials.email,
+          );
+        }
+        const proof = mfa.kind === 'proved' ? mfa.proof : undefined;
+        const now = this.clock.now();
+        const currentCredentials = await upgradePasswordHashIfNeeded(
+          this.credentials,
+          credentials,
+          input.password,
+          now,
+          ip,
+        );
+        const session = await this.startLoginSession(
+          currentCredentials,
+          now,
+          ip,
+          proof,
+        );
+        this.securityEvents.record({
+          event: 'login_succeeded',
+          userAccountId: credentials.userId,
+          occurredAt: now,
+        });
+        return { kind: 'session', session };
+      },
+      this.clock,
+      this.securityEvents,
+    );
   }
 
   /**

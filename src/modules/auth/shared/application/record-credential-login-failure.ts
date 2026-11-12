@@ -11,7 +11,8 @@ export function recordCredentialLoginFailure(
 ): void {
   if (
     !(error instanceof AppError) ||
-    error.code !== 'AUTH_CREDENTIALS_INVALID'
+    (error.code !== 'AUTH_CREDENTIALS_INVALID' &&
+      error.code !== 'AUTH_VERIFICATION_PASSWORD_INVALID')
   ) {
     return;
   }
@@ -21,4 +22,22 @@ export function recordCredentialLoginFailure(
     ...(userAccountId === undefined ? {} : { userAccountId }),
     occurredAt: clock.now(),
   });
+}
+
+export async function withCredentialLoginFailureRecording<T>(
+  attempt: (
+    rememberUserAccountId: (userAccountId: string | undefined) => void,
+  ) => Promise<T>,
+  clock: AuthClock,
+  securityEvents: AuthSecurityEventRecorderPort,
+): Promise<T> {
+  let userAccountId: string | undefined;
+  try {
+    return await attempt((knownUserAccountId) => {
+      userAccountId = knownUserAccountId;
+    });
+  } catch (error) {
+    recordCredentialLoginFailure(error, userAccountId, clock, securityEvents);
+    throw error;
+  }
 }

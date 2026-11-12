@@ -380,6 +380,28 @@ describe('LocalRegistrationService', () => {
       expect(accountStatus(context)).toBe('active');
     });
 
+    it('records an admitted verification password failure as login_failed', async () => {
+      const context = await registered(true);
+
+      await expect(
+        context.registration.verify(
+          context.rawToken,
+          '203.0.113.7',
+          undefined,
+          'a wrong password',
+        ),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+
+      expect(context.limiter.calls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ scope: 'verify_ip' }),
+        ]),
+      );
+      expect(context.securityEvents).toEqual([
+        { event: 'login_failed', occurredAt: NOW },
+      ]);
+    });
+
     it('counts wrong passwords and spends the token on the fifth', async () => {
       const context = await registered(true);
 

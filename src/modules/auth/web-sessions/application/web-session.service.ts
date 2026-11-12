@@ -17,7 +17,10 @@ import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rat
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
 import type { AuthSecurityEventRecorderPort } from '@/modules/auth/shared/application/auth-security-event.port';
 import { invalidVerificationToken } from '@/modules/auth/shared/application/local-auth-errors';
-import { recordCredentialLoginFailure } from '@/modules/auth/shared/application/record-credential-login-failure';
+import {
+  recordCredentialLoginFailure,
+  withCredentialLoginFailureRecording,
+} from '@/modules/auth/shared/application/record-credential-login-failure';
 import { type VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
 import { type VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
 import {
@@ -112,71 +115,71 @@ export class WebSessionService implements WebSessionServicePort {
     },
     endUserIp: string,
   ): Promise<CreateWebSessionOutcome> {
-    let userAccountId: string | undefined;
-    try {
-      // The same check, dummy hash, and login limits login applies, so this route
-      // adds no way around them.
-      const credentials = await authenticateCredentials(
-        {
-          userAccounts: this.userAccounts,
-          passwordHasher: this.passwordHasher,
-          rateLimiter: this.rateLimiter,
-        },
-        input,
-        endUserIp,
-        (knownUserAccountId) => {
-          userAccountId = knownUserAccountId;
-        },
-      );
-      userAccountId = credentials.userId;
-      const mfa = await this.mfa.loginProof(credentials.userId, input.mfa_code);
-      if (mfa.kind === 'required') return { kind: 'mfa-required' };
-      if (mfa.kind === 'invalid') {
-        await rejectCredentials(this.rateLimiter, endUserIp, credentials.email);
-      }
-
-      const now = this.clock.now();
-      let currentCredentials: AuthenticatedCredentials;
-      try {
-        currentCredentials = await upgradePasswordHashIfNeeded(
+    return withCredentialLoginFailureRecording(
+      async (rememberUserAccountId) => {
+        // The same check, dummy hash, and login limits login applies, so this route
+        // adds no way around them.
+        const credentials = await authenticateCredentials(
           {
             userAccounts: this.userAccounts,
             passwordHasher: this.passwordHasher,
             rateLimiter: this.rateLimiter,
           },
-          credentials,
-          input.password,
+          input,
+          endUserIp,
+          rememberUserAccountId,
+        );
+        rememberUserAccountId(credentials.userId);
+        const mfa = await this.mfa.loginProof(
+          credentials.userId,
+          input.mfa_code,
+        );
+        if (mfa.kind === 'required') return { kind: 'mfa-required' };
+        if (mfa.kind === 'invalid') {
+          await rejectCredentials(
+            this.rateLimiter,
+            endUserIp,
+            credentials.email,
+          );
+        }
+
+        const now = this.clock.now();
+        let currentCredentials: AuthenticatedCredentials;
+        try {
+          currentCredentials = await upgradePasswordHashIfNeeded(
+            {
+              userAccounts: this.userAccounts,
+              passwordHasher: this.passwordHasher,
+              rateLimiter: this.rateLimiter,
+            },
+            credentials,
+            input.password,
+            now,
+            endUserIp,
+          );
+        } catch (error) {
+          if (error instanceof AppError) throw error;
+          throw webSessionUnavailable(error);
+        }
+        const outcome = await this.commitSession(
+          currentCredentials,
+          this.tokenIssuer.issue(now),
           now,
           endUserIp,
+          mfa.kind === 'proved' ? mfa.proof : undefined,
         );
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        throw webSessionUnavailable(error);
-      }
-      const outcome = await this.commitSession(
-        currentCredentials,
-        this.tokenIssuer.issue(now),
-        now,
-        endUserIp,
-        mfa.kind === 'proved' ? mfa.proof : undefined,
-      );
-      if (outcome.kind === 'created') {
-        this.securityEvents.record({
-          event: 'login_succeeded',
-          userAccountId: credentials.userId,
-          occurredAt: now,
-        });
-      }
-      return outcome;
-    } catch (error) {
-      recordCredentialLoginFailure(
-        error,
-        userAccountId,
-        this.clock,
-        this.securityEvents,
-      );
-      throw error;
-    }
+        if (outcome.kind === 'created') {
+          this.securityEvents.record({
+            event: 'login_succeeded',
+            userAccountId: credentials.userId,
+            occurredAt: now,
+          });
+        }
+        return outcome;
+      },
+      this.clock,
+      this.securityEvents,
+    );
   }
 
   /**
@@ -205,10 +208,21 @@ export class WebSessionService implements WebSessionServicePort {
     // stays available while the token is unexpired.
     const token = this.tokenIssuer.issue(now);
     const tokenHash = this.verificationTokens.hash(input.token);
-    const proof = await proveVerificationPassword(
-      { store: this.verificationTokenStore, hasher: this.passwordHasher },
-      { tokenHash, password: input.password, now },
-    );
+    let proof: Awaited<ReturnType<typeof proveVerificationPassword>>;
+    try {
+      proof = await proveVerificationPassword(
+        { store: this.verificationTokenStore, hasher: this.passwordHasher },
+        { tokenHash, password: input.password, now },
+      );
+    } catch (error) {
+      recordCredentialLoginFailure(
+        error,
+        undefined,
+        this.clock,
+        this.securityEvents,
+      );
+      throw error;
+    }
     let outcome;
     try {
       outcome = await this.verificationTokenStore.consumeVerificationToken({
@@ -229,7 +243,14 @@ export class WebSessionService implements WebSessionServicePort {
     }
 
     if (outcome.kind === 'password_required') {
-      throw verificationPasswordInvalid();
+      const error = verificationPasswordInvalid();
+      recordCredentialLoginFailure(
+        error,
+        undefined,
+        this.clock,
+        this.securityEvents,
+      );
+      throw error;
     }
     if (outcome.kind === 'invalid') {
       throw invalidVerificationToken();

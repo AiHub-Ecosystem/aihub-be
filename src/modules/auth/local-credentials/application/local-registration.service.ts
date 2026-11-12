@@ -12,6 +12,7 @@ import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
 import { AuthIdentityConflictError } from '@/modules/auth/shared/application/auth-identity-conflict.error';
 import type { AuthSecurityEventRecorderPort } from '@/modules/auth/shared/application/auth-security-event.port';
 import { invalidVerificationToken } from '@/modules/auth/shared/application/local-auth-errors';
+import { recordCredentialLoginFailure } from '@/modules/auth/shared/application/record-credential-login-failure';
 import type { VerificationTokenRepositoryPort } from '@/modules/auth/verification/application/verification-token-repository.port';
 import type { VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
 import {
@@ -150,13 +151,24 @@ export class LocalRegistrationService implements LocalRegistrationPort {
     // back, leaving the sign-in available while the token is unexpired.
     const refreshToken = this.sessionIssuers.refreshTokens.issue(now);
     const tokenHash = this.tokenIssuer.hash(token);
-    const proof = await proveVerificationPassword(
-      {
-        store: this.verificationTokens,
-        hasher: this.credentials.passwordHasher,
-      },
-      { tokenHash, password, now },
-    );
+    let proof: Awaited<ReturnType<typeof proveVerificationPassword>>;
+    try {
+      proof = await proveVerificationPassword(
+        {
+          store: this.verificationTokens,
+          hasher: this.credentials.passwordHasher,
+        },
+        { tokenHash, password, now },
+      );
+    } catch (error) {
+      recordCredentialLoginFailure(
+        error,
+        undefined,
+        this.clock,
+        this.securityEvents,
+      );
+      throw error;
+    }
     const outcome = await this.verificationTokens.consumeVerificationToken({
       tokenHash,
       ...browserBindingHash(this.tokenIssuer, browserBinding),
@@ -165,7 +177,14 @@ export class LocalRegistrationService implements LocalRegistrationPort {
       now,
     });
     if (outcome.kind === 'password_required') {
-      throw verificationPasswordInvalid();
+      const error = verificationPasswordInvalid();
+      recordCredentialLoginFailure(
+        error,
+        undefined,
+        this.clock,
+        this.securityEvents,
+      );
+      throw error;
     }
     if (outcome.kind === 'invalid') {
       throw invalidVerificationToken();
