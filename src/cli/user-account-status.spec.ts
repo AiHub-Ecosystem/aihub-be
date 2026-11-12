@@ -87,12 +87,12 @@ describe('runDisableUserAccountCommand', () => {
     expect(repository.disableCalls[0]?.actorUsername).toBe('operator_alice');
     expect(repository.closed).toBe(true);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatch(
+    expect(lines[1]).toMatch(
       /Disabled User Account targetuser \(usr_target\) and revoked 2 refresh sessions, 1 web sessions, 1 verification tokens, and 1 password reset tokens; recorded as req_/,
     );
     const requestId = repository.disableCalls[0]?.requestId;
     expect(requestId).toMatch(/^req_/);
-    const securityEvent: unknown = JSON.parse(lines[1] ?? 'null');
+    const securityEvent: unknown = JSON.parse(lines[0] ?? 'null');
     expect(securityEvent).toEqual({
       event: 'web_session_revoked',
       request_id: requestId,
@@ -101,8 +101,36 @@ describe('runDisableUserAccountCommand', () => {
       trigger: 'account_disabled',
       sessions_revoked: 1,
     });
-    expect(lines[1]).not.toContain('targetuser');
-    expect(lines[1]).not.toContain('operator_alice');
+    expect(lines[0]).not.toContain('targetuser');
+    expect(lines[0]).not.toContain('operator_alice');
+  });
+
+  it('emits the disable event before repository cleanup can fail', async () => {
+    const repository = new UserAccountStatusFake();
+    repository.close = async () => {
+      throw new Error('cleanup failed');
+    };
+    const lines: string[] = [];
+
+    await expect(
+      runDisableUserAccountCommand({
+        databaseUrl: 'postgres://unused',
+        user: 'targetuser',
+        actorUsername: 'operator_alice',
+        repository,
+        emit: (line) => lines.push(line),
+      }),
+    ).rejects.toThrow('cleanup failed');
+
+    expect(lines).toHaveLength(1);
+    const securityEvent: unknown = JSON.parse(lines[0] ?? 'null');
+    expect(securityEvent).toMatchObject({
+      event: 'web_session_revoked',
+      request_id: repository.disableCalls[0]?.requestId,
+      user_account_id: 'usr_target',
+      trigger: 'account_disabled',
+      sessions_revoked: 1,
+    });
   });
 
   it('handles user_not_found', async () => {

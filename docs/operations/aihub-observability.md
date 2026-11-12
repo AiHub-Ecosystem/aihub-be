@@ -111,6 +111,15 @@ neither `pg_monitor` nor `pg_read_all_stats`. The postgres_exporter `v0.20.1`
 query extension is deprecated upstream; keep the image pinned and replace this
 compatibility path before upgrading past its support.
 
+Application auth security events also emit one structured JSON line for each
+request-path event, with request ID, occurrence time, account ID when known, and
+fixed event-specific fields. The recorder uses an info-level child logger, so
+these lines remain emitted with `LOG_LEVEL=warn`, `error`, `fatal`, or `silent`
+without lowering the root logger or changing other log levels. The Operator
+account-disable command emits its bounded `web_session_revoked` line to stdout.
+Event lines omit email, passwords, raw tokens or hashes, session cookies, raw IP
+addresses, and request bodies.
+
 Redis uses a dedicated ACL user with only `PING`, aggregate `INFO`, `CLIENT SETNAME`, `LATENCY LATEST`, and `MEMORY STATS`. Key-reading and `CONFIG` commands are denied. The exporter reads its password from a mounted secret file. Do not change Redis `maxmemory` or its existing persistence policy for this collector. Its alert threshold assumes the observed 256 MiB `maxmemory` and must be reviewed if that value changes.
 
 ## Deploy and validate

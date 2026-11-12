@@ -2,6 +2,7 @@ import { AppError } from '@/common/errors/app-error';
 import type { AuthClock } from './auth-clock';
 import type { AuthSecurityEventRecorderPort } from './auth-security-event.port';
 
+/** Records generic credential failures with the account ID when it was resolved. */
 export function recordCredentialLoginFailure(
   error: unknown,
   userAccountId: string | undefined,

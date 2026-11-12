@@ -19,6 +19,7 @@ export type WebSessionExchangeLookup =
       readonly userId: string;
     };
 
+/** Classifies persisted session state and expiry for a Web Session exchange. */
 export function classifyWebSessionForExchange(
   session: WebSessionForExchange | undefined,
   now: Date,

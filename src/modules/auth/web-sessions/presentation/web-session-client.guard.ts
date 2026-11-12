@@ -31,6 +31,7 @@ interface ClientAuthenticationDependencies {
   readonly clock: AuthClock;
 }
 
+/** Verifies the BFF secret, records rejections, and marks its IP as trusted. */
 function authenticateClient(
   context: ExecutionContext,
   dependencies: ClientAuthenticationDependencies,

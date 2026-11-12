@@ -1,5 +1,7 @@
 import { ContextIdFactory } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 import { LoggerModule, PinoLogger } from 'nestjs-pino';
 
 import { getMetrics, registry } from '@/common/observability/metrics';
@@ -28,6 +30,9 @@ const FORBIDDEN_PROPERTIES = {
 };
 const FORBIDDEN_VALUES = Object.values(FORBIDDEN_PROPERTIES);
 
+const EVENT_LOG_RECORD = Type.Record(Type.String(), Type.Unknown());
+
+/** Builds a deterministic event fixture for each supported security-event name. */
 function eventFor(event: AuthSecurityEventName): AuthSecurityEvent {
   switch (event) {
     case 'login_failed':
@@ -94,6 +99,7 @@ describe('Auth security event recorder', () => {
   });
 
   afterEach(async () => {
+    logger.logger.level = 'info';
     await moduleRef.close();
   });
 
@@ -108,13 +114,14 @@ describe('Auth security event recorder', () => {
     );
 
     expect(lines).toHaveLength(AUTH_SECURITY_EVENT_NAMES.length);
-    const parsed = lines.map(
-      (line) => JSON.parse(line) as Record<string, unknown>,
-    );
-    expect(parsed.map((line) => line['event'])).toEqual(
+    const records = lines.map((line) => {
+      const parsed: unknown = JSON.parse(line);
+      return Value.Parse(EVENT_LOG_RECORD, parsed);
+    });
+    expect(records.map((line) => line['event'])).toEqual(
       AUTH_SECURITY_EVENT_NAMES,
     );
-    for (const line of parsed) {
+    for (const line of records) {
       expect(line).toMatchObject({
         occurred_at: OCCURRED_AT.toISOString(),
         request_id: REQUEST_ID,
@@ -160,6 +167,36 @@ describe('Auth security event recorder', () => {
       ),
     ).toBe(true);
   });
+
+  it.each(['warn', 'error', 'fatal', 'silent'] as const)(
+    'emits security events at %s without lowering the configured logger level',
+    async (logLevel) => {
+      logger.logger.level = logLevel;
+      lines = [];
+      logger.runInContext(
+        () => {
+          recorder.record({
+            event: 'login_succeeded',
+            userAccountId: USER_ID,
+            occurredAt: OCCURRED_AT,
+          });
+          logger.info({ event: 'ordinary_auth_log' }, 'ordinary_auth_log');
+        },
+        { bindings: { request_id: REQUEST_ID }, inherit: true },
+      );
+
+      expect(logger.logger.level).toBe(logLevel);
+      expect(lines).toHaveLength(1);
+      const raw: unknown = JSON.parse(lines[0] ?? 'null');
+      const parsed = Value.Parse(EVENT_LOG_RECORD, raw);
+      expect(parsed).toMatchObject({
+        level: 'info',
+        event: 'login_succeeded',
+        request_id: REQUEST_ID,
+        user_account_id: USER_ID,
+      });
+    },
+  );
 
   it('rejects an event outside the fixed set without adding a metric series', async () => {
     expect(() =>

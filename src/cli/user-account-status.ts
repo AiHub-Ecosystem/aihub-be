@@ -19,6 +19,9 @@ export interface DisableUserAccountCliInput {
 
 export type DisableUserAccountCliOutcome = DisableUserAccountResult['kind'];
 
+/**
+ * Disables a User Account and emits its revocation event before cleanup.
+ */
 export async function runDisableUserAccountCommand(
   input: DisableUserAccountCliInput,
 ): Promise<DisableUserAccountCliOutcome> {
@@ -31,13 +34,27 @@ export async function runDisableUserAccountCommand(
   const execution = await runOperatorCommand(
     repository,
     input.now,
-    ({ requestId, occurredAt }) =>
-      repository.disableUserAccount({
+    async ({ requestId, occurredAt }) => {
+      const result = await repository.disableUserAccount({
         user: input.user,
         actorUsername: input.actorUsername,
         requestId,
         occurredAt,
-      }),
+      });
+      if (result.kind === 'disabled') {
+        emit(
+          JSON.stringify({
+            event: 'web_session_revoked',
+            request_id: requestId,
+            occurred_at: occurredAt.toISOString(),
+            user_account_id: result.userId,
+            trigger: 'account_disabled',
+            sessions_revoked: result.revokedSessions.webSessions,
+          }),
+        );
+      }
+      return result;
+    },
   );
   const { result, context } = execution;
   const requestId = context.requestId;
@@ -66,16 +83,6 @@ export async function runDisableUserAccountCommand(
   } = result.revokedSessions;
   emit(
     `Disabled User Account ${result.username} (${result.userId}) and revoked ${refreshTokens} refresh sessions, ${webSessions} web sessions, ${verificationTokens} verification tokens, and ${passwordResetTokens} password reset tokens; recorded as ${requestId}.`,
-  );
-  emit(
-    JSON.stringify({
-      event: 'web_session_revoked',
-      request_id: requestId,
-      occurred_at: context.occurredAt.toISOString(),
-      user_account_id: result.userId,
-      trigger: 'account_disabled',
-      sessions_revoked: webSessions,
-    }),
   );
   return result.kind;
 }

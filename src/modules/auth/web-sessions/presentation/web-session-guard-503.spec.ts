@@ -15,6 +15,7 @@ import {
   MODULE_METADATA,
   PATH_METADATA,
 } from '@nestjs/common/constants';
+import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import {
   OptionalWebSessionClientGuard,
   WebSessionClientGuard,
@@ -35,9 +36,9 @@ function clientSecretContext(secret: string | undefined): ExecutionContext {
         ? {}
         : { [WEB_SESSION_CLIENT_SECRET_HEADER.toLowerCase()]: secret },
   };
-  return {
-    switchToHttp: () => ({ getRequest: () => request }),
-  } as unknown as ExecutionContext;
+  const context = new ExecutionContextHost([request]);
+  context.setType('http');
+  return context;
 }
 
 function guardHarness(configuredSecret: string | undefined) {

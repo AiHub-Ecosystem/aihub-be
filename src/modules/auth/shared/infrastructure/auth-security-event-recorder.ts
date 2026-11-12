@@ -13,6 +13,7 @@ export class AuthSecurityEventRecorder
 {
   constructor(private readonly logger: PinoLogger) {}
 
+  /** Writes one fixed security event line and increments its bounded metric. */
   record(event: AuthSecurityEvent): void {
     incrementAuthSecurityEvent(event.event);
 
@@ -31,6 +32,8 @@ export class AuthSecurityEventRecorder
       fields['sessions_revoked'] = event.sessionsRevoked;
     }
 
-    this.logger.info(fields, 'auth_security_event');
+    this.logger.logger
+      .child({}, { level: 'info' })
+      .info(fields, 'auth_security_event');
   }
 }

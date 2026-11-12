@@ -348,7 +348,11 @@ describe('WebSessionService exchange refusal events', () => {
   it('records an inactive-account refusal with the known account ID', async () => {
     const test = harness();
     seedExchangeSession(test);
-    test.state.accounts.get(USER_ID)!.status = 'disabled';
+    const account = test.state.accounts.get(USER_ID);
+    if (account === undefined) {
+      throw new Error('expected the seeded account');
+    }
+    account.status = 'disabled';
 
     await expect(
       test.service.exchangeWebSession({ token: EXCHANGE_TOKEN }, undefined),

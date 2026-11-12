@@ -17,6 +17,7 @@ for (const event of AUTH_SECURITY_EVENT_NAMES) {
   authSecurityEvents.inc({ event }, 0);
 }
 
+/** Increments one bounded Auth security-event series. */
 export function incrementAuthSecurityEvent(event: string): void {
   if (!eventNames.has(event)) {
     throw internalError('unmapped Auth security event');

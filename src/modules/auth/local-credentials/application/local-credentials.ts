@@ -88,6 +88,9 @@ export async function upgradePasswordHashIfNeeded(
   return { ...credentials, passwordHash };
 }
 
+/**
+ * Consumes failed-login limits before returning the generic credential error.
+ */
 export async function rejectCredentials(
   rateLimiter: AuthRateLimiterPort,
   ip: string,
