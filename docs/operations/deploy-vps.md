@@ -43,6 +43,16 @@ each hostname to its matching loopback port. See
 
 Do not reuse the development AppRole or the development rendered snapshot.
 
+## Pre-deployment Cosign verification gate (#1839)
+
+Automated deployment via CD (`.github/workflows/cd.yml`) enforces cryptographic verification in the `resolve` job before VPS credentials or SSH are touched:
+
+1. **Digest match**: The image tag's manifest digest must match the exact digest CI published and booted.
+2. **Keyless image signature**: Verified via `cosign verify` against the GitHub Actions OIDC issuer (`https://token.actions.githubusercontent.com`) and workflow identity (`.github/workflows/ci.yml@refs/heads/main`).
+3. **SPDX SBOM attestation**: Verified via `cosign verify-attestation --type spdxjson` ensuring the image carries the signed SBOM attestation bound to that digest.
+
+If any verification check fails, CD aborts immediately without establishing an SSH connection or modifying host containers.
+
 ## Shared PostgreSQL connection budget (#560, #1589)
 
 The last full PostgreSQL/host measurement recorded here was read-only on 2026-10-15 over SSH with `nproc`, `free -h`, `swapon --show`, and `sudo docker exec aihub-db psql`: PostgreSQL 16.15; `max_connections = 100`; `superuser_reserved_connections = 3`; `reserved_connections = 0`; `shared_buffers = 128MB`; `effective_cache_size = 4GB`; and `work_mem = 4MB`. The host reported 2 vCPUs, 7.7 GiB RAM, no swap, and 3.3 GiB available. A 2026-10-28 connection-setting check in #560 still reported 100 maximum connections, 3 superuser-reserved slots, and 0 additional reserved slots. Remeasure all server and host values before rollout; do not treat these snapshots as current capacity evidence.
@@ -63,7 +73,7 @@ Before production rollout:
 
 1. Record fresh dated PostgreSQL settings and host CPU, RAM, swap, and available memory. The shared-cluster owner must set `capacity_evidence_valid_through` in the pooler bundle; provisioning rejects it after that date. Keep `max_connections = 100` and other server settings unchanged unless workload evidence and written shared-cluster-owner approval justify a change.
 2. Obtain written, dated budgets from the owners of all four AIHUB applications and every other client of the cluster, plus a newly agreed operational/monitoring reserve. Have the shared-cluster owner attest that the enumerated aliases and direct clients cover the complete client inventory; record approver, amount, evidence, and date. Unknown or unbounded direct clients block rollout.
-3. Derive each application's cap from configured pool maxima and the largest supported process overlap. Include up to three AIHUB application containers during cutover; include a migration connection and any backup still running if they can overlap; include a scheduled CLI connection when it can overlap. Keep migration and CLI pools at `max = 1`; only one CLI operator command may run at a time. Do not assume suspending scheduled jobs drains a backup already in progress.
+3. Derive each application's cap from configured pool maxima and the largest supported process overlap. Include up to three AIHUB application containers during cutover; include a migration connection and any backup still running if they can overlap; include a scheduled CLI connection when it can overlap. Keep migration and CLI pools at `max = 1`; only one CLI operator command may run at a time. CD suspension drains the managed `backup-postgres.sh` job before replacing host files; include any separately started backup that can overlap.
 4. Sum each PgBouncer alias `max_db_connections`, direct-client pool maxima across their own process overlaps, configured PostgreSQL reserved slots, and approved headroom against the fresh `max_connections` measurement. Separately verify the sum of app client caps against `max_client_conn` and set bounded `max_db_client_connections` queues.
 5. Route the four AIHUB runtime applications through one PgBouncer endpoint in the production Compose topology with `pool_mode = transaction`; PostgreSQL remains external to that Compose project. Keep migration and administrative clients on direct URLs with explicit `max = 1`. Use existing Vault secret delivery and do not add a shared static credential to Compose or source. PgBouncer aliases enforce quotas only; PostgreSQL role isolation remains in #298.
 6. Keep the single PgBouncer endpoint's single-point-of-failure behavior, health check, restart/rollback procedure, and HA trigger documented. Fail closed with retryable `DATABASE_UNAVAILABLE`; do not fall back to direct PostgreSQL.
@@ -652,20 +662,30 @@ revisions and only proceeds when every active tier runs the target revision.
 It smoke-tests the staged wrapper against every active tier, installs the
 wrapper, smokes the installed wrapper, then enables and verifies the managed
 schedule.
-If a failed attempt leaves no pending recovery state and no unresolved
-caller-IP gate, CD restores the saved crontab, including when the tiers run
-different revisions; it reports each tier's revision and the target, then fails
-the run. Unknown or pending tier state, an unresolved gate, or a successful
-deploy that still reports mixed tiers keeps AIHUB jobs suspended; the message
-names the next step. This preserves ADR-0085's per-tier rollback behavior:
-Production can remain on the new release while Sandbox returns to its previous
-release. Re-running the CD run of the revision Production already runs then
-finishes the Sandbox rollout and reinstalls the jobs.
+CD keeps the schedule suspended whenever active tiers run mixed revisions.
+The installed wrapper must not dispatch jobs across a release gap because its
+commands and helper files may not match the tier image. A retry resumes the
+valid saved suspension, finishes the rollout, then installs the schedule when
+all active tiers match the target revision.
+
+When CD suspends the schedule, the host immediately writes
+`aihub_host_jobs_suspended{reason="deployment"} 1` to
+`~/.aihub-host-job-metrics/host-jobs-suspended.prom`. A mixed-revision outcome
+changes the reason to `mixed_revisions` while preserving the suspension time.
+Prometheus raises `AIHUBHostJobsSuspended` before the next scheduled job can be
+missed. Check the alert or read the metric file on the host. Resolve the
+deployment first, then retry CD; a successful restore or install clears the
+metric. To restore manually, confirm there is no pending blue-green recovery and
+the active tiers have the intended revision, then run
+`APP_DIR=<deployment-dir> ./scripts/ops/host-jobs/install-host-jobs.sh restore`.
+A damaged suspension backup fails closed and remains at
+`.aihub-host-jobs-state/`; inspect it before manual recovery.
 
 If deployment-file synchronization fails after the pause, CD restores the
-previous Compose file, host deployment helper, and saved crontab before it
-exits. If that recovery cannot be confirmed, the saved crontab remains in
-`.aihub-host-jobs-state/` for operator recovery.
+previous Compose file and host deployment helper, then checks active tier
+revisions before restoring the saved crontab. It keeps the schedule suspended
+when revisions remain mixed. If recovery cannot be confirmed, the saved crontab
+remains in `.aihub-host-jobs-state/` for operator recovery.
 
 The installer replaces only the `AIHUB MANAGED JOBS` block, preserves unrelated
 entries, and removes old hand-installed AIHUB wrapper lines. Unknown active

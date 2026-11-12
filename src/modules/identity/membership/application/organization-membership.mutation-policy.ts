@@ -118,3 +118,19 @@ export function authorizeOrganizationMembershipMutation(
 
   return { kind: 'allowed' };
 }
+
+const ROLE_AUTHORITY_RANK: Readonly<
+  Record<OrganizationMembershipRole, number>
+> = { owner: 2, admin: 1, member: 0 };
+
+/**
+ * Whether the change lowers the target's authority. A demotion removes
+ * authority the member's API keys still act with, so the mutation surfaces
+ * those keys for review; a promotion grants authority and surfaces none.
+ */
+export function demotesOrganizationMembershipRole(
+  from: OrganizationMembershipRole,
+  to: OrganizationMembershipRole,
+): boolean {
+  return ROLE_AUTHORITY_RANK[to] < ROLE_AUTHORITY_RANK[from];
+}

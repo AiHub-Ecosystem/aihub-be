@@ -23,13 +23,17 @@ import {
 } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
   USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessSession,
   type UserAccessTokenVerifierPort,
   type VerifiedUserAccessToken,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    aihubUser?: { readonly userId: string };
+    aihubUser?: {
+      readonly userId: string;
+      readonly session?: UserAccessSession;
+    };
   }
 }
 
@@ -157,7 +161,10 @@ export class UserAccessJwtGuard implements CanActivate {
       throw invalidUserAccessToken();
     }
 
-    request.aihubUser = { userId: verified.userId };
+    request.aihubUser = {
+      userId: verified.userId,
+      ...(verified.session === undefined ? {} : { session: verified.session }),
+    };
     return true;
   }
 }

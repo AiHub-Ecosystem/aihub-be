@@ -94,6 +94,26 @@ describe('JoseUserAccessTokenService', () => {
     expect(verified.jti).toEqual(expect.any(String));
   });
 
+  it('issues the durable session identity as a JWT claim', async () => {
+    const keys = await keyPair();
+    const service = new JoseUserAccessTokenService(config(keys.privateKeyPem));
+    const issued = await service.issue('usr_01J00000000000000000000000', {
+      kind: 'web',
+      id: 'wss_01J00000000000000000000000',
+    });
+
+    expect(decodeJwt(issued.token)['session']).toEqual({
+      kind: 'web',
+      id: 'wss_01J00000000000000000000000',
+    });
+    await expect(service.verify(issued.token)).resolves.toMatchObject({
+      session: {
+        kind: 'web',
+        id: 'wss_01J00000000000000000000000',
+      },
+    });
+  });
+
   it('maps malformed, expired, and claim-tampered tokens to one safe error', async () => {
     const keys = await keyPair();
     const service = new JoseUserAccessTokenService(
@@ -154,6 +174,41 @@ describe('JoseUserAccessTokenService', () => {
         }),
       ),
     ).rejects.toMatchObject({ code: 'AUTH_USER_ACCESS_TOKEN_INVALID' });
+  });
+
+  it('reads a session claim from a future release without requiring it from old tokens', async () => {
+    const keys = await keyPair();
+    const service = new JoseUserAccessTokenService(
+      config(keys.privateKeyPem),
+      () => 1_800_000_000,
+    );
+    const token = await signedToken(keys.privateKey, {
+      extra: { session: { kind: 'web', id: 'wss_01J00000000000000000000000' } },
+    });
+
+    await expect(service.verify(token)).resolves.toMatchObject({
+      session: { kind: 'web', id: 'wss_01J00000000000000000000000' },
+    });
+  });
+
+  it.each([
+    null,
+    {},
+    { kind: 'unknown', id: 'session' },
+    { kind: 'refresh', id: '' },
+  ])('rejects a malformed known session claim: %j', async (session) => {
+    const keys = await keyPair();
+    const service = new JoseUserAccessTokenService(
+      config(keys.privateKeyPem),
+      () => 1_800_000_000,
+    );
+    const token = await signedToken(keys.privateKey, {
+      extra: { session },
+    });
+
+    await expect(service.verify(token)).rejects.toMatchObject({
+      code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+    });
   });
 
   it('accepts a token from the next release that carries an extra claim', async () => {

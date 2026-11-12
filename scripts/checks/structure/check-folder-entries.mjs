@@ -9,9 +9,10 @@
  *     checks,ci,runtime}) and the test roots the grouping sentence names
  *     (test/, test/cli/, test/integration/).
  *   - 20-entry ceiling: every layer folder under src/modules/ — a directory
- *     named application, domain, infrastructure, presentation or public at
- *     any depth — plus each direct feature subfolder of a layer folder, the
- *     way the Gateway and Metering ceilings are stated since #1555.
+ *     named application, domain, infrastructure, presentation, public or
+ *     testing at any depth — plus each direct feature subfolder of one, the
+ *     way the Gateway and Metering ceilings are stated since #1555 and the
+ *     testing/ ceiling since #1821.
  *
  * Over-ceiling folders are grandfathered only through the explicit allowlist
  * below. An entry is a debt record, not a permission to grow: it pins the
@@ -49,6 +50,10 @@ export const LAYER_DIRS = new Set([
   'infrastructure',
   'presentation',
   'public',
+  // #1821: a module's cross-feature testing/ folder (Auth's HTTP specs and
+  // in-memory adapters) keeps the same ceiling as a layer folder, and so does
+  // each concern subfolder it is split into.
+  'testing',
 ]);
 
 /**

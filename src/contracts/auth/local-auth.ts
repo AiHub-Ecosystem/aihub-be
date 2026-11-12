@@ -46,6 +46,12 @@ export const VerificationPasswordSchema = Type.String({
     'The password chosen at registration. Required when the verification token needs it; a wrong password answers AUTH_VERIFICATION_PASSWORD_INVALID.',
 });
 
+export const CurrentPasswordSchema = Type.String({
+  minLength: 1,
+  maxLength: PASSWORD_RUNTIME_MAX_CODE_UNITS,
+  description: 'The current password for the signed-in account.',
+});
+
 export const BrowserBindingSchema = Type.String({
   pattern: '^[A-Za-z0-9_-]{43}$',
   description:
@@ -103,6 +109,16 @@ export const ResetPasswordRequestSchema = Type.Object(
 );
 
 export type ResetPasswordRequest = Static<typeof ResetPasswordRequestSchema>;
+
+export const ChangePasswordRequestSchema = Type.Object(
+  {
+    current_password: CurrentPasswordSchema,
+    new_password: PasswordSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ChangePasswordRequest = Static<typeof ChangePasswordRequestSchema>;
 
 export const LoginRequestSchema = Type.Object(
   {

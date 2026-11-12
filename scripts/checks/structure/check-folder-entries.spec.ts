@@ -90,9 +90,33 @@ describe('folder-entry ceiling check', () => {
     );
   });
 
+  it('fails when a module testing folder exceeds the 20-entry ceiling (#1821)', () => {
+    const result = runOnFixture({ 'src/modules/auth/testing': 21 });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toMatch(
+      /src\/modules\/auth\/testing holds 21 direct entries against the 20-entry ceiling/,
+    );
+  });
+
+  it('passes a module testing folder at the ceiling (#1821)', () => {
+    const result = runOnFixture({ 'src/modules/auth/testing': 20 });
+
+    expect(result.status).toBe(0);
+    expect(result.output).toMatch(/Folder-entry ceiling check passed/);
+  });
+
+  it('caps a concern subfolder of a module testing folder (#1821)', () => {
+    const result = runOnFixture({ 'src/modules/auth/testing/http': 21 });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toMatch(
+      /src\/modules\/auth\/testing\/http holds 21 direct entries against the 20-entry ceiling/,
+    );
+  });
+
   it('does not cap directories outside the stated scope', () => {
     const result = runOnFixture({
-      'src/modules/auth/testing': 22,
       'test/db/auth': 22,
       'scripts/ci/n-minus-one': 20,
     });

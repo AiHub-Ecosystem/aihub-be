@@ -10,7 +10,10 @@ import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-use
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { InMemoryWebSessionAdapter } from '@/modules/auth/testing/in-memory-web-session.adapter';
 import type { VerificationTokenPort } from '@/modules/auth/verification/application/verification-token.port';
-import type { UserAccessTokenIssuerPort } from './user-access-token.port';
+import type {
+  UserAccessSession,
+  UserAccessTokenIssuerPort,
+} from './user-access-token.port';
 import type { WebSessionTokenIssuerPort } from './web-session-token.port';
 import { WebSessionService } from './web-session.service';
 
@@ -97,7 +100,10 @@ class VerificationTokenFake implements VerificationTokenPort {
 }
 
 class UserAccessTokenIssuerFake implements UserAccessTokenIssuerPort {
-  async issue() {
+  lastSession: UserAccessSession | undefined;
+
+  async issue(_userId: string, session?: UserAccessSession) {
+    this.lastSession = session;
     return { token: 'user-access-token', expiresIn: 900 };
   }
 }
@@ -114,6 +120,7 @@ function harness(
   const updatePasswordHash = jest.spyOn(userAccounts, 'updatePasswordHash');
   const createWebSession = jest.spyOn(webSessions, 'createWebSession');
   const passwordHasher = new PasswordHasherFake();
+  const accessTokens = new UserAccessTokenIssuerFake();
   const service = new WebSessionService(
     webSessions,
     new WebSessionTokenFake(),
@@ -124,7 +131,7 @@ function harness(
     { now: () => NOW },
     new InMemoryVerificationTokenAdapter(state),
     new VerificationTokenFake(),
-    new UserAccessTokenIssuerFake(),
+    accessTokens,
     new LoginMfaFake(mfaResult),
   );
 
@@ -132,6 +139,7 @@ function harness(
     service,
     state,
     passwordHasher,
+    accessTokens,
     createWebSession,
     updatePasswordHash,
   };
@@ -207,5 +215,33 @@ describe('WebSessionService.createWebSession password hash upgrade', () => {
 
     expect(test.createWebSession).not.toHaveBeenCalled();
     expect(test.state.accounts.get(USER_ID)?.passwordHash).toBe(OLD_HASH);
+  });
+});
+
+describe('WebSessionService access token session identity', () => {
+  it('issues a Web Session access token carrying the durable session id', async () => {
+    const test = harness();
+    const sessionId = 'wss_01J00000000000000000000000';
+    test.state.webSessions.set('hash:web-session-token', {
+      sessionId,
+      userId: USER_ID,
+      tokenHash: 'hash:web-session-token',
+      createdAt: NOW,
+      expiresAt: new Date(NOW.getTime() + 86_400_000),
+      lastRenewedAt: NOW,
+      revokedAt: undefined,
+    });
+
+    await expect(
+      test.service.exchangeWebSession(
+        { token: 'web-session-token' },
+        '203.0.113.7',
+      ),
+    ).resolves.toMatchObject({ token: 'user-access-token' });
+
+    expect(test.accessTokens.lastSession).toEqual({
+      kind: 'web',
+      id: sessionId,
+    });
   });
 });

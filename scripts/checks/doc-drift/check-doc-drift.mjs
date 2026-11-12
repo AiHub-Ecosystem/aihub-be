@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { codeRabbitConfigDrift } from '../../generate/coderabbit-config.mjs';
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 /** @typedef {{relation: string, id: string}} AdrTarget */
@@ -29,6 +31,18 @@ function statusLine(content) {
     .find((line) => /^\s*-?\s*Status\s*:/iu.test(line));
 }
 
+/** @param {string} content @returns {string} */
+function statusAndRelationLines(content) {
+  return content
+    .split(/\r?\n/u)
+    .filter((line) =>
+      /^\s*-?\s*(?:Status|Supersedes?|Amends?|Amended\s+by|Superseded\s+by)(?::|\s)/iu.test(
+        line,
+      ),
+    )
+    .join('\n');
+}
+
 /** @param {string} target @returns {string} */
 function decodeMarkdownTarget(target) {
   try {
@@ -46,7 +60,7 @@ function declaredAdrTargets(content) {
   for (const line of content.split(/\r?\n/u)) {
     const declarations = [
       ...line.matchAll(
-        /\b(Amends|Supersedes)\s*:\s*|\b(Amends|Supersedes)\s+(?=ADR-\d{4})/giu,
+        /\b(?:(Amends|Supersedes)|(Amended|Superseded)\s+by)\s*(?::\s*|\s+(?=\[?ADR-\d{4}))/giu,
       ),
     ];
 
@@ -156,11 +170,15 @@ export function findDocDriftViolations(rootDir = REPO_ROOT) {
   const repositoryRoot = resolve(rootDir);
   const adrDir = resolve(repositoryRoot, 'docs/adr');
   const files = markdownFiles(adrDir);
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, string[]>} */
   const byId = new Map();
   for (const path of files) {
     const id = adrIdOf(path);
-    if (id !== undefined) byId.set(id, path);
+    if (id !== undefined) {
+      const list = byId.get(id);
+      if (list) list.push(path);
+      else byId.set(id, [path]);
+    }
   }
   /** @type {string[]} */
   const violations = [];
@@ -174,19 +192,22 @@ export function findDocDriftViolations(rootDir = REPO_ROOT) {
     if (status === undefined) violations.push(`ADR-${id} has no Status line`);
 
     for (const relation of declaredAdrTargets(content)) {
-      const target = byId.get(relation.id);
-      if (target === undefined) {
+      const targets = byId.get(relation.id);
+      if (targets === undefined || targets.length === 0) {
         violations.push(
           `ADR-${id} declares ${relation.relation} ADR-${relation.id}, but that ADR file is missing`,
         );
         continue;
       }
 
-      const targetStatus = statusLine(readFileSync(target, 'utf8'));
-      if (
-        targetStatus !== undefined &&
-        !new RegExp(`\\bADR-${id}\\b`, 'iu').test(targetStatus)
-      ) {
+      const re = new RegExp(String.raw`\bADR-${id}\b`, 'iu');
+      const satisfied = targets.some((targetPath) => {
+        const targetStatus = statusAndRelationLines(
+          readFileSync(targetPath, 'utf8'),
+        );
+        return re.test(targetStatus);
+      });
+      if (!satisfied) {
         violations.push(
           `ADR-${relation.id} status does not name ADR-${id}, declared by ADR-${id}`,
         );
@@ -204,7 +225,10 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  const violations = findDocDriftViolations();
+  const violations = [
+    ...findDocDriftViolations(),
+    ...codeRabbitConfigDrift(REPO_ROOT),
+  ];
   if (violations.length > 0) {
     console.error(violations.join('\n'));
     process.exitCode = 1;

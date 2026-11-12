@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
+  type OrganizationApiKeyCallerRefusal,
   hasRequiredOrganizationApiKeyEntitlements,
   reachedOrganizationApiKeyLimit,
 } from '@/modules/identity/api-keys/application/organization-api-key-policy';
@@ -16,11 +17,13 @@ import type {
   RotateOrganizationApiKeyRecordResult,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
 import { apiKeyStatus } from '@/modules/identity/domain/api-key';
+import type { OrganizationApiKeySurface } from '@/modules/identity/membership/application/organization-admission';
 import {
   dateValue,
   identityStoreError,
   identityStoreUnavailable,
   invalidIdentityData,
+  organizationStatusValue,
   stringArrayValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
@@ -35,83 +38,32 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  INVENTORY_SELECT,
+  LOCK_API_KEY_FOR_REVOKE_SQL,
+  LOCK_API_KEY_SQL,
+  LOCK_ORGANIZATION_SQL,
+  handlingAttributionValue,
+} from './organization-api-key-attribution';
+import { organizationApiKeyCallerRefusalFor } from './organization-api-key-caller-authority';
 
-/**
- * Locking the Organization row is what makes the active-key limit hold: two
- * concurrent creations would otherwise both read the same count and both
- * insert. The lock also re-reads `status` and `entitlements` for free, so the
- * suspension and Entitlement guards see the same Organization the limit does.
- */
-const LOCK_ORGANIZATION_SQL = `
-  SELECT id, status, entitlements
-  FROM organizations
-  WHERE id = $1
-  FOR UPDATE
-`;
-
-/**
- * The columns an inventory entry is built from. The list query selects exactly
- * these, and the revoke path's locked row is aliased to the same names, so one
- * mapper serves both.
- */
-const INVENTORY_SELECT = {
-  id: true,
-  name: true,
-  keyPrefix: true,
-  scopes: true,
-  allowedEnvironments: true,
-  status: true,
-  expiresAt: true,
-  lastUsedAt: true,
-  createdAt: true,
-} as const;
-
-/**
- * Claims the key being retired. Without this lock two concurrent rotations
- * both read it as active, both revoke it, and both insert, leaving the
- * Organization with two live replacements where one was asked for.
- *
- * The rotatability guard runs here, under the lock, but against the clock the
- * application passes in: the canonical form of the rule is `apiKeyStatus` in
- * the domain, and the database's own clock never decides it.
- */
-const LOCK_API_KEY_SQL = `
-  SELECT
-    encode(key_hash, 'hex') AS key_hash_hex,
-    name,
-    key_prefix,
-    scopes,
-    allowed_environments,
-    status,
-    expires_at
-  FROM api_keys
-  WHERE id = $1
-    AND organization_id = $2
-  FOR UPDATE
-`;
-
-/**
- * Claims the key so a withdrawal cannot read a row that rotation is in the
- * middle of replacing. Two concurrent withdrawals need no protection — they
- * agree — so this lock is here for the race against rotation, not for itself.
- */
-const LOCK_API_KEY_FOR_REVOKE_SQL = `
-  SELECT
-    encode(key_hash, 'hex') AS key_hash_hex,
-    id,
-    name,
-    key_prefix AS "keyPrefix",
-    scopes,
-    allowed_environments AS "allowedEnvironments",
-    status,
-    expires_at AS "expiresAt",
-    last_used_at AS "lastUsedAt",
-    created_at AS "createdAt"
-  FROM api_keys
-  WHERE id = $1
-    AND organization_id = $2
-  FOR UPDATE
-`;
+function extractHandlingUsername(
+  value: Record<string, unknown>,
+  flatKey: 'createdByUsername' | 'lastRotatedByUsername',
+  nestedKey: 'createdByAccount' | 'lastRotatedByAccount',
+): string | null | undefined {
+  if (flatKey in value) {
+    return handlingAttributionValue(value, flatKey);
+  }
+  const account = value[nestedKey];
+  if (account === null || account === undefined) {
+    return null;
+  }
+  if (isRecord(account)) {
+    return handlingAttributionValue(account, 'username');
+  }
+  return undefined;
+}
 
 function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   if (!isRecord(value)) {
@@ -126,6 +78,16 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
   const expiresAt = dateValue(value, 'expiresAt');
   const lastUsedAt = dateValue(value, 'lastUsedAt');
   const createdAt = dateValue(value, 'createdAt');
+  const createdByUsername = extractHandlingUsername(
+    value,
+    'createdByUsername',
+    'createdByAccount',
+  );
+  const lastRotatedByUsername = extractHandlingUsername(
+    value,
+    'lastRotatedByUsername',
+    'lastRotatedByAccount',
+  );
 
   // Mapped from the row rather than hardcoded to the value the query happens
   // to select: the filter belongs in one place, and a mapper that contradicts
@@ -145,7 +107,9 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
     expiresAt === undefined ||
     lastUsedAt === undefined ||
     createdAt === undefined ||
-    createdAt === null
+    createdAt === null ||
+    createdByUsername === undefined ||
+    lastRotatedByUsername === undefined
   ) {
     return undefined;
   }
@@ -160,6 +124,8 @@ function mapListRow(value: unknown): OrganizationApiKeyRecord | undefined {
     expiresAt: expiresAt ?? null,
     lastUsedAt,
     createdAt,
+    createdByUsername,
+    lastRotatedByUsername,
   };
 }
 
@@ -167,6 +133,28 @@ export class PostgresOrganizationApiKeyRepository
   implements OrganizationApiKeyPort
 {
   constructor(private readonly client: IdentityRepositoryClient) {}
+
+  /**
+   * The one caller-authority evaluation every key mutation makes under its
+   * Organization lock: the policy decides, this only supplies the rows and
+   * the locked Organization status, and create, rotate, and revoke share it.
+   */
+  private callerRefusal(
+    transaction: Parameters<typeof identityRows>[0],
+    input: { readonly organizationId: string; readonly actorUserId: string },
+    surface: OrganizationApiKeySurface,
+    organization: Record<string, unknown>,
+  ): Promise<OrganizationApiKeyCallerRefusal | undefined> {
+    const status = organizationStatusValue(organization, 'status');
+    if (status === undefined) throw invalidIdentityData();
+    return organizationApiKeyCallerRefusalFor(
+      transaction,
+      input.organizationId,
+      input.actorUserId,
+      surface,
+      status,
+    );
+  }
 
   async rotateApiKey(
     input: RotateOrganizationApiKeyRecordInput,
@@ -194,8 +182,20 @@ export class PostgresOrganizationApiKeyRepository
           [input.organizationId],
         );
         const organization = organizationRows[0];
-        if (!isRecord(organization) || organization['status'] !== 'active') {
+        if (!isRecord(organization)) {
           return { kind: 'organization_unavailable' as const };
+        }
+        // ADR-0159 (decision 2): the caller is re-read under the Organization
+        // lock, so a disable or demotion that committed while this request
+        // waited refuses it instead of leaving a fresh credential behind.
+        const refusal = await this.callerRefusal(
+          transaction,
+          input,
+          'api_key_rotate',
+          organization,
+        );
+        if (refusal !== undefined) {
+          return { kind: refusal } as const;
         }
 
         const keyRows = await identityRows(transaction, LOCK_API_KEY_SQL, [
@@ -216,12 +216,22 @@ export class PostgresOrganizationApiKeyRepository
           'allowed_environments',
         );
         const expiresAt = dateValue(key, 'expires_at');
+        const createdByUsername = handlingAttributionValue(
+          key,
+          'createdByUsername',
+        );
+        const storedCreatedBy = handlingAttributionValue(
+          key,
+          'createdByUserId',
+        );
         if (
           retiredKeyHash === undefined ||
           retiredKeyPrefix === undefined ||
           name === undefined ||
           scopes === undefined ||
           allowedEnvironments === undefined ||
+          createdByUsername === undefined ||
+          storedCreatedBy === undefined ||
           // `undefined` is an unreadable value; `null` is a key with no expiry.
           expiresAt === undefined
         ) {
@@ -254,6 +264,8 @@ export class PostgresOrganizationApiKeyRepository
 
         // Rotation narrows environment authority to one. It is exempt from the
         // active-key cap because it never changes how many keys are active.
+        // The replacement keeps the creator and records this caller as the last
+        // rotator, so the attribution follows the credential (ADR-0027 as amended).
         const { createdAt } = await transaction.apiKey.create({
           data: {
             id: input.replacementId,
@@ -264,6 +276,11 @@ export class PostgresOrganizationApiKeyRepository
             scopes: [...scopes],
             allowedEnvironments: [...input.replacementAllowedEnvironments],
             expiresAt: expiresAt ?? null,
+            // The stored creator wins, even when nobody is recorded: falling
+            // back to the caller would attribute a successor to whoever
+            // rotated it.
+            createdBy: storedCreatedBy,
+            lastRotatedBy: input.actorUserId,
           },
           select: { createdAt: true },
         });
@@ -291,6 +308,8 @@ export class PostgresOrganizationApiKeyRepository
           allowedEnvironments: [...input.replacementAllowedEnvironments],
           expiresAt: expiresAt ?? null,
           createdAt,
+          createdByUsername,
+          lastRotatedByUsername: input.rotatedByUsername,
         };
       });
     } catch (error) {
@@ -325,8 +344,20 @@ export class PostgresOrganizationApiKeyRepository
           [input.organizationId],
         );
         const organization = organizationRows[0];
-        if (!isRecord(organization) || organization['status'] !== 'active') {
+        if (!isRecord(organization)) {
           return { kind: 'organization_unavailable' as const };
+        }
+        // ADR-0159 (decision 2): a caller demoted or disabled while this
+        // request waited is refused here, so a revoked-then-reread key cannot
+        // be closed by an authority that no longer exists.
+        const refusal = await this.callerRefusal(
+          transaction,
+          input,
+          'api_key_revoke',
+          organization,
+        );
+        if (refusal !== undefined) {
+          return { kind: refusal } as const;
         }
 
         const keyRows = await identityRows(
@@ -455,8 +486,18 @@ export class PostgresOrganizationApiKeyRepository
         if (!isRecord(organization)) {
           return { kind: 'organization_unavailable' as const };
         }
-        if (organization['status'] !== 'active') {
-          return { kind: 'organization_unavailable' as const };
+
+        // ADR-0159 (decision 2): an admin disabled during an incident must not
+        // complete a concurrent creation and walk away with a fresh
+        // credential. The same evaluation refuses a suspended Organization.
+        const refusal = await this.callerRefusal(
+          transaction,
+          input,
+          'api_key_create',
+          organization,
+        );
+        if (refusal !== undefined) {
+          return { kind: refusal } as const;
         }
 
         const entitlements = stringArrayValue(organization, 'entitlements');
@@ -489,6 +530,7 @@ export class PostgresOrganizationApiKeyRepository
             scopes: [...input.scopes],
             allowedEnvironments: [...input.allowedEnvironments],
             expiresAt: input.expiresAt,
+            createdBy: input.actorUserId,
           },
           select: { createdAt: true },
         });

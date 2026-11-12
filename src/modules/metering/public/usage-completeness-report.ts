@@ -1,6 +1,7 @@
 export {
   type UsageCompletenessReport,
   UsageCompletenessReportService,
+  UsageReportDatabaseError,
   UsageReportError,
   type UsageReportErrorCode,
   type UsageReportOperationDefinition,

@@ -785,7 +785,6 @@ describe('Organization invitation HTTP flow', () => {
       throw new Error('expected an invitation revocation');
     expect(revokeInput.context.organizationId).toBe(ORGANIZATION_ID);
     expect(revokeInput.actorUserId).toBe(USER_ID);
-    expect(revokeInput.actorRole).toBe('owner');
     expect(revokeInput.organizationId).toBe(ORGANIZATION_ID);
     expect(revokeInput.invitationId).toBe(INVITATION_ID);
     expect(revokeInput.now).toBeInstanceOf(Date);

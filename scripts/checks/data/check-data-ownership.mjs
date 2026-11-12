@@ -45,15 +45,14 @@ for (const line of schema.split(/\r?\n/)) {
 
 /** @param {string} dir @returns {string[]} */
 function collectFiles(dir) {
-  /** @type {string[]} */
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectFiles(p));
-    else if (entry.isFile() && p.endsWith('.ts') && !p.endsWith('.spec.ts'))
-      out.push(p);
-  }
-  return out;
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.spec.ts'),
+    )
+    .map((entry) => join(entry.parentPath ?? entry.path, entry.name));
 }
 
 /** @type {Map<string, string>} */
@@ -93,6 +92,10 @@ const allowlist = new Map([
   [
     'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts::user_accounts',
     'near-expiry notice recipients must hold an active account (ADR-0120)',
+  ],
+  [
+    'src/modules/identity/api-keys/infrastructure/organization-api-key-attribution.ts::user_accounts',
+    'joins creator/rotator usernames for key handling attribution (ADR-0027 as amended, #447)',
   ],
   [
     'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts::auth_identities',

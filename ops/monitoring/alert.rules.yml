@@ -207,7 +207,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "72d076091adc400a64ac46450737366674fd0f009fb3cc6f6e1605f7211187fc"
+          rules_sha256: "a3f19ab6a88f96405beec65e292edc9da56384a0ff6efe0e05ef6cf321785d29"
 
   - name: aihub-email-outbox
     rules:
@@ -425,6 +425,17 @@ groups:
           summary: "An AIHUB scheduled job has not succeeded within its window"
           description: "{{ $labels.task }} last succeeded {{ $value | humanizeDuration }} ago."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#scheduled-jobs
+
+      - alert: AIHUBHostJobsSuspended
+        expr: aihub_host_jobs_suspended == 1
+        for: 0m
+        labels:
+          severity: warning
+          owner: aihub-operations
+        annotations:
+          summary: "AIHUB host-job schedule remains suspended"
+          description: "The host-job schedule suspension remains active (reason={{ $labels.reason }}); see the deployment runbook."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/deploy-vps.md#scheduled-operator-jobs
 
   # Written every minute by scripts/ops/host-jobs/container-watchdog.sh (#396).
   # Each event alert stays active for 15 minutes after the event.

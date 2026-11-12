@@ -667,6 +667,31 @@ describe('Organization membership HTTP flow', () => {
     expect(changeCall?.context.organizationId).toBe(ORGANIZATION_ID);
   });
 
+  it('surfaces the disabled member’s handled API keys for review', async () => {
+    mutation.disable.mockImplementationOnce(async (input) => ({
+      organizationId: input.organizationId,
+      username: input.username,
+      role: 'member' as const,
+      status: 'disabled' as const,
+      handledApiKeys: [
+        { id: 'key_1', name: 'CI key', keyPrefix: 'ak_live_01' },
+      ],
+    }));
+
+    const response = await mutationRequest('DELETE');
+
+    expect(response.statusCode).toBe(200);
+    expect(mutationBody(response).data).toEqual({
+      organization_id: ORGANIZATION_ID,
+      username: 'bob',
+      role: 'member',
+      status: 'disabled',
+      handled_api_keys: [
+        { id: 'key_1', name: 'CI key', key_prefix: 'ak_live_01' },
+      ],
+    });
+  });
+
   it('disables a member through DELETE and returns the durable state', async () => {
     const response = await mutationRequest('DELETE');
 

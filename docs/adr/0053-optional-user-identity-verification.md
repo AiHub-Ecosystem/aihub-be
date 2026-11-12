@@ -1,6 +1,6 @@
 # ADR-0053: Make end-user identity verification optional per Organization
 
-- Status: Accepted
+- Status: Accepted (supersedes ADR-0050)
 - Supersedes: ADR-0050
 - Related ADR: ADR-0049
 

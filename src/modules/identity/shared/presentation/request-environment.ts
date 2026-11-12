@@ -12,28 +12,17 @@ export type AihubEnvironment =
   | 'production'
   | 'sandbox';
 
-const ENVIRONMENTS: readonly AihubEnvironment[] = [
-  'development',
-  'staging',
-  'production',
-  'sandbox',
-];
-
-type HostVariable = Extract<keyof RuntimeConfiguration, `AIHUB_${string}_HOST`>;
-
-const HOST_VARIABLES: Readonly<Record<AihubEnvironment, HostVariable>> = {
-  production: 'AIHUB_PRODUCTION_HOST',
-  staging: 'AIHUB_STAGING_HOST',
-  development: 'AIHUB_DEVELOPMENT_HOST',
-  sandbox: 'AIHUB_SANDBOX_HOST',
-};
-
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+function normalizeHostname(hostname: string): string {
+  return hostname.trim().toLowerCase().replace(/\.$/, '');
+}
 
 export type RequestEnvironmentConfig = Pick<
   RuntimeConfiguration,
   | 'NODE_ENV'
   | 'AIHUB_ALLOW_UNAUTHENTICATED_DEV'
+  | 'AIHUB_RUNTIME_DATABASE_SCOPE'
   | 'AIHUB_PRODUCTION_HOST'
   | 'AIHUB_STAGING_HOST'
   | 'AIHUB_DEVELOPMENT_HOST'
@@ -43,16 +32,50 @@ export type RequestEnvironmentConfig = Pick<
 function configuredHosts(
   config: RequestEnvironmentConfig,
 ): ReadonlyMap<string, AihubEnvironment> {
+  const scope = config.AIHUB_RUNTIME_DATABASE_SCOPE;
   const hosts = new Map<string, AihubEnvironment>();
-  for (const server of PUBLIC_API_SERVERS) {
-    hosts.set(server.hostname, server.environment);
+
+  if (scope === 'sandbox') {
+    for (const server of PUBLIC_API_SERVERS) {
+      if (server.environment === 'sandbox') {
+        hosts.set(server.hostname, server.environment);
+      }
+    }
+    const sandboxHost = config.AIHUB_SANDBOX_HOST;
+    if (sandboxHost !== undefined) {
+      const hostname = normalizeHostname(sandboxHost);
+      if (hostname.length > 0) {
+        hosts.set(hostname, 'sandbox');
+      }
+    }
+    return hosts;
   }
-  for (const environment of ENVIRONMENTS) {
-    const variable = HOST_VARIABLES[environment];
-    const value = config[variable];
-    if (value === undefined) continue;
-    const hostname = value.trim().toLowerCase().replace(/\.$/, '');
-    hosts.set(hostname, environment);
+
+  for (const server of PUBLIC_API_SERVERS) {
+    if (server.environment === 'production') {
+      hosts.set(server.hostname, server.environment);
+    }
+  }
+  const productionHost = config.AIHUB_PRODUCTION_HOST;
+  if (productionHost !== undefined) {
+    const hostname = normalizeHostname(productionHost);
+    if (hostname.length > 0) {
+      hosts.set(hostname, 'production');
+    }
+  }
+  const stagingHost = config.AIHUB_STAGING_HOST;
+  if (stagingHost !== undefined) {
+    const hostname = normalizeHostname(stagingHost);
+    if (hostname.length > 0) {
+      hosts.set(hostname, 'staging');
+    }
+  }
+  const devHost = config.AIHUB_DEVELOPMENT_HOST;
+  if (devHost !== undefined) {
+    const hostname = normalizeHostname(devHost);
+    if (hostname.length > 0) {
+      hosts.set(hostname, 'development');
+    }
   }
   return hosts;
 }
@@ -62,11 +85,8 @@ function hostnameFromHostHeader(request: FastifyRequest): string {
   if (host === undefined) return '';
 
   try {
-    return new URL(`http://${host}`).hostname
-      .replace(/^\[|\]$/g, '')
-      .trim()
-      .toLowerCase()
-      .replace(/\.$/, '');
+    const hostname = new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, '');
+    return normalizeHostname(hostname);
   } catch {
     return '';
   }
@@ -81,6 +101,7 @@ export function resolveAihubEnvironment(
   if (publicEnvironment !== undefined) return publicEnvironment;
 
   if (
+    config.AIHUB_RUNTIME_DATABASE_SCOPE === 'production' &&
     LOCAL_HOSTNAMES.has(hostname) &&
     (config.NODE_ENV === 'development' || config.NODE_ENV === 'test')
   ) {

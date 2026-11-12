@@ -13,6 +13,7 @@ import type {
   OrganizationMembershipPort,
   OrganizationMembershipRole,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import { mayGrantInvitationRole } from './organization-invitation.grant-authority.policy';
 import type { OrganizationInvitationCreationRecordPort } from './organization-invitation.port';
 import type { OrganizationInviteTokenPort } from './organization-invite-token.port';
 
@@ -135,6 +136,19 @@ export class InviteOrganizationMember {
           });
         }
 
+        if (result.kind === 'caller_not_authorized') {
+          // The caller's authority was re-read under the Organization lock and
+          // no longer admits this send (ADR-0027 as amended). Nothing durable
+          // was written, and the refusal matches a fresh request.
+          throw forbidden(INVITATION_SENDING_FORBIDDEN);
+        }
+
+        if (result.kind === 'organization_suspended') {
+          // A suspension committed before the transaction boundary closes the
+          // surface: no invitation and no email outbox request.
+          throw forbidden(INVITATION_SENDING_FORBIDDEN);
+        }
+
         return {
           invitationId: issued.id,
           organizationId: input.organizationId,
@@ -161,8 +175,15 @@ export class InviteOrganizationMember {
     );
 
     // An admin has proved authority to invite, so the limit on what they may
-    // grant is a reason about the request and keeps its own message.
-    if (caller.role === 'admin' && input.role !== 'member') {
+    // grant is a reason about the request and keeps its own message. The same
+    // rule is re-evaluated against the inviter's current role inside the
+    // repository's transaction (ADR-0027 as amended).
+    if (
+      !mayGrantInvitationRole({
+        callerRole: caller.role,
+        invitedRole: input.role,
+      })
+    ) {
       throw forbidden('Organization admins can only invite members');
     }
   }

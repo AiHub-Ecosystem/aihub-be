@@ -48,15 +48,18 @@ const BATCHED_GATES = [
   'check:deprecation',
   'check:tenant-global',
   'check:data-ownership',
+  'check:migration-exemptions',
   'validate:openapi',
   'test:capacity-benchmark',
   'test:check-changed',
   'test:issue-triage',
   'test:lint-staged',
+  'test:check-staged',
   'check:doc-drift',
   'test:doc-drift',
   'check:log-redaction',
   'test:log-redaction',
+  'check:declaration-registry',
 ];
 
 /** @param {{freeBytes?: number}} [options] @returns {number} */

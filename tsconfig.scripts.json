@@ -17,6 +17,11 @@
     "skipLibCheck": false,
     "strict": false
   },
-  "include": ["scripts/**/*.mjs", "scripts/**/*.cjs", "scripts/**/*.js"],
+  "include": [
+    "scripts/**/*.mjs",
+    "scripts/**/*.cjs",
+    "scripts/**/*.js",
+    "scripts/generate/generate-coderabbit-config.ts"
+  ],
   "exclude": ["node_modules", "dist", "coverage", "temp"]
 }

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, matchesGlob, resolve, sep } from 'node:path';
 import { test } from 'node:test';
 
 import { findDocDriftViolations } from './check-doc-drift.mjs';
@@ -67,6 +68,36 @@ await test('requires the target ADR status to name the amending ADR', async (/**
   );
 });
 
+await test('recognises passive supersession and amendment relations in either voice (#1462)', async (/** @type {import('node:test').TestContext} */ t) => {
+  const root = await fixture(t, {
+    'docs/adr/0001-bare-passive.md':
+      '# ADR-0001\n\nStatus: Superseded by ADR-0002\n',
+    'docs/adr/0002-bare-active.md':
+      '# ADR-0002\n\n- Status: Accepted\n- Supersedes ADR-0001\n',
+    'docs/adr/0003-link-passive.md':
+      '# ADR-0003\n\nStatus: Superseded by [ADR-0004](0004-link-active.md)\n',
+    'docs/adr/0004-link-active.md':
+      '# ADR-0004\n\n- Status: Accepted\n- Supersedes: [ADR-0003](0003-link-passive.md)\n',
+    'docs/adr/0005-amended-passive.md':
+      '# ADR-0005\n\n- Status: Accepted (identity clauses amended by [ADR-0006](0006-amender.md))\n',
+    'docs/adr/0006-amender.md':
+      '# ADR-0006\n\n- Status: Accepted\n- Amends: [ADR-0005](0005-amended-passive.md)\n',
+  });
+
+  assert.deepEqual(findDocDriftViolations(root), []);
+});
+
+await test('fails when a passive supersession has no acknowledgement in the successor (#1462)', async (/** @type {import('node:test').TestContext} */ t) => {
+  const root = await fixture(t, {
+    'docs/adr/0001-base.md': '# ADR-0001\n\nStatus: Superseded by ADR-0002\n',
+    'docs/adr/0002-successor.md': '# ADR-0002\n\n- Status: Accepted\n',
+  });
+
+  assert.deepEqual(findDocDriftViolations(root), [
+    'ADR-0002 status does not name ADR-0001, declared by ADR-0001',
+  ]);
+});
+
 await test('rejects missing ADR links and missing repository paths in operations docs', async (/** @type {import('node:test').TestContext} */ t) => {
   const root = await fixture(t, {
     'docs/adr/0001-base.md':
@@ -117,5 +148,140 @@ await test('the static job runs this suite in CI (#1786)', async () => {
   assert.ok(
     staticJob.includes('bun run test:doc-drift'),
     'the static job must run bun run test:doc-drift',
+  );
+});
+
+await test('CodeRabbit config is generated and has disjoint owner scopes', async () => {
+  execFileSync('bun', ['run', 'generate:coderabbit-config', '--', '--check'], {
+    stdio: 'pipe',
+  });
+
+  const config = await readFile('.coderabbit.yaml', 'utf8');
+  assert.match(
+    config,
+    /^  auto_review:\r?\n    enabled: true\r?\n    drafts: true\r?\n  path_instructions:/mu,
+    'CodeRabbit must review every PR, including drafts, without label or author filters',
+  );
+  const start = config.indexOf('  path_instructions:\n');
+  const end = config.indexOf('knowledge_base:\n', start);
+  assert.notEqual(start, -1, 'CodeRabbit path instructions must exist');
+  assert.notEqual(
+    end,
+    -1,
+    'CodeRabbit knowledge base must follow path instructions',
+  );
+  /** @type {Array<{path: string, instructions: string}>} */
+  const entries = [
+    ...config
+      .slice(start, end)
+      .matchAll(
+        /^    - path: ("(?:\\.|[^"\\])*")\r?\n      instructions: ("(?:\\.|[^"\\])*")$/gmu,
+      ),
+  ].map((match) => {
+    /** @type {unknown} */
+    const path = JSON.parse(match[1] ?? 'null');
+    /** @type {unknown} */
+    const instructions = JSON.parse(match[2] ?? 'null');
+    if (typeof path !== 'string' || typeof instructions !== 'string') {
+      throw new Error('CodeRabbit path instructions must use string scalars');
+    }
+    return { path, instructions };
+  });
+
+  assert.equal(entries.length, 4);
+  for (const role of ['api', 'identity', 'auth', 'scripts/checks']) {
+    assert.ok(entries.some(({ instructions }) => instructions.includes(role)));
+  }
+
+  const trackedPaths = execFileSync('git', ['ls-files'], { encoding: 'utf8' })
+    .split(/\r?\n/u)
+    .filter(Boolean);
+  const samplePaths = [
+    {
+      path: 'src/modules/writing/presentation/writing.controller.ts',
+      owner: 'api role',
+    },
+    {
+      path: 'src/modules/writing/presentation/request-mapper.ts',
+      owner: 'api role',
+    },
+    {
+      path: 'src/modules/identity/membership/application/create-member.ts',
+      owner: 'identity role',
+    },
+    {
+      path: 'src/modules/identity/shared/infrastructure/identity-store.ts',
+      owner: 'identity role',
+    },
+    {
+      path: 'src/modules/identity/domain/api-key.ts',
+      owner: 'identity role',
+    },
+    {
+      path: 'src/modules/identity/public/postgres-readiness.ts',
+      owner: 'identity role',
+    },
+    {
+      path: 'src/modules/identity/identity.module.ts',
+      owner: 'identity role',
+    },
+    {
+      path: 'src/modules/auth/api-keys/application/create-key.ts',
+      owner: 'auth role',
+    },
+    {
+      path: 'src/modules/auth/auth.module.ts',
+      owner: 'auth role',
+    },
+    {
+      path: 'scripts/checks/architecture/check-architecture.mjs',
+      owner: 'For scripts/checks,',
+    },
+    { path: 'src/modules/gateway/application/grade-request.ts' },
+  ];
+
+  for (const { path, owner } of samplePaths) {
+    const matchedOwners = entries.filter(({ path: pattern }) =>
+      matchesGlob(path, pattern),
+    );
+    assert.equal(matchedOwners.length, owner ? 1 : 0, `${path} scope count`);
+    if (owner) assert.ok(matchedOwners[0]?.instructions.includes(owner), path);
+  }
+
+  for (const file of new Set([
+    ...trackedPaths,
+    ...samplePaths.map(({ path }) => path),
+  ])) {
+    const matchedOwners = entries.filter(({ path }) => matchesGlob(file, path));
+    assert.ok(
+      matchedOwners.length <= 1,
+      `${file} matched multiple CodeRabbit scopes`,
+    );
+  }
+
+  for (const file of trackedPaths.filter(
+    (path) =>
+      path.startsWith('src/modules/identity/') &&
+      !path.includes('/presentation/') &&
+      !path.endsWith('.controller.ts'),
+  )) {
+    assert.ok(
+      entries.some(
+        ({ path, instructions }) =>
+          instructions.includes('identity role') && matchesGlob(file, path),
+      ),
+      `${file} is owned by Identity but has no Identity path instruction`,
+    );
+  }
+
+  const instructionLength = entries.reduce(
+    (total, { instructions }) => total + instructions.length,
+    0,
+  );
+  assert.ok(instructionLength < 20_000);
+  assert.ok(
+    entries
+      .find(({ instructions }) => instructions.includes('scripts/checks'))
+      ?.instructions.includes('check:changed and `bun run verify`'),
   );
 });

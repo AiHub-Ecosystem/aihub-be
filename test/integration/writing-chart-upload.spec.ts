@@ -327,6 +327,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
   let currentTime = new Date('2026-10-14T00:00:00.000Z');
   const oldEnvironment = {
     nodeEnv: process.env['NODE_ENV'],
+    databaseScope: process.env['AIHUB_RUNTIME_DATABASE_SCOPE'],
     sandboxHost: process.env['AIHUB_SANDBOX_HOST'],
     writingUrl: process.env['DOWNSTREAM_AI_WRITING_URL'],
     writingToken: process.env['DOWNSTREAM_AI_WRITING_TOKEN'],
@@ -334,6 +335,7 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
 
   beforeAll(async () => {
     process.env['NODE_ENV'] = 'test';
+    process.env['AIHUB_RUNTIME_DATABASE_SCOPE'] = 'sandbox';
     process.env['AIHUB_SANDBOX_HOST'] = 'sandbox.test';
     process.env['DOWNSTREAM_AI_WRITING_URL'] = 'https://ai-writing.test';
     process.env['DOWNSTREAM_AI_WRITING_TOKEN'] = 'writing-token';
@@ -407,6 +409,11 @@ describe('Writing Task 1 chart upload HTTP flow', () => {
     await app.close();
     if (oldEnvironment.nodeEnv === undefined) delete process.env['NODE_ENV'];
     else process.env['NODE_ENV'] = oldEnvironment.nodeEnv;
+    if (oldEnvironment.databaseScope === undefined)
+      delete process.env['AIHUB_RUNTIME_DATABASE_SCOPE'];
+    else
+      process.env['AIHUB_RUNTIME_DATABASE_SCOPE'] =
+        oldEnvironment.databaseScope;
     if (oldEnvironment.sandboxHost === undefined)
       delete process.env['AIHUB_SANDBOX_HOST'];
     else process.env['AIHUB_SANDBOX_HOST'] = oldEnvironment.sandboxHost;

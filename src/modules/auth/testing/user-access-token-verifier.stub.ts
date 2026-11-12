@@ -11,11 +11,13 @@ export const NO_USER_ACCESS_TOKEN_REVOCATIONS: UserAccessTokenRevocationRecordPo
 export function verifiedUserAccessToken(
   userId: string,
   jti: string,
+  session?: VerifiedUserAccessToken['session'],
 ): VerifiedUserAccessToken {
   return {
     userId,
     issuer: 'https://api.test.aihub.example.com',
     jti,
     validUntil: new Date(Date.now() + 960_000),
+    ...(session === undefined ? {} : { session }),
   };
 }

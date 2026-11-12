@@ -192,6 +192,24 @@ const pathCases = [
     ],
   },
   {
+    path: 'scripts/checks/staged/check-staged.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:check-staged',
+    ],
+  },
+  {
+    path: 'scripts/checks/staged/check-staged.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:check-staged',
+    ],
+  },
+  {
     path: 'scripts/ops/capacity-benchmark/capacity-benchmark.mjs',
     gates: [
       'check:doc-drift',
@@ -238,6 +256,7 @@ const pathCases = [
     path: '.github/workflows/ci.yml',
     gates: [
       'format:check',
+      'test:check-staged',
       'test:commit-message',
       'test:commit-messages',
       'test:doc-drift',
@@ -286,6 +305,14 @@ const pathCases = [
       'lint',
       'test:generated-drift',
     ],
+  },
+  {
+    path: 'scripts/checks/architecture/check-architecture.mjs',
+    gates: ['arch-check', 'check:doc-drift', 'check:folder-entries', 'lint'],
+  },
+  {
+    path: 'scripts/checks/architecture/dependency-cruiser-cache.cjs',
+    gates: ['arch-check', 'check:doc-drift', 'check:folder-entries', 'lint'],
   },
   {
     path: 'ops/nginx/site.conf',
@@ -342,14 +369,35 @@ const pathCases = [
   },
   { path: 'tsconfig.json', gates: ['type-check'] },
   { path: 'tsconfig.scripts.json', gates: ['type-check:scripts'] },
-  { path: 'knip.json', gates: ['knip'] },
+  // #1787: knip.json carries the entry side of the declaration pairing.
+  { path: 'knip.json', gates: ['check:declaration-registry', 'knip'] },
+  // #1787: a declaration is the file side of that same pairing.
+  {
+    path: 'scripts/cli/cli-options.d.cts',
+    gates: [
+      'check:declaration-registry',
+      'check:doc-drift',
+      'check:folder-entries',
+      'type-check',
+    ],
+  },
+  {
+    path: 'ops/vault/pgbouncer-budget.d.mts',
+    gates: ['check:declaration-registry', 'check:doc-drift', 'type-check'],
+  },
   { path: 'biome.json', gates: ['lint'] },
   // #1768: the remaining gate-tool configuration files follow the same rule.
   { path: '.dependency-cruiser.cjs', gates: ['arch-check'] },
   { path: '.oxlintrc.json', gates: ['lint'] },
   { path: 'nest-cli.json', gates: ['build'] },
   { path: 'tsconfig.build.json', gates: ['build'] },
-  { path: '.squawk.toml', gates: ['check:migrations'] },
+  {
+    // #1810: this file carries both the squawk config and the exemption list,
+    // so a change to it selects the linter and the gate that keeps that list
+    // inside the historical baseline.
+    path: '.squawk.toml',
+    gates: ['check:migration-exemptions', 'check:migrations'],
+  },
   {
     // #1777: the spec that pins the cached format:check command and proves
     // the cache cannot mask a real finding. `scripts/` is a doc-drift input,
@@ -386,7 +434,10 @@ const pathCases = [
   { path: '.prettierignore', gates: ['format:check'] },
   { path: '.lintstagedrc', gates: ['test:lint-staged'] },
   // #1767: each husky hook selects the gate that asserts its content.
-  { path: '.husky/pre-commit', gates: ['test:lint-staged'] },
+  {
+    path: '.husky/pre-commit',
+    gates: ['test:check-staged', 'test:lint-staged'],
+  },
   { path: '.husky/commit-msg', gates: ['test:commit-message'] },
   // #1767: the whole checker directory selects the suite that exercises it,
   // not only its accepted-breaking-changes list.
@@ -442,6 +493,24 @@ const pathCases = [
   },
   {
     path: 'scripts/ops/monitoring/probe-sandbox-mint.sh',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
+  },
+  {
+    path: 'scripts/ops/blue-green/blue-green-host.sh',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
+  },
+  {
+    path: 'scripts/ops/logs/request-log-lookup.sh',
     gates: [
       'check:doc-drift',
       'check:folder-entries',
@@ -588,6 +657,29 @@ await test('changed source paths keep the documentation path check selected', ()
   );
 });
 
+await test('CodeRabbit config inputs select drift, formatting and behavior checks', () => {
+  for (const path of [
+    'AGENTS.md',
+    '.claude/agents/api.md',
+    '.claude/rules/security.md',
+    '.coderabbit.yaml',
+  ]) {
+    assert.deepEqual(planChangedFiles([path]).gates, [
+      'check:doc-drift',
+      'format:check',
+      'test:doc-drift',
+    ]);
+  }
+  for (const path of [
+    'scripts/generate/coderabbit-config.mjs',
+    'scripts/generate/generate-coderabbit-config.ts',
+  ]) {
+    const gates = planChangedFiles([path]).gates;
+    assert.ok(gates.includes('test:doc-drift'));
+    assert.ok(gates.includes('type-check:scripts'));
+  }
+});
+
 await test('the Bun runner defaults to TypeScript unit specs', () => {
   assert.equal(buildBunTestArgs([]).at(-1), '.spec.ts');
 });
@@ -634,11 +726,62 @@ await test('wrappers whose directory has no co-located suite select documentatio
   for (const path of [
     'scripts/ops/firewall/docker-user-guard.sh',
     'scripts/ops/speaking/speaking-gateway-smoke.sh',
-    'scripts/ops/blue-green/blue-green-host.sh',
-    'scripts/ops/logs/request-log-lookup.sh',
   ]) {
     assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
   }
+});
+
+await test('the shell-spec gate selects test/ suites for blue-green and log wrappers (#1764)', () => {
+  const listDir = (/** @type {string} */ dir) => {
+    if (dir === 'test/ops') {
+      return [
+        'blue-green-readiness.spec.sh',
+        'blue-green-config-retention.spec.sh',
+        'blue-green-resume.spec.sh',
+        'blue-green-rollback-image.spec.sh',
+        'blue-green-upstream.spec.sh',
+        'blue-green-edge-monitor.spec.sh',
+        'other.spec.sh',
+      ];
+    }
+    if (dir === 'test/cli') {
+      return ['request-log-lookup.spec.sh', 'other.spec.sh'];
+    }
+    return [];
+  };
+
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/blue-green/blue-green-host.sh'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: [
+        'test/ops/blue-green-config-retention.spec.sh',
+        'test/ops/blue-green-edge-monitor.spec.sh',
+        'test/ops/blue-green-readiness.spec.sh',
+        'test/ops/blue-green-resume.spec.sh',
+        'test/ops/blue-green-rollback-image.spec.sh',
+        'test/ops/blue-green-upstream.spec.sh',
+      ],
+    },
+  );
+
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/logs/request-log-lookup.sh'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/cli/request-log-lookup.spec.sh'],
+    },
+  );
 });
 
 await test('SAST-only CodeQL inputs select no local gate and say so (#1460)', () => {
@@ -1025,5 +1168,19 @@ await test('image inputs select no local gate and say so (#1766)', () => {
     'scripts/ci/image/image-boot-check.sh',
   ]) {
     assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
+  }
+});
+
+// #1539: editing the architecture checker or its cache helper selects the
+// architecture gate directly rather than relying on test:related.
+await test('check-architecture edits select the architecture gate directly (#1539)', () => {
+  for (const path of [
+    'scripts/checks/architecture/check-architecture.mjs',
+    'scripts/checks/architecture/dependency-cruiser-cache.cjs',
+  ]) {
+    assert.ok(
+      planChangedFiles([path]).gates.includes('arch-check'),
+      `${path} must select arch-check`,
+    );
   }
 });

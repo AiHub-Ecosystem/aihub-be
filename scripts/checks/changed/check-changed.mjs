@@ -86,6 +86,7 @@ export const GATE_COMMANDS = {
   'check:compose': 'check:compose',
   'check:tenant-global': 'check:tenant-global',
   'check:data-ownership': 'check:data-ownership',
+  'check:migration-exemptions': 'check:migration-exemptions',
   'format:check': 'format:check',
   knip: 'knip',
   lint: 'lint',
@@ -100,11 +101,13 @@ export const GATE_COMMANDS = {
   'test:doc-drift': 'test:doc-drift',
   'test:commit-messages': 'test:commit-messages',
   'test:generated-drift': 'test:generated-drift',
+  'check:declaration-registry': 'check:declaration-registry',
   'check:log-redaction': 'check:log-redaction',
   'test:log-redaction': 'test:log-redaction',
   'test:issue-triage': 'test:issue-triage',
   'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
+  'test:check-staged': 'test:check-staged',
   'test:monitoring-config': 'test:monitoring-config',
   'test:api-compatibility': 'test:api-compatibility',
   'test:shell-specs': 'test:shell-specs',
@@ -129,7 +132,13 @@ const BATCHABLE = new Set(BATCHED_GATES);
 
 /** Extensions jest can trace a dependency edge back from. */
 const CODE_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
-const DOC_DRIFT_INPUT = /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/)/;
+
+/** A hand-written declaration, one half of the pair #1787 keeps in agreement. */
+const DECLARATION_FILE = /\.d\.(?:cts|mts)$/;
+const DOC_DRIFT_INPUT =
+  /^(?:docs\/(?:adr|operations)\/|(?:scripts|ops|src)\/|AGENTS\.md$|\.claude\/(?:agents|rules)\/.*\.md$|\.coderabbit\.yaml$)/;
+const CODERABBIT_CONFIG_INPUT =
+  /^(?:AGENTS\.md|\.claude\/(?:agents|rules)\/.*\.md|\.coderabbit\.yaml)$/;
 
 /**
  * The trees the folder-entry ceilings measure (#1347): everything under
@@ -148,10 +157,9 @@ function listDirEntries(dir) {
 }
 
 /**
- * The co-located `*.spec.sh` suites for changed wrappers under `scripts/ops/`
- * (#1460). Selection is per directory: CI exercises each wrapper directory's
- * stub suites, and a directory-level match keeps helpers such as
- * `install-host-jobs.sh` covered by the suite that drives it.
+ * The `*.spec.sh` suites for changed wrappers under `scripts/ops/` (#1460, #1764).
+ * Co-located suites are selected per directory. Cross-cutting suites under `test/`
+ * are selected for wrappers whose suites live outside `scripts/ops/`.
  *
  * @param {readonly string[]} files changed `.sh` paths under `scripts/ops/`
  * @param {(dir: string) => readonly string[]} [listDir]
@@ -161,9 +169,23 @@ export function selectShellSpecs(files, listDir = listDirEntries) {
   /** @type {Set<string>} */
   const specs = new Set();
   for (const file of files) {
-    const dir = file.slice(0, file.lastIndexOf('/'));
-    for (const entry of listDir(dir)) {
-      if (entry.endsWith('.spec.sh')) specs.add(`${dir}/${entry}`);
+    if (file === 'scripts/ops/blue-green/blue-green-host.sh') {
+      for (const entry of listDir('test/ops')) {
+        if (entry.startsWith('blue-green-') && entry.endsWith('.spec.sh')) {
+          specs.add(`test/ops/${entry}`);
+        }
+      }
+    } else if (file === 'scripts/ops/logs/request-log-lookup.sh') {
+      for (const entry of listDir('test/cli')) {
+        if (entry === 'request-log-lookup.spec.sh') {
+          specs.add(`test/cli/${entry}`);
+        }
+      }
+    } else {
+      const dir = file.slice(0, file.lastIndexOf('/'));
+      for (const entry of listDir(dir)) {
+        if (entry.endsWith('.spec.sh')) specs.add(`${dir}/${entry}`);
+      }
     }
   }
   return sorted(specs);
@@ -193,6 +215,9 @@ function classifyPathGates(p) {
     return sorted(gates);
   }
 
+  if (CODERABBIT_CONFIG_INPUT.test(path)) {
+    return ['check:doc-drift', 'format:check', 'test:doc-drift'];
+  }
   if (path === 'openapi.json' || /^openapi\/v\d+\.json$/.test(path)) {
     return ['lint', 'validate:openapi'];
   }
@@ -211,7 +236,16 @@ function classifyPathGates(p) {
     return ['type-check:scripts'];
   }
   if (path === 'knip.json') {
-    return ['knip'];
+    // The declaration registry pairs every hand-written `.d.*` file with its
+    // knip entry, so the config change that can break that pairing selects it
+    // (#1787).
+    return ['check:declaration-registry', 'knip'];
+  }
+  // #1787: a declaration is one half of the pair the registry checks, so adding,
+  // renaming or deleting one must fail with the change that broke it rather than
+  // only on the next full knip run.
+  if (DECLARATION_FILE.test(path)) {
+    return ['check:declaration-registry', 'type-check'];
   }
   if (path === 'biome.json') {
     return ['lint'];
@@ -222,6 +256,20 @@ function classifyPathGates(p) {
   if (path === '.dependency-cruiser.cjs') {
     return ['arch-check'];
   }
+  // #1539: editing the architecture checker must run `arch-check` directly
+  // rather than relying on test:related, which has no static import edge.
+  if (
+    path.includes('check-architecture') ||
+    path === 'scripts/checks/architecture/dependency-cruiser-cache.cjs'
+  ) {
+    return ['arch-check', 'lint'];
+  }
+  if (
+    path === 'scripts/generate/coderabbit-config.mjs' ||
+    path === 'scripts/generate/generate-coderabbit-config.ts'
+  ) {
+    return [...TS_GATES, 'test:doc-drift', 'type-check:scripts'];
+  }
   if (path === '.oxlintrc.json') {
     return ['lint'];
   }
@@ -229,9 +277,11 @@ function classifyPathGates(p) {
   if (path === 'nest-cli.json' || path === 'tsconfig.build.json') {
     return ['build'];
   }
-  // squawk lints the migration SQL that `check:migrations` runs.
+  // squawk lints the migration SQL that `check:migrations` runs. The exemption
+  // list in this same file is what #1810 keeps inside the historical baseline,
+  // so a change to it selects both:
   if (path === '.squawk.toml') {
-    return ['check:migrations'];
+    return ['check:migrations', 'check:migration-exemptions'];
   }
   if (path === '.prettierrc' || path === '.prettierignore') {
     return ['format:check'];
@@ -244,7 +294,7 @@ function classifyPathGates(p) {
   // commit-msg hook delegates to the commit-message rule, whose spec runs
   // through `test:commit-message`.
   if (path === '.husky/pre-commit') {
-    return ['test:lint-staged'];
+    return ['test:check-staged', 'test:lint-staged'];
   }
   if (path === '.husky/commit-msg') {
     return ['test:commit-message'];
@@ -334,10 +384,10 @@ function classifyPathGates(p) {
       'test:generated-drift',
       'test:issue-triage',
       'test:lint-staged',
+      'test:check-staged',
       'test:secret-scan',
     ];
   }
-
   // #1766: a compose change selects the validators CI runs over the rendered
   // production config, instead of falling through to the generic YAML rule or
   // the full loop. Both compose files map here: production is what the
@@ -380,10 +430,10 @@ function classifyPathGates(p) {
 
   // #1460: recorded no-gate answers, not silent fall-throughs. The firewall
   // guard's suite needs a Linux network namespace and runs only in CI; the
-  // speaking, blue-green and logs wrappers have no co-located suite. The
-  // documentation drift gate still covers path references to them. These must
-  // precede the general `scripts/ops` wrapper rule below.
-  if (/^(?:scripts\/ops\/(?:firewall|speaking|blue-green|logs)\/)/.test(path)) {
+  // speaking wrapper has no suite yet (#1765). The documentation drift gate still
+  // covers path references to them. These must precede the general `scripts/ops`
+  // wrapper rule below.
+  if (/^(?:scripts\/ops\/(?:firewall|speaking)\/)/.test(path)) {
     return [];
   }
 
@@ -419,6 +469,9 @@ function classifyPathGates(p) {
   }
   if (path.includes('lint-staged-config')) {
     return ['lint', 'test:lint-staged'];
+  }
+  if (path.startsWith('scripts/checks/staged/')) {
+    return ['lint', 'test:check-staged'];
   }
   // #1777: the spec pins the format:check command shape and proves the cache
   // cannot mask a real finding, so a change to it runs itself.

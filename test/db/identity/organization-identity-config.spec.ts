@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 
 import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { jsonWebKeyThumbprint } from '@/modules/identity/organization-identity-configuration/application/jwk-thumbprint';
 import type { SaveOrganizationIdentityConfigInput } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -65,8 +66,18 @@ async function seedMember(
   return id;
 }
 
+const DEFAULT_KEY = { kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1' };
+const rawThumbprint = jsonWebKeyThumbprint(DEFAULT_KEY);
+if (rawThumbprint === undefined) {
+  throw new Error('default test key cannot be thumbprinted');
+}
+const DEFAULT_THUMBPRINT: string = rawThumbprint;
+
 function input(
-  overrides: Partial<SaveOrganizationIdentityConfigInput> = {},
+  overrides: Omit<
+    Partial<SaveOrganizationIdentityConfigInput>,
+    'keyThumbprints'
+  > = {},
 ): SaveOrganizationIdentityConfigInput {
   const userId = overrides.userId ?? ownerId;
   return {
@@ -82,11 +93,12 @@ function input(
     issuer: 'https://acme.edu',
     jwksUrl: null,
     publicKeysJwks: {
-      keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1' }],
+      keys: [DEFAULT_KEY],
     },
     allowedAlgorithms: ['RS256', 'ES256'],
     maxAssertionTtlSeconds: 300,
     sourceKind: 'inline',
+    keyThumbprints: [DEFAULT_THUMBPRINT],
     ...overrides,
   };
 }
@@ -204,7 +216,11 @@ describe('Organization identity configuration against PostgreSQL', () => {
         target_type: 'organization',
         target_id: organizationId,
         target_label: 'Identity configuration',
-        detail: { issuer: 'https://acme.edu', sourceKind: 'inline' },
+        detail: {
+          issuer: 'https://acme.edu',
+          sourceKind: 'inline',
+          keyThumbprints: [DEFAULT_THUMBPRINT],
+        },
       },
     ]);
     expect(JSON.stringify(await auditEvents())).not.toContain('rsa-1');

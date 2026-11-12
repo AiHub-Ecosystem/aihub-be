@@ -47,10 +47,13 @@ export class AcceptOrganizationInvitation {
       });
     }
 
-    if (result.kind === 'token_invalid') {
-      // One result for unknown, malformed, expired, consumed, superseded, and
-      // wrong-account tokens: the response must not tell a token holder which
-      // of those they are looking at.
+    if (
+      result.kind === 'token_invalid' ||
+      result.kind === 'inviter_unauthorized'
+    ) {
+      // One result for unknown, malformed, expired, consumed, superseded,
+      // wrong-account, and inviter-no-longer-authorized tokens: the response
+      // must not tell a token holder which of those they are looking at.
       throw new AppError({
         code: 'ORGANIZATION_INVITE_TOKEN_INVALID',
         message: 'Invitation token is invalid',

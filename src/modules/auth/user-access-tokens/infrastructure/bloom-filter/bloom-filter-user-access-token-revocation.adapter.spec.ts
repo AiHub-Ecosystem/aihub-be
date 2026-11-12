@@ -1,4 +1,5 @@
 import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import { Logger } from '@nestjs/common';
 import { BloomFilterUserAccessTokenRevocationAdapter } from './bloom-filter-user-access-token-revocation.adapter';
 import { InProcessBloomFilter } from './in-process-bloom-filter';
 
@@ -55,6 +56,8 @@ class FakeRedisClient {
   }> = [];
   readonly subscribedChannels: string[] = [];
   private messageHandler?: (channel: string, message: string) => void;
+  private errorHandler?: (error: unknown) => void;
+  subscribeGate?: Promise<void>;
   publishError?: Error;
   subscribeError?: Error;
 
@@ -65,6 +68,7 @@ class FakeRedisClient {
   }
 
   async subscribe(channel: string): Promise<string> {
+    if (this.subscribeGate) await this.subscribeGate;
     if (this.subscribeError) throw this.subscribeError;
     this.subscribedChannels.push(channel);
     return 'OK';
@@ -76,14 +80,21 @@ class FakeRedisClient {
     return 'OK';
   }
 
-  on(event: string, handler: (channel: string, message: string) => void): void {
+  on(event: string, handler: (...args: unknown[]) => void): void {
     if (event === 'message') {
-      this.messageHandler = handler;
+      this.messageHandler = (channel, message) => handler(channel, message);
+    }
+    if (event === 'error') {
+      this.errorHandler = (error) => handler(error);
     }
   }
 
   emitMessage(channel: string, message: string): void {
     this.messageHandler?.(channel, message);
+  }
+
+  emitError(error: unknown): void {
+    this.errorHandler?.(error);
   }
 }
 
@@ -116,7 +127,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     await adapter.close();
   });
 
-  it('bypasses underlying store and returns false when token not in filter', async () => {
+  it('checks the authoritative store for a token missing from a seeded filter', async () => {
     const isRevoked = await adapter.isRevoked({
       issuer: 'aihub_test',
       jti: 'valid_active_jti_123',
@@ -124,7 +135,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     });
 
     expect(isRevoked).toBe(false);
-    expect(underlying.isRevokedCalls).toHaveLength(0);
+    expect(underlying.isRevokedCalls).toHaveLength(1);
   });
 
   it('revokes token, updates local filter, and publishes to Redis Pub/Sub', async () => {
@@ -201,7 +212,16 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     expect(underlying.isRevokedCalls).toHaveLength(1);
   });
 
-  it('tolerates Redis publish error without failing revocation', async () => {
+  it('rejects a committed revocation on a healthy peer when its broadcast is lost', async () => {
+    const peerSubscriber = new FakeRedisClient();
+    const peer = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying,
+      bloomFilter: new InProcessBloomFilter(),
+      redisSubscriber: peerSubscriber,
+    });
+    await peer.init();
+    expect(peer.isSubscribed).toBe(true);
+
     mockPublisher.publishError = new Error('Redis connection lost');
 
     const input = {
@@ -213,12 +233,148 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     await expect(adapter.revoke(input)).resolves.toBeUndefined();
     expect(underlying.revokeCalls).toEqual([input]);
 
-    const isRevoked = await adapter.isRevoked({
-      issuer: input.issuer,
-      jti: input.jti,
-      now: new Date(),
+    expect(
+      await peer.isRevoked({
+        issuer: input.issuer,
+        jti: input.jti,
+        now: new Date(),
+      }),
+    ).toBe(true);
+    expect(underlying.isRevokedCalls).toHaveLength(1);
+    await peer.close();
+  });
+
+  it('rejects a revocation committed after the startup snapshot but before subscription is ready', async () => {
+    const snapshotStore = new RecordingRevocationAdapter();
+    let finishSnapshot: (
+      records: readonly { readonly issuer: string; readonly jti: string }[],
+    ) => void = () => undefined;
+    const snapshot = new Promise<
+      readonly { readonly issuer: string; readonly jti: string }[]
+    >((resolve) => {
+      finishSnapshot = resolve;
     });
-    expect(isRevoked).toBe(true);
+    const listSnapshot = jest.fn(() => snapshot);
+    snapshotStore.listActiveRevocations = listSnapshot;
+    const subscriber = new FakeRedisClient();
+    let finishSubscription: () => void = () => undefined;
+    subscriber.subscribeGate = new Promise<void>((resolve) => {
+      finishSubscription = resolve;
+    });
+    const startingFilter = new InProcessBloomFilter();
+    const startingInstance = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying: snapshotStore,
+      bloomFilter: startingFilter,
+      redisSubscriber: subscriber,
+    });
+    const initialization = startingInstance.init();
+    expect(listSnapshot).toHaveBeenCalledTimes(1);
+    const token = {
+      issuer: 'aihub_test',
+      jti: 'committed_during_startup',
+      effectiveExpiresAt: new Date(Date.now() + 3600_000),
+    };
+
+    await snapshotStore.revoke(token);
+    expect(startingInstance.isSubscribed).toBe(false);
+    finishSnapshot([]);
+    finishSubscription();
+    await initialization;
+
+    expect(startingInstance.isSeeded).toBe(true);
+    expect(startingInstance.isSubscribed).toBe(true);
+    expect(startingFilter.has(JSON.stringify([token.issuer, token.jti]))).toBe(
+      false,
+    );
+    expect(
+      await startingInstance.isRevoked({
+        issuer: token.issuer,
+        jti: token.jti,
+        now: new Date(),
+      }),
+    ).toBe(true);
+    expect(snapshotStore.isRevokedCalls).toHaveLength(1);
+    await startingInstance.close();
+  });
+
+  it('checks the authoritative store when a subscriber loses its connection', async () => {
+    const peerSubscriber = new FakeRedisClient();
+    const peer = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying,
+      bloomFilter: new InProcessBloomFilter(),
+      redisSubscriber: peerSubscriber,
+    });
+    await peer.init();
+    peerSubscriber.emitError(new Error('Redis connection gap'));
+    expect(peer.isSubscribed).toBe(false);
+
+    const token = {
+      issuer: 'aihub_test',
+      jti: 'missed_during_connection_gap',
+      effectiveExpiresAt: new Date(Date.now() + 3600_000),
+    };
+    await adapter.revoke(token);
+
+    expect(
+      await peer.isRevoked({
+        issuer: token.issuer,
+        jti: token.jti,
+        now: new Date(),
+      }),
+    ).toBe(true);
+    expect(underlying.isRevokedCalls).toHaveLength(1);
+    await peer.close();
+  });
+
+  it('logs bounded synchronization diagnostics without error details', async () => {
+    const unsafeDetail = 'Bearer ey.header.payload.signature';
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const failedStore = new RecordingRevocationAdapter();
+    failedStore.listActiveRevocations = jest
+      .fn()
+      .mockRejectedValue(new Error(unsafeDetail));
+    const subscriber = new FakeRedisClient();
+    subscriber.subscribeError = new Error(unsafeDetail);
+    const publisher = new FakeRedisClient();
+    const diagnosticAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying: failedStore,
+      redisPublisher: publisher,
+      redisSubscriber: subscriber,
+    });
+
+    try {
+      await diagnosticAdapter.init();
+      subscriber.emitError(new Error(unsafeDetail));
+      publisher.publishError = new Error(unsafeDetail);
+      await diagnosticAdapter.revoke({
+        issuer: 'aihub_test',
+        jti: 'diagnostic_test',
+        effectiveExpiresAt: new Date(Date.now() + 3600_000),
+      });
+
+      expect(logError.mock.calls).toEqual(
+        expect.arrayContaining([
+          ['Failed to seed token revocations from underlying store'],
+          ['Failed to subscribe to token revocation channel'],
+          ['Token revocation Redis subscriber connection error'],
+          ['Failed to broadcast token revocation'],
+        ]),
+      );
+      expect(
+        logError.mock.calls.every(
+          (args) =>
+            args.length === 1 &&
+            typeof args[0] === 'string' &&
+            args[0].length <= 80,
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(logError.mock.calls)).not.toContain(unsafeDetail);
+    } finally {
+      await diagnosticAdapter.close();
+      logError.mockRestore();
+    }
   });
 
   it('seeds the filter from underlying store on boot so tokens revoked before restart are rejected', async () => {
@@ -263,7 +419,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     });
     expect(isRevoked).toBe(true);
 
-    // An unrevoked token is accepted without querying underlying
+    // A token absent from the filter is still checked against the store.
     const callsBefore = underlying.isRevokedCalls.length;
     const unrevoked = await restartedAdapter.isRevoked({
       issuer: 'aihub_test',
@@ -271,7 +427,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
       now: new Date(),
     });
     expect(unrevoked).toBe(false);
-    expect(underlying.isRevokedCalls.length).toBe(callsBefore);
+    expect(underlying.isRevokedCalls.length).toBe(callsBefore + 1);
     await restartedAdapter.close();
   });
 
@@ -290,8 +446,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
 
     expect(degradedAdapter.isSubscribed).toBe(false);
 
-    // Because subscription failed, it must not fail open:
-    // It queries underlying store directly so revocations issued elsewhere are not bypassed
+    // It queries the authoritative store even when subscription failed.
     const callsBefore = underlying.isRevokedCalls.length;
     await degradedAdapter.isRevoked({
       issuer: 'aihub_test',
@@ -370,8 +525,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
 
     expect(degradedAdapter.isSeeded).toBe(false);
 
-    // Because seeding failed, isRevoked must query underlying store directly
-    // instead of relying on an empty Bloom filter (failing closed, not open)
+    // The miss must be checked against the authoritative store.
     await degradedAdapter.isRevoked({
       issuer: 'aihub_test',
       jti: 'token_after_failed_seed',
@@ -382,7 +536,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     await degradedAdapter.close();
   });
 
-  it('re-seeds after a failed boot seed and re-engages the fast path', async () => {
+  it('re-seeds after a failed boot seed without skipping authoritative lookups', async () => {
     const recoveringStore = new RecordingRevocationAdapter();
     let seedAttempts = 0;
     recoveringStore.listActiveRevocations = jest.fn(async () => {
@@ -406,7 +560,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     expect(retryAdapter.isSeeded).toBe(true);
     expect(seedAttempts).toBe(2);
 
-    // Fast path is engaged: an unrevoked token avoids the store entirely.
+    // A successful seed does not make a negative filter result authoritative.
     const callsBefore = recoveringStore.isRevokedCalls.length;
     const unrevoked = await retryAdapter.isRevoked({
       issuer: 'aihub_test',
@@ -414,7 +568,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
       now: new Date(),
     });
     expect(unrevoked).toBe(false);
-    expect(recoveringStore.isRevokedCalls.length).toBe(callsBefore);
+    expect(recoveringStore.isRevokedCalls.length).toBe(callsBefore + 1);
     await retryAdapter.close();
   });
 });

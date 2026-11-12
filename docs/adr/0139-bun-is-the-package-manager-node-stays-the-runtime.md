@@ -1,6 +1,6 @@
 # ADR-0139: Bun is the package manager; Node.js stays the runtime
 
-- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-31 in [#342](https://github.com/AiHub-Ecosystem/aihub-be/issues/342).
+- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-31 in [#342](https://github.com/AiHub-Ecosystem/aihub-be/issues/342); toolchain version amended by ADR-0161.
 - Date: 2026-10-31
 - Amends: [ADR-0088](0088-prisma-for-control-plane-persistence.md) (the build paragraph names `.pnpmfile.cjs` and `pnpm why`; the guarantee it protects now rests on the Dockerfile and a CI check)
 - Related: [ADR-0047](0047-nestjs-12-esm-only-framework.md), [ADR-0064](0064-ci-publishes-the-image-it-booted.md), [#342](https://github.com/AiHub-Ecosystem/aihub-be/issues/342), [#1434](https://github.com/AiHub-Ecosystem/aihub-be/issues/1434), [#228](https://github.com/AiHub-Ecosystem/aihub-be/issues/228)

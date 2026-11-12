@@ -300,7 +300,10 @@ describe('Speaking Audio upload HTTP flow', () => {
   let currentTime = new Date('2026-10-03T04:00:00.000Z');
 
   beforeAll(async () => {
-    useTestRuntimeConfiguration({ AIHUB_SANDBOX_HOST: 'sandbox.test' });
+    useTestRuntimeConfiguration({
+      AIHUB_SANDBOX_HOST: 'sandbox.test',
+      AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+    });
     const apiKeys: ApiKeyAuthenticatorPort = {
       authenticate: async ({ environment, value }) => {
         if (value === 'aihub_sk_revoked') {
@@ -382,6 +385,7 @@ describe('Speaking Audio upload HTTP flow', () => {
 
   afterAll(async () => {
     await app.close();
+    useTestRuntimeConfiguration({});
   });
 
   beforeEach(() => {

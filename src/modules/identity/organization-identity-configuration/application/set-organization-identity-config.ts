@@ -17,6 +17,7 @@ import {
 } from '@/modules/identity/shared/application/jwks-errors';
 import type { JwksCachePort } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import { jsonWebKeyThumbprint } from './jwk-thumbprint';
 import type {
   IdentityConfigAlgorithm,
   IdentityConfigPrecondition,
@@ -132,11 +133,24 @@ export class SetOrganizationIdentityConfig {
       throw invalidJwks();
     }
 
-    if (jwksUrl !== null) {
-      await this.keys.validateRemote({
-        organizationId: input.organizationId,
-        url: jwksUrl,
-      });
+    // Every key the configuration will trust gets an RFC 7638 thumbprint in
+    // the audit event, so swapping keys under the same issuer leaves a record
+    // of which keys were trusted when (ADR-0049, #447). A key the supported
+    // algorithms cannot thumbprint cannot be recorded, so it is refused.
+    const trustedJwks =
+      jwksUrl !== null
+        ? await this.keys.validateRemote({
+            organizationId: input.organizationId,
+            url: jwksUrl,
+          })
+        : (publicKeysJwks ?? { keys: [] });
+    const keyThumbprints: string[] = [];
+    for (const key of trustedJwks.keys) {
+      const thumbprint = jsonWebKeyThumbprint(key);
+      if (thumbprint === undefined) {
+        throw invalidJwks();
+      }
+      keyThumbprints.push(thumbprint);
     }
 
     const saved = await this.configs.saveForOwner({
@@ -149,6 +163,7 @@ export class SetOrganizationIdentityConfig {
       allowedAlgorithms,
       maxAssertionTtlSeconds,
       sourceKind: jwksUrl === null ? 'inline' : 'url',
+      keyThumbprints,
       ...(input.precondition === undefined
         ? {}
         : { precondition: input.precondition }),

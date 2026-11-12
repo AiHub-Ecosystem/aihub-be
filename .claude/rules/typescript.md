@@ -6,7 +6,7 @@ paths:
 
 # TypeScript rules
 
-- Keep `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noImplicitOverride`, `allowUnreachableCode` (false), and `allowUnusedLabels` (false) green. The unused/import flags are a second defense layer beside oxlint `no-unused-vars`, so nobody removes them as redundant.
+- Keep `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noImplicitOverride`, `allowUnreachableCode` (false), and `allowUnusedLabels` (false) green. The unused/import flags are a second defense layer beside Bun lint `no-unused-vars`, so nobody removes them as redundant.
 - Keep `noPropertyAccessFromIndexSignature` green (#1775): a read through an index signature — a JSON document, a row shape, an env map — must be spelled `obj['key']`, so a misspelled key fails the type check instead of silently reading `undefined`.
 - Keep `skipLibCheck` (false, in both `tsconfig.json` and `tsconfig.scripts.json`) green: dependency and generated declaration files are type-checked, so a drifted `.d.ts` fails the gate instead of surfacing as wrong runtime behavior. Import only a package's public surface — a deep path the package's `exports` map does not list is a resolution error, not something to route around.
 - Do not use `any`, broad `as` casts, non-null assertions, or `@ts-ignore` to bypass a boundary.

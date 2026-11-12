@@ -70,11 +70,35 @@ export class UsageReportError extends Error {
   }
 }
 
+function safeDatabaseErrorDiagnostic(error: unknown): string | undefined {
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+
+  const value = error as Error & { readonly code?: unknown };
+  const code =
+    typeof value.code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(value.code)
+      ? value.code
+      : undefined;
+  const type = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(error.name)
+    ? error.name
+    : undefined;
+  const details = [code && `code=${code}`, type && `type=${type}`].filter(
+    (detail): detail is string => detail !== undefined,
+  );
+  return details.length > 0 ? details.join(' ') : undefined;
+}
+
 export class UsageReportDatabaseError extends UsageReportError {
-  constructor() {
+  constructor(
+    cause?: unknown,
+    operation: 'setup' | 'read' | 'shutdown' = 'read',
+  ) {
+    const diagnostic = safeDatabaseErrorDiagnostic(cause);
+    const message = `usage completeness report database ${operation} failed`;
     super(
       'USAGE_REPORT_DATABASE_FAILURE',
-      'usage completeness report database read failed',
+      diagnostic ? `${message} (${diagnostic})` : message,
     );
     this.name = UsageReportDatabaseError.name;
   }
@@ -195,7 +219,7 @@ export class UsageCompletenessReportService {
       if (error instanceof UsageReportSnapshotError) {
         throw error;
       }
-      throw new UsageReportDatabaseError();
+      throw new UsageReportDatabaseError(error);
     }
 
     const snapshot = snapshotMap(rows, this.operations);

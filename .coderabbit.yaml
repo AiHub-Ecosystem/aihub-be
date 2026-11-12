@@ -1,0 +1,31 @@
+version: 2
+reviews:
+  auto_review:
+    enabled: true
+    drafts: true
+  path_instructions:
+    - path: "{src/**/presentation/**,src/**/*.controller.ts}"
+      instructions: "Review under the api role in .claude/agents/api.md. Apply AGENTS.md and all matching .claude/rules/*.md. Keep controllers thin, validate request bodies with parseRequestBody, and prevent direct database, Redis, downstream calls, or secret and raw-body exposure."
+    - path: "{src/modules/identity/*/application/**,src/modules/identity/*/domain/**,src/modules/identity/*/infrastructure/**,src/modules/identity/*/public/**,src/modules/identity/shared/application/**,src/modules/identity/shared/domain/**,src/modules/identity/shared/infrastructure/**,src/modules/identity/domain/**,src/modules/identity/public/**,src/modules/identity/identity.module.ts,src/common/request-context/**,src/common/security/**}"
+      instructions: "Review under the identity role in .claude/agents/identity.md. Apply AGENTS.md and matching path-scoped rules. Keep organization identity explicit and preserve tenant isolation, credential handling, TTL and algorithm constraints, and secret redaction. API owns presentation paths and controllers; this scope excludes them."
+    - path: "{src/modules/auth/*/{application,domain,public}/**,src/modules/auth/shared/application/**,src/modules/auth/public/**,src/modules/auth/testing/**,src/modules/auth/auth.module.ts}"
+      instructions: "Review under the auth role in .claude/agents/auth.md. Use another feature’s public facade or application port; keep shared implementations under shared/ and never import feature-private layers from shared/. Apply AGENTS.md and matching path-scoped rules."
+    - path: "scripts/checks/**"
+      instructions: "For scripts/checks, confirm each guarded rule has a behavior spec; confirm each checker is wired into check:changed and `bun run verify`; keep its measured folder under the direct-entry ceiling; add no grandfather allowlist."
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - files: ".claude/agents/api.md"
+        applyTo: "src/**/presentation/**, src/modules/auth/testing/http/auth-http-*.spec.ts, src/**/*.controller.ts, src/catalog/**, src/contracts/**, src/main.ts, src/app.module.ts"
+      - files: ".claude/agents/auth.md"
+        applyTo: "src/modules/auth/*/{application,domain,public}/**, src/modules/auth/shared/application/**, src/modules/auth/public/**, src/modules/auth/testing/**, src/modules/auth/auth.module.ts"
+      - files: ".claude/agents/downstream.md"
+        applyTo: "src/downstream/**, src/modules/gateway/**, src/modules/writing/application/**"
+      - files: ".claude/agents/identity.md"
+        applyTo: "src/modules/identity/**, src/common/request-context/**, src/common/security/**"
+      - files: ".claude/agents/infrastructure.md"
+        applyTo: "src/**/infrastructure/**, src/config/**, scripts/**, .dependency-cruiser.cjs"
+      - files: ".claude/agents/metering.md"
+        applyTo: "src/modules/metering/**"
+      - files: ".claude/agents/testing.md"
+        applyTo: "src/**/*.spec.ts, test/**, scripts/checks/architecture/check-architecture.mjs, jest.config.cjs, biome.json"

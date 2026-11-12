@@ -2,7 +2,7 @@
 
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-10-30 in [#1411](https://github.com/AiHub-Ecosystem/aihub-be/issues/1411).
 - Date: 2026-10-30
-- Amends: [ADR-0127](0127-public-api-uri-major-versioning.md)
+- Amends: [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0130](0130-collection-routes-are-paginated-by-limit-and-cursor.md)
 - Related: [ADR-0028](0028-organization-roster-read-boundary.md), [ADR-0051](0051-organization-membership-list-read-boundary.md), [ADR-0130](0130-collection-routes-are-paginated-by-limit-and-cursor.md), [ADR-0133](0133-the-cross-organization-roster-is-paginated-by-organization.md), [#276](https://github.com/AiHub-Ecosystem/aihub-be/issues/276), [#896](https://github.com/AiHub-Ecosystem/aihub-be/issues/896), [#1374](https://github.com/AiHub-Ecosystem/aihub-be/issues/1374), [#1411](https://github.com/AiHub-Ecosystem/aihub-be/issues/1411), [#1412](https://github.com/AiHub-Ecosystem/aihub-be/issues/1412)
 
 ## Context

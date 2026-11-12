@@ -156,6 +156,12 @@ interface OrganizationIdentityConfigSetDraft {
   readonly organizationId: string;
   readonly issuer: string;
   readonly sourceKind: 'url' | 'inline';
+  /**
+   * RFC 7638 thumbprints of the public keys the configuration trusted after
+   * this change (ADR-0049, #447). Swapping keys under the same issuer must
+   * leave a record of which keys were trusted when.
+   */
+  readonly keyThumbprints: readonly string[];
 }
 
 interface OrganizationEntitlementGrantedDraft {
@@ -303,7 +309,11 @@ function shape(draft: OrganizationAuditDraft): Shape {
         targetType: 'organization',
         targetId: draft.organizationId,
         targetLabel: 'Identity configuration',
-        detail: { issuer: draft.issuer, sourceKind: draft.sourceKind },
+        detail: {
+          issuer: draft.issuer,
+          sourceKind: draft.sourceKind,
+          keyThumbprints: [...draft.keyThumbprints],
+        },
         outcome: 'applied',
       };
     case 'organization.entitlement_granted':

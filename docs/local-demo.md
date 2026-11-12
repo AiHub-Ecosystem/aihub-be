@@ -18,7 +18,7 @@ flow. There is no customer app or customer backend in this repository. The
 ## What you need
 
 - Node.js 22.22.3 or newer (the NestJS 12 build tooling needs it; see ADR-0047)
-- Bun 1.4 as the package manager (the repository pins `bun@1.4.4`); Node.js stays the runtime
+- Bun 1.4 as the package manager (the repository pins `bun@1.4.4-canary.20261109.1`); Node.js stays the runtime
 - Docker Desktop or another Docker Compose implementation
 - A valid AI Writing bearer token from the AI Writing team (for Writing calls)
 - AI Speaking Dev URL and server-side `x-client-id`/`x-secret-key` values (for

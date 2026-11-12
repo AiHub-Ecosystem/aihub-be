@@ -69,6 +69,15 @@ describe('API key material', () => {
     expect(
       apiKeyStatus(
         {
+          status: 'active',
+          expiresAt: new Date('2026-10-26T12:00:00.001Z'),
+        },
+        now,
+      ),
+    ).toBe('active');
+    expect(
+      apiKeyStatus(
+        {
           status: 'revoked',
           expiresAt: new Date('2026-11-01T00:00:00.000Z'),
         },

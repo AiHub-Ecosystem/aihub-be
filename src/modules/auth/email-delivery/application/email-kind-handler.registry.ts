@@ -7,6 +7,7 @@ import {
   composeApiKeyNearExpiryNotification,
   composeMfaSecurityNotification,
   composeOrganizationInviteEmail,
+  composePasswordChangedNotification,
   composePasswordResetEmail,
   composeVerificationEmail,
 } from './email-message.composer';
@@ -21,6 +22,7 @@ import {
   INVITE_EMAIL_ROLES,
   MfaSecurityNotificationPayloadSchema,
   OrganizationInviteEmailDeliveryPayloadSchema,
+  PasswordChangedNotificationPayloadSchema,
 } from './payload/email-delivery-payload';
 
 type Credential = Pick<AuthEmailDeliveryPayload, 'token' | 'expiresAt'>;
@@ -224,6 +226,18 @@ export const EMAIL_KIND_POLICIES = {
           email: payload.email,
           action: 'removed',
         }),
+    ),
+  },
+  password_changed_notification: {
+    priorityTier: 2,
+    dailyBudgetBucket: 'priority',
+    staleCutoffMs: MAX_CREDENTIAL_LIFETIME_MS,
+    staleCancellationReason: 'not_actionable',
+    backpressureLifetimeMs: null,
+    handler: createEmailKindHandler(
+      PasswordChangedNotificationPayloadSchema,
+      () => undefined,
+      (payload) => composePasswordChangedNotification(payload),
     ),
   },
   [API_KEY_NEAR_EXPIRY_KIND]: {

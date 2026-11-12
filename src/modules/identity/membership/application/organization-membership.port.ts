@@ -15,11 +15,26 @@ export interface ChangeOrganizationMemberRoleInput
   readonly role: OrganizationMembershipMutationRole;
 }
 
+/** An active API key the member created or last rotated. */
+export interface HandledOrganizationApiKey {
+  readonly id: string;
+  readonly name: string;
+  readonly keyPrefix: string;
+}
+
 export interface OrganizationMembershipMutationResult {
   readonly organizationId: string;
   readonly username: string;
   readonly role: OrganizationMembershipRole;
   readonly status: OrganizationMembershipStatus;
+  /**
+   * Active API keys the member created or last rotated, present when the
+   * mutation removed their authority — a disable, or a demotion. The caller
+   * reviews or revokes them without a separate lookup, because the keys a
+   * demoted admin keeps reading are the authority the demotion was meant to
+   * take away. Absent when the mutation removed no authority.
+   */
+  readonly handledApiKeys?: readonly HandledOrganizationApiKey[];
 }
 
 export type OrganizationMembershipRole = 'owner' | 'admin' | 'member';
@@ -31,6 +46,12 @@ export interface OrganizationMembershipRecord {
   readonly organizationStatus: OrganizationStatus;
   readonly role: OrganizationMembershipRole;
   readonly status: OrganizationMembershipStatus;
+  /**
+   * The immutable public identifier of the caller. Surfaces that record who
+   * handled an organization-owned credential report it in the same response
+   * (ADR-0027 as amended), and the admission has already read it.
+   */
+  readonly username?: string;
 }
 
 export interface ResolveMembershipInput {

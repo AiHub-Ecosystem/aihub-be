@@ -25,6 +25,10 @@ import {
 } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/outbox/email-outbox-backpressure.gate';
 import {
+  PASSWORD_CHANGE_REPOSITORY,
+  type PasswordChangeRepositoryPort,
+} from '@/modules/auth/local-credentials/application/password-change-repository.port';
+import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '@/modules/auth/local-credentials/application/password-hasher.port';
@@ -52,7 +56,10 @@ import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
 import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
 import { verifiedUserAccessToken } from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import {
+  USER_ACCESS_TOKEN_REVOCATION_RECORD,
+  type UserAccessTokenRevocationRecordPort,
+} from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import {
   type IssuedVerificationToken,
@@ -68,6 +75,7 @@ import {
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
+  type UserAccessSession,
   type UserAccessTokenIssuerPort,
   type UserAccessTokenVerifierPort,
 } from '@/modules/auth/web-sessions/application/user-access-token.port';
@@ -218,12 +226,67 @@ export class MfaFake implements AuthMfaServicePort {
 
 export class AccessTokenIssuerFake implements UserAccessTokenIssuerPort {
   fail = false;
+  lastSession: UserAccessSession | undefined;
 
-  async issue(): Promise<{ token: string; expiresIn: number }> {
+  async issue(
+    _userId: string,
+    session?: UserAccessSession,
+  ): Promise<{ token: string; expiresIn: number }> {
     if (this.fail) {
       throw new Error('access token issuer unavailable');
     }
+    this.lastSession = session;
     return { token: 'ey.fake.access', expiresIn: 900 };
+  }
+}
+
+export class InMemoryPasswordChangeAdapter
+  implements PasswordChangeRepositoryPort
+{
+  constructor(private readonly state: InMemoryAuthState) {}
+
+  async changePassword(
+    input: Parameters<PasswordChangeRepositoryPort['changePassword']>[0],
+  ): Promise<boolean> {
+    const account = this.state.accounts.get(input.userId);
+    if (
+      account?.status !== 'active' ||
+      account.passwordHash !== input.expectedPasswordHash
+    ) {
+      return false;
+    }
+
+    account.passwordHash = input.passwordHash;
+    for (const token of this.state.passwordResetTokens.values()) {
+      if (token.userId === input.userId && token.consumedAt === undefined) {
+        token.consumedAt = input.now;
+      }
+    }
+    for (const [hash, token] of this.state.refreshTokens) {
+      if (
+        token.userId === input.userId &&
+        token.revokedAt === undefined &&
+        !(
+          input.session.kind === 'refresh' &&
+          token.familyId === input.session.id
+        )
+      ) {
+        this.state.refreshTokens.set(hash, { ...token, revokedAt: input.now });
+      }
+    }
+    for (const session of this.state.webSessions.values()) {
+      if (
+        session.userId === input.userId &&
+        session.revokedAt === undefined &&
+        !(
+          input.session.kind === 'web' && session.sessionId === input.session.id
+        )
+      ) {
+        session.revokedAt = input.now;
+      }
+    }
+    this.state.emailDeliveryRequests.push(input.emailDelivery);
+    return true;
   }
 }
 
@@ -288,16 +351,19 @@ export interface LocalAuthTestContext {
   reset: () => void;
 }
 
+/** Creates an isolated Auth app with in-memory adapters and optional overrides. */
 export async function createLocalAuthTestContext(
   accessTokenVerifierOverride?: UserAccessTokenVerifierPort,
   requestLogStream?: RequestLogStream,
   configureFastify?: (fastify: FastifyInstance) => void,
   clientSecret?: string,
+  revocationRecordOverride?: UserAccessTokenRevocationRecordPort,
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
   const verificationTokens = new InMemoryVerificationTokenAdapter(state);
   const passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
+  const passwordChanges = new InMemoryPasswordChangeAdapter(state);
   const refreshSessions = new InMemoryRefreshSessionAdapter(state);
   const hasher = new HasherFake();
   const limiter = new LimiterFake();
@@ -310,8 +376,12 @@ export async function createLocalAuthTestContext(
   const mfa = new MfaFake();
   const accessTokenVerifier: UserAccessTokenVerifierPort = {
     verify: async (token) => {
-      if (token === 'valid.user.access') {
-        return verifiedUserAccessToken(USER_ID, 'jti_current_user');
+      if (token === 'ey.fake.access' || token === 'valid.user.access') {
+        return verifiedUserAccessToken(
+          USER_ID,
+          'jti_current_user',
+          accessTokenIssuer.lastSession,
+        );
       }
       throw new Error('invalid token');
     },
@@ -325,6 +395,8 @@ export async function createLocalAuthTestContext(
     .useValue(verificationTokens)
     .overrideProvider(PASSWORD_RESET_TOKEN_REPOSITORY)
     .useValue(passwordResetTokens)
+    .overrideProvider(PASSWORD_CHANGE_REPOSITORY)
+    .useValue(passwordChanges)
     .overrideProvider(REFRESH_SESSION_REPOSITORY)
     .useValue(refreshSessions)
     .overrideProvider(PASSWORD_HASHER)
@@ -357,7 +429,7 @@ export async function createLocalAuthTestContext(
     .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
     .useValue(accessTokenVerifierOverride ?? accessTokenVerifier)
     .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(revocations)
+    .useValue(revocationRecordOverride ?? revocations)
     .overrideProvider(REFRESH_TOKEN_ISSUER)
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)
@@ -389,6 +461,7 @@ export async function createLocalAuthTestContext(
     limiter.reset();
     queueAge.reset();
     accessTokenIssuer.fail = false;
+    accessTokenIssuer.lastSession = undefined;
     revocations.reset();
     refreshSessions.failCreateRefreshSession = false;
     refreshSessions.failFindRefreshToken = false;

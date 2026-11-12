@@ -350,7 +350,7 @@ export function organizationIdOf(result: HttpResult): string {
   return value;
 }
 
-export function jwt(privatePem: string): string {
+export function jwt(privatePem: string, audience = 'aihub-user-api'): string {
   const now = Math.floor(Date.now() / 1_000);
   const header = Buffer.from(
     JSON.stringify({ alg: 'RS256', kid: 'ci-boot-fake', typ: 'JWT' }),
@@ -358,7 +358,7 @@ export function jwt(privatePem: string): string {
   const payload = Buffer.from(
     JSON.stringify({
       iss: 'https://api.ci-boot.invalid',
-      aud: 'aihub-user-api',
+      aud: audience,
       sub: USER_ID,
       jti: randomUUID(),
       iat: now,

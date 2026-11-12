@@ -16,6 +16,7 @@ import {
 } from '@/modules/auth/web-sessions/application/user-access-token-key-policy';
 import type {
   IssuedUserAccessToken,
+  UserAccessSession,
   UserAccessTokenIssuerPort,
   UserAccessTokenVerifierPort,
   VerifiedUserAccessToken,
@@ -84,7 +85,10 @@ export class JoseUserAccessTokenService
     }
   }
 
-  async issue(userId: string): Promise<IssuedUserAccessToken> {
+  async issue(
+    userId: string,
+    session?: UserAccessSession,
+  ): Promise<IssuedUserAccessToken> {
     if (!/^usr_[0-9A-HJKMNP-TV-Z]{26}$/u.test(userId)) {
       throw new AppError({
         code: 'INTERNAL_ERROR',
@@ -94,7 +98,7 @@ export class JoseUserAccessTokenService
     }
 
     const issuedAt = this.now();
-    const token = await new SignJWT({})
+    const token = await new SignJWT(session === undefined ? {} : { session })
       .setProtectedHeader({ alg: 'RS256', kid: this.config.keyId })
       .setIssuer(this.config.issuer)
       .setAudience(this.config.audience)
@@ -120,6 +124,7 @@ export class JoseUserAccessTokenService
         clockTolerance: this.config.clockSkewSeconds,
       });
       const payload = verified.payload;
+      const session = payload['session'];
       // Unknown claims are ignored so a token from the next release verifies
       // here during a cutover or rollback; every required claim is still checked.
       if (
@@ -132,7 +137,8 @@ export class JoseUserAccessTokenService
         payload.jti.length === 0 ||
         payload.jti.length > 256 ||
         !isSafeInteger(payload.iat) ||
-        !isSafeInteger(payload.exp)
+        !isSafeInteger(payload.exp) ||
+        (session !== undefined && !isUserAccessSession(session))
       ) {
         throw invalidUserAccessToken();
       }
@@ -154,11 +160,26 @@ export class JoseUserAccessTokenService
         validUntil: new Date(
           (payload.exp + this.config.clockSkewSeconds) * 1000,
         ),
+        ...(session === undefined ? {} : { session }),
       };
     } catch {
       throw invalidUserAccessToken();
     }
   }
+}
+
+function isUserAccessSession(value: unknown): value is UserAccessSession {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const kind = 'kind' in value ? value.kind : undefined;
+  const id = 'id' in value ? value.id : undefined;
+  return (
+    (kind === 'refresh' || kind === 'web') &&
+    typeof id === 'string' &&
+    id.length > 0 &&
+    id.length <= 256
+  );
 }
 
 function isSafeInteger(value: unknown): value is number {

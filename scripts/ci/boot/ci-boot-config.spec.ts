@@ -219,6 +219,44 @@ describe('CI boot configuration', () => {
     );
   });
 
+  it('pins each compose service to its intended database scope and fails if the sandbox override is removed', () => {
+    const compose = readFileSync('docker-compose.production.yml', 'utf8');
+    const serviceBlock = (serviceName: string): string => {
+      const start = compose.indexOf(`\n  ${serviceName}:\n`);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const contentStart = start + 1;
+      const tail = compose.slice(contentStart);
+      const nextService = tail.search(/\n  [A-Za-z0-9_-]+:\s*$/m);
+      return compose.slice(
+        contentStart,
+        nextService < 0 ? undefined : contentStart + nextService,
+      );
+    };
+
+    // Base app-environment specifies production scope
+    const appEnvIndex = compose.indexOf('x-app-environment: &app-environment');
+    const appServiceIndex = compose.indexOf('x-app-service: &app-service');
+    const appEnvironment = compose.slice(appEnvIndex, appServiceIndex);
+    expect(appEnvironment).toMatch(
+      /AIHUB_RUNTIME_DATABASE_SCOPE:\s*production/,
+    );
+
+    for (const serviceName of ['migrate', 'app', 'app-slot-b']) {
+      expect(serviceBlock(serviceName)).toContain('*app-environment');
+    }
+
+    // Sandbox services override to sandbox scope
+    for (const serviceName of [
+      'migrate-sandbox',
+      'app-sandbox',
+      'app-sandbox-slot-b',
+    ]) {
+      expect(serviceBlock(serviceName)).toMatch(
+        /AIHUB_RUNTIME_DATABASE_SCOPE:\s*sandbox/,
+      );
+    }
+  });
+
   it('mints fresh keys on every run, so none is ever committed', () => {
     const keys = (): string[] => [
       readFileSync(join(directory, 'runtime-secrets.json'), 'utf8'),

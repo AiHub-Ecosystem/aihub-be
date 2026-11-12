@@ -28,7 +28,10 @@ export async function issueSession(
   userId: string,
   refreshToken: IssuedRefreshToken,
 ): Promise<IssuedSession> {
-  const accessToken = await issuers.accessTokens.issue(userId);
+  const accessToken = await issuers.accessTokens.issue(userId, {
+    kind: 'refresh',
+    id: refreshToken.familyId,
+  });
   return {
     accessToken: accessToken.token,
     expiresIn: accessToken.expiresIn,

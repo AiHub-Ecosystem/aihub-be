@@ -83,3 +83,6 @@ export const OrganizationInviteEmailDeliveryPayloadSchema = Type.Object({
 export const MfaSecurityNotificationPayloadSchema = Type.Object({
   email: NonEmptyString,
 });
+export const PasswordChangedNotificationPayloadSchema = Type.Object({
+  email: NonEmptyString,
+});

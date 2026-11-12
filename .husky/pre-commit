@@ -1,4 +1,4 @@
-bunx lint-staged --hide-all
+bun run check:staged
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "gitleaks not found on PATH. Install v8.30.1 from https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1 (see docs/operations/secret-scanning.md) and retry." >&2
   exit 1

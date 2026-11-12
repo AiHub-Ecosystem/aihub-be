@@ -45,6 +45,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PULL_TOKEN }}
 
+      - name: Install Cosign 2.4.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/cosign"
+          curl --fail --silent --show-error --location \
+            --output "$binary" \
+            https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-amd64
+          printf '%s  %s\n' \
+            '8b24b946dd5809c6bd93de08033bcf6bc0ed7d336b7785787c080f574b89249b' \
+            "$binary" | sha256sum --check
+          chmod +x "$binary"
+          "$binary" version
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
       - name: Check the registry still holds the image CI booted
         id: image
         shell: bash
@@ -63,7 +78,38 @@ jobs:
             printf 'image digest mismatch: refusing to deploy %s\n' "$image" >&2
             exit 1
           fi
+          # #1814: the same digest carries an SBOM attestation in the registry
+          # (SPDX JSON, keyless cosign). Name it so an operator starts from the
+          # deployed digest; verify with cosign verify-attestation --type spdxjson.
+          # See docs/operations/image-sbom-provenance.md.
+          printf '### SBOM provenance\n\n`%s@%s`\n\nSPDX SBOM is attached as a signed attestation to this digest (CI artifact `image-sbom`, SPDX JSON). Verify from a workstation with:\n\n```bash\ncosign verify-attestation %s@%s --type spdxjson --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '\''https://github.com/%s/.github/workflows/ci.yml@refs/heads/main'\''\n```\n' \
+            "$image_name" "$actual" "$image_name" "$actual" "$REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
           echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      # #1839: enforce cryptographic verification of image signature and SPDX SBOM attestation
+      # before any deployment steps or host contact.
+      - name: Verify image signature and SBOM attestation (Cosign)
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          expected="$(tr -d '[:space:]' < image-digest.txt)"
+          image_name="ghcr.io/${REPOSITORY,,}"
+          image_ref="${image_name}@${expected}"
+          identity_regex="https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@refs/heads/main"
+
+          echo "Verifying Cosign keyless image signature for $image_ref..."
+          cosign verify "$image_ref" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$identity_regex"
+
+          echo "Verifying Cosign SPDX SBOM attestation for $image_ref..."
+          cosign verify-attestation --type spdxjson "$image_ref" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$identity_regex"
+
+          printf '### Cosign cryptographic verification\n\nVerified keyless signature and SPDX SBOM attestation for `%s` against workflow `ci.yml@refs/heads/main`.\n' "$image_ref" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Record the digest used by this CD run
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -267,11 +313,14 @@ jobs:
           REMOTE
           scp "${scp_opts[@]}" \
             scripts/ops/host-jobs/install-host-jobs.sh \
-            "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+            scripts/ops/host-jobs/finish-host-jobs.sh \
+            "$target:$VPS_APP_DIR/.aihub-host-jobs-candidate/"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
-          chmod 755 "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+          chmod 755 "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" \
+            "$APP_DIR/.aihub-host-jobs-candidate/finish-host-jobs.sh"
           test -s "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-candidate/finish-host-jobs.sh"
           REMOTE
 
       - name: Log in to GHCR on VPS
@@ -346,6 +395,7 @@ jobs:
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
           scp "${scp_opts[@]}" \
             scripts/ops/host-jobs/install-host-jobs.sh \
+            scripts/ops/host-jobs/finish-host-jobs.sh \
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
           scp "${scp_opts[@]}" \
             scripts/ops/blue-green/blue-green-host.sh \
@@ -394,6 +444,7 @@ jobs:
           test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
           test -s "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
+          test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/finish-host-jobs.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh"
           test -s "$APP_DIR/.aihub-host-jobs-candidate/host-scheduled-job.sh"
@@ -414,10 +465,13 @@ jobs:
           compose_next="$(mktemp "$APP_DIR/.aihub-compose.XXXXXX")"
           helper_next="$(mktemp "$APP_DIR/scripts/ops/.blue-green-host.XXXXXX")"
           installer_next="$(mktemp "$APP_DIR/scripts/ops/.install-host-jobs.XXXXXX")"
+          finish_installer_next="$(mktemp "$APP_DIR/scripts/ops/host-jobs/.finish-host-jobs.XXXXXX")"
           install -m 644 "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" "$compose_next"
           install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" "$helper_next"
           install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh" "$installer_next"
+          install -m 755 "$APP_DIR/.aihub-host-jobs-sync-candidate/finish-host-jobs.sh" "$finish_installer_next"
           mv -f -- "$installer_next" "$APP_DIR/scripts/ops/host-jobs/install-host-jobs.sh"
+          mv -f -- "$finish_installer_next" "$APP_DIR/scripts/ops/host-jobs/finish-host-jobs.sh"
           mv -f -- "$compose_next" "$APP_DIR/docker-compose.production.yml"
           mv -f -- "$helper_next" "$APP_DIR/scripts/ops/blue-green/blue-green-host.sh"
           test -s "$APP_DIR/scripts/ops/host-jobs/install-host-jobs.sh"
@@ -436,7 +490,8 @@ jobs:
           target=aihub-deploy
           ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          target_sha_arg="$(printf '%q' "${AIHUB_IMAGE##*:}")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg TARGET_SHA=$target_sha_arg bash -se" <<'REMOTE'
           set -euo pipefail
           backup="$APP_DIR/.aihub-host-jobs-state/sync-backup"
           if [[ -f "$backup/ready" ]]; then
@@ -464,9 +519,11 @@ jobs:
           fi
           rm -f -- "$APP_DIR/.aihub-host-jobs-sync-candidate/blue-green-host.sh" \
             "$APP_DIR/.aihub-host-jobs-sync-candidate/docker-compose.production.yml" \
-            "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
+            "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh" \
+            "$APP_DIR/.aihub-host-jobs-sync-candidate/finish-host-jobs.sh"
           rmdir "$APP_DIR/.aihub-host-jobs-sync-candidate" 2>/dev/null || true
-          "$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" restore
+          AIHUB_HOST_JOB_INSTALLER="$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" \
+            "$APP_DIR/.aihub-host-jobs-candidate/finish-host-jobs.sh" finish failure "$TARGET_SHA"
           REMOTE
 
       - name: Deploy Production and verify caller IP
@@ -723,69 +780,23 @@ jobs:
             "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg DEPLOY_OUTCOME=$deploy_outcome bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          state="$(./scripts/ops/blue-green/blue-green-host.sh status)"
-          target_sha="${AIHUB_IMAGE##*:}"
-          restore_hint='after the recovery, run ./scripts/ops/host-jobs/install-host-jobs.sh restore from the deployment directory'
-          if grep -Eq '^pending=' <<<"$state" || grep -Fxq 'sandbox enabled but not routed' <<<"$state"; then
-            printf 'deployment state is unresolved; AIHUB host jobs remain suspended; %s\n' "$restore_hint" >&2
-            exit 1
-          fi
-          if grep -Eq '^caller_ip_gate=' <<<"$state"; then
-            printf 'caller-IP deployment gate remains unresolved; AIHUB host jobs remain suspended; re-run this CD run to resolve it\n' >&2
-            exit 1
-          fi
-          if ! grep -Eq '^production active_slot=' <<<"$state" || ! grep -Eq '^sandbox (active_slot=|disabled$)' <<<"$state"; then
-            printf 'could not resolve every AIHUB tier; host jobs remain suspended\n' >&2
-            exit 1
-          fi
-          active_shas=()
-          revision_summary=
-          while IFS= read -r line; do
-            if [[ "$line" =~ ^(production|sandbox)[[:space:]]active_slot= ]]; then
-              tier_name="${BASH_REMATCH[1]}"
-              if [[ "$line" =~ [[:space:]]sha=([^[:space:]]+) ]]; then
-                active_shas+=("${BASH_REMATCH[1]}")
-                revision_summary+="$tier_name=${BASH_REMATCH[1]:0:12} "
-              else
-                printf 'an active AIHUB tier revision is missing; host jobs remain suspended\n' >&2
-                exit 1
-              fi
-            fi
-          done <<<"$state"
-          if (( ${#active_shas[@]} == 0 )); then
-            printf 'no active AIHUB tier revisions were reported; host jobs remain suspended\n' >&2
-            exit 1
-          fi
-          for sha in "${active_shas[@]}"; do
-            if [[ ! "$sha" =~ ^[a-f0-9]{40}$ ]]; then
-              printf 'an active AIHUB tier revision is unknown; host jobs remain suspended\n' >&2
-              exit 1
-            fi
-            if [[ "$sha" != "${active_shas[0]}" ]]; then
-              printf 'active AIHUB tiers run mixed revisions (%starget=%s)\n' \
-                "$revision_summary" "${target_sha:0:12}" >&2
-              # A failed attempt that left no recovery state returns the jobs
-              # to the schedule they had before CD paused them; a successful
-              # deploy that is still mixed stays suspended.
-              if [[ "$DEPLOY_OUTCOME" != success ]]; then
-                ./scripts/ops/host-jobs/install-host-jobs.sh restore
-              else
-                printf 'host jobs remain suspended; %s\n' "$restore_hint" >&2
-              fi
-              exit 1
-            fi
-          done
-          if [[ "${active_shas[0]}" == "$target_sha" ]]; then
-            ./scripts/ops/host-jobs/install-host-jobs.sh install
-          elif [[ "$DEPLOY_OUTCOME" == success ]]; then
-            printf 'successful deployment does not expose the target revision; AIHUB host jobs remain suspended\n' >&2
-            exit 1
-          else
-            ./scripts/ops/host-jobs/install-host-jobs.sh restore
-          fi
+          ./scripts/ops/host-jobs/finish-host-jobs.sh finish "$DEPLOY_OUTCOME" "${AIHUB_IMAGE##*:}"
           REMOTE
         env:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+
+      - name: Report unresolved AIHUB host-job suspension
+        if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.ssh.outcome == 'success' && steps.pause_host_jobs.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=aihub-deploy
+          ssh_opts=(-F "$AIHUB_SSH_CONFIG")
+          app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
+          ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          set -euo pipefail
+          "$APP_DIR/.aihub-host-jobs-candidate/finish-host-jobs.sh" report
+          REMOTE
 
       - name: Report active tier revisions
         if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.ssh.outcome == 'success' && steps.sync.outcome == 'success' }}

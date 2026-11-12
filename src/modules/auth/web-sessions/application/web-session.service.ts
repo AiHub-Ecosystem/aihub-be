@@ -234,6 +234,7 @@ export class WebSessionService implements WebSessionServicePort {
     const now = this.clock.now();
 
     let userId: string;
+    let sessionId: string;
     try {
       const session = await this.webSessions.findExchangeableWebSession({
         tokenHash,
@@ -254,6 +255,7 @@ export class WebSessionService implements WebSessionServicePort {
         throw invalidWebSession();
       }
       userId = session.userId;
+      sessionId = session.sessionId;
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -268,7 +270,10 @@ export class WebSessionService implements WebSessionServicePort {
     // If revocation commits during signing or renewal, the fresh read refuses
     // this exchange. If it commits after the read, the JWT was already signed
     // before revocation, which is the documented 15-minute allowance.
-    const issued = await this.accessTokenIssuer.issue(userId);
+    const issued = await this.accessTokenIssuer.issue(userId, {
+      kind: 'web',
+      id: sessionId,
+    });
     const checkedAt = this.clock.now();
     await this.renewSession(tokenHash, checkedAt);
     let stillExchangeable;

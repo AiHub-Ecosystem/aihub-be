@@ -55,11 +55,15 @@ function tier(name: string, sha: string): string {
 function runHostJobsStep(
   statusText: string,
   deployOutcome: string,
+  stepName = 'Install and smoke the scheduled host jobs',
+  nextStep = 'Report active tier revisions',
 ): { code: number; stderr: string; calls: string } {
   const root = mkdtempSync(join(tmpdir(), 'cd-host-jobs-'));
   try {
     mkdirSync(join(root, 'scripts/ops/blue-green'), { recursive: true });
     mkdirSync(join(root, 'scripts/ops/host-jobs'), { recursive: true });
+    mkdirSync(join(root, '.aihub-host-jobs-candidate'), { recursive: true });
+    mkdirSync(join(root, '.aihub-host-jobs-state'), { recursive: true });
     writeFileSync(join(root, 'status.txt'), statusText);
     const helper = join(root, 'scripts/ops/blue-green/blue-green-host.sh');
     writeFileSync(helper, '#!/usr/bin/env bash\ncat "$APP_DIR/status.txt"\n');
@@ -68,22 +72,43 @@ function runHostJobsStep(
       installer,
       '#!/usr/bin/env bash\nprintf "%s\\n" "$1" >>"$APP_DIR/calls.txt"\n',
     );
-    chmodSync(helper, 0o755);
-    chmodSync(installer, 0o755);
-    const script = remoteScript(
-      step(
-        'Install and smoke the scheduled host jobs',
-        'Report active tier revisions',
+    const finishHelper = join(
+      root,
+      'scripts/ops/host-jobs/finish-host-jobs.sh',
+    );
+    writeFileSync(
+      finishHelper,
+      readFileSync(
+        resolve(__dirname, '../../scripts/ops/host-jobs/finish-host-jobs.sh'),
+        'utf8',
       ),
     );
+    const candidateInstaller = join(
+      root,
+      '.aihub-host-jobs-candidate/install-host-jobs.sh',
+    );
+    const candidateFinishHelper = join(
+      root,
+      '.aihub-host-jobs-candidate/finish-host-jobs.sh',
+    );
+    writeFileSync(candidateInstaller, readFileSync(installer, 'utf8'));
+    writeFileSync(candidateFinishHelper, readFileSync(finishHelper, 'utf8'));
+    chmodSync(helper, 0o755);
+    chmodSync(installer, 0o755);
+    chmodSync(finishHelper, 0o755);
+    chmodSync(candidateInstaller, 0o755);
+    chmodSync(candidateFinishHelper, 0o755);
+    const script = remoteScript(step(stepName, nextStep));
     const result = spawnSync(bashExecutable(), ['-se'], {
       input: script,
       encoding: 'utf8',
       env: {
         PATH: process.env['PATH'] ?? '',
         APP_DIR: root,
+        AIHUB_HOST_JOB_METRICS_DIR: join(root, 'metrics'),
         AIHUB_IMAGE: `ghcr.io/example/aihub:${TARGET}`,
         DEPLOY_OUTCOME: deployOutcome,
+        TARGET_SHA: TARGET,
       },
     });
     let calls = '';
@@ -139,14 +164,15 @@ describe('CD finishing a half-deployed release', () => {
       expect(result.calls).toBe('install\n');
     });
 
-    it('restores the saved schedule when a failed attempt left the tiers mixed', () => {
+    it('keeps the schedule suspended when a failed attempt left tiers mixed', () => {
       const result = runHostJobsStep(
         status([tier('production', TARGET), tier('sandbox', OLDER)]),
-        'skipped',
+        'failure',
       );
 
       expect(result.code).toBe(1);
-      expect(result.calls).toBe('restore\n');
+      expect(result.calls).toBe('');
+      expect(result.stderr).toContain('host jobs remain suspended');
     });
 
     it('names each tier revision and the target when the tiers are mixed', () => {
@@ -169,7 +195,20 @@ describe('CD finishing a half-deployed release', () => {
 
       expect(result.code).toBe(1);
       expect(result.calls).toBe('');
-      expect(result.stderr).toContain('install-host-jobs.sh restore');
+      expect(result.stderr).toContain('host jobs remain suspended');
+    });
+
+    it('keeps the jobs suspended when sync recovery sees mixed revisions', () => {
+      const result = runHostJobsStep(
+        status([tier('production', TARGET), tier('sandbox', OLDER)]),
+        'failure',
+        'Restore host files and schedule after sync failure',
+        'Deploy Production and verify caller IP',
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.calls).toBe('');
+      expect(result.stderr).toContain('host jobs remain suspended');
     });
 
     it('keeps the jobs suspended while a rollout or the gate is unresolved', () => {

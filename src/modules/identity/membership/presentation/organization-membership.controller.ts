@@ -26,7 +26,7 @@ import {
   OrganizationRosterQuerySchema,
   type OrganizationRosterResponse,
 } from '@/contracts/organization/membership';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
 import { ListOrganizationMemberships } from '@/modules/identity/membership/application/list-organization-memberships';
 import {
   ORGANIZATION_MEMBERSHIP_MUTATION,
@@ -248,6 +248,15 @@ function mutationResponse(
       username: result.username,
       role: result.role,
       status: result.status,
+      ...(result.handledApiKeys === undefined
+        ? {}
+        : {
+            handled_api_keys: result.handledApiKeys.map((key) => ({
+              id: key.id,
+              name: key.name,
+              key_prefix: key.keyPrefix,
+            })),
+          }),
     },
     meta: { request_id: requestId },
   };

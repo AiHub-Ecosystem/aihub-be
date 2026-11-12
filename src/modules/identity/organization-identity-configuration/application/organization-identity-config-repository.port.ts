@@ -51,6 +51,8 @@ export interface SaveOrganizationIdentityConfigInput {
   readonly allowedAlgorithms: readonly IdentityConfigAlgorithm[];
   readonly maxAssertionTtlSeconds: number;
   readonly sourceKind: 'url' | 'inline';
+  /** RFC 7638 thumbprints of the keys this configuration trusts (#447). */
+  readonly keyThumbprints: readonly string[];
   readonly precondition?: IdentityConfigPrecondition;
 }
 

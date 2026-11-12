@@ -74,6 +74,10 @@ import {
   type SandboxDispatchBudgetPort,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import {
+  OUTSTANDING_QUOTA_RESERVATIONS,
+  type OutstandingQuotaReservationRegistry,
+} from '@/modules/gateway/public/outstanding-quota-reservations';
+import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
@@ -100,6 +104,7 @@ import { BullmqSpeakingGradingJobConsumer } from './infrastructure/grading-jobs/
 import { BullmqSpeakingGradingJobQueue } from './infrastructure/grading-jobs/bullmq-speaking-grading-job.queue';
 import { PostgresSpeakingGradingJobRepository } from './infrastructure/grading-jobs/postgres-speaking-grading-job.repository';
 import { SpeakingGradingJobSweepScheduler } from './infrastructure/grading-jobs/speaking-grading-job-sweep-scheduler';
+import { SpeakingQuotaReservationRegistration } from './infrastructure/grading-jobs/speaking-quota-reservation-registration';
 
 /**
  * Jobs a worker grades at once in this process, per Environment queue. The
@@ -134,6 +139,15 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
       runtime: PrismaClientHolder,
     ): SpeakingGradingJobRepositoryPort =>
       new PostgresSpeakingGradingJobRepository(runtime.prisma),
+  },
+  {
+    provide: SpeakingQuotaReservationRegistration,
+    inject: [OUTSTANDING_QUOTA_RESERVATIONS, SPEAKING_GRADING_JOB_REPOSITORY],
+    useFactory: (
+      registry: OutstandingQuotaReservationRegistry,
+      repository: SpeakingGradingJobRepositoryPort,
+    ): SpeakingQuotaReservationRegistration =>
+      new SpeakingQuotaReservationRegistration(registry, repository),
   },
   {
     provide: SPEAKING_GRADING_JOB_QUEUE,

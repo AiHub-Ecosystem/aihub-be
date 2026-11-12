@@ -11,13 +11,6 @@ import { join } from 'node:path';
 
 const repositoryRoot = process.cwd();
 const temporaryRoot = join(repositoryRoot, 'temp');
-const oxlintCli = join(
-  repositoryRoot,
-  'node_modules',
-  'oxlint',
-  'bin',
-  'oxlint',
-);
 
 function removeTemporaryRootIfCreated(createdByThisRun: boolean): void {
   if (!createdByThisRun) return;
@@ -49,17 +42,17 @@ function lintFixture(source: string): {
     const fixturePath = join(fixtureDirectory, 'expect-expect.spec.ts');
     writeFileSync(fixturePath, source, 'utf8');
     const result = spawnSync(
-      process.execPath,
+      'bun',
       [
-        oxlintCli,
-        '--config',
-        join(repositoryRoot, '.oxlintrc.json'),
+        'lint',
+        '--no-script',
         '--allow=typescript/no-unsafe-assignment',
         '--allow=typescript/no-unsafe-member-access',
         '--allow=typescript/no-unsafe-call',
         '--allow=typescript/no-unsafe-return',
         '--allow=typescript/no-unsafe-argument',
         '--no-ignore',
+        '--format=unix',
         fixturePath,
       ],
       {

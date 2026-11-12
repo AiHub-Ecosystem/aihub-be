@@ -80,6 +80,14 @@ async function seedOrganization(
     'INSERT INTO organizations (id, name, status, entitlements) VALUES ($1, $2, $3, $4)',
     [id, `Organization ${id}`, status, [...entitlements]],
   );
+  if (actorUserId !== undefined) {
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_account_id, role, status, created_at, updated_at)
+       VALUES ($1, $2, 'owner', 'active', now(), now())
+       ON CONFLICT (organization_id, user_account_id) DO NOTHING`,
+      [id, actorUserId],
+    );
+  }
 }
 
 function listContext(organizationId: string) {
@@ -542,6 +550,9 @@ describe('organization API key rotation against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: stored.rows[0]?.allowed_environments ?? [],
       replacementAllowedEnvironments: [replacementEnvironment],
+      // Attribution is not what these concurrency suites assert; the keys they
+      // seed predate migration 0063, so a null creator is the honest value.
+      rotatedByUsername: 'rotator',
       now,
     });
   }
@@ -652,6 +663,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: ['sandbox', 'production'],
       replacementAllowedEnvironments: ['sandbox'],
+      rotatedByUsername: 'rotator',
       now: new Date(),
     });
 
@@ -698,6 +710,7 @@ describe('organization API key rotation against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: ['sandbox', 'production'],
       replacementAllowedEnvironments: ['sandbox'],
+      rotatedByUsername: 'rotator',
       now: new Date(),
     });
 
@@ -798,6 +811,7 @@ describe('organization API key rotation against PostgreSQL', () => {
         keyPrefix: replacement.prefix,
         retiredAllowedEnvironments: ['production'],
         replacementAllowedEnvironments: ['production'],
+        rotatedByUsername: 'rotator',
         now: new Date(),
       }),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
@@ -1111,6 +1125,7 @@ describe('organization API key audit trail against PostgreSQL', () => {
       keyPrefix: replacement.prefix,
       retiredAllowedEnvironments: ['production'],
       replacementAllowedEnvironments: ['production'],
+      rotatedByUsername: 'rotator',
       now: new Date(),
     });
 

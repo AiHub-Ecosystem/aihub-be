@@ -10,6 +10,7 @@ import type {
 } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import type { JwksCachePort } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import { jsonWebKeyThumbprint } from './jwk-thumbprint';
 import { SetOrganizationIdentityConfig } from './set-organization-identity-config';
 
 const ORGANIZATION_ID = 'org_acme';
@@ -53,7 +54,7 @@ function subject(result: SaveOrganizationIdentityConfigResult) {
     }),
   };
   const keys: Pick<JwksKeyProviderPort, 'validateRemote'> = {
-    validateRemote: async () => undefined,
+    validateRemote: async () => ({ keys: [] }),
   };
   const cache: Pick<JwksCachePort, 'deleteJwks'> = {
     deleteJwks: async (_organizationId, version) => {
@@ -136,5 +137,99 @@ describe('SetOrganizationIdentityConfig precondition (ADR-0132)', () => {
     );
 
     expect(config.revision).toBe('9');
+  });
+});
+
+describe('SetOrganizationIdentityConfig trusted-key thumbprints (#447)', () => {
+  it('thumbprints the inline keys the configuration trusts', async () => {
+    const { setter, saves } = subject({ kind: 'saved', config: saved });
+
+    await setter.set(setInput());
+
+    expect(saves[0]?.keyThumbprints).toEqual([
+      jsonWebKeyThumbprint({ kty: 'RSA', n: 'modulus', e: 'AQAB' }),
+    ]);
+  });
+
+  it('thumbprints the keys the fetched URL source validated', async () => {
+    const remoteKeys = {
+      keys: [
+        {
+          kty: 'EC',
+          crv: 'P-256',
+          x: 'MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4',
+          y: '4Etl6SRW2YiLUrN5vfvCDHh+R8Xht8bUvbBpA7utIGY',
+        },
+      ],
+    };
+    const saves: SaveOrganizationIdentityConfigInput[] = [];
+    const configs: Pick<
+      OrganizationIdentityConfigRepositoryPort,
+      'saveForOwner'
+    > = {
+      saveForOwner: async (input) => {
+        saves.push(input);
+        return { kind: 'saved', config: saved };
+      },
+    };
+    const setter = new SetOrganizationIdentityConfig(
+      {
+        resolveMembership: async () => ({
+          kind: 'active',
+          membership: {
+            organizationId: ORGANIZATION_ID,
+            userId: USER_ID,
+            organizationStatus: 'active',
+            role: 'owner',
+            status: 'active',
+          },
+        }),
+      },
+      configs,
+      { validateRemote: async () => remoteKeys },
+      { deleteJwks: async () => undefined },
+    );
+
+    await setter.set({
+      ...setInput(),
+      publicKeysJwks: undefined,
+      jwksUrl: 'https://acme.edu/jwks.json',
+    });
+
+    expect(saves[0]?.keyThumbprints).toEqual([
+      jsonWebKeyThumbprint(remoteKeys.keys[0] as never),
+    ]);
+  });
+
+  it('refuses a key it cannot thumbprint rather than trusting it unrecorded', async () => {
+    const setter = new SetOrganizationIdentityConfig(
+      {
+        resolveMembership: async () => ({
+          kind: 'active',
+          membership: {
+            organizationId: ORGANIZATION_ID,
+            userId: USER_ID,
+            organizationStatus: 'active',
+            role: 'owner',
+            status: 'active',
+          },
+        }),
+      },
+      {
+        saveForOwner: async () => {
+          throw new Error('must not save');
+        },
+      },
+      { validateRemote: async () => ({ keys: [{ kty: 'oct', k: 'secret' }] }) },
+      { deleteJwks: async () => undefined },
+    );
+
+    await expect(
+      setter.set({
+        ...setInput(),
+        publicKeysJwks: undefined,
+        jwksUrl: 'https://acme.edu/jwks.json',
+      }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_INVALID' });
   });
 });

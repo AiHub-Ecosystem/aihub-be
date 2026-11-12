@@ -3,6 +3,7 @@ import type { OperationId } from './operation-id';
 
 import type { HttpStatus } from '@/common/errors/error-registry';
 import {
+  ChangePasswordRequestSchema,
   EmptyAuthRequestSchema,
   ForgotPasswordRequestSchema,
   ForgotPasswordResponseSchema,
@@ -1439,6 +1440,26 @@ export const PUBLIC_ROUTES = {
     requestSchema: ResetPasswordRequestSchema,
     responseSchema: null,
     errorStatuses: [400, 429, 500, 503],
+  },
+  'auth.change_password': {
+    cacheControl: { value: 'no-store' },
+    openApi: {
+      summary: 'Change the signed-in account password',
+      description:
+        'Requires the current password and ends every other Refresh Token Family and Web Session while preserving the session that made the request.',
+      successDescription:
+        'The password was changed, other sessions were revoked, and a security notification was queued.',
+    },
+    method: 'POST',
+    path: '/v1/auth/change-password',
+    callerAuth: 'bearer',
+    organizationResolution: 'none',
+    successStatus: 204,
+    publishedIdentityScope: 'none',
+    idempotency: 'none',
+    requestSchema: ChangePasswordRequestSchema,
+    responseSchema: null,
+    errorStatuses: [400, 401, 429, 500, 503],
   },
   'auth.refresh': {
     cacheControl: { value: 'no-store' },

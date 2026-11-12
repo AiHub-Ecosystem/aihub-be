@@ -9,14 +9,17 @@ import {
   auditStamp,
   recordOrganizationAuditEvent,
 } from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
+import { mayGrantInvitationRole } from '@/modules/identity/invitations/application/organization-invitation.grant-authority.policy';
 import type {
   CreateOrganizationInvitationInput,
   CreateOrganizationInvitationResult,
   OrganizationInvitationCreationRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
+import { organizationSuspensionClosesSurface } from '@/modules/identity/membership/application/organization-membership.authorization';
 import {
   identityStoreUnavailable,
   invalidIdentityData,
+  organizationStatusValue,
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
@@ -26,14 +29,20 @@ import {
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { invalidInvitationInput } from './organization-invitation-input';
+import {
+  LOCK_MEMBERSHIP_AUTHORITY_SQL,
+  membershipAuthority,
+} from './organization-invitation-membership-authority';
 
 /**
  * Locking the organization row serializes concurrent invitations for the same
  * organization, so the active-member check and the partial unique index cannot
- * be raced by two requests arriving together.
+ * be raced by two requests arriving together. The status is read under the
+ * same lock so a suspension that commits first closes this surface (ADR-0159,
+ * decision 3).
  */
 const LOCK_ORGANIZATION_SQL = `
-  SELECT id, name
+  SELECT id, name, status
   FROM organizations
   WHERE id = $1
   FOR UPDATE
@@ -76,8 +85,24 @@ export class PostgresOrganizationInvitationCreateRepository
           LOCK_ORGANIZATION_SQL,
           [input.organizationId],
         );
-        const name = organizationName(organizationRows[0]);
+        const organizationRow = organizationRows[0];
+        if (!isRecord(organizationRow)) throw invalidIdentityData();
+        const name = organizationName(organizationRow);
         if (name === undefined) throw invalidIdentityData();
+
+        // A suspension committed before this transaction boundary closes the
+        // surface: no invitation and no email outbox request (ADR-0027 as
+        // amended, #447).
+        const organizationStatus = organizationStatusValue(
+          organizationRow,
+          'status',
+        );
+        if (organizationStatus === undefined) {
+          throw invalidIdentityData();
+        }
+        if (organizationSuspensionClosesSurface(organizationStatus)) {
+          return { kind: 'organization_suspended' };
+        }
 
         // The inviter is read here, inside the transaction that commits the
         // invitation and its Email Delivery Request, so the message can name
@@ -89,6 +114,27 @@ export class PostgresOrganizationInvitationCreateRepository
         const inviterUsername = inviter?.username;
         if (inviterUsername === undefined) {
           throw invalidIdentityData();
+        }
+
+        // The inviter's authority is re-evaluated under the Organization lock:
+        // a disable or demotion that committed while this request waited
+        // refuses the send, so a pending invitation cannot outlive the
+        // authority that issued it (ADR-0159, decision 1).
+        const inviterMembershipRows = await identityRows(
+          transaction,
+          LOCK_MEMBERSHIP_AUTHORITY_SQL,
+          [input.organizationId, input.invitedBy],
+        );
+        const inviterAuthority = membershipAuthority(inviterMembershipRows[0]);
+        if (
+          inviterAuthority === undefined ||
+          inviterAuthority.status !== 'active' ||
+          !mayGrantInvitationRole({
+            callerRole: inviterAuthority.role,
+            invitedRole: input.role,
+          })
+        ) {
+          return { kind: 'caller_not_authorized' };
         }
 
         // An active member whose password identity carries this email.

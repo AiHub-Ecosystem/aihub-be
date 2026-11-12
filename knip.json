@@ -81,13 +81,19 @@
     "scripts/checks/changed/verify-summary.d.cts",
     // Hand-written types for scripts/checks/changed/merged-coverage.cjs — same reason.
     "scripts/checks/changed/merged-coverage.d.cts",
-    // Hand-written types for check-changed.mjs and check-batch.cjs — test imports
-    // reach the runtime modules through TypeScript declaration boundaries.
+    // Hand-written types for check-changed.mjs — test imports reach the runtime
+    // module through TypeScript declaration boundaries.
     "scripts/checks/changed/check-changed.d.mts",
+    // Hand-written types for check-batch.cjs, which the spec reaches through
+    // TypeScript, so knip sees no import edge to the .cjs itself.
     "scripts/checks/changed/check-batch.d.cts",
     // Hand-written types for check-architecture.mjs; the spec reaches the .mjs
     // through TypeScript, so without this knip reports a live file as unused.
     "scripts/checks/architecture/check-architecture.d.mts",
+    // Hand-written types for the dependency-cruiser cache helper. Knip does not
+    // require this line; it is kept because tsconfig.scripts.json type-checks
+    // scripts/**/*.cjs and this declaration is where that .cjs gets its types.
+    "scripts/checks/architecture/dependency-cruiser-cache.d.cts",
     // Hand-written types for scripts/checks/jest/jest-worker-cap.cjs — same reason:
     // Jest reaches it through jest.config.cjs, outside the TypeScript graph.
     "scripts/checks/jest/jest-worker-cap.d.cts",
@@ -95,6 +101,10 @@
     // the spec reaches the .cjs through TypeScript, so without this knip
     // reports a live file as unused.
     "scripts/checks/knip/knip-cache-args.d.cts",
+    // Hand-written types for the Kysely and Prisma benchmark rows. Knip does not
+    // require this line; the benchmarks reach it only through JSDoc typedefs, and
+    // tsconfig.scripts.json is what fails without the declaration.
+    "scripts/ops/kysely-evaluation/benchmark.d.mts",
     // Hand-written types for Vault's PgBouncer budget module; Knip does not
     // follow TypeScript's adjacent-declaration lookup from the .mjs import.
     "ops/vault/pgbouncer-budget.d.mts",

@@ -36,8 +36,8 @@ const RevocationMessageSchema = Type.Object({
 });
 type RevocationMessage = Static<typeof RevocationMessageSchema>;
 
-// A failed boot seed usually means a cold connection pool; the retry re-engages
-// the fast path without a restart. Bounded so a down database is not hammered.
+// A failed boot seed retries filter synchronization without delaying auth reads.
+// Bounded so a down database is not hammered.
 const SEED_RETRY_DELAY_MS = 10_000;
 
 export class BloomFilterUserAccessTokenRevocationAdapter
@@ -101,14 +101,13 @@ export class BloomFilterUserAccessTokenRevocationAdapter
         );
       }
       return active.length;
-    } catch (error) {
+    } catch {
       this.seeded = false;
       this.logger.error(
         'Failed to seed token revocations from underlying store',
-        error,
       );
       // The failure is usually a cold connection pool at boot; a bounded
-      // background retry re-engages the fast path without a restart.
+      // retry restores filter synchronization without changing auth decisions.
       this.scheduleSeedRetry();
       return 0;
     }
@@ -140,24 +139,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     readonly jti: string;
     readonly now: Date;
   }): Promise<boolean> {
-    await this.seedReady;
-
-    const key = this.buildKey(input.issuer, input.jti);
-
-    // If subscription to revocation broadcast failed or filter was not seeded,
-    // fall back to authoritative store so an instance does not fail open.
-    if (!this.subscribed || !this.seeded) {
-      return this.underlying.isRevoked(input);
-    }
-
-    // Fast-path: Bloom filter guarantees zero false negatives.
-    // If not in filter, token was definitely not revoked.
-    if (!this.bloomFilter.has(key)) {
-      return false;
-    }
-
-    // Slow-path: Bloom filter matched (true positive or false positive).
-    // Query underlying authoritative store to confirm.
+    // A local miss cannot prove that this instance received every revocation.
     return this.underlying.isRevoked(input);
   }
 
@@ -183,11 +165,8 @@ export class BloomFilterUserAccessTokenRevocationAdapter
           this.channel,
           JSON.stringify(payload),
         );
-      } catch (error) {
-        this.logger.error(
-          `Failed to broadcast token revocation on channel ${this.channel}`,
-          error,
-        );
+      } catch {
+        this.logger.error('Failed to broadcast token revocation');
         recordRedisUnavailable('token_revocation');
       }
     }
@@ -258,24 +237,18 @@ export class BloomFilterUserAccessTokenRevocationAdapter
       }
     });
 
-    this.redisSubscriber.on('error', (error) => {
+    this.redisSubscriber.on('error', () => {
       this.subscribed = false;
-      this.logger.error(
-        `Token revocation Redis subscriber connection error on channel ${this.channel}`,
-        error,
-      );
+      this.logger.error('Token revocation Redis subscriber connection error');
       recordRedisUnavailable('token_revocation');
     });
 
     try {
       await this.redisSubscriber.subscribe(this.channel);
       this.subscribed = true;
-    } catch (error) {
+    } catch {
       this.subscribed = false;
-      this.logger.error(
-        `Failed to subscribe to token revocation channel ${this.channel}`,
-        error,
-      );
+      this.logger.error('Failed to subscribe to token revocation channel');
       recordRedisUnavailable('token_revocation');
     }
   }

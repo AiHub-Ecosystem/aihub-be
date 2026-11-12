@@ -386,14 +386,17 @@ describe('restricted-edge import rules', () => {
     expect(matches(pathNot, 'src/modules/auth/public/local-auth.ts')).toBe(
       true,
     );
-    // A Nest-exported provider: AuthModule exports UserAccessJwtGuard, so the
-    // file holding it is seam even though it sits under presentation/.
+    // Identity consumes the guard through the Web Sessions public facade.
+    expect(
+      matches(pathNot, 'src/modules/auth/web-sessions/public/index.ts'),
+    ).toBe(true);
+    // The implementation remains private behind that facade.
     expect(
       matches(
         pathNot,
         'src/modules/auth/web-sessions/presentation/user-access-jwt.guard.ts',
       ),
-    ).toBe(true);
+    ).toBe(false);
     // The module composition root, which composes AuthModule into Identity.
     expect(matches(pathNot, 'src/modules/auth/auth.module.ts')).toBe(true);
 

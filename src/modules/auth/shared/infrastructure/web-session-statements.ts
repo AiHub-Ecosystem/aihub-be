@@ -40,21 +40,24 @@ export async function insertWebSession(
 }
 
 /**
- * Revokes every open Web Session of one account, with the same guard the
- * per-session revocation uses, so a row that is already revoked keeps its first
- * revocation instant.
- *
- * Shared because the password reset and the MFA changes end an account's Web
- * Sessions in the transaction they already hold; they cannot call through the
- * session store, which owns its own.
+ * Revokes open Web Sessions, optionally preserving the one session that
+ * authenticated a password change. A row that is already revoked keeps its
+ * first revocation instant.
  */
 export async function revokeUserWebSessions(
   client: WebSessions,
   userId: string,
   revokedAt: Date,
+  preservedSessionId?: string,
 ): Promise<void> {
   await client.webSession.updateMany({
-    where: { userAccountId: userId, revokedAt: null },
+    where: {
+      userAccountId: userId,
+      revokedAt: null,
+      ...(preservedSessionId === undefined
+        ? {}
+        : { id: { not: preservedSessionId } }),
+    },
     data: { revokedAt },
   });
 }
