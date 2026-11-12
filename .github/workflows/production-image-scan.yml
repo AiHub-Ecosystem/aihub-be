@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -48,20 +49,28 @@ jobs:
           "$RUNNER_TEMP/grype" version
           printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      - name: Resolve deployed production image
+      - name: Resolve deployed production image digest
         id: image
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/cd.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty')"
-          if [[ -z "$sha" ]]; then
-            sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/cd.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].id // empty')"
+          if [[ -z "$run_id" ]]; then
+            echo 'No successful production deployment run found.' >&2
+            exit 1
           fi
-          image="ghcr.io/${GITHUB_REPOSITORY,,}:${sha}"
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq .head_sha)"
+          mkdir -p temp/production-image
+          gh run download "$run_id" --name image-digest --dir temp/production-image
+          digest="$(tr -d '\r\n' < temp/production-image/image-digest.txt)"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          image="ghcr.io/${GITHUB_REPOSITORY,,}@$digest"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "image=$image" >> "$GITHUB_OUTPUT"
+          printf 'Scanning deployed image `%s` (commit `%s`).\n' "$image" "$sha" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Scan deployed image with Grype
         id: grype_scan

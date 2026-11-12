@@ -1170,27 +1170,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "### Vulnerability scan: aihub:image-boot" >> "$GITHUB_STEP_SUMMARY"
-          grype aihub:image-boot --output table >> "$GITHUB_STEP_SUMMARY" || true
-          grype aihub:image-boot --only-fixed --fail-on high
+          image_id="$(docker image inspect --format '{{.Id}}' aihub:image-boot)"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "### Vulnerability scan: aihub:image-boot ($image_id)" >> "$GITHUB_STEP_SUMMARY"
+          grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "docker:$image_id" --only-fixed --fail-on high
 
       - name: Build and scan firewall guard image (Grype)
         shell: bash
         run: |
           set -euo pipefail
           docker build -t aihub-guard:scan -f ops/firewall/guard.Dockerfile ops/firewall
-          echo "### Vulnerability scan: ops/firewall/guard.Dockerfile" >> "$GITHUB_STEP_SUMMARY"
-          grype aihub-guard:scan --output table >> "$GITHUB_STEP_SUMMARY" || true
-          grype aihub-guard:scan --only-fixed --fail-on high
+          image_id="$(docker image inspect --format '{{.Id}}' aihub-guard:scan)"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "### Vulnerability scan: ops/firewall/guard.Dockerfile ($image_id)" >> "$GITHUB_STEP_SUMMARY"
+          grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "docker:$image_id" --only-fixed --fail-on high
 
       - name: Build and scan monitoring SSH tunnel image (Grype)
         shell: bash
         run: |
           set -euo pipefail
           docker build -t aihub-ssh-tunnel:scan -f ops/monitoring/ssh-tunnel.Dockerfile ops/monitoring
-          echo "### Vulnerability scan: ops/monitoring/ssh-tunnel.Dockerfile" >> "$GITHUB_STEP_SUMMARY"
-          grype aihub-ssh-tunnel:scan --output table >> "$GITHUB_STEP_SUMMARY" || true
-          grype aihub-ssh-tunnel:scan --only-fixed --fail-on high
+          image_id="$(docker image inspect --format '{{.Id}}' aihub-ssh-tunnel:scan)"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "### Vulnerability scan: ops/monitoring/ssh-tunnel.Dockerfile ($image_id)" >> "$GITHUB_STEP_SUMMARY"
+          grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "docker:$image_id" --only-fixed --fail-on high
 
       - name: Select active per-tier release revisions
         id: previous_release

@@ -15,7 +15,16 @@ describe('container image vulnerability scanning (#331)', () => {
     expect(end).toBeGreaterThan(start);
     const imageJob = ciContent.slice(start, end);
 
-    expect(imageJob).toContain('grype');
+    expect(imageJob).toContain(
+      "docker image inspect --format '{{.Id}}' aihub:image-boot",
+    );
+    expect(imageJob).toContain(
+      "docker image inspect --format '{{.Id}}' aihub-guard:scan",
+    );
+    expect(imageJob).toContain(
+      "docker image inspect --format '{{.Id}}' aihub-ssh-tunnel:scan",
+    );
+    expect(imageJob.match(/grype "docker:\$image_id"/g) ?? []).toHaveLength(6);
     expect(imageJob).toContain('aihub:image-boot');
     expect(imageJob).toContain('ops/firewall/guard.Dockerfile');
     expect(imageJob).toContain('ops/monitoring/ssh-tunnel.Dockerfile');
@@ -33,6 +42,9 @@ describe('container image vulnerability scanning (#331)', () => {
     expect(content).toContain('grype');
     expect(content).toContain('--only-fixed');
     expect(content).toContain('--fail-on high');
+    expect(content).toContain('gh run download');
+    expect(content).toContain('image-digest');
+    expect(content).toContain('image="ghcr.io/${GITHUB_REPOSITORY,,}@$digest"');
     expect(content).toContain('gh issue');
   });
 
@@ -43,5 +55,8 @@ describe('container image vulnerability scanning (#331)', () => {
     expect(content).toContain('.grype.yaml');
     expect(content).toContain('digest');
     expect(content).toContain('--only-fixed');
+    expect(content).toContain(
+      'Grype does not enforce expiry; remove expired exceptions manually.',
+    );
   });
 });
