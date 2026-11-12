@@ -240,8 +240,10 @@ describe('Organization identity configuration against PostgreSQL', () => {
     ) {
       throw new Error('Owner config saves unexpectedly refused');
     }
-    expect(retried.config.jwksCacheVersion).toBe(first.config.jwksCacheVersion);
-    expect(retried.config.updatedAt).toEqual(first.config.updatedAt);
+    expect(BigInt(retried.config.jwksCacheVersion ?? '0')).toBe(
+      BigInt(first.config.jwksCacheVersion ?? '0') + 1n,
+    );
+    expect(retried.config.revision).toBe(first.config.revision);
     expect(await auditEvents()).toHaveLength(1);
   });
 

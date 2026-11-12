@@ -531,6 +531,36 @@ describe('RedisIdentityStore', () => {
     expect(redis.values.get('aihub:v1:jwks-generation:org_acme')).toBe('1');
   });
 
+  it('rejects a replayed JWKS after the durable config version advances', async () => {
+    const redis = new FakeRedis();
+    const store = createStore(redis);
+    const organizationId = 'org_replay';
+    const oldKey = 'aihub:v1:jwks:org_replay:1:0';
+    const currentKey = 'aihub:v1:jwks:org_replay:2:0';
+    const generationKey = 'aihub:v1:jwks-generation:org_replay';
+    await store.setJwks(organizationId, '1', '0', {
+      jwks: { keys: [{ kty: 'RSA', n: 'old-modulus', e: 'AQAB' }] },
+      freshUntil: Date.now() + 1_000,
+      staleUntil: Date.now() + 60_000,
+    });
+    const captured = redis.values.get(oldKey);
+    if (captured === undefined) {
+      throw new Error('JWKS cache entry was not written');
+    }
+
+    await store.deleteJwks(organizationId, '2');
+
+    // Model a Redis writer restoring both the old generation and signed entry.
+    redis.values.set(generationKey, '0');
+    redis.values.set(oldKey, captured);
+    redis.values.set(currentKey, captured);
+
+    await expect(store.getJwks(organizationId, '2')).resolves.toEqual({
+      generation: '0',
+    });
+    expect(redis.values.has(currentKey)).toBe(false);
+  });
+
   it('fails open for cache and brute-force protection when Redis is unavailable', async () => {
     const redis: RedisIdentityClient = {
       get: () => Promise.reject(new Error('redis down')),
