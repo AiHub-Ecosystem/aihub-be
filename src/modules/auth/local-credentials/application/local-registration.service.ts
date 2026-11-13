@@ -151,19 +151,23 @@ export class LocalRegistrationService implements LocalRegistrationPort {
     // back, leaving the sign-in available while the token is unexpired.
     const refreshToken = this.sessionIssuers.refreshTokens.issue(now);
     const tokenHash = this.tokenIssuer.hash(token);
+    let userAccountId: string | undefined;
     let proof: Awaited<ReturnType<typeof proveVerificationPassword>>;
     try {
       proof = await proveVerificationPassword(
         {
           store: this.verificationTokens,
           hasher: this.credentials.passwordHasher,
+          rememberUserAccountId: (userId) => {
+            userAccountId = userId;
+          },
         },
         { tokenHash, password, now },
       );
     } catch (error) {
       recordCredentialLoginFailure(
         error,
-        undefined,
+        userAccountId,
         this.clock,
         this.securityEvents,
       );
@@ -180,7 +184,7 @@ export class LocalRegistrationService implements LocalRegistrationPort {
       const error = verificationPasswordInvalid();
       recordCredentialLoginFailure(
         error,
-        undefined,
+        userAccountId,
         this.clock,
         this.securityEvents,
       );

@@ -398,7 +398,11 @@ describe('LocalRegistrationService', () => {
         ]),
       );
       expect(context.securityEvents).toEqual([
-        { event: 'login_failed', occurredAt: NOW },
+        {
+          event: 'login_failed',
+          userAccountId: [...context.state.accounts.values()][0]?.userId,
+          occurredAt: NOW,
+        },
       ]);
     });
 
