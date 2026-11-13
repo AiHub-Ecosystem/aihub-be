@@ -36,6 +36,7 @@ export interface RotateVerificationTokenInput {
 
 /** What a caller needs to prove a token's password before consuming it. */
 export interface VerificationCredential {
+  readonly userId: string;
   readonly requiresPassword: boolean;
   /** The pending account's stored password hash. */
   readonly passwordHash: string;

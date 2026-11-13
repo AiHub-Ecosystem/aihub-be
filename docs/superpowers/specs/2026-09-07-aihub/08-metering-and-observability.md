@@ -178,6 +178,7 @@ aihub_argon2_queue_waits_total                      counter
 aihub_argon2_queue_refusals_total                   counter
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
 aihub_rejected_total{reason}                         counter
+aihub_auth_security_events_total{event}               counter
 aihub_speaking_audio_url_rejected_total{reason}      counter
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total{seam}                   counter
@@ -194,6 +195,16 @@ aihub_downstream_pool_queued{origin}
 The Argon2 counters record process-wide queue waits and refusals without
 request or tenant labels. Refusals use their own counter; `aihub_rejected_total`
 remains owned by #200.
+
+`aihub_auth_security_events_total{event}` increments once per recorded Auth
+security event. Its complete fixed `event` values are `refresh_reuse`,
+`password_reset_completed`, `login_succeeded`, `login_failed`, and
+`verification_sign_in`. `event` is the only metric label; it never carries an
+account, user, request, credential, or IP dimension. Request-path events emit
+one structured JSON line with request ID and time, the account ID when known,
+and fixed event-specific fields. These fields are not metric labels. Event logs
+never contain email, passwords, raw tokens or token hashes, session cookies,
+raw IP addresses, or request bodies.
 
 `aihub_rejected_total` counts a request once at the admission decision that
 refuses it, not by re-deriving a reason from its response. Its fixed `reason`

@@ -267,6 +267,9 @@ describe('local auth HTTP boundary - passwords and reset', () => {
     expect(response.payload).toBe('');
     expect(response.headers['cache-control']).toBe('no-store');
     expect(String(response.headers['set-cookie'])).toContain('Max-Age=0');
+    expect(c.securityEvents.events).toMatchObject([
+      { event: 'password_reset_completed', userAccountId: USER_ID },
+    ]);
   });
 
   it('changes the password and revokes every existing refresh session', async () => {

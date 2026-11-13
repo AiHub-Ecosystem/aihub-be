@@ -10,6 +10,7 @@ import type { PasswordResetTokenPort } from '@/modules/auth/password-reset/appli
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { enforceAuthRateLimits } from '@/modules/auth/rate-limit/public/auth-rate-limit';
 import type { AuthClock } from '@/modules/auth/shared/application/auth-clock';
+import type { AuthSecurityEventRecorderPort } from '@/modules/auth/shared/application/auth-security-event.port';
 import { invalidPasswordResetToken } from '@/modules/auth/shared/application/local-auth-errors';
 import {
   AUTH_EMAIL_REQUEST_LIMIT,
@@ -39,6 +40,7 @@ export class PasswordRecoveryService implements PasswordRecoveryPort {
     private readonly emailOutbox: EmailOutboxPort,
     private readonly rateLimiter: AuthRateLimiterPort,
     private readonly clock: AuthClock,
+    private readonly securityEvents: AuthSecurityEventRecorderPort,
   ) {}
 
   async forgotPassword(
@@ -109,16 +111,23 @@ export class PasswordRecoveryService implements PasswordRecoveryPort {
     }
 
     const passwordHash = await this.passwordHasher.hash(password);
+    const now = this.clock.now();
     const result = await this.passwordResetTokens.consumePasswordReset({
       tokenHash,
       passwordHash,
-      now: this.clock.now(),
+      now,
     });
 
     if (result.kind === 'invalid') {
       await this.enforceResetFailureLimits(ip, tokenHash);
       throw invalidPasswordResetToken();
     }
+
+    this.securityEvents.record({
+      event: 'password_reset_completed',
+      userAccountId: result.userId,
+      occurredAt: now,
+    });
   }
 
   private async enforceResetFailureLimits(

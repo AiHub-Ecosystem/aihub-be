@@ -86,9 +86,6 @@ export class InMemoryPasswordResetTokenAdapter
         });
       }
     }
-    // The same durable step the transaction performs, so the unit lane observes
-    // what a password reset does to Customer Web sessions rather than trusting
-    // the Postgres statement to be the only implementation.
     for (const session of this.state.webSessions.values()) {
       if (
         session.userId === account.userId &&
@@ -97,7 +94,7 @@ export class InMemoryPasswordResetTokenAdapter
         session.revokedAt = input.now;
       }
     }
-    return { kind: 'reset' };
+    return { kind: 'reset', userId: account.userId };
   }
 
   private inspect(tokenHash: string, now: Date): Inspection {

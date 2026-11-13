@@ -101,6 +101,14 @@ Store monitoring credentials in Vault and provision host-side files under `~/aih
 
 PostgreSQL uses a dedicated `aihub_monitoring` login that can execute one fixed `SECURITY DEFINER` function owned by `aihub_admin` and read the fixed aggregate `operator_redis_failures` rows. The function returns aggregate connection and lock counts plus `aihub`/`aihub_sandbox` sizes and transaction durations; the table contains only a bounded seam and total. It exports no SQL text or per-role activity and grants neither `pg_monitor` nor `pg_read_all_stats`. The postgres_exporter `v0.20.1` query extension is deprecated upstream; keep the image pinned and replace this compatibility path before upgrading past its support.
 
+Application auth security events use the five fixed names in the observability
+inventory and emit one structured JSON line per request-path event, with
+request ID, occurrence time, and account ID when known. The recorder uses an
+info-level child logger, so these lines remain emitted with `LOG_LEVEL=warn`,
+`error`, `fatal`, or `silent` without lowering the root logger or changing
+other log levels. Event lines omit email, passwords, raw tokens or hashes,
+session cookies, raw IP addresses, and request bodies.
+
 Redis uses a dedicated ACL user with only `PING`, aggregate `INFO`, `CLIENT SETNAME`, `LATENCY LATEST`, and `MEMORY STATS`. Key-reading and `CONFIG` commands are denied. The exporter reads its password from a mounted secret file. Do not change Redis `maxmemory` or its existing persistence policy for this collector. Its alert threshold assumes the observed 256 MiB `maxmemory` and must be reviewed if that value changes.
 
 ## Deploy and validate

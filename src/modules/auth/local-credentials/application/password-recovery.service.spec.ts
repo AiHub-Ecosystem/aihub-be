@@ -162,4 +162,35 @@ describe('PasswordRecoveryService', () => {
       ]),
     );
   });
+
+  it('checks reset expiry again after hashing the new password', async () => {
+    const { recovery, state, clock, hasher, passwordResetTokenIssuer } =
+      localAuth();
+    seedActiveAccount(state);
+    await recovery.forgotPassword({ email: EMAIL }, '203.0.113.7');
+
+    const token = issuedToken(passwordResetTokenIssuer.issued);
+    const expiresAt = passwordResetTokenIssuer.issued[0]?.expiresAt;
+    const account = state.accounts.get(USER_ID);
+    if (expiresAt === undefined || account === undefined) {
+      throw new Error('the account and reset token were not seeded');
+    }
+    const originalPasswordHash = account.passwordHash;
+    const hashPassword = hasher.hash.bind(hasher);
+    jest.spyOn(hasher, 'hash').mockImplementation(async (password) => {
+      clock.value = new Date(expiresAt.getTime() + 1);
+      return hashPassword(password);
+    });
+
+    await expect(
+      recovery.resetPassword(
+        { token, password: 'new password that works' },
+        '203.0.113.7',
+      ),
+    ).rejects.toMatchObject({
+      code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID',
+      httpStatus: 400,
+    });
+    expect(account.passwordHash).toBe(originalPasswordHash);
+  });
 });

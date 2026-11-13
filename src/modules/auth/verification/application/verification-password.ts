@@ -31,6 +31,7 @@ export async function proveVerificationPassword(
       'readVerificationCredential' | 'recordWrongVerificationPassword'
     >;
     readonly hasher: Pick<PasswordHasherPort, 'verify'>;
+    readonly rememberUserAccountId?: (userId: string) => void;
   },
   input: {
     readonly tokenHash: string;
@@ -43,6 +44,7 @@ export async function proveVerificationPassword(
     now: input.now,
   });
   if (credential === undefined) return {};
+  dependencies.rememberUserAccountId?.(credential.userId);
 
   if (input.password === undefined) {
     if (credential.requiresPassword) throw verificationPasswordInvalid();

@@ -711,7 +711,7 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
   });
 
   it('resets a password to a real password hash', async () => {
-    await seedAccount('active', 'reset-real@example.com');
+    const userId = await seedAccount('active', 'reset-real@example.com');
     const rawToken = randomBytes(32).toString('base64url');
     const resetTokenHash = createHash('sha256')
       .update(rawToken, 'utf8')
@@ -730,6 +730,9 @@ describe('password hashes from the installed argon2 against PostgreSQL', () => {
       now: new Date(NOW.getTime() + 1_000),
     });
 
-    expect(result).toEqual({ kind: 'reset' });
+    expect(result).toEqual({
+      kind: 'reset',
+      userId,
+    });
   });
 });

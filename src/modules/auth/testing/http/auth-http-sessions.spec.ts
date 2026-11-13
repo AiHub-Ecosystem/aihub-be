@@ -77,6 +77,9 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       expires_in: 900,
     });
     expect(body.meta.request_id).toMatch(/^req_/);
+    expect(c.securityEvents.events).toMatchObject([
+      { event: 'login_succeeded', userAccountId: USER_ID },
+    ]);
     const setCookie = response.headers['set-cookie'];
     expect(Array.isArray(setCookie) ? setCookie : [setCookie]).toEqual(
       expect.arrayContaining([
@@ -131,6 +134,28 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
     });
     expect(pending.statusCode).toBe(401);
     expect(pending.payload).not.toContain('pending_verification');
+    expect(c.securityEvents.events).toMatchObject([
+      { event: 'login_failed' },
+      { event: 'login_failed' },
+    ]);
+    expect(JSON.stringify(c.securityEvents.events)).not.toContain(
+      'nobody@example.com',
+    );
+    expect(JSON.stringify(c.securityEvents.events)).not.toContain(
+      'wrong password',
+    );
+  });
+  it('does not report a login failure when the rate limit rejects first', async () => {
+    c.limiter.allowed = false;
+    const response = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'wrong password' },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(c.securityEvents.events).toHaveLength(0);
   });
 
   it('rejects extra login fields at the boundary', async () => {
@@ -200,6 +225,14 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
       headers: { cookie: rotatedCookie },
     });
     expect(successorAfterReuse.statusCode).toBe(401);
+    const reuseEvents = c.securityEvents.events.filter(
+      (event) => event.event === 'refresh_reuse',
+    );
+    expect(reuseEvents).toHaveLength(2);
+    expect(reuseEvents).toMatchObject([
+      { userAccountId: USER_ID },
+      { userAccountId: USER_ID },
+    ]);
   });
 
   it('serializes concurrent refresh attempts so only one token rotates', async () => {

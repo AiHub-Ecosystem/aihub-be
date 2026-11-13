@@ -10,6 +10,7 @@ import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/password-reset/a
 import { PASSWORD_RESET_TOKEN } from '@/modules/auth/password-reset/application/password-reset-token.port';
 import { AUTH_RATE_LIMITER } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { AUTH_CLOCK } from '@/modules/auth/shared/application/auth-clock';
+import { AUTH_SECURITY_EVENT_RECORDER } from '@/modules/auth/shared/application/auth-security-event.port';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import { VERIFICATION_TOKEN } from '@/modules/auth/verification/application/verification-token.port';
 import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
@@ -89,6 +90,7 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
         SESSION_TOKEN_ISSUERS,
         AUTH_CLOCK,
         EMAIL_VERIFICATION_REQUIRES_PASSWORD,
+        AUTH_SECURITY_EVENT_RECORDER,
       ],
     },
     {
@@ -103,6 +105,7 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
         EMAIL_OUTBOX,
         AUTH_RATE_LIMITER,
         AUTH_CLOCK,
+        AUTH_SECURITY_EVENT_RECORDER,
       ],
     },
     {
@@ -129,6 +132,7 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
         SESSION_TOKEN_ISSUERS,
         AUTH_CLOCK,
         AUTH_MFA_SERVICE,
+        AUTH_SECURITY_EVENT_RECORDER,
       ],
     },
   ],

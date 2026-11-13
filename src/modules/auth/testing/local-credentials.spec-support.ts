@@ -17,6 +17,10 @@ import type {
   PasswordResetTokenPort,
 } from '@/modules/auth/password-reset/application/password-reset-token.port';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import type {
+  AuthSecurityEvent,
+  AuthSecurityEventRecorderPort,
+} from '@/modules/auth/shared/application/auth-security-event.port';
 import {
   type InMemoryAuthState,
   createInMemoryAuthState,
@@ -232,6 +236,12 @@ export function localAuth(
   const hasher = new FakeHasher();
   const clock = new FakeClock();
   const mfa = new FakeMfaService();
+  const securityEvents: AuthSecurityEvent[] = [];
+  const securityEventRecorder: AuthSecurityEventRecorderPort = {
+    record(event) {
+      securityEvents.push(event);
+    },
+  };
 
   const gate = new EmailOutboxBackpressureGate(
     {
@@ -269,6 +279,7 @@ export function localAuth(
     sessionIssuers,
     clock,
     options.requireVerificationPassword ?? false,
+    securityEventRecorder,
   );
   const recovery = new PasswordRecoveryService(
     passwordResetTokens,
@@ -277,6 +288,7 @@ export function localAuth(
     emailOutbox,
     limiter,
     clock,
+    securityEventRecorder,
   );
   const sessions = new LocalSessionService(
     credentials,
@@ -284,6 +296,7 @@ export function localAuth(
     sessionIssuers,
     clock,
     mfa,
+    securityEventRecorder,
   );
   return {
     registration,
@@ -299,6 +312,7 @@ export function localAuth(
     hasher,
     clock,
     mfa,
+    securityEvents,
     refusals,
     queueAges,
   };

@@ -554,8 +554,8 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
       );
       expect(results).toEqual(
         firstOperation === 'reset'
-          ? [{ kind: 'reset' }, false]
-          : [true, { kind: 'reset' }],
+          ? [{ kind: 'reset', userId }, false]
+          : [true, { kind: 'reset', userId }],
       );
       expect(await durableState(userId)).toEqual({
         revokedSessions: firstOperation === 'reset' ? 2 : 3,
@@ -582,7 +582,7 @@ describe('password reset and Web Session revocation on PostgreSQL', () => {
         passwordHash: resetPasswordHash,
         now: RESET_AT,
       }),
-    ).resolves.toEqual({ kind: 'reset' });
+    ).resolves.toEqual({ kind: 'reset', userId });
 
     expect(await durableState(userId)).toEqual({
       revokedSessions: 2,

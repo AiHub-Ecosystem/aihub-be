@@ -1,0 +1,32 @@
+import { Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
+
+import {
+  type AuthSecurityEvent,
+  type AuthSecurityEventRecorderPort,
+} from '@/modules/auth/shared/application/auth-security-event.port';
+import { incrementAuthSecurityEvent } from './auth-security-event-metric';
+
+@Injectable()
+export class AuthSecurityEventRecorder
+  implements AuthSecurityEventRecorderPort
+{
+  constructor(private readonly logger: PinoLogger) {}
+
+  /** Writes one fixed security event line and increments its bounded metric. */
+  record(event: AuthSecurityEvent): void {
+    incrementAuthSecurityEvent(event.event);
+
+    const fields: Record<string, string | number> = {
+      event: event.event,
+      occurred_at: event.occurredAt.toISOString(),
+    };
+    if ('userAccountId' in event) {
+      fields['user_account_id'] = event.userAccountId;
+    }
+
+    this.logger.logger
+      .child({}, { level: 'info' })
+      .info(fields, 'auth_security_event');
+  }
+}

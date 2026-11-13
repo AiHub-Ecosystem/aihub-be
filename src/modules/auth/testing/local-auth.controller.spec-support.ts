@@ -47,6 +47,11 @@ import {
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import {
+  AUTH_SECURITY_EVENT_RECORDER,
+  type AuthSecurityEvent,
+  type AuthSecurityEventRecorderPort,
+} from '@/modules/auth/shared/application/auth-security-event.port';
+import {
   type InMemoryAuthState,
   createInMemoryAuthState,
 } from '@/modules/auth/testing/in-memory-auth.state';
@@ -332,6 +337,18 @@ export class QueueAgeFake implements EmailOutboxQueueAgePort {
   }
 }
 
+export class AuthSecurityEventsFake implements AuthSecurityEventRecorderPort {
+  readonly events: AuthSecurityEvent[] = [];
+
+  record(event: AuthSecurityEvent): void {
+    this.events.push(event);
+  }
+
+  reset(): void {
+    this.events.length = 0;
+  }
+}
+
 export interface LocalAuthTestContext {
   app: NestFastifyApplication;
   state: InMemoryAuthState;
@@ -348,6 +365,7 @@ export interface LocalAuthTestContext {
   accessTokenIssuer: AccessTokenIssuerFake;
   revocations: InMemoryUserAccessTokenRevocationAdapter;
   mfa: MfaFake;
+  securityEvents: AuthSecurityEventsFake;
   reset: () => void;
 }
 
@@ -374,6 +392,7 @@ export async function createLocalAuthTestContext(
   const accessTokenIssuer = new AccessTokenIssuerFake();
   const revocations = new InMemoryUserAccessTokenRevocationAdapter();
   const mfa = new MfaFake();
+  const securityEvents = new AuthSecurityEventsFake();
   const accessTokenVerifier: UserAccessTokenVerifierPort = {
     verify: async (token) => {
       if (token === 'ey.fake.access' || token === 'valid.user.access') {
@@ -434,6 +453,8 @@ export async function createLocalAuthTestContext(
     .useValue(refreshTokenIssuer)
     .overrideProvider(AUTH_MFA_SERVICE)
     .useValue(mfa)
+    .overrideProvider(AUTH_SECURITY_EVENT_RECORDER)
+    .useValue(securityEvents)
     .overrideProvider(WEB_SESSION_CLIENT_SECRET)
     .useValue({ resolve: () => clientSecret })
     .compile();
@@ -469,6 +490,7 @@ export async function createLocalAuthTestContext(
     mfa.loginResult = { kind: 'none' };
     passwordResetTokenIssuer.reset();
     refreshTokenIssuer.reset();
+    securityEvents.reset();
   };
 
   return {
@@ -487,6 +509,7 @@ export async function createLocalAuthTestContext(
     accessTokenIssuer,
     revocations,
     mfa,
+    securityEvents,
     reset,
   };
 }

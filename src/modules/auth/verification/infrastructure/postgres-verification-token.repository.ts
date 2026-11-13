@@ -403,7 +403,9 @@ export class PostgresVerificationTokenRepository
     const rows = await authQueryRows(
       this.client,
       `
-        SELECT token.requires_password, identity.password_hash
+        SELECT account.id AS user_account_id,
+               token.requires_password,
+               identity.password_hash
         FROM email_verification_tokens token
         JOIN user_accounts account ON account.id = token.user_account_id
         JOIN auth_identities identity
@@ -418,12 +420,14 @@ export class PostgresVerificationTokenRepository
     const row = rows[0];
     if (
       row === undefined ||
+      typeof row['user_account_id'] !== 'string' ||
       typeof row['requires_password'] !== 'boolean' ||
       typeof row['password_hash'] !== 'string'
     ) {
       return undefined;
     }
     return {
+      userId: row['user_account_id'],
       requiresPassword: row['requires_password'],
       passwordHash: row['password_hash'],
     };

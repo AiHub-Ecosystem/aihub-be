@@ -65,6 +65,8 @@ import {
 } from './rate-limit/application/auth-rate-limiter.port';
 import { RedisAuthRateLimiter } from './rate-limit/infrastructure/redis-auth-rate-limiter';
 import { AUTH_CLOCK, type AuthClock } from './shared/application/auth-clock';
+import { AUTH_SECURITY_EVENT_RECORDER } from './shared/application/auth-security-event.port';
+import { AuthSecurityEventRecorder } from './shared/infrastructure/auth-security-event-recorder';
 import {
   REVOKE_USER_ACCESS_TOKEN,
   type RevokeUserAccessTokenPort,
@@ -348,6 +350,7 @@ function createUserAccessTokenCrypto(
         VERIFICATION_TOKEN,
         USER_ACCESS_TOKEN_ISSUER,
         AUTH_MFA_SERVICE,
+        AUTH_SECURITY_EVENT_RECORDER,
       ],
     },
     {
@@ -410,6 +413,10 @@ function createUserAccessTokenCrypto(
         new RevokeUserAccessTokenService(...ports),
       inject: [USER_ACCESS_TOKEN_VERIFIER, USER_ACCESS_TOKEN_REVOCATION_RECORD],
     },
+    {
+      provide: AUTH_SECURITY_EVENT_RECORDER,
+      useClass: AuthSecurityEventRecorder,
+    },
     UserAccessJwtGuard,
     OptionalWebSessionClientGuard,
     WebSessionClientGuard,
@@ -426,6 +433,7 @@ function createUserAccessTokenCrypto(
     VERIFICATION_TOKEN,
     PASSWORD_RESET_TOKEN,
     AUTH_CLOCK,
+    AUTH_SECURITY_EVENT_RECORDER,
     AUTH_MFA_SERVICE,
     PASSWORD_HASHER,
     PASSWORD_CHANGE_REPOSITORY,

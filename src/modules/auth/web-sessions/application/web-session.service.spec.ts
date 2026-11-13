@@ -2,6 +2,10 @@ import type { IdMinter } from '@/common/ids/prefixed-id';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import type { AuthMfaServicePort } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import type {
+  AuthSecurityEvent,
+  AuthSecurityEventRecorderPort,
+} from '@/modules/auth/shared/application/auth-security-event.port';
 import {
   createInMemoryAuthState,
   seedAccount,
@@ -121,6 +125,12 @@ function harness(
   const createWebSession = jest.spyOn(webSessions, 'createWebSession');
   const passwordHasher = new PasswordHasherFake();
   const accessTokens = new UserAccessTokenIssuerFake();
+  const securityEvents: AuthSecurityEvent[] = [];
+  const securityEventRecorder: AuthSecurityEventRecorderPort = {
+    record(event) {
+      securityEvents.push(event);
+    },
+  };
   const service = new WebSessionService(
     webSessions,
     new WebSessionTokenFake(),
@@ -133,6 +143,7 @@ function harness(
     new VerificationTokenFake(),
     accessTokens,
     new LoginMfaFake(mfaResult),
+    securityEventRecorder,
   );
 
   return {
@@ -142,6 +153,7 @@ function harness(
     accessTokens,
     createWebSession,
     updatePasswordHash,
+    securityEvents,
   };
 }
 
@@ -182,6 +194,14 @@ describe('WebSessionService.createWebSession password hash upgrade', () => {
       ),
     ).rejects.toMatchObject({ code: 'AUTH_CREDENTIALS_INVALID' });
 
+    expect(test.securityEvents).toEqual([
+      {
+        event: 'login_failed',
+        userAccountId: USER_ID,
+        occurredAt: NOW,
+      },
+    ]);
+
     expect(test.updatePasswordHash).not.toHaveBeenCalled();
     expect(test.createWebSession).not.toHaveBeenCalled();
     expect(test.state.accounts.get(USER_ID)?.passwordHash).toBe(OLD_HASH);
@@ -218,6 +238,43 @@ describe('WebSessionService.createWebSession password hash upgrade', () => {
   });
 });
 
+describe('WebSessionService verification sign-in failures', () => {
+  it.each([
+    { scenario: 'wrong password', password: 'wrong password' },
+    { scenario: 'missing password', password: undefined },
+  ])(
+    'records login_failed with the known account ID for $scenario',
+    async ({ password }) => {
+      const test = harness();
+      test.state.accounts.get(USER_ID)!.status = 'pending_verification';
+      test.state.verificationTokens.set('hash:verification-token', {
+        tokenId: 'evt_test',
+        userId: USER_ID,
+        expiresAt: new Date(NOW.getTime() + 86_400_000),
+        browserBindingHash: undefined,
+        consumedAt: undefined,
+        consumedReason: undefined,
+        signedInAt: undefined,
+        requiresPassword: true,
+        passwordFailures: 0,
+      });
+      jest.spyOn(test.passwordHasher, 'verify').mockResolvedValue(false);
+
+      await expect(
+        test.service.createWebSessionFromVerification({
+          token: 'verification-token',
+          browserBinding: undefined,
+          password,
+        }),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+
+      expect(test.securityEvents).toEqual([
+        { event: 'login_failed', userAccountId: USER_ID, occurredAt: NOW },
+      ]);
+    },
+  );
+});
+
 describe('WebSessionService access token session identity', () => {
   it('issues a Web Session access token carrying the durable session id', async () => {
     const test = harness();
@@ -243,5 +300,6 @@ describe('WebSessionService access token session identity', () => {
       kind: 'web',
       id: sessionId,
     });
+    expect(test.securityEvents).toEqual([]);
   });
 });

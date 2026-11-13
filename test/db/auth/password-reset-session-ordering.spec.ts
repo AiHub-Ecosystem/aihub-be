@@ -186,8 +186,8 @@ describe('a password reset and a sign-in that verified the old password', () => 
 
       expect(results).toEqual(
         firstOperation === 'reset'
-          ? [{ kind: 'reset' }, false]
-          : [true, { kind: 'reset' }],
+          ? [{ kind: 'reset', userId }, false]
+          : [true, { kind: 'reset', userId }],
       );
       expect(await durableState(userId)).toEqual({
         openRefreshTokens: 0,
@@ -233,8 +233,14 @@ describe('a password reset and a Refresh Token rotation', () => {
 
       expect(results).toEqual(
         firstOperation === 'reset'
-          ? [{ kind: 'reset' }, { kind: 'invalid', reason: 'revoked' }]
-          : [{ kind: 'rotated', userId }, { kind: 'reset' }],
+          ? [
+              { kind: 'reset', userId },
+              { kind: 'invalid', reason: 'revoked' },
+            ]
+          : [
+              { kind: 'rotated', userId },
+              { kind: 'reset', userId },
+            ],
       );
       expect((await durableState(userId)).openRefreshTokens).toBe(0);
     },
@@ -279,7 +285,7 @@ describe('a password reset and a Refresh Token rotation', () => {
       gated.resume();
 
       await expect(Promise.all([resetting, rotating])).resolves.toEqual([
-        { kind: 'reset' },
+        { kind: 'reset', userId },
         { kind: 'invalid', reason: 'revoked' },
       ]);
       expect((await durableState(userId)).openRefreshTokens).toBe(0);
@@ -333,7 +339,7 @@ describe('a password reset request and Password Reset consumption', () => {
       expect(results).toEqual(
         firstOperation === 'issue'
           ? [{ email: EMAIL }, { kind: 'invalid', reason: 'consumed' }]
-          : [{ kind: 'reset' }, { email: EMAIL }],
+          : [{ kind: 'reset', userId }, { email: EMAIL }],
       );
       expect(await durableState(userId)).toMatchObject({
         openRefreshTokens: firstOperation === 'issue' ? 1 : 0,
@@ -438,7 +444,7 @@ describe('two resets consuming one Password Reset Token', () => {
     );
 
     expect(results).toEqual([
-      { kind: 'reset' },
+      { kind: 'reset', userId },
       { kind: 'invalid', reason: 'consumed' },
     ]);
     expect((await durableState(userId)).passwordHash).toBe(firstPasswordHash);

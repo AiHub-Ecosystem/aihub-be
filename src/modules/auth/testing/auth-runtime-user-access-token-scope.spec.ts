@@ -3,6 +3,7 @@ import { decodeJwt } from 'jose';
 
 import { appConfig } from '@/config/runtime-configuration';
 import { AuthRuntimeModule } from '@/modules/auth/auth-runtime.module';
+import { AUTH_SECURITY_EVENT_RECORDER } from '@/modules/auth/shared/application/auth-security-event.port';
 import type { UserAccessTokenRevocationRecordPort } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import { BloomFilterUserAccessTokenRevocationAdapter } from '@/modules/auth/user-access-tokens/infrastructure/bloom-filter/bloom-filter-user-access-token-revocation.adapter';
 import {
@@ -28,12 +29,15 @@ describe('Auth runtime User Access JWT scope', () => {
       return [];
     },
   };
+  const securityEventRecorder = { record: (): void => undefined };
 
   beforeAll(async () => {
     const configuration = appConfig();
     productionModuleRef = await Test.createTestingModule({
       imports: [AuthRuntimeModule],
     })
+      .overrideProvider(AUTH_SECURITY_EVENT_RECORDER)
+      .useValue(securityEventRecorder)
       .overrideProvider(appConfig.KEY)
       .useValue({
         ...configuration,
@@ -47,6 +51,8 @@ describe('Auth runtime User Access JWT scope', () => {
     sandboxModuleRef = await Test.createTestingModule({
       imports: [AuthRuntimeModule],
     })
+      .overrideProvider(AUTH_SECURITY_EVENT_RECORDER)
+      .useValue(securityEventRecorder)
       .overrideProvider(appConfig.KEY)
       .useValue({
         ...configuration,
