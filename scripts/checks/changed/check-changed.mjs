@@ -256,13 +256,13 @@ function classifyPathGates(p) {
   if (path === '.dependency-cruiser.cjs') {
     return ['arch-check'];
   }
-  // #1539: editing the architecture checker must run `arch-check` directly
-  // rather than relying on test:related, which has no static import edge.
+  // #1539: checker edits run the architecture gate directly; it does not run
+  // the behavior specs, so select those separately as well.
   if (
     path.includes('check-architecture') ||
     path === 'scripts/checks/architecture/dependency-cruiser-cache.cjs'
   ) {
-    return ['arch-check', 'lint'];
+    return ['arch-check', 'lint', 'test:related'];
   }
   if (
     path === 'scripts/generate/coderabbit-config.mjs' ||

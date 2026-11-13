@@ -308,11 +308,23 @@ const pathCases = [
   },
   {
     path: 'scripts/checks/architecture/check-architecture.mjs',
-    gates: ['arch-check', 'check:doc-drift', 'check:folder-entries', 'lint'],
+    gates: [
+      'arch-check',
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:related',
+    ],
   },
   {
     path: 'scripts/checks/architecture/dependency-cruiser-cache.cjs',
-    gates: ['arch-check', 'check:doc-drift', 'check:folder-entries', 'lint'],
+    gates: [
+      'arch-check',
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:related',
+    ],
   },
   {
     path: 'ops/nginx/site.conf',
@@ -1171,8 +1183,8 @@ await test('image inputs select no local gate and say so (#1766)', () => {
   }
 });
 
-// #1539: editing the architecture checker or its cache helper selects the
-// architecture gate directly rather than relying on test:related.
+// #1539: editing the architecture checker or its cache helper selects both
+// the architecture gate and its behavior specs.
 await test('check-architecture edits select the architecture gate directly (#1539)', () => {
   for (const path of [
     'scripts/checks/architecture/check-architecture.mjs',
@@ -1181,6 +1193,10 @@ await test('check-architecture edits select the architecture gate directly (#153
     assert.ok(
       planChangedFiles([path]).gates.includes('arch-check'),
       `${path} must select arch-check`,
+    );
+    assert.ok(
+      planChangedFiles([path]).gates.includes('test:related'),
+      `${path} must select test:related`,
     );
   }
 });
