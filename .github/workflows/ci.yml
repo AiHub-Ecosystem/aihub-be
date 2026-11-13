@@ -1119,8 +1119,8 @@ jobs:
           push: false
           load: true
           tags: aihub:image-boot
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=aihub-production
+          cache-to: type=gha,scope=aihub-production,mode=max
           # Baked into the image so `docker inspect` on the VPS can name the
           # commit that is live. The deployed checkout carries no `.git`, so
           # there is no other place to read it from.

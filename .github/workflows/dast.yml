@@ -130,8 +130,8 @@ jobs:
           push: false
           load: true
           tags: aihub:dast
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=aihub-production
+          cache-to: type=gha,scope=aihub-dast,mode=max
           build-args: |
             VCS_REF=${{ github.sha }}
 
