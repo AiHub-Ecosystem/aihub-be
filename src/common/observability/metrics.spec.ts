@@ -253,6 +253,48 @@ describe('request lifecycle metrics', () => {
     // Must not throw, and must not produce NaN in the exposition payload.
     expect(await getMetrics()).not.toContain('NaN');
   });
+
+  it('exposes upper duration buckets beyond 30s for long-running AI grading tasks', async () => {
+    recordCompletedRequest({
+      operation: GRADE,
+      statusCode: 200,
+      outcome: 'success',
+      totalMs: 45000,
+      downstreamMs: 44000,
+    });
+
+    expect(
+      await sample('aihub_request_duration_seconds_bucket', {
+        le: '60',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
+    expect(
+      await sample('aihub_request_duration_seconds_bucket', {
+        le: '90',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
+    expect(
+      await sample('aihub_request_duration_seconds_bucket', {
+        le: '120',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
+
+    expect(
+      await sample('aihub_downstream_duration_seconds_bucket', {
+        le: '90',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
+    expect(
+      await sample('aihub_downstream_duration_seconds_bucket', {
+        le: '120',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
+  });
 });
 
 describe('email delivery failure series before any failure', () => {

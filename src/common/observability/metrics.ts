@@ -112,7 +112,9 @@ const requestDuration = new Histogram({
   // A grading request runs 800-3000ms while a rejected one returns in
   // single-digit milliseconds, so the buckets are denser at the fast end
   // where the interesting distinction sits.
-  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  buckets: [
+    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 90, 120,
+  ],
   registers: [registry],
 });
 
@@ -120,7 +122,7 @@ const downstreamDuration = new Histogram({
   name: 'aihub_downstream_duration_seconds',
   help: 'Time spent waiting on the downstream AI service, in seconds.',
   labelNames: ['operation'],
-  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 90, 120],
   registers: [registry],
 });
 
