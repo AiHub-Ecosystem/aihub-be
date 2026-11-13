@@ -1,11 +1,13 @@
 /var/log/aihub-access.log {
-    size 10M
+    daily
+    maxsize 10M
+    maxage 28
     rotate 4
+    ifempty
     su root adm
     compress
     delaycompress
     missingok
-    notifempty
     create 0640 root adm
     sharedscripts
     postrotate

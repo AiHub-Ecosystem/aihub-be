@@ -35,9 +35,15 @@ this decision. Traces continue directly to Tempo.
 Use Loki as the primary historical search path. Keep
 `scripts/ops/logs/request-log-lookup.sh` as the local fallback for the Docker,
 deploy-snapshot, and AIHUB Nginx copies. Follow the request ID from a Loki log
-line to the matching Tempo trace and usage record. The maximum age is 30 days
-for Loki and every local copy; existing size limits may expire records sooner.
-The Docker and Nginx rotations still need age enforcement under #601.
+line to the matching Tempo trace and usage record. The design target is a
+30-day maximum age for Loki and every local copy; existing size limits may
+expire records sooner.
+The tracked Nginx source now applies daily numeric rotation with a 30-day
+maximum record age while preserving the existing archive names, pending
+deployment. Docker `json-file` application logs remain size-only and still need
+maximum-age enforcement under #601; deploy-log snapshots can copy older Docker
+records, and their best-effort deploy-time cleanup does not enforce a 30-day
+maximum age. Snapshot age enforcement also remains unresolved under #601.
 
 This pipeline is not deployed. Before Production deployment, collect a
 representative seven-day volume sample, derive 30-day storage needs, set hard

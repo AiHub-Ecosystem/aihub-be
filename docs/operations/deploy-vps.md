@@ -1395,13 +1395,21 @@ See [Roll back a blue-green release](#roll-back-a-blue-green-release).
 Both AIHUB hosts write to `/var/log/aihub-access.log`; this does not change the
 shared `/var/log/nginx/access.log` or another site's logging. Each JSON record
 contains only the observed IP, upstream `X-Request-Id`, method, `$uri` without
-the query string, and status. `/etc/logrotate.d/aihub-access` uses a 10 MiB
-threshold and keeps four rotated files, for five files including the active
-one. Its retained time window varies with request volume. The helper creates
-the active file as `root:adm` mode `0640` (or tightens those permissions
-without truncating existing records); logrotate uses the same mode after
-rotation. The active file may exceed the threshold between host logrotate
-runs.
+the query string, and status. `/etc/logrotate.d/aihub-access` rotates daily
+with numeric archive names, a 10 MiB `maxsize` threshold, `maxage 28`, and up
+to four rotated generations. Numeric names keep the existing `.1` and `.2.gz`
+archives in the same retention chain; date-stamped names would leave those
+archives outside logrotate's age and generation matching. `ifempty` makes the
+daily age sweep run even when the active file is empty. A rotated segment
+covers at most one day's records; allowing nearly one day before rotation and
+nearly one day until the next age sweep, the 28-day rotated-file limit expires
+each record in under 30 days when the host's daily logrotate timer runs. The
+four-generation count limit can expire records sooner. The helper creates the
+active file as `root:adm` mode
+`0640` (or tightens those permissions without truncating existing records);
+logrotate uses the same mode after rotation. The active file may exceed the
+threshold between host logrotate runs. This source policy is not evidence that
+the change has been deployed.
 
 Do not enable this CD step until migration and bootstrap are complete. The API
 and Sandbox configs keep the 27 MiB request ceiling, 75-second proxy timeouts,

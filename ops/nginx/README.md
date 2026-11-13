@@ -27,10 +27,18 @@ deletes log records during rollback.
 AIHUB access records contain the observed address, the upstream
 `X-Request-Id`, method, `$uri` without a query string, and status. Both AIHUB
 hosts use `/var/log/aihub-access.log`; the shared `/var/log/nginx/access.log`
-and other sites are not changed. Rotation uses a 10 MiB size threshold and
-keeps four rotated files, compressed after the first rotation. This is a
-size-based window, not a fixed number of days; the active file can exceed the
-threshold between host logrotate runs. The helper creates the active file as
+and other sites are not changed. Rotation runs daily with numeric archive
+names to keep existing `.1` and `.2.gz` generations in the same retention
+chain. It keeps the existing 10 MiB `maxsize` threshold and four rotated
+generations; `maxage 28` removes older segments on the daily run. `ifempty`
+ensures cleanup also runs when the active file is empty. A segment contains at
+most one day's records, and the daily cleanup can run up to one day after a
+segment reaches the 28-day cutoff, so a record expires within 30 days when the
+host's daily logrotate timer is running. The four-generation count limit can
+expire records sooner; the active file may exceed 10 MiB between host logrotate
+runs. Date-stamped daily filenames are not enabled because they would exclude
+the current numeric archives from rotation and age cleanup. The helper creates
+the active file as
 `root:adm` mode `0640` (or tightens those permissions without truncating it),
 and logrotate preserves that mode for new active files. The rotation policy
 uses `su root adm` because this host's shared `/var/log` directory is group

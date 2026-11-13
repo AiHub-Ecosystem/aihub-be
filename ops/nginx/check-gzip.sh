@@ -36,6 +36,33 @@ grep -Fq "readonly LOGROTATE_SHA256=$logrotate_sha256" \
 sudo chown root:root "$tmp/aihub-access-logrotate"
 sudo logrotate --debug --state "$tmp/logrotate.status" \
   "$tmp/aihub-access-logrotate" >/dev/null
+for directive in 'daily' 'maxsize 10M' 'ifempty' 'maxage 28' 'rotate 4'; do
+  grep -Fq "$directive" "$tmp/aihub-access-logrotate"
+done
+if grep -Fq 'dateext' "$tmp/aihub-access-logrotate"; then
+  printf 'AIHUB access log rotation must preserve numeric archive names.\n' >&2
+  exit 1
+fi
+
+age_log="$tmp/aihub-access-age.log"
+sed \
+  -e "s#/var/log/aihub-access.log#$age_log#g" \
+  -e '/postrotate/,/endscript/d' \
+  "$repo_root/ops/nginx/aihub-access-logrotate" > "$tmp/aihub-access-age.logrotate"
+sudo install -o root -g adm -m 0640 /dev/null "$age_log"
+printf 'stale archive\n' | sudo tee "$age_log.3.gz" >/dev/null
+sudo touch -d '29 days ago' "$age_log.3.gz"
+printf 'recent archive\n' | sudo tee "$age_log.2.gz" >/dev/null
+sudo touch -d '2 days ago' "$age_log.2.gz"
+sudo logrotate --force --state "$tmp/logrotate-age.status" "$tmp/aihub-access-age.logrotate" >/dev/null
+if grep -Fq 'stale archive' "$age_log".*; then
+  printf 'AIHUB access log rotation retained a file past maxage.\n' >&2
+  exit 1
+fi
+if ! grep -Fq 'recent archive' "$age_log.3.gz"; then
+  printf 'AIHUB access log rotation removed recent history.\n' >&2
+  exit 1
+fi
 install -m 0640 /dev/null "$tmp/aihub-access.log"
 
 node -e '
