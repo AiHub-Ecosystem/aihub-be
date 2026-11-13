@@ -5,7 +5,6 @@ const { privateKey: userAccessPrivateKey } = generateKeyPairSync('rsa', {
 });
 
 process.env['NODE_ENV'] = 'test';
-process.env['AIHUB_ALLOW_UNAUTHENTICATED_DEV'] = 'false';
 process.env['AIHUB_RUNTIME_SECRET_SOURCE'] = 'env';
 process.env['AIHUB_TRUSTED_PROXY_IP'] = '127.0.0.1';
 process.env['DOWNSTREAM_AI_SPEAKING_CLIENT_ID'] = 'jest-speaking-client';
