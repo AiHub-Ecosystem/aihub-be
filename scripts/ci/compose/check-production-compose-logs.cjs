@@ -12,7 +12,7 @@ const SYSLOG_OPTIONS = {
   'syslog-format': 'rfc5424micro',
   'cache-disabled': 'true',
   mode: 'non-blocking',
-  'max-buffer-size': '1m',
+  'max-buffer-size': '16m',
 };
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */

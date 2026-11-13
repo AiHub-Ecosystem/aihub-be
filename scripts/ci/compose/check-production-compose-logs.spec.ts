@@ -15,7 +15,7 @@ describe('production Compose log bounds', () => {
       'syslog-format': 'rfc5424micro',
       'cache-disabled': 'true',
       mode: 'non-blocking',
-      'max-buffer-size': '1m',
+      'max-buffer-size': '16m',
       tag: 'aihub-production',
     },
   };

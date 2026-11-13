@@ -11,7 +11,7 @@ x-app-syslog-options: &app-syslog-options
   syslog-format: rfc5424micro
   cache-disabled: "true"
   mode: non-blocking
-  max-buffer-size: 1m
+  max-buffer-size: 16m
 
 x-production-app-logging: &production-app-logging
   driver: syslog

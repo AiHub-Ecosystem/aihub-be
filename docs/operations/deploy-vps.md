@@ -1424,7 +1424,7 @@ files rotate daily with a 10 MiB threshold, `maxage 28`, and two rotated files
 expire records sooner; each 28-day rotated-file limit expires records within
 30 days when the host's daily logrotate timer runs. Files are `syslog:adm`
 mode `0640`; the same mode is recreated after rotation. Docker's dual-logging
-cache is disabled, and each app container uses a bounded 1 MiB non-blocking
+cache is disabled, and each app container uses a bounded 16 MB non-blocking
 buffer; `docker logs` does not read these app services. When rsyslog is
 unavailable or its buffer is full, messages can be dropped instead of blocking
 application output.
@@ -1544,7 +1544,7 @@ Production and Sandbox tags route to separate JSON-message files. Each tier's
 file rotates daily at 10 MiB with `maxage 28` and two rotated generations; the
 daily host logrotate timer expires each record within 30 days, while size and
 generation limits may expire records sooner. Docker's dual-logging cache is
-disabled, and each app container uses a 1 MiB non-blocking buffer, so
+disabled, and each app container uses a 16 MB non-blocking buffer, so
 `docker logs` does not read these app services and messages may be dropped if
 the receiver remains unavailable until that buffer fills.
 
@@ -1580,7 +1580,7 @@ done
 ```
 
 The four app services must show `syslog`, `syslog-address=tcp://127.0.0.1:1514`,
-`cache-disabled=true`, `mode=non-blocking`, `max-buffer-size=1m`, and the tier's
+`cache-disabled=true`, `mode=non-blocking`, `max-buffer-size=16m`, and the tier's
 fixed tag. Other services must show `json-file`, `max-size=10m`, and
 `max-file=3`.
 
