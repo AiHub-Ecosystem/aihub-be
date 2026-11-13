@@ -24,6 +24,13 @@ async function breakerState(operation: string): Promise<string | undefined> {
   return line?.slice(prefix.length);
 }
 
+async function listenOnLoopback(
+  server: ReturnType<typeof createServer>,
+): Promise<string> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
 async function ignoreFailure(
   breakers: DownstreamCircuitBreakers,
   operation: 'writing.task1.grade' | 'writing.task2.grade' | 'speaking.grading',
@@ -178,10 +185,7 @@ describe('DownstreamCircuitBreakers', () => {
           return response.end('{}');
         });
       });
-      await new Promise<void>((resolve) =>
-        server.listen(0, '127.0.0.1', resolve),
-      );
-      const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const origin = await listenOnLoopback(server);
       const client = new DownstreamHttpClient(origin, undefined, {}, config);
       const circuitBreakers = (breakers = new DownstreamCircuitBreakers());
       let releaseActions!: () => void;
@@ -259,10 +263,7 @@ describe('DownstreamCircuitBreakers', () => {
 
   it('counts a pre-send connection refusal as a breaker failure', async () => {
     const server = createServer();
-    await new Promise<void>((resolve) =>
-      server.listen(0, '127.0.0.1', resolve),
-    );
-    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const origin = await listenOnLoopback(server);
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
