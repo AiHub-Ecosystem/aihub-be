@@ -152,6 +152,24 @@ const pathCases = [
     ],
   },
   {
+    path: 'scripts/checks/structure/check-duplication-register.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:duplication-register',
+    ],
+  },
+  {
+    path: 'scripts/checks/structure/check-duplication-register.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:duplication-register',
+    ],
+  },
+  {
     path: 'scripts/checks/doc-drift/check-doc-drift.mjs',
     gates: [
       'check:doc-drift',
@@ -260,6 +278,7 @@ const pathCases = [
       'test:commit-message',
       'test:commit-messages',
       'test:doc-drift',
+      'test:duplication-register',
       'test:generated-drift',
       'test:issue-triage',
       'test:lint-staged',

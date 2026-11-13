@@ -9,6 +9,7 @@ import { ulid } from 'ulid';
 
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
 import type { DispatchObserverPort } from '@/modules/gateway/application/dispatch/dispatch-observer.port';
@@ -195,6 +196,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     );
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
     registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    registerSecurityHeaders(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -241,7 +243,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     });
   }
 
-  it('accepts and queues a job without dispatching it', async () => {
+  it('accepts and queues a job with the catalog no-store header', async () => {
     const response = await submit();
     const accepted = json(response) as {
       data: { job_id: string; status: string };
@@ -451,7 +453,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(queue.enqueued).toHaveLength(0);
   });
 
-  it('polls a succeeded job with the Speaking result and response_id', async () => {
+  it('polls a succeeded job with the catalog no-store header and result', async () => {
     repository.seed(seededJob('succeeded'));
 
     const response = await app.inject({

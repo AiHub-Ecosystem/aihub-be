@@ -105,6 +105,7 @@ export const GATE_COMMANDS = {
   'check:log-redaction': 'check:log-redaction',
   'test:log-redaction': 'test:log-redaction',
   'test:issue-triage': 'test:issue-triage',
+  'test:duplication-register': 'test:duplication-register',
   'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
   'test:check-staged': 'test:check-staged',
@@ -382,6 +383,7 @@ function classifyPathGates(p) {
       'test:commit-messages',
       'test:doc-drift',
       'test:generated-drift',
+      'test:duplication-register',
       'test:issue-triage',
       'test:lint-staged',
       'test:check-staged',
@@ -458,6 +460,9 @@ function classifyPathGates(p) {
   }
   if (path.includes('issue-triage')) {
     return ['lint', 'test:issue-triage'];
+  }
+  if (path.includes('duplication-register')) {
+    return ['lint', 'test:duplication-register'];
   }
   if (path.includes('check-doc-drift')) {
     return ['check:doc-drift', 'lint', 'test:doc-drift'];
