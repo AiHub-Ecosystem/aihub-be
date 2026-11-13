@@ -239,34 +239,40 @@ describe('WebSessionService.createWebSession password hash upgrade', () => {
 });
 
 describe('WebSessionService verification sign-in failures', () => {
-  it('records an admitted verification password failure as login_failed', async () => {
-    const test = harness();
-    test.state.accounts.get(USER_ID)!.status = 'pending_verification';
-    test.state.verificationTokens.set('hash:verification-token', {
-      tokenId: 'evt_test',
-      userId: USER_ID,
-      expiresAt: new Date(NOW.getTime() + 86_400_000),
-      browserBindingHash: undefined,
-      consumedAt: undefined,
-      consumedReason: undefined,
-      signedInAt: undefined,
-      requiresPassword: true,
-      passwordFailures: 0,
-    });
-    jest.spyOn(test.passwordHasher, 'verify').mockResolvedValue(false);
+  it.each([
+    { scenario: 'wrong password', password: 'wrong password' },
+    { scenario: 'missing password', password: undefined },
+  ])(
+    'records login_failed with the known account ID for $scenario',
+    async ({ password }) => {
+      const test = harness();
+      test.state.accounts.get(USER_ID)!.status = 'pending_verification';
+      test.state.verificationTokens.set('hash:verification-token', {
+        tokenId: 'evt_test',
+        userId: USER_ID,
+        expiresAt: new Date(NOW.getTime() + 86_400_000),
+        browserBindingHash: undefined,
+        consumedAt: undefined,
+        consumedReason: undefined,
+        signedInAt: undefined,
+        requiresPassword: true,
+        passwordFailures: 0,
+      });
+      jest.spyOn(test.passwordHasher, 'verify').mockResolvedValue(false);
 
-    await expect(
-      test.service.createWebSessionFromVerification({
-        token: 'verification-token',
-        browserBinding: undefined,
-        password: 'wrong password',
-      }),
-    ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
+      await expect(
+        test.service.createWebSessionFromVerification({
+          token: 'verification-token',
+          browserBinding: undefined,
+          password,
+        }),
+      ).rejects.toMatchObject({ code: 'AUTH_VERIFICATION_PASSWORD_INVALID' });
 
-    expect(test.securityEvents).toEqual([
-      { event: 'login_failed', occurredAt: NOW },
-    ]);
-  });
+      expect(test.securityEvents).toEqual([
+        { event: 'login_failed', userAccountId: USER_ID, occurredAt: NOW },
+      ]);
+    },
+  );
 });
 
 describe('WebSessionService access token session identity', () => {

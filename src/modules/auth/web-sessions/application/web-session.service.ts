@@ -208,16 +208,23 @@ export class WebSessionService implements WebSessionServicePort {
     // stays available while the token is unexpired.
     const token = this.tokenIssuer.issue(now);
     const tokenHash = this.verificationTokens.hash(input.token);
+    let userAccountId: string | undefined;
     let proof: Awaited<ReturnType<typeof proveVerificationPassword>>;
     try {
       proof = await proveVerificationPassword(
-        { store: this.verificationTokenStore, hasher: this.passwordHasher },
+        {
+          store: this.verificationTokenStore,
+          hasher: this.passwordHasher,
+          rememberUserAccountId: (userId) => {
+            userAccountId = userId;
+          },
+        },
         { tokenHash, password: input.password, now },
       );
     } catch (error) {
       recordCredentialLoginFailure(
         error,
-        undefined,
+        userAccountId,
         this.clock,
         this.securityEvents,
       );
@@ -246,7 +253,7 @@ export class WebSessionService implements WebSessionServicePort {
       const error = verificationPasswordInvalid();
       recordCredentialLoginFailure(
         error,
-        undefined,
+        userAccountId,
         this.clock,
         this.securityEvents,
       );

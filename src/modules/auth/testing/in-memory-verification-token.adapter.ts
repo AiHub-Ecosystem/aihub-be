@@ -77,6 +77,7 @@ export class InMemoryVerificationTokenAdapter
       return undefined;
     }
     return {
+      userId: account.userId,
       requiresPassword: token.requiresPassword ?? false,
       passwordHash: account.passwordHash,
     };

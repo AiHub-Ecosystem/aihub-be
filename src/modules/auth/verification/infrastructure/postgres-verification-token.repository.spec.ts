@@ -69,6 +69,33 @@ function admitted(options: { readonly factorId?: string } = {}): unknown[] {
 }
 
 describe('PostgresVerificationTokenRepository', () => {
+  it('reads the account ID alongside a verification credential', async () => {
+    const script = new ScriptedPrisma();
+    script.outside = [
+      [
+        {
+          user_account_id: USER_ID,
+          requires_password: true,
+          password_hash: 'argon2:registered password',
+        },
+      ],
+    ];
+
+    await expect(
+      repositoryOver(script).readVerificationCredential({
+        tokenHash: input.tokenHash,
+        now: input.now,
+      }),
+    ).resolves.toEqual({
+      userId: USER_ID,
+      requiresPassword: true,
+      passwordHash: 'argon2:registered password',
+    });
+
+    expect(script.statements[0]?.name).toContain(
+      'account.id AS user_account_id',
+    );
+  });
   it('invalidates open tokens before inserting a resend token for pending accounts', async () => {
     const script = new ScriptedPrisma();
     script.inside = [

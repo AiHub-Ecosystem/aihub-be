@@ -331,7 +331,7 @@ export function verificationTokenRepositoryContract(
 
       await expect(
         repo.readVerificationCredential({ tokenHash: hash, now }),
-      ).resolves.toEqual({ requiresPassword: true, passwordHash });
+      ).resolves.toEqual({ userId, requiresPassword: true, passwordHash });
 
       await harness.setAccountStatus(userId, 'active');
       await expect(
