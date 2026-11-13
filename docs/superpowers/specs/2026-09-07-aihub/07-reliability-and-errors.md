@@ -75,6 +75,8 @@ new CircuitBreaker(call, {
 
 **Only 5xx / timeouts / transport connection faults, and downstream `401` / `403`, count as failures.** Other `4xx` responses from downstream **never** count — the service is healthy; the client simply submitted invalid parameters. Counting those would allow a single client sending invalid payloads to trip the circuit breaker and knock out service for **all other customers**. `401` and `403` are the exception: they mean the service rejected AIHUB's own credential, not the customer's input, so every request fails and the breaker opens (`isDownstreamFault`, #845). `408` and `425` do not count.
 
+Local admission refusals marked `ai_service:bulkhead_exhausted` do not count toward the circuit breaker: they were never sent to the provider. Pre-send transport faults such as connection refusal still count as provider failures.
+
 Open breaker → `503 AI_SERVICE_UNAVAILABLE`, with `retry_after_ms` indicating time until the next exploratory probe.
 
 ## I.4 Idempotency — Full Lifecycle

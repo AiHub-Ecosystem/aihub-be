@@ -18,6 +18,7 @@ type OperationBreaker = CircuitBreaker<
 
 function isCircuitFailure(error: unknown, operation: OperationId): boolean {
   if (!(error instanceof AppError)) return false;
+  if (error.diagnostic === 'ai_service:bulkhead_exhausted') return false;
   if (operation === 'speaking.grading' && error.code === 'AUDIO_UNREADABLE') {
     return false;
   }
