@@ -10,6 +10,10 @@ async function reset(): Promise<void> {
   });
   redis.on('error', () => undefined);
   try {
+    await database.query(
+      "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = 'aihub_email_delivery'",
+    );
+    await database.query('DROP PUBLICATION IF EXISTS aihub_email_delivery');
     await database.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public');
     await redis.flushall();
     await database.query('SELECT 1');
