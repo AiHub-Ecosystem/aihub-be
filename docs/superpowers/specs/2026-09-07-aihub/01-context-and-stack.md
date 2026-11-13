@@ -91,6 +91,10 @@ Additionally: `url` in Task 1 is a client-supplied URL that Writing fetches dire
 | Deployment       | **Docker Compose on 1 VPS**                                    | K8s, ECS, Cloud Run           | 2–3 devs without DevOps. Exit trigger documented in [10 §N.5](10-deployment-roadmap.md#n5-triggers-to-exit-this-architecture)                     |
 | Secrets          | **`.env` chmod 600**                                           | Vault, SOPS, Doppler          | Below threshold. Trigger in [05 §G.9](05-auth-identity.md#g9-secrets)                                                                             |
 
+ADR-0164 accepts Loki + Alloy as a log-only target. Loki is not deployed until
+the seven-day sizing and resource-cap gates pass. Application traces continue
+directly to Tempo; Alloy does not collect traces.
+
 ### Evaluating candidate stack from brief §14
 
 | Item from brief                          | Verdict                | Notes                                                                                                                                 |

@@ -6,23 +6,46 @@ This runbook covers the host, container, shared PostgreSQL, Redis, and TLS signa
 
 The shared stack's non-secret source of truth is the private [aihub-monitoring-config repository](https://github.com/AiHub-Ecosystem/aihub-monitoring-config). The host's environment and mounted secret files are restored from Vault and stay outside that checkout. The clean-host runbook is below. On 2026-11-05 the owner confirmed that its rehearsal met the four-hour objective; attach the dated start/finish log and measured RTO to #237 as closure evidence.
 
-The monitoring data volumes are local. A lost monitoring host means complete loss of retained Prometheus and Tempo history; this recovery plan does not restore history. The tracked settings and 2026-10-27 deployment evidence show 30 days for the shared Prometheus, 14 days/512 MB for AIHUB Prometheus, and 48 hours for Tempo. These are retention limits, not backups.
+The monitoring data volumes are local. A lost monitoring host means complete loss of retained Prometheus and Tempo history; this recovery plan does not restore history. ADR-0164 adds planned Loki history with the same no-backup behavior. The tracked settings and 2026-10-27 deployment evidence show 30 days for the shared Prometheus, 14 days/512 MB for AIHUB Prometheus, and 48 hours for Tempo. These are retention limits, not backups.
 
-The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means expected targets are healthy, rules are loaded and evaluating, Grafana and OTLP HTTPS are ready, Grafana login works, Tempo is ready, and a controlled Sandbox alert reaches its configured route. The objective excludes history restoration. The owner confirmed on 2026-11-05 that the rehearsal met the objective; the dated log and measured RTO still need to be attached to #237. #826 separately owns the monitoring-host reboot drill. The monitoring-host owner register is tracked in [#362](https://github.com/AiHub-Ecosystem/aihub-be/issues/362); the linked joint-host-loss recovery work is tracked in [#454](https://github.com/AiHub-Ecosystem/aihub-be/issues/454).
+The clean-host recovery objective is four hours from declaring the monitoring host lost. Complete recovery means expected targets are healthy, rules are loaded and evaluating, Grafana and OTLP HTTPS are ready, Grafana login works, Tempo is ready, and a controlled Sandbox alert reaches its configured route. After ADR-0164 is deployed, recovery also requires Loki readiness, a healthy Alloy log path from Production/Sandbox, and a searchable controlled log record. The objective excludes history restoration. The owner confirmed on 2026-11-05 that the existing rehearsal met the objective; it predates Loki/Alloy, and the dated log and measured RTO still need to be attached to #237. #826 separately owns the monitoring-host reboot drill. The monitoring-host owner register is tracked in [#362](https://github.com/AiHub-Ecosystem/aihub-be/issues/362); the linked joint-host-loss recovery work is tracked in [#454](https://github.com/AiHub-Ecosystem/aihub-be/issues/454).
 
 ## Clean-host recovery runbook
 
-Use the Compose files, Nginx sites, Tempo configuration, dashboards, and AIHUB Prometheus snapshot from the version-controlled monitoring repository. Restore the protected environment files and mounted credentials from Vault; keep them outside the checkout with owner-only permissions. The recovery also needs the existing `monitoring` and `redis_default` Docker networks and the dependent shared-stack services that own them.
+Use the Compose files, Nginx sites, Tempo configuration, dashboards, and AIHUB Prometheus snapshot from the version-controlled monitoring repository. After ADR-0164 is deployed, restore the Loki configuration and Grafana datasource provisioning from that repository too. Restore the protected environment files and mounted credentials from Vault; keep them outside the checkout with owner-only permissions. The recovery also needs the existing `monitoring` and `redis_default` Docker networks and the dependent shared-stack services that own them.
 
 1. Start the four-hour timer when monitoring-host loss is declared. Provision the replacement host, restore SSH access and firewall policy, and point `grafana.aihubproduction.com` and `otel.aihubproduction.com` to it. Preserve the OTLP allowlist for the Production/Sandbox egress address `76.13.218.96/32`.
 2. Restore the protected shared-stack and AIHUB environment files and secret files from Vault. Keep `/home/ngoc_anh/infra/monitoring/.env` and the AIHUB exporter secrets outside Git; set the files to mode `0600` and their secret directory to `0700`.
 3. Clone `AiHub-Ecosystem/aihub-monitoring-config` to `/home/ngoc_anh/aihub-monitoring-config`. Keep the Compose project name `monitoring` so its named volumes attach if the old host is still available; on a truly clean host, create empty volumes and accept the history loss described above.
 4. Install `nginx/grafana-otel-bootstrap.conf`, reload Nginx, and issue the two-name certificate with Certbot's webroot at `/var/www/letsencrypt`. Install `nginx/grafana-otel.conf` and `certbot/deploy-hook.sh`, run `nginx -t`, then reload Nginx.
-5. Validate and start the shared stack with `docker compose --project-name monitoring --env-file /home/ngoc_anh/infra/monitoring/.env config --quiet` and the same command with `up -d`.
+5. Validate and start the shared stack with `docker compose --project-name monitoring --env-file /home/ngoc_anh/infra/monitoring/.env config --quiet` and the same command with `up -d`. After ADR-0164 is deployed, verify Loki readiness and the provisioned Grafana datasource.
 6. From the repository's `aihub/` directory, validate and start `exporters.compose.yml` with the protected AIHUB environment file and `--profile monitoring`. This restores AIHUB Prometheus, exporters, and the restricted Production SSH tunnel. Restore its host-job cron entries and scheduled drift check from the tracked operations instructions.
-7. Verify both HTTPS routes, Grafana authentication, Tempo readiness, all expected Prometheus targets, loaded rule health and fingerprint, certificate probes, and a searchable real AIHUB trace. Run the controlled Sandbox L.4 alert drill and confirm the configured notification route receives it before stopping the timer.
+7. Verify both HTTPS routes, Grafana authentication, Tempo readiness, all expected Prometheus targets, loaded rule health and fingerprint, certificate probes, and a searchable real AIHUB trace. After ADR-0164 is deployed, verify Alloy is shipping only the selected AIHUB app and Nginx logs, and search for a controlled log record in Loki. Run the controlled Sandbox L.4 alert drill and confirm the configured notification route receives it before stopping the timer.
 
 Record the start/end time, restored configuration commit, checks, and any gaps in #237 and link this section from #454. The procedure itself is not evidence that the recovery has been rehearsed; use the dated rehearsal record.
+
+## Planned centralized log pipeline
+
+ADR-0164 accepts Loki on the monitoring host and Alloy on the Production/Sandbox
+application host. Alloy's collection boundary is the AIHUB app containers and
+AIHUB-specific Nginx access logs only. Loki and the Grafana datasource are
+operator-only; no customer access or per-Organization dashboards are part of
+this decision. Traces continue directly to Tempo.
+
+Use Loki as the primary historical search path. Keep
+`scripts/ops/logs/request-log-lookup.sh` as the local fallback for the Docker,
+deploy-snapshot, and AIHUB Nginx copies. Follow the request ID from a Loki log
+line to the matching Tempo trace and usage record. The maximum age is 30 days
+for Loki and every local copy; existing size limits may expire records sooner.
+The Docker and Nginx rotations still need age enforcement under #601.
+
+This pipeline is not deployed. Before Production deployment, collect a
+representative seven-day volume sample, derive 30-day storage needs, set hard
+CPU, memory, and disk caps for Loki and Alloy, and record the caps and
+full-disk behavior in the private monitoring configuration repository. Create
+and link an implementation issue before deployment work starts. Keep all
+credentials in Vault. There is no off-host Loki backup; losing the monitoring
+host loses its retained log history.
 
 ## Grafana and OTLP HTTPS routes
 

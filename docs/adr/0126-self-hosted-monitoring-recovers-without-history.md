@@ -1,6 +1,6 @@
 # ADR-0126: Self-hosted monitoring recovers without historical telemetry
 
-- Status: Accepted
+- Status: Accepted; Loki history-loss and recovery scope amended by [ADR-0164](0164-centralized-log-pipeline-with-loki-and-alloy.md)
 - Date: 2026-10-24
 - Related: [ADR-0063](0063-request-tracing-through-otlp.md), #237, #412, #456, #481, #826
 
