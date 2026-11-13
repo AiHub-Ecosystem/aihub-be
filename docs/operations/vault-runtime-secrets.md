@@ -12,8 +12,10 @@ AIHUB supports two explicit sources:
   `AIHUB_RUNTIME_SECRETS_FILE=<agent-rendered JSON path>` — downstream AI,
   Resend, JWT, and SeaweedFS credentials.
 - `AIHUB_RUNTIME_CONNECTION_SECRETS_FILE=<agent-rendered JSON path>` —
-  database, Redis, and sandbox signing material. The process bootstrap selects
-  the production or sandbox connection before Nest wiring.
+  database, Redis, sandbox signing material, and the optional identity-cache
+  HMAC key. The process bootstrap selects the production or sandbox connection
+  before Nest wiring. The Redis bundle keys are `identity_cache_hmac_key` and
+  `sandbox_identity_cache_hmac_key`.
 - `AIHUB_EMAIL_WAL_SECRETS_FILE=<agent-rendered JSON path>` — the direct
   replication login for email delivery WAL. It stays in a separate document so
   previous images can ignore this newly added secret.
@@ -46,6 +48,17 @@ during a temporary Vault/Agent outage; it does not read Vault per request.
 6. Roll the change across the deployment only after the first instance is
    healthy, then remove the migrated long-lived credentials from deployment
    environments.
+
+Identity-cache integrity uses a reader-first rollout. First deploy the
+optional-key reader while the rendered Redis bundle still omits both keys; it
+bypasses Redis identity entries when they are absent. After every serving
+process runs a reader-capable image, a later release adds independent
+`randomBytes(32)` base64url keys for each environment to the Vault Redis bundles
+(`identity_cache_hmac_key` and `sandbox_identity_cache_hmac_key`) and updates
+the Agent template. Rotate one active key at a time; old entries become misses
+and rebuild. Rollback must remain on a reader-capable image while either key is
+present; a pre-reader image must not return while signed entries remain in
+Redis.
 
 ## Rotation and rollback
 

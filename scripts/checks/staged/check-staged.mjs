@@ -15,11 +15,32 @@ export function parseStagedPaths(output) {
   return output.split('\0').filter(Boolean);
 }
 
-/** @param {string} command @param {string[]} args */
-function runCommand(command, args) {
+/**
+ * Builds the environment passed to spawned check commands. #1894: unsets keys
+ * explicitly passed as undefined (such as REDIS_URL and DATABASE_URL for Jest)
+ * so unit tests do not inherit live service connection strings from .env or shell.
+ * @param {{ env?: Record<string, string | undefined> }} [options]
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function buildStagedCommandEnv(options) {
+  const env = { ...process.env, GOMAXPROCS: '1' };
+  if (options?.env) {
+    for (const [key, val] of Object.entries(options.env)) {
+      if (val === undefined) {
+        delete env[key];
+      } else {
+        env[key] = val;
+      }
+    }
+  }
+  return env;
+}
+
+/** @param {string} command @param {string[]} args @param {{ env?: Record<string, string | undefined> }} [options] */
+function runCommand(command, args, options) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
-    env: { ...process.env, GOMAXPROCS: '1' },
+    env: buildStagedCommandEnv(options),
     stdio: 'inherit',
   });
 
@@ -31,7 +52,7 @@ function runCommand(command, args) {
   return result.status ?? 1;
 }
 
-/** @typedef {(command: string, args: string[]) => number} CommandRunner */
+/** @typedef {(command: string, args: string[], options?: { env?: Record<string, string | undefined> }) => number} CommandRunner */
 /** @param {{ stagedFiles: string[], runCommand?: CommandRunner }} options */
 export function runStagedChecks({ stagedFiles, runCommand: run = runCommand }) {
   if (stagedFiles.length === 0) return 0;
@@ -77,15 +98,29 @@ export function runStagedChecks({ stagedFiles, runCommand: run = runCommand }) {
   }
 
   if (sourceFiles.length > 0) {
-    exitCode = run(process.execPath, [
-      'x',
-      'jest',
-      '--findRelatedTests',
-      '--coverage=false',
-      '--passWithNoTests',
-      '--runInBand',
-      ...sourceFiles,
-    ]);
+    // #1894: Bun auto-loads .env at startup, injecting dev services (REDIS_URL,
+    // DATABASE_URL) into process.env. When Jest inherits REDIS_URL, AppModule in
+    // HTTP/auth integration suites instantiates live Redis connections that hang
+    // during app.close() in afterAll and exceed the 5s hook timeout. Strip
+    // connection strings to keep the staged unit lane hermetic.
+    exitCode = run(
+      process.execPath,
+      [
+        'x',
+        'jest',
+        '--findRelatedTests',
+        '--coverage=false',
+        '--passWithNoTests',
+        '--runInBand',
+        ...sourceFiles,
+      ],
+      {
+        env: {
+          REDIS_URL: undefined,
+          DATABASE_URL: undefined,
+        },
+      },
+    );
   }
 
   return exitCode;

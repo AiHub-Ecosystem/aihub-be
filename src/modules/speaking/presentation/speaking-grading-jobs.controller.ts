@@ -7,10 +7,8 @@ import {
   Param,
   Post,
   Req,
-  Res,
   UseGuards,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
@@ -70,9 +68,7 @@ export class SpeakingGradingJobsController {
   async submit(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown,
-    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SpeakingGradingJobSubmitResponse> {
-    reply.header('Cache-Control', 'no-store');
     const authenticated = getAuthenticatedApiKey(request);
     const identity = request.aihubIdentity;
     if (identity === undefined) throw userIdentityRequired();
@@ -115,9 +111,7 @@ export class SpeakingGradingJobsController {
   async poll(
     @Req() request: AuthenticatedRequest,
     @Param('jobId') jobId: string,
-    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SpeakingGradingJobPollResponse> {
-    reply.header('Cache-Control', 'no-store');
     const result = await this.getJob.execute({
       owner: ownerFor(request),
       jobId,

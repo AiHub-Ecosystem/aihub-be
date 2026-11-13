@@ -17,7 +17,13 @@ import {
 } from '@/catalog/public-api-majors';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
 import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
-import { buildOpenApiDocument } from './build-openapi-document';
+
+async function openApiDocument(major?: PublicApiMajorDef): Promise<unknown> {
+  const { buildOpenApiDocument } = await import('./build-openapi-document');
+  return major === undefined
+    ? buildOpenApiDocument(latestPublicApiMajor())
+    : buildOpenApiDocument(major);
+}
 
 const VERSIONED_DOCUMENT = /^v([1-9][0-9]*)\.json$/u;
 
@@ -92,23 +98,25 @@ const DOCS_CONTENT_SECURITY_POLICY =
 @Controller()
 export class OpenApiController {
   @Get('openapi.json')
-  getSpec(): unknown {
+  async getSpec(): Promise<unknown> {
     // Built fresh from the running catalog on every call rather than reading
     // the committed `openapi.json` off disk — the AC requires the served
     // spec to always match the running build with no regeneration step
     // anyone can forget. The committed file exists for git diffing and for
     // `bun run generate:postman`'s input, not as this endpoint's source.
-    return buildOpenApiDocument(latestPublicApiMajor());
+    return openApiDocument();
   }
 
   /** Each supported major's contract; a retired major's is no longer served. */
   @Get('openapi/:document')
-  getVersionedSpec(@Param('document') document: string): unknown {
+  async getVersionedSpec(
+    @Param('document') document: string,
+  ): Promise<unknown> {
     const major = versionedDocumentMajor(document);
     if (major === undefined) {
       throw new NotFoundException();
     }
-    return buildOpenApiDocument(major);
+    return openApiDocument(major);
   }
 
   @Get('docs')

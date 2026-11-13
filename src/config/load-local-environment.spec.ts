@@ -7,34 +7,37 @@ import { loadLocalEnvironment } from './load-local-environment';
 describe('loadLocalEnvironment', () => {
   let directory: string;
   let errorSpy: jest.SpyInstance;
-  let loadSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'aihub-local-env-'));
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    loadSpy = jest.spyOn(process, 'loadEnvFile').mockImplementation(() => {});
   });
 
   afterEach(async () => {
     errorSpy.mockRestore();
-    loadSpy.mockRestore();
     await rm(directory, { force: true, recursive: true });
   });
 
   async function writeEnvFile(): Promise<void> {
-    await writeFile(join(directory, '.env'), 'AIHUB_PROBE=1\n', 'utf8');
+    await writeFile(
+      join(directory, '.env'),
+      'AIHUB_LOCAL_ENV_PROBE=1\n',
+      'utf8',
+    );
   }
 
   it('loads the file in development and test modes', async () => {
     await writeEnvFile();
 
+    delete process.env['AIHUB_LOCAL_ENV_PROBE'];
     loadLocalEnvironment('development', directory);
-    expect(loadSpy).toHaveBeenCalledWith(join(directory, '.env'));
+    expect(process.env['AIHUB_LOCAL_ENV_PROBE']).toBe('1');
     expect(errorSpy).not.toHaveBeenCalled();
 
-    loadSpy.mockClear();
+    delete process.env['AIHUB_LOCAL_ENV_PROBE'];
     loadLocalEnvironment('test', directory);
-    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(process.env['AIHUB_LOCAL_ENV_PROBE']).toBe('1');
+    delete process.env['AIHUB_LOCAL_ENV_PROBE'];
   });
 
   it('loads the file when the mode is unset, preserving the local-run behavior', async () => {
@@ -42,8 +45,9 @@ describe('loadLocalEnvironment', () => {
 
     loadLocalEnvironment(undefined, directory);
 
-    expect(loadSpy).toHaveBeenCalledWith(join(directory, '.env'));
+    expect(process.env['AIHUB_LOCAL_ENV_PROBE']).toBe('1');
     expect(errorSpy).not.toHaveBeenCalled();
+    delete process.env['AIHUB_LOCAL_ENV_PROBE'];
   });
 
   it('refuses the file in production and staging modes instead of consuming it', async () => {
@@ -51,11 +55,10 @@ describe('loadLocalEnvironment', () => {
 
     for (const mode of ['production', 'staging']) {
       errorSpy.mockClear();
-      loadSpy.mockClear();
 
       loadLocalEnvironment(mode, directory);
 
-      expect(loadSpy).not.toHaveBeenCalled();
+      expect(process.env['AIHUB_LOCAL_ENV_PROBE']).toBeUndefined();
       expect(errorSpy).toHaveBeenCalledTimes(1);
       const [loggedLine] = (errorSpy.mock.calls as unknown[][])[0] ?? [];
       expect(typeof loggedLine).toBe('string');
@@ -71,7 +74,29 @@ describe('loadLocalEnvironment', () => {
   it('does nothing when the directory carries no .env file', () => {
     loadLocalEnvironment('development', directory);
 
-    expect(loadSpy).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('names a malformed line instead of importing it into the process', async () => {
+    await writeFile(join(directory, '.env'), 'A=1\nBROKEN LINE\n', 'utf8');
+
+    expect(() => loadLocalEnvironment('development', directory)).toThrow(
+      '.env',
+    );
+    expect(process.env['A']).toBeUndefined();
+  });
+
+  it('preserves values already set by the operator', async () => {
+    await writeFile(
+      join(directory, '.env'),
+      'AIHUB_LOCAL_ENV_PROBE=file\n',
+      'utf8',
+    );
+    process.env['AIHUB_LOCAL_ENV_PROBE'] = 'operator';
+
+    loadLocalEnvironment('development', directory);
+
+    expect(process.env['AIHUB_LOCAL_ENV_PROBE']).toBe('operator');
+    delete process.env['AIHUB_LOCAL_ENV_PROBE'];
   });
 });

@@ -158,10 +158,8 @@ import { PostgresOrganizationCreationRepository } from './organizations/infrastr
 import { PostgresOrganizationRenameRepository } from './organizations/infrastructure/postgres-organization-rename.repository';
 import { OrganizationController } from './organizations/presentation/organization.controller';
 import { createIdentityTransactionRunner } from './shared/infrastructure/postgres-identity.client';
-import {
-  RedisAuthFailureCounter,
-  RedisIdentityStore,
-} from './shared/infrastructure/redis-identity.store';
+import { RedisAuthFailureCounter } from './shared/infrastructure/redis-auth-failure-counter';
+import { RedisIdentityStore } from './shared/infrastructure/redis-identity.store';
 import { UserIdentityGuard } from './shared/presentation/user-identity.guard';
 import {
   JWKS_CACHE,
@@ -531,7 +529,11 @@ type IdentityTransactionClient = ReturnType<
       provide: API_KEY_CACHE,
       inject: [RUNTIME_CONNECTION_CONFIGURATION],
       useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
-        new RedisIdentityStore(configuration.redisUrl ?? ''),
+        new RedisIdentityStore(
+          configuration.redisUrl ?? '',
+          undefined,
+          configuration.identityCacheHmacKey,
+        ),
     },
     {
       provide: JWKS_CACHE,

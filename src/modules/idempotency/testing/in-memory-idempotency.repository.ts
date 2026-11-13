@@ -26,10 +26,13 @@ export class InMemoryIdempotencyRepository
 {
   private readonly records = new Map<string, StoredIdempotencyRecord>();
 
+  /** `clock` returns epoch milliseconds; a spec injects one to move time. */
+  constructor(private readonly clock: () => number = Date.now) {}
+
   reserve(input: ReserveIdempotencyInput): Promise<IdempotencyReservation> {
     const key = `${input.organizationId}:${input.operation}:${input.idempotencyKey}`;
     const existing = this.records.get(key);
-    const now = new Date();
+    const now = new Date(this.clock());
     if (existing === undefined) {
       this.records.set(key, {
         fingerprintHex: input.fingerprintHex,
@@ -77,7 +80,7 @@ export class InMemoryIdempotencyRepository
     const existing = this.records.get(key);
     return Promise.resolve(
       existing !== undefined &&
-        existing.expiresAt.getTime() > Date.now() &&
+        existing.expiresAt.getTime() > this.clock() &&
         existing.state === 'completed' &&
         existing.fingerprintHex === input.fingerprintHex
         ? {
@@ -127,7 +130,7 @@ export class InMemoryIdempotencyRepository
   }
 
   cleanupExpired(): Promise<number> {
-    const now = new Date();
+    const now = new Date(this.clock());
     let count = 0;
     for (const [key, record] of this.records) {
       if (record.expiresAt.getTime() <= now.getTime()) {

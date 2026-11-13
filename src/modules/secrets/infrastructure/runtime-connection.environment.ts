@@ -45,6 +45,7 @@ export function loadRuntimeConnectionEnvironment(
   if (path === undefined || path.length === 0) {
     return;
   }
+  delete env['AIHUB_IDENTITY_CACHE_HMAC_KEY'];
 
   let raw: string;
   try {
@@ -91,7 +92,13 @@ export function loadRuntimeConnectionEnvironment(
   );
   assertAllowedKeys(
     redis,
-    ['url', 'sandbox_url', 'email_send_rate_url'],
+    [
+      'url',
+      'sandbox_url',
+      'email_send_rate_url',
+      'identity_cache_hmac_key',
+      'sandbox_identity_cache_hmac_key',
+    ],
     'Redis runtime secret bundle',
   );
 
@@ -186,6 +193,16 @@ export function loadRuntimeConnectionEnvironment(
     scope === 'sandbox' ? 'sandbox_url' : 'url',
     scope === 'sandbox' ? 'sandbox Redis URL' : 'Redis URL',
   );
+  const identityCacheHmacKey = optionalRecordString(
+    redis,
+    scope === 'sandbox'
+      ? 'sandbox_identity_cache_hmac_key'
+      : 'identity_cache_hmac_key',
+    'identity cache HMAC key',
+  );
+  if (identityCacheHmacKey !== undefined) {
+    env['AIHUB_IDENTITY_CACHE_HMAC_KEY'] = identityCacheHmacKey;
+  }
   env['AIHUB_EMAIL_SEND_RATE_REDIS_URL'] = requiredRecordString(
     redis,
     'email_send_rate_url',
@@ -280,4 +297,19 @@ function requiredRecordString(
     `required runtime connection is missing: ${label}`,
     configurationError,
   );
+}
+
+function optionalRecordString(
+  record: SecretDocument,
+  key: string,
+  label: string,
+): string | undefined {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw configurationError(
+      `optional runtime connection is invalid: ${label}`,
+    );
+  }
+  return value;
 }

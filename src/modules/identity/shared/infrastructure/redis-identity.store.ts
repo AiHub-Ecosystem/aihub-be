@@ -1,20 +1,12 @@
-import { internalError } from '@/common/errors/app-error';
 import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
-import { Logger } from '@nestjs/common';
-import Redis from 'ioredis';
 
 import {
   type ApiKeyCacheInvalidationSeam,
   recordRedisUnavailable,
 } from '@/common/observability/redis-unavailable-metric';
-import { createRedisClient } from '@/common/redis/create-redis-client';
-import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
-import { numberReply } from '@/common/redis/number-reply';
-import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import {
   type ApiKeyCachePort,
   type ApiKeyRecord,
-  type AuthFailureCounterPort,
   apiKeyCacheKey,
   apiKeyCacheMissKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
@@ -25,93 +17,16 @@ import type {
   JwksCacheSnapshot,
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
+import {
+  signIdentityCacheEntry,
+  verifyIdentityCacheEntry,
+} from './identity-cache-envelope';
+import { recordIdentityCacheIntegrityRejection } from './identity-cache-integrity-metric';
 import { putBounded, shortenedTtl } from './local-cache-policy';
-
-export interface RedisIdentityClient {
-  get(key: string): Promise<string | null>;
-  pttl(key: string): Promise<number>;
-  set(
-    key: string,
-    value: string,
-    mode: 'EX',
-    seconds: number,
-    condition?: 'NX',
-  ): Promise<unknown>;
-  del(...keys: string[]): Promise<number>;
-  incr(key: string): Promise<number>;
-  eval(
-    script: string,
-    numberOfKeys: number,
-    ...args: readonly (string | number)[]
-  ): Promise<number>;
-  expire(key: string, seconds: number): Promise<number>;
-  quit(): Promise<unknown>;
-}
-
-class IoredisIdentityClient implements RedisIdentityClient {
-  constructor(private readonly client: Redis) {}
-
-  get(key: string): Promise<string | null> {
-    return this.client.get(key);
-  }
-
-  pttl(key: string): Promise<number> {
-    return this.client.pttl(key);
-  }
-
-  set(
-    key: string,
-    value: string,
-    mode: 'EX',
-    seconds: number,
-    condition?: 'NX',
-  ): Promise<unknown> {
-    return condition === undefined
-      ? this.client.set(key, value, mode, seconds)
-      : this.client.set(key, value, mode, seconds, condition);
-  }
-
-  del(...keys: string[]): Promise<number> {
-    return this.client.del(...keys);
-  }
-
-  incr(key: string): Promise<number> {
-    return this.client.incr(key);
-  }
-
-  eval(
-    script: string,
-    numberOfKeys: number,
-    ...args: readonly (string | number)[]
-  ): Promise<number> {
-    return this.client.eval(script, numberOfKeys, ...args).then(numberReply);
-  }
-
-  expire(key: string, seconds: number): Promise<number> {
-    return this.client.expire(key, seconds);
-  }
-
-  // A quit that cannot reach Redis leaves ioredis reconnecting, which keeps
-  // a shutting-down process alive; drop the connection instead.
-  quit(): Promise<unknown> {
-    return this.client.quit().catch(() => this.client.disconnect());
-  }
-}
-
-// docs/operations/redis-round-trip.md: at least three times the measured p95
-// round trip to Redis, rounded up to 100 ms.
-const REDIS_COMMAND_TIMEOUT_MS = 400;
-
-function connect(url: string): RedisIdentityClient | undefined {
-  if (url.trim().length === 0) {
-    return undefined;
-  }
-
-  const client = createRedisClient(url, {
-    commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
-  });
-  return new IoredisIdentityClient(client);
-}
+import {
+  type RedisIdentityClient,
+  connectRedisIdentityClient,
+} from './redis-identity-client';
 
 function jwksKey(
   organizationId: string,
@@ -142,20 +57,40 @@ interface LocalApiKeyEntry {
 interface LocalJwksEntry {
   readonly generation: string;
   readonly entry: JwksCacheEntry;
+  readonly expiresAt: number;
+}
+
+interface ApiKeyCacheData {
+  readonly type: 'record' | 'miss';
+  readonly freshUntil: number;
+  readonly record?: unknown;
+}
+
+function parseApiKeyCacheData(value: unknown): ApiKeyCacheData | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const data = value as Record<string, unknown>;
+  if (
+    (data['type'] !== 'record' && data['type'] !== 'miss') ||
+    typeof data['freshUntil'] !== 'number' ||
+    !Number.isSafeInteger(data['freshUntil']) ||
+    (data['type'] === 'record' && data['record'] === undefined)
+  ) {
+    return undefined;
+  }
+  return {
+    type: data['type'],
+    freshUntil: data['freshUntil'],
+    record: data['record'],
+  };
 }
 
 function localJwksKey(organizationId: string, configVersion: string): string {
   return JSON.stringify([organizationId, configVersion]);
 }
 
-function parseJwksCacheEntry(serialized: string): JwksCacheEntry | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(serialized);
-  } catch {
-    return undefined;
-  }
-
+function parseJwksCacheEntry(value: unknown): JwksCacheEntry | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined;
   }
@@ -180,11 +115,13 @@ function parseJwksCacheEntry(serialized: string): JwksCacheEntry | undefined {
 
 export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   private readonly client: RedisIdentityClient | undefined;
+  private readonly hmacKey: Buffer | undefined;
   private readonly localApiKeys = new Map<string, LocalApiKeyEntry>();
   private readonly localJwks = new Map<string, LocalJwksEntry>();
 
-  constructor(url: string, client?: RedisIdentityClient) {
-    this.client = client ?? connect(url);
+  constructor(url: string, client?: RedisIdentityClient, hmacKey?: Buffer) {
+    this.client = client ?? connectRedisIdentityClient(url);
+    this.hmacKey = hmacKey;
   }
 
   async get(hashHex: string): Promise<ApiKeyRecord | null | undefined> {
@@ -194,41 +131,81 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       this.localApiKeys.delete(hashHex);
     }
 
-    if (this.client === undefined) {
+    if (this.client === undefined || this.hmacKey === undefined) {
       return undefined;
     }
 
     try {
-      const serialized = await this.client.get(apiKeyCacheKey(hashHex));
+      const cacheKey = apiKeyCacheKey(hashHex);
+      const serialized = await this.client.get(cacheKey);
       if (serialized !== null) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(serialized);
-        } catch {
-          parsed = undefined;
+        const verification = verifyIdentityCacheEntry({
+          key: this.hmacKey as Buffer,
+          kind: 'api_key',
+          redisKey: cacheKey,
+          serialized,
+        });
+        if (!verification.authenticated) {
+          recordIdentityCacheIntegrityRejection('api_key');
+          await this.client.del(cacheKey);
+          return undefined;
+        }
+        const data = parseApiKeyCacheData(verification.data);
+        if (data === undefined) {
+          await this.client.del(cacheKey);
+          return undefined;
         }
         const record =
-          parsed === undefined ? undefined : apiKeyRecordFromRow(parsed);
-        if (record !== undefined) {
-          const lookupStartedAt = performance.now();
-          const remainingMs = await this.client.pttl(apiKeyCacheKey(hashHex));
-          if (remainingMs <= 0) {
-            await this.client.del(apiKeyCacheKey(hashHex));
-            return undefined;
-          }
-          this.rememberApiKey(hashHex, record, lookupStartedAt + remainingMs);
-          return record;
+          data['type'] === 'record' && data['freshUntil'] > Date.now()
+            ? apiKeyRecordFromRow(data['record'])
+            : undefined;
+        if (record === undefined) {
+          await this.client.del(cacheKey);
+          return undefined;
         }
-        await this.client.del(apiKeyCacheKey(hashHex));
-        return undefined;
+        const lookupStartedAt = performance.now();
+        const remainingMs = Math.min(
+          await this.client.pttl(cacheKey),
+          data['freshUntil'] - Date.now(),
+        );
+        if (remainingMs <= 0) {
+          await this.client.del(cacheKey);
+          return undefined;
+        }
+        this.rememberApiKey(hashHex, record, lookupStartedAt + remainingMs);
+        return record;
       }
 
-      const miss = await this.client.get(apiKeyCacheMissKey(hashHex));
-      if (miss !== '1') return undefined;
+      const missKey = apiKeyCacheMissKey(hashHex);
+      const serializedMiss = await this.client.get(missKey);
+      if (serializedMiss === null) return undefined;
+      const missVerification = verifyIdentityCacheEntry({
+        key: this.hmacKey as Buffer,
+        kind: 'api_key',
+        redisKey: missKey,
+        serialized: serializedMiss,
+      });
+      if (!missVerification.authenticated) {
+        recordIdentityCacheIntegrityRejection('api_key');
+        await this.client.del(missKey);
+        return undefined;
+      }
+      const missData = parseApiKeyCacheData(missVerification.data);
+      if (missData === undefined) {
+        await this.client.del(missKey);
+        return undefined;
+      }
+      if (missData.type !== 'miss' || missData.freshUntil <= Date.now()) {
+        await this.client.del(missKey);
+        return undefined;
+      }
       const lookupStartedAt = performance.now();
-      const remainingMs = await this.client.pttl(apiKeyCacheMissKey(hashHex));
+      const remainingMs = Math.min(
+        await this.client.pttl(missKey),
+        missData.freshUntil - Date.now(),
+      );
       if (remainingMs <= 0) {
-        await this.client.del(apiKeyCacheMissKey(hashHex));
+        await this.client.del(missKey);
         return undefined;
       }
       this.rememberApiKey(hashHex, null, lookupStartedAt + remainingMs);
@@ -241,19 +218,35 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
   async set(hashHex: string, record: ApiKeyRecord): Promise<void> {
     const ttlSeconds = shortenedTtl(API_KEY_CACHE_POSITIVE_TTL_SECONDS);
+    const freshUntil = Date.now() + ttlSeconds * 1_000;
     this.rememberApiKey(
       hashHex,
       record,
       performance.now() + ttlSeconds * 1_000,
     );
-    if (this.client === undefined) return;
+    if (this.client === undefined || this.hmacKey === undefined) return;
 
-    const serialized = JSON.stringify({
-      ...record,
-      expiresAt: record.expiresAt?.toISOString() ?? null,
-    });
+    const cacheKey = apiKeyCacheKey(hashHex);
+    const data = {
+      type: 'record',
+      freshUntil,
+      record: {
+        ...record,
+        expiresAt: record.expiresAt?.toISOString() ?? null,
+      },
+    };
     await this.client
-      .set(apiKeyCacheKey(hashHex), serialized, 'EX', ttlSeconds)
+      .set(
+        cacheKey,
+        signIdentityCacheEntry(
+          this.hmacKey as Buffer,
+          'api_key',
+          cacheKey,
+          data,
+        ),
+        'EX',
+        ttlSeconds,
+      )
       .catch(() => {
         recordRedisUnavailable('api_key_cache');
       });
@@ -261,11 +254,21 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
 
   async setMiss(hashHex: string): Promise<void> {
     const ttlSeconds = shortenedTtl(API_KEY_CACHE_NEGATIVE_TTL_SECONDS);
+    const freshUntil = Date.now() + ttlSeconds * 1_000;
     this.rememberApiKey(hashHex, null, performance.now() + ttlSeconds * 1_000);
-    if (this.client === undefined) return;
+    if (this.client === undefined || this.hmacKey === undefined) return;
 
+    const cacheKey = apiKeyCacheMissKey(hashHex);
     await this.client
-      .set(apiKeyCacheMissKey(hashHex), '1', 'EX', ttlSeconds)
+      .set(
+        cacheKey,
+        signIdentityCacheEntry(this.hmacKey as Buffer, 'api_key', cacheKey, {
+          type: 'miss',
+          freshUntil,
+        }),
+        'EX',
+        ttlSeconds,
+      )
       .catch(() => {
         recordRedisUnavailable('api_key_cache');
       });
@@ -303,9 +306,17 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
         jwksGenerationKey(organizationId),
       );
       const generation = currentGeneration ?? '0';
-      const serialized = await this.client.get(
-        jwksKey(organizationId, configVersion, generation),
-      );
+      if (this.hmacKey === undefined) {
+        // Generation is invalidation metadata, not an unsigned cached entry.
+        return (
+          this.readLocalJwks(organizationId, configVersion, generation) ?? {
+            generation,
+          }
+        );
+      }
+
+      const cacheKey = jwksKey(organizationId, configVersion, generation);
+      const serialized = await this.client.get(cacheKey);
       if (serialized === null) {
         return (
           this.readLocalJwks(organizationId, configVersion, generation) ?? {
@@ -314,11 +325,24 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
         );
       }
 
-      const entry = parseJwksCacheEntry(serialized);
-      if (entry === undefined) {
-        await this.client.del(
-          jwksKey(organizationId, configVersion, generation),
+      const verification = verifyIdentityCacheEntry({
+        key: this.hmacKey as Buffer,
+        kind: 'jwks',
+        redisKey: cacheKey,
+        serialized,
+      });
+      if (!verification.authenticated) {
+        recordIdentityCacheIntegrityRejection('jwks');
+        await this.client.del(cacheKey);
+        return (
+          this.readLocalJwks(organizationId, configVersion, generation) ?? {
+            generation,
+          }
         );
+      }
+      const entry = parseJwksCacheEntry(verification.data);
+      if (entry === undefined) {
+        await this.client.del(cacheKey);
       }
       if (entry === undefined) {
         return (
@@ -327,7 +351,26 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
           }
         );
       }
-      this.rememberJwks(organizationId, configVersion, generation, entry);
+      const lookupStartedAt = performance.now();
+      const remainingMs = Math.min(
+        await this.client.pttl(cacheKey),
+        entry.staleUntil - Date.now(),
+      );
+      if (remainingMs <= 0) {
+        await this.client.del(cacheKey);
+        return (
+          this.readLocalJwks(organizationId, configVersion, generation) ?? {
+            generation,
+          }
+        );
+      }
+      this.rememberJwks(
+        organizationId,
+        configVersion,
+        generation,
+        entry,
+        lookupStartedAt + remainingMs,
+      );
       return { generation, entry };
     } catch {
       recordRedisUnavailable('jwks_cache');
@@ -346,16 +389,23 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     entry: JwksCacheEntry,
   ): Promise<void> {
     this.rememberJwks(organizationId, configVersion, generation, entry);
-    if (this.client === undefined) return;
+    if (
+      this.client === undefined ||
+      this.hmacKey === undefined ||
+      entry.staleUntil <= Date.now()
+    ) {
+      return;
+    }
 
     const ttlSeconds = Math.max(
       1,
       Math.ceil((entry.staleUntil - Date.now()) / 1_000),
     );
+    const cacheKey = jwksKey(organizationId, configVersion, generation);
     await this.client
       .set(
-        jwksKey(organizationId, configVersion, generation),
-        JSON.stringify(entry),
+        cacheKey,
+        signIdentityCacheEntry(this.hmacKey as Buffer, 'jwks', cacheKey, entry),
         'EX',
         ttlSeconds,
       )
@@ -368,7 +418,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   ): Promise<void> {
     this.localJwks.delete(localJwksKey(organizationId, configVersion));
     if (this.client === undefined) {
-      throw internalError('Redis is unavailable');
+      return;
     }
 
     const generationKey = jwksGenerationKey(organizationId);
@@ -378,7 +428,7 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   }
 
   async tryAcquireRefresh(organizationId: string): Promise<JwksRefreshLock> {
-    if (this.client === undefined) {
+    if (this.client === undefined || this.hmacKey === undefined) {
       return { acquired: false, available: false };
     }
 
@@ -420,12 +470,14 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     configVersion: string,
     generation: string,
     entry: JwksCacheEntry,
+    expiresAt = performance.now() + Math.max(0, entry.staleUntil - Date.now()),
   ): void {
-    if (entry.staleUntil <= Date.now()) return;
+    if (entry.staleUntil <= Date.now() || expiresAt <= performance.now())
+      return;
     putBounded(
       this.localJwks,
       localJwksKey(organizationId, configVersion),
-      { generation, entry },
+      { generation, entry, expiresAt },
       MAX_LOCAL_JWKS_ENTRIES,
     );
   }
@@ -438,96 +490,17 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
     const key = localJwksKey(organizationId, configVersion);
     const cached = this.localJwks.get(key);
     if (cached === undefined) return undefined;
-    if (cached.entry.staleUntil <= Date.now()) {
+    if (
+      cached.expiresAt <= performance.now() ||
+      cached.entry.staleUntil <= Date.now()
+    ) {
       this.localJwks.delete(key);
       return undefined;
     }
     if (generation !== undefined && cached.generation !== generation) {
+      this.localJwks.delete(key);
       return undefined;
     }
     return { generation: cached.generation, entry: cached.entry };
-  }
-}
-
-export class RedisAuthFailureCounter implements AuthFailureCounterPort {
-  private readonly client: RedisIdentityClient | undefined;
-  // Every outage counts the metric through the shared reporter; the recovered
-  // line waits until BOTH the read and write paths are healthy again, so the
-  // log covers the counter as a whole rather than either half.
-  private readonly health: RedisHealthReporter;
-  private readonly degradedOperations = new Set<'read' | 'write'>();
-
-  constructor(
-    url: string,
-    client?: RedisIdentityClient,
-    logger: Pick<Logger, 'warn' | 'log'> = new Logger(
-      RedisAuthFailureCounter.name,
-    ),
-  ) {
-    this.client = client ?? connect(url);
-    this.health = new RedisHealthReporter(
-      'auth_failure_counter',
-      'API-key authentication failure counter',
-      logger,
-      'brute-force protection is failing open until it recovers',
-    );
-  }
-
-  async get(ip: string): Promise<number> {
-    if (this.client === undefined) {
-      return 0;
-    }
-
-    try {
-      const value = await this.client.get(`aihub:v1:authfail:${ip}`);
-      const count = Number(value ?? '0');
-      this.reportRecovered('read');
-      return Number.isInteger(count) && count >= 0 ? count : 0;
-    } catch {
-      this.reportDegraded('read');
-      return 0;
-    }
-  }
-
-  async recordFailure(ip: string): Promise<number> {
-    const client = this.client;
-    if (client === undefined) {
-      return 0;
-    }
-
-    try {
-      const key = `aihub:v1:authfail:${ip}`;
-      const count = await incrementRedisCounterWithExpiry(
-        (script, numberOfKeys, ...args) =>
-          client.eval(script, numberOfKeys, ...args),
-        key,
-        300,
-      );
-      this.reportRecovered('write');
-      return count;
-    } catch {
-      this.reportDegraded('write');
-      return 0;
-    }
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.client?.quit().catch(() => undefined);
-  }
-
-  private reportDegraded(operation: 'read' | 'write'): void {
-    this.degradedOperations.add(operation);
-    this.health.reportDegraded();
-  }
-
-  private reportRecovered(operation: 'read' | 'write'): void {
-    if (
-      !this.degradedOperations.delete(operation) ||
-      this.degradedOperations.size > 0
-    ) {
-      return;
-    }
-
-    this.health.reportRecovered();
   }
 }

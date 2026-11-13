@@ -25,6 +25,7 @@ const pathCases = [
       'check:deprecation',
       'check:doc-drift',
       'check:domain-globals',
+      'check:duplication',
       'check:file-size',
       'check:folder-entries',
       'check:imports',
@@ -46,6 +47,7 @@ const pathCases = [
       'check:data-ownership',
       'check:deprecation',
       'check:doc-drift',
+      'check:duplication',
       'check:file-size',
       'check:folder-entries',
       'check:imports',
@@ -62,6 +64,7 @@ const pathCases = [
     path: 'src/modules/example/application/use-case.spec.ts',
     gates: [
       'check:doc-drift',
+      'check:duplication',
       'check:folder-entries',
       'lint',
       'test:jest-specs',
@@ -73,6 +76,7 @@ const pathCases = [
     path: 'src/modules/example/domain/policy.spec.ts',
     gates: [
       'check:doc-drift',
+      'check:duplication',
       'check:folder-entries',
       'lint',
       'test:jest-specs',
@@ -84,6 +88,7 @@ const pathCases = [
     path: 'src/modules/example/application/use-case.test.ts',
     gates: [
       'check:doc-drift',
+      'check:duplication',
       'check:folder-entries',
       'lint',
       'test:related',
@@ -93,6 +98,7 @@ const pathCases = [
   {
     path: 'test/unit/example.spec.ts',
     gates: [
+      'check:duplication',
       'check:folder-entries',
       'lint',
       'test:jest-specs',
@@ -102,20 +108,39 @@ const pathCases = [
   },
   {
     path: 'test/support/helper.ts',
-    gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
+    gates: [
+      'check:duplication',
+      'check:folder-entries',
+      'lint',
+      'test:related',
+      'type-check',
+    ],
   },
   {
     path: 'test/fixtures/ai-speaking/grading-no-speech.200.json',
-    gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
+    gates: [
+      'check:duplication',
+      'check:folder-entries',
+      'lint',
+      'test:related',
+      'type-check',
+    ],
   },
   {
     path: 'test/cli/request-log-lookup.spec.sh',
-    gates: ['check:folder-entries', 'lint', 'test:related', 'type-check'],
+    gates: [
+      'check:duplication',
+      'check:folder-entries',
+      'lint',
+      'test:related',
+      'type-check',
+    ],
   },
   {
     path: 'scripts/checks/data/check-app-errors.spec.ts',
     gates: [
       'check:doc-drift',
+      'check:duplication',
       'check:folder-entries',
       'lint',
       'test:jest-specs',
@@ -149,6 +174,33 @@ const pathCases = [
       'check:folder-entries',
       'lint',
       'test:issue-triage',
+    ],
+  },
+  {
+    path: 'scripts/checks/structure/check-duplication-register.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:duplication-register',
+    ],
+  },
+  {
+    path: 'scripts/checks/structure/check-duplication-register.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:duplication-register',
+    ],
+  },
+  {
+    path: 'scripts/checks/structure/check-duplication.spec.mjs',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:duplication',
     ],
   },
   {
@@ -260,6 +312,8 @@ const pathCases = [
       'test:commit-message',
       'test:commit-messages',
       'test:doc-drift',
+      'test:duplication',
+      'test:duplication-register',
       'test:generated-drift',
       'test:issue-triage',
       'test:lint-staged',
@@ -327,6 +381,7 @@ const pathCases = [
       'check:data-ownership',
       'check:deprecation',
       'check:doc-drift',
+      'check:duplication',
       'check:file-size',
       'check:imports',
       'check:imports:dist',
@@ -365,8 +420,15 @@ const pathCases = [
     // #1460: the gate configuration files select the gate whose behaviour
     // they control, so weakening one cannot produce a green run.
     path: 'package.json',
-    gates: ['knip', 'test:check-changed'],
+    gates: [
+      'check:duplication',
+      'knip',
+      'test:check-changed',
+      'test:duplication',
+    ],
   },
+  { path: '.jscpd.json', gates: ['check:duplication', 'test:duplication'] },
+  { path: 'bun.lock', gates: ['check:duplication', 'test:duplication'] },
   { path: 'tsconfig.json', gates: ['type-check'] },
   { path: 'tsconfig.scripts.json', gates: ['type-check:scripts'] },
   // #1787: knip.json carries the entry side of the declaration pairing.
@@ -582,6 +644,7 @@ await test('a mixed diff keeps the full union of gates (#1634)', () => {
     'check:data-ownership',
     'check:deprecation',
     'check:doc-drift',
+    'check:duplication',
     'check:file-size',
     'check:folder-entries',
     'check:imports',

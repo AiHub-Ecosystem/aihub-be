@@ -1,330 +1,26 @@
-import fastifyCookie from '@fastify/cookie';
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
 import type { LightMyRequestResponse } from 'fastify';
 
-import { AppModule } from '@/app.module';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
-import { createRequestLogging } from '@/common/observability/request-logger';
-import { generateRequestId } from '@/common/request-context/request-id';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
-  PASSWORD_HASHER,
-  type PasswordHasherPort,
-} from '@/modules/auth/local-credentials/application/password-hasher.port';
-import {
-  AUTH_MFA_SERVICE,
-  type AuthMfaServicePort,
-} from '@/modules/auth/mfa/application/auth-mfa-repository.port';
-import { PASSWORD_RESET_TOKEN_REPOSITORY } from '@/modules/auth/password-reset/application/password-reset-token-repository.port';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
-import { AUTH_CLOCK } from '@/modules/auth/shared/application/auth-clock';
-import {
-  type InMemoryAuthState,
-  type InMemoryWebSession,
-  createInMemoryAuthState,
-  seedAccount,
-} from '@/modules/auth/testing/in-memory-auth.state';
-import { InMemoryPasswordResetTokenAdapter } from '@/modules/auth/testing/in-memory-password-reset-token.adapter';
-import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
-import { InMemoryVerificationTokenAdapter } from '@/modules/auth/testing/in-memory-verification-token.adapter';
-import { InMemoryWebSessionAdapter } from '@/modules/auth/testing/in-memory-web-session.adapter';
-import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
-import {
-  VERIFICATION_TOKEN,
-  type VerificationTokenPort,
-} from '@/modules/auth/verification/application/verification-token.port';
-import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
-import { WEB_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/web-session-repository.port';
+  type AlternateCredential,
+  CLIENT_SECRET,
+  createWebSessionTestHelpers,
+  createWebSessionTestSuite,
+} from '@/modules/auth/testing/web-session.spec-support';
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
 
 const URL = '/v1/auth/web-sessions';
-const EXCHANGE_URL = '/v1/auth/web-sessions/exchange';
 const LOGOUT_URL = '/v1/auth/web-sessions/logout';
-const CLIENT_SECRET = 'bff-client-secret-value-that-must-not-leak';
-const END_USER_IP = '203.0.113.10';
-const USER_ID = 'usr_01J00000000000000000000000';
-const EMAIL = 'person@example.com';
-const PASSWORD = 'correct horse battery';
-const NOW = new Date('2026-10-08T00:00:00.000Z');
-
-class FakeClock {
-  value = new Date(NOW.getTime());
-  now(): Date {
-    return new Date(this.value);
-  }
-}
-
-class HasherFake implements PasswordHasherPort {
-  result = true;
-  async hash(password: string): Promise<string> {
-    return `$argon2id$fake:${password}`;
-  }
-  needsRehash(): boolean {
-    return false;
-  }
-  async verify(): Promise<boolean> {
-    return this.result;
-  }
-}
-
-class LimiterFake implements AuthRateLimiterPort {
-  allowed = true;
-  calls: Parameters<AuthRateLimiterPort['consume']>[0][] = [];
-
-  async check(): Promise<{ allowed: boolean }> {
-    return { allowed: this.allowed };
-  }
-
-  async consume(
-    input: Parameters<AuthRateLimiterPort['consume']>[0],
-  ): Promise<{ allowed: boolean }> {
-    this.calls.push(input);
-    return { allowed: this.allowed };
-  }
-}
-
-class MfaFake implements AuthMfaServicePort {
-  loginResult: Awaited<ReturnType<AuthMfaServicePort['loginProof']>> = {
-    kind: 'none',
-  };
-
-  async loginProof() {
-    return this.loginResult;
-  }
-
-  async beginEnrollment() {
-    return { secret: 'A'.repeat(32), otpauthUri: 'otpauth://totp/AIHUB:test' };
-  }
-
-  async confirmEnrollment() {
-    return ['ABCD-EFGH-IJKL-MNOP'];
-  }
-
-  async removeFactor(): Promise<void> {}
-}
-
-/** Hashes reversibly, so a test can seed the hash of a binding it knows. */
-class VerificationTokenFake implements VerificationTokenPort {
-  issue(now: Date): ReturnType<VerificationTokenPort['issue']> {
-    return {
-      id: 'evt_01J00000000000000000000000',
-      raw: 'issued-verification-token',
-      hash: this.hash('issued-verification-token'),
-      expiresAt: new Date(now.getTime() + 86_400_000),
-    };
-  }
-
-  hash(raw: string): string {
-    return `hash:${raw}`;
-  }
-}
-
-/** Stands in for container stdout, so redaction is asserted against real lines. */
-class CapturedLog {
-  private readonly lines: string[] = [];
-  write(line: string): void {
-    this.lines.push(line);
-  }
-  reset(): void {
-    this.lines.length = 0;
-  }
-  text(): string {
-    return this.lines.join('');
-  }
-
-  completion(): Record<string, unknown> {
-    const line = this.lines.find((entry) =>
-      entry.includes('"event":"request_completed"'),
-    );
-    if (line === undefined) {
-      throw new Error('no request completion event was logged');
-    }
-
-    return JSON.parse(line) as Record<string, unknown>;
-  }
-}
 
 describe('web session HTTP boundary', () => {
-  let app: NestFastifyApplication;
-  let state: InMemoryAuthState;
-  let webSessions: InMemoryWebSessionAdapter;
-  let verificationTokens: InMemoryVerificationTokenAdapter;
-  let hasher: HasherFake;
-  let limiter: LimiterFake;
-  let clock: FakeClock;
-  let provisioned: { secret: string | undefined };
-  let passwordResetTokens: InMemoryPasswordResetTokenAdapter;
-  const log = new CapturedLog();
-  const mfa = new MfaFake();
+  const suite = createWebSessionTestSuite(registerRequestCompletionLog);
+  const webSessionHelpers = createWebSessionTestHelpers(
+    () => suite.context,
+    URL,
+  );
 
-  beforeAll(async () => {
-    state = createInMemoryAuthState();
-    webSessions = new InMemoryWebSessionAdapter(state);
-    verificationTokens = new InMemoryVerificationTokenAdapter(state);
-    hasher = new HasherFake();
-    limiter = new LimiterFake();
-    clock = new FakeClock();
-    provisioned = { secret: CLIENT_SECRET };
-    passwordResetTokens = new InMemoryPasswordResetTokenAdapter(state);
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(new InMemoryUserAccountAdapter(state))
-      .overrideProvider(VERIFICATION_TOKEN_REPOSITORY)
-      .useValue(verificationTokens)
-      .overrideProvider(PASSWORD_RESET_TOKEN_REPOSITORY)
-      .useValue(passwordResetTokens)
-      .overrideProvider(VERIFICATION_TOKEN)
-      .useValue(new VerificationTokenFake())
-      .overrideProvider(WEB_SESSION_REPOSITORY)
-      .useValue(webSessions)
-      .overrideProvider(PASSWORD_HASHER)
-      .useValue(hasher)
-      .overrideProvider(AUTH_RATE_LIMITER)
-      .useValue(limiter)
-      .overrideProvider(AUTH_CLOCK)
-      .useValue(clock)
-      .overrideProvider(WEB_SESSION_CLIENT_SECRET)
-      .useValue({ resolve: () => provisioned.secret })
-      .overrideProvider(AUTH_MFA_SERVICE)
-      .useValue(mfa)
-      .compile();
-
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({
-        ...createRequestLogging(log),
-        genReqId: () => generateRequestId(),
-      }),
-    );
-    const fastify = app.getHttpAdapter().getInstance();
-    await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
-    registerSecurityHeaders(fastify);
-    registerRequestCompletionLog(fastify);
-    await app.init();
-    await fastify.ready();
-  });
-
-  afterAll(async () => {
-    await app.close();
-  });
-
-  beforeEach(() => {
-    state.reset();
-    webSessions.failCreateWebSession = false;
-    webSessions.failFindWebSession = false;
-    webSessions.failRenewWebSession = false;
-    webSessions.failRevokeWebSession = false;
-    verificationTokens.failSessionWrite = false;
-    hasher.result = true;
-    limiter.allowed = true;
-    limiter.calls = [];
-    clock.value = new Date(NOW.getTime());
-    provisioned.secret = CLIENT_SECRET;
-    mfa.loginResult = { kind: 'none' };
-    log.reset();
-  });
-
-  /** An account holder who already verified their email. */
-  function seedActiveAccount(): void {
-    seedAccount(state, {
-      userId: USER_ID,
-      email: EMAIL,
-      passwordHash: '$argon2id$fake',
-    });
-  }
-
-  /**
-   * A real Web Session token, created through the real route, so an exchange
-   * test holds a credential rather than a fixture that could drift from it.
-   */
-  async function webSessionToken(): Promise<string> {
-    const created = await create();
-    if (created.statusCode !== 201) {
-      throw new Error('the web session was never created');
-    }
-    return (created.json() as { data: { web_session_token: string } }).data
-      .web_session_token;
-  }
-
-  /** The durable row itself, which is what the renewal rules change. */
-  function storedSession(): InMemoryWebSession {
-    const [stored] = [...state.webSessions.values()];
-    if (stored === undefined) {
-      throw new Error('no web session is stored');
-    }
-    return stored;
-  }
-
-  /** A credential placed somewhere a Web Session route refuses to read it from. */
-  interface AlternateCredential {
-    readonly url: string;
-    readonly headers: Record<string, string>;
-  }
-
-  /**
-   * An exchange request whose client secret defaults to the provisioned one.
-   * Shared by every describe here: whether a session is still alive is observed
-   * by exchanging it, never by reading the row.
-   */
-  function exchange(
-    token: unknown,
-    options: {
-      readonly secret?: string | null;
-      readonly headers?: Record<string, string>;
-    } = {},
-  ): Promise<LightMyRequestResponse> {
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      ...options.headers,
-    };
-    if (options.secret !== null) {
-      headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
-    }
-    return app.inject({
-      method: 'POST',
-      url: EXCHANGE_URL,
-      headers,
-      payload: { web_session_token: token },
-    });
-  }
-
-  /** A create request whose client secret defaults to the provisioned one. */
-  function create(
-    options: {
-      readonly secret?: string | null;
-      readonly body?: unknown;
-      readonly endUserIp?: string | null;
-    } = {},
-  ): Promise<LightMyRequestResponse> {
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      ...(options.endUserIp === null
-        ? {}
-        : {
-            'x-aihub-end-user-ip': options.endUserIp ?? END_USER_IP,
-          }),
-    };
-    if (options.secret !== null) {
-      headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
-    }
-    return app.inject({
-      method: 'POST',
-      url: URL,
-      headers,
-      payload: options.body ?? { email: EMAIL, password: PASSWORD },
-    });
-  }
   describe('logout', () => {
     beforeEach(() => {
-      seedActiveAccount();
+      webSessionHelpers.seedActiveAccount();
     });
 
     function logout(
@@ -342,7 +38,7 @@ describe('web session HTTP boundary', () => {
       if (options.secret !== null) {
         headers['x-aihub-client-secret'] = options.secret ?? CLIENT_SECRET;
       }
-      return app.inject({
+      return suite.context.app.inject({
         method: 'POST',
         url: options.url ?? LOGOUT_URL,
         headers,
@@ -351,10 +47,10 @@ describe('web session HTTP boundary', () => {
     }
 
     it('answers a bodyless 204 and ends only the presented session', async () => {
-      const thisDevice = await webSessionToken();
-      const otherDevice = await webSessionToken();
-      expect(state.webSessions.size).toBe(2);
-      const beforeLogout = new Set(state.webSessions.keys());
+      const thisDevice = await webSessionHelpers.webSessionToken();
+      const otherDevice = await webSessionHelpers.webSessionToken();
+      expect(suite.context.state.webSessions.size).toBe(2);
+      const beforeLogout = new Set(suite.context.state.webSessions.keys());
 
       const response = await logout(thisDevice);
 
@@ -363,18 +59,22 @@ describe('web session HTTP boundary', () => {
       expect(response.headers['set-cookie']).toBeUndefined();
       // Exactly one durable row moved, and it is the presented session's. The
       // other device is checked by exchanging it, not by reading its row.
-      const revoked = [...state.webSessions.values()].filter(
+      const revoked = [...suite.context.state.webSessions.values()].filter(
         (session) => session.revokedAt !== undefined,
       );
       expect(revoked).toHaveLength(1);
       expect(beforeLogout.has(revoked[0]?.tokenHash ?? '')).toBe(true);
 
-      expect((await exchange(thisDevice)).statusCode).toBe(401);
-      expect((await exchange(otherDevice)).statusCode).toBe(200);
+      expect((await webSessionHelpers.exchange(thisDevice)).statusCode).toBe(
+        401,
+      );
+      expect((await webSessionHelpers.exchange(otherDevice)).statusCode).toBe(
+        200,
+      );
     });
 
     it('answers 204 again when the same session is logged out twice', async () => {
-      const token = await webSessionToken();
+      const token = await webSessionHelpers.webSessionToken();
 
       const first = await logout(token);
       const second = await logout(token);
@@ -382,14 +82,14 @@ describe('web session HTTP boundary', () => {
       expect(first.statusCode).toBe(204);
       expect(second.statusCode).toBe(204);
       expect(second.payload).toBe('');
-      expect((await exchange(token)).statusCode).toBe(401);
+      expect((await webSessionHelpers.exchange(token)).statusCode).toBe(401);
     });
 
     it.each([
       [
         'a session that is already revoked',
         async (): Promise<string> => {
-          const token = await webSessionToken();
+          const token = await webSessionHelpers.webSessionToken();
           await logout(token);
           return token;
         },
@@ -401,8 +101,10 @@ describe('web session HTTP boundary', () => {
       [
         'an expired session',
         async (): Promise<string> => {
-          const token = await webSessionToken();
-          clock.value = new Date(storedSession().expiresAt.getTime());
+          const token = await webSessionHelpers.webSessionToken();
+          suite.context.clock.value = new Date(
+            webSessionHelpers.storedSession().expiresAt.getTime(),
+          );
           return token;
         },
       ],
@@ -455,7 +157,7 @@ describe('web session HTTP boundary', () => {
     ])(
       'answers 204 and revokes nothing for a token offered in %s',
       async (_case, offer) => {
-        const token = await webSessionToken();
+        const token = await webSessionHelpers.webSessionToken();
         const { url, headers } = offer(token);
 
         const response = await logout(token, { url, headers });
@@ -464,7 +166,7 @@ describe('web session HTTP boundary', () => {
         // can explain why nothing was revoked.
         expect(response.statusCode).toBe(204);
         expect(response.payload).toBe('');
-        expect((await exchange(token)).statusCode).toBe(200);
+        expect((await webSessionHelpers.exchange(token)).statusCode).toBe(200);
       },
     );
 
@@ -475,10 +177,10 @@ describe('web session HTTP boundary', () => {
     ])(
       'refuses %s with one generic 401 before any lookup',
       async (_case, secret) => {
-        const token = await webSessionToken();
+        const token = await webSessionHelpers.webSessionToken();
         // A store that would throw if it were reached: the answer stays `401`,
         // so the refusal came first and no row was touched.
-        webSessions.failRevokeWebSession = true;
+        suite.context.webSessions.failRevokeWebSession = true;
 
         const response = await logout(token, { secret });
 
@@ -486,15 +188,15 @@ describe('web session HTTP boundary', () => {
         expect(response.json()).toMatchObject({
           error: { code: 'UNAUTHORIZED' },
         });
-        expect(limiter.calls).toEqual([]);
+        expect(suite.context.limiter.calls).toEqual([]);
         // A refused caller logs nobody out.
-        expect((await exchange(token)).statusCode).toBe(200);
+        expect((await webSessionHelpers.exchange(token)).statusCode).toBe(200);
       },
     );
 
     it('answers 503 when the store cannot record the revocation', async () => {
-      const token = await webSessionToken();
-      webSessions.failRevokeWebSession = true;
+      const token = await webSessionHelpers.webSessionToken();
+      suite.context.webSessions.failRevokeWebSession = true;
 
       const response = await logout(token);
 
@@ -509,8 +211,8 @@ describe('web session HTTP boundary', () => {
     });
 
     it('answers 503 when the deployment provisioned no client secret', async () => {
-      const token = await webSessionToken();
-      provisioned.secret = undefined;
+      const token = await webSessionHelpers.webSessionToken();
+      suite.context.provisioned.secret = undefined;
 
       const response = await logout(token);
 
@@ -521,11 +223,11 @@ describe('web session HTTP boundary', () => {
     });
 
     it('marks every response no-store, whatever it answers', async () => {
-      const token = await webSessionToken();
+      const token = await webSessionHelpers.webSessionToken();
       const revoked = await logout(token);
       const refused = await logout(token, { secret: 'wrong' });
       const unavailable = await (async () => {
-        webSessions.failRevokeWebSession = true;
+        suite.context.webSessions.failRevokeWebSession = true;
         return logout('z'.repeat(43));
       })();
       const unknown = await logout('z'.repeat(43));
@@ -536,9 +238,9 @@ describe('web session HTTP boundary', () => {
     });
 
     it('rejects an unknown field at the boundary', async () => {
-      const token = await webSessionToken();
+      const token = await webSessionHelpers.webSessionToken();
 
-      const response = await app.inject({
+      const response = await suite.context.app.inject({
         method: 'POST',
         url: LOGOUT_URL,
         headers: {
@@ -552,19 +254,19 @@ describe('web session HTTP boundary', () => {
       expect(response.json()).toMatchObject({
         error: { code: 'INVALID_REQUEST' },
       });
-      expect((await exchange(token)).statusCode).toBe(200);
+      expect((await webSessionHelpers.exchange(token)).statusCode).toBe(200);
     });
 
     it('keeps the client secret and the token out of every log line', async () => {
-      const token = await webSessionToken();
+      const token = await webSessionHelpers.webSessionToken();
       await logout(token);
       await logout(token, { secret: 'wrong-secret-value' });
 
-      const written = log.text();
+      const written = suite.context.log.text();
       expect(written).not.toContain(CLIENT_SECRET);
       expect(written).not.toContain('wrong-secret-value');
       expect(written).not.toContain(token);
-      for (const [hash] of state.webSessions) {
+      for (const [hash] of suite.context.state.webSessions) {
         expect(written).not.toContain(hash);
       }
     });

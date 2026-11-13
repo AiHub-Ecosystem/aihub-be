@@ -43,6 +43,16 @@ each hostname to its matching loopback port. See
 
 Do not reuse the development AppRole or the development rendered snapshot.
 
+## Pre-deployment Cosign verification gate (#1839)
+
+Automated deployment via CD (`.github/workflows/cd.yml`) enforces cryptographic verification in the `resolve` job before VPS credentials or SSH are touched:
+
+1. **Digest match**: The image tag's manifest digest must match the exact digest CI published and booted.
+2. **Keyless image signature**: Verified via `cosign verify` against the GitHub Actions OIDC issuer (`https://token.actions.githubusercontent.com`) and workflow identity (`.github/workflows/ci.yml@refs/heads/main`).
+3. **SPDX SBOM attestation**: Verified via `cosign verify-attestation --type spdxjson` ensuring the image carries the signed SBOM attestation bound to that digest.
+
+If any verification check fails, CD aborts immediately without establishing an SSH connection or modifying host containers.
+
 ## Shared PostgreSQL connection budget (#560, #1589)
 
 The last full PostgreSQL/host measurement recorded here was read-only on 2026-10-15 over SSH with `nproc`, `free -h`, `swapon --show`, and `sudo docker exec aihub-db psql`: PostgreSQL 16.15; `max_connections = 100`; `superuser_reserved_connections = 3`; `reserved_connections = 0`; `shared_buffers = 128MB`; `effective_cache_size = 4GB`; and `work_mem = 4MB`. The host reported 2 vCPUs, 7.7 GiB RAM, no swap, and 3.3 GiB available. A 2026-10-28 connection-setting check in #560 still reported 100 maximum connections, 3 superuser-reserved slots, and 0 additional reserved slots. Remeasure all server and host values before rollout; do not treat these snapshots as current capacity evidence.

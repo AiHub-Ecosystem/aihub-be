@@ -34,6 +34,7 @@ const TS_GATES = [
   'check:app-errors',
   'check:data-ownership',
   'check:deprecation',
+  'check:duplication',
   'check:file-size',
   'check:imports',
   'check:imports:dist',
@@ -50,7 +51,12 @@ const TS_GATES = [
  * a test path violates are still caught by the full `bun run verify` loop CI
  * runs on push.
  */
-const TS_TEST_GATES = ['lint', 'test:related', 'type-check'];
+const TS_TEST_GATES = [
+  'check:duplication',
+  'lint',
+  'test:related',
+  'type-check',
+];
 
 /**
  * Whether a path is test-only: a spec or test file by suffix, or anything
@@ -76,6 +82,7 @@ export const GATE_COMMANDS = {
   'check:data-dictionary': 'check:data-dictionary',
   'check:app-errors': 'check:app-errors',
   'check:deprecation': 'check:deprecation',
+  'check:duplication': 'check:duplication',
   'check:domain-globals': 'check:domain-globals',
   'check:file-size': 'check:file-size',
   'check:imports': 'check:imports',
@@ -105,6 +112,8 @@ export const GATE_COMMANDS = {
   'check:log-redaction': 'check:log-redaction',
   'test:log-redaction': 'test:log-redaction',
   'test:issue-triage': 'test:issue-triage',
+  'test:duplication-register': 'test:duplication-register',
+  'test:duplication': 'test:duplication',
   'test:jest-specs': 'test:jest-specs',
   'test:lint-staged': 'test:lint-staged',
   'test:check-staged': 'test:check-staged',
@@ -227,7 +236,15 @@ function classifyPathGates(p) {
   if (path === 'package.json') {
     // knip reads the entry and script configuration; `test:check-changed`
     // parses `scripts.verify` and asserts the gate map against it.
-    return ['knip', 'test:check-changed'];
+    return [
+      'check:duplication',
+      'knip',
+      'test:check-changed',
+      'test:duplication',
+    ];
+  }
+  if (path === '.jscpd.json' || path === 'bun.lock') {
+    return ['check:duplication', 'test:duplication'];
   }
   if (path === 'tsconfig.json') {
     return ['type-check'];
@@ -381,7 +398,9 @@ function classifyPathGates(p) {
       'test:commit-message',
       'test:commit-messages',
       'test:doc-drift',
+      'test:duplication',
       'test:generated-drift',
+      'test:duplication-register',
       'test:issue-triage',
       'test:lint-staged',
       'test:check-staged',
@@ -458,6 +477,12 @@ function classifyPathGates(p) {
   }
   if (path.includes('issue-triage')) {
     return ['lint', 'test:issue-triage'];
+  }
+  if (path.includes('duplication-register')) {
+    return ['lint', 'test:duplication-register'];
+  }
+  if (path.includes('check-duplication')) {
+    return ['lint', 'test:duplication'];
   }
   if (path.includes('check-doc-drift')) {
     return ['check:doc-drift', 'lint', 'test:doc-drift'];

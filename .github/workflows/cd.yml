@@ -39,11 +39,26 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PULL_TOKEN }}
+
+      - name: Install Cosign 2.4.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/cosign"
+          curl --fail --silent --show-error --location \
+            --output "$binary" \
+            https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-amd64
+          printf '%s  %s\n' \
+            '8b24b946dd5809c6bd93de08033bcf6bc0ed7d336b7785787c080f574b89249b' \
+            "$binary" | sha256sum --check
+          chmod +x "$binary"
+          "$binary" version
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Check the registry still holds the image CI booted
         id: image
@@ -70,6 +85,31 @@ jobs:
           printf '### SBOM provenance\n\n`%s@%s`\n\nSPDX SBOM is attached as a signed attestation to this digest (CI artifact `image-sbom`, SPDX JSON). Verify from a workstation with:\n\n```bash\ncosign verify-attestation %s@%s --type spdxjson --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '\''https://github.com/%s/.github/workflows/ci.yml@refs/heads/main'\''\n```\n' \
             "$image_name" "$actual" "$image_name" "$actual" "$REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
           echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      # #1839: enforce cryptographic verification of image signature and SPDX SBOM attestation
+      # before any deployment steps or host contact.
+      - name: Verify image signature and SBOM attestation (Cosign)
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          expected="$(tr -d '[:space:]' < image-digest.txt)"
+          image_name="ghcr.io/${REPOSITORY,,}"
+          image_ref="${image_name}@${expected}"
+          identity_regex="https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@refs/heads/main"
+
+          echo "Verifying Cosign keyless image signature for $image_ref..."
+          cosign verify "$image_ref" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$identity_regex"
+
+          echo "Verifying Cosign SPDX SBOM attestation for $image_ref..."
+          cosign verify-attestation --type spdxjson "$image_ref" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$identity_regex" > "$RUNNER_TEMP/attestation.json"
+
+          printf '### Cosign cryptographic verification\n\nVerified keyless signature and SPDX SBOM attestation for `%s` against workflow `ci.yml@refs/heads/main`.\n' "$image_ref" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Record the digest used by this CD run
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

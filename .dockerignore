@@ -40,3 +40,10 @@ scripts/ops/*
 runtime-secrets.json
 Dockerfile*
 docker-compose*.yml
+
+# #1154: exclude throwaway scratch directories and PEM signing keys
+temp
+temp/**
+*.pem
+**/*.pem
+demo-jwks.json

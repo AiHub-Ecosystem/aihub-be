@@ -272,6 +272,8 @@ async function main(): Promise<void> {
       redis,
       organizationId,
       userToken: candidateUserToken,
+      candidateHasIdentityCacheHmacKey:
+        candidateRedis.identity_cache_hmac_key !== undefined,
       report,
       previousSha,
     });

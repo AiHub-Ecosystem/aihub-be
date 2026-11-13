@@ -964,7 +964,9 @@ async function setIdentity(options) {
       }
       await pool.query(
         `UPDATE organization_identity_configs
-         SET status = 'disabled', updated_at = now()
+         SET status = 'disabled',
+             jwks_cache_version = jwks_cache_version + 1,
+             updated_at = now()
          WHERE organization_id = $1`,
         [input.organizationId],
       );
@@ -1000,6 +1002,7 @@ async function setIdentity(options) {
            allowed_algorithms = EXCLUDED.allowed_algorithms,
            max_assertion_ttl_seconds = EXCLUDED.max_assertion_ttl_seconds,
            status = EXCLUDED.status,
+           jwks_cache_version = organization_identity_configs.jwks_cache_version + 1,
            updated_at = now()`,
       [
         input.organizationId,

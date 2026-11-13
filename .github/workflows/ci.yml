@@ -24,7 +24,10 @@ on:
       - "docs/history/aihub-deliverable-1-historical-contract.md"
       - "docs/integration-guide.md"
       - "docs/local-demo.md"
+      - "docs/operations/ci-boot-check.md"
       - "docs/operations/deploy-vps.md"
+      - "docs/operations/image-sbom-provenance.md"
+      - "docs/operations/image-vulnerability-scanning.md"
       - "ops/vault/README.md"
 
   workflow_dispatch:
@@ -32,6 +35,11 @@ on:
       run_outbox_evaluation:
         description: Run the isolated zero-table outbox comparison
         required: true
+        type: boolean
+        default: false
+      probe_source_cache:
+        description: Add temporary src file to verify production dependency cache reuse
+        required: false
         type: boolean
         default: false
 
@@ -116,6 +124,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      issues: read
 
     steps:
       - name: Check out repository
@@ -144,17 +153,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # #1777: `format:check` runs prettier with `--cache`. Without this the
-      # CI job always ran cold (~25s); with it an unchanged tree re-checks only
-      # the files a commit touched. The key carries the lockfile and the
-      # prettier config, because an option change invalidates every entry.
-      - name: Cache prettier
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: node_modules/.cache/prettier
-          key: prettier-${{ runner.os }}-${{ hashFiles('bun.lock', '.prettierrc', '.prettierignore') }}
-          restore-keys: prettier-${{ runner.os }}-
-
       - name: Check unused exports
         run: bun run knip
 
@@ -173,16 +171,46 @@ jobs:
       - name: Check deprecation descriptors
         run: bun run check:deprecation
 
+      - name: Check duplication register against GitHub and source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun run check:duplication-register
+
+      - name: Check for new code duplication
+        run: bun run check:duplication
+
       - name: Check architecture
         run: bun run arch-check
 
       - name: Check import style
         run: bun run check:imports
 
+      # #941: static job runs the checks verify runs so regressions cannot pass CI.
+      - name: Check application errors
+        run: bun run check:app-errors
+
+      - name: Check data dictionary
+        run: bun run check:data-dictionary
+
+      - name: Check file sizes
+        run: bun run check:file-size
+
+      - name: Check domain globals
+        run: bun run check:domain-globals
+
+      - name: Check tenant globals
+        run: bun run check:tenant-global
+
+      - name: Check data ownership
+        run: bun run check:data-ownership
+
+      - name: Check documentation drift
+        run: bun run check:doc-drift
+
       # #1786: these suites ran only inside the local check:batch loop, so a
       # regression in the checkers they pin stayed invisible in CI.
-      - name: Check the hook and drift suites CI owns
-        run: bun run test:issue-triage && bun run test:lint-staged && bun run test:check-staged && bun run test:doc-drift && bun run test:commit-message
+      - name: Check the hook, drift, and register suites CI owns
+        run: bun run test:issue-triage && bun run test:duplication && bun run test:duplication-register && bun run test:lint-staged && bun run test:check-staged && bun run test:doc-drift && bun run test:commit-message
 
       # #1786: the commit-message gate exists only at hook time, so a
       # --no-verify commit landed a non-Conventional header with nothing to
@@ -269,6 +297,9 @@ jobs:
       - name: Verify scoped Speaking JSON gzip
         run: bash ops/nginx/check-gzip.sh
 
+      - name: Check nginx configuration headers
+        run: bun run check:nginx-headers
+
   test:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -352,6 +383,51 @@ jobs:
       - name: Test the changed-file gate map
         run: bun run test:check-changed
 
+      - name: Upload flaky-test history and report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-test-history
+          path: |
+            temp/flaky-tests/history.json
+            temp/flaky-tests/report.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  shell-specs:
+    name: Shell specs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4-canary.20261109.1
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate the runtime Prisma client
+        run: node scripts/generate/generate-prisma-client.mjs --runtime
+
       - name: Exercise scheduled host job wrappers with stubs
         run: bash scripts/ops/host-jobs/host-scheduled-job.spec.sh
 
@@ -396,17 +472,6 @@ jobs:
 
       - name: Exercise Speaking gateway smoke identity handling with stubs
         run: bash test/ops/speaking-gateway-smoke.spec.sh
-
-      - name: Upload flaky-test history and report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: flaky-test-history
-          path: |
-            temp/flaky-tests/history.json
-            temp/flaky-tests/report.json
-          if-no-files-found: ignore
-          retention-days: 90
 
   dev-restart-budget:
     name: Dev restart budget
@@ -533,10 +598,14 @@ jobs:
           path: customer-web-linked
           persist-credentials: false
 
+      # #1399: Customer Web checks run on active Node 22 LTS (Node 20 reached
+      # EOL on 2026-03-24). Both dev and linked PR paths execute under this
+      # runtime without engine restrictions (AiHub-Frontend declares no
+      # engines.node in package.json).
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Customer Web dependencies
         working-directory: customer-web
@@ -1056,6 +1125,10 @@ jobs:
       # and emit the manifest list a push needs. The push is a separate step
       # once the boot has passed. The Dockerfile this uses is the only one
       # release ever builds (ADR-0064).
+      - name: Add source-only cache probe
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_source_cache }}
+        run: printf 'export {};\n' > src/cache-validation-probe.ts
+
       - name: Build production image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -1064,8 +1137,8 @@ jobs:
           push: false
           load: true
           tags: aihub:image-boot
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=aihub-production
+          cache-to: type=gha,scope=aihub-production,mode=max
           # Baked into the image so `docker inspect` on the VPS can name the
           # commit that is live. The deployed checkout carries no `.git`, so
           # there is no other place to read it from.
@@ -1084,6 +1157,55 @@ jobs:
 
       - name: Boot the image and wait for its health check
         run: bash scripts/ci/image/image-boot-check.sh aihub:image-boot
+
+      # #331: scan the booted image and operational support images with Grype
+      # before allowing the image to be published or deployed.
+      - name: Install Grype 0.87.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/grype.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            https://github.com/anchore/grype/releases/download/v0.87.0/grype_0.87.0_linux_amd64.tar.gz
+          printf '%s  %s\n' \
+            'be710d15f5477e5c77ce03d14e480263415d7ab135e04b8483663f688823087d' \
+            "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" grype
+          "$RUNNER_TEMP/grype" version
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Scan booted production image for fixable CVEs (Grype)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id="$(docker image inspect --format '{{.Id}}' aihub:image-boot)"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "### Vulnerability scan: aihub:image-boot ($image_id)" >> "$GITHUB_STEP_SUMMARY"
+          grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "docker:$image_id" --only-fixed --fail-on high
+
+      - name: Build and scan firewall guard image (Grype)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t aihub-guard:scan -f ops/firewall/guard.Dockerfile scripts/ops/firewall
+          image_id="$(docker image inspect --format '{{.Id}}' aihub-guard:scan)"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "### Vulnerability scan: ops/firewall/guard.Dockerfile ($image_id)" >> "$GITHUB_STEP_SUMMARY"
+          grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "docker:$image_id" --only-fixed --fail-on high
+
+      - name: Build and scan monitoring SSH tunnel image (Grype)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t aihub-ssh-tunnel:scan -f ops/monitoring/ssh-tunnel.Dockerfile ops/monitoring
+          image_id="$(docker image inspect --format '{{.Id}}' aihub-ssh-tunnel:scan)"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "### Vulnerability scan: ops/monitoring/ssh-tunnel.Dockerfile ($image_id)" >> "$GITHUB_STEP_SUMMARY"
+          grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
+          grype "docker:$image_id" --only-fixed --fail-on high
 
       - name: Select active per-tier release revisions
         id: previous_release
@@ -1245,7 +1367,7 @@ jobs:
       # GITHUB_TOKEN cannot write this organization package until its package
       # setting is enabled, so keep the existing write-capable token here.
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USERNAME }}
@@ -1396,6 +1518,7 @@ jobs:
       - secret-scan
       - static
       - test
+      - shell-specs
       - dev-restart-budget
       - build
       - audit
@@ -1415,6 +1538,7 @@ jobs:
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          SHELL_SPECS_RESULT: ${{ needs.shell-specs.result }}
           DEV_RESTART_BUDGET_RESULT: ${{ needs.dev-restart-budget.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           AUDIT_RESULT: ${{ needs.audit.result }}
@@ -1432,6 +1556,7 @@ jobs:
           test "$SECRET_SCAN_RESULT" = success
           test "$STATIC_RESULT" = success
           test "$TEST_RESULT" = success
+          test "$SHELL_SPECS_RESULT" = success
           test "$DEV_RESTART_BUDGET_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$AUDIT_RESULT" = success

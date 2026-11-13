@@ -18,15 +18,14 @@ const SENSITIVE_KEYS = new Set([
 export function redactRecord(
   input: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
-  const output: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(input)) {
-    output[key] = SENSITIVE_KEYS.has(key.toLowerCase())
-      ? REDACTED
-      : redactValue(value);
-  }
-
-  return output;
+  // `Object.fromEntries` defines own data properties, so a `__proto__` key is
+  // kept; assigning `output[key]` would call the prototype setter and drop it.
+  return Object.fromEntries(
+    Object.entries(input).map(([key, value]) => [
+      key,
+      SENSITIVE_KEYS.has(key.toLowerCase()) ? REDACTED : redactValue(value),
+    ]),
+  );
 }
 
 function redactValue(value: unknown): unknown {

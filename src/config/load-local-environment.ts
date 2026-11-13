@@ -1,5 +1,8 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseEnv } from 'node:util';
+
+import { RuntimeConfigurationError } from './runtime-configuration';
 
 // Deployed images declare these modes explicitly (Dockerfile and the
 // production compose set NODE_ENV). A .env reaching such a process would
@@ -33,5 +36,21 @@ export function loadLocalEnvironment(
     );
     return;
   }
-  process.loadEnvFile(envFile);
+  let raw: Buffer;
+  try {
+    raw = readFileSync(envFile);
+  } catch {
+    throw new RuntimeConfigurationError(['.env']);
+  }
+  const text = raw.toString('utf8');
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue;
+    if (!line.includes('=')) {
+      throw new RuntimeConfigurationError(['.env']);
+    }
+  }
+  const values = parseEnv(text);
+  for (const [name, value] of Object.entries(values)) {
+    process.env[name] ??= value;
+  }
 }

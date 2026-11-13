@@ -70,23 +70,32 @@ export async function verifyApiKeyCacheCompatibility(input: {
         const { RedisIdentityStore } = require('./dist/modules/identity/shared/infrastructure/redis-identity.store.js');
         const { readFileSync } = require('node:fs');
         const Redis = require('ioredis');
-        const redisUrl = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis.url;
+        const redisConfig = JSON.parse(readFileSync(process.env.AIHUB_RUNTIME_CONNECTION_SECRETS_FILE, 'utf8')).redis;
+        const redisUrl = redisConfig.url;
+        const hmacKey = typeof redisConfig.identity_cache_hmac_key === 'string' ? Buffer.from(redisConfig.identity_cache_hmac_key, 'base64url') : undefined;
         const client = new Redis(redisUrl, { lazyConnect: true, enableOfflineQueue: false });
         client.on('error', () => {});
         await client.connect();
-        const store = new RedisIdentityStore('', client);
+        const store = new RedisIdentityStore('', client, hmacKey);
         const expected = JSON.parse(Buffer.from(process.env.COMPAT_RECORD, 'base64').toString('utf8'));
         try {
-          if ('${operation}' === 'set') await store.set(process.env.COMPAT_HASH, expected);
-          else if (JSON.stringify(await store.get(process.env.COMPAT_HASH)) !== JSON.stringify(expected)) throw new Error('N-1 API-key cache record mismatch');
+          const key = 'aihub:v1:key:' + process.env.COMPAT_HASH;
+          if ('${operation}' === 'set') {
+            await store.set(process.env.COMPAT_HASH, expected);
+            const written = await client.get(key);
+            if (hmacKey === undefined ? written !== null : written === null) throw new Error('API-key cache key configuration mismatch');
+          } else {
+            const cached = await store.get(process.env.COMPAT_HASH);
+            if (hmacKey === undefined ? cached !== undefined : JSON.stringify(cached) !== JSON.stringify(expected)) throw new Error('N-1 API-key cache record mismatch');
+          }
         } finally { await store.onModuleDestroy(); }
       })().catch(() => { process.stderr.write('API-key cache compatibility failed'); process.exitCode = 1; });`,
     ]);
   }
   const ttl = await redis.pttl(keyCacheKey);
   check(
-    ttl > 0 && ttl <= 60_000,
-    'API-key cache freshness is missing or exceeds its 60-second authority bound',
+    ttl === -2 || (ttl > 0 && ttl <= 60_000),
+    'API-key cache freshness exceeds its 60-second authority bound',
   );
 
   await database.query("UPDATE api_keys SET status = 'revoked' WHERE id = $1", [
@@ -109,7 +118,9 @@ export async function verifyApiKeyCacheCompatibility(input: {
     );
   }
   report.push(
-    `PASS: N-1 ${previousSha} read the candidate-written API-key cache record through its configured Redis endpoint, and still refused a grading-scope request once Postgres marked the key revoked (grading scopes read fresh authority, never the cache).`,
+    ttl === -2
+      ? `PASS: candidate and N-1 ${previousSha} bypassed Redis API-key entries while the optional integrity key was absent, and Postgres still refused the grading-scope request after revocation.`
+      : `PASS: N-1 ${previousSha} read the authenticated candidate API-key cache record, and Postgres still refused a grading-scope request after revocation.`,
   );
 
   const oldReplay = await request(
@@ -127,7 +138,7 @@ export async function verifyApiKeyCacheCompatibility(input: {
   );
   expectStatus(retryRefusal, 429, 'shared keyed retry-budget refusal');
   report.push(
-    'PASS: N-1 read the candidate API-key cache adapter entry and replayed a request using shared JWKS state; mixed-version retry admission shared one Redis window.',
+    'PASS: N-1 replayed a request using shared JWKS state; mixed-version retry admission shared one Redis window.',
   );
   return keyCacheKey;
 }

@@ -125,6 +125,14 @@ const INSERT_OR_UPDATE_CONFIG_SQL = `${INSERT_CONFIG_SQL}
   RETURNING ${STORED_CONFIG_COLUMNS_SQL}
 `;
 
+// An identical save still invalidates remote JWKS, so fence Redis replays durably.
+const ADVANCE_UNCHANGED_JWKS_CACHE_VERSION_SQL = `
+  UPDATE organization_identity_configs
+  SET jwks_cache_version = jwks_cache_version + 1
+  WHERE organization_id = $1
+  RETURNING ${STORED_CONFIG_COLUMNS_SQL}
+`;
+
 /**
  * The database holds a `bigint` (`jwks_cache_version`, `revision`); the
  * application port holds its digits. The conversion happens here so no
@@ -377,11 +385,13 @@ export class PostgresOrganizationIdentityConfigRepository
         const changed = written.length > 0;
         const row =
           written[0] ??
-          (await transaction.organizationIdentityConfig.findUnique({
-            where: { organizationId: input.organizationId },
-            select: STORED_CONFIG_SELECT,
-          })) ??
-          undefined;
+          (
+            (await identityRows(
+              transaction,
+              ADVANCE_UNCHANGED_JWKS_CACHE_VERSION_SQL,
+              [input.organizationId],
+            )) as readonly IdentityConfigRow[]
+          )[0];
         const config = storedIdentityConfigFromRow(row);
         if (config === undefined) {
           throw invalidIdentityData();
