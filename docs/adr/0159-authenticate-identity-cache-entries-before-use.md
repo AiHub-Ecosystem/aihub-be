@@ -29,10 +29,18 @@ from reintroducing trust in unsigned values.
 
 2. **Fail closed on unverified Redis values.** A missing or invalid MAC is
    deleted and treated as a cache miss. If a process starts without the key,
-   it bypasses Redis identity entries and uses the existing trusted local or
-   authoritative-source path; it does not read or write unsigned Redis
-   entries. API-key misses use Postgres. JWKS misses use the existing key
-   provider path.
+   it bypasses Redis identity reads and writes and uses the existing trusted
+   local or authoritative-source path; it does not read or write unsigned
+   Redis entries. Invalidation is not an unsigned entry write: a keyless
+   process still advances the shared JWKS generation and purges its local
+   entry, because otherwise an identity-config update would not stop a
+   stale local JWKS from being trusted. API-key misses use Postgres. JWKS
+   misses use the existing key provider path. Every successful identity-config
+   save also advances the durable `jwks_cache_version`, including an unchanged
+   retry, so a Redis writer cannot replay an entry by restoring its generation.
+   The verification result keeps `authenticated` and `data` separate, so a
+   genuinely `undefined` payload is
+   not confused with an unauthenticated entry.
 
 3. **Authenticate original freshness.** The signed entry carries an absolute
    freshness deadline. Redis storage expiry may shorten, but never extend, that
@@ -67,6 +75,12 @@ from reintroducing trust in unsigned values.
 - Initial activation and key rotation can cause cache misses and extra source
   reads. If the JWKS source is unavailable and a process has no usable local
   entry, assertion verification may fail until keys can be fetched.
+- The version advance on an unchanged save applies only to processes that run
+  this release. While a pre-release image can still save an identical
+  configuration during a blue/green cutover, that save leaves the version
+  unchanged and the JWKS replay window stays open until the older image drains.
+  The unchanged-save advance changes `jwks_cache_version` and `updated_at` but
+  not `revision`, so ETags and the audit trail are unaffected.
 - This integrity check does not isolate Redis or protect its availability.
   Redis isolation remains tracked by [#348](https://github.com/AiHub-Ecosystem/aihub-be/issues/348)
   and [#583](https://github.com/AiHub-Ecosystem/aihub-be/issues/583).

@@ -8,10 +8,8 @@ import {
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-import {
-  RedisAuthFailureCounter,
-  RedisIdentityStore,
-} from '@/modules/identity/shared/infrastructure/redis-identity.store';
+import { RedisAuthFailureCounter } from '@/modules/identity/shared/infrastructure/redis-auth-failure-counter';
+import { RedisIdentityStore } from '@/modules/identity/shared/infrastructure/redis-identity.store';
 import { UserAssertionVerifier } from '@/modules/identity/user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from '@/modules/identity/user-assertions/application/user-identity-resolver';
 import { JoseUserAssertionCrypto } from '@/modules/identity/user-assertions/infrastructure/jose-user-assertion-crypto';
@@ -40,6 +38,7 @@ let configRepository: PostgresOrganizationIdentityConfigRepository;
 let identityStore: RedisIdentityStore;
 let failureCounter: RedisAuthFailureCounter;
 let authenticator: ApiKeyAuthenticator;
+const IDENTITY_CACHE_HMAC_KEY = Buffer.alloc(32, 11);
 
 function nowSeconds(): number {
   return Math.floor(TEST_NOW.getTime() / 1_000);
@@ -52,7 +51,11 @@ beforeAll(() => {
   configRepository = new PostgresOrganizationIdentityConfigRepository(
     identityClient,
   );
-  identityStore = new RedisIdentityStore('', redisClients.identity);
+  identityStore = new RedisIdentityStore(
+    '',
+    redisClients.identity,
+    IDENTITY_CACHE_HMAC_KEY,
+  );
   failureCounter = new RedisAuthFailureCounter('', redisClients.identity);
   authenticator = new ApiKeyAuthenticator(
     new PostgresApiKeyRepository(identityClient),
@@ -185,7 +188,7 @@ describe('tenant isolation for identity boundaries', () => {
   });
 
   // Presence-shaped: both JWKS caches populate, and neither contains the other's keys.
-  it('keeps colliding assertion subjects in their Organization JWKS cache namespace', async () => {
+  it('rejects a forged cached JWKS before verifying an assertion', async () => {
     await pool.query(
       `UPDATE organization_identity_configs
        SET jwks_url = $2, public_keys_jwks = NULL
@@ -197,6 +200,28 @@ describe('tenant isolation for identity boundaries', () => {
        SET jwks_url = $2, public_keys_jwks = NULL
        WHERE organization_id = $1`,
       [ORGANIZATION_B, 'https://tenant-b.example.test/jwks'],
+    );
+
+    const configVersionResult = await pool.query<{ configVersion: string }>(
+      `SELECT jwks_cache_version::text AS "configVersion"
+       FROM organization_identity_configs
+       WHERE organization_id = $1`,
+      [ORGANIZATION_A],
+    );
+    const configVersion = configVersionResult.rows[0]?.configVersion;
+    if (configVersion === undefined) {
+      throw new Error('tenant A identity configuration is missing');
+    }
+    const forgedCacheKey = `aihub:v1:jwks:${ORGANIZATION_A}:${configVersion}:0`;
+    await redisClients.raw.set(
+      forgedCacheKey,
+      JSON.stringify({
+        jwks: fixture.organizationB.identity.jwks,
+        freshUntil: Date.now() + 60_000,
+        staleUntil: Date.now() + 120_000,
+      }),
+      'EX',
+      120,
     );
 
     const fetched: string[] = [];
@@ -216,7 +241,11 @@ describe('tenant isolation for identity boundaries', () => {
       cancel: () => undefined,
     });
     const provider = new JwksKeyProvider(
-      identityStore,
+      new RedisIdentityStore(
+        '',
+        redisClients.identity,
+        IDENTITY_CACHE_HMAC_KEY,
+      ),
       fetcher,
       resolver,
       Date.now,
@@ -231,6 +260,17 @@ describe('tenant isolation for identity boundaries', () => {
     );
     const assertionA = await signUserAssertion(fixture.organizationA.identity);
     const assertionB = await signUserAssertion(fixture.organizationB.identity);
+    const forgedAssertion = await signUserAssertion({
+      ...fixture.organizationB.identity,
+      issuer: fixture.organizationA.identity.issuer,
+    });
+
+    await expect(
+      verifier.resolve({
+        value: forgedAssertion,
+        organizationId: ORGANIZATION_A,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
 
     await expect(
       verifier.resolve({

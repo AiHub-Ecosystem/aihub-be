@@ -5,6 +5,7 @@ import { registerAs } from '@nestjs/config';
 import { type TSchema, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
+import { internalError } from '@/common/errors/app-error';
 import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
 
 type RuntimeMode = 'development' | 'test' | 'staging' | 'production';
@@ -186,6 +187,7 @@ const fields = {
     format: 'uri',
     requiredIn: PROD_MODES,
   },
+  AIHUB_IDENTITY_CACHE_HMAC_KEY: { kind: 'string', secret: true },
   AIHUB_EMAIL_SEND_RATE_REDIS_URL: {
     kind: 'string',
     secret: true,
@@ -319,11 +321,14 @@ type FieldValue<F> = F extends { readonly kind: 'number' }
       ? Value
       : string;
 
-export type RuntimeConfiguration = Readonly<{
+type RuntimeEnvironmentConfiguration = Readonly<{
   [K in keyof FieldMap]: FieldMap[K] extends { readonly defaultValue: unknown }
     ? FieldValue<FieldMap[K]>
     : FieldValue<FieldMap[K]> | undefined;
 }>;
+
+export type RuntimeConfiguration = RuntimeEnvironmentConfiguration &
+  Readonly<{ identityCacheHmacKey: Buffer | undefined }>;
 
 type SecretFieldNames = {
   [K in keyof FieldMap]: FieldMap[K] extends { readonly secret: true }
@@ -333,7 +338,7 @@ type SecretFieldNames = {
 
 export type PublicRuntimeConfiguration = Omit<
   RuntimeConfiguration,
-  SecretFieldNames
+  SecretFieldNames | 'identityCacheHmacKey'
 >;
 
 type RuntimeFieldGroups = Record<string, readonly RuntimeFieldName[]>;
@@ -392,6 +397,7 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'AIHUB_EMAIL_WAL_DATABASE_URL',
     'AIHUB_EMAIL_WAL_SECRETS_FILE',
     'REDIS_URL',
+    'AIHUB_IDENTITY_CACHE_HMAC_KEY',
     'AIHUB_EMAIL_SEND_RATE_REDIS_URL',
     'AIHUB_EMAIL_SEND_RATE_LIMIT',
     'AIHUB_EMAIL_SEND_RATE_DURATION_MS',
@@ -449,6 +455,25 @@ interface RuntimeLoadStep {
   readonly problems: string[];
 }
 
+export function parseIdentityCacheHmacKey(
+  value: string | undefined,
+): Buffer | undefined {
+  if (value === undefined || value.trim().length === 0) return undefined;
+  const trimmed = value.trim();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(trimmed)) {
+    throw internalError(
+      'AIHUB_IDENTITY_CACHE_HMAC_KEY must be 32 random bytes in base64url',
+    );
+  }
+  const decoded = Buffer.from(trimmed, 'base64url');
+  if (decoded.length !== 32 || decoded.toString('base64url') !== trimmed) {
+    throw internalError(
+      'AIHUB_IDENTITY_CACHE_HMAC_KEY must be 32 random bytes in base64url',
+    );
+  }
+  return decoded;
+}
+
 export interface RuntimeConnectionConfiguration {
   readonly databaseUrl: string | undefined;
   readonly databasePoolerEnabled: boolean;
@@ -463,6 +488,7 @@ export interface RuntimeConnectionConfiguration {
   readonly emailDailyBudgetDatabaseUrl: string | undefined;
   readonly emailWalDatabaseUrl: string | undefined;
   readonly redisUrl: string | undefined;
+  readonly identityCacheHmacKey: Buffer | undefined;
   readonly emailSendRateRedisUrl: string | undefined;
   readonly sandboxAssertionPrivateKey: string | undefined;
   readonly sandboxAssertionKeyId: string | undefined;
@@ -767,7 +793,19 @@ export function loadRuntimeConfiguration(
     if (name !== undefined) problems.push(name);
   }
 
-  const configuration = values as RuntimeConfiguration;
+  const environment = values as RuntimeEnvironmentConfiguration;
+  let identityCacheHmacKey: Buffer | undefined;
+  try {
+    identityCacheHmacKey = parseIdentityCacheHmacKey(
+      environment.AIHUB_IDENTITY_CACHE_HMAC_KEY,
+    );
+  } catch {
+    problems.push('AIHUB_IDENTITY_CACHE_HMAC_KEY');
+  }
+  const configuration: RuntimeConfiguration = {
+    ...environment,
+    identityCacheHmacKey,
+  };
   validateCustomerWebUrl(configuration, problems);
   validateHostBindings(configuration, problems);
   validateTraceEndpoint(configuration, problems);
@@ -837,6 +875,7 @@ export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfigurat
       configuration.AIHUB_EMAIL_DAILY_BUDGET_DATABASE_URL,
     emailWalDatabaseUrl: configuration.AIHUB_EMAIL_WAL_DATABASE_URL,
     redisUrl: configuration.REDIS_URL,
+    identityCacheHmacKey: configuration.identityCacheHmacKey,
     emailSendRateRedisUrl: configuration.AIHUB_EMAIL_SEND_RATE_REDIS_URL,
     sandboxAssertionPrivateKey:
       configuration.AIHUB_SANDBOX_ASSERTION_PRIVATE_KEY,
