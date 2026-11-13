@@ -33,25 +33,27 @@ operator-only; no customer access or per-Organization dashboards are part of
 this decision. Traces continue directly to Tempo.
 
 Use Loki as the primary historical search path. Keep
-`scripts/ops/logs/request-log-lookup.sh` as the local fallback for the Docker,
-deploy-snapshot, and AIHUB Nginx copies. Follow the request ID from a Loki log
-line to the matching Tempo trace and usage record. The design target is a
-30-day maximum age for Loki and every local copy; existing size limits may
-expire records sooner.
-The tracked Nginx source now applies daily numeric rotation with a 30-day
-maximum record age while preserving the existing archive names, pending
-deployment. Docker `json-file` application logs remain size-only and still need
-maximum-age enforcement under #601; deploy-log snapshots can copy older Docker
-records, and their best-effort deploy-time cleanup does not enforce a 30-day
-maximum age. Snapshot age enforcement also remains unresolved under #601.
+`scripts/ops/logs/request-log-lookup.sh` as the local fallback for the
+Production/Sandbox app files, legacy `json-file` containers during migration,
+deploy snapshots, and AIHUB Nginx files. Follow the request ID from a Loki log
+line to the matching Tempo trace and usage record. The local app sink accepts
+only the Production and Sandbox tags over loopback, preserves each JSON message
+payload, and discards other tags. Daily rotation uses a 10 MiB threshold,
+`maxage 28`, and two rotated files; size and generation bounds can expire logs
+sooner. Docker caches are disabled, so `docker logs` does not read app output.
+Blue-green snapshots are limited to 20 MB and the previous 24 hours for legacy
+`json-file` containers; the daily monitored prune job removes records by their
+embedded Docker timestamps after 28 days. With that daily job and the host
+logrotate timer running, all local app records expire within 30 days.
 
-This pipeline is not deployed. Before Production deployment, collect a
-representative seven-day volume sample, derive 30-day storage needs, set hard
-CPU, memory, and disk caps for Loki and Alloy, and record the caps and
-full-disk behavior in the private monitoring configuration repository. Create
-and link an implementation issue before deployment work starts. Keep all
-credentials in Vault. There is no off-host Loki backup; losing the monitoring
-host loses its retained log history.
+This local source configuration and the Nginx retention source are tracked but
+not deployed until the operator installs managed host-helper version 2. Before
+Production deployment of Loki/Alloy, collect a representative seven-day volume
+sample, derive 30-day storage needs, set hard CPU, memory, and disk caps for
+Loki and Alloy, and record the caps and full-disk behavior in the private
+monitoring configuration repository. Create and link an implementation issue
+before that deployment work starts. Keep all credentials in Vault. There is no
+off-host Loki backup; losing the monitoring host loses its retained log history.
 
 ## Grafana and OTLP HTTPS routes
 

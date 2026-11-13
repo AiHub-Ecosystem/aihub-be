@@ -386,7 +386,7 @@ jobs:
           cp -p -- "$APP_DIR/docker-compose.production.yml" "$sync_backup/docker-compose.production.yml"
           : >"$sync_backup/ready"
           chmod 600 "$sync_backup/ready"
-          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/blue-green" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/backups" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" \
+          mkdir -p "$APP_DIR/scripts/ops" "$APP_DIR/scripts/ops/blue-green" "$APP_DIR/scripts/ops/logs" "$APP_DIR/scripts/ops/backups" "$APP_DIR/scripts/ops/host-jobs" "$APP_DIR/ops/nginx" "$APP_DIR/ops/logs" \
             "$APP_DIR/ops/vault/agent" "$APP_DIR/ops/vault/templates" \
             "$APP_DIR/ops/host-jobs" "$APP_DIR/.aihub-host-jobs-candidate"
           REMOTE
@@ -402,6 +402,7 @@ jobs:
             "$target:$VPS_APP_DIR/.aihub-host-jobs-sync-candidate/"
           scp "${scp_opts[@]}" \
             scripts/ops/logs/request-log-lookup.sh \
+            scripts/ops/logs/prune-deploy-log-snapshots.sh \
             "$target:$VPS_APP_DIR/scripts/ops/logs/"
           scp "${scp_opts[@]}" \
             scripts/ops/backups/backup-postgres.sh \
@@ -421,6 +422,10 @@ jobs:
             ops/nginx/aihub-access-logrotate \
             "$target:$VPS_APP_DIR/ops/nginx/"
           scp "${scp_opts[@]}" \
+            ops/logs/30-aihub-app-logs.conf \
+            ops/logs/aihub-app-logrotate \
+            "$target:$VPS_APP_DIR/ops/logs/"
+          scp "${scp_opts[@]}" \
             ops/vault/agent/aihub-runtime.hcl \
             ops/vault/agent/aihub-pgbouncer.hcl \
             "$target:$VPS_APP_DIR/ops/vault/agent/"
@@ -435,13 +440,15 @@ jobs:
             "$target:$VPS_APP_DIR/ops/vault/templates/"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -eu
-          chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
+          chmod 755 "$APP_DIR/scripts/ops/logs/request-log-lookup.sh" \
+            "$APP_DIR/scripts/ops/logs/prune-deploy-log-snapshots.sh"
           chmod 755 "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           chmod 755 "$APP_DIR/scripts/ops/backups/backup-postgres.sh" \
             "$APP_DIR/scripts/ops/backups/restore-postgres-rehearsal.sh"
           test -s "$APP_DIR/docker-compose.production.yml"
           test -s "$APP_DIR/scripts/ops/backups/backup-postgres.sh"
           test -s "$APP_DIR/scripts/ops/logs/request-log-lookup.sh"
+          test -s "$APP_DIR/scripts/ops/logs/prune-deploy-log-snapshots.sh"
           test -s "$APP_DIR/scripts/ops/host-jobs/container-watchdog.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/install-host-jobs.sh"
           test -s "$APP_DIR/.aihub-host-jobs-sync-candidate/finish-host-jobs.sh"
@@ -453,6 +460,8 @@ jobs:
           test -s "$APP_DIR/ops/nginx/sandbox.conf"
           test -s "$APP_DIR/ops/nginx/00-aihub-log-format.conf"
           test -s "$APP_DIR/ops/nginx/aihub-access-logrotate"
+          test -s "$APP_DIR/ops/logs/30-aihub-app-logs.conf"
+          test -s "$APP_DIR/ops/logs/aihub-app-logrotate"
           test -s "$APP_DIR/ops/vault/agent/aihub-runtime.hcl"
           test -s "$APP_DIR/ops/vault/agent/aihub-pgbouncer.hcl"
           test -s "$APP_DIR/ops/vault/templates/runtime-secrets.json.ctmpl"

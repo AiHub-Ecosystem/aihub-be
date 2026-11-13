@@ -1371,19 +1371,23 @@ Add exactly this sudoers command for the deploy user using `visudo`:
 <deploy-user> ALL=(root) NOPASSWD: /usr/local/sbin/aihub-nginx-apply
 ```
 
-CD stages the API config, the HTTP-context log format, the logrotate policy,
-and, when `AIHUB_SANDBOX_ENABLED=true`, the Sandbox config in
-`/var/lib/aihub-nginx-staging`. The no-argument root-owned helper changes only
-the two AIHUB virtual hosts, the AIHUB log-format include, and the AIHUB
-logrotate file. It creates the active access log as `root:adm` mode `0640` or
-tightens its existing permissions without truncating it. It validates
-logrotate and nginx before reload and restores the previous config files if
-install, validation, or reload fails. With Sandbox disabled, it removes only
-`/etc/nginx/conf.d/sandbox.conf`. Operators review and install helper updates;
-CD cannot replace its code. The helper verifies the staged logrotate file
-against its pinned SHA-256 because its `postrotate` command runs as root. If a
-config update fails, it keeps the active log file and restrictive permissions;
-rollback never deletes records or restores a broader mode.
+CD stages the API config, the HTTP-context log format, both logrotate policies,
+the rsyslog receiver config, and, when `AIHUB_SANDBOX_ENABLED=true`, the
+Sandbox config in `/var/lib/aihub-nginx-staging`. The no-argument root-owned
+helper manages the two AIHUB virtual hosts, the AIHUB log-format include, both
+AIHUB logrotate files, and `/etc/rsyslog.d/30-aihub-app-logs.conf`. It creates
+or tightens the four fixed AIHUB log files without truncating them, validates
+logrotate, rsyslog, and nginx, then restarts rsyslog only when its config
+changes and reloads nginx. It restores the previous config files if install,
+validation, or reload fails. With Sandbox disabled, it removes only
+`/etc/nginx/conf.d/sandbox.conf`. The deploy script requires the helper's
+`AIHUB_HOST_CONFIG_VERSION=2` marker before changing app containers; an older
+installed helper stops the release before the logging-driver migration.
+Operators review and install helper updates; CD cannot replace its code. The
+helper verifies staged root-run rsyslog and logrotate configs against pinned
+SHA-256 values. If a config update fails, it keeps the active logs and
+restrictive permissions; rollback never deletes records or restores a broader
+mode. The existing exact no-argument sudoers entry remains unchanged.
 
 A deploy re-renders nginx from the synced template only for the tier it
 deploys. The other tier keeps its live policy, retargeted to its active slot
@@ -1405,11 +1409,25 @@ covers at most one day's records; allowing nearly one day before rotation and
 nearly one day until the next age sweep, the 28-day rotated-file limit expires
 each record in under 30 days when the host's daily logrotate timer runs. The
 four-generation count limit can expire records sooner. The helper creates the
-active file as `root:adm` mode
-`0640` (or tightens those permissions without truncating existing records);
-logrotate uses the same mode after rotation. The active file may exceed the
-threshold between host logrotate runs. This source policy is not evidence that
-the change has been deployed.
+active file as `root:adm` mode `0640` (or tightens those permissions without
+truncating existing records); logrotate uses the same mode after rotation.
+The active file may exceed the threshold between host logrotate runs.
+
+Production and Sandbox application records go to separate files,
+`/var/log/aihub-app-production.log` and `/var/log/aihub-app-sandbox.log`. Docker
+sends only those services to rsyslog over `tcp://127.0.0.1:1514`; the receiver
+binds to loopback and accepts only the fixed Production/Sandbox tags. Its
+output template writes the JSON message payload unchanged. Other Compose
+services retain `json-file` with `max-size: 10m` and `max-file: 3`. The app
+files rotate daily with a 10 MiB threshold, `maxage 28`, and two rotated files
+(three generations including the active file). Size and generation limits can
+expire records sooner; each 28-day rotated-file limit expires records within
+30 days when the host's daily logrotate timer runs. Files are `syslog:adm`
+mode `0640`; the same mode is recreated after rotation. Docker's dual-logging
+cache is disabled, and each app container uses a bounded 1 MiB non-blocking
+buffer; `docker logs` does not read these app services. When rsyslog is
+unavailable or its buffer is full, messages can be dropped instead of blocking
+application output.
 
 Do not enable this CD step until migration and bootstrap are complete. The API
 and Sandbox configs keep the 27 MiB request ceiling, 75-second proxy timeouts,
@@ -1520,15 +1538,21 @@ disposal have been approved separately.
 
 ## Container stdout and stderr logs (#363)
 
-Every service in `docker-compose.production.yml` uses Docker's `json-file`
-driver with `max-size: 10m` and `max-file: 3`. Docker retains at most three
-files of up to 10 MB each, for a configured maximum of 30 MB per container.
-The Compose file declares seven services, so even if every profile and
-migration service runs at once, their combined configured maximum is 210 MB.
-CI renders the complete Compose file and fails if any service is missing these
-options. This limit covers Docker-managed container stdout and stderr; it does
-not include the separate `deploy-logs/` snapshots described in the blue-green
-section below.
+The four runtime app services (`app`, `app-slot-b`, `app-sandbox`, and
+`app-sandbox-slot-b`) send stdout/stderr to the local AIHUB syslog receiver.
+Production and Sandbox tags route to separate JSON-message files. Each tier's
+file rotates daily at 10 MiB with `maxage 28` and two rotated generations; the
+daily host logrotate timer expires each record within 30 days, while size and
+generation limits may expire records sooner. Docker's dual-logging cache is
+disabled, and each app container uses a 1 MiB non-blocking buffer, so
+`docker logs` does not read these app services and messages may be dropped if
+the receiver remains unavailable until that buffer fills.
+
+All other Compose services keep Docker's `json-file` driver with `max-size:
+10m` and `max-file: 3`, at most 30 MB per container. CI renders the complete
+Compose file and fails if an app service has a different driver/buffer/tag or
+an unrelated service loses its JSON-file bounds. The local app files and
+`deploy-logs/` snapshots described below are separate copies.
 
 Before the first deployment that applies these options, record the host's
 existing Docker log defaults on #363. Record only the logging keys (or that the
@@ -1541,16 +1565,19 @@ sudo docker info --format 'default_log_driver={{.LoggingDriver}}'
 
 After deployment, inspect the actual container settings and record the output
 on #363. Existing containers keep their previous logging configuration until
-they are recreated.
+they are recreated; the blue-green cutover recreates the stopped rollback slot
+under the syslog driver after saving its last 24 hours.
 
 ```sh
 for id in $(sudo docker ps -aq --filter label=com.docker.compose.project=aihub-production); do
-  sudo docker inspect --format '{{.Name}} driver={{.HostConfig.LogConfig.Type}} options={{json .HostConfig.LogConfig.Config}}' "$id"
+  sudo docker inspect --format 'service={{index .Config.Labels "com.docker.compose.service"}} driver={{.HostConfig.LogConfig.Type}} options={{json .HostConfig.LogConfig.Config}}' "$id"
 done
 ```
 
-The expected values are `json-file`, `max-size: 10m`, and `max-file: 3` for
-each returned AIHUB container.
+The four app services must show `syslog`, `syslog-address=tcp://127.0.0.1:1514`,
+`cache-disabled=true`, `mode=non-blocking`, `max-buffer-size=1m`, and the tier's
+fixed tag. Other services must show `json-file`, `max-size=10m`, and
+`max-file=3`.
 
 ## Verify and operate
 
@@ -1615,13 +1642,16 @@ the `Reject a stale CI revision` step, and confirm the result with
 Use an SSH key for this, not a password: a credential pasted into a chat or a
 ticket stays in its history.
 
-A container's logs are deleted with the container, and every deploy replaces
-it. So before it recreates `app` and `app-sandbox`, the deploy saves the last
-20 MB from each running container to
-`deploy-logs/<service>-<commit>-<time>.log` under the app directory (mode
-`700`); files older than 30 days are removed. Saving is best effort and never
-blocks a release. These snapshots also contain request IPs after #450 and must
-be included in #287's personal-data and retention record.
+Legacy `json-file` container logs are saved before replacement as a bounded
+snapshot of at most 20 MB and the last 24 hours in `deploy-logs/` (directory
+mode `700`; snapshot mode `600`). The daily monitored `prune` host job filters
+each snapshot by its embedded Docker timestamp and removes entries older than
+28 days; unparseable lines are removed. With the 24-hour capture window and
+daily pruning, retained snapshot records stay under 30 days. Saving remains
+best effort and does not block a release. Syslog-backed app containers need no
+snapshot because their persistent tier file survives container replacement.
+These snapshots also contain request IPs after #450 and must be included in
+#287's personal-data and retention record.
 
 ### Diagnosing unmatched API 404s
 
@@ -1642,25 +1672,30 @@ client-secret guard succeeds. A failed guard is classified from the network
 path as `nginx` or `direct_peer`. No end-user forwarded address is recorded
 until #436 validates that contract.
 
-Production and Sandbox events come from separate app containers, and an
-unmatched request may not have an `environment` field. The lookup below checks
-both tiers and their retained `deploy-logs/` snapshots by request ID.
+Production and Sandbox events come from separate app files, and an unmatched
+request may not have an `environment` field. The lookup below checks both
+local syslog files, any still-running legacy `json-file` containers, and
+retained `deploy-logs/` snapshots by request ID.
 
-Run the lookup from the AIHUB deployment directory. It searches the active and
-rotated Docker logs for all Production and Sandbox slots, retained container
-snapshots under `deploy-logs/`, and active or rotated AIHUB nginx access logs.
-It prints only the application route/status/outcome and nginx method/path/status
-for the exact request ID. A missing record or an unreadable source is reported
-separately; it never infers a match from time or path:
+Run the lookup from the AIHUB deployment directory. It searches active and
+rotated `/var/log/aihub-app-production.log*` and
+`/var/log/aihub-app-sandbox.log*` files, legacy Docker logs for `json-file`
+containers, retained snapshots under `deploy-logs/`, and active or rotated
+AIHUB nginx access logs. Syslog-backed app containers have no Docker dual-log
+cache, so `docker logs` is unavailable for them. The lookup prints only the
+application route/status/outcome and nginx method/path/status for the exact
+request ID. A missing record or an unreadable source is reported separately;
+it never infers a match from time or path:
 
 ```sh
 ./scripts/ops/logs/request-log-lookup.sh req_01ARZ3NDEKTSV4RRFFQ69G5FAV
 ```
 
-Run it as an account that already has access to `deploy-logs/` and
-`/var/log/aihub-access.log*`; the latter is `root:adm` mode `0640`. The script
-uses non-interactive sudo only for Docker log reads and does not elevate nginx
-log access. Do not run the whole command with sudo to bypass those permissions.
+Run it as an account that already has access to `deploy-logs/` and the
+`/var/log/aihub-*.log*` files; app logs are `syslog:adm` and Nginx logs are
+`root:adm`, both mode `0640`. The script uses non-interactive sudo to inspect
+container log drivers and read legacy Docker logs; it does not elevate file
+access. Do not run the whole command with sudo to bypass those permissions.
 
 An nginx-generated response does not have an AIHUB request ID because it never
 reached the application; its access record therefore has an empty `request_id`.

@@ -295,19 +295,69 @@ container_revision() {
 }
 
 save_service_logs() {
-  local service="$1" id revision stamp log_dir
+  local service="$1" id revision stamp log_dir log_driver snapshot
   id="$(container_id "$service")"
   [[ -n "$id" ]] || return 0
   revision="$(container_revision "$id" 2>/dev/null || true)"
   [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || revision=unknown
+  log_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$id" 2>/dev/null || true)"
+  [[ "$log_driver" == json-file ]] || return 0
   log_dir=deploy-logs
   if ! mkdir -p "$log_dir" || ! chmod 700 "$log_dir"; then
     return 0
   fi
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  sudo -n docker logs --timestamps "$id" 2>&1 \
-    | tail -c 20000000 >"$log_dir/$service-${revision:0:7}-$stamp.log" || true
-  find "$log_dir" -name '*.log' -mtime +30 -delete 2>/dev/null || true
+  snapshot="$(mktemp "$log_dir/$service-${revision:0:7}-$stamp.XXXXXX.log")" || return 0
+  if sudo -n docker logs --since 24h --timestamps "$id" 2>/dev/null \
+    | tail -c 20000000 \
+    | awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/' \
+      >"$snapshot" && [[ -s "$snapshot" ]]; then
+    return 0
+  fi
+  rm -f -- "$snapshot"
+}
+
+refresh_stopped_app_logging() {
+  local service="$1" id driver cache_disabled image replacement_id replacement_driver replacement_cache env_file
+  local -a replacement_compose
+  id="$(container_id "$service")"
+  [[ -n "$id" ]] || return 0
+  driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$id")" || return 1
+  cache_disabled="$(sudo -n docker inspect --format '{{index .HostConfig.LogConfig.Config "cache-disabled"}}' "$id")" || return 1
+  if [[ "$driver" == syslog && "$cache_disabled" == true ]]; then
+    return 0
+  fi
+  if [[ "$driver" != json-file && "$driver" != syslog ]]; then
+    printf '%s has unsupported app log driver %s\n' "$service" "$driver" >&2
+    return 1
+  fi
+  if [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$id")" == true ]]; then
+    printf '%s must be stopped before its logging config is refreshed\n' "$service" >&2
+    return 1
+  fi
+  [[ "$driver" != json-file ]] || save_service_logs "$service"
+  image="$(sudo -n docker inspect --format '{{.Config.Image}}' "$id")" || return 1
+  [[ -n "$image" ]] || return 1
+  env_file="$(mktemp "$STATE_DIR/legacy-app-image.XXXXXX")" || return 1
+  printf 'AIHUB_IMAGE=%s\n' "$image" >"$env_file"
+  chmod 0600 "$env_file"
+  replacement_compose=("${compose[@]}" --env-file "$env_file")
+  if ! "${replacement_compose[@]}" up --no-start --force-recreate --no-deps --no-build "$service"; then
+    rm -f -- "$env_file"
+    return 1
+  fi
+  rm -f -- "$env_file"
+  replacement_id="$(container_id "$service")"
+  [[ -n "$replacement_id" && "$replacement_id" != "$id" ]] || {
+    printf '%s logging refresh did not replace its legacy container\n' "$service" >&2
+    return 1
+  }
+  replacement_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$replacement_id")" || return 1
+  replacement_cache="$(sudo -n docker inspect --format '{{index .HostConfig.LogConfig.Config "cache-disabled"}}' "$replacement_id")" || return 1
+  if [[ "$replacement_driver" != syslog || "$replacement_cache" != true ]]; then
+    printf '%s logging refresh did not apply the bounded syslog driver\n' "$service" >&2
+    return 1
+  fi
 }
 
 container_running() {
@@ -587,7 +637,7 @@ render_config() {
 
 apply_slots() {
   local api_slot="$1" sandbox_slot="$2" include_sandbox="${3:-$sandbox_routed}" api_tmp sandbox_tmp
-  local api_source sandbox_source
+  local api_source sandbox_source helper_status
   api_source="$(config_source production)"
   sandbox_source="$(config_source sandbox)"
   nginx_override_production=""
@@ -608,8 +658,16 @@ apply_slots() {
     ops/nginx/00-aihub-log-format.conf "$NGINX_STAGING/00-aihub-log-format.conf"
   install -o "$(id -u)" -g "$(id -g)" -m 0644 \
     ops/nginx/aihub-access-logrotate "$NGINX_STAGING/aihub-access-logrotate"
+  install -o "$(id -u)" -g "$(id -g)" -m 0644 \
+    ops/logs/30-aihub-app-logs.conf "$NGINX_STAGING/30-aihub-app-logs.conf"
+  install -o "$(id -u)" -g "$(id -g)" -m 0644 \
+    ops/logs/aihub-app-logrotate "$NGINX_STAGING/aihub-app-logrotate"
   rm -f "$api_tmp" "$sandbox_tmp"
-  sudo -n "$NGINX_HELPER"
+  helper_status="$(sudo -n "$NGINX_HELPER" | tail -n 1)"
+  if [[ "$helper_status" != AIHUB_HOST_CONFIG_VERSION=2 ]]; then
+    printf 'The installed AIHUB host helper does not support the managed app-log sink.\n' >&2
+    return 1
+  fi
   [[ "$(active_slot production "$API_CONFIG")" == "$api_slot" ]]
   if [[ "$include_sandbox" == true ]]; then
     [[ "$(active_slot sandbox "$SANDBOX_CONFIG")" == "$sandbox_slot" ]]
@@ -1065,6 +1123,10 @@ deploy_tier() {
 
   drain_status=0
   drain_old_slot "$old_service" || drain_status=$?
+  if [[ "$drain_status" -eq 0 ]]; then
+    refresh_stopped_app_logging "$old_service" || drain_status=$?
+    old_id="$(container_id "$old_service")"
+  fi
   resource_status=0
   capture_resources "drained-${tier}" || resource_status=1
   if [[ "$drain_status" -ne 0 || "$resource_status" -ne 0 || -n "$edge_monitor_failures" ]] ||

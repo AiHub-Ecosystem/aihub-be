@@ -1,0 +1,18 @@
+/var/log/aihub-app-production.log /var/log/aihub-app-sandbox.log {
+    daily
+    maxsize 10M
+    maxage 28
+    rotate 2
+    ifempty
+    su root adm
+    compress
+    delaycompress
+    missingok
+    create 0640 syslog adm
+    sharedscripts
+    postrotate
+        if systemctl is-active --quiet rsyslog.service; then
+            systemctl kill --signal=HUP rsyslog.service
+        fi
+    endscript
+}

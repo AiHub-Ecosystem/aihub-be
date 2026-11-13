@@ -77,19 +77,25 @@ app_dir="$test_root/app"
 bin_dir="$test_root/bin"
 home_dir="$test_root/home"
 mkdir -p "$app_dir/scripts/ops/host-jobs" "$app_dir/scripts/ops/blue-green" \
+  "$app_dir/scripts/ops/logs" \
   "$app_dir/ops/host-jobs" \
   "$app_dir/.aihub-host-jobs-candidate" "$bin_dir" "$home_dir"
 cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" \
   "$app_dir/.aihub-host-jobs-candidate/host-scheduled-job.sh"
 cp "$repository_root/scripts/ops/host-jobs/host-scheduled-job.sh" \
   "$app_dir/scripts/ops/host-jobs/"
+cp "$repository_root/scripts/ops/logs/prune-deploy-log-snapshots.sh" \
+  "$app_dir/scripts/ops/logs/"
 cp "$repository_root/scripts/ops/host-jobs/install-host-jobs.sh" \
   "$app_dir/scripts/ops/host-jobs/"
 cp "$repository_root/scripts/ops/host-jobs/finish-host-jobs.sh" \
   "$app_dir/scripts/ops/host-jobs/"
 cp "$repository_root/ops/host-jobs/aihub.crontab" \
   "$app_dir/.aihub-host-jobs-candidate/aihub.crontab"
-chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" "$app_dir/scripts/ops/host-jobs/finish-host-jobs.sh"
+chmod 755 "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" \
+  "$app_dir/scripts/ops/logs/prune-deploy-log-snapshots.sh" \
+  "$app_dir/scripts/ops/host-jobs/install-host-jobs.sh" \
+  "$app_dir/scripts/ops/host-jobs/finish-host-jobs.sh"
 
 cat >"$app_dir/scripts/ops/blue-green/blue-green-host.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -292,6 +298,7 @@ assert_contains "$FAKE_DOCKER_CALLS" \
 : >"$FAKE_DOCKER_CALLS"
 APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" prune \
   --dry-run true >"$test_root/prune-dry-run.out" 2>&1
+assert_not_contains "$test_root/prune-dry-run.out" 'deploy_log_snapshots='
 assert_contains "$FAKE_DOCKER_CALLS" 'usage:prune --target production --dry-run true'
 assert_contains "$FAKE_DOCKER_CALLS" 'usage:prune --target sandbox --dry-run true'
 
@@ -358,6 +365,9 @@ for job_and_limits in 'quota 900 90000' 'prune 1800 90000' 'report 180 8400' 'tt
   : >"$FAKE_DOCKER_CALLS"
   APP_DIR="$app_dir" bash "$app_dir/scripts/ops/host-jobs/host-scheduled-job.sh" "$job" \
     >"$test_root/$job.out" 2>&1
+  if [[ "$job" == prune ]]; then
+    assert_contains "$test_root/$job.out" 'prune deploy_log_snapshots=success'
+  fi
   assert_contains "$FAKE_DOCKER_CALLS" "app-slot-b timeout=$expected_timeout"
   assert_contains "$FAKE_DOCKER_CALLS" "app-sandbox timeout=$expected_timeout"
   success_file="$home_dir/.aihub-host-job-metrics/$job-success.prom"

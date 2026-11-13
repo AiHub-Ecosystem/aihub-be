@@ -190,6 +190,12 @@ export function selectShellSpecs(files, listDir = listDirEntries) {
           specs.add(`test/cli/${entry}`);
         }
       }
+    } else if (file === 'scripts/ops/logs/prune-deploy-log-snapshots.sh') {
+      for (const entry of listDir('test/cli')) {
+        if (entry === 'prune-deploy-log-snapshots.spec.sh') {
+          specs.add(`test/cli/${entry}`);
+        }
+      }
     } else {
       const dir = file.slice(0, file.lastIndexOf('/'));
       for (const entry of listDir(dir)) {

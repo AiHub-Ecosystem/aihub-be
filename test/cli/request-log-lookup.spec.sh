@@ -30,6 +30,7 @@ app_dir="$test_root/app"
 fixture_dir="$test_root/fixtures"
 bin_dir="$test_root/bin"
 mkdir -p "$app_dir/deploy-logs" "$fixture_dir/docker" "$bin_dir"
+touch "$fixture_dir/aihub-app-production.log" "$fixture_dir/aihub-app-sandbox.log"
 real_zgrep="$(command -v zgrep)"
 real_gzip="$(command -v gzip)"
 touch "$fixture_dir/nginx-active.log"
@@ -60,6 +61,9 @@ elif [[ "${1:-}" == logs ]]; then
   printf '%s\n' "$*" >>"$FAKE_DOCKER_CALLS"
   container_id="${*: -1}"
   cat "$FAKE_DOCKER_LOGS/$container_id.log"
+elif [[ "${1:-}" == inspect ]]; then
+  printf '%s\n' "$*" >>"$FAKE_DOCKER_CALLS"
+  printf '%s\n' "${FAKE_DOCKER_DRIVER:-json-file}"
 else
   exit 93
 fi
@@ -69,7 +73,17 @@ cat >"$bin_dir/zgrep" <<'STUB'
 #!/usr/bin/env bash
 [[ "${1:-}" == -h && "${2:-}" == -F && "${3:-}" == -- ]] || exit 94
 [[ "${FAKE_ZGREP_FAIL:-false}" != true ]] || exit 95
-exec "$REAL_ZGREP" -h -F -- "$4" "$FAKE_NGINX_ACTIVE" "$FAKE_NGINX_ROTATED"
+needle="$4"
+shift 4
+files=()
+for file in "$@"; do
+  case "${file##*/}" in
+    aihub-access.log) files+=("$FAKE_NGINX_ACTIVE") ;;
+    aihub-access.log.*) files+=("$FAKE_NGINX_ROTATED") ;;
+    *) files+=("$file") ;;
+  esac
+done
+exec "$REAL_ZGREP" -h -F -- "$needle" "${files[@]}"
 STUB
 chmod 755 "$bin_dir/sudo" "$bin_dir/docker" "$bin_dir/zgrep"
 
@@ -79,6 +93,7 @@ export FAKE_DOCKER_LOGS="$fixture_dir/docker"
 export FAKE_DOCKER_CALLS="$fixture_dir/docker-calls.log"
 export FAKE_NGINX_ACTIVE="$fixture_dir/nginx-active.log"
 export FAKE_NGINX_ROTATED="$fixture_dir/nginx-rotated.log.gz"
+export AIHUB_APP_LOG_DIR="$fixture_dir"
 export REAL_ZGREP="$real_zgrep"
 export REAL_GZIP="$real_gzip"
 
@@ -147,6 +162,21 @@ run_verify
 assert_status 0
 [[ "$(cat "$test_root/output.log")" == PASS ]]
 assert_not_contains "$test_root/output.log" '192.0.2.10'
+
+# Syslog-backed app records are searched from AIHUB files; docker logs is not
+# called because the remote driver has no dual-logging cache.
+: >"$FAKE_DOCKER_CALLS"
+FAKE_DOCKER_DRIVER=syslog
+write_app_event "$fixture_dir/aihub-app-production.log" '/v1/items/:itemId' 200 success
+run_lookup
+assert_status 0
+assert_contains "$test_root/output.log" 'application: route=/v1/items/:itemId status=200 outcome=success'
+if grep -Fq 'logs --timestamps' "$FAKE_DOCKER_CALLS"; then
+  printf 'lookup called docker logs for a syslog-backed service\n' >&2
+  exit 1
+fi
+unset FAKE_DOCKER_DRIVER
+: >"$fixture_dir/aihub-app-production.log"
 
 write_app_event "$FAKE_DOCKER_LOGS/app-container.log" '/v1/items/:itemId' 200 success
 sed -i 's/"client_ip_source":"nginx"/"client_ip_source":"direct_peer"/' \

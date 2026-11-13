@@ -581,6 +581,15 @@ const pathCases = [
     ],
   },
   {
+    path: 'scripts/ops/logs/prune-deploy-log-snapshots.sh',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
+  },
+  {
     path: 'docker-compose.production.yml',
     gates: ['check:compose', 'format:check'],
   },
@@ -808,7 +817,11 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
       ];
     }
     if (dir === 'test/cli') {
-      return ['request-log-lookup.spec.sh', 'other.spec.sh'];
+      return [
+        'request-log-lookup.spec.sh',
+        'prune-deploy-log-snapshots.spec.sh',
+        'other.spec.sh',
+      ];
     }
     return [];
   };
@@ -843,6 +856,18 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
     {
       script: 'test:shell-specs',
       args: ['test/cli/request-log-lookup.spec.sh'],
+    },
+  );
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/logs/prune-deploy-log-snapshots.sh'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/cli/prune-deploy-log-snapshots.spec.sh'],
     },
   );
 });

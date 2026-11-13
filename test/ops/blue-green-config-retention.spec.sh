@@ -89,6 +89,7 @@ if [[ -f "$NGINX_STAGING/sandbox.conf" ]]; then
 else
   rm -f "$SANDBOX_CONFIG"
 fi
+printf 'AIHUB_HOST_CONFIG_VERSION=2\n'
 HELPER
 chmod +x "$NGINX_HELPER"
 sudo() { shift; "$@"; }

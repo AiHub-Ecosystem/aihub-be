@@ -164,6 +164,19 @@ fi
 tmp_dir="$(mktemp -d)" || exit 1
 trap 'rm -rf -- "$tmp_dir"' EXIT
 
+snapshot_prune_status=0
+if [[ "$JOB" == prune && "$prune_dry_run" == false ]]; then
+  if timeout --signal=TERM --kill-after=5s 900s \
+    "$APP_DIR/scripts/ops/logs/prune-deploy-log-snapshots.sh" \
+    >"$tmp_dir/snapshot-prune.out" 2>"$tmp_dir/snapshot-prune.err"; then
+    log_line "$(date -u +%FT%TZ) prune deploy_log_snapshots=success"
+  else
+    code=$?
+    snapshot_prune_status=1
+    log_line "$(date -u +%FT%TZ) prune deploy_log_snapshots=failed exit=$code"
+  fi
+fi
+
 log_stderr_tail() {
   local timestamp=$1 tier=$2 service=$3 code=$4 stderr_file=$5 line
   log_line "$timestamp $JOB $tier service=$service exit=$code"
@@ -224,7 +237,7 @@ if [[ "$JOB" == report && "$report_window_provided" == false ]]; then
   to="$(date -u +%Y-%m-%dT%H:00:00.000Z)" || exit 1
 fi
 
-status=0
+status="$snapshot_prune_status"
 for tier in production sandbox; do
   timestamp="$(date -u +%FT%TZ)"
   if [[ "$tier" == sandbox ]] && grep -Fxq 'sandbox disabled' <<<"$deployment_status"; then

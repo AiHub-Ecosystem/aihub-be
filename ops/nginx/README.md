@@ -9,20 +9,30 @@ for the one-time supervised migration and helper bootstrap.
 
 The operator installs `aihub-nginx-apply` as root-owned
 `/usr/local/sbin/aihub-nginx-apply` and grants the deploy user one exact
-`NOPASSWD` sudoers entry for that no-argument path. CD stages config data in
-`/var/lib/aihub-nginx-staging`; the helper only changes the two AIHUB virtual
-hosts, their log-format include, and the AIHUB logrotate file. It also creates
-or tightens the active access log without truncating it. It validates the
-logrotate config with `logrotate --debug` and nginx with `nginx -t`, reloads on
-success, and restores the previous config files on failure. The operator must
-review and install helper updates; CD never installs or updates its own
-privileged helper.
+`NOPASSWD` sudoers entry for that no-argument path. CD stages fixed config data
+in `/var/lib/aihub-nginx-staging`; the helper manages the two AIHUB virtual
+hosts, their log-format include, both AIHUB logrotate policies, and the
+AIHUB-only rsyslog receiver. It creates or tightens the active log files
+without truncating them, validates logrotate, rsyslog, and nginx, restarts
+rsyslog only when its config changes, and restores the previous config files
+on failure. The deploy script requires helper version 2 before it changes
+application containers. The operator must review and install helper updates;
+CD never installs or updates its own privileged helper.
 
-The helper pins the staged logrotate file's SHA-256 because `postrotate` runs
-as root. Changing that file also requires an operator-reviewed helper update.
-If a later config step fails, the helper restores its managed config files but
-keeps the active log and its restrictive permissions; it never truncates or
-deletes log records during rollback.
+The helper pins each staged logrotate and rsyslog file's SHA-256 because the
+policies and service restart run as root. Changing one of those files also
+requires an operator-reviewed helper update. If a later config step fails, the
+helper restores its managed config files but keeps the active logs and their
+restrictive permissions; it never truncates or deletes log records during
+rollback.
+
+Production and Sandbox app containers send only their JSON message payloads to
+the TCP receiver on `127.0.0.1:1514`. The fixed `aihub-production` and
+`aihub-sandbox` tags route to separate files; other tags are discarded. Docker's
+remote log cache is disabled, and each app container uses a bounded 1 MiB
+non-blocking buffer. `docker logs` is therefore unavailable for these app
+containers; use `scripts/ops/logs/request-log-lookup.sh` to search the local
+files and any legacy `json-file` containers during migration.
 
 AIHUB access records contain the observed address, the upstream
 `X-Request-Id`, method, `$uri` without a query string, and status. Both AIHUB

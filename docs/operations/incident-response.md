@@ -118,16 +118,19 @@ or the cause is unknown, do these in order (about 10 minutes):
 
 1. **Pause CD** (`gh workflow disable cd.yml`) so the next merge does not
    replace the containers.
-2. **Copy container logs off the host** to the responder's workstation, for
-   each affected service (`app`, `app-sandbox`, and the blue-green slot if it is
-   active):
+2. **Copy app logs off the host** to the responder's workstation, for the
+   affected tier and any relevant rotated generations:
 
    ```sh
-   ssh <user>@<host> 'cd <app-dir> && sudo -n docker compose --env-file .env.production -f docker-compose.production.yml logs --no-color --timestamps app' > incident-<date>-app.log
+   ssh <user>@<host> 'zgrep -h . /var/log/aihub-app-production.log*' > incident-<date>-production.log
+   ssh <user>@<host> 'zgrep -h . /var/log/aihub-app-sandbox.log*' > incident-<date>-sandbox.log
    ```
 
-   Also copy the `deploy-logs/` snapshots from the app directory if the incident
-   spans a deploy ([Checking deployed state](deploy-vps.md#checking-deployed-state)).
+   These files are `syslog:adm` mode `0640`. For an app container that still
+   uses the legacy `json-file` driver, collect its output with `docker logs`;
+   `docker logs` is not available for the syslog-backed services. Also copy
+   recent `deploy-logs/` snapshots if the incident spans the cutover
+   ([Checking deployed state](deploy-vps.md#checking-deployed-state)).
 
 3. **Record container state:** the output of `ops/status.sh` and
    `docker inspect` for each affected container (start time, restart count,

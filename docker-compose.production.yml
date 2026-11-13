@@ -6,6 +6,25 @@ x-container-logging: &container-logging
     max-size: "10m"
     max-file: "3"
 
+x-app-syslog-options: &app-syslog-options
+  syslog-address: tcp://127.0.0.1:1514
+  syslog-format: rfc5424micro
+  cache-disabled: "true"
+  mode: non-blocking
+  max-buffer-size: 1m
+
+x-production-app-logging: &production-app-logging
+  driver: syslog
+  options:
+    <<: *app-syslog-options
+    tag: aihub-production
+
+x-sandbox-app-logging: &sandbox-app-logging
+  driver: syslog
+  options:
+    <<: *app-syslog-options
+    tag: aihub-sandbox
+
 x-app-common: &app-common
   image: ${AIHUB_IMAGE:-aihub-be:local}
   logging: *container-logging
@@ -79,6 +98,7 @@ x-app-environment: &app-environment
 
 x-app-service: &app-service
   <<: *app-common
+  logging: *production-app-logging
   networks: *app-database-networks
   restart: unless-stopped
   # Sized for the largest request timeout T (ADR-0085, amended by ADR-0143):
@@ -342,6 +362,7 @@ services:
 
   app-sandbox:
     <<: *app-service
+    logging: *sandbox-app-logging
     profiles:
       - sandbox
     environment:
@@ -367,6 +388,7 @@ services:
 
   app-sandbox-slot-b:
     <<: *app-service
+    logging: *sandbox-app-logging
     profiles:
       - sandbox
       - blue-green
