@@ -1,0 +1,6 @@
+{
+  "minLines": 8,
+  "minTokens": 80,
+  "ignore": ["**/fixtures/**", "**/generated/**"],
+  "failOnEmpty": true
+}

@@ -13,6 +13,20 @@ not a finding already proven.
 - Entries already solved are struck with a pointer to the commit that solved
   them.
 
+## Automated gate (#1420)
+
+`bun run check:duplication` scans `src` and `test` at 8 lines / 80 tokens and
+compares clone fingerprints with `origin/main`. It follows the current
+inventory: specs and `testing/` code are included; `**/fixtures/**` and
+`**/generated/**` are excluded. CI fetches full history so the baseline ref is
+available. The gate checks only new clones; it does not enforce a total
+duplication threshold or use a committed baseline.
+
+To keep an intentional clone, add a row here with its paths and reason, then
+wrap the exact repeated blocks in both copies with `jscpd:ignore-start` and
+`jscpd:ignore-end`. This keeps the clone documented without editing a baseline
+or suppressing unrelated code in either file.
+
 The five drifted rules that could change behaviour today are filed on their own
 and are **not** repeated here:
 
@@ -191,7 +205,7 @@ were absent from earlier rows; the `JOB_COLUMNS` copy was confirmed directly.
   is written. Rows are never deleted.
 - New duplication found later is appended here rather than becoming its own
   top-level issue.
-- jscpd runs are point-in-time inventories. #1420 tracks a future clone gate;
-  this register remains responsible for row accuracy.
+- jscpd runs are point-in-time inventories; the #1420 gate catches new clones
+  while this register remains responsible for row accuracy and rationale.
 
 - Final run for #1422 on 2026-10-31, same thresholds as #1315: 0 clones in 561 files.

@@ -176,6 +176,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bun run check:duplication-register
 
+      - name: Check for new code duplication
+        run: bun run check:duplication
+
       - name: Check architecture
         run: bun run arch-check
 
@@ -207,7 +210,7 @@ jobs:
       # #1786: these suites ran only inside the local check:batch loop, so a
       # regression in the checkers they pin stayed invisible in CI.
       - name: Check the hook, drift, and register suites CI owns
-        run: bun run test:issue-triage && bun run test:duplication-register && bun run test:lint-staged && bun run test:check-staged && bun run test:doc-drift && bun run test:commit-message
+        run: bun run test:issue-triage && bun run test:duplication && bun run test:duplication-register && bun run test:lint-staged && bun run test:check-staged && bun run test:doc-drift && bun run test:commit-message
 
       # #1786: the commit-message gate exists only at hook time, so a
       # --no-verify commit landed a non-Conventional header with nothing to
