@@ -285,12 +285,12 @@ export class WebSessionService implements WebSessionServicePort {
     input: { readonly token: string | undefined },
     endUserIp: string | undefined,
   ): Promise<IssuedUserAccessToken> {
-    const now = this.clock.now();
     if (input.token === undefined || input.token.length === 0) {
       throw invalidWebSession();
     }
 
     const tokenHash = this.tokenIssuer.hash(input.token);
+    const now = this.clock.now();
 
     let userId: string;
     let sessionId: string;
@@ -299,13 +299,13 @@ export class WebSessionService implements WebSessionServicePort {
         tokenHash,
         now,
       });
+      // An active account is the condition of the exchange, checked beside the
+      // session rather than inside it: disabling an account has to stop every
+      // session it owns, not revoke them.
       if (session === undefined) {
         await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
         throw invalidWebSession();
       }
-      // An active account is the condition of the exchange, checked beside the
-      // session rather than inside it: disabling an account has to stop every
-      // session it owns, not revoke them.
       const status = await this.userAccounts.findUserAccountStatus(
         session.userId,
       );
