@@ -25,15 +25,20 @@ function canonicalize(value: unknown): unknown {
   // convert such values first. Stored idempotency fingerprints and audit
   // cursors are keyed on this exact output, so do not change it in passing.
   if (isRecord(value)) {
-    const normalized: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) {
-      const item = value[key];
-      if (item === undefined) {
-        throw internalError('canonical JSON cannot contain undefined');
-      }
-      normalized[key] = canonicalize(item);
-    }
-    return normalized;
+    // `Object.fromEntries` defines own data properties, so a `__proto__` key
+    // is kept; assigning `output[key]` would call the prototype setter and
+    // drop it.
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => {
+          const item = value[key];
+          if (item === undefined) {
+            throw internalError('canonical JSON cannot contain undefined');
+          }
+          return [key, canonicalize(item)];
+        }),
+    );
   }
 
   throw internalError('canonical JSON contains an unsupported value');

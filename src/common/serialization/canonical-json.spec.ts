@@ -29,6 +29,16 @@ describe('canonicalJson', () => {
     expect(canonicalJson({})).toBe('{}');
   });
 
+  // Shrunk counterexample from canonical-json.property.spec.ts (#329).
+  it('keeps a __proto__ key, so it changes the bytes and the fingerprint', () => {
+    expect(canonicalJson(JSON.parse('{"__proto__":{}}'))).toBe(
+      '{"__proto__":{}}',
+    );
+    expect(
+      canonicalJson(JSON.parse('{"a":1,"__proto__":{"role":"admin"}}')),
+    ).toBe('{"__proto__":{"role":"admin"},"a":1}');
+  });
+
   it('rejects undefined, in a property and at the root', () => {
     expect(() => canonicalJson({ a: undefined })).toThrow(/undefined/);
     expect(() => canonicalJson(undefined)).toThrow(/unsupported/);
