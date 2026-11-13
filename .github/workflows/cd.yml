@@ -783,7 +783,7 @@ jobs:
           ./scripts/ops/host-jobs/finish-host-jobs.sh finish "$DEPLOY_OUTCOME" "${AIHUB_IMAGE##*:}"
           REMOTE
         env:
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
 
       - name: Report unresolved AIHUB host-job suspension
         if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.ssh.outcome == 'success' && steps.pause_host_jobs.outcome != 'skipped' }}

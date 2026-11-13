@@ -154,6 +154,17 @@ describe('CD finishing a half-deployed release', () => {
   });
 
   describe('the host-jobs step', () => {
+    it('treats a skipped final health check as a failed deployment', () => {
+      expect(
+        step(
+          'Install and smoke the scheduled host jobs',
+          'Report active tier revisions',
+        ),
+      ).toContain(
+        "DEPLOY_OUTCOME: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}",
+      );
+    });
+
     it('installs the jobs once both tiers run the target', () => {
       const result = runHostJobsStep(
         status([tier('production', TARGET), tier('sandbox', TARGET)]),
