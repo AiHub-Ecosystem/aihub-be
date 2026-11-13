@@ -37,6 +37,11 @@ on:
         required: true
         type: boolean
         default: false
+      probe_source_cache:
+        description: Add temporary src file to verify production dependency cache reuse
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -1111,6 +1116,10 @@ jobs:
       # and emit the manifest list a push needs. The push is a separate step
       # once the boot has passed. The Dockerfile this uses is the only one
       # release ever builds (ADR-0064).
+      - name: Add source-only cache probe
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_source_cache }}
+        run: printf 'export {};\n' > src/cache-validation-probe.ts
+
       - name: Build production image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:

@@ -120,8 +120,8 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # The same image CD ships, built and loaded into this runner's daemon
-      # only. The gha cache is shared with the CI image job, so a PR whose
-      # image job already built this commit pays little here.
+      # only. DAST reads CI's production cache but writes to its own scope, so
+      # a DAST run cannot replace the cache used by the CI image job.
       - name: Build production image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
