@@ -2,15 +2,45 @@ import { generateKeyPairSync } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { decodeJwt } from 'jose';
+import type { Pool } from 'pg';
 
 import {
   API_HOST,
   assertNMinusOneGatePasses,
   jwt,
   request,
+  resetNMinusOneDatabase,
   safeContainerError,
   waitReady,
 } from './n-minus-one-runtime';
+
+it('clears the database-scoped N-1 publication and replication slot', async () => {
+  const query = jest
+    .fn()
+    .mockResolvedValueOnce({ rows: [{ active: false }] })
+    .mockResolvedValue({ rows: [] });
+
+  await resetNMinusOneDatabase({ query } as unknown as Pool);
+
+  expect(query.mock.calls).toEqual([
+    [
+      'SELECT active FROM pg_replication_slots WHERE slot_name = $1',
+      ['aihub_email_delivery'],
+    ],
+    ['SELECT pg_drop_replication_slot($1)', ['aihub_email_delivery']],
+    ['DROP PUBLICATION IF EXISTS aihub_email_delivery'],
+    ['DROP SCHEMA public CASCADE; CREATE SCHEMA public'],
+  ]);
+});
+
+it('refuses to reset while the N-1 replication slot is active', async () => {
+  const query = jest.fn().mockResolvedValue({ rows: [{ active: true }] });
+
+  await expect(
+    resetNMinusOneDatabase({ query } as unknown as Pool),
+  ).rejects.toThrow('N-1 reset cannot drop an active email replication slot');
+  expect(query).toHaveBeenCalledTimes(1);
+});
 
 it('passes the N-1 gate when no release hold is recorded', () => {
   expect(() => assertNMinusOneGatePasses([])).not.toThrow();

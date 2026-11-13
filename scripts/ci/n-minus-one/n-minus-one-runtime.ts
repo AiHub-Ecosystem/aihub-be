@@ -10,6 +10,8 @@ import { request as httpRequest } from 'node:http';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
+import type { Pool } from 'pg';
+
 import type { RedisEndpoints } from './redis-endpoint-compatibility';
 
 export const ROOT = process.cwd();
@@ -444,6 +446,23 @@ export function safeContainerError(logs: string): string {
         '[JWT]',
       ) ?? 'no error line in the last 40 log lines'
   );
+}
+
+export async function resetNMinusOneDatabase(database: Pool): Promise<void> {
+  const slots = await database.query<{ active: boolean }>(
+    'SELECT active FROM pg_replication_slots WHERE slot_name = $1',
+    ['aihub_email_delivery'],
+  );
+  if (slots.rows[0]?.active) {
+    throw new Error('N-1 reset cannot drop an active email replication slot');
+  }
+  if (slots.rows.length > 0) {
+    await database.query('SELECT pg_drop_replication_slot($1)', [
+      'aihub_email_delivery',
+    ]);
+  }
+  await database.query('DROP PUBLICATION IF EXISTS aihub_email_delivery');
+  await database.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public');
 }
 
 export async function waitReady(

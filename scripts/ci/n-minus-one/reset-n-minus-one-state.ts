@@ -1,7 +1,7 @@
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 
-import { DATABASE_URL } from './n-minus-one-runtime';
+import { DATABASE_URL, resetNMinusOneDatabase } from './n-minus-one-runtime';
 
 async function reset(): Promise<void> {
   const database = new Pool({ connectionString: DATABASE_URL });
@@ -10,7 +10,7 @@ async function reset(): Promise<void> {
   });
   redis.on('error', () => undefined);
   try {
-    await database.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public');
+    await resetNMinusOneDatabase(database);
     await redis.flushall();
     await database.query('SELECT 1');
     if ((await redis.ping()) !== 'PONG') {
