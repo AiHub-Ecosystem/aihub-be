@@ -19,6 +19,8 @@ extract() {
 }
 
 eval "$(extract refresh_stopped_app_logging "$repository_root/scripts/ops/blue-green/blue-green-host.sh")"
+eval "$(extract save_service_logs "$repository_root/scripts/ops/blue-green/blue-green-host.sh")"
+eval "$(extract write_app_logging_override "$repository_root/scripts/ops/blue-green/blue-green-host.sh")"
 eval "$(extract replace_app_container_baseline "$repository_root/scripts/ops/blue-green/blue-green-host.sh")"
 eval "$(extract compose_override_supported "$repository_root/scripts/ops/blue-green/blue-green-host.sh")"
 eval "$(extract deploy_tier "$repository_root/scripts/ops/blue-green/blue-green-host.sh")"
@@ -36,6 +38,8 @@ COMPOSE_FAIL=false
 SAVED_SNAPSHOT=false
 ROLLBACK_CALLED=false
 COMPOSE_STOPPED=false
+REPLACEMENT_STATUS=missing
+LOG_CAPTURE_MODE=success
 AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:current
 API_CONFIG="$test_root/nginx-api.conf"
 SANDBOX_CONFIG="$test_root/nginx-sandbox.conf"
@@ -53,7 +57,6 @@ container_id() {
 }
 
 container_revision() { printf '%s\n' "$OLD_SHA"; }
-save_service_logs() { SAVED_SNAPSHOT=true; }
 retained_dir() { printf '%s/config/%s/%s\n' "$test_root" "$1" "$2"; }
 
 sudo() {
@@ -61,6 +64,15 @@ sudo() {
   shift
   if [[ "${1:-}" == docker && "${2:-}" == compose && "${3:-}" == version ]]; then
     printf '%s\n' "$FAKE_COMPOSE_VERSION"
+    return 0
+  fi
+  if [[ "${1:-}" == docker && "${2:-}" == logs ]]; then
+    case "$LOG_CAPTURE_MODE" in
+      success) printf '2026-11-13T14:00:00.000000Z stderr F legacy log line\n' >&2 ;;
+      empty) ;;
+      failure) printf '2026-11-13T14:00:00.000000Z stderr F partial log line\n' >&2; return 1 ;;
+      *) return 83 ;;
+    esac
     return 0
   fi
   [[ "${1:-}" == docker && "${2:-}" == inspect && "${3:-}" == --format ]] || return 81
@@ -74,10 +86,42 @@ sudo() {
       ;;
     '{{.State.Running}}') printf 'false\n' ;;
     '{{.Config.Image}}') printf '%s\n' "$OLD_IMAGE" ;;
-    '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}') printf 'created false 0\n' ;;
+    '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}')
+      if [[ "$id" == replacement-container ]]; then
+        printf '%s false 0\n' "$REPLACEMENT_STATUS"
+      else
+        printf 'created false 0\n'
+      fi
+      ;;
+    '{{.HostConfig.LogConfig.Type}}')
+      [[ "$id" == old-container || "$id" == restored-container ]] && printf 'json-file\n' || printf 'syslog\n'
+      ;;
     *) return 82 ;;
   esac
 }
+
+mkdir -p "$test_root/snapshot-capture"
+(
+  cd "$test_root/snapshot-capture"
+  ACTIVE_CONTAINER=old-container LOG_CAPTURE_MODE=success save_service_logs app || fail 'captured legacy stdout and stderr'
+  [[ "$(find deploy-logs -name '*.log' -type f | wc -l | tr -d ' ')" == 1 ]] || fail 'published one complete snapshot'
+  [[ "$(cat deploy-logs/*.log)" == *'legacy log line'* ]] || fail 'kept application log output'
+)
+(
+  cd "$test_root/snapshot-capture"
+  rm -f deploy-logs/*.log
+  if ACTIVE_CONTAINER=old-container LOG_CAPTURE_MODE=failure save_service_logs app; then
+    fail 'refused to publish after docker logs failed'
+  fi
+  [[ -z "$(find deploy-logs -type f -print -quit)" ]] || fail 'removed the incomplete snapshot'
+)
+(
+  cd "$test_root/snapshot-capture"
+  LOG_CAPTURE_MODE=empty save_service_logs app || fail 'accepted a successfully captured empty stream'
+  [[ -z "$(find deploy-logs -type f -print -quit)" ]] || fail 'did not publish an empty snapshot'
+)
+SAVED_SNAPSHOT=false
+save_service_logs() { SAVED_SNAPSHOT=true; }
 
 FAKE_COMPOSE_VERSION=v2.24.4
 compose_override_supported || fail 'accepted Compose 2.24.4'
@@ -89,7 +133,7 @@ if compose_override_supported; then
 fi
 
 fake_compose() {
-  local operation= previous_file= override_file= env_file= pending=
+  local operation= previous_file= override_file= env_file= pending= no_start=false
   local argument
   while (( $# )); do
     argument="$1"
@@ -106,6 +150,7 @@ fake_compose() {
       up | stop) operation="$argument" ;;
       --env-file) pending=env-file ;;
       -f | --file) pending=file ;;
+      --no-start) no_start=true ;;
     esac
   done
   if [[ "$operation" == up ]]; then
@@ -121,6 +166,11 @@ fake_compose() {
         return 1
       fi
       ACTIVE_CONTAINER=replacement-container
+      if [[ "$no_start" == true ]]; then
+        REPLACEMENT_STATUS=created
+      else
+        REPLACEMENT_STATUS=running
+      fi
     else
       ACTIVE_CONTAINER=restored-container
     fi
@@ -136,6 +186,8 @@ fake_compose() {
 refresh_stopped_app_logging production app "$OLD_SHA" || fail 'legacy app logging refresh should succeed'
 [[ "$ACTIVE_CONTAINER" == replacement-container ]] || fail 'replaced the legacy container'
 [[ "$COMPOSE_STOPPED" == false ]] || fail 'recreated the rollback slot without starting it'
+replacement_state="$(sudo -n docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}' replacement-container)"
+[[ "$replacement_state" == 'created false 0' ]] || fail 'replacement container remains stopped'
 [[ "${app_container_baseline_ids[0]}" == replacement-container ]] || fail 'updated the replaced container baseline'
 
 # If recreation fails after the candidate cutover, the helper restores the old
@@ -185,5 +237,29 @@ fi
 [[ "$ACTIVE_CONTAINER" == restored-container ]] || fail 'restored the old Compose container after refresh failure'
 [[ "${app_container_baseline_ids[0]}" == restored-container ]] || fail 'tracked the restored rollback container'
 [[ "$ROLLBACK_CALLED" == true ]] || fail 'rolled back the cutover after refresh failure'
+
+# A restart or OOM during drain is checked against the original baseline before
+# log refresh can replace the container ID.
+ACTIVE_CONTAINER=old-container
+COMPOSE_FAIL=false
+SAVED_SNAPSHOT=false
+ROLLBACK_CALLED=false
+DRAIN_SAFETY_CHECKED=false
+app_container_baseline_ids=(old-container candidate-container)
+app_container_baseline_restarts=(0 0)
+app_containers_safe() {
+  if [[ "$1" == old-container ]]; then
+    DRAIN_SAFETY_CHECKED=true
+    return 1
+  fi
+  return 0
+}
+if deploy_tier production; then
+  fail 'deployment must fail when the drained container violates its original baseline'
+fi
+[[ "$DRAIN_SAFETY_CHECKED" == true ]] || fail 'checked the drained container before refresh'
+[[ "$SAVED_SNAPSHOT" == false ]] || fail 'did not refresh or replace the unsafe drained container'
+[[ "$ACTIVE_CONTAINER" == old-container ]] || fail 'preserved the drained container ID after safety failure'
+[[ "$ROLLBACK_CALLED" == true ]] || fail 'rolled back after a drain-time safety failure'
 
 printf 'blue-green app-log refresh spec: ok\n'

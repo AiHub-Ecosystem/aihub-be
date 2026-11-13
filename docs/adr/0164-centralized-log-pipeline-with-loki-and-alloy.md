@@ -81,8 +81,9 @@ have a best-effort 30-day cleanup. Issue #601 tracks maximum-age enforcement.
 
 ## Consequences
 
-Operators gain a durable, searchable 30-day log window and can correlate a
-request ID with the trace and usage evidence. The logs remain operator-only
+Operators can search logs retained for up to a 30-day maximum and correlate a
+request ID with trace and usage evidence. Retention may expire earlier, and loss
+of the host removes Loki history. The logs remain operator-only
 because they include personal and tenant-linked identifiers. Loki adds storage
 and recovery work on an already shared host, so deployment remains blocked
 until the seven-day measurement and hard resource caps are recorded and

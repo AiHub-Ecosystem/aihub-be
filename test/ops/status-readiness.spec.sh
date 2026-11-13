@@ -47,12 +47,19 @@ case "$1" in
         *) exit 1 ;;
       esac
     elif [[ "$3" == --format ]]; then
-      printf '0123456789abcdef0123456789abcdef01234567 running healthy 0 2026-10-21T00:00:00Z\n'
+      case "$4" in
+        '{{.HostConfig.LogConfig.Type}}') printf '%s\n' "${FAKE_DOCKER_DRIVER:-json-file}" ;;
+        *) printf '0123456789abcdef0123456789abcdef01234567 running healthy 0 2026-10-21T00:00:00Z\n' ;;
+      esac
     else
       exit 1
     fi
     ;;
-  logs) ;;
+  logs)
+    if [[ "${FAKE_DOCKER_DRIVER:-json-file}" == syslog ]]; then
+      printf 'Error response from daemon: configured logging driver does not support reading\n' >&2
+    fi
+    ;;
   exec)
     shift 2
     [[ "$1" == node ]] || exit 1
@@ -101,9 +108,10 @@ missing_runtime='{"status":"ok","dependencies":{"redis":"up"}}'
 missing_redis='{"status":"ok","dependencies":{"runtime-postgres":"up"}}'
 
 run_status() {
-  local mode="$1" http_status="$2" body="$3"
+  local mode="$1" http_status="$2" body="$3" log_driver="${4:-json-file}"
   if output="$(PATH="$bin_dir:$PATH" \
     FAKE_FETCH_SHIM="$fetch_shim" \
+    FAKE_DOCKER_DRIVER="$log_driver" \
     FAKE_READY_MODE="$mode" \
     FAKE_READY_STATUS="$http_status" \
     FAKE_READY_BODY="$body" \
@@ -153,6 +161,12 @@ run_status normal 200 '{malformed-response-secret=must-not-leak'
 assert_contains "$output" 'readiness_probe=200 readiness_dependencies=unavailable'
 assert_not_contains "$output" 'malformed-response-secret'
 assert_contains "$output" 'production FAIL revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200 readiness_dependencies=unavailable restarts=0 errors=0 since='
+
+run_status normal 200 "$all_up" syslog
+[[ "$exit_code" == 0 ]] || fail "syslog status exited $exit_code"
+assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=unavailable since='
+assert_not_contains "$output" 'errors=1'
 
 run_status normal 200 '{"status":"ok"}'
 [[ "$exit_code" == 1 ]] || fail "readiness response without dependencies exited $exit_code"

@@ -1631,7 +1631,9 @@ the full SHA of the commit you pushed, not `HEAD`: in a checkout other agents
 commit to, `HEAD` can already be a later, undeployed commit. The exit status is 1 when any container is missing, not
 running, not healthy, failing either probe, or on another commit. A non-zero
 `errors=` count is not a failure by itself: read those lines, because they
-include real errors such as a downstream contract violation.
+include real errors such as a downstream contract violation. If the log driver
+does not expose `docker logs`, the script reports `errors=unavailable` instead
+of counting the driver's own error response as an application error.
 
 A green CD run does not prove a deploy. CD ships only the newest commit on
 `main` that CI runs on: the run for an older commit finishes `success` after

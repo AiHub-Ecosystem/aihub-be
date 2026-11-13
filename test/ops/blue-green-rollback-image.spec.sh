@@ -30,7 +30,7 @@ extract() {
   ' "$2"
 }
 
-for function_name in ensure_local_image prepare_candidate rollback; do
+for function_name in ensure_local_image prepare_candidate rollback write_app_logging_override; do
   definition="$(extract "$function_name" scripts/ops/blue-green/blue-green-host.sh)"
   [[ -n "$definition" ]] || fail "$function_name is missing from blue-green-host.sh"
   eval "$definition"
@@ -135,5 +135,60 @@ fi
 [[ "$message" == *"$old_image"* ]] || fail "rollback should name the missing image: $message"
 assert_equals "${#changed[@]}" 0 "state changed before the image was secured"
 assert_no_call "compose" "rollback with a missing image"
+
+# A successful manual rollback starts the candidate with only its logging
+# override layered over the retained Compose file.
+mkdir -p "$test_root/state"
+STATE_DIR="$test_root/state"
+printf '2026-10-28T17:36:47Z\tdeploy\tsandbox\tb\t%s\ta\t%s\n' "$old_sha" "$new_sha" >"$HISTORY_FILE"
+local_images=("$old_image")
+sandbox_routed=true
+DEPLOY_ENV="$test_root/deploy.env"
+API_CONFIG="$test_root/api.conf"
+SANDBOX_CONFIG="$test_root/sandbox.conf"
+rollback_compose_file="$test_root/retained-compose.yml"
+rollback_nginx_config="$test_root/retained-nginx.conf"
+touch "$rollback_compose_file" "$rollback_nginx_config"
+load_sandbox_route_state() { sandbox_routed=true; }
+select_rollback_inputs() { rollback_compose_file="$test_root/retained-compose.yml"; rollback_nginx_config="$test_root/retained-nginx.conf"; }
+active_slot() { printf 'a\n'; }
+service_for_slot() {
+  if [[ "$1:$2" == sandbox:b ]]; then printf 'app-sandbox-slot-b\n'; else printf 'app-sandbox\n'; fi
+}
+container_id() {
+  case "$1" in
+    app-sandbox) printf 'active-sandbox-container\n' ;;
+    app-sandbox-slot-b) printf 'candidate-sandbox-container\n' ;;
+    *) return 1 ;;
+  esac
+}
+container_running() { [[ "$1" == active-sandbox-container ]]; }
+container_revision() { printf '%s\n' "$new_sha"; }
+apply_slots() { APPLY_SLOTS_COUNT=$((APPLY_SLOTS_COUNT + 1)); }
+APPLY_SLOTS_COUNT=0
+start_candidate() {
+  local last=$(( ${#compose[@]} - 1 ))
+  [[ "$APPLY_SLOTS_COUNT" == 1 ]] || fail 'initialized the receiver before starting the rollback candidate'
+  [[ "${compose[last-1]}" == -f && "${compose[last]}" == *.yml ]] || fail 'added a logging override to the rollback Compose command'
+  ROLLBACK_OVERRIDE_FILE="${compose[last]}"
+  grep -Fq 'logging: !override' "$ROLLBACK_OVERRIDE_FILE" || fail 'used a logging-only Compose override'
+  grep -Fq 'tag: aihub-sandbox' "$ROLLBACK_OVERRIDE_FILE" || fail 'used the Sandbox syslog tag'
+  candidate_restart_baseline=0
+}
+probe_window() { :; }
+probe_container_dependencies() { :; }
+container_ready() { :; }
+candidate_state_safe() { :; }
+app_containers_safe() { :; }
+drain_old_slot() { :; }
+record_release() { :; }
+clear_pending() { :; }
+capture_resources() { :; }
+edge_monitor_failures=
+
+rollback sandbox || fail 'completed a manual rollback with the syslog override'
+assert_equals "$APPLY_SLOTS_COUNT" 2 're-applied the route after starting the candidate'
+[[ ! -e "$ROLLBACK_OVERRIDE_FILE" ]] || fail 'removed the temporary Compose override after startup'
+[[ " ${compose[*]} " != *"$ROLLBACK_OVERRIDE_FILE"* ]] || fail 'restored the retained Compose command after startup'
 
 printf 'PASS\n'

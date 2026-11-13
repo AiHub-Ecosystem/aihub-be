@@ -49,6 +49,7 @@ sed \
   -e "s#/var/log/aihub-access.log#$age_log#g" \
   -e '/postrotate/,/endscript/d' \
   "$repo_root/ops/nginx/aihub-access-logrotate" > "$tmp/aihub-access-age.logrotate"
+sudo chown root:root "$tmp/aihub-access-age.logrotate"
 sudo install -o root -g adm -m 0640 /dev/null "$age_log"
 printf 'stale archive\n' | sudo tee "$age_log.3.gz" >/dev/null
 sudo touch -d '29 days ago' "$age_log.3.gz"

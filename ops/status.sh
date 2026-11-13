@@ -87,9 +87,15 @@ for label in production sandbox; do
   }
   read -r revision state health restarts started <<<"$info"
 
-  # Lines since this container started, so an old crash does not count.
-  errors=$("${docker[@]}" logs --since "$started" "$container" </dev/null 2>&1 \
-    | grep -ciE '"level":"error"|\bERROR\b|\bFATAL\b|unhandled|exception')
+  log_driver=$("${docker[@]}" inspect "$container" --format '{{.HostConfig.LogConfig.Type}}' \
+    </dev/null 2>/dev/null) || log_driver=unavailable
+  if [[ "$log_driver" == json-file ]]; then
+    # Lines since this container started, so an old crash does not count.
+    errors=$("${docker[@]}" logs --since "$started" "$container" </dev/null 2>&1 \
+      | grep -ciE '"level":"error"|\bERROR\b|\bFATAL\b|unhandled|exception')
+  else
+    errors=unavailable
+  fi
 
   health_probe=$("${docker[@]}" exec "$container" node -e \
     "fetch('http://127.0.0.1:3000/health').then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" \

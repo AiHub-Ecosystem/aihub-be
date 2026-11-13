@@ -84,6 +84,11 @@ for file in "$@"; do
     *) files+=("$file") ;;
   esac
 done
+if [[ "${FAKE_ZGREP_PARTIAL_FAIL:-false}" == true && ! -e "$FAKE_ZGREP_PARTIAL_MARKER" ]]; then
+  : >"$FAKE_ZGREP_PARTIAL_MARKER"
+  cat "$FAKE_ZGREP_PARTIAL_RECORD_FILE"
+  exit 95
+fi
 exec "$REAL_ZGREP" -h -F -- "$needle" "${files[@]}"
 STUB
 chmod 755 "$bin_dir/sudo" "$bin_dir/docker" "$bin_dir/zgrep"
@@ -178,6 +183,20 @@ if grep -Fq 'logs --timestamps' "$FAKE_DOCKER_CALLS"; then
 fi
 unset FAKE_DOCKER_DRIVER
 : >"$fixture_dir/aihub-app-production.log"
+
+# Partial application matches survive a zgrep error while incomplete coverage
+# remains visible to the caller.
+write_app_event "$fixture_dir/partial-app-record" '/v1/partial/:itemId' 503 server_error INTERNAL
+write_nginx_event "$FAKE_NGINX_ACTIVE" GET '/v1/partial/42' 503
+export FAKE_ZGREP_PARTIAL_FAIL=true
+export FAKE_ZGREP_PARTIAL_MARKER="$test_root/zgrep-partial-done"
+export FAKE_ZGREP_PARTIAL_RECORD_FILE="$fixture_dir/partial-app-record"
+run_lookup
+assert_status 2
+assert_contains "$test_root/output.log" 'application: route=/v1/partial/:itemId status=503 outcome=server_error error_code=INTERNAL'
+assert_contains "$test_root/output.log" 'application log search incomplete'
+unset FAKE_ZGREP_PARTIAL_FAIL FAKE_ZGREP_PARTIAL_MARKER FAKE_ZGREP_PARTIAL_RECORD_FILE
+rm -f "$test_root/zgrep-partial-done" "$fixture_dir/partial-app-record"
 
 write_app_event "$FAKE_DOCKER_LOGS/app-container.log" '/v1/items/:itemId' 200 success
 sed -i 's/"client_ip_source":"nginx"/"client_ip_source":"direct_peer"/' \

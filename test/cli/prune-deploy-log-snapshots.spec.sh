@@ -16,10 +16,12 @@ printf '%s {"record":"old"}\n' "$old_timestamp" >"$log_dir/old.log"
 printf '%s {"record":"recent"}\nunparseable old record\n' "$recent_timestamp" \
   >"$log_dir/recent.log"
 printf 'no parseable records\n' >"$log_dir/broken.log"
+printf 'capture still in progress\n' >"$log_dir/.app-aaaaaaaa-20261113T000000Z.capture.tmp"
 
 APP_DIR="$app_dir" bash "$prune_script" >"$test_root/output.log"
 test ! -e "$log_dir/old.log"
 test ! -e "$log_dir/broken.log"
+grep -Fq 'capture still in progress' "$log_dir/.app-aaaaaaaa-20261113T000000Z.capture.tmp"
 grep -Fq '"record":"recent"' "$log_dir/recent.log"
 if grep -Fq 'unparseable' "$log_dir/recent.log"; then
   printf 'snapshot pruner retained a line without a Docker timestamp\n' >&2

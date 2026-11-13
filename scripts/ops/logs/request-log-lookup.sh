@@ -124,12 +124,10 @@ for log_file in "${snapshot_files[@]}"; do
 done
 
 if (( ${#app_log_files[@]} )); then
-  if app_records="$(zgrep -h -F -- "$app_needle" "${app_log_files[@]}" 2>/dev/null)"; then
-    consume_app_records "$app_records"
-  else
-    zgrep_status=$?
-    [[ "$zgrep_status" == 1 ]] || app_incomplete=true
-  fi
+  zgrep_status=0
+  app_records="$(zgrep -h -F -- "$app_needle" "${app_log_files[@]}" 2>/dev/null)" || zgrep_status=$?
+  [[ -z "$app_records" ]] || consume_app_records "$app_records"
+  [[ "$zgrep_status" == 0 || "$zgrep_status" == 1 ]] || app_incomplete=true
 else
   app_incomplete=true
 fi

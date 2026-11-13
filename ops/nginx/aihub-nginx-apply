@@ -54,7 +54,11 @@ for source in "$API_SOURCE" "$LOG_FORMAT_SOURCE" "$LOGROTATE_SOURCE" \
     exit 1
   fi
 done
-if ! grep -Fq '/etc/rsyslog.d/' /etc/rsyslog.conf; then
+has_active_rsyslog_include() {
+  grep -Eq '^[[:space:]]*(\$IncludeConfig[[:space:]]+/etc/rsyslog\.d/|include[[:space:]]*\([[:space:]]*file="/etc/rsyslog\.d/)' "$1"
+}
+
+if ! has_active_rsyslog_include /etc/rsyslog.conf; then
   printf 'The host rsyslog configuration does not include /etc/rsyslog.d/.\n' >&2
   exit 1
 fi
@@ -199,6 +203,19 @@ logrotate --debug "$APP_LOGROTATE_DEST"
 rsyslogd -N1 -f /etc/rsyslog.conf
 if [[ "$rsyslog_config_changed" == true ]] || ! systemctl is-active --quiet rsyslog.service; then
   systemctl restart rsyslog.service
+fi
+receiver_ready=false
+for ((attempt = 0; attempt < 10; attempt += 1)); do
+  if systemctl is-active --quiet rsyslog.service &&
+    timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/1514'; then
+    receiver_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$receiver_ready" != true ]]; then
+  printf 'The AIHUB rsyslog receiver is not accepting connections on 127.0.0.1:1514.\n' >&2
+  exit 1
 fi
 nginx -t
 systemctl reload nginx

@@ -295,32 +295,64 @@ container_revision() {
 }
 
 save_service_logs() {
-  local service="$1" id revision stamp log_dir log_driver snapshot
+  local service="$1" id revision stamp log_dir log_driver snapshot temporary_snapshot temporary_name
   id="$(container_id "$service")"
   [[ -n "$id" ]] || return 0
-  revision="$(container_revision "$id" 2>/dev/null || true)"
+  revision="$(container_revision "$id")" || return 1
   [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || revision=unknown
-  log_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$id" 2>/dev/null || true)"
+  log_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$id" 2>/dev/null)" || return 1
   [[ "$log_driver" == json-file ]] || return 0
   log_dir=deploy-logs
-  if ! mkdir -p "$log_dir" || ! chmod 700 "$log_dir"; then
-    return 0
-  fi
+  mkdir -p "$log_dir" && chmod 700 "$log_dir" || return 1
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  snapshot="$(mktemp "$log_dir/$service-${revision:0:7}-$stamp.XXXXXX.log")" || return 0
-  if sudo -n docker logs --since 24h --timestamps "$id" 2>/dev/null \
+  temporary_snapshot="$(mktemp "$log_dir/.$service-${revision:0:7}-$stamp.XXXXXX.tmp")" || return 1
+  temporary_name="${temporary_snapshot##*/}"
+  snapshot="$log_dir/${temporary_name#.}"
+  snapshot="${snapshot%.tmp}.log"
+  if ! sudo -n docker logs --since 24h --timestamps "$id" 2>&1 \
     | tail -c 20000000 \
     | awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/' \
-      >"$snapshot" && [[ -s "$snapshot" ]]; then
-    return 0
+      >"$temporary_snapshot"; then
+    rm -f -- "$temporary_snapshot"
+    return 1
   fi
-  rm -f -- "$snapshot"
+  if [[ -s "$temporary_snapshot" ]]; then
+    mv -- "$temporary_snapshot" "$snapshot" || {
+      rm -f -- "$temporary_snapshot"
+      return 1
+    }
+  else
+    rm -f -- "$temporary_snapshot"
+  fi
+}
+
+write_app_logging_override() {
+  local service="$1" destination="$2" app_tag
+  case "$service" in
+    app | app-slot-b) app_tag=aihub-production ;;
+    app-sandbox | app-sandbox-slot-b) app_tag=aihub-sandbox ;;
+    *) printf 'unsupported app service for log override: %s\n' "$service" >&2; return 1 ;;
+  esac
+  cat >"$destination" <<EOF
+services:
+  $service:
+    logging: !override
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:1514
+        syslog-format: rfc5424micro
+        cache-disabled: "true"
+        mode: non-blocking
+        max-buffer-size: 16m
+        tag: $app_tag
+EOF
+  chmod 0600 "$destination"
 }
 
 refresh_stopped_app_logging() {
   local tier="$1" service="$2" old_sha="$3"
   local id driver cache_disabled image replacement_id replacement_driver replacement_cache env_file logging_override
-  local release_compose compose_index app_tag status=0
+  local release_compose compose_index status=0
   local -a release_compose_command replacement_compose restore_compose
   id="$(container_id "$service")"
   [[ -n "$id" ]] || return 0
@@ -330,8 +362,8 @@ refresh_stopped_app_logging() {
     return 0
   fi
   case "$tier:$service" in
-    production:app | production:app-slot-b) app_tag=aihub-production ;;
-    sandbox:app-sandbox | sandbox:app-sandbox-slot-b) app_tag=aihub-sandbox ;;
+    production:app | production:app-slot-b) ;;
+    sandbox:app-sandbox | sandbox:app-sandbox-slot-b) ;;
     *) printf 'unsupported app service for log refresh: %s/%s\n' "$tier" "$service" >&2; return 1 ;;
   esac
   if [[ "$driver" != json-file && "$driver" != syslog ]]; then
@@ -348,7 +380,7 @@ refresh_stopped_app_logging() {
     printf 'missing retained Compose config for %s release %s; preserving its container\n' "$tier" "$old_sha" >&2
     return 1
   fi
-  [[ "$driver" != json-file ]] || save_service_logs "$service"
+  [[ "$driver" != json-file ]] || save_service_logs "$service" || return 1
   image="$(sudo -n docker inspect --format '{{.Config.Image}}' "$id")" || return 1
   [[ -n "$image" ]] || return 1
   env_file="$(mktemp "$STATE_DIR/legacy-app-image.XXXXXX")" || return 1
@@ -360,24 +392,7 @@ refresh_stopped_app_logging() {
     rm -f -- "$env_file" "$logging_override"
     return 1
   fi
-  if ! cat >"$logging_override" <<EOF
-services:
-  $service:
-    logging: !override
-      driver: syslog
-      options:
-        syslog-address: tcp://127.0.0.1:1514
-        syslog-format: rfc5424micro
-        cache-disabled: "true"
-        mode: non-blocking
-        max-buffer-size: 16m
-        tag: $app_tag
-EOF
-  then
-    rm -f -- "$env_file" "$logging_override"
-    return 1
-  fi
-  chmod 0600 "$logging_override" || {
+  write_app_logging_override "$service" "$logging_override" || {
     rm -f -- "$env_file" "$logging_override"
     return 1
   }
@@ -1069,7 +1084,7 @@ prepare_candidate() {
     previous_restart_count="$(sudo -n docker inspect --format '{{.RestartCount}}' "$previous_id")"
   fi
   capture_running_app_baseline || return 1
-  save_service_logs "$service"
+  save_service_logs "$service" || return 1
   [[ "$skip_candidate_pull" == true ]] || "${compose[@]}" pull "$service" || return 1
   assert_container_count "$((expected_count - 1))" || return 1
   "${compose[@]}" up -d --no-deps --no-build "$service" || return 1
@@ -1222,6 +1237,9 @@ deploy_tier() {
   drain_status=0
   drain_old_slot "$old_service" || drain_status=$?
   if [[ "$drain_status" -eq 0 ]]; then
+    app_containers_safe "$old_id" "$new_id" || drain_status=$?
+  fi
+  if [[ "$drain_status" -eq 0 ]]; then
     refresh_stopped_app_logging "$tier" "$old_service" "$old_sha" || drain_status=$?
     old_id="$(container_id "$old_service")"
   fi
@@ -1333,7 +1351,7 @@ preflight() {
   local expected_count=2
   [[ "$sandbox_routed" == false ]] && expected_count=1
   assert_container_count "$expected_count"
-  local api_slot sandbox_slot service id status
+  local api_slot sandbox_slot=a service id status
   api_slot="$(active_slot production "$API_CONFIG")"
   service="$(service_for_slot production "$api_slot")"
   id="$(container_id "$service")"
@@ -1352,6 +1370,10 @@ preflight() {
       return 1
     }
   fi
+  apply_slots "$api_slot" "$sandbox_slot" || {
+    printf 'could not initialize the managed app-log receiver before starting a candidate\n' >&2
+    return 1
+  }
   probe_all
 }
 
@@ -1673,7 +1695,7 @@ rollback_sandbox_to_disabled() {
 }
 
 rollback() {
-  local tier="$1" line old_slot old_sha new_slot new_sha
+  local tier="$1" line old_slot old_sha new_slot new_sha logging_override
   [[ "$tier" == production || "$tier" == sandbox ]] || {
     printf 'rollback tier must be production or sandbox\n' >&2
     return 1
@@ -1707,6 +1729,7 @@ rollback() {
 
   local current_api current_sandbox current_slot candidate_service active_service active_id candidate_id
   local active_api active_sandbox expected_count failed
+  local -a rollback_compose
   current_api="$(active_slot production "$API_CONFIG")"
   current_sandbox=a
   if [[ "$sandbox_routed" == true ]]; then
@@ -1732,11 +1755,23 @@ rollback() {
   # nginx still points at the slot being replaced, so probing the edge here would
   # only re-confirm the failure that triggered this rollback; it is validated
   # after apply_slots instead.
+  apply_slots "$current_api" "$current_sandbox" || return 1
+  logging_override="$(mktemp "$STATE_DIR/manual-rollback-logging.XXXXXX.yml")" || return 1
+  write_app_logging_override "$candidate_service" "$logging_override" || {
+    rm -f -- "$logging_override"
+    return 1
+  }
+  rollback_compose=("${compose[@]}")
+  compose+=( -f "$logging_override" )
   start_candidate "$candidate_service" "$expected_count" false || {
+    compose=("${rollback_compose[@]}")
+    rm -f -- "$logging_override"
     capture_resources "failed-rollback-${tier}" || true
     "${compose[@]}" stop "$candidate_service" >/dev/null 2>&1 || true
     return 1
   }
+  compose=("${rollback_compose[@]}")
+  rm -f -- "$logging_override"
   candidate_id="$(container_id "$candidate_service")"
   if [[ "$tier" == production ]]; then
     current_api="$old_slot"
