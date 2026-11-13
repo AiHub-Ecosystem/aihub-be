@@ -1,10 +1,4 @@
-import './config/bootstrap-local-environment';
-import './config/bootstrap-runtime-configuration';
 import { GracefulFastifyAdapter } from './common/http/graceful-fastify-adapter';
-import {
-  requestTracer,
-  shutdownOpenTelemetry,
-} from './common/observability/open-telemetry';
 
 import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
@@ -12,11 +6,14 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
-import { AppModule } from './app.module';
 import { prepareSocketListener } from './common/http/unix-socket-listener';
 import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
 import { generateRequestId } from './common/request-context/request-id';
+import {
+  ConfigurationBootstrapError,
+  bootstrapConfiguration,
+} from './config/bootstrap-configuration';
 import { getRuntimeConfiguration } from './config/runtime-configuration';
 import {
   PUBLIC_API_MAJOR_USAGE_BUFFER,
@@ -28,6 +25,12 @@ import { registerRequestHooks } from './register-request-hooks';
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export async function bootstrap(): Promise<void> {
+  bootstrapConfiguration();
+  const [{ requestTracer, shutdownOpenTelemetry }, { AppModule }] =
+    await Promise.all([
+      import('./common/observability/open-telemetry'),
+      import('./app.module'),
+    ]);
   const configuration = getRuntimeConfiguration();
   const listenSocket = configuration.AIHUB_LISTEN_SOCKET as string | undefined;
 
@@ -109,4 +112,17 @@ export async function bootstrap(): Promise<void> {
   await openSocket?.();
 }
 
-void bootstrap();
+void bootstrap().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const isConfigurationError = error instanceof ConfigurationBootstrapError;
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      event: isConfigurationError
+        ? 'configuration_error'
+        : 'application_boot_error',
+      message: `${isConfigurationError ? 'Nest configuration error' : 'Application startup error'}: ${message.replace(/[\r\n]+/g, ' ')}`,
+    }),
+  );
+  process.exitCode = 1;
+});
