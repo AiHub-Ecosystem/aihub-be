@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { MockAgent } from 'undici/index.js';
 
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
@@ -29,6 +30,26 @@ async function listenOnLoopback(
 ): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+async function executeTwentyTransportFailures(
+  client: DownstreamHttpClient,
+  circuitBreakers: DownstreamCircuitBreakers,
+): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    await circuitBreakers
+      .execute('writing.task1.grade', () =>
+        client.request(
+          { method: 'POST', path: '/grade', body: {} },
+          {
+            requestId: `req_transport_${index}`,
+            deadlineMs: 5_000,
+            signal: AbortSignal.timeout(5_000),
+          },
+        ),
+      )
+      .catch(() => undefined);
+  }
 }
 
 async function ignoreFailure(
@@ -271,26 +292,42 @@ describe('DownstreamCircuitBreakers', () => {
     const circuitBreakers = (breakers = new DownstreamCircuitBreakers());
 
     try {
-      for (let index = 0; index < 20; index += 1) {
-        await circuitBreakers
-          .execute('writing.task1.grade', () =>
-            client.request(
-              { method: 'POST', path: '/grade', body: {} },
-              {
-                requestId: `req_${index}`,
-                deadlineMs: 5_000,
-                signal: AbortSignal.timeout(5_000),
-              },
-            ),
-          )
-          .catch(() => undefined);
-      }
-
+      await executeTwentyTransportFailures(client, circuitBreakers);
       expect(await breakerState('writing.task1.grade')).toBe('1');
     } finally {
       await client.close();
     }
   });
+
+  it.each([
+    ['DNS failure', 'ENOTFOUND'],
+    ['connect timeout', 'UND_ERR_CONNECT_TIMEOUT'],
+  ] as const)(
+    'counts a pre-send %s as a breaker failure',
+    async (_failureType, code) => {
+      const origin = 'https://ai-writing.test';
+      const mockAgent = new MockAgent();
+      mockAgent.disableNetConnect();
+      const pool = mockAgent.get(origin);
+      for (let index = 0; index < 20; index += 1) {
+        pool
+          .intercept({ method: 'POST', path: '/grade' })
+          .replyWithError(
+            Object.assign(new Error('connection failed'), { code }),
+          );
+      }
+      const client = new DownstreamHttpClient(origin, mockAgent);
+      const circuitBreakers = (breakers = new DownstreamCircuitBreakers());
+
+      try {
+        await executeTwentyTransportFailures(client, circuitBreakers);
+        expect(await breakerState('writing.task1.grade')).toBe('1');
+        mockAgent.assertNoPendingInterceptors();
+      } finally {
+        await client.close();
+      }
+    },
+  );
 
   it('does not count downstream 4xx responses as service failures', async () => {
     breakers = new DownstreamCircuitBreakers();
