@@ -1,7 +1,7 @@
 # Pinned by digest so two builds of one commit cannot differ by a base image
 # repoint. Bump when Node publishes a security patch for this version, or
 # monthly, whichever comes first (ADR-0064).
-FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS dependencies
+FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS base
 
 WORKDIR /app
 
@@ -9,25 +9,23 @@ WORKDIR /app
 # because the base image ships Node and npm, not Bun.
 RUN npm install --global bun@1.4.4-canary.20261109.1
 
+# Keep production dependencies cached until package manifests change.
+FROM base AS prod-deps
+
+COPY package.json bun.lock ./
+RUN HUSKY=0 bun install --frozen-lockfile --production --ignore-scripts \
+  && rm -rf node_modules/prisma node_modules/.bin/prisma
+
+FROM base AS build
+
 COPY package.json bun.lock ./
 RUN HUSKY=0 bun install --frozen-lockfile
 
-FROM dependencies AS build
-
 COPY . .
 RUN bun run build
-# A production reinstall, not a prune: Bun has no prune. Remove Prisma's optional
-# peer as well; Bun links the dev-only CLI into this production install.
-RUN rm -rf node_modules \
-  && HUSKY=0 bun install --frozen-lockfile --production --ignore-scripts \
-  && rm -rf node_modules/prisma node_modules/.bin/prisma
 
 FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
 
-# Pinned by digest so two builds of one commit cannot differ by a base image
-# repoint. Bump when Node publishes a security patch for this version, or
-# monthly, whichever comes first (ADR-0064).
-#
 # `revision` is the commit the running image came from. The deployed checkout
 # has no `.git`, so without this label `docker inspect` cannot tell an operator
 # which commit is live, and an incident starts with guessing.
@@ -45,7 +43,7 @@ WORKDIR /app
 RUN groupadd --system --gid 10001 aihub \
   && useradd --system --uid 10001 --gid 10001 --no-create-home aihub
 
-COPY --from=build --chown=10001:10001 /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=10001:10001 /app/node_modules ./node_modules
 COPY --from=build --chown=10001:10001 /app/dist ./dist
 COPY --from=build --chown=10001:10001 /app/package.json ./package.json
 COPY --from=build --chown=10001:10001 /app/scripts/cli/cli.mjs /app/scripts/cli/cli-options.cjs /app/scripts/cli/load-cli-runner.cjs /app/scripts/cli/operator-safety.cjs /app/scripts/cli/avatar-sweep-exit-code.cjs ./scripts/cli/
