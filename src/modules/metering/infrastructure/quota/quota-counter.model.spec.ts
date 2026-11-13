@@ -7,6 +7,10 @@ import type { QuotaReconciliationSnapshotPort } from '@/modules/metering/applica
 import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
 
 import { PROPERTY_OPTIONS } from '../../../../../test/support/property-options';
+import {
+  monthOf,
+  startOfNextMonth,
+} from '../../../../../test/support/quota-months';
 import type { RedisMeteringClient } from './redis-metering.client';
 import { RedisQuotaCounter } from './redis-quota-counter';
 import { RedisQuotaReconciliationCounter } from './redis-quota-reconciliation.counter';
@@ -95,21 +99,6 @@ const commandArbitrary: fc.Arbitrary<Command> = fc.oneof(
     offsetMs: fc.constantFrom<-1 | 0>(-1, 0),
   }),
 );
-
-/** `YYYY-MM` of the UTC month `monthsBack` before the month containing `ms`. */
-function monthOf(ms: number, monthsBack = 0): string {
-  const at = new Date(ms);
-  return new Date(
-    Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - monthsBack, 1),
-  )
-    .toISOString()
-    .slice(0, 7);
-}
-
-function startOfNextMonth(ms: number): number {
-  const at = new Date(ms);
-  return Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1);
-}
 
 class Harness {
   clockMs = START_MS;

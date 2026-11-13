@@ -53,6 +53,7 @@ import {
   sandboxTestRedisUrl,
   testDatabaseUrl,
 } from '../shared/database';
+import { openFlushedSandboxRedis } from '../shared/flushed-sandbox-redis';
 import {
   createTenantIdentity,
   signUserAssertion,
@@ -177,18 +178,7 @@ function unusedRateLimitWindow(keyId: string): number {
 beforeAll(async () => {
   controlPlane = createTestPool();
   sandbox = createSandboxTestPool();
-  redis = createSandboxTestRedis();
-  if (redis.status !== 'ready') {
-    await new Promise<void>((resolve, reject) => {
-      redis.once('ready', resolve);
-      redis.once('error', reject);
-    });
-  }
-  await flushOwnedRedisDatabase(
-    redis.duplicate({ db: 0, enableOfflineQueue: true }),
-    () => redis.flushdb(),
-    'SANDBOX_TEST_REDIS_URL',
-  );
+  redis = await openFlushedSandboxRedis();
   await sandbox.query(
     `TRUNCATE organization_audit_events, organization_identity_configs,
        api_keys, organization_invitations, organization_members,

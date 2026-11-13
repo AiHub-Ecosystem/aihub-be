@@ -15,11 +15,8 @@ import {
   quotaKeyForMonth,
   quotaPeriod,
 } from '@/modules/metering/public/quota-counter';
-import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
-import {
-  createSandboxTestRedis,
-  sandboxTestRedisUrl,
-} from '../shared/database';
+import { sandboxTestRedisUrl } from '../shared/database';
+import { openFlushedSandboxRedis } from '../shared/flushed-sandbox-redis';
 
 // The combined script is the one place the rate limit, the Organization retry
 // budget, and the monthly quota are ordered (ADR-0057). Fakes cannot show the
@@ -58,18 +55,7 @@ function retryPrefix(organizationId: string): string {
 }
 
 beforeAll(async () => {
-  redis = createSandboxTestRedis();
-  if (redis.status !== 'ready') {
-    await new Promise<void>((resolve, reject) => {
-      redis.once('ready', resolve);
-      redis.once('error', reject);
-    });
-  }
-  await flushOwnedRedisDatabase(
-    redis.duplicate({ db: 0, enableOfflineQueue: true }),
-    () => redis.flushdb(),
-    'SANDBOX_TEST_REDIS_URL',
-  );
+  redis = await openFlushedSandboxRedis();
   const created = createRedisGatewayClient(sandboxTestRedisUrl());
   if (created === undefined) throw new Error('expected a Redis gateway client');
   client = created;
