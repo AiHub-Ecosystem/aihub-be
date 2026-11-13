@@ -5,9 +5,13 @@ import {
   BillingStatementService,
   parseBillingMonth,
 } from '@/modules/metering/application/billing/billing-statement';
+import { MeteringService } from '@/modules/metering/application/usage-recording/metering.service';
 import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/billing/postgres-billing-statement.repository';
 import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/billing/postgres-monthly-billable-usage';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+import {
+  PostgresUsageRepository,
+  createPostgresMeteringClient,
+} from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import {
   createTestPool,
@@ -129,6 +133,42 @@ async function runAdjustmentCli(
 }
 
 describe('billing statement', () => {
+  it('counts a successful usage row written by the metering finalizer for the same month', async () => {
+    const finalizer = new MeteringService(new PostgresUsageRepository(client));
+    const occurredAt = new Date('2026-10-15T08:00:00Z');
+    await client.$connect();
+
+    await finalizer.finalize({
+      requestId: 'req_billing_finalizer_count',
+      organizationId: ORG,
+      apiKeyId: 'ak_customer',
+      operation: 'writing.task1.grade',
+      environment: 'production',
+      outcome: 'success',
+      httpStatus: 200,
+      totalMs: 10,
+      occurredAt,
+    });
+
+    const persisted = await pool.query<{
+      readonly outcome: string;
+      readonly billable_requests: number;
+      readonly created_at: Date;
+    }>(
+      `SELECT outcome, billable_requests, created_at FROM usage_records
+       WHERE request_id = 'req_billing_finalizer_count'`,
+    );
+    expect(persisted.rows[0]).toMatchObject({
+      outcome: 'success',
+      billable_requests: 1,
+      created_at: occurredAt,
+    });
+
+    await expect(
+      monthlyUsage.billableCount(ORG, OCTOBER.from, OCTOBER.to),
+    ).resolves.toBe(1);
+  });
+
   it('bills one UTC month of successful, non-replayed Production customer requests', async () => {
     await usage({ at: '2026-09-30T23:59:59Z' }); // the month before
     await usage({ at: '2026-10-01T00:00:00Z' }); // first instant: billed
