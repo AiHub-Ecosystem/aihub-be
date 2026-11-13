@@ -318,8 +318,10 @@ save_service_logs() {
 }
 
 refresh_stopped_app_logging() {
-  local service="$1" id driver cache_disabled image replacement_id replacement_driver replacement_cache env_file
-  local -a replacement_compose
+  local tier="$1" service="$2" old_sha="$3"
+  local id driver cache_disabled image replacement_id replacement_driver replacement_cache env_file logging_override
+  local release_compose compose_index app_tag status=0
+  local -a release_compose_command replacement_compose restore_compose
   id="$(container_id "$service")"
   [[ -n "$id" ]] || return 0
   driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$id")" || return 1
@@ -327,6 +329,11 @@ refresh_stopped_app_logging() {
   if [[ "$driver" == syslog && "$cache_disabled" == true ]]; then
     return 0
   fi
+  case "$tier:$service" in
+    production:app | production:app-slot-b) app_tag=aihub-production ;;
+    sandbox:app-sandbox | sandbox:app-sandbox-slot-b) app_tag=aihub-sandbox ;;
+    *) printf 'unsupported app service for log refresh: %s/%s\n' "$tier" "$service" >&2; return 1 ;;
+  esac
   if [[ "$driver" != json-file && "$driver" != syslog ]]; then
     printf '%s has unsupported app log driver %s\n' "$service" "$driver" >&2
     return 1
@@ -335,29 +342,89 @@ refresh_stopped_app_logging() {
     printf '%s must be stopped before its logging config is refreshed\n' "$service" >&2
     return 1
   fi
+  [[ "$old_sha" =~ ^[a-f0-9]{40}$ ]] || return 1
+  release_compose="$(retained_dir "$tier" "$old_sha")/docker-compose.production.yml"
+  if [[ ! -s "$release_compose" ]]; then
+    printf 'missing retained Compose config for %s release %s; preserving its container\n' "$tier" "$old_sha" >&2
+    return 1
+  fi
   [[ "$driver" != json-file ]] || save_service_logs "$service"
   image="$(sudo -n docker inspect --format '{{.Config.Image}}' "$id")" || return 1
   [[ -n "$image" ]] || return 1
   env_file="$(mktemp "$STATE_DIR/legacy-app-image.XXXXXX")" || return 1
-  printf 'AIHUB_IMAGE=%s\n' "$image" >"$env_file"
-  chmod 0600 "$env_file"
-  replacement_compose=("${compose[@]}" --env-file "$env_file")
-  if ! "${replacement_compose[@]}" up --no-start --force-recreate --no-deps --no-build "$service"; then
+  logging_override="$(mktemp "$STATE_DIR/legacy-app-logging.XXXXXX.yml")" || {
     rm -f -- "$env_file"
     return 1
+  }
+  if ! printf 'AIHUB_IMAGE=%s\n' "$image" >"$env_file" || ! chmod 0600 "$env_file"; then
+    rm -f -- "$env_file" "$logging_override"
+    return 1
   fi
-  rm -f -- "$env_file"
-  replacement_id="$(container_id "$service")"
-  [[ -n "$replacement_id" && "$replacement_id" != "$id" ]] || {
-    printf '%s logging refresh did not replace its legacy container\n' "$service" >&2
+  if ! cat >"$logging_override" <<EOF
+services:
+  $service:
+    logging: !override
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:1514
+        syslog-format: rfc5424micro
+        cache-disabled: "true"
+        mode: non-blocking
+        max-buffer-size: 1m
+        tag: $app_tag
+EOF
+  then
+    rm -f -- "$env_file" "$logging_override"
+    return 1
+  fi
+  chmod 0600 "$logging_override" || {
+    rm -f -- "$env_file" "$logging_override"
     return 1
   }
-  replacement_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$replacement_id")" || return 1
-  replacement_cache="$(sudo -n docker inspect --format '{{index .HostConfig.LogConfig.Config "cache-disabled"}}' "$replacement_id")" || return 1
-  if [[ "$replacement_driver" != syslog || "$replacement_cache" != true ]]; then
-    printf '%s logging refresh did not apply the bounded syslog driver\n' "$service" >&2
+
+  for ((compose_index = 0; compose_index < ${#compose[@]}; compose_index += 1)); do
+    case "${compose[compose_index]}" in
+      -f | --file | --project-directory) compose_index=$((compose_index + 1)) ;;
+      *) release_compose_command+=("${compose[compose_index]}") ;;
+    esac
+  done
+  release_compose_command+=(--env-file "$env_file" --project-directory "$PWD" -f "$release_compose")
+  restore_compose=("${release_compose_command[@]}")
+  replacement_compose=("${release_compose_command[@]}" -f "$logging_override")
+  "${replacement_compose[@]}" up --no-start --force-recreate --no-deps --no-build "$service" || status=$?
+  if [[ "$status" -eq 0 ]]; then
+    replacement_id="$(container_id "$service")"
+    if [[ -z "$replacement_id" || "$replacement_id" == "$id" ]]; then
+      printf '%s logging refresh did not replace its legacy container\n' "$service" >&2
+      status=1
+    else
+      replacement_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$replacement_id")" || status=$?
+      replacement_cache="$(sudo -n docker inspect --format '{{index .HostConfig.LogConfig.Config "cache-disabled"}}' "$replacement_id")" || status=$?
+      if [[ "$replacement_driver" != syslog || "$replacement_cache" != true ]]; then
+        printf '%s logging refresh did not apply the bounded syslog driver\n' "$service" >&2
+        status=1
+      elif ! replace_app_container_baseline "$id" "$replacement_id"; then
+        status=1
+      fi
+    fi
+  fi
+  if [[ "$status" -ne 0 ]]; then
+    printf 'restoring stopped %s from its retained Compose config after log refresh failure\n' "$service" >&2
+    if ! "${restore_compose[@]}" up --no-start --force-recreate --no-deps --no-build "$service"; then
+      printf 'could not restore stopped %s; operator recovery is required\n' "$service" >&2
+      rm -f -- "$env_file" "$logging_override"
+      return 1
+    fi
+    replacement_id="$(container_id "$service")"
+    if [[ -z "$replacement_id" ]] || ! replace_app_container_baseline "$id" "$replacement_id"; then
+      printf 'could not verify the restored %s container baseline\n' "$service" >&2
+      rm -f -- "$env_file" "$logging_override"
+      return 1
+    fi
+    rm -f -- "$env_file" "$logging_override"
     return 1
   fi
+  rm -f -- "$env_file" "$logging_override"
 }
 
 container_running() {
@@ -430,6 +497,26 @@ capture_running_app_baseline() {
   done
 }
 
+replace_app_container_baseline() {
+  local previous_id="$1" replacement_id="$2" state status oom_killed restart_count index
+  state="$(sudo -n docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}}' "$replacement_id")" || return 1
+  read -r status oom_killed restart_count <<<"$state"
+  if [[ ( "$status" != created && "$status" != exited ) || "$oom_killed" != false ]]; then
+    printf 'refreshed app container has unsafe baseline state id=%s status=%s oom_killed=%s\n' \
+      "$replacement_id" "$status" "$oom_killed" >&2
+    return 1
+  fi
+  for ((index = 0; index < ${#app_container_baseline_ids[@]}; index += 1)); do
+    if [[ "${app_container_baseline_ids[index]}" == "$previous_id" ]]; then
+      app_container_baseline_ids[index]="$replacement_id"
+      app_container_baseline_restarts[index]="$restart_count"
+      return 0
+    fi
+  done
+  printf 'refreshed app container was not in the rollout baseline id=%s\n' "$previous_id" >&2
+  return 1
+}
+
 app_containers_safe() {
   local excluded_id="${1:-}" candidate_id="${2:-}" id current_id known_id known state status oom_killed restart_count expected_restart_count i running_ids_output
   local -a running_ids=()
@@ -476,6 +563,17 @@ app_containers_safe() {
       return 1
     fi
   done
+}
+
+compose_override_supported() {
+  local version major minor patch
+  version="$(sudo -n docker compose version --short 2>/dev/null)" || return 1
+  version="${version#v}"
+  [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || return 1
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  patch="${BASH_REMATCH[3]}"
+  ((major > 2 || (major == 2 && (minor > 24 || (minor == 24 && patch >= 4)))))
 }
 
 probe_container_dependencies() {
@@ -1124,7 +1222,7 @@ deploy_tier() {
   drain_status=0
   drain_old_slot "$old_service" || drain_status=$?
   if [[ "$drain_status" -eq 0 ]]; then
-    refresh_stopped_app_logging "$old_service" || drain_status=$?
+    refresh_stopped_app_logging "$tier" "$old_service" "$old_sha" || drain_status=$?
     old_id="$(container_id "$old_service")"
   fi
   resource_status=0
@@ -1218,6 +1316,10 @@ preflight() {
   }
   [[ -x "$NGINX_HELPER" ]] || {
     printf 'managed nginx helper is unavailable\n' >&2
+    return 1
+  }
+  compose_override_supported || {
+    printf 'Docker Compose 2.24.4 or newer is required for safe app-log migration\n' >&2
     return 1
   }
   [[ ! -e "$PENDING_FILE" ]] || {

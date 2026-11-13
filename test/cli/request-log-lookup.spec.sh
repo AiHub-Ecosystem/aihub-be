@@ -80,6 +80,7 @@ for file in "$@"; do
   case "${file##*/}" in
     aihub-access.log) files+=("$FAKE_NGINX_ACTIVE") ;;
     aihub-access.log.*) files+=("$FAKE_NGINX_ROTATED") ;;
+    aihub-access.log\*) files+=("$FAKE_NGINX_ACTIVE" "$FAKE_NGINX_ROTATED") ;;
     *) files+=("$file") ;;
   esac
 done
@@ -166,7 +167,7 @@ assert_not_contains "$test_root/output.log" '192.0.2.10'
 # Syslog-backed app records are searched from AIHUB files; docker logs is not
 # called because the remote driver has no dual-logging cache.
 : >"$FAKE_DOCKER_CALLS"
-FAKE_DOCKER_DRIVER=syslog
+export FAKE_DOCKER_DRIVER=syslog
 write_app_event "$fixture_dir/aihub-app-production.log" '/v1/items/:itemId' 200 success
 run_lookup
 assert_status 0

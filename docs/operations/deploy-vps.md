@@ -1554,6 +1554,11 @@ Compose file and fails if an app service has a different driver/buffer/tag or
 an unrelated service loses its JSON-file bounds. The local app files and
 `deploy-logs/` snapshots described below are separate copies.
 
+The blue-green migration refreshes the stopped rollback slot with its retained
+Compose file and uses Compose's `!override` tag to replace only its logging
+configuration. Docker Compose 2.24.4 or newer is required; deployment preflight
+checks this before it changes application containers.
+
 Before the first deployment that applies these options, record the host's
 existing Docker log defaults on #363. Record only the logging keys (or that the
 file is absent), not unrelated daemon settings:

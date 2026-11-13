@@ -147,10 +147,12 @@ rollback() {
     fi
   done
 
-  if rsyslogd -N1 -f /etc/rsyslog.conf >/dev/null 2>&1; then
-    systemctl restart rsyslog.service || printf 'Rollback restored files but rsyslog could not be restarted.\n' >&2
-  else
-    printf 'Rollback restored files but rsyslog config validation failed; rsyslog was not restarted.\n' >&2
+  if [[ "$rsyslog_config_changed" == true ]]; then
+    if rsyslogd -N1 -f /etc/rsyslog.conf >/dev/null 2>&1; then
+      systemctl restart rsyslog.service || printf 'Rollback restored files but rsyslog could not be restarted.\n' >&2
+    else
+      printf 'Rollback restored files but rsyslog config validation failed; rsyslog was not restarted.\n' >&2
+    fi
   fi
 
   if nginx -t; then
