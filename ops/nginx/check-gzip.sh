@@ -33,6 +33,7 @@ grep -Fq 'su root adm' "$tmp/aihub-access-logrotate"
 logrotate_sha256="$(sha256sum "$repo_root/ops/nginx/aihub-access-logrotate" | cut -d ' ' -f 1)"
 grep -Fq "readonly LOGROTATE_SHA256=$logrotate_sha256" \
   "$repo_root/ops/nginx/aihub-nginx-apply"
+sudo chown root:root "$tmp/aihub-access-logrotate"
 sudo logrotate --debug --state "$tmp/logrotate.status" \
   "$tmp/aihub-access-logrotate" >/dev/null
 install -m 0640 /dev/null "$tmp/aihub-access.log"
