@@ -107,6 +107,15 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.13.0] - 2026-11-14
+
+### Added
+
+- `GET /v1/listening/tests` and `GET /v1/reading/tests` list Listening and
+  Reading practice tests without authentication. Both accept optional `page`,
+  `page_size`, and `limit` query parameters and are `no-store`. Per-user counts
+  such as `user_attempt_count` show the anonymous view.
+
 ## [1.12.0] - 2026-11-10
 
 ### Added
