@@ -15,7 +15,7 @@ import {
   type ListOrganizationAuditEventsResponse,
   OrganizationAuditEventQuerySchema,
 } from '@/contracts/organization/audit-event';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
+import { UserAccessJwtGuard } from '@/modules/auth/public/web-sessions';
 import {
   READ_ORGANIZATION_AUDIT_EVENTS,
   type ReadOrganizationAuditEventsPort,

@@ -24,7 +24,7 @@ import {
   RenameOrganizationRequestSchema,
   type RenameOrganizationResponse,
 } from '@/contracts/organization/organization';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
+import { UserAccessJwtGuard } from '@/modules/auth/public/web-sessions';
 import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,

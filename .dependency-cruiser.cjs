@@ -302,6 +302,45 @@ function restrictedEdgeRule({ name, fromPattern, toModule, comment }) {
   };
 }
 
+/**
+ * Runtime source outside Auth has consumers that are not business modules,
+ * such as contracts and OpenAPI. They use Auth's root facade and declared
+ * module seams. The Operator CLI keeps its separate composition-root rule,
+ * which permits it to construct concrete infrastructure adapters.
+ */
+function externalAuthRule() {
+  const authPath = '^src/modules/auth/';
+  /**
+   * @param {string[]} files
+   * @returns {string[]}
+   */
+
+  const authFiles = (files) =>
+    files.filter((file) => file.startsWith(authPath));
+
+  return {
+    name: 'no-auth-internal-import-outside-auth',
+    severity: 'error',
+    comment:
+      'Runtime source outside Auth imports Auth through its root public facade, application ports, Nest exports, module composition, decorators, or shared Fastify primitives. The Operator CLI is governed by its composition-root rule.',
+    from: {
+      path: '^src/(?!modules/auth/)(?!cli/)',
+      pathNot: '[.]spec[.]ts$',
+    },
+    to: {
+      path: '^src/modules/auth/',
+      pathNot: [
+        '^src/modules/auth/auth[.]module[.]ts$',
+        '^src/modules/auth/(application/|.*/application/).*[.]port[.]ts$',
+        '^src/modules/auth/public/',
+        ...authFiles(nestExportPaths()),
+        ...authFiles(nestDecoratorPaths()),
+        ...authFiles(sharedPrimitivePaths()),
+      ],
+    },
+  };
+}
+
 module.exports = {
   // no-orphans is intentionally omitted; orphan/liveness analysis belongs to
   // dedicated tooling and may overlap with Knip.
@@ -479,6 +518,7 @@ module.exports = {
       from: { path: '^src/modules/avatar/', pathNot: '[.]spec[.]ts$' },
       to: { path: '^src/modules/gateway/' },
     },
+    externalAuthRule(),
     crossModuleRule(),
     cliRule(),
   ],

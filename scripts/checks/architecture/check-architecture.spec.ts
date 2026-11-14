@@ -82,6 +82,9 @@ const businessGatewayRule = rules.find(
 const avatarGatewayRule = rules.find(
   (rule) => rule.name === 'no-avatar-gateway-import',
 );
+const authBoundaryRule = rules.find(
+  (rule) => rule.name === 'no-auth-internal-import-outside-auth',
+);
 
 function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
@@ -730,6 +733,7 @@ describe('cross-module import rule over the real tree', () => {
   let identityAuthViolations: Array<{ from: string; to: string }>;
   let businessGatewayViolations: Array<{ from: string; to: string }>;
   let avatarGatewayViolations: Array<{ from: string; to: string }>;
+  let authBoundaryViolations: Array<{ from: string; to: string }>;
 
   beforeAll(() => {
     const result = spawnSync(
@@ -774,6 +778,9 @@ describe('cross-module import rule over the real tree', () => {
       'no-business-to-gateway-internal-import',
     );
     avatarGatewayViolations = violationsFor('no-avatar-gateway-import');
+    authBoundaryViolations = violationsFor(
+      'no-auth-internal-import-outside-auth',
+    );
   });
 
   it('reports no imports of another module internal files', () => {
@@ -937,6 +944,114 @@ describe('cross-module import rule over the real tree', () => {
 
   it('reports no avatar import of gateway code', () => {
     expect(avatarGatewayViolations).toEqual([]);
+  });
+  it('reports no external imports of Auth internals', () => {
+    expect(authBoundaryViolations).toEqual([]);
+  });
+});
+
+describe('external Auth import boundary fixtures', () => {
+  it('uses Auth root facades and its declared consumer seams', () => {
+    const fromPath = authBoundaryRule?.from.path ?? '';
+    const pathNot = authBoundaryRule?.to.pathNot ?? [];
+
+    expect(authBoundaryRule?.severity).toBe('error');
+    expect(matches(fromPath, 'src/openapi/openapi.controller.ts')).toBe(true);
+    expect(matches(fromPath, 'src/modules/auth/auth.module.ts')).toBe(false);
+    expect(matches(fromPath, 'src/cli/operator-auth-client.ts')).toBe(false);
+    expect(matches(pathNot, 'src/modules/auth/public/email-outbox.ts')).toBe(
+      true,
+    );
+    expect(
+      matches(pathNot, 'src/modules/auth/web-sessions/public/index.ts'),
+    ).toBe(false);
+    expect(
+      matches(
+        pathNot,
+        'src/modules/auth/email-delivery/application/email-outbox.port.ts',
+      ),
+    ).toBe(true);
+    expect(matches(pathNot, 'src/modules/auth/auth.module.ts')).toBe(true);
+    expect(
+      matches(
+        pathNot,
+        'src/modules/auth/web-sessions/presentation/user-access-jwt.guard.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(pathNot, 'src/modules/auth/shared/infrastructure/auth-prisma.ts'),
+    ).toBe(false);
+  });
+
+  it('rejects private Auth imports while allowing published seams', () => {
+    const root = workspaceRoot();
+    const publicProbe = join(root, 'src', 'openapi', 'auth-public-probe.ts');
+    const privateProbe = join(root, 'src', 'openapi', 'auth-private-probe.ts');
+    const dependencyCruiserPath = join(
+      repoRoot,
+      'node_modules',
+      'dependency-cruiser',
+      'bin',
+      'dependency-cruiser.mjs',
+    );
+    writeFileSync(
+      publicProbe,
+      [
+        "import '@/modules/auth/auth.module';",
+        "import '@/modules/auth/public/email-outbox';",
+        "import '@/modules/auth/email-delivery/application/email-outbox.port';",
+        "import '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';",
+        'export const probe = true;',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      privateProbe,
+      [
+        "import '@/modules/auth/web-sessions/presentation/refresh-cookie';",
+        'export const probe = true;',
+        '',
+      ].join('\n'),
+    );
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          dependencyCruiserPath,
+          '--config',
+          '.dependency-cruiser.cjs',
+          '--output-type',
+          'json',
+          'src',
+        ],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          maxBuffer: 64 * 1024 * 1024,
+        },
+      );
+      const violations = parseDependencyCruiserViolations(
+        JSON.parse(result.stdout),
+      ).filter(
+        ({ rule }) => rule.name === 'no-auth-internal-import-outside-auth',
+      );
+      const publicProbeViolations = violations.filter(({ from }) =>
+        from.endsWith('/auth-public-probe.ts'),
+      );
+      const privateProbeViolations = violations.filter(({ from }) =>
+        from.endsWith('/auth-private-probe.ts'),
+      );
+
+      expect(publicProbeViolations).toEqual([]);
+      expect(privateProbeViolations).toHaveLength(1);
+      expect(privateProbeViolations[0]?.to).toContain(
+        '/auth/web-sessions/presentation/refresh-cookie',
+      );
+    } finally {
+      rmSync(publicProbe, { force: true });
+      rmSync(privateProbe, { force: true });
+    }
   });
 });
 

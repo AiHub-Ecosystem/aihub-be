@@ -11,11 +11,11 @@ import {
   BeginMfaEnrollmentResponseSchema,
   ConfirmMfaEnrollmentResponseSchema,
 } from '@/contracts/auth/mfa';
+import { AIHUB_CSRF_HEADER } from '@/modules/auth/public/csrf-header';
 import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
-} from '@/modules/auth/local-credentials/public/local-auth';
-import { AIHUB_CSRF_HEADER } from '@/modules/auth/shared/presentation/cross-site-csrf';
+} from '@/modules/auth/public/local-auth';
 import { errorResponse, errorResponseSchema } from './openapi-error-responses';
 import {
   routeAlternateSuccessResponsesOf,

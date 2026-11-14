@@ -4,7 +4,7 @@ import {
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MIN_CODE_POINTS,
   isValidPassword,
-} from '@/modules/auth/local-credentials/public/local-auth';
+} from '@/modules/auth/public/local-auth';
 
 const PASSWORD_POLICY_FORMAT = 'aihub-password-policy';
 export const PASSWORD_POLICY_DESCRIPTION = `${PASSWORD_MIN_CODE_POINTS}–${PASSWORD_MAX_CODE_POINTS} Unicode code points; no normalization.`;

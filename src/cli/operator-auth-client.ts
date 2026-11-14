@@ -1,9 +1,9 @@
-import type { AuthRepositoryClient } from '@/modules/auth/shared/infrastructure/auth-prisma';
+import type { PrismaClientHolder } from '@/modules/persistence/persistence.module';
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
 export async function createOperatorAuthClient(
   databaseUrl: string,
-): Promise<AuthRepositoryClient & { close(): Promise<void> }> {
+): Promise<PrismaClientHolder['prisma'] & { close(): Promise<void> }> {
   const { createOperatorPrismaClient } = await import(
     '@/modules/persistence/infrastructure/prisma-client'
   );

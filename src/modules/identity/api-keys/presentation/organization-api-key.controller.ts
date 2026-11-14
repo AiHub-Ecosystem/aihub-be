@@ -21,7 +21,7 @@ import {
   type OrganizationApiKeySecretResponse,
   type RevokeOrganizationApiKeyResponse,
 } from '@/contracts/organization/api-key';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/public';
+import { UserAccessJwtGuard } from '@/modules/auth/public/web-sessions';
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
 import {

@@ -16,7 +16,7 @@ import {
   supportedPublicApiMajors,
 } from '@/catalog/public-api-majors';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
+import { UserAccessJwtGuard } from '@/modules/auth/public/web-sessions';
 
 async function openApiDocument(major?: PublicApiMajorDef): Promise<unknown> {
   const { buildOpenApiDocument } = await import('./build-openapi-document');

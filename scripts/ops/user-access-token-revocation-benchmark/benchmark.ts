@@ -15,9 +15,9 @@ import { Pool } from 'pg';
 
 import { PostgresUserAccountRepository } from '@/modules/auth/accounts/infrastructure/postgres-user-account.repository';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import { UserAccessJwtGuard } from '@/modules/auth/public/web-sessions';
 import { PostgresUserAccessTokenRevocationRepository } from '@/modules/auth/user-access-tokens/infrastructure/postgres-user-access-token-revocation.repository';
 import type { VerifiedUserAccessToken } from '@/modules/auth/web-sessions/application/user-access-token.port';
-import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 
 import { summarizeLatency } from './summary';
 
