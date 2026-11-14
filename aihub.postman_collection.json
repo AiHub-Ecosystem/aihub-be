@@ -543,20 +543,14 @@
             {
               "disabled": false,
               "key": "page",
-              "value": "<string>",
+              "value": "1",
               "description": "Forwarded to the content backend as `page`."
             },
             {
               "disabled": false,
-              "key": "page_size",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `page_size`."
-            },
-            {
-              "disabled": false,
-              "key": "limit",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `limit`."
+              "key": "pageSize",
+              "value": "20",
+              "description": "Forwarded to the content backend as `pageSize`."
             }
           ],
           "variable": []
@@ -591,20 +585,14 @@
             {
               "disabled": false,
               "key": "page",
-              "value": "<string>",
+              "value": "1",
               "description": "Forwarded to the content backend as `page`."
             },
             {
               "disabled": false,
-              "key": "page_size",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `page_size`."
-            },
-            {
-              "disabled": false,
-              "key": "limit",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `limit`."
+              "key": "pageSize",
+              "value": "20",
+              "description": "Forwarded to the content backend as `pageSize`."
             }
           ],
           "variable": []
@@ -630,20 +618,14 @@
             {
               "disabled": false,
               "key": "page",
-              "value": "<string>",
+              "value": "1",
               "description": "Forwarded to the content backend as `page`."
             },
             {
               "disabled": false,
-              "key": "page_size",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `page_size`."
-            },
-            {
-              "disabled": false,
-              "key": "limit",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `limit`."
+              "key": "pageSize",
+              "value": "20",
+              "description": "Forwarded to the content backend as `pageSize`."
             }
           ],
           "variable": []
@@ -678,20 +660,14 @@
             {
               "disabled": false,
               "key": "page",
-              "value": "<string>",
+              "value": "1",
               "description": "Forwarded to the content backend as `page`."
             },
             {
               "disabled": false,
-              "key": "page_size",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `page_size`."
-            },
-            {
-              "disabled": false,
-              "key": "limit",
-              "value": "<string>",
-              "description": "Forwarded to the content backend as `limit`."
+              "key": "pageSize",
+              "value": "20",
+              "description": "Forwarded to the content backend as `pageSize`."
             }
           ],
           "variable": []
