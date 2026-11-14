@@ -15,7 +15,7 @@ hosts, their log-format include, both AIHUB logrotate policies, and the
 AIHUB-only rsyslog receiver. It creates or tightens the active log files
 without truncating them, validates logrotate, rsyslog, and nginx, restarts
 rsyslog only when its config changes, and restores the previous config files
-on failure. The deploy script requires helper version 2 before it changes
+on failure. The deploy script requires helper version 3 before it changes
 application containers. The operator must review and install helper updates;
 CD never installs or updates its own privileged helper.
 
@@ -32,9 +32,13 @@ the TCP receiver on `127.0.0.1:1514`. The fixed `aihub-production` and
 16 MiB non-blocking buffer. A full buffer can drop new messages. `docker logs`
 is therefore unavailable for these app containers; use
 `scripts/ops/logs/request-log-lookup.sh` to search the local files and any
-legacy `json-file` containers during migration. The 10 MiB app-logrotate
-threshold runs on the daily timer; it is not a hard disk ceiling. #1904 tracks
-local rsyslog capacity enforcement.
+legacy `json-file` containers during migration. Rsyslog rotates each active
+app log at 10 MiB to its `.1` file; the daily logrotate policy keeps two
+archives. This bounds the two tiers' app-log files to about 60 MiB total, with
+small threshold overshoot, when both rotation mechanisms run successfully. It
+does not cap other files on the host or total disk usage. The 10 MiB threshold
+reuses the existing logrotate setting and must be checked against the seven-day
+source-volume sample before app logging is enabled for collection.
 
 AIHUB access records contain the Unix timestamp, observed address, upstream
 `X-Request-Id`, method, `$uri` without a query string, and status. The timestamp

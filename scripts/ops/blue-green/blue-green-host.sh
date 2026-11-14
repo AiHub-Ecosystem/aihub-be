@@ -777,7 +777,7 @@ apply_slots() {
     ops/logs/aihub-app-logrotate "$NGINX_STAGING/aihub-app-logrotate"
   rm -f "$api_tmp" "$sandbox_tmp"
   helper_status="$(sudo -n "$NGINX_HELPER" | tail -n 1)"
-  if [[ "$helper_status" != AIHUB_HOST_CONFIG_VERSION=2 ]]; then
+  if [[ "$helper_status" != AIHUB_HOST_CONFIG_VERSION=3 ]]; then
     printf 'The installed AIHUB host helper does not support the managed app-log sink.\n' >&2
     return 1
   fi

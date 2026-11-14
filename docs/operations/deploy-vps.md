@@ -1381,7 +1381,7 @@ logrotate, rsyslog, and nginx, then restarts rsyslog only when its config
 changes and reloads nginx. It restores the previous config files if install,
 validation, or reload fails. With Sandbox disabled, it removes only
 `/etc/nginx/conf.d/sandbox.conf`. The deploy script requires the helper's
-`AIHUB_HOST_CONFIG_VERSION=2` marker before changing app containers; an older
+`AIHUB_HOST_CONFIG_VERSION=3` marker before changing app containers; an older
 installed helper stops the release before the logging-driver migration.
 Operators review and install helper updates; CD cannot replace its code. The
 helper verifies staged root-run rsyslog and logrotate configs against pinned
