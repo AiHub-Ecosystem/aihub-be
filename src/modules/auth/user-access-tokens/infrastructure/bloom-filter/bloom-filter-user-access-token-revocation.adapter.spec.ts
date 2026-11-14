@@ -138,31 +138,71 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     expect(underlying.isRevokedCalls).toHaveLength(1);
   });
 
-  it('defers the initial seed until application bootstrap', async () => {
+  it('does not seed before application bootstrap or while the store is unready', async () => {
     const startupStore = new RecordingRevocationAdapter();
-    const startupOrder: string[] = [];
-    const listActiveRevocations = jest
-      .spyOn(startupStore, 'listActiveRevocations')
-      .mockImplementation(async () => {
-        startupOrder.push('seed');
-        return [];
-      });
-    const waitForStoreReady = jest.fn(async () => {
-      startupOrder.push('ready');
+    startupStore.listActiveRevocations = jest.fn(async () => [
+      { issuer: 'aihub_test', jti: 'seed_after_pool_ready' },
+    ]);
+    let releaseReadiness: (() => void) | undefined;
+    const readiness = new Promise<void>((resolve) => {
+      releaseReadiness = () => resolve();
     });
+    const checkStoreReady = jest.fn(() => readiness);
     const startupAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
       underlying: startupStore,
-      waitForStoreReady,
+      checkStoreReady,
     });
 
     try {
-      expect(listActiveRevocations).not.toHaveBeenCalled();
+      expect(checkStoreReady).not.toHaveBeenCalled();
+      expect(startupAdapter.isSeeded).toBe(false);
       startupAdapter.onApplicationBootstrap();
+      await Promise.resolve();
+      expect(checkStoreReady).toHaveBeenCalledWith(750);
+      expect(startupAdapter.isSeeded).toBe(false);
+      releaseReadiness?.();
       await startupAdapter.init();
-      expect(waitForStoreReady).toHaveBeenCalledWith(750);
-      expect(startupOrder).toEqual(['ready', 'seed']);
+      expect(startupAdapter.isSeeded).toBe(true);
+    } finally {
+      releaseReadiness?.();
+      await startupAdapter.close();
+    }
+  });
+
+  it('waits through transient pool readiness failures without logging an error', async () => {
+    jest.useFakeTimers();
+    let readinessChecks = 0;
+    const checkStoreReady = jest.fn(async (_timeoutMs: number) => {
+      readinessChecks += 1;
+      if (readinessChecks === 1) {
+        throw Object.assign(new Error('pool is still starting'), {
+          code: 'ECONNREFUSED',
+        });
+      }
+    });
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const startupAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying: new RecordingRevocationAdapter(),
+      checkStoreReady,
+    });
+
+    try {
+      startupAdapter.onApplicationBootstrap();
+      await jest.advanceTimersByTimeAsync(1_999);
+      expect(checkStoreReady).toHaveBeenCalledTimes(1);
+      expect(startupAdapter.isSeeded).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      await startupAdapter.init();
+
+      expect(checkStoreReady).toHaveBeenCalledTimes(2);
+      expect(startupAdapter.isSeeded).toBe(true);
+      expect(logError).not.toHaveBeenCalled();
     } finally {
       await startupAdapter.close();
+      logError.mockRestore();
+      jest.useRealTimers();
     }
   });
 
@@ -359,6 +399,9 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     const logError = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
+    const logWarn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     const failedStore = new RecordingRevocationAdapter();
     failedStore.listActiveRevocations = jest
       .fn()
@@ -386,14 +429,14 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
 
       expect(logError.mock.calls).toEqual(
         expect.arrayContaining([
-          [
-            'Failed to seed token revocations from underlying store (type=Error code=ECONNREFUSED)',
-          ],
           ['Failed to subscribe to token revocation channel'],
           ['Token revocation Redis subscriber connection error'],
           ['Failed to broadcast token revocation'],
         ]),
       );
+      expect(logWarn.mock.calls).toContainEqual([
+        'Failed to seed token revocations from underlying store (type=Error code=ECONNREFUSED)',
+      ]);
       expect(
         logError.mock.calls.every(
           (args) =>
@@ -403,9 +446,11 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
         ),
       ).toBe(true);
       expect(JSON.stringify(logError.mock.calls)).not.toContain(unsafeDetail);
+      expect(JSON.stringify(logWarn.mock.calls)).not.toContain(unsafeDetail);
     } finally {
       await diagnosticAdapter.close();
       logError.mockRestore();
+      logWarn.mockRestore();
     }
   });
 
@@ -569,6 +614,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
   });
 
   it('re-seeds after a failed boot seed without skipping authoritative lookups', async () => {
+    jest.useFakeTimers();
     const recoveringStore = new RecordingRevocationAdapter();
     let seedAttempts = 0;
     recoveringStore.listActiveRevocations = jest.fn(async () => {
@@ -583,24 +629,28 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
       underlying: recoveringStore,
       bloomFilter: new InProcessBloomFilter(),
     });
-    await retryAdapter.init();
-    expect(retryAdapter.isSeeded).toBe(false);
+    try {
+      await retryAdapter.init();
+      expect(retryAdapter.isSeeded).toBe(false);
 
-    // The adapter schedules its own background retry; driving seed() here
-    // proves the second attempt re-engages the fast path without a restart.
-    await retryAdapter.seed();
-    expect(retryAdapter.isSeeded).toBe(true);
-    expect(seedAttempts).toBe(2);
+      await jest.advanceTimersByTimeAsync(1_999);
+      expect(seedAttempts).toBe(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(retryAdapter.isSeeded).toBe(true);
+      expect(seedAttempts).toBe(2);
 
-    // A successful seed does not make a negative filter result authoritative.
-    const callsBefore = recoveringStore.isRevokedCalls.length;
-    const unrevoked = await retryAdapter.isRevoked({
-      issuer: 'aihub_test',
-      jti: 'unrevoked_after_recovery',
-      now: new Date(),
-    });
-    expect(unrevoked).toBe(false);
-    expect(recoveringStore.isRevokedCalls.length).toBe(callsBefore + 1);
-    await retryAdapter.close();
+      // A successful seed does not make a negative filter result authoritative.
+      const callsBefore = recoveringStore.isRevokedCalls.length;
+      const unrevoked = await retryAdapter.isRevoked({
+        issuer: 'aihub_test',
+        jti: 'unrevoked_after_recovery',
+        now: new Date(),
+      });
+      expect(unrevoked).toBe(false);
+      expect(recoveringStore.isRevokedCalls.length).toBe(callsBefore + 1);
+    } finally {
+      await retryAdapter.close();
+      jest.useRealTimers();
+    }
   });
 });

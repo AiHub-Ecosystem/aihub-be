@@ -294,7 +294,7 @@ function createUserAccessTokenCrypto(
         }
         return new BloomFilterUserAccessTokenRevocationAdapter({
           underlying,
-          waitForStoreReady: (timeoutMs) => runtime.checkConnection(timeoutMs),
+          checkStoreReady: (timeoutMs) => runtime.checkConnection(timeoutMs),
           redisPublisher: publisher,
           redisSubscriber: subscriber,
         });

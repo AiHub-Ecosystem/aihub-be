@@ -30,9 +30,7 @@ export interface BloomFilterRevocationAdapterOptions {
   readonly bloomFilter?: InProcessBloomFilter | undefined;
   readonly redisPublisher?: RedisPublisherPort | undefined;
   readonly redisSubscriber?: RedisSubscriberPort | undefined;
-  readonly waitForStoreReady?:
-    | ((timeoutMs: number) => Promise<void>)
-    | undefined;
+  readonly checkStoreReady?: ((timeoutMs: number) => Promise<void>) | undefined;
   readonly channel?: string | undefined;
 }
 
@@ -46,6 +44,7 @@ type RevocationMessage = Static<typeof RevocationMessageSchema>;
 // A failed boot seed retries filter synchronization without delaying auth reads.
 // Bounded so a down database is not hammered.
 const SEED_RETRY_DELAY_MS = 10_000;
+const SEED_FIRST_RETRY_DELAY_MS = 2_000;
 const SEED_POOL_READINESS_TIMEOUT_MS = 750;
 
 function safeErrorDiagnostic(error: unknown): string {
@@ -78,7 +77,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   private readonly bloomFilter: InProcessBloomFilter;
   private readonly redisPublisher: RedisPublisherPort | undefined;
   private readonly redisSubscriber: RedisSubscriberPort | undefined;
-  private readonly waitForStoreReady:
+  private readonly checkStoreReady:
     | ((timeoutMs: number) => Promise<void>)
     | undefined;
   private readonly channel: string;
@@ -94,7 +93,7 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     this.bloomFilter = options.bloomFilter ?? new InProcessBloomFilter();
     this.redisPublisher = options.redisPublisher;
     this.redisSubscriber = options.redisSubscriber;
-    this.waitForStoreReady = options.waitForStoreReady;
+    this.checkStoreReady = options.checkStoreReady;
     this.channel = options.channel ?? REVOCATION_CHANNEL_DEFAULT;
     this.subscribed = options.redisSubscriber === undefined;
 
@@ -121,8 +120,8 @@ export class BloomFilterUserAccessTokenRevocationAdapter
       return 0;
     }
     try {
-      if (this.waitForStoreReady) {
-        await this.waitForStoreReady(SEED_POOL_READINESS_TIMEOUT_MS);
+      if (this.checkStoreReady) {
+        await this.checkStoreReady(SEED_POOL_READINESS_TIMEOUT_MS);
       }
       const active = await this.underlying.listActiveRevocations(now);
       for (const record of active) {
@@ -141,9 +140,12 @@ export class BloomFilterUserAccessTokenRevocationAdapter
       return active.length;
     } catch (error) {
       this.seeded = false;
-      this.logger.error(
-        `Failed to seed token revocations from underlying store (${safeErrorDiagnostic(error)})`,
-      );
+      const message = `Failed to seed token revocations from underlying store (${safeErrorDiagnostic(error)})`;
+      if (this.seedRetried) {
+        this.logger.error(message);
+      } else {
+        this.logger.warn(message);
+      }
       // The failure is usually a cold connection pool at boot; a bounded
       // retry restores filter synchronization without changing auth decisions.
       this.scheduleSeedRetry();
@@ -153,11 +155,14 @@ export class BloomFilterUserAccessTokenRevocationAdapter
 
   private scheduleSeedRetry(): void {
     if (this.seedRetryTimer !== undefined) return;
+    const delayMs = this.seedRetried
+      ? SEED_RETRY_DELAY_MS
+      : SEED_FIRST_RETRY_DELAY_MS;
     this.seedRetried = true;
     this.seedRetryTimer = setTimeout(() => {
       this.seedRetryTimer = undefined;
       void this.seed().catch(() => undefined);
-    }, SEED_RETRY_DELAY_MS);
+    }, delayMs);
     this.seedRetryTimer.unref?.();
   }
 
