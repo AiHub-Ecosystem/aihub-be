@@ -243,3 +243,10 @@ Ending public serving of an AIHUB-published chart before its natural expiry.
 It stops access through AIHUB-controlled serving; it cannot retrieve copies
 others already downloaded or independently cached.
 _Avoid_: deletion (without qualification), which can imply every copy is gone.
+
+**Capacity action trigger**:
+A policy that connects measured resource and dependency signals, evidence-based
+thresholds and windows, remaining headroom, and a human capacity response. It
+names who approves cost-bearing action and the time needed to carry it out; it
+does not resize automatically.
+_Avoid_: autoscaling rule
