@@ -44,11 +44,36 @@ describe('container image vulnerability scanning (#331)', () => {
     expect(content).toContain('workflow_dispatch:');
     expect(content).toContain('grype');
     expect(content).toContain('--only-fixed');
-    expect(content).toContain('--fail-on high');
+    expect(content).toContain('packages: read');
+    expect(content).toContain('docker login ghcr.io');
     expect(content).toContain('gh run download');
     expect(content).toContain('image-digest');
     expect(content).toContain('image="ghcr.io/${GITHUB_REPOSITORY,,}@$digest"');
+    expect(content).toContain('has_fixable_vulnerabilities=true');
+    expect(content).toContain('report_file=$fixable_cves');
+    expect(content).toContain(
+      "steps.grype_scan.outputs.has_fixable_vulnerabilities == 'true'",
+    );
+    expect(content).toContain('cat "$REPORT_FILE"');
+    expect(content).toContain('.vulnerability.fix.state == "fixed"');
+    expect(content).toContain('.vulnerability.severity == "High"');
+    expect(content).toContain('.vulnerability.severity == "Critical"');
+    expect(content.match(/\.vulnerability\.fix\.state/g) ?? []).toHaveLength(1);
+    expect(content).not.toContain('|| true');
     expect(content).toContain('gh issue');
+  });
+
+  it('pins both build and runtime stages to one versioned Node 22 digest', () => {
+    const dockerfile = readFileSync('Dockerfile', 'utf8');
+    const base = dockerfile.match(
+      /^FROM (node:22\.\d+\.\d+-bookworm-slim@sha256:[a-f0-9]{64}) AS base$/m,
+    )?.[1];
+    const runtime = dockerfile.match(
+      /^FROM (node:22\.\d+\.\d+-bookworm-slim@sha256:[a-f0-9]{64}) AS runtime$/m,
+    )?.[1];
+
+    expect(base).toBeDefined();
+    expect(runtime).toBe(base);
   });
 
   it('documents the base-image digest bump procedure and accepted CVE policy', () => {

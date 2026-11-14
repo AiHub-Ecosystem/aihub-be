@@ -12,6 +12,7 @@ permissions:
   actions: read
   contents: read
   issues: write
+  packages: read
 
 concurrency:
   group: production-image-scan
@@ -72,6 +73,14 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
           printf 'Scanning deployed image `%s` (commit `%s`).\n' "$image" "$sha" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
       - name: Scan deployed image with Grype
         id: grype_scan
         shell: bash
@@ -79,19 +88,29 @@ jobs:
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
           set -euo pipefail
-          scan_exit=0
-          grype "$IMAGE" --output table >> "$GITHUB_STEP_SUMMARY" || true
-          grype "$IMAGE" --output json > scan-report.json || true
-          grype "$IMAGE" --only-fixed --fail-on high || scan_exit=$?
-          echo "exit_code=$scan_exit" >> "$GITHUB_OUTPUT"
+          fixable_cves="$RUNNER_TEMP/fixable-cves.txt"
+          grype "$IMAGE" --only-fixed --output json \
+            | jq -r '(.matches // [])[] | select(.vulnerability.fix.state == "fixed" and (.vulnerability.severity == "High" or .vulnerability.severity == "Critical")) | "\(.vulnerability.severity) \(.vulnerability.id): \(.artifact.name) \(.artifact.version) -> fixed in \(.vulnerability.fix.versions // [] | join(", "))"' \
+            | sed -n '1,40p' > "$fixable_cves"
+          echo "report_file=$fixable_cves" >> "$GITHUB_OUTPUT"
+          if [[ -s "$fixable_cves" ]]; then
+            echo 'has_fixable_vulnerabilities=true' >> "$GITHUB_OUTPUT"
+            {
+              printf '### Fixable High/Critical CVEs\n\n'
+              cat "$fixable_cves"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'has_fixable_vulnerabilities=false' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Open or update issue on fixable Critical or High CVEs
-        if: steps.grype_scan.outputs.exit_code != '0'
+        if: steps.grype_scan.outputs.has_fixable_vulnerabilities == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE: ${{ steps.image.outputs.image }}
           SHA: ${{ steps.image.outputs.sha }}
+          REPORT_FILE: ${{ steps.grype_scan.outputs.report_file }}
         run: |
           set -euo pipefail
           title="Security: fixable CVE detected in deployed production image"
@@ -101,7 +120,7 @@ jobs:
           Please inspect the scan report and bump the base image digest in \`Dockerfile\` per \`docs/operations/image-vulnerability-scanning.md\`.
 
           \`\`\`
-          $(jq -r '.matches[] | select(.vulnerability.fix.state == "fixed" and (.vulnerability.severity == "High" or .vulnerability.severity == "Critical")) | "\(.vulnerability.severity) \(.vulnerability.id): \(.artifact.name) \(.artifact.version) -> fixed in \(.vulnerability.fix.versions // [] | join(", "))"' scan-report.json | head -40)
+          $(cat "$REPORT_FILE")
           \`\`\`
           EOF
 
