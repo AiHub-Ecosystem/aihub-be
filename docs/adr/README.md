@@ -27,5 +27,5 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0008](0008-operation-catalog-in-code.md)                 | The operation catalog lives in code, not in the database         | Accepted                                    |
 | [0009](0009-pure-downstream-adapters.md)                  | Downstream adapters are pure functions without I/O               | Accepted                                    |
 | [0010](0010-meter-requests-and-tokens.md)                 | Meter both request counts and token metrics from day one         | Accepted                                    |
-| [0011](0011-docker-compose-single-vps.md)                 | Docker Compose on a single VPS with documented exit triggers     | Accepted; topology by ADR-0085              |
+| [0011](0011-docker-compose-single-vps.md)                 | Docker Compose on a single VPS with documented exit triggers     | Accepted; see ADR-0085 and ADR-0165         |
 | [0012](0012-defer-distributed-tracing.md)                 | Defer distributed tracing in Stage A                             | Superseded by ADR-0063                      |

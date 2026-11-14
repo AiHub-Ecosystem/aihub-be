@@ -1,6 +1,6 @@
 # ADR-0011: Docker Compose on a single VPS with documented exit triggers
 
-- Status: Accepted (retroactive record; per-tier topology recorded by ADR-0085)
+- Status: Accepted; per-tier topology by ADR-0085; exit triggers amended by ADR-0165
 - Date: decided 2026-09-07 in the implementation specification suite; file written 2026-11-07
 
 ## Context

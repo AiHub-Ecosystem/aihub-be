@@ -129,7 +129,7 @@ Documented explicitly to prevent premature, speculative refactoring:
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Dedicated VPS for Postgres            | Database CPU > 60% sustained, or application/DB disk I/O contention                                        |
 | Managed PostgreSQL                    | Operating overhead becomes unmanageable, or high-availability failover is required                         |
-| Multi-node cluster with dedicated LB  | Sustained traffic > 300 RPS or > 1,000 concurrent connections                                              |
+| Multi-node cluster with dedicated LB  | See ADR-0165.                                                                                              |
 | Kubernetes                            | ≥ 3 independent microservices requiring decoupled deploy pipelines **and** dedicated DevOps staffing       |
 | Re-evaluate Go / dedicated data plane | p99 gateway overhead > 50ms while CPU is underutilized; or streaming SSE becomes mandatory; or > 1,000 RPS |
 | Apache Kafka                          | Deferred indefinitely until a third event consumer requires event log replay                               |
@@ -137,6 +137,8 @@ Documented explicitly to prevent premature, speculative refactoring:
 | HashiCorp Vault / SOPS                | ≥ 3 deployment environments, or team member departures, or formal compliance audits                        |
 | Trace storage / Tempo                 | When an operator needs a trace UI; point the optional OTLP exporter at an existing receiver                |
 | Sliding window / GCRA rate limiting   | Customer disputes regarding minute-boundary burst fairness, or contractual SLA mandates                    |
+
+For the current Production multi-node trigger, see [ADR-0165](../../../adr/0165-production-availability-and-single-host-risk.md).
 
 <a id="n6-phases"></a>
 
