@@ -112,9 +112,9 @@ out.
 ### Added
 
 - `GET /v1/listening/tests` and `GET /v1/reading/tests` list Listening and
-  Reading practice tests without authentication. Both accept optional `page`,
-  `page_size`, and `limit` query parameters and are `no-store`. Per-user counts
-  such as `user_attempt_count` show the anonymous view.
+  Reading practice tests without authentication. Both accept optional `page`
+  and `pageSize` query parameters and are `no-store`. Per-user counts such as
+  `user_attempt_count` show the anonymous view.
 
 ## [1.12.0] - 2026-11-10
 

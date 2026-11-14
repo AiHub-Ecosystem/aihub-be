@@ -78,10 +78,10 @@ describe('HttpLegacyContentClient', () => {
     const { fetchFn, calls } = stubFetch(fixture(file));
 
     const result = await new HttpLegacyContentClient(BASE_URL, fetchFn)[method](
-      { limit: '5' },
+      { pageSize: '5' },
     );
 
-    expect(calls[0]?.url).toBe(`${BASE_URL}${path}?limit=5`);
+    expect(calls[0]?.url).toBe(`${BASE_URL}${path}?pageSize=5`);
     expect(result.items.length).toBeGreaterThan(0);
   });
 
@@ -104,6 +104,54 @@ describe('HttpLegacyContentClient', () => {
     await expect(
       new HttpLegacyContentClient(BASE_URL, fetchFn).fetchListeningTests(),
     ).rejects.toMatchObject({ code, retryable, downstreamStatus: status });
+  });
+
+  it('refuses a body that is not JSON as a contract violation', async () => {
+    const { fetchFn } = stubFetch('<html>bad gateway</html>');
+
+    await expect(
+      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchSpeakingLibrary(),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      retryable: false,
+    });
+  });
+
+  it('maps a timeout while the body streams to AI_SERVICE_TIMEOUT', async () => {
+    const fetchFn: typeof undiciFetch = async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"items":['));
+            controller.error(new DOMException('timed out', 'TimeoutError'));
+          },
+        }),
+      );
+
+    await expect(
+      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchListeningTests(),
+    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT', retryable: true });
+  });
+
+  it('releases the body of a refused upstream response', async () => {
+    let cancelled = false;
+    const fetchFn: typeof undiciFetch = async () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 502 },
+      );
+
+    await expect(
+      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchReadingTests(),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      downstreamStatus: 502,
+    });
+    expect(cancelled).toBe(true);
   });
 
   it('maps a timeout to AI_SERVICE_TIMEOUT', async () => {

@@ -3375,27 +3375,19 @@
             "description": "Forwarded to the content backend as `page`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "1"
             }
           },
           {
-            "name": "page_size",
+            "name": "pageSize",
             "in": "query",
             "required": false,
-            "description": "Forwarded to the content backend as `page_size`.",
+            "description": "Forwarded to the content backend as `pageSize`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Forwarded to the content backend as `limit`.",
-            "schema": {
-              "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "20"
             }
           }
         ],
@@ -3553,27 +3545,19 @@
             "description": "Forwarded to the content backend as `page`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "1"
             }
           },
           {
-            "name": "page_size",
+            "name": "pageSize",
             "in": "query",
             "required": false,
-            "description": "Forwarded to the content backend as `page_size`.",
+            "description": "Forwarded to the content backend as `pageSize`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Forwarded to the content backend as `limit`.",
-            "schema": {
-              "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "20"
             }
           }
         ],
@@ -3622,27 +3606,19 @@
             "description": "Forwarded to the content backend as `page`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "1"
             }
           },
           {
-            "name": "page_size",
+            "name": "pageSize",
             "in": "query",
             "required": false,
-            "description": "Forwarded to the content backend as `page_size`.",
+            "description": "Forwarded to the content backend as `pageSize`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Forwarded to the content backend as `limit`.",
-            "schema": {
-              "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "20"
             }
           }
         ],
@@ -3791,27 +3767,19 @@
             "description": "Forwarded to the content backend as `page`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "1"
             }
           },
           {
-            "name": "page_size",
+            "name": "pageSize",
             "in": "query",
             "required": false,
-            "description": "Forwarded to the content backend as `page_size`.",
+            "description": "Forwarded to the content backend as `pageSize`.",
             "schema": {
               "pattern": "^[1-9][0-9]*$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Forwarded to the content backend as `limit`.",
-            "schema": {
-              "pattern": "^[1-9][0-9]*$",
-              "type": "string"
+              "type": "string",
+              "default": "20"
             }
           }
         ],

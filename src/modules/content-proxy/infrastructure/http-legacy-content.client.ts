@@ -83,8 +83,7 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
   ): Promise<ListeningTestsResponse> {
     const url = buildQueryUrl(this.baseUrl, '/v1/listening/tests', {
       page: query?.page,
-      page_size: query?.page_size,
-      limit: query?.limit,
+      pageSize: query?.pageSize,
     });
     return this.fetchAndValidate(
       url,
@@ -98,8 +97,7 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
   ): Promise<ReadingTestsResponse> {
     const url = buildQueryUrl(this.baseUrl, '/v1/reading/tests', {
       page: query?.page,
-      page_size: query?.page_size,
-      limit: query?.limit,
+      pageSize: query?.pageSize,
     });
     return this.fetchAndValidate(
       url,
@@ -118,22 +116,37 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
     resource: string,
     headers: Readonly<Record<string, string>> = {},
   ): Promise<Static<S>> {
-    const response = await this.executeFetch(url, headers);
-    const data = Value.Clean(schema, await response.json());
-    if (!Value.Check(schema, data)) {
-      throw new AppError({
+    const invalidPayload = (cause?: unknown): AppError =>
+      new AppError({
         code: 'AI_SERVICE_CONTRACT_VIOLATION',
         message: `Legacy backend returned invalid ${resource} payload`,
         retryable: false,
+        ...(cause === undefined ? {} : { cause }),
       });
+
+    const body = await this.fetchBody(url, headers);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch (error) {
+      throw invalidPayload(error);
+    }
+    const data = Value.Clean(schema, parsed);
+    if (!Value.Check(schema, data)) {
+      throw invalidPayload();
     }
     return data;
   }
 
-  private async executeFetch(
+  /**
+   * Reads the whole body inside the transport boundary, so a stall, a cut
+   * connection or the timeout while the body streams maps the same way as a
+   * failure before the headers arrive.
+   */
+  private async fetchBody(
     url: string,
     headers: Readonly<Record<string, string>>,
-  ): Promise<Awaited<ReturnType<typeof undiciFetch>>> {
+  ): Promise<string> {
     try {
       const response = await this.fetchFn(url, {
         method: 'GET',
@@ -142,6 +155,8 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
       });
 
       if (!response.ok) {
+        // An unread body holds its connection; release it before refusing.
+        await response.body?.cancel().catch(() => undefined);
         throw new AppError({
           code:
             response.status >= 500
@@ -153,7 +168,7 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
         });
       }
 
-      return response;
+      return await response.text();
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

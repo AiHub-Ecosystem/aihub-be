@@ -135,11 +135,11 @@ describe('ContentProxyController', () => {
     it('calls client with query', async () => {
       const { controller, fetchReadingTests } = createSubject();
       const request = {
-        query: { limit: '5' },
+        query: { pageSize: '5' },
       } as unknown as FastifyRequest;
 
       await controller.getReadingTests(request);
-      expect(fetchReadingTests.mock.calls).toEqual([[{ limit: '5' }]]);
+      expect(fetchReadingTests.mock.calls).toEqual([[{ pageSize: '5' }]]);
     });
   });
 });

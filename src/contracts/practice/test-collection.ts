@@ -1,10 +1,11 @@
 import { Type } from '@sinclair/typebox';
 
+// The content backend pages with `page` and camel-case `pageSize`; it ignores
+// `page_size` and `limit` (probed 2026-11-14).
 export const PracticeTestsQuerySchema = Type.Object(
   {
     page: Type.Optional(Type.String({ pattern: '^[1-9][0-9]*$' })),
-    page_size: Type.Optional(Type.String({ pattern: '^[1-9][0-9]*$' })),
-    limit: Type.Optional(Type.String({ pattern: '^[1-9][0-9]*$' })),
+    pageSize: Type.Optional(Type.String({ pattern: '^[1-9][0-9]*$' })),
   },
   { additionalProperties: false },
 );

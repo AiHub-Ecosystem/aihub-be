@@ -120,15 +120,24 @@ import type {
 } from './openapi-operation-metadata';
 import type { IdempotencyMode } from './operation-catalog';
 
-/** The paging query the Listening and Reading test lists forward upstream. */
+/**
+ * The paging query the Listening and Reading test lists forward upstream. The
+ * defaults are what the content backend answers when the value is omitted.
+ */
 const PRACTICE_TEST_QUERY_PARAMETERS: readonly OpenApiParameterMetadata[] = (
-  ['page', 'page_size', 'limit'] as const
-).map((name) => ({
+  [
+    ['page', '1'],
+    ['pageSize', '20'],
+  ] as const
+).map(([name, upstreamDefault]) => ({
   name,
   in: 'query',
   required: false,
   description: `Forwarded to the content backend as \`${name}\`.`,
-  schema: PracticeTestsQuerySchema.properties[name],
+  schema: {
+    ...PracticeTestsQuerySchema.properties[name],
+    default: upstreamDefault,
+  },
 }));
 
 /**
