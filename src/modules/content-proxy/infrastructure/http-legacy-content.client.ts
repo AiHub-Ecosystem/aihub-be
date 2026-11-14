@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import { fetch as undiciFetch } from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   type ListeningTestsQuery,
   type ListeningTestsResponse,
@@ -158,9 +159,11 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
         throw error;
       }
 
+      // An abort is a DOMException, which may come from another realm than
+      // this module's Error, so the name decides rather than `instanceof`.
       const isTimeout =
-        error instanceof Error &&
-        (error.name === 'TimeoutError' || error.name === 'AbortError');
+        isRecord(error) &&
+        (error['name'] === 'TimeoutError' || error['name'] === 'AbortError');
 
       throw new AppError({
         code: isTimeout ? 'AI_SERVICE_TIMEOUT' : 'AI_SERVICE_UNAVAILABLE',
