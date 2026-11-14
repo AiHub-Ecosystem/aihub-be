@@ -138,6 +138,34 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     expect(underlying.isRevokedCalls).toHaveLength(1);
   });
 
+  it('defers the initial seed until application bootstrap', async () => {
+    const startupStore = new RecordingRevocationAdapter();
+    const startupOrder: string[] = [];
+    const listActiveRevocations = jest
+      .spyOn(startupStore, 'listActiveRevocations')
+      .mockImplementation(async () => {
+        startupOrder.push('seed');
+        return [];
+      });
+    const waitForStoreReady = jest.fn(async () => {
+      startupOrder.push('ready');
+    });
+    const startupAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying: startupStore,
+      waitForStoreReady,
+    });
+
+    try {
+      expect(listActiveRevocations).not.toHaveBeenCalled();
+      startupAdapter.onApplicationBootstrap();
+      await startupAdapter.init();
+      expect(waitForStoreReady).toHaveBeenCalledWith(750);
+      expect(startupOrder).toEqual(['ready', 'seed']);
+    } finally {
+      await startupAdapter.close();
+    }
+  });
+
   it('revokes token, updates local filter, and publishes to Redis Pub/Sub', async () => {
     const input = {
       issuer: 'aihub_test',
@@ -334,7 +362,9 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
     const failedStore = new RecordingRevocationAdapter();
     failedStore.listActiveRevocations = jest
       .fn()
-      .mockRejectedValue(new Error(unsafeDetail));
+      .mockRejectedValue(
+        Object.assign(new Error(unsafeDetail), { code: 'ECONNREFUSED' }),
+      );
     const subscriber = new FakeRedisClient();
     subscriber.subscribeError = new Error(unsafeDetail);
     const publisher = new FakeRedisClient();
@@ -356,7 +386,9 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
 
       expect(logError.mock.calls).toEqual(
         expect.arrayContaining([
-          ['Failed to seed token revocations from underlying store'],
+          [
+            'Failed to seed token revocations from underlying store (type=Error code=ECONNREFUSED)',
+          ],
           ['Failed to subscribe to token revocation channel'],
           ['Token revocation Redis subscriber connection error'],
           ['Failed to broadcast token revocation'],
@@ -367,7 +399,7 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
           (args) =>
             args.length === 1 &&
             typeof args[0] === 'string' &&
-            args[0].length <= 80,
+            args[0].length <= 120,
         ),
       ).toBe(true);
       expect(JSON.stringify(logError.mock.calls)).not.toContain(unsafeDetail);

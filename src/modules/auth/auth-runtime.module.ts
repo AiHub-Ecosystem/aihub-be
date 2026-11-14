@@ -269,10 +269,12 @@ function createUserAccessTokenCrypto(
       provide: BloomFilterUserAccessTokenRevocationAdapter,
       inject: [
         PostgresUserAccessTokenRevocationRepository,
+        RUNTIME_PRISMA_CLIENT,
         RUNTIME_CONNECTION_CONFIGURATION,
       ],
       useFactory: (
         underlying: PostgresUserAccessTokenRevocationRepository,
+        runtime: PrismaClientHolder,
         connectionConfig: RuntimeConnectionConfigurationPort,
       ): BloomFilterUserAccessTokenRevocationAdapter => {
         const redisUrl = connectionConfig.redisUrl?.trim();
@@ -292,6 +294,7 @@ function createUserAccessTokenCrypto(
         }
         return new BloomFilterUserAccessTokenRevocationAdapter({
           underlying,
+          waitForStoreReady: (timeoutMs) => runtime.checkConnection(timeoutMs),
           redisPublisher: publisher,
           redisSubscriber: subscriber,
         });
