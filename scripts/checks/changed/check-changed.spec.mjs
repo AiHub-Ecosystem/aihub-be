@@ -581,6 +581,27 @@ const pathCases = [
     ],
   },
   {
+    path: 'scripts/ops/logs/prune-deploy-log-snapshots.sh',
+    gates: [
+      'check:doc-drift',
+      'check:folder-entries',
+      'lint',
+      'test:shell-specs',
+    ],
+  },
+  {
+    path: 'ops/nginx/aihub-nginx-apply',
+    gates: ['check:doc-drift', 'test:shell-specs'],
+  },
+  {
+    path: 'ops/logs/30-aihub-app-logs.conf',
+    gates: ['check:doc-drift', 'test:shell-specs'],
+  },
+  {
+    path: 'ops/logs/aihub-app-logrotate',
+    gates: ['check:doc-drift', 'test:shell-specs'],
+  },
+  {
     path: 'docker-compose.production.yml',
     gates: ['check:compose', 'format:check'],
   },
@@ -798,6 +819,7 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
   const listDir = (/** @type {string} */ dir) => {
     if (dir === 'test/ops') {
       return [
+        'app-log-sink-config.spec.sh',
         'blue-green-readiness.spec.sh',
         'blue-green-config-retention.spec.sh',
         'blue-green-resume.spec.sh',
@@ -808,7 +830,11 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
       ];
     }
     if (dir === 'test/cli') {
-      return ['request-log-lookup.spec.sh', 'other.spec.sh'];
+      return [
+        'request-log-lookup.spec.sh',
+        'prune-deploy-log-snapshots.spec.sh',
+        'other.spec.sh',
+      ];
     }
     return [];
   };
@@ -836,6 +862,31 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
   assert.deepEqual(
     gateInvocation(
       'test:shell-specs',
+      ['ops/nginx/aihub-nginx-apply'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/ops/app-log-sink-config.spec.sh'],
+    },
+  );
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['ops/logs/30-aihub-app-logs.conf'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/ops/app-log-sink-config.spec.sh'],
+    },
+  );
+
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
       ['scripts/ops/logs/request-log-lookup.sh'],
       () => true,
       listDir,
@@ -843,6 +894,18 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
     {
       script: 'test:shell-specs',
       args: ['test/cli/request-log-lookup.spec.sh'],
+    },
+  );
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['scripts/ops/logs/prune-deploy-log-snapshots.sh'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/cli/prune-deploy-log-snapshots.spec.sh'],
     },
   );
 });

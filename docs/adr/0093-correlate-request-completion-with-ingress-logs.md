@@ -1,6 +1,6 @@
 # ADR-0093: Correlate request completion with ingress logs
 
-- Status: Accepted
+- Status: Accepted; log retention amended by [ADR-0164](0164-centralized-log-pipeline-with-loki-and-alloy.md)
 - Date: 2026-10-12
 - Related issues: [#450](https://github.com/AiHub-Ecosystem/aihub-be/issues/450), [#287](https://github.com/AiHub-Ecosystem/aihub-be/issues/287), [#363](https://github.com/AiHub-Ecosystem/aihub-be/issues/363), [#436](https://github.com/AiHub-Ecosystem/aihub-be/issues/436), [#139](https://github.com/AiHub-Ecosystem/aihub-be/issues/139)
 - Related ADRs: [ADR-0079](0079-managed-nginx-configuration-on-shared-vps.md), [ADR-0086](0086-trust-single-nginx-hop-for-caller-ips.md)

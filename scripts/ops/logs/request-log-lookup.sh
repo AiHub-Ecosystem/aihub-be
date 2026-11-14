@@ -18,6 +18,7 @@ fi
 request_id="$1"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 app_dir="${APP_DIR:-$(cd -- "$script_dir/../../.." && pwd -P)}"
+app_log_dir="${AIHUB_APP_LOG_DIR:-/var/log}"
 app_needle="\"request_id\":\"$request_id\""
 nginx_needle="$app_needle"
 app_found=false
@@ -111,6 +112,7 @@ consume_nginx_records() {
 
 shopt -s nullglob
 snapshot_files=("$app_dir"/deploy-logs/*.log)
+app_log_files=("$app_log_dir"/aihub-app-production.log* "$app_log_dir"/aihub-app-sandbox.log*)
 shopt -u nullglob
 for log_file in "${snapshot_files[@]}"; do
   if records="$(grep -F -- "$app_needle" "$log_file" | grep -F -- '"event":"request_completed"')"; then
@@ -121,12 +123,33 @@ for log_file in "${snapshot_files[@]}"; do
   fi
 done
 
+if (( ${#app_log_files[@]} )); then
+  zgrep_status=0
+  app_records="$(zgrep -h -F -- "$app_needle" "${app_log_files[@]}" 2>/dev/null)" || zgrep_status=$?
+  [[ -z "$app_records" ]] || consume_app_records "$app_records"
+  [[ "$zgrep_status" == 0 || "$zgrep_status" == 1 ]] || app_incomplete=true
+else
+  app_incomplete=true
+fi
+
 for service in app app-slot-b app-sandbox app-sandbox-slot-b; do
   if container_ids="$(sudo -n docker ps --all --quiet \
     --filter label=com.docker.compose.project=aihub-production \
     --filter "label=com.docker.compose.service=$service" 2>/dev/null)"; then
     while IFS= read -r container_id; do
       [[ -n "$container_id" ]] || continue
+      if ! log_driver="$(sudo -n docker inspect --format '{{.HostConfig.LogConfig.Type}}' \
+        "$container_id" 2>/dev/null)"; then
+        app_incomplete=true
+        continue
+      fi
+      if [[ "$log_driver" == syslog ]]; then
+        continue
+      fi
+      if [[ "$log_driver" != json-file ]]; then
+        app_incomplete=true
+        continue
+      fi
       if container_logs="$(sudo -n docker logs --timestamps "$container_id" 2>/dev/null)"; then
         if records="$(grep -F -- "$app_needle" <<<"$container_logs" | grep -F -- '"event":"request_completed"')"; then
           consume_app_records "$records"
@@ -153,7 +176,7 @@ fi
 
 result_status=0
 if [[ "$app_incomplete" == true ]]; then
-  [[ "$verify_mode" == true ]] || printf 'application log search incomplete; check Docker and deploy-logs access\n' >&2
+  [[ "$verify_mode" == true ]] || printf 'application log search incomplete; check Docker, app log, and deploy-logs access\n' >&2
   result_status=2
 elif [[ "$app_found" == false ]]; then
   [[ "$verify_mode" == true ]] || printf 'application request_completed: missing (request_id=%s)\n' "$request_id" >&2

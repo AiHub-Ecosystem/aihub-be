@@ -6,19 +6,36 @@ readonly API_SOURCE="$STAGING_DIR/aihub-api.conf"
 readonly SANDBOX_SOURCE="$STAGING_DIR/sandbox.conf"
 readonly LOG_FORMAT_SOURCE="$STAGING_DIR/00-aihub-log-format.conf"
 readonly LOGROTATE_SOURCE="$STAGING_DIR/aihub-access-logrotate"
-readonly LOGROTATE_SHA256=b4cb2bfe308e102284bd12d158a851bf5928c25dcde2cc13afbfb4282022bbec
+readonly APP_LOGS_SOURCE="$STAGING_DIR/30-aihub-app-logs.conf"
+readonly APP_LOGROTATE_SOURCE="$STAGING_DIR/aihub-app-logrotate"
+readonly LOGROTATE_SHA256=fa44816b1cebdb9111b478e842bf8e953bf89f84a57272dfa1536fb05d0e513a
+readonly APP_LOGS_SHA256=b70a2f81a1e9c874b33cea78bc51f21994db914387b8eca8943396fd5ec9ea1b
+readonly APP_LOGROTATE_SHA256=d52185c56d12e15f9dcd521117ba72a87c314fdf66f2345053a4401ff5bad0ef
 readonly API_DEST=/etc/nginx/conf.d/aihub-api.conf
 readonly SANDBOX_DEST=/etc/nginx/conf.d/sandbox.conf
 readonly LOG_FORMAT_DEST=/etc/nginx/conf.d/00-aihub-log-format.conf
 readonly LOGROTATE_DEST=/etc/logrotate.d/aihub-access
+readonly APP_LOGS_DEST=/etc/rsyslog.d/30-aihub-app-logs.conf
+readonly APP_LOGROTATE_DEST=/etc/logrotate.d/aihub-app-logs
 readonly ACCESS_LOG_DEST=/var/log/aihub-access.log
+readonly APP_PRODUCTION_LOG_DEST=/var/log/aihub-app-production.log
+readonly APP_SANDBOX_LOG_DEST=/var/log/aihub-app-sandbox.log
 readonly -a MANAGED_DESTS=(
   "$API_DEST"
   "$SANDBOX_DEST"
   "$LOG_FORMAT_DEST"
   "$LOGROTATE_DEST"
+  "$APP_LOGS_DEST"
+  "$APP_LOGROTATE_DEST"
 )
-readonly -a BACKUP_NAMES=(api.conf sandbox.conf log-format.conf logrotate.conf)
+readonly -a BACKUP_NAMES=(
+  api.conf
+  sandbox.conf
+  log-format.conf
+  logrotate.conf
+  app-logs.conf
+  app-logrotate.conf
+)
 
 if [[ $# -ne 0 ]]; then
   printf 'This helper accepts no arguments.\n' >&2
@@ -30,12 +47,21 @@ if [[ ! -d "$STAGING_DIR" || -L "$STAGING_DIR" ]]; then
   exit 1
 fi
 
-for source in "$API_SOURCE" "$LOG_FORMAT_SOURCE" "$LOGROTATE_SOURCE"; do
+for source in "$API_SOURCE" "$LOG_FORMAT_SOURCE" "$LOGROTATE_SOURCE" \
+  "$APP_LOGS_SOURCE" "$APP_LOGROTATE_SOURCE"; do
   if [[ ! -f "$source" || -L "$source" || ! -s "$source" ]]; then
     printf 'Missing or invalid staged nginx file: %s\n' "$source" >&2
     exit 1
   fi
 done
+has_active_rsyslog_include() {
+  grep -Eq '^[[:space:]]*(\$IncludeConfig[[:space:]]+/etc/rsyslog\.d/|include[[:space:]]*\([[:space:]]*file="/etc/rsyslog\.d/)' "$1"
+}
+
+if ! has_active_rsyslog_include /etc/rsyslog.conf; then
+  printf 'The host rsyslog configuration does not include /etc/rsyslog.d/.\n' >&2
+  exit 1
+fi
 if [[ -L "$SANDBOX_SOURCE" ]]; then
   printf 'Staged Sandbox nginx config must not be a symlink.\n' >&2
   exit 1
@@ -46,6 +72,16 @@ if [[ -e "$SANDBOX_SOURCE" && ( ! -f "$SANDBOX_SOURCE" || ! -s "$SANDBOX_SOURCE"
 fi
 if [[ -L "$ACCESS_LOG_DEST" || ( -e "$ACCESS_LOG_DEST" && ! -f "$ACCESS_LOG_DEST" ) ]]; then
   printf 'Refusing invalid AIHUB access-log destination: %s\n' "$ACCESS_LOG_DEST" >&2
+  exit 1
+fi
+for destination in "$APP_PRODUCTION_LOG_DEST" "$APP_SANDBOX_LOG_DEST"; do
+  if [[ -L "$destination" || ( -e "$destination" && ! -f "$destination" ) ]]; then
+    printf 'Refusing invalid AIHUB application-log destination: %s\n' "$destination" >&2
+    exit 1
+  fi
+done
+if ! id -u syslog >/dev/null 2>&1 || ! getent group adm >/dev/null 2>&1; then
+  printf 'AIHUB application-log ownership requires the syslog user and adm group.\n' >&2
   exit 1
 fi
 
@@ -62,6 +98,8 @@ done
 
 backup_dir="$(mktemp -d /run/aihub-nginx.XXXXXX)"
 approved_logrotate="$backup_dir/approved-logrotate.conf"
+approved_app_logs="$backup_dir/approved-app-logs.conf"
+approved_app_logrotate="$backup_dir/approved-app-logrotate.conf"
 if ! cat -- "$LOGROTATE_SOURCE" > "$approved_logrotate" \
   || ! printf '%s  %s\n' "$LOGROTATE_SHA256" "$approved_logrotate" | sha256sum --check --status; then
   rm -rf "$backup_dir"
@@ -69,6 +107,24 @@ if ! cat -- "$LOGROTATE_SOURCE" > "$approved_logrotate" \
   exit 1
 fi
 chmod 0600 "$approved_logrotate"
+if ! cat -- "$APP_LOGS_SOURCE" > "$approved_app_logs" \
+  || ! printf '%s  %s\n' "$APP_LOGS_SHA256" "$approved_app_logs" | sha256sum --check --status; then
+  rm -rf "$backup_dir"
+  printf 'Staged AIHUB application syslog config does not match the operator-reviewed policy.\n' >&2
+  exit 1
+fi
+if ! cat -- "$APP_LOGROTATE_SOURCE" > "$approved_app_logrotate" \
+  || ! printf '%s  %s\n' "$APP_LOGROTATE_SHA256" "$approved_app_logrotate" | sha256sum --check --status; then
+  rm -rf "$backup_dir"
+  printf 'Staged AIHUB application logrotate config does not match the operator-reviewed policy.\n' >&2
+  exit 1
+fi
+chmod 0600 "$approved_app_logs" "$approved_app_logrotate"
+
+rsyslog_config_changed=true
+if [[ -f "$APP_LOGS_DEST" ]] && cmp -s -- "$approved_app_logs" "$APP_LOGS_DEST"; then
+  rsyslog_config_changed=false
+fi
 
 declare -A existed=()
 for index in "${!MANAGED_DESTS[@]}"; do
@@ -94,6 +150,14 @@ rollback() {
       rm -f "$destination"
     fi
   done
+
+  if [[ "$rsyslog_config_changed" == true ]]; then
+    if rsyslogd -N1 -f /etc/rsyslog.conf >/dev/null 2>&1; then
+      systemctl restart rsyslog.service || printf 'Rollback restored files but rsyslog could not be restarted.\n' >&2
+    else
+      printf 'Rollback restored files but rsyslog config validation failed; rsyslog was not restarted.\n' >&2
+    fi
+  fi
 
   if nginx -t; then
     systemctl reload nginx
@@ -122,9 +186,39 @@ else
 fi
 install -o root -g root -m 0644 "$LOG_FORMAT_SOURCE" "$LOG_FORMAT_DEST"
 install -o root -g root -m 0644 "$approved_logrotate" "$LOGROTATE_DEST"
+install -o root -g root -m 0644 "$approved_app_logs" "$APP_LOGS_DEST"
+install -o root -g root -m 0644 "$approved_app_logrotate" "$APP_LOGROTATE_DEST"
+
+for destination in "$APP_PRODUCTION_LOG_DEST" "$APP_SANDBOX_LOG_DEST"; do
+  if [[ -e "$destination" ]]; then
+    chown syslog:adm "$destination"
+    chmod 0640 "$destination"
+  else
+    install -o syslog -g adm -m 0640 /dev/null "$destination"
+  fi
+done
 
 logrotate --debug "$LOGROTATE_DEST"
+logrotate --debug "$APP_LOGROTATE_DEST"
+rsyslogd -N1 -f /etc/rsyslog.conf
+if [[ "$rsyslog_config_changed" == true ]] || ! systemctl is-active --quiet rsyslog.service; then
+  systemctl restart rsyslog.service
+fi
+receiver_ready=false
+for ((attempt = 0; attempt < 10; attempt += 1)); do
+  if systemctl is-active --quiet rsyslog.service &&
+    timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/1514'; then
+    receiver_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$receiver_ready" != true ]]; then
+  printf 'The AIHUB rsyslog receiver is not accepting connections on 127.0.0.1:1514.\n' >&2
+  rollback 1
+fi
 nginx -t
 systemctl reload nginx
 trap - ERR INT TERM
 rm -rf "$backup_dir"
+printf 'AIHUB_HOST_CONFIG_VERSION=2\n'

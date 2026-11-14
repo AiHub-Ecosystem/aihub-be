@@ -166,11 +166,11 @@ function listDirEntries(dir) {
 }
 
 /**
- * The `*.spec.sh` suites for changed wrappers under `scripts/ops/` (#1460, #1764).
- * Co-located suites are selected per directory. Cross-cutting suites under `test/`
- * are selected for wrappers whose suites live outside `scripts/ops/`.
+ * The `*.spec.sh` suites for changed wrappers and host config. Co-located suites
+ * are selected per directory; cross-cutting suites under `test/` cover host
+ * files and wrappers whose suites live outside `scripts/ops/`.
  *
- * @param {readonly string[]} files changed `.sh` paths under `scripts/ops/`
+ * @param {readonly string[]} files changed wrapper or host-config paths
  * @param {(dir: string) => readonly string[]} [listDir]
  * @returns {string[]}
  */
@@ -188,6 +188,21 @@ export function selectShellSpecs(files, listDir = listDirEntries) {
       for (const entry of listDir('test/cli')) {
         if (entry === 'request-log-lookup.spec.sh') {
           specs.add(`test/cli/${entry}`);
+        }
+      }
+    } else if (file === 'scripts/ops/logs/prune-deploy-log-snapshots.sh') {
+      for (const entry of listDir('test/cli')) {
+        if (entry === 'prune-deploy-log-snapshots.spec.sh') {
+          specs.add(`test/cli/${entry}`);
+        }
+      }
+    } else if (
+      file === 'ops/nginx/aihub-nginx-apply' ||
+      file.startsWith('ops/logs/')
+    ) {
+      for (const entry of listDir('test/ops')) {
+        if (entry === 'app-log-sink-config.spec.sh') {
+          specs.add(`test/ops/${entry}`);
         }
       }
     } else {
@@ -447,6 +462,10 @@ function classifyPathGates(p) {
     return ['lint', 'test:monitoring-config'];
   }
 
+  if (path === 'ops/nginx/aihub-nginx-apply' || path.startsWith('ops/logs/')) {
+    return ['test:shell-specs'];
+  }
+
   // #1460: recorded no-gate answers, not silent fall-throughs. The firewall
   // guard's suite needs a Linux network namespace and runs only in CI; the
   // speaking wrapper has no suite yet (#1765). The documentation drift gate still
@@ -616,8 +635,9 @@ export function gateInvocation(gate, files, exists = existsSync, listDir) {
         .map(norm)
         .filter(
           (file) =>
-            file.startsWith('scripts/ops/') &&
-            file.endsWith('.sh') &&
+            ((file.startsWith('scripts/ops/') && file.endsWith('.sh')) ||
+              file === 'ops/nginx/aihub-nginx-apply' ||
+              file.startsWith('ops/logs/')) &&
             exists(file),
         ),
       listDir,
