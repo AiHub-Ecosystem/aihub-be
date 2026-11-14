@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Headers, Response, type fetch as undiciFetch } from 'undici/index.js';
 
+import { encodeCursor } from '@/modules/content-proxy/application/cursor-pagination';
 import { HttpLegacyContentClient } from './http-legacy-content.client';
 
 const BASE_URL = 'https://backend.example.invalid';
@@ -52,7 +53,7 @@ describe('HttpLegacyContentClient /v2', () => {
       { url: `${BASE_URL}/api/WritingTemplate`, taskType: 'task 1' },
     ]);
     expect(result.data.templates).toHaveLength(5);
-    expect(result.data.next_cursor).toBe('eyJwYWdlIjoyfQ');
+    expect(result.data.next_cursor).toBe(encodeCursor({ page: 2, limit: 5 }));
     expect(result.meta.request_id).toBe(REQ_ID);
 
     const first = result.data.templates[0];
@@ -93,7 +94,7 @@ describe('HttpLegacyContentClient /v2', () => {
       `${BASE_URL}/api/Speaking/library?page=1&pageSize=10`,
     );
     expect(result.data.topics.length).toBeGreaterThan(0);
-    expect(result.data.next_cursor).toBe('eyJwYWdlIjoyfQ');
+    expect(result.data.next_cursor).toBe(encodeCursor({ page: 2, limit: 10 }));
 
     const first = result.data.topics[0];
     expect(first?.original_id).toBeDefined();
@@ -124,7 +125,31 @@ describe('HttpLegacyContentClient /v2', () => {
       `${BASE_URL}/v1/reading/tests?page=1&pageSize=5`,
     );
     expect(result.data.tests.length).toBeGreaterThan(0);
-    expect(result.data.next_cursor).toBe('eyJwYWdlIjoyfQ');
+    expect(result.data.next_cursor).toBe(encodeCursor({ page: 2, limit: 5 }));
+  });
+
+  it('refuses malformed upstream payload shape as AI_SERVICE_CONTRACT_VIOLATION', async () => {
+    const { fetchFn } = stubFetch(JSON.stringify({ unexpected: true }));
+
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    await expect(
+      client.fetchSpeakingLibrary(10, 1, REQ_ID),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      retryable: false,
+    });
+  });
+
+  it('refuses malformed upstream Writing payload as AI_SERVICE_CONTRACT_VIOLATION', async () => {
+    const { fetchFn } = stubFetch(JSON.stringify({ notAnArray: true }));
+
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    await expect(
+      client.fetchWritingTask1Templates(10, 1, REQ_ID),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      retryable: false,
+    });
   });
 
   it('refuses invalid JSON as AI_SERVICE_CONTRACT_VIOLATION', async () => {

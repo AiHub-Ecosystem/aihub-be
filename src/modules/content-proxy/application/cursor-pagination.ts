@@ -2,13 +2,17 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 
 export interface CursorPayload {
   readonly page: number;
+  readonly limit: number;
 }
 
 export function encodeCursor(payload: CursorPayload): string {
   return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
-export function decodeCursor(cursor?: string): CursorPayload {
+export function decodeCursor(
+  cursor: string | undefined,
+  currentLimit: number,
+): { readonly page: number } {
   if (cursor === undefined) return { page: 1 };
   try {
     const raw = Buffer.from(cursor, 'base64url').toString('utf8');
@@ -17,13 +21,27 @@ export function decodeCursor(cursor?: string): CursorPayload {
       typeof parsed === 'object' &&
       parsed !== null &&
       'page' in parsed &&
+      'limit' in parsed &&
       typeof (parsed as { page: unknown }).page === 'number' &&
+      typeof (parsed as { limit: unknown }).limit === 'number' &&
       Number.isInteger((parsed as { page: number }).page) &&
       (parsed as { page: number }).page >= 1
     ) {
+      if ((parsed as { limit: number }).limit !== currentLimit) {
+        throw invalidRequest('Cursor cannot be reused with a different limit');
+      }
       return { page: (parsed as { page: number }).page };
     }
-  } catch {}
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: unknown }).code === 'INVALID_REQUEST'
+    ) {
+      throw error;
+    }
+  }
   throw invalidRequest('Invalid cursor');
 }
 
