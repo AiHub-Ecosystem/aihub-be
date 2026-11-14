@@ -34,8 +34,10 @@ non-blocking buffer. `docker logs` is therefore unavailable for these app
 containers; use `scripts/ops/logs/request-log-lookup.sh` to search the local
 files and any legacy `json-file` containers during migration.
 
-AIHUB access records contain the observed address, the upstream
-`X-Request-Id`, method, `$uri` without a query string, and status. Both AIHUB
+AIHUB access records contain the Unix timestamp, observed address, upstream
+`X-Request-Id`, method, `$uri` without a query string, and status. The timestamp
+allows daily byte totals to be grouped by UTC date without retaining raw lines.
+Both AIHUB
 hosts use `/var/log/aihub-access.log`; the shared `/var/log/nginx/access.log`
 and other sites are not changed. Rotation runs daily with numeric archive
 names to keep existing `.1` and `.2.gz` generations in the same retention

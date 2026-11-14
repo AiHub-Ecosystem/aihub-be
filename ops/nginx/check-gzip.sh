@@ -156,8 +156,9 @@ node -e '
   }
   const accessLines = readFileSync(process.argv[2], "utf8").trim().split("\n");
   const access = JSON.parse(accessLines.at(-1));
-  const expectedKeys = ["client_ip", "request_id", "method", "path", "status"];
+  const expectedKeys = ["timestamp", "client_ip", "request_id", "method", "path", "status"];
   if (JSON.stringify(Object.keys(access).sort()) !== JSON.stringify(expectedKeys.sort()) ||
+      !Number.isFinite(access.timestamp) ||
       access.client_ip !== "127.0.0.1" ||
       access.request_id !== "req_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
       access.method !== "GET" ||
