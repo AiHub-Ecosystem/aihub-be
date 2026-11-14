@@ -28,11 +28,13 @@ rollback.
 
 Production and Sandbox app containers send only their JSON message payloads to
 the TCP receiver on `127.0.0.1:1514`. The fixed `aihub-production` and
-`aihub-sandbox` tags route to separate files; other tags are discarded. Docker's
-remote log cache is disabled, and each app container uses a bounded 1 MiB
-non-blocking buffer. `docker logs` is therefore unavailable for these app
-containers; use `scripts/ops/logs/request-log-lookup.sh` to search the local
-files and any legacy `json-file` containers during migration.
+`aihub-sandbox` tags route to separate files; other tags are discarded. Docker's remote log cache is disabled, and each app container uses a bounded
+16 MiB non-blocking buffer. A full buffer can drop new messages. `docker logs`
+is therefore unavailable for these app containers; use
+`scripts/ops/logs/request-log-lookup.sh` to search the local files and any
+legacy `json-file` containers during migration. The 10 MiB app-logrotate
+threshold runs on the daily timer; it is not a hard disk ceiling. #1904 tracks
+local rsyslog capacity enforcement.
 
 AIHUB access records contain the Unix timestamp, observed address, upstream
 `X-Request-Id`, method, `$uri` without a query string, and status. The timestamp

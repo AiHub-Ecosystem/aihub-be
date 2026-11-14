@@ -46,14 +46,16 @@ Blue-green snapshots are limited to 20 MB and the previous 24 hours for legacy
 embedded Docker timestamps after 28 days. With that daily job and the host
 logrotate timer running, all local app records expire within 30 days.
 
-This local source configuration and the Nginx retention source are tracked but
-not deployed until the operator installs managed host-helper version 2. Before
-Production deployment of Loki/Alloy, collect a representative seven-day volume
-sample, derive 30-day storage needs, set hard CPU, memory, and disk caps for
-Loki and Alloy, and record the caps and full-disk behavior in the private
-monitoring configuration repository. Create and link an implementation issue
-before that deployment work starts. Keep all credentials in Vault. There is no
-off-host Loki backup; losing the monitoring host loses its retained log history.
+A read-only host check on 2026-11-14 confirmed managed host-helper version 2,
+the loopback app syslog receiver, all four Production/Sandbox app service
+configurations on the receiver, and the daily logrotate timer. The local rsyslog
+files had only partial-day data, so the required seven-day sample remains
+incomplete. Before Production deployment of Loki/Alloy, collect a representative
+seven-day volume sample, derive 30-day storage needs, set hard CPU, memory, and
+disk caps for Loki and Alloy, and record the caps and full-disk behavior in the
+private monitoring configuration repository. Keep all credentials in Vault.
+There is no off-host Loki backup; losing the monitoring host loses its retained
+log history.
 
 ## Grafana and OTLP HTTPS routes
 
