@@ -30,10 +30,13 @@ assert_contains "$rsyslog_config" 'file="/var/log/aihub-app-production.log"'
 assert_contains "$rsyslog_config" 'if $programname == "aihub-sandbox"'
 assert_contains "$rsyslog_config" 'file="/var/log/aihub-app-sandbox.log"'
 for tier in production sandbox; do
-  assert_contains "$rsyslog_config" "rotation.sizeLimitCommand=\"/usr/bin/mv -f /var/log/aihub-app-$tier.log /var/log/aihub-app-$tier.log.1\""
+  assert_contains "$rsyslog_config" "rotation.sizeLimitCommand=\"/bin/sh -c '/usr/bin/mv -f /var/log/aihub-app-$tier.log /var/log/aihub-app-$tier.log.1'\""
 done
 [[ "$(grep -Fc 'rotation.sizeLimit="10485760"' "$rsyslog_config")" == 2 ]]
-[[ "$(grep -Fc 'rotation.sizeLimitCommandPassFileName="off"' "$rsyslog_config")" == 2 ]]
+if grep -Fq 'rotation.sizeLimitCommandPassFileName' "$rsyslog_config"; then
+  printf 'AIHUB receiver uses a parameter unsupported by the host rsyslog version\n' >&2
+  exit 1
+fi
 if grep -Eq 'address="\*"|omfile.*(nginx|/var/log/syslog)' "$rsyslog_config"; then
   printf 'AIHUB receiver must stay loopback-only and write only AIHUB files\n' >&2
   exit 1
@@ -48,7 +51,7 @@ app_logs_sha="$(sha256sum "$rsyslog_config" | cut -d ' ' -f 1)"
 app_logrotate_sha="$(sha256sum "$logrotate_config" | cut -d ' ' -f 1)"
 assert_contains "$root_helper" "readonly APP_LOGS_SHA256=$app_logs_sha"
 assert_contains "$root_helper" "readonly APP_LOGROTATE_SHA256=$app_logrotate_sha"
-assert_contains "$root_helper" "printf 'AIHUB_HOST_CONFIG_VERSION=3\\n'"
+assert_contains "$root_helper" "printf 'AIHUB_HOST_CONFIG_VERSION=4\\n'"
 eval "$(extract has_active_rsyslog_include "$root_helper")"
 printf '# $IncludeConfig /etc/rsyslog.d/*.conf\n' >"$test_root/commented.conf"
 if has_active_rsyslog_include "$test_root/commented.conf"; then

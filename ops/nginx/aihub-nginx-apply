@@ -9,7 +9,7 @@ readonly LOGROTATE_SOURCE="$STAGING_DIR/aihub-access-logrotate"
 readonly APP_LOGS_SOURCE="$STAGING_DIR/30-aihub-app-logs.conf"
 readonly APP_LOGROTATE_SOURCE="$STAGING_DIR/aihub-app-logrotate"
 readonly LOGROTATE_SHA256=fa44816b1cebdb9111b478e842bf8e953bf89f84a57272dfa1536fb05d0e513a
-readonly APP_LOGS_SHA256=f7bd0ee20c51732f722a4d3d2b28a504ccf7f4a78fbdc613949d6f2e12db1367
+readonly APP_LOGS_SHA256=3f89c55f0367eafa19e40adcb23773144a84634735be2a58f414d86c720646d3
 readonly APP_LOGROTATE_SHA256=d52185c56d12e15f9dcd521117ba72a87c314fdf66f2345053a4401ff5bad0ef
 readonly API_DEST=/etc/nginx/conf.d/aihub-api.conf
 readonly SANDBOX_DEST=/etc/nginx/conf.d/sandbox.conf
@@ -221,4 +221,4 @@ nginx -t
 systemctl reload nginx
 trap - ERR INT TERM
 rm -rf "$backup_dir"
-printf 'AIHUB_HOST_CONFIG_VERSION=3\n'
+printf 'AIHUB_HOST_CONFIG_VERSION=4\n'
