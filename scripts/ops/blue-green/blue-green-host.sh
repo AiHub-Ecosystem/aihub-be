@@ -1714,6 +1714,10 @@ rollback() {
     rollback_sandbox_to_disabled "$new_slot" "$new_sha"
     return $?
   fi
+  compose_override_supported || {
+    printf 'Docker Compose 2.24.4 or newer is required for safe app-log migration\n' >&2
+    return 1
+  }
   # Before the image override changes: a rollback without a retained known-good
   # configuration stops here with both slots as they were.
   select_rollback_inputs "$tier" "$old_sha" || return 1

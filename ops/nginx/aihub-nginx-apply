@@ -215,7 +215,7 @@ for ((attempt = 0; attempt < 10; attempt += 1)); do
 done
 if [[ "$receiver_ready" != true ]]; then
   printf 'The AIHUB rsyslog receiver is not accepting connections on 127.0.0.1:1514.\n' >&2
-  exit 1
+  rollback 1
 fi
 nginx -t
 systemctl reload nginx

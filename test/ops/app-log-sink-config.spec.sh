@@ -57,5 +57,9 @@ if ! has_active_rsyslog_include "$test_root/active.conf"; then
 fi
 assert_contains "$root_helper" "timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/1514'"
 assert_contains "$root_helper" 'systemctl is-active --quiet rsyslog.service'
+if ! awk '/receiver_ready.*!= true/ { in_failure = 1 } in_failure && /rollback 1/ { found = 1 } in_failure && /^fi$/ { exit } END { exit !found }' "$root_helper"; then
+  printf 'receiver readiness failure must restore managed files before exiting\n' >&2
+  exit 1
+fi
 
 printf 'AIHUB app-log sink config checks passed\n'
