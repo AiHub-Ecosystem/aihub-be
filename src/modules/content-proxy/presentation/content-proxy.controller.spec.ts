@@ -1,24 +1,37 @@
 import type { FastifyRequest } from 'fastify';
 
-import { AppError } from '@/common/errors/app-error';
+import { encodeCursor } from '@/modules/content-proxy/application/cursor-pagination';
 import type { FetchLegacyContentPort } from '@/modules/content-proxy/application/legacy-content.port';
 import { ContentProxyController } from './content-proxy.controller';
 
-describe('ContentProxyController', () => {
+const REQ_ID = 'req_01J00000000000000000000000';
+
+describe('ContentProxyController /v2', () => {
   function createSubject() {
-    const fetchWritingTemplates = jest.fn().mockResolvedValue([]);
-    const fetchSpeakingLibrary = jest.fn().mockResolvedValue({
-      totalCount: 0,
-      page: 1,
-      pageSize: 15,
-      totalPages: 0,
-      items: [],
+    const fetchWritingTask1Templates = jest.fn().mockResolvedValue({
+      data: { templates: [], next_cursor: null },
+      meta: { request_id: REQ_ID },
     });
-    const fetchListeningTests = jest.fn().mockResolvedValue({ items: [] });
-    const fetchReadingTests = jest.fn().mockResolvedValue({ items: [] });
+    const fetchWritingTask2Templates = jest.fn().mockResolvedValue({
+      data: { templates: [], next_cursor: null },
+      meta: { request_id: REQ_ID },
+    });
+    const fetchSpeakingLibrary = jest.fn().mockResolvedValue({
+      data: { topics: [], next_cursor: null },
+      meta: { request_id: REQ_ID },
+    });
+    const fetchListeningTests = jest.fn().mockResolvedValue({
+      data: { tests: [], next_cursor: null },
+      meta: { request_id: REQ_ID },
+    });
+    const fetchReadingTests = jest.fn().mockResolvedValue({
+      data: { tests: [], next_cursor: null },
+      meta: { request_id: REQ_ID },
+    });
 
     const client: FetchLegacyContentPort = {
-      fetchWritingTemplates,
+      fetchWritingTask1Templates,
+      fetchWritingTask2Templates,
       fetchSpeakingLibrary,
       fetchListeningTests,
       fetchReadingTests,
@@ -26,120 +39,127 @@ describe('ContentProxyController', () => {
 
     return {
       controller: new ContentProxyController(client),
-      fetchWritingTemplates,
+      fetchWritingTask1Templates,
+      fetchWritingTask2Templates,
       fetchSpeakingLibrary,
       fetchListeningTests,
       fetchReadingTests,
     };
   }
 
-  describe('getWritingTemplates', () => {
-    it('passes the declared task type and ignores unrelated headers', async () => {
-      const { controller, fetchWritingTemplates } = createSubject();
+  describe('getWritingTask1Templates', () => {
+    it('uses default limit=20 and page=1 when query is empty', async () => {
+      const { controller, fetchWritingTask1Templates } = createSubject();
       const request = {
-        headers: { 'x-task-type': 'task 2', accept: 'application/json' },
+        id: REQ_ID,
         query: {},
       } as unknown as FastifyRequest;
 
-      await controller.getWritingTemplates(request);
-      expect(fetchWritingTemplates.mock.calls).toEqual([['task 2']]);
+      await controller.getWritingTask1Templates(request);
+      expect(fetchWritingTask1Templates.mock.calls).toEqual([[20, 1, REQ_ID]]);
     });
 
-    it('rejects a task type outside the documented values', async () => {
-      const { controller, fetchWritingTemplates } = createSubject();
+    it('decodes cursor and limit', async () => {
+      const { controller, fetchWritingTask1Templates } = createSubject();
+      const cursor = encodeCursor({ page: 3 });
       const request = {
-        headers: { 'x-task-type': 'Task 2' },
-        query: {},
+        id: REQ_ID,
+        query: { limit: '50', cursor },
+      } as unknown as FastifyRequest;
+
+      await controller.getWritingTask1Templates(request);
+      expect(fetchWritingTask1Templates.mock.calls).toEqual([[50, 3, REQ_ID]]);
+    });
+
+    it('rejects limit greater than 200', async () => {
+      const { controller, fetchWritingTask1Templates } = createSubject();
+      const request = {
+        id: REQ_ID,
+        query: { limit: '201' },
       } as unknown as FastifyRequest;
 
       await expect(
-        controller.getWritingTemplates(request),
+        controller.getWritingTask1Templates(request),
       ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
-      expect(fetchWritingTemplates.mock.calls).toHaveLength(0);
+      expect(fetchWritingTask1Templates.mock.calls).toHaveLength(0);
     });
 
-    it('rejects an undeclared query parameter', async () => {
-      const { controller, fetchWritingTemplates } = createSubject();
+    it('rejects malformed cursor', async () => {
+      const { controller, fetchWritingTask1Templates } = createSubject();
       const request = {
-        headers: { 'x-task-type': 'task 1' },
-        query: { page: '2' },
+        id: REQ_ID,
+        query: { cursor: 'not-base64-json' },
       } as unknown as FastifyRequest;
 
       await expect(
-        controller.getWritingTemplates(request),
+        controller.getWritingTask1Templates(request),
       ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
-      expect(fetchWritingTemplates.mock.calls).toHaveLength(0);
+      expect(fetchWritingTask1Templates.mock.calls).toHaveLength(0);
     });
 
-    it('rejects missing X-Task-Type header', async () => {
-      const { controller } = createSubject();
+    it('rejects undeclared query parameters', async () => {
+      const { controller, fetchWritingTask1Templates } = createSubject();
       const request = {
-        headers: {},
+        id: REQ_ID,
+        query: { undeclared: 'true' },
       } as unknown as FastifyRequest;
 
-      await expect(controller.getWritingTemplates(request)).rejects.toThrow(
-        AppError,
-      );
+      await expect(
+        controller.getWritingTask1Templates(request),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+      expect(fetchWritingTask1Templates.mock.calls).toHaveLength(0);
     });
+  });
 
-    it('rejects invalid X-Task-Type header', async () => {
-      const { controller } = createSubject();
+  describe('getWritingTask2Templates', () => {
+    it('calls client with parsed pagination', async () => {
+      const { controller, fetchWritingTask2Templates } = createSubject();
       const request = {
-        headers: { 'x-task-type': 'task 3' },
+        id: REQ_ID,
+        query: { limit: '10' },
       } as unknown as FastifyRequest;
 
-      await expect(controller.getWritingTemplates(request)).rejects.toThrow(
-        AppError,
-      );
+      await controller.getWritingTask2Templates(request);
+      expect(fetchWritingTask2Templates.mock.calls).toEqual([[10, 1, REQ_ID]]);
     });
   });
 
   describe('getSpeakingLibrary', () => {
-    it('passes parsed query to client', async () => {
+    it('calls client with parsed pagination', async () => {
       const { controller, fetchSpeakingLibrary } = createSubject();
       const request = {
-        query: { page: '2', pageSize: '10' },
+        id: REQ_ID,
+        query: { limit: '15' },
       } as unknown as FastifyRequest;
 
       await controller.getSpeakingLibrary(request);
-      expect(fetchSpeakingLibrary.mock.calls).toEqual([
-        [{ page: '2', pageSize: '10' }],
-      ]);
-    });
-
-    it('rejects invalid query parameter', async () => {
-      const { controller } = createSubject();
-      const request = {
-        query: { unexpected_param: '123' },
-      } as unknown as FastifyRequest;
-
-      await expect(controller.getSpeakingLibrary(request)).rejects.toThrow(
-        AppError,
-      );
+      expect(fetchSpeakingLibrary.mock.calls).toEqual([[15, 1, REQ_ID]]);
     });
   });
 
   describe('getListeningTests', () => {
-    it('calls client with query', async () => {
+    it('calls client with parsed pagination', async () => {
       const { controller, fetchListeningTests } = createSubject();
       const request = {
-        query: { page: '1' },
+        id: REQ_ID,
+        query: { limit: '30' },
       } as unknown as FastifyRequest;
 
       await controller.getListeningTests(request);
-      expect(fetchListeningTests.mock.calls).toEqual([[{ page: '1' }]]);
+      expect(fetchListeningTests.mock.calls).toEqual([[30, 1, REQ_ID]]);
     });
   });
 
   describe('getReadingTests', () => {
-    it('calls client with query', async () => {
+    it('calls client with parsed pagination', async () => {
       const { controller, fetchReadingTests } = createSubject();
       const request = {
-        query: { pageSize: '5' },
+        id: REQ_ID,
+        query: { limit: '25' },
       } as unknown as FastifyRequest;
 
       await controller.getReadingTests(request);
-      expect(fetchReadingTests.mock.calls).toEqual([[{ pageSize: '5' }]]);
+      expect(fetchReadingTests.mock.calls).toEqual([[25, 1, REQ_ID]]);
     });
   });
 });

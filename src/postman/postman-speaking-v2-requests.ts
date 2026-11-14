@@ -220,6 +220,13 @@ export const SPEAKING_V2_REQUESTS: readonly V2Request[] = [
     path: '/v2/ielts/speaking/grading-jobs/{{v2GradingJobId}}',
     testScript: [assertStatus(200)],
   },
+  {
+    name: '9. List Speaking library topics',
+    description: 'Lists Speaking library topics with cursor pagination.',
+    method: 'GET',
+    path: '/v2/ielts/speaking/library',
+    testScript: [assertStatus(200)],
+  },
 ];
 
 export function speakingV2Folder(): Record<string, unknown> {

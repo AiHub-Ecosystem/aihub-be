@@ -1,6 +1,6 @@
 # ADR-0166: AIHUB serves the legacy content backend's public lists
 
-- Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-11-14 in [#1914](https://github.com/AiHub-Ecosystem/aihub-be/pull/1914)
+- Status: Superseded by [ADR-0167](0167-v2-ielts-practice-content-cursor-pagination.md)
 - Date: 2026-11-14
 - Related: [ADR-0009](0009-pure-downstream-adapters.md), [ADR-0059](0059-non-dispatch-public-api-routes-have-their-own-registry.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [#1914](https://github.com/AiHub-Ecosystem/aihub-be/pull/1914), [#1916](https://github.com/AiHub-Ecosystem/aihub-be/issues/1916), [#455](https://github.com/AiHub-Ecosystem/aihub-be/issues/455)
 

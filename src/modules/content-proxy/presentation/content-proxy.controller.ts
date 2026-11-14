@@ -1,25 +1,21 @@
 import { Controller, Get, Inject, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
-import { parseRequestHeaders } from '@/common/http/parse-request-headers';
 import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { PracticeContentPaginationQuerySchema } from '@/contracts/practice/v2/pagination-query';
+import type {
+  ListeningTestsResponse,
+  ReadingTestsResponse,
+} from '@/contracts/practice/v2/tests';
+import type { SpeakingLibraryResponse } from '@/contracts/speaking/v2/library';
+import type {
+  WritingTask1TemplatesResponse,
+  WritingTask2TemplatesResponse,
+} from '@/contracts/writing/v2/templates';
 import {
-  ListeningTestsQuerySchema,
-  type ListeningTestsResponse,
-} from '@/contracts/listening/tests';
-import {
-  ReadingTestsQuerySchema,
-  type ReadingTestsResponse,
-} from '@/contracts/reading/tests';
-import {
-  SpeakingLibraryQuerySchema,
-  type SpeakingLibraryResponse,
-} from '@/contracts/speaking/library';
-import {
-  WritingTemplateHeadersSchema,
-  type WritingTemplateListResponse,
-  WritingTemplateQuerySchema,
-} from '@/contracts/writing/template';
+  decodeCursor,
+  parseLimit,
+} from '@/modules/content-proxy/application/cursor-pagination';
 import {
   FETCH_LEGACY_CONTENT_PORT,
   type FetchLegacyContentPort,
@@ -32,39 +28,88 @@ export class ContentProxyController {
     private readonly client: FetchLegacyContentPort,
   ) {}
 
-  @Get('api/WritingTemplate')
-  async getWritingTemplates(
+  @Get('v2/ielts/writing/task1/templates')
+  async getWritingTask1Templates(
     @Req() request: FastifyRequest,
-  ): Promise<WritingTemplateListResponse> {
-    parseRequestQuery(WritingTemplateQuerySchema, request.query);
-    const headers = parseRequestHeaders(
-      WritingTemplateHeadersSchema,
-      request.headers,
+  ): Promise<WritingTask1TemplatesResponse> {
+    const query = parseRequestQuery(
+      PracticeContentPaginationQuerySchema,
+      request.query,
     );
-    return this.client.fetchWritingTemplates(headers['x-task-type']);
+    const limit = parseLimit(query.limit);
+    const cursor = decodeCursor(query.cursor);
+    return this.client.fetchWritingTask1Templates(
+      limit,
+      cursor.page,
+      String(request.id),
+    );
   }
 
-  @Get('api/Speaking/library')
+  @Get('v2/ielts/writing/task2/templates')
+  async getWritingTask2Templates(
+    @Req() request: FastifyRequest,
+  ): Promise<WritingTask2TemplatesResponse> {
+    const query = parseRequestQuery(
+      PracticeContentPaginationQuerySchema,
+      request.query,
+    );
+    const limit = parseLimit(query.limit);
+    const cursor = decodeCursor(query.cursor);
+    return this.client.fetchWritingTask2Templates(
+      limit,
+      cursor.page,
+      String(request.id),
+    );
+  }
+
+  @Get('v2/ielts/speaking/library')
   async getSpeakingLibrary(
     @Req() request: FastifyRequest,
   ): Promise<SpeakingLibraryResponse> {
-    const query = parseRequestQuery(SpeakingLibraryQuerySchema, request.query);
-    return this.client.fetchSpeakingLibrary(query);
+    const query = parseRequestQuery(
+      PracticeContentPaginationQuerySchema,
+      request.query,
+    );
+    const limit = parseLimit(query.limit);
+    const cursor = decodeCursor(query.cursor);
+    return this.client.fetchSpeakingLibrary(
+      limit,
+      cursor.page,
+      String(request.id),
+    );
   }
 
-  @Get('v1/listening/tests')
+  @Get('v2/ielts/listening/tests')
   async getListeningTests(
     @Req() request: FastifyRequest,
   ): Promise<ListeningTestsResponse> {
-    const query = parseRequestQuery(ListeningTestsQuerySchema, request.query);
-    return this.client.fetchListeningTests(query);
+    const query = parseRequestQuery(
+      PracticeContentPaginationQuerySchema,
+      request.query,
+    );
+    const limit = parseLimit(query.limit);
+    const cursor = decodeCursor(query.cursor);
+    return this.client.fetchListeningTests(
+      limit,
+      cursor.page,
+      String(request.id),
+    );
   }
 
-  @Get('v1/reading/tests')
+  @Get('v2/ielts/reading/tests')
   async getReadingTests(
     @Req() request: FastifyRequest,
   ): Promise<ReadingTestsResponse> {
-    const query = parseRequestQuery(ReadingTestsQuerySchema, request.query);
-    return this.client.fetchReadingTests(query);
+    const query = parseRequestQuery(
+      PracticeContentPaginationQuerySchema,
+      request.query,
+    );
+    const limit = parseLimit(query.limit);
+    const cursor = decodeCursor(query.cursor);
+    return this.client.fetchReadingTests(
+      limit,
+      cursor.page,
+      String(request.id),
+    );
   }
 }
