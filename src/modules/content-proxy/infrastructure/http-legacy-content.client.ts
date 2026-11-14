@@ -96,6 +96,57 @@ interface LegacyPracticeTestsResponse {
   readonly items: readonly LegacyPracticeTestItem[];
 }
 
+function isLegacyWritingItem(item: unknown): item is LegacyWritingItem {
+  return (
+    isRecord(item) &&
+    typeof item['id'] === 'number' &&
+    typeof item['question'] === 'string' &&
+    typeof item['typeId'] === 'number' &&
+    typeof item['typeName'] === 'string' &&
+    typeof item['sourceId'] === 'number' &&
+    typeof item['sourceName'] === 'string' &&
+    typeof item['imageAnalysisStatus'] === 'boolean'
+  );
+}
+
+function isLegacySpeakingResponse(
+  value: unknown,
+): value is LegacySpeakingResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value['items']) &&
+    value['items'].every(
+      (item) =>
+        isRecord(item) &&
+        typeof item['id'] === 'number' &&
+        typeof item['originalId'] === 'number' &&
+        typeof item['topic'] === 'string' &&
+        typeof item['part'] === 'number' &&
+        Array.isArray(item['questions']),
+    )
+  );
+}
+
+function isLegacyPracticeTestsResponse(
+  value: unknown,
+): value is LegacyPracticeTestsResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value['items']) &&
+    value['items'].every(
+      (item) =>
+        isRecord(item) &&
+        typeof item['id'] === 'number' &&
+        typeof item['card_id'] === 'string' &&
+        typeof item['test_id'] === 'number' &&
+        Array.isArray(item['parts']) &&
+        typeof item['title'] === 'string' &&
+        typeof item['source'] === 'string' &&
+        typeof item['total_questions'] === 'number',
+    )
+  );
+}
+
 function mapBaseWritingTemplate(item: LegacyWritingItem) {
   return {
     id: item.id,
@@ -147,7 +198,9 @@ function paginateSlice<T>(
   const startIndex = (page - 1) * limit;
   const paged = items.slice(startIndex, startIndex + limit);
   const nextCursor =
-    startIndex + limit < items.length ? encodeCursor({ page: page + 1 }) : null;
+    startIndex + limit < items.length
+      ? encodeCursor({ page: page + 1, limit })
+      : null;
   return { paged, nextCursor };
 }
 
@@ -165,11 +218,19 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
     page: number,
     requestId: string,
   ): Promise<WritingTask1TemplatesResponse> {
-    const raw = await this.fetchJson<readonly LegacyWritingItem[]>(
+    const raw = await this.fetchJson<unknown>(
       `${this.baseUrl}/api/WritingTemplate`,
       'WritingTemplate',
       { 'x-task-type': 'task 1' },
     );
+
+    if (!Array.isArray(raw) || !raw.every(isLegacyWritingItem)) {
+      throw new AppError({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        message: 'Legacy backend returned malformed WritingTemplate payload',
+        retryable: false,
+      });
+    }
 
     const mapped = raw.map((item) => ({
       task_type: 'Task 1' as const,
@@ -200,11 +261,19 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
     page: number,
     requestId: string,
   ): Promise<WritingTask2TemplatesResponse> {
-    const raw = await this.fetchJson<readonly LegacyWritingItem[]>(
+    const raw = await this.fetchJson<unknown>(
       `${this.baseUrl}/api/WritingTemplate`,
       'WritingTemplate',
       { 'x-task-type': 'task 2' },
     );
+
+    if (!Array.isArray(raw) || !raw.every(isLegacyWritingItem)) {
+      throw new AppError({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        message: 'Legacy backend returned malformed WritingTemplate payload',
+        retryable: false,
+      });
+    }
 
     const mapped = raw.map((item) => ({
       task_type: 'Task 2' as const,
@@ -235,12 +304,17 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
     requestId: string,
   ): Promise<SpeakingLibraryResponse> {
     const url = `${this.baseUrl}/api/Speaking/library?page=${page}&pageSize=${limit}`;
-    const raw = await this.fetchJson<LegacySpeakingResponse>(
-      url,
-      'SpeakingLibrary',
-    );
+    const raw = await this.fetchJson<unknown>(url, 'SpeakingLibrary');
 
-    const mapped = (raw.items ?? []).map((item) => ({
+    if (!isLegacySpeakingResponse(raw)) {
+      throw new AppError({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        message: 'Legacy backend returned malformed SpeakingLibrary payload',
+        retryable: false,
+      });
+    }
+
+    const mapped = raw.items.map((item) => ({
       id: item.id,
       original_id: item.originalId,
       topic: item.topic,
@@ -259,7 +333,7 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
 
     const totalPages = raw.totalPages ?? 0;
     const nextCursor =
-      page < totalPages ? encodeCursor({ page: page + 1 }) : null;
+      page < totalPages ? encodeCursor({ page: page + 1, limit }) : null;
 
     const response: SpeakingLibraryResponse = {
       data: {
@@ -283,12 +357,17 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
     requestId: string,
   ): Promise<ListeningTestsResponse> {
     const url = `${this.baseUrl}/v1/listening/tests?page=${page}&pageSize=${limit}`;
-    const raw = await this.fetchJson<LegacyPracticeTestsResponse>(
-      url,
-      'ListeningTests',
-    );
+    const raw = await this.fetchJson<unknown>(url, 'ListeningTests');
 
-    const mapped = (raw.items ?? []).map((item) => ({
+    if (!isLegacyPracticeTestsResponse(raw)) {
+      throw new AppError({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        message: 'Legacy backend returned malformed ListeningTests payload',
+        retryable: false,
+      });
+    }
+
+    const mapped = raw.items.map((item) => ({
       ...mapBasePracticeTest(item),
       ...(item.test_ref !== undefined ? { test_ref: item.test_ref } : {}),
       ...(item.section_number !== undefined
@@ -306,7 +385,7 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
 
     const totalPages = raw.total_pages ?? 0;
     const nextCursor =
-      page < totalPages ? encodeCursor({ page: page + 1 }) : null;
+      page < totalPages ? encodeCursor({ page: page + 1, limit }) : null;
 
     const response: ListeningTestsResponse = {
       data: {
@@ -330,12 +409,17 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
     requestId: string,
   ): Promise<ReadingTestsResponse> {
     const url = `${this.baseUrl}/v1/reading/tests?page=${page}&pageSize=${limit}`;
-    const raw = await this.fetchJson<LegacyPracticeTestsResponse>(
-      url,
-      'ReadingTests',
-    );
+    const raw = await this.fetchJson<unknown>(url, 'ReadingTests');
 
-    const mapped = (raw.items ?? []).map((item) => ({
+    if (!isLegacyPracticeTestsResponse(raw)) {
+      throw new AppError({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        message: 'Legacy backend returned malformed ReadingTests payload',
+        retryable: false,
+      });
+    }
+
+    const mapped = raw.items.map((item) => ({
       ...mapBasePracticeTest(item),
       ...(item.word_count !== undefined ? { word_count: item.word_count } : {}),
       ...(item.thumbnail_url !== undefined
@@ -346,7 +430,7 @@ export class HttpLegacyContentClient implements FetchLegacyContentPort {
 
     const totalPages = raw.total_pages ?? 0;
     const nextCursor =
-      page < totalPages ? encodeCursor({ page: page + 1 }) : null;
+      page < totalPages ? encodeCursor({ page: page + 1, limit }) : null;
 
     const response: ReadingTestsResponse = {
       data: {

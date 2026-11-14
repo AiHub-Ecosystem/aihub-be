@@ -61,7 +61,7 @@ describe('ContentProxyController /v2', () => {
 
     it('decodes cursor and limit', async () => {
       const { controller, fetchWritingTask1Templates } = createSubject();
-      const cursor = encodeCursor({ page: 3 });
+      const cursor = encodeCursor({ page: 3, limit: 50 });
       const request = {
         id: REQ_ID,
         query: { limit: '50', cursor },
@@ -69,6 +69,20 @@ describe('ContentProxyController /v2', () => {
 
       await controller.getWritingTask1Templates(request);
       expect(fetchWritingTask1Templates.mock.calls).toEqual([[50, 3, REQ_ID]]);
+    });
+
+    it('rejects cursor when reused with a different limit', async () => {
+      const { controller, fetchWritingTask1Templates } = createSubject();
+      const cursor = encodeCursor({ page: 2, limit: 20 });
+      const request = {
+        id: REQ_ID,
+        query: { limit: '50', cursor },
+      } as unknown as FastifyRequest;
+
+      await expect(
+        controller.getWritingTask1Templates(request),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+      expect(fetchWritingTask1Templates.mock.calls).toHaveLength(0);
     });
 
     it('rejects limit greater than 200', async () => {

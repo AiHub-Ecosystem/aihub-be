@@ -37,7 +37,7 @@ export class ContentProxyController {
       request.query,
     );
     const limit = parseLimit(query.limit);
-    const cursor = decodeCursor(query.cursor);
+    const cursor = decodeCursor(query.cursor, limit);
     return this.client.fetchWritingTask1Templates(
       limit,
       cursor.page,
@@ -54,7 +54,7 @@ export class ContentProxyController {
       request.query,
     );
     const limit = parseLimit(query.limit);
-    const cursor = decodeCursor(query.cursor);
+    const cursor = decodeCursor(query.cursor, limit);
     return this.client.fetchWritingTask2Templates(
       limit,
       cursor.page,
@@ -71,7 +71,7 @@ export class ContentProxyController {
       request.query,
     );
     const limit = parseLimit(query.limit);
-    const cursor = decodeCursor(query.cursor);
+    const cursor = decodeCursor(query.cursor, limit);
     return this.client.fetchSpeakingLibrary(
       limit,
       cursor.page,
@@ -88,7 +88,7 @@ export class ContentProxyController {
       request.query,
     );
     const limit = parseLimit(query.limit);
-    const cursor = decodeCursor(query.cursor);
+    const cursor = decodeCursor(query.cursor, limit);
     return this.client.fetchListeningTests(
       limit,
       cursor.page,
@@ -105,7 +105,7 @@ export class ContentProxyController {
       request.query,
     );
     const limit = parseLimit(query.limit);
-    const cursor = decodeCursor(query.cursor);
+    const cursor = decodeCursor(query.cursor, limit);
     return this.client.fetchReadingTests(
       limit,
       cursor.page,
