@@ -8,7 +8,8 @@ trap 'rm -rf -- "$test_root"' EXIT
 
 bin_dir="$test_root/bin"
 config_dir="$test_root/nginx"
-mkdir -p "$bin_dir" "$config_dir"
+app_log_dir="$test_root/app-logs"
+mkdir -p "$bin_dir" "$config_dir" "$app_log_dir"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -49,7 +50,7 @@ case "$1" in
     elif [[ "$3" == --format ]]; then
       case "$4" in
         '{{.HostConfig.LogConfig.Type}}') printf '%s\n' "${FAKE_DOCKER_DRIVER:-json-file}" ;;
-        *) printf '0123456789abcdef0123456789abcdef01234567 running healthy 0 2026-10-21T00:00:00Z\n' ;;
+        *) printf '0123456789abcdef0123456789abcdef01234567 running healthy 0 %s\n' "${FAKE_DOCKER_STARTED_AT:-2026-10-21T00:00:00Z}" ;;
       esac
     else
       exit 1
@@ -109,9 +110,12 @@ missing_redis='{"status":"ok","dependencies":{"runtime-postgres":"up"}}'
 
 run_status() {
   local mode="$1" http_status="$2" body="$3" log_driver="${4:-json-file}"
+  local started_at="${5:-2026-10-21T00:00:00Z}"
   if output="$(PATH="$bin_dir:$PATH" \
     FAKE_FETCH_SHIM="$fetch_shim" \
     FAKE_DOCKER_DRIVER="$log_driver" \
+    FAKE_DOCKER_STARTED_AT="$started_at" \
+    AIHUB_APP_LOG_DIR="$app_log_dir" \
     FAKE_READY_MODE="$mode" \
     FAKE_READY_STATUS="$http_status" \
     FAKE_READY_BODY="$body" \
@@ -162,11 +166,39 @@ assert_contains "$output" 'readiness_probe=200 readiness_dependencies=unavailabl
 assert_not_contains "$output" 'malformed-response-secret'
 assert_contains "$output" 'production FAIL revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200 readiness_dependencies=unavailable restarts=0 errors=0 since='
 
-run_status normal 200 "$all_up" syslog
+app_log_started_at='2026-10-21T00:00:00Z'
+app_log_started_ms="$(date -u -d "$app_log_started_at" +%s%3N)"
+printf '{"time":%s,"level":"error","msg":"old container failure"}\n' \
+  "$((app_log_started_ms - 1))" >"$app_log_dir/aihub-app-production.log"
+printf '{"time":%s,"level":"error","msg":"current container failure"}\n' \
+  "$((app_log_started_ms + 1))" >"$app_log_dir/aihub-app-production.log.1"
+gzip -c "$app_log_dir/aihub-app-production.log.1" \
+  >"$app_log_dir/aihub-app-production.log.1.gz"
+rm -f -- "$app_log_dir/aihub-app-production.log.1"
+printf '{"time":%s,"level":"info","msg":"sandbox startup"}\n' \
+  "$((app_log_started_ms - 1))" >"$app_log_dir/aihub-app-sandbox.log"
+printf '{"time":%s,"level":"info","msg":"error_code is a field name"}\n' \
+  "$((app_log_started_ms + 1))" >>"$app_log_dir/aihub-app-sandbox.log"
+
+run_status normal 200 "$all_up" syslog "$app_log_started_at"
 [[ "$exit_code" == 0 ]] || fail "syslog status exited $exit_code"
 assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
-assert_contains "$output" 'errors=unavailable since='
-assert_not_contains "$output" 'errors=1'
+assert_contains "$output" 'errors=1 since=2026-10-21T00:00:00Z'
+assert_contains "$output" 'sandbox    ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=0 since=2026-10-21T00:00:00Z'
+
+run_status normal 200 "$all_up" syslog '2026-10-20T00:00:00Z'
+[[ "$exit_code" == 0 ]] || fail "incomplete syslog window affected health verdict"
+assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=unavailable since=2026-10-20T00:00:00Z'
+assert_not_contains "$output" 'errors=1 since=2026-10-20T00:00:00Z'
+
+printf '{"level":"error","msg":"untimed startup failure"}\n' \
+  >>"$app_log_dir/aihub-app-production.log"
+run_status normal 200 "$all_up" syslog "$app_log_started_at"
+[[ "$exit_code" == 0 ]] || fail "untimed app log affected health verdict"
+assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=unavailable since=2026-10-21T00:00:00Z'
 
 run_status normal 200 '{"status":"ok"}'
 [[ "$exit_code" == 1 ]] || fail "readiness response without dependencies exited $exit_code"
@@ -180,4 +212,4 @@ run_status normal 200 "$missing_redis"
 [[ "$exit_code" == 1 ]] || fail "readiness response without Redis exited $exit_code"
 assert_contains "$output" 'readiness_probe=200 readiness_dependencies=unavailable'
 
-printf 'status readiness spec: all-up, dependency-down, timeout, and malformed response passed\n'
+printf 'status readiness spec: readiness and managed syslog error counts passed\n'

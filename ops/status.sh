@@ -21,6 +21,7 @@ api_config=/etc/nginx/conf.d/aihub-api.conf
 sandbox_config=/etc/nginx/conf.d/sandbox.conf
 docker=(sudo -n docker)
 repository_url=https://github.com/AiHub-Ecosystem/aihub-be
+app_log_dir="${AIHUB_APP_LOG_DIR:-/var/log}"
 status=0
 
 # nginx reaches a slot through its published port or, once the apps listen on a
@@ -58,6 +59,47 @@ container_for_upstream() {
   printf '%s\n' "$selected"
 }
 
+app_error_count_since() {
+  local tier="$1" started="$2" started_seconds started_nanos started_ms file
+  local -a app_log_files=()
+  started_seconds="$(date -u -d "$started" +%s 2>/dev/null)" || return 1
+  started_nanos="$(date -u -d "$started" +%N 2>/dev/null)" || return 1
+  [[ "$started_seconds" =~ ^[0-9]+$ && "$started_nanos" =~ ^[0-9]{9}$ ]] || return 1
+  started_ms=$((started_seconds * 1000 + (10#$started_nanos + 999999) / 1000000))
+
+  shopt -s nullglob
+  app_log_files=("$app_log_dir/aihub-app-$tier.log" "$app_log_dir/aihub-app-$tier.log".*)
+  shopt -u nullglob
+  ((${#app_log_files[@]} > 0)) || return 1
+  for file in "${app_log_files[@]}"; do
+    [[ -f "$file" && ! -L "$file" ]] || return 1
+  done
+
+  zcat -f -- "${app_log_files[@]}" 2>/dev/null | awk -v since="$started_ms" '
+    {
+      lower = tolower($0)
+      is_error = lower ~ /(^|[^[:alnum:]_])error([^[:alnum:]_]|$)/ ||
+        lower ~ /(^|[^[:alnum:]_])fatal([^[:alnum:]_]|$)/ ||
+        lower ~ /unhandled|exception/
+      if (!match($0, /"time"[[:space:]]*:[[:space:]]*[0-9]+/)) {
+        if (is_error) incomplete = 1
+        next
+      }
+      timestamp = substr($0, RSTART, RLENGTH)
+      sub(/^.*:[[:space:]]*/, "", timestamp)
+      timestamp += 0
+      if (!have_time || timestamp < oldest) oldest = timestamp
+      have_time = 1
+      if (timestamp >= since && is_error) errors++
+    }
+    END {
+      # Bounded rotation cannot prove completeness when its oldest line is newer than container start.
+      if (incomplete || !have_time || oldest > since) exit 1
+      print errors + 0
+    }
+  '
+}
+
 for label in production sandbox; do
   config="$api_config"
   if [ "$label" = sandbox ]; then
@@ -93,6 +135,12 @@ for label in production sandbox; do
     # Lines since this container started, so an old crash does not count.
     errors=$("${docker[@]}" logs --since "$started" "$container" </dev/null 2>&1 \
       | grep -ciE '"level":"error"|\bERROR\b|\bFATAL\b|unhandled|exception')
+  elif [[ "$log_driver" == syslog ]]; then
+    if errors="$(app_error_count_since "$label" "$started")"; then
+      :
+    else
+      errors=unavailable
+    fi
   else
     errors=unavailable
   fi
