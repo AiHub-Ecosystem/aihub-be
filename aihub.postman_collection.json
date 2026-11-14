@@ -531,6 +531,180 @@
       }
     },
     {
+      "id": "41db88c5-e83f-4abc-a2ba-cc5c5810a717",
+      "name": "List Listening tests",
+      "request": {
+        "name": "List Listening tests",
+        "description": {},
+        "url": {
+          "path": ["v1", "listening", "tests"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "page",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page`."
+            },
+            {
+              "disabled": false,
+              "key": "page_size",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page_size`."
+            },
+            {
+              "disabled": false,
+              "key": "limit",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `limit`."
+            }
+          ],
+          "variable": []
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "GET",
+        "auth": null
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "01667204-5d16-47ee-b8a5-8f19ca300a3d",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "listening", "tests"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "page",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page`."
+            },
+            {
+              "disabled": false,
+              "key": "page_size",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page_size`."
+            },
+            {
+              "disabled": false,
+              "key": "limit",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `limit`."
+            }
+          ],
+          "variable": []
+        },
+        "method": "HEAD",
+        "auth": null
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "be281409-6f3d-4d01-9b06-ee7edadab821",
+      "name": "List Reading tests",
+      "request": {
+        "name": "List Reading tests",
+        "description": {},
+        "url": {
+          "path": ["v1", "reading", "tests"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "page",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page`."
+            },
+            {
+              "disabled": false,
+              "key": "page_size",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page_size`."
+            },
+            {
+              "disabled": false,
+              "key": "limit",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `limit`."
+            }
+          ],
+          "variable": []
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "method": "GET",
+        "auth": null
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
+      "id": "6ce99d4c-25ee-4e1d-9f1e-bbc47d5deb44",
+      "name": "Retrieve response headers",
+      "request": {
+        "name": "Retrieve response headers",
+        "description": {
+          "content": "Returns the same status and headers as GET without a response body.",
+          "type": "text/plain"
+        },
+        "url": {
+          "path": ["v1", "reading", "tests"],
+          "host": ["{{baseUrl}}"],
+          "query": [
+            {
+              "disabled": false,
+              "key": "page",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page`."
+            },
+            {
+              "disabled": false,
+              "key": "page_size",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `page_size`."
+            },
+            {
+              "disabled": false,
+              "key": "limit",
+              "value": "<string>",
+              "description": "Forwarded to the content backend as `limit`."
+            }
+          ],
+          "variable": []
+        },
+        "method": "HEAD",
+        "auth": null
+      },
+      "event": [],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      }
+    },
+    {
       "id": "affc5af2-e8fc-4a00-99c2-5dd7561cd424",
       "name": "Create a Speaking Audio upload intent",
       "request": {

@@ -1,0 +1,359 @@
+{
+  "totalCount": 544,
+  "page": 1,
+  "pageSize": 15,
+  "totalPages": 37,
+  "items": [
+    {
+      "id": 713,
+      "originalId": 713,
+      "topic": "Helping others",
+      "subtopic": "Helping others",
+      "part": 3,
+      "difficulty": "Dễ",
+      "permanentTopic": false,
+      "source": "speaking_topics_pdf",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_299_bb792d570e.jpg",
+      "questions": [
+        "How can children help their parents at home?",
+        "Should children be taught to help others?",
+        "What makes children help each other at school?",
+        "Should students do community service? Why?",
+        "Do students in Vietnam do volunteer work?",
+        "Why do some people do volunteer work all over the world?",
+        "Do Vietnamese people often offer help?",
+        "Do you think it is in human nature to help others?",
+        "How can people help others?",
+        "Who often need help?",
+        "Who needs more help, young people or old people?",
+        "Who is often willing to help others?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 712,
+      "originalId": 712,
+      "topic": "Nature",
+      "subtopic": "Describe an activity you do regularly that you think is a waste of time",
+      "part": 3,
+      "difficulty": "Khó",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_212_9a7e5d3d62.jpg",
+      "questions": [
+        "Why do some people refuse to abide by rules?",
+        "What kinds of things make people feel pressured?",
+        "Will you continue doing something when you are aware that it’s a waste of time?",
+        "How do you balance life and work?",
+        "Do people usually continue doing something when they are aware that it is a waste of time?",
+        "How do people usually balance life and work?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 711,
+      "originalId": 711,
+      "topic": "City that you have been to and would like to visit again",
+      "subtopic": "Describe a city that you have been to and would like to visit again",
+      "part": 3,
+      "difficulty": "Khó",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_57_a9bdd41d2e.jpg",
+      "questions": [
+        "What should the government do to improve citizens’ safety?",
+        "Are there any changes in your city?",
+        "Do you think people in the countryside are friendlier than people in the city?",
+        "Some people say large cities are suitable for old people. What do you think?",
+        "What's the difference between the city and the countryside?",
+        "What kinds of changes commonly take place in cities?",
+        "Do you think it is possible that all of the population will move to cities?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 710,
+      "originalId": 710,
+      "topic": "Education",
+      "subtopic": "Describe a course that impressed you a lot",
+      "part": 3,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_62_76d1940e0b.jpg",
+      "questions": [
+        "What can we learn from history?",
+        "What do people need to remember in their daily lives?",
+        "Can technology help people remember things better? How?",
+        "Which can help people remember things better, words or photos?",
+        "Do people like things of memorial significance?",
+        "Why do some people have a better memory than others?",
+        "Do you think education in schools has changed a lot in the last few decades?",
+        "Do you think lessons should be fun or just educational?",
+        "How could teachers in schools improve their lessons?",
+        "Do you think parents should encourage their child to learn more?",
+        "Do you think parents sometimes pressure their children to learn too much?",
+        "What do children gain from free time?",
+        "Would you ever force your child to do extra-curricular activities at school?",
+        "What makes a good teacher?",
+        "Why do many girls not go on to study the sciences at university?",
+        "Do you think art and music are a waste of time to learn at school?",
+        "How do you think education will change in the future?",
+        "How has technology changed education?",
+        "Why do some people learn online?",
+        "Do you think Youtube is a good source for learning?",
+        "What are the advantages and disadvantages to online learning?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 709,
+      "originalId": 709,
+      "topic": "Nature",
+      "subtopic": "Describe a law on environmental protection",
+      "part": 3,
+      "difficulty": "Khó",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "questions": [
+        "What is the purpose of punishment?",
+        "What are the rules people should obey at work?",
+        "How can parents and teachers help children understand and follow rules?",
+        "Are children unhappy with the school rules?",
+        "Do you think school rules are important?",
+        "What kinds of rules do schools in Vietnam have?",
+        "What environmental laws does your country already have?",
+        "Will there be a law that is universally accepted?",
+        "How does technology affect the law?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 708,
+      "originalId": 708,
+      "topic": "Apps",
+      "subtopic": "Describe a program or app on your computer or phone",
+      "part": 3,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "questions": [
+        "Are apps useful or are they a distraction?",
+        "How do people stop themselves getting distracted by apps on their phone?",
+        "Have you ever learned anything new from an app?",
+        "Why do old people struggle with apps?",
+        "How do you think apps will develop in the future?",
+        "Can apps help us improve our health? How?",
+        "How do you differentiate between a good app and a bad one?",
+        "Do children in your country use apps?",
+        "What is the downside of using apps for educational purposes?",
+        "What do you think about some countries banning children from using social media?",
+        "Do you think young people are more and more reliant on these programs?",
+        "Should parents limit their children's use of computer programs and computer games? Why and how?",
+        "What apps are popular in your country? Why?",
+        "Why do some people not like using apps?",
+        "What are the differences between old and young people when using apps?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 707,
+      "originalId": 707,
+      "topic": "Media",
+      "subtopic": "Describe your least favourite movie",
+      "part": 3,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_261_1250849b1c.jpg",
+      "questions": [
+        "Do people’s movie preferences change as they get older?",
+        "Should documentary films be completely truthful?",
+        "Can movies help people better understand the cultural background of a country?",
+        "Are movies more likely to help people become more creative than books?",
+        "What are the differences between watching movies at home and in a cinema?",
+        "What kinds of movies are the most popular in Vietnam?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 706,
+      "originalId": 706,
+      "topic": "Buildings",
+      "subtopic": "Describe a building you enjoy visiting (e.g. a library, a shopping mall, etc.)",
+      "part": 3,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "luyennoi",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_53_d257601067.jpg",
+      "questions": [
+        "Do you think all old buildings should be demolished?",
+        "Do you think old buildings are valuable?",
+        "Is it better to live in an apartment than in a house?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 705,
+      "originalId": 705,
+      "topic": "Time when you saved money to buy something special",
+      "subtopic": "Describe a time when you saved money to buy something special",
+      "part": 3,
+      "difficulty": "Khó",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_188_2a2c161009.jpg",
+      "questions": [
+        "Should people spend time on charity, or just money?",
+        "What kind of things do people usually save money for?",
+        "Is it easier to spend money or save money?",
+        "Do you think it is easier to teach teenagers how to manage money when they are around 16 or 17 years old?",
+        "Should parents teach their children to spend money freely or to save money?",
+        "Should schools teach children how to manage money from a young age?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 704,
+      "originalId": 704,
+      "topic": "Time when you received good service in a shop/store",
+      "subtopic": "Describe a time when you received good service in a shop/store",
+      "part": 3,
+      "difficulty": "Khó",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part3/speaking_forecast_184_9a93756870.jpg",
+      "questions": [
+        "Can consumption drive economic growth?",
+        "What are the advantages and disadvantages of shopping online?",
+        "What are the differences between online shopping and in-store shopping?",
+        "Why do some people not like shopping in small shops?",
+        "What are the advantages and disadvantages of shopping in small shops?",
+        "Why are shopping malls so popular in Vietnam?"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 703,
+      "originalId": 703,
+      "topic": "Nature",
+      "subtopic": "Describe a natural place in your city that you enjoy visiting",
+      "topicType": "Describe a place",
+      "part": 2,
+      "difficulty": "Dễ",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part2/speaking_forecast_98_9e435c9ef4.jpg",
+      "questions": [
+        "Describe a natural place in your city that you enjoy visiting"
+      ],
+      "cueCard": [
+        "Where it is",
+        "What it is like",
+        "How often you go there",
+        "And explain why you enjoy visiting there"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 702,
+      "originalId": 702,
+      "topic": "Art",
+      "subtopic": "Describe a piece of art (e.g. a painting or sculpture) that you like",
+      "topicType": "Describe an object",
+      "part": 2,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "ieltsliz",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part2/speaking_forecast_141_deebb616e1.jpg",
+      "questions": [
+        "Describe a piece of art (e.g. a painting or sculpture) that you like"
+      ],
+      "cueCard": [
+        "What it is",
+        "where you saw it",
+        "what it shows",
+        "why you like it"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 701,
+      "originalId": 701,
+      "topic": "Education",
+      "subtopic": "Describe a course that impressed you a lot",
+      "topicType": "Describe an activity",
+      "part": 2,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part2/speaking_forecast_61_d51989a6bf.jpg",
+      "questions": [
+        "Describe a course that impressed you a lot"
+      ],
+      "cueCard": [
+        "What the course was about",
+        "Where you took the course",
+        "What you did during the course",
+        "And explain why it impressed you a lot"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 700,
+      "originalId": 700,
+      "topic": "Nature",
+      "subtopic": "Describe a law on environmental protection",
+      "topicType": "Describe an object",
+      "part": 2,
+      "difficulty": "Khó",
+      "permanentTopic": false,
+      "source": "Forecast Quý 3/2026",
+      "forecast": "2026-Q3",
+      "questions": [
+        "Describe a law on environmental protection"
+      ],
+      "cueCard": [
+        "What it is",
+        "How you first learned about it",
+        "Who benefits from it",
+        "And explain how you feel about this law"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    },
+    {
+      "id": 699,
+      "originalId": 699,
+      "topic": "Friends & Family",
+      "subtopic": "Describe a party for a special event that impressed you a lot",
+      "topicType": "Describe an activity",
+      "part": 2,
+      "difficulty": "Trung bình",
+      "permanentTopic": false,
+      "source": "luyennoi",
+      "forecast": "2026-Q3",
+      "imageUrl": "https://s3.wispace.app/wispace/speaking/forecast-images/part2/speaking_forecast_110_3626d30734.jpg",
+      "questions": [
+        "Describe a party for a special event that impressed you a lot"
+      ],
+      "cueCard": [
+        "When and where it was held",
+        "What the party was held for",
+        "How many people attended it",
+        "And explain why it impressed you a lot"
+      ],
+      "createdAt": "2026-11-13T04:04:23.320733Z"
+    }
+  ]
+}

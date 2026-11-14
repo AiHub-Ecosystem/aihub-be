@@ -1,0 +1,484 @@
+{
+  "items": [
+    {
+      "id": 8,
+      "card_id": "8-full",
+      "test_id": 8,
+      "parts": [
+        1,
+        2,
+        3
+      ],
+      "title": "Cambridge IELTS 16 — Test 4",
+      "source": "Cambridge IELTS 16, Reading Test 4",
+      "total_questions": 40,
+      "estimated_minutes": 60,
+      "difficulty": "Trung bình",
+      "unit": "Full test",
+      "question_types": [
+        "Map, Diagram Label",
+        "True/False/Not Given",
+        "Others",
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given",
+        "Matching Headings"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 2642,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimages.fineartamerica.com%2Fimages%2Fartworkimages%2Fmediumlarge%2F1%2Froman-tunnels-cadence-moore.jpg&f=1&nofb=1&ipt=2370d74336167764ad30c071b1550cd646ca5d633d36ab9bea2ce8485a9a4faf&ipo=images"
+    },
+    {
+      "id": 8001,
+      "card_id": "8-p1",
+      "test_id": 8,
+      "passage_id": 81,
+      "parts": [
+        1
+      ],
+      "title": "Roman tunnels",
+      "source": "Cambridge IELTS 16, Reading Test 4",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 1",
+      "question_types": [
+        "Map, Diagram Label",
+        "True/False/Not Given",
+        "Others"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 860,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimages.fineartamerica.com%2Fimages%2Fartworkimages%2Fmediumlarge%2F1%2Froman-tunnels-cadence-moore.jpg&f=1&nofb=1&ipt=2370d74336167764ad30c071b1550cd646ca5d633d36ab9bea2ce8485a9a4faf&ipo=images"
+    },
+    {
+      "id": 8002,
+      "card_id": "8-p2",
+      "test_id": 8,
+      "passage_id": 82,
+      "parts": [
+        2
+      ],
+      "title": "Changes in reading habits",
+      "source": "Cambridge IELTS 16, Reading Test 4",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 2",
+      "question_types": [
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 911,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t4_p2.jpg"
+    },
+    {
+      "id": 8003,
+      "card_id": "8-p3",
+      "test_id": 8,
+      "passage_id": 83,
+      "parts": [
+        3
+      ],
+      "title": "Attitudes towards Artificial Intelligence",
+      "source": "Cambridge IELTS 16, Reading Test 4",
+      "total_questions": 14,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 3",
+      "question_types": [
+        "Matching Headings",
+        "Multiple Choice (Single Answer)",
+        "Yes/No/Not Given"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 871,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t4_p3.jpg"
+    },
+    {
+      "id": 7,
+      "card_id": "7-full",
+      "test_id": 7,
+      "parts": [
+        1,
+        2,
+        3
+      ],
+      "title": "Cambridge IELTS 16 — Test 3",
+      "source": "Cambridge IELTS 16, Reading Test 3",
+      "total_questions": 40,
+      "estimated_minutes": 60,
+      "difficulty": "Trung bình",
+      "unit": "Full test",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)",
+        "Matching Information",
+        "Multiple Choice (Multiple Answers)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 2547,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t3_p1.jpg"
+    },
+    {
+      "id": 7001,
+      "card_id": "7-p1",
+      "test_id": 7,
+      "passage_id": 71,
+      "parts": [
+        1
+      ],
+      "title": "Roman shipbuilding and navigation",
+      "source": "Cambridge IELTS 16, Reading Test 3",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 1",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 811,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t3_p1.jpg"
+    },
+    {
+      "id": 7002,
+      "card_id": "7-p2",
+      "test_id": 7,
+      "passage_id": 72,
+      "parts": [
+        2
+      ],
+      "title": "Climate change reveals ancient artefacts in Norway’s glaciers",
+      "source": "Cambridge IELTS 16, Reading Test 3",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 2",
+      "question_types": [
+        "Matching Information",
+        "Gap Filling (Type)",
+        "Multiple Choice (Multiple Answers)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 926,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t3_p2.jpg"
+    },
+    {
+      "id": 7003,
+      "card_id": "7-p3",
+      "test_id": 7,
+      "passage_id": 73,
+      "parts": [
+        3
+      ],
+      "title": "Plant ‘thermometer’ triggers springtime growth by measuring night-time heat",
+      "source": "Cambridge IELTS 16, Reading Test 3",
+      "total_questions": 14,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 3",
+      "question_types": [
+        "True/False/Not Given",
+        "Matching Information",
+        "Gap Filling (Type)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 810,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t3_p3.jpg"
+    },
+    {
+      "id": 6,
+      "card_id": "6-full",
+      "test_id": 6,
+      "parts": [
+        1,
+        2,
+        3
+      ],
+      "title": "Cambridge IELTS 16 — Test 2",
+      "source": "Cambridge IELTS 16, Reading Test 2",
+      "total_questions": 40,
+      "estimated_minutes": 60,
+      "difficulty": "Trung bình",
+      "unit": "Full test",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)",
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 2522,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.worldhistory.org%2Fimg%2Fc%2Fp%2F2400x1254%2F357.jpg&f=1&nofb=1&ipt=eac9810d387c6956c8379d1abd68d437075418d09cd53b1b509595d7e30628bc&ipo=images"
+    },
+    {
+      "id": 6001,
+      "card_id": "6-p1",
+      "test_id": 6,
+      "passage_id": 61,
+      "parts": [
+        1
+      ],
+      "title": "The White Horse of Uffington",
+      "source": "Cambridge IELTS 16, Reading Test 2",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 1",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 867,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.worldhistory.org%2Fimg%2Fc%2Fp%2F2400x1254%2F357.jpg&f=1&nofb=1&ipt=eac9810d387c6956c8379d1abd68d437075418d09cd53b1b509595d7e30628bc&ipo=images"
+    },
+    {
+      "id": 6002,
+      "card_id": "6-p2",
+      "test_id": 6,
+      "passage_id": 62,
+      "parts": [
+        2
+      ],
+      "title": "I contain multitudes",
+      "source": "Cambridge IELTS 16, Reading Test 2",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 2",
+      "question_types": [
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 900,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t2_p2.jpg"
+    },
+    {
+      "id": 6003,
+      "card_id": "6-p3",
+      "test_id": 6,
+      "passage_id": 63,
+      "parts": [
+        3
+      ],
+      "title": "How to make wise decisions",
+      "source": "Cambridge IELTS 16, Reading Test 2",
+      "total_questions": 14,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 3",
+      "question_types": [
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "True/False/Not Given"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 755,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2F0901.static.prezi.com%2Fpreview%2Fv2%2Flat7yfkot7w63v3wvce7vmmegx6jc3sachvcdoaizecfr3dnitcq_3_0.png&f=1&nofb=1&ipt=5d22b146c27d6ea86f2613fe9bda8dc0288d898d2cf688464a82709c5385392c&ipo=images"
+    },
+    {
+      "id": 5,
+      "card_id": "5-full",
+      "test_id": 5,
+      "parts": [
+        1,
+        2,
+        3
+      ],
+      "title": "Cambridge IELTS 16 — Test 1",
+      "source": "Cambridge IELTS 16, Reading Test 1",
+      "total_questions": 40,
+      "estimated_minutes": 60,
+      "difficulty": "Trung bình",
+      "unit": "Full test",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)",
+        "Matching Headings",
+        "Multiple Choice (Multiple Answers)",
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "Matching Features"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 2477,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.arcticwwf.org%2F_next%2Fimage%2F%3Furl%3Dhttps%3A%252F%252Fapiwwfarcticse.cdn.triggerfish.cloud%252Fuploads%252F2022%252F05%252F04144550%252FPolarBear_onSeaIce.jpg%26w%3D2048%26q%3D75&f=1&nofb=1&ipt=f908eade0b8200eb2f4afe146c57321ba520a39df73769ce5989c3bc89cfddcd&ipo=images"
+    },
+    {
+      "id": 5001,
+      "card_id": "5-p1",
+      "test_id": 5,
+      "passage_id": 51,
+      "parts": [
+        1
+      ],
+      "title": "Why we need to protect polar bears",
+      "source": "Cambridge IELTS 16, Reading Test 1",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 1",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 806,
+      "thumbnail_url": "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.arcticwwf.org%2F_next%2Fimage%2F%3Furl%3Dhttps%3A%252F%252Fapiwwfarcticse.cdn.triggerfish.cloud%252Fuploads%252F2022%252F05%252F04144550%252FPolarBear_onSeaIce.jpg%26w%3D2048%26q%3D75&f=1&nofb=1&ipt=f908eade0b8200eb2f4afe146c57321ba520a39df73769ce5989c3bc89cfddcd&ipo=images"
+    },
+    {
+      "id": 5002,
+      "card_id": "5-p2",
+      "test_id": 5,
+      "passage_id": 52,
+      "parts": [
+        2
+      ],
+      "title": "The Step Pyramid of Djoser",
+      "source": "Cambridge IELTS 16, Reading Test 1",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 2",
+      "question_types": [
+        "Matching Headings",
+        "Gap Filling (Type)",
+        "Multiple Choice (Multiple Answers)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 825,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t1_p2.jpg"
+    },
+    {
+      "id": 5003,
+      "card_id": "5-p3",
+      "test_id": 5,
+      "passage_id": 53,
+      "parts": [
+        3
+      ],
+      "title": "The future of work",
+      "source": "Cambridge IELTS 16, Reading Test 1",
+      "total_questions": 14,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 3",
+      "question_types": [
+        "Multiple Choice (Single Answer)",
+        "Gap Filling (Drag & Drop)",
+        "Matching Features"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 846,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c16t1_p3.jpg"
+    },
+    {
+      "id": 4,
+      "card_id": "4-full",
+      "test_id": 4,
+      "parts": [
+        1,
+        2,
+        3
+      ],
+      "title": "Cambridge IELTS 21 — Test 4",
+      "source": "Cambridge IELTS 21, Reading Test 4",
+      "total_questions": 40,
+      "estimated_minutes": 60,
+      "difficulty": "Trung bình",
+      "unit": "Full test",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)",
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given",
+        "Multiple Choice (Single Answer)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 2707,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c21t4_p1.jpg"
+    },
+    {
+      "id": 4001,
+      "card_id": "4-p1",
+      "test_id": 4,
+      "passage_id": 41,
+      "parts": [
+        1
+      ],
+      "title": "The problems and benefits created by the spread of the water hyacinth in Kenya",
+      "source": "Cambridge IELTS 21, Reading Test 4",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 1",
+      "question_types": [
+        "True/False/Not Given",
+        "Gap Filling (Type)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 848,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c21t4_p1.jpg"
+    },
+    {
+      "id": 4002,
+      "card_id": "4-p2",
+      "test_id": 4,
+      "passage_id": 42,
+      "parts": [
+        2
+      ],
+      "title": "How could multilingualism benefit India's poorest schoolchildren?",
+      "source": "Cambridge IELTS 21, Reading Test 4",
+      "total_questions": 13,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 2",
+      "question_types": [
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given",
+        "Multiple Choice (Single Answer)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 949,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c21t4_p2.jpg"
+    },
+    {
+      "id": 4003,
+      "card_id": "4-p3",
+      "test_id": 4,
+      "passage_id": 43,
+      "parts": [
+        3
+      ],
+      "title": "The Globemakers: The Curious Story of an Ancient Craft",
+      "source": "Cambridge IELTS 21, Reading Test 4",
+      "total_questions": 14,
+      "estimated_minutes": 20,
+      "difficulty": "Trung bình",
+      "unit": "Passage 3",
+      "question_types": [
+        "Gap Filling (Drag & Drop)",
+        "Yes/No/Not Given",
+        "Multiple Choice (Single Answer)"
+      ],
+      "user_attempt_count": 0,
+      "word_count": 910,
+      "thumbnail_url": "https://s3.wispace.app/wispace/reading-images/thumbnails/c21t4_p3.jpg"
+    }
+  ],
+  "total_count": 32,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 2,
+  "done_count": 0,
+  "not_done_count": 32
+}

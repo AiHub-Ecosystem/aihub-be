@@ -220,6 +220,11 @@ const fields = {
     requiredIn: PROD_MODES,
     format: 'url',
   },
+  AIHUB_LEGACY_BACKEND_URL: {
+    kind: 'string',
+    defaultValue: 'https://backend.aihubproduction.com',
+    format: 'url',
+  },
   DOWNSTREAM_AI_WRITING_TOKEN: {
     kind: 'string',
     secret: true,
@@ -404,6 +409,7 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'AIHUB_EMAIL_DAILY_SEND_BUDGET',
     'DOWNSTREAM_AI_WRITING_URL',
     'DOWNSTREAM_AI_SPEAKING_URL',
+    'AIHUB_LEGACY_BACKEND_URL',
   ],
   delivery: [
     'DOWNSTREAM_AI_WRITING_TOKEN',
