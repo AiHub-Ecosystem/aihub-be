@@ -531,156 +531,6 @@
       }
     },
     {
-      "id": "41db88c5-e83f-4abc-a2ba-cc5c5810a717",
-      "name": "List Listening tests",
-      "request": {
-        "name": "List Listening tests",
-        "description": {},
-        "url": {
-          "path": ["v1", "listening", "tests"],
-          "host": ["{{baseUrl}}"],
-          "query": [
-            {
-              "disabled": false,
-              "key": "page",
-              "value": "1",
-              "description": "Forwarded to the content backend as `page`."
-            },
-            {
-              "disabled": false,
-              "key": "pageSize",
-              "value": "20",
-              "description": "Forwarded to the content backend as `pageSize`."
-            }
-          ],
-          "variable": []
-        },
-        "header": [
-          {
-            "key": "Accept",
-            "value": "application/json"
-          }
-        ],
-        "method": "GET",
-        "auth": null
-      },
-      "event": [],
-      "protocolProfileBehavior": {
-        "disableBodyPruning": true
-      }
-    },
-    {
-      "id": "01667204-5d16-47ee-b8a5-8f19ca300a3d",
-      "name": "Retrieve response headers",
-      "request": {
-        "name": "Retrieve response headers",
-        "description": {
-          "content": "Returns the same status and headers as GET without a response body.",
-          "type": "text/plain"
-        },
-        "url": {
-          "path": ["v1", "listening", "tests"],
-          "host": ["{{baseUrl}}"],
-          "query": [
-            {
-              "disabled": false,
-              "key": "page",
-              "value": "1",
-              "description": "Forwarded to the content backend as `page`."
-            },
-            {
-              "disabled": false,
-              "key": "pageSize",
-              "value": "20",
-              "description": "Forwarded to the content backend as `pageSize`."
-            }
-          ],
-          "variable": []
-        },
-        "method": "HEAD",
-        "auth": null
-      },
-      "event": [],
-      "protocolProfileBehavior": {
-        "disableBodyPruning": true
-      }
-    },
-    {
-      "id": "be281409-6f3d-4d01-9b06-ee7edadab821",
-      "name": "List Reading tests",
-      "request": {
-        "name": "List Reading tests",
-        "description": {},
-        "url": {
-          "path": ["v1", "reading", "tests"],
-          "host": ["{{baseUrl}}"],
-          "query": [
-            {
-              "disabled": false,
-              "key": "page",
-              "value": "1",
-              "description": "Forwarded to the content backend as `page`."
-            },
-            {
-              "disabled": false,
-              "key": "pageSize",
-              "value": "20",
-              "description": "Forwarded to the content backend as `pageSize`."
-            }
-          ],
-          "variable": []
-        },
-        "header": [
-          {
-            "key": "Accept",
-            "value": "application/json"
-          }
-        ],
-        "method": "GET",
-        "auth": null
-      },
-      "event": [],
-      "protocolProfileBehavior": {
-        "disableBodyPruning": true
-      }
-    },
-    {
-      "id": "6ce99d4c-25ee-4e1d-9f1e-bbc47d5deb44",
-      "name": "Retrieve response headers",
-      "request": {
-        "name": "Retrieve response headers",
-        "description": {
-          "content": "Returns the same status and headers as GET without a response body.",
-          "type": "text/plain"
-        },
-        "url": {
-          "path": ["v1", "reading", "tests"],
-          "host": ["{{baseUrl}}"],
-          "query": [
-            {
-              "disabled": false,
-              "key": "page",
-              "value": "1",
-              "description": "Forwarded to the content backend as `page`."
-            },
-            {
-              "disabled": false,
-              "key": "pageSize",
-              "value": "20",
-              "description": "Forwarded to the content backend as `pageSize`."
-            }
-          ],
-          "variable": []
-        },
-        "method": "HEAD",
-        "auth": null
-      },
-      "event": [],
-      "protocolProfileBehavior": {
-        "disableBodyPruning": true
-      }
-    },
-    {
       "id": "affc5af2-e8fc-4a00-99c2-5dd7561cd424",
       "name": "Create a Speaking Audio upload intent",
       "request": {
@@ -4295,6 +4145,31 @@
               }
             }
           ]
+        },
+        {
+          "name": "9. List Speaking library topics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Identity",
+                "value": "{{declaredUserId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/speaking/library",
+            "description": "Lists Speaking library topics with cursor pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -4564,6 +4439,112 @@
                   "  pm.expect(data.score).to.be.within(1, 10);",
                   "  pm.expect(data.comment).to.be.a('string');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. List Writing Task 1 templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/writing/task1/templates",
+            "description": "Lists Task 1 writing templates with cursor pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. List Writing Task 2 templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/writing/task2/templates",
+            "description": "Lists Task 2 writing templates with cursor pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Public API /v2 (Practice content)",
+      "description": "Unauthenticated Listening and Reading practice test lists with cursor pagination (ADR-0130, ADR-0167).",
+      "item": [
+        {
+          "name": "1. List Listening tests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/listening/tests",
+            "description": "Lists Listening practice tests with cursor pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. List Reading tests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v2/ielts/reading/tests",
+            "description": "Lists Reading practice tests with cursor pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responds with HTTP 200', function () { pm.response.to.have.status(200); });"
                 ]
               }
             }
@@ -5900,6 +5881,6 @@
     "name": "AIHUB Writing API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Generated by `bun run generate:postman` from openapi.json — do not hand-edit. The \"D1 handover test cases\" folder is the D2 handover artifact described in docs/history/aihub-deliverable-1-historical-contract.md §G; it is not a CI regression suite.",
-    "version": "1.13.0"
+    "version": "1.14.0"
   }
 }

@@ -40,7 +40,6 @@ import {
   CreateAvatarUploadRequestSchema,
   ReadAvatarResponseSchema,
 } from '@/contracts/avatar/avatar';
-import { ListeningTestsResponseSchema } from '@/contracts/listening/tests';
 import {
   CreateOrganizationApiKeyRequestSchema,
   ListOrganizationApiKeysResponseSchema,
@@ -84,8 +83,10 @@ import {
   MAX_ROSTER_PAGE_SIZE,
   ROSTER_MEMBERS_PER_ORGANIZATION,
 } from '@/contracts/organization/pagination';
-import { PracticeTestsQuerySchema } from '@/contracts/practice/test-collection';
-import { ReadingTestsResponseSchema } from '@/contracts/reading/tests';
+import {
+  ListeningTestsResponseSchema,
+  ReadingTestsResponseSchema,
+} from '@/contracts/practice/v2/tests';
 import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
@@ -108,11 +109,16 @@ import {
   SpeakingGradingJobSubmitRequestSchema,
   SpeakingGradingJobSubmitResponseSchema,
 } from '@/contracts/speaking/v2/grading-job';
+import { SpeakingLibraryResponseSchema } from '@/contracts/speaking/v2/library';
 import {
   CreateWritingChartUploadRequestSchema,
   WritingChartAssetResponseSchema,
   WritingChartUploadGrantResponseSchema,
 } from '@/contracts/writing/chart-upload';
+import {
+  WritingTask1TemplatesResponseSchema,
+  WritingTask2TemplatesResponseSchema,
+} from '@/contracts/writing/v2/templates';
 import type {
   CacheControlPolicy,
   OpenApiParameterMetadata,
@@ -120,25 +126,23 @@ import type {
 } from './openapi-operation-metadata';
 import type { IdempotencyMode } from './operation-catalog';
 
-/**
- * The paging query the Listening and Reading test lists forward upstream. The
- * defaults are what the content backend answers when the value is omitted.
- */
-const PRACTICE_TEST_QUERY_PARAMETERS: readonly OpenApiParameterMetadata[] = (
-  [
-    ['page', '1'],
-    ['pageSize', '20'],
-  ] as const
-).map(([name, upstreamDefault]) => ({
-  name,
-  in: 'query',
-  required: false,
-  description: `Forwarded to the content backend as \`${name}\`.`,
-  schema: {
-    ...PracticeTestsQuerySchema.properties[name],
-    default: upstreamDefault,
+/** Paging query parameters for /v2 practice content collections (ADR-0130). */
+const PRACTICE_CONTENT_QUERY_PARAMETERS: readonly OpenApiParameterMetadata[] = [
+  {
+    name: 'limit',
+    in: 'query',
+    required: false,
+    description: 'Number of items to return (1..200, default 20).',
+    schema: { type: 'integer', minimum: 1, maximum: 200, default: 20 },
   },
-}));
+  {
+    name: 'cursor',
+    in: 'query',
+    required: false,
+    description: 'Opaque pagination cursor from a previous page.',
+    schema: { type: 'string', minLength: 1 },
+  },
+];
 
 /**
  * How a route learns who is calling it, which decides the `security` entry the
@@ -304,7 +308,76 @@ export const PUBLIC_ROUTES = {
     responseSchema: SpeakingQuestionsResponseSchema,
     errorStatuses: [400, 500],
   },
-  'listening.tests': {
+  'writing.v2.task1.templates': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
+    openApi: {
+      summary: 'List Writing Task 1 templates',
+      includeCorrelationId: false,
+      parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
+      successDescription:
+        'List of Writing Task 1 templates with cursor pagination',
+    },
+    method: 'GET',
+    path: '/v2/ielts/writing/task1/templates',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: null,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: WritingTask1TemplatesResponseSchema,
+    errorStatuses: [400, 500, 502, 503, 504],
+  },
+  'writing.v2.task2.templates': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
+    openApi: {
+      summary: 'List Writing Task 2 templates',
+      includeCorrelationId: false,
+      parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
+      successDescription:
+        'List of Writing Task 2 templates with cursor pagination',
+    },
+    method: 'GET',
+    path: '/v2/ielts/writing/task2/templates',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: null,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: WritingTask2TemplatesResponseSchema,
+    errorStatuses: [400, 500, 502, 503, 504],
+  },
+  'speaking.v2.library': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
+    openApi: {
+      summary: 'List Speaking library topics',
+      includeCorrelationId: false,
+      parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
+      successDescription:
+        'List of Speaking library topics with cursor pagination',
+    },
+    method: 'GET',
+    path: '/v2/ielts/speaking/library',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: null,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: SpeakingLibraryResponseSchema,
+    errorStatuses: [400, 500, 502, 503, 504],
+  },
+  'listening.v2.tests': {
     cacheControl: {
       value: 'no-store',
       description: 'This response must not be cached.',
@@ -312,11 +385,11 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'List Listening tests',
       includeCorrelationId: false,
-      parameters: PRACTICE_TEST_QUERY_PARAMETERS,
-      successDescription: 'List of Listening tests',
+      parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
+      successDescription: 'List of Listening tests with cursor pagination',
     },
     method: 'GET',
-    path: '/v1/listening/tests',
+    path: '/v2/ielts/listening/tests',
     callerAuth: 'none',
     organizationResolution: 'none',
     successStatus: 200,
@@ -326,7 +399,7 @@ export const PUBLIC_ROUTES = {
     responseSchema: ListeningTestsResponseSchema,
     errorStatuses: [400, 500, 502, 503, 504],
   },
-  'reading.tests': {
+  'reading.v2.tests': {
     cacheControl: {
       value: 'no-store',
       description: 'This response must not be cached.',
@@ -334,11 +407,11 @@ export const PUBLIC_ROUTES = {
     openApi: {
       summary: 'List Reading tests',
       includeCorrelationId: false,
-      parameters: PRACTICE_TEST_QUERY_PARAMETERS,
-      successDescription: 'List of Reading tests',
+      parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
+      successDescription: 'List of Reading tests with cursor pagination',
     },
     method: 'GET',
-    path: '/v1/reading/tests',
+    path: '/v2/ielts/reading/tests',
     callerAuth: 'none',
     organizationResolution: 'none',
     successStatus: 200,

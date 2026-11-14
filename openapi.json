@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "servers": [
     {
@@ -9379,6 +9379,1177 @@
             "description": "Same status as GET, without a response body."
           },
           "429": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "502": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          },
+          "504": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v2/ielts/writing/task1/templates": {
+      "get": {
+        "operationId": "writing.v2.task1.templates",
+        "summary": "List Writing Task 1 templates",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Writing Task 1 templates with cursor pagination",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["templates", "next_cursor"],
+                      "properties": {
+                        "templates": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "task_type",
+                              "image_url",
+                              "id",
+                              "question",
+                              "type_id",
+                              "type_name",
+                              "source_id",
+                              "source_name",
+                              "image_analysis_status"
+                            ],
+                            "properties": {
+                              "task_type": {
+                                "const": "Task 1",
+                                "type": "string"
+                              },
+                              "image_url": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "integer"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "type_id": {
+                                "type": "integer"
+                              },
+                              "type_name": {
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "type": "integer"
+                              },
+                              "source_name": {
+                                "type": "string"
+                              },
+                              "image_analysis_status": {
+                                "type": "boolean"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "question_type": {
+                                "type": "string"
+                              },
+                              "subtype": {
+                                "type": "string"
+                              },
+                              "source_detail": {
+                                "type": "string"
+                              },
+                              "exam_date": {
+                                "type": "string"
+                              },
+                              "topic": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "string"
+                              },
+                              "book_id": {
+                                "type": "integer"
+                              },
+                              "book_name": {
+                                "type": "string"
+                              },
+                              "test_id": {
+                                "type": "integer"
+                              },
+                              "test_name": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "next_cursor": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      },
+      "head": {
+        "operationId": "writing.v2.task1.templates.head",
+        "summary": "Retrieve response headers",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "502": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          },
+          "504": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v2/ielts/writing/task2/templates": {
+      "get": {
+        "operationId": "writing.v2.task2.templates",
+        "summary": "List Writing Task 2 templates",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Writing Task 2 templates with cursor pagination",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["templates", "next_cursor"],
+                      "properties": {
+                        "templates": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "task_type",
+                              "id",
+                              "question",
+                              "type_id",
+                              "type_name",
+                              "source_id",
+                              "source_name",
+                              "image_analysis_status"
+                            ],
+                            "properties": {
+                              "task_type": {
+                                "const": "Task 2",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "integer"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "type_id": {
+                                "type": "integer"
+                              },
+                              "type_name": {
+                                "type": "string"
+                              },
+                              "source_id": {
+                                "type": "integer"
+                              },
+                              "source_name": {
+                                "type": "string"
+                              },
+                              "image_analysis_status": {
+                                "type": "boolean"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "question_type": {
+                                "type": "string"
+                              },
+                              "subtype": {
+                                "type": "string"
+                              },
+                              "source_detail": {
+                                "type": "string"
+                              },
+                              "exam_date": {
+                                "type": "string"
+                              },
+                              "topic": {
+                                "type": "string"
+                              },
+                              "difficulty": {
+                                "type": "string"
+                              },
+                              "book_id": {
+                                "type": "integer"
+                              },
+                              "book_name": {
+                                "type": "string"
+                              },
+                              "test_id": {
+                                "type": "integer"
+                              },
+                              "test_name": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "next_cursor": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      },
+      "head": {
+        "operationId": "writing.v2.task2.templates.head",
+        "summary": "Retrieve response headers",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "502": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          },
+          "504": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v2/ielts/speaking/library": {
+      "get": {
+        "operationId": "speaking.v2.library",
+        "summary": "List Speaking library topics",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Speaking library topics with cursor pagination",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["topics", "next_cursor"],
+                      "properties": {
+                        "topics": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "original_id",
+                              "topic",
+                              "subtopic",
+                              "part",
+                              "difficulty",
+                              "permanent_topic",
+                              "source",
+                              "questions",
+                              "created_at"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "original_id": {
+                                "type": "integer"
+                              },
+                              "topic": {
+                                "type": "string"
+                              },
+                              "subtopic": {
+                                "type": "string"
+                              },
+                              "part": {
+                                "type": "integer"
+                              },
+                              "difficulty": {
+                                "type": "string"
+                              },
+                              "permanent_topic": {
+                                "type": "boolean"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "questions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "created_at": {
+                                "type": "string"
+                              },
+                              "image_url": {
+                                "type": "string"
+                              },
+                              "forecast": {
+                                "type": "string"
+                              },
+                              "topic_type": {
+                                "type": "string"
+                              },
+                              "cue_card": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "next_cursor": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      },
+      "head": {
+        "operationId": "speaking.v2.library.head",
+        "summary": "Retrieve response headers",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "502": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          },
+          "504": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v2/ielts/listening/tests": {
+      "get": {
+        "operationId": "listening.v2.tests",
+        "summary": "List Listening tests",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Listening tests with cursor pagination",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["tests", "next_cursor"],
+                      "properties": {
+                        "tests": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "card_id",
+                              "test_id",
+                              "parts",
+                              "title",
+                              "source",
+                              "total_questions",
+                              "estimated_minutes",
+                              "difficulty",
+                              "unit",
+                              "question_types"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "card_id": {
+                                "type": "string"
+                              },
+                              "test_id": {
+                                "type": "integer"
+                              },
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer"
+                                }
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "total_questions": {
+                                "type": "integer"
+                              },
+                              "estimated_minutes": {
+                                "type": "integer"
+                              },
+                              "difficulty": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string"
+                              },
+                              "question_types": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "test_ref": {
+                                "type": "string"
+                              },
+                              "section_number": {
+                                "type": "integer"
+                              },
+                              "topic": {
+                                "type": "string"
+                              },
+                              "duration_seconds": {
+                                "type": "integer"
+                              },
+                              "thumbnail_url": {
+                                "type": "string"
+                              },
+                              "audio_url": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "next_cursor": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      },
+      "head": {
+        "operationId": "listening.v2.tests.head",
+        "summary": "Retrieve response headers",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "500": {
+            "description": "Same status as GET, without a response body."
+          },
+          "502": {
+            "description": "Same status as GET, without a response body."
+          },
+          "503": {
+            "description": "Same status as GET, without a response body."
+          },
+          "504": {
+            "description": "Same status as GET, without a response body."
+          }
+        },
+        "description": "Returns the same status and headers as GET without a response body."
+      }
+    },
+    "/v2/ielts/reading/tests": {
+      "get": {
+        "operationId": "reading.v2.tests",
+        "summary": "List Reading tests",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Reading tests with cursor pagination",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["data", "meta"],
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["tests", "next_cursor"],
+                      "properties": {
+                        "tests": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "card_id",
+                              "test_id",
+                              "parts",
+                              "title",
+                              "source",
+                              "total_questions",
+                              "estimated_minutes",
+                              "difficulty",
+                              "unit",
+                              "question_types"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "card_id": {
+                                "type": "string"
+                              },
+                              "test_id": {
+                                "type": "integer"
+                              },
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer"
+                                }
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "total_questions": {
+                                "type": "integer"
+                              },
+                              "estimated_minutes": {
+                                "type": "integer"
+                              },
+                              "difficulty": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string"
+                              },
+                              "question_types": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "word_count": {
+                                "type": "integer"
+                              },
+                              "thumbnail_url": {
+                                "type": "string"
+                              },
+                              "passage_id": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "next_cursor": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": ["request_id"],
+                      "properties": {
+                        "request_id": {
+                          "pattern": "^req_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error502"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error504"
+          }
+        }
+      },
+      "head": {
+        "operationId": "reading.v2.tests.head",
+        "summary": "Retrieve response headers",
+        "security": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of items to return (1..200, default 20).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; same headers as GET, without a response body.",
+            "headers": {
+              "Cache-Control": {
+                "description": "This response must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
             "description": "Same status as GET, without a response body."
           },
           "500": {

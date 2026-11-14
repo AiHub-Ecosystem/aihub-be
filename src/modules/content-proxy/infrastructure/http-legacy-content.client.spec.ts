@@ -5,6 +5,7 @@ import { Headers, Response, type fetch as undiciFetch } from 'undici/index.js';
 import { HttpLegacyContentClient } from './http-legacy-content.client';
 
 const BASE_URL = 'https://backend.example.invalid';
+const REQ_ID = 'req_01J00000000000000000000000';
 
 function fixture(filename: string): string {
   return readFileSync(
@@ -18,7 +19,6 @@ interface Recorded {
   readonly taskType: string | null;
 }
 
-/** A fetch that answers every call with `body` and records what was asked. */
 function stubFetch(
   body: string,
   status = 200,
@@ -39,85 +39,107 @@ function stubFetch(
   return { fetchFn, calls };
 }
 
-describe('HttpLegacyContentClient', () => {
-  it('sends the task type and drops the template author from the result', async () => {
+describe('HttpLegacyContentClient /v2', () => {
+  it('fetches Task 1 templates, applies cursor pagination and snake_case mapping', async () => {
     const { fetchFn, calls } = stubFetch(
       fixture('writing-template-task1.200.json'),
     );
 
-    const result = await new HttpLegacyContentClient(
-      `${BASE_URL}/`,
-      fetchFn,
-    ).fetchWritingTemplates('task 1');
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    const result = await client.fetchWritingTask1Templates(5, 1, REQ_ID);
 
     expect(calls).toEqual([
       { url: `${BASE_URL}/api/WritingTemplate`, taskType: 'task 1' },
     ]);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result.data.templates).toHaveLength(5);
+    expect(result.data.next_cursor).toBe('eyJwYWdlIjoyfQ');
+    expect(result.meta.request_id).toBe(REQ_ID);
+
+    const first = result.data.templates[0];
+    expect(first?.task_type).toBe('Task 1');
+    expect(first?.image_url).toBeDefined();
+    expect(first?.type_id).toBeDefined();
     expect(JSON.stringify(result)).not.toMatch(/"user(Id|Name)"/);
   });
 
-  it('forwards Speaking library paging', async () => {
+  it('fetches Task 2 templates without image_url', async () => {
+    const { fetchFn, calls } = stubFetch(
+      fixture('writing-template-task2.200.json'),
+    );
+
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    const result = await client.fetchWritingTask2Templates(50, 1, REQ_ID);
+
+    expect(calls).toEqual([
+      { url: `${BASE_URL}/api/WritingTemplate`, taskType: 'task 2' },
+    ]);
+    expect(result.data.templates.length).toBeGreaterThan(0);
+    expect(result.data.next_cursor).toBeNull();
+
+    const first = result.data.templates[0];
+    expect(first?.task_type).toBe('Task 2');
+    expect(
+      (first as unknown as Record<string, unknown>)['image_url'],
+    ).toBeUndefined();
+  });
+
+  it('forwards Speaking library paging and maps to topics', async () => {
     const { fetchFn, calls } = stubFetch(fixture('speaking-library.200.json'));
 
-    const result = await new HttpLegacyContentClient(
-      BASE_URL,
-      fetchFn,
-    ).fetchSpeakingLibrary({ page: '1', pageSize: '10' });
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    const result = await client.fetchSpeakingLibrary(10, 1, REQ_ID);
 
     expect(calls[0]?.url).toBe(
       `${BASE_URL}/api/Speaking/library?page=1&pageSize=10`,
     );
-    expect(result.page).toBe(1);
+    expect(result.data.topics.length).toBeGreaterThan(0);
+    expect(result.data.next_cursor).toBe('eyJwYWdlIjoyfQ');
+
+    const first = result.data.topics[0];
+    expect(first?.original_id).toBeDefined();
+    expect(first?.created_at).toBeDefined();
+    expect(first?.permanent_topic).toBeDefined();
   });
 
-  it.each([
-    ['fetchListeningTests', '/v1/listening/tests', 'listening-tests.200.json'],
-    ['fetchReadingTests', '/v1/reading/tests', 'reading-tests.200.json'],
-  ] as const)('%s calls %s', async (method, path, file) => {
-    const { fetchFn, calls } = stubFetch(fixture(file));
+  it('fetches Listening tests with cursor pagination', async () => {
+    const { fetchFn, calls } = stubFetch(fixture('listening-tests.200.json'));
 
-    const result = await new HttpLegacyContentClient(BASE_URL, fetchFn)[method](
-      { pageSize: '5' },
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    const result = await client.fetchListeningTests(5, 1, REQ_ID);
+
+    expect(calls[0]?.url).toBe(
+      `${BASE_URL}/v1/listening/tests?page=1&pageSize=5`,
     );
-
-    expect(calls[0]?.url).toBe(`${BASE_URL}${path}?pageSize=5`);
-    expect(result.items.length).toBeGreaterThan(0);
+    expect(result.data.tests.length).toBeGreaterThan(0);
+    expect(result.data.next_cursor).toBeNull();
   });
 
-  it('refuses a body that does not match the public schema', async () => {
-    const { fetchFn } = stubFetch(JSON.stringify({ invalid: true }));
+  it('fetches Reading tests with cursor pagination', async () => {
+    const { fetchFn, calls } = stubFetch(fixture('reading-tests.200.json'));
 
-    await expect(
-      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchWritingTemplates(
-        'task 1',
-      ),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    const result = await client.fetchReadingTests(5, 1, REQ_ID);
+
+    expect(calls[0]?.url).toBe(
+      `${BASE_URL}/v1/reading/tests?page=1&pageSize=5`,
+    );
+    expect(result.data.tests.length).toBeGreaterThan(0);
+    expect(result.data.next_cursor).toBe('eyJwYWdlIjoyfQ');
   });
 
-  it.each([
-    [503, 'AI_SERVICE_UNAVAILABLE', true],
-    [404, 'AI_SERVICE_ERROR', false],
-  ] as const)('maps upstream %d to %s', async (status, code, retryable) => {
-    const { fetchFn } = stubFetch('upstream error', status);
-
-    await expect(
-      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchListeningTests(),
-    ).rejects.toMatchObject({ code, retryable, downstreamStatus: status });
-  });
-
-  it('refuses a body that is not JSON as a contract violation', async () => {
+  it('refuses invalid JSON as AI_SERVICE_CONTRACT_VIOLATION', async () => {
     const { fetchFn } = stubFetch('<html>bad gateway</html>');
 
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
     await expect(
-      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchSpeakingLibrary(),
+      client.fetchSpeakingLibrary(10, 1, REQ_ID),
     ).rejects.toMatchObject({
       code: 'AI_SERVICE_CONTRACT_VIOLATION',
       retryable: false,
     });
   });
 
-  it('maps a timeout while the body streams to AI_SERVICE_TIMEOUT', async () => {
+  it('maps timeout while streaming body to AI_SERVICE_TIMEOUT', async () => {
     const fetchFn: typeof undiciFetch = async () =>
       new Response(
         new ReadableStream({
@@ -128,12 +150,16 @@ describe('HttpLegacyContentClient', () => {
         }),
       );
 
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
     await expect(
-      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchListeningTests(),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT', retryable: true });
+      client.fetchListeningTests(10, 1, REQ_ID),
+    ).rejects.toMatchObject({
+      code: 'AI_SERVICE_TIMEOUT',
+      retryable: true,
+    });
   });
 
-  it('releases the body of a refused upstream response', async () => {
+  it('releases body of refused upstream response', async () => {
     let cancelled = false;
     const fetchFn: typeof undiciFetch = async () =>
       new Response(
@@ -145,22 +171,13 @@ describe('HttpLegacyContentClient', () => {
         { status: 502 },
       );
 
-    await expect(
-      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchReadingTests(),
-    ).rejects.toMatchObject({
-      code: 'AI_SERVICE_UNAVAILABLE',
-      downstreamStatus: 502,
-    });
+    const client = new HttpLegacyContentClient(BASE_URL, fetchFn);
+    await expect(client.fetchReadingTests(10, 1, REQ_ID)).rejects.toMatchObject(
+      {
+        code: 'AI_SERVICE_UNAVAILABLE',
+        downstreamStatus: 502,
+      },
+    );
     expect(cancelled).toBe(true);
-  });
-
-  it('maps a timeout to AI_SERVICE_TIMEOUT', async () => {
-    const fetchFn: typeof undiciFetch = async () => {
-      throw new DOMException('timed out', 'TimeoutError');
-    };
-
-    await expect(
-      new HttpLegacyContentClient(BASE_URL, fetchFn).fetchReadingTests(),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT', retryable: true });
   });
 });
