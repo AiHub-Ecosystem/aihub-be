@@ -11,6 +11,7 @@ import { RuntimeConfigurationModule } from './config/runtime-configuration.modul
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
+import { ContentProxyModule } from './modules/content-proxy/content-proxy.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeteringModule } from './modules/metering/metering.module';
@@ -37,6 +38,7 @@ import { OpenApiModule } from './openapi/openapi.module';
     GatewayModule,
     WritingModule,
     SpeakingModule,
+    ContentProxyModule,
     MeteringModule,
     OpenApiModule,
   ],

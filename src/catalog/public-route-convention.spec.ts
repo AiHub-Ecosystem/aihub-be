@@ -23,8 +23,10 @@ interface RouteFacts {
 const TOP_LEVEL = [
   'auth',
   'ielts',
+  'listening',
   'me',
   'organizations',
+  'reading',
   'sandbox',
   'speaking',
 ];

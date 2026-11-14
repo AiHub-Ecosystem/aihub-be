@@ -40,6 +40,7 @@ import {
   CreateAvatarUploadRequestSchema,
   ReadAvatarResponseSchema,
 } from '@/contracts/avatar/avatar';
+import { ListeningTestsResponseSchema } from '@/contracts/listening/tests';
 import {
   CreateOrganizationApiKeyRequestSchema,
   ListOrganizationApiKeysResponseSchema,
@@ -83,6 +84,8 @@ import {
   MAX_ROSTER_PAGE_SIZE,
   ROSTER_MEMBERS_PER_ORGANIZATION,
 } from '@/contracts/organization/pagination';
+import { PracticeTestsQuerySchema } from '@/contracts/practice/test-collection';
+import { ReadingTestsResponseSchema } from '@/contracts/reading/tests';
 import {
   MintSandboxAssertionRequestSchema,
   MintSandboxAssertionResponseSchema,
@@ -112,9 +115,21 @@ import {
 } from '@/contracts/writing/chart-upload';
 import type {
   CacheControlPolicy,
+  OpenApiParameterMetadata,
   PublicRouteOpenApiMetadata,
 } from './openapi-operation-metadata';
 import type { IdempotencyMode } from './operation-catalog';
+
+/** The paging query the Listening and Reading test lists forward upstream. */
+const PRACTICE_TEST_QUERY_PARAMETERS: readonly OpenApiParameterMetadata[] = (
+  ['page', 'page_size', 'limit'] as const
+).map((name) => ({
+  name,
+  in: 'query',
+  required: false,
+  description: `Forwarded to the content backend as \`${name}\`.`,
+  schema: PracticeTestsQuerySchema.properties[name],
+}));
 
 /**
  * How a route learns who is calling it, which decides the `security` entry the
@@ -279,6 +294,50 @@ export const PUBLIC_ROUTES = {
     requestSchema: null,
     responseSchema: SpeakingQuestionsResponseSchema,
     errorStatuses: [400, 500],
+  },
+  'listening.tests': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
+    openApi: {
+      summary: 'List Listening tests',
+      includeCorrelationId: false,
+      parameters: PRACTICE_TEST_QUERY_PARAMETERS,
+      successDescription: 'List of Listening tests',
+    },
+    method: 'GET',
+    path: '/v1/listening/tests',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: null,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: ListeningTestsResponseSchema,
+    errorStatuses: [400, 500, 502, 503, 504],
+  },
+  'reading.tests': {
+    cacheControl: {
+      value: 'no-store',
+      description: 'This response must not be cached.',
+    },
+    openApi: {
+      summary: 'List Reading tests',
+      includeCorrelationId: false,
+      parameters: PRACTICE_TEST_QUERY_PARAMETERS,
+      successDescription: 'List of Reading tests',
+    },
+    method: 'GET',
+    path: '/v1/reading/tests',
+    callerAuth: 'none',
+    organizationResolution: 'none',
+    successStatus: 200,
+    publishedIdentityScope: null,
+    idempotency: 'none',
+    requestSchema: null,
+    responseSchema: ReadingTestsResponseSchema,
+    errorStatuses: [400, 500, 502, 503, 504],
   },
   'speaking.gradingJobs.create': {
     cacheControl: {
