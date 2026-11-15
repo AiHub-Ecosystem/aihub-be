@@ -9,7 +9,7 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
-## [2.8.0] - 2026-11-15
+## [2.7.1] - 2026-11-15
 
 ### Changed
 
