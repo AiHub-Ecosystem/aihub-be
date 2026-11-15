@@ -196,7 +196,7 @@ function cliRule() {
     name: 'no-cli-module-internal-import',
     severity: 'error',
     comment:
-      "An Operator command imports a module's internal path. Use an application port or explicit public/ facade; the CLI may construct other infrastructure, while Auth imports must also pass its public-seam rule (#1822, ADR-0066).",
+      "An Operator command imports a module's internal path. Use an application port or explicit public/ facade; the CLI may construct other infrastructure, while Auth imports must also pass its public-seam rule (#1822, ADR-0106).",
     from: {
       path: '^src/cli/',
       pathNot: '[.]spec[.]ts$',
