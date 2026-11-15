@@ -10,7 +10,11 @@ import { ulid } from 'ulid';
 import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import type { GeneratedApiKey } from '@/modules/identity/domain/api-key';
 
-import { sandboxTestRedisUrl, testDatabaseUrl } from '../shared/database';
+import {
+  sandboxTestDatabaseUrl,
+  sandboxTestRedisUrl,
+  testDatabaseUrl,
+} from '../shared/database';
 import {
   createTenantIdentity,
   signUserAssertion,
@@ -45,6 +49,7 @@ export function listen(server: Server): Promise<string> {
 export async function startWorker(configuration: {
   readonly downstreamUrl: string;
   readonly redisUrl?: string;
+  readonly runtimeDatabaseScope?: 'production' | 'sandbox';
 }): Promise<TestWorker> {
   const worker = spawn(
     process.execPath,
@@ -62,8 +67,12 @@ export async function startWorker(configuration: {
         ...process.env,
         NODE_ENV: 'test',
         AIHUB_RUNTIME_SECRET_SOURCE: 'env',
-        AIHUB_RUNTIME_DATABASE_SCOPE: 'production',
-        DATABASE_URL: testDatabaseUrl(),
+        AIHUB_RUNTIME_DATABASE_SCOPE:
+          configuration.runtimeDatabaseScope ?? 'production',
+        DATABASE_URL:
+          configuration.runtimeDatabaseScope === 'sandbox'
+            ? sandboxTestDatabaseUrl()
+            : testDatabaseUrl(),
         CONTROL_PLANE_DATABASE_URL: testDatabaseUrl(),
         CONTROL_PLANE_READ_DATABASE_URL: testDatabaseUrl(),
         REDIS_URL: configuration.redisUrl ?? sandboxTestRedisUrl(),

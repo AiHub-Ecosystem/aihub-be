@@ -18,6 +18,7 @@ import {
   getRuntimeConnectionConfiguration,
 } from '@/config/runtime-configuration';
 import { MintSandboxAssertionResponseSchema } from '@/contracts/sandbox/assertion';
+import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -104,6 +105,12 @@ describe('Sandbox assertion HTTP flow', () => {
       .useValue(runtimeConnection)
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(authenticator)
+      .overrideProvider(RATE_LIMITER)
+      .useValue({
+        consume: async ({ limit }: { limit: number }) => ({
+          allowed: limit > 0,
+        }),
+      })
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
       .useValue({ findActiveByOrganizationId: async () => identityConfig })
       .compile();

@@ -1,6 +1,6 @@
 # ADR-0006: Redis has a scoped role and fails open where blocking costs more
 
-- Status: Accepted (retroactive record; graded-route behavior amended by ADR-0116)
+- Status: Accepted (retroactive record; graded-route behavior amended by ADR-0116; non-graded rate-limit outages amended by ADR-0168)
 - Date: decided 2026-09-07 in the implementation specification suite; file written 2026-11-07
 
 ## Context

@@ -62,6 +62,11 @@ End-User ID, applies rate limits, checks quota, and takes a concurrency slot
 caller receives `RATE_LIMITED` or `QUOTA_EXCEEDED`.
 _Avoid_: middleware stack, guard chain, request pipeline
 
+**Organization retry budget**:
+The Organization-wide allowance for same-key repeats of operations that
+support idempotency, shared by its API keys and distinct from monthly quota.
+_Avoid_: per-key retry limit
+
 **Request ID**:
 An AIHUB-generated identifier for one HTTP request. The same value connects
 the application's completion event, the response, and the proxy access record.
