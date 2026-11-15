@@ -2,7 +2,7 @@ import {
   type DownstreamConcurrencySample,
   recordDownstreamLimitDropped,
   setDownstreamConcurrencySource,
-} from '@/common/observability/downstream-concurrency-metrics';
+} from './downstream-concurrency-metrics';
 
 export interface Gradient2Config {
   readonly initialLimit: number;

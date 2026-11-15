@@ -7,7 +7,6 @@ import {
 } from 'undici/index.js';
 
 import { AppError, internalError } from '@/common/errors/app-error';
-import { recordDownstreamLimitDropped } from '@/common/observability/downstream-concurrency-metrics';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -18,6 +17,7 @@ import type {
   DownstreamRequest,
   InternalAIServiceResponse,
 } from '@/downstream/downstream.types';
+import { recordDownstreamLimitDropped } from './downstream-concurrency-metrics';
 import {
   Gradient2ConcurrencyLimiter,
   type Gradient2Config,

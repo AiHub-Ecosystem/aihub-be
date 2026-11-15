@@ -1,10 +1,10 @@
 import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
-import type { EmailOutboxCancellationSample } from '@/common/observability/metrics';
 import {
   EMAIL_DELIVERY_CANCEL_REASONS,
   EMAIL_DELIVERY_KINDS,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailOutboxCancellationSample } from '@/modules/auth/email-delivery/infrastructure/metrics/email-delivery-metrics';
 import {
   type AuthSqlClient,
   authQueryRows,

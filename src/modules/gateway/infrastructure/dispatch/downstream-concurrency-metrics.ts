@@ -1,6 +1,6 @@
 import { Counter, Gauge, type Registry } from '@prometheus-io/client';
 
-import { registry as sharedRegistry } from './metrics';
+import { registry as sharedRegistry } from '@/common/observability/metrics';
 
 export interface DownstreamConcurrencySample {
   readonly origin: string;

@@ -54,7 +54,7 @@ adaptive limiter is disabled the deployment still refuses runaway tenants.
 The two limiters protect different axes (tenant fairness vs. provider
 health) and are expected to compose, not compete.
 
-`src/common/observability/downstream-concurrency-metrics.ts` exposes the
+`src/modules/gateway/infrastructure/dispatch/downstream-concurrency-metrics.ts` exposes the
 four metrics the acceptance criteria name, labelled by configured origin
 only (never request data), following the established origin-label pattern
 used by `aihub_downstream_pool_queued`:

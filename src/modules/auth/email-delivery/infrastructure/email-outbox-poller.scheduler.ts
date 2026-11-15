@@ -12,6 +12,8 @@ import {
 } from '@/common/background-work-tracker';
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { JitteredTimer, jitteredDelayMs } from '@/common/jittered-timer';
+import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
+import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 import {
   type EmailDeliveryKindLabel,
   type EmailOutboxBacklogSample,
@@ -23,9 +25,7 @@ import {
   setEmailOutboxCancellationSource,
   setEmailOutboxWalHealthSource,
   setEmailProviderOutageDurationSource,
-} from '@/common/observability/metrics';
-import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
-import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
+} from './metrics/email-delivery-metrics';
 
 /** How often an instance reconciles stale and terminal delivery rows. */
 export const EMAIL_OUTBOX_RECONCILE_INTERVAL_MS = 5_000;

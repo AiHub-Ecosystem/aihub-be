@@ -8,8 +8,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { PublicApiMajorDef } from '@/catalog/public-api-majors';
 import { AppError } from '@/common/errors/app-error';
-import { retiredPublicApiMajor } from '@/common/http/retired-public-api-major';
 import { HttpExceptionFilter } from './http-exception.filter';
+import { retiredPublicApiMajor } from './retired-public-api-major';
 
 interface Caught {
   readonly header: string | undefined;

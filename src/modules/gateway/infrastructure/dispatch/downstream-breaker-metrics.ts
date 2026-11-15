@@ -1,7 +1,7 @@
 import { Gauge } from '@prometheus-io/client';
 
 import { type OperationId, isOperationId } from '@/catalog/operation-id';
-import { registry } from './metrics';
+import { registry } from '@/common/observability/metrics';
 
 const breakerState = new Gauge({
   name: 'aihub_breaker_state',

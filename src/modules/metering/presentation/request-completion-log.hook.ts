@@ -30,6 +30,7 @@ import {
   requestGradedDimensions,
 } from '@/modules/metering/public/graded-request-timing';
 import { criticalJourneyForRequest } from './critical-journey';
+import { recordCriticalJourneyMetrics } from './critical-journey-metrics';
 
 const COMPLETION_EVENT = 'request_completed';
 const OPERATION_BY_ROUTE = new Map<string, OperationId>(
@@ -189,7 +190,6 @@ function recordRequestMetrics(
     ...(evidence?.downstreamMs === undefined
       ? {}
       : { downstreamMs: evidence.downstreamMs }),
-    ...(criticalJourney === undefined ? {} : { criticalJourney }),
     ...(tokens === undefined ? {} : { tokens }),
     // Read from the evidence rather than recomputed: the finalizer stamps this
     // after applying every mutation, so it is the status the record was
@@ -197,6 +197,14 @@ function recordRequestMetrics(
     ...(evidence?.meteringStatus === undefined
       ? {}
       : { meteringStatus: evidence.meteringStatus }),
+  });
+  recordCriticalJourneyMetrics({
+    outcome,
+    totalMs,
+    ...(evidence?.downstreamMs === undefined
+      ? {}
+      : { downstreamMs: evidence.downstreamMs }),
+    ...(criticalJourney === undefined ? {} : { criticalJourney }),
   });
   if (catalogOperation !== undefined) {
     recordGradedAdmission(catalogOperation, admissionMs, dimensions);

@@ -21,11 +21,6 @@ import {
   markRequestAdmission,
   requestDurationMs,
 } from '@/common/http/request-timing.hook';
-import {
-  RETIRED_PUBLIC_API_MAJOR_LOOKUP,
-  type RetiredPublicApiMajor,
-  retiredPublicApiMajor,
-} from '@/common/http/retired-public-api-major';
 import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import {
   databaseUnavailableError,
@@ -39,6 +34,11 @@ import {
   type MeteringFinalizerPort,
 } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { requestOutcome } from '@/modules/metering/application/usage-recording/request-outcome';
+import {
+  RETIRED_PUBLIC_API_MAJOR_LOOKUP,
+  type RetiredPublicApiMajor,
+  retiredPublicApiMajor,
+} from './retired-public-api-major';
 
 interface FrameworkError {
   readonly code: ErrorCode;

@@ -6,7 +6,7 @@ import { type TSchema, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { internalError } from '@/common/errors/app-error';
-import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
+import { parseCustomerWebBaseUrl } from '@/config/customer-web-base-url';
 
 type RuntimeMode = 'development' | 'test' | 'staging' | 'production';
 type RuntimeKind = 'string' | 'number' | 'boolean' | 'enum';

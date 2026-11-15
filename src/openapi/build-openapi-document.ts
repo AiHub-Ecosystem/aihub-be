@@ -12,10 +12,10 @@ import {
   type PublicRouteDef,
   type PublicRouteId,
 } from '@/catalog/public-routes';
-import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/common/http/client-secret-header';
 import { isRecord } from '@/common/is-record';
 import { PUBLIC_API_SERVERS } from '@/config/runtime-configuration';
 import { OrganizationIdSchema } from '@/contracts/organization/organization-id';
+import { WEB_SESSION_CLIENT_SECRET_HEADER } from '@/modules/auth/public/client-secret-header';
 import { REFRESH_COOKIE_NAME } from '@/modules/auth/public/web-sessions';
 import { buildErrorResponses } from './openapi-error-responses';
 import { localAuthPathItems } from './openapi-local-auth-path-items';

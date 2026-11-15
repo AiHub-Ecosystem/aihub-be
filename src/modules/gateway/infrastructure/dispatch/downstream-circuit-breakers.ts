@@ -4,8 +4,8 @@ import CircuitBreaker from 'opossum';
 import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import { isDownstreamFault } from '@/common/errors/downstream-fault';
-import { setDownstreamBreakerState } from '@/common/observability/downstream-breaker-metrics';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
+import { setDownstreamBreakerState } from './downstream-breaker-metrics';
 
 const WINDOW_MS = 10_000;
 const RESET_TIMEOUT_MS = 30_000;

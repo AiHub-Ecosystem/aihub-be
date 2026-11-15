@@ -12,10 +12,10 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import type { ClientIpSource } from '@/common/http/client-ip-source';
-import { clientSecretFrom } from '@/common/http/client-secret-header';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import { appConfig } from '@/config/runtime-configuration';
+import { clientSecretFrom } from '@/modules/auth/public/client-secret-header';
 import {
   WEB_SESSION_CLIENT_SECRET,
   type WebSessionClientSecretPort,

@@ -4,9 +4,9 @@ import { MockAgent } from 'undici/index.js';
 
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
-import { setDownstreamBreakerState } from '@/common/observability/downstream-breaker-metrics';
 import { getMetrics } from '@/common/observability/metrics';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
+import { setDownstreamBreakerState } from './downstream-breaker-metrics';
 import { DownstreamCircuitBreakers } from './downstream-circuit-breakers';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { GRADIENT2_DEFAULT_CONFIG } from './gradient2-concurrency-limiter';

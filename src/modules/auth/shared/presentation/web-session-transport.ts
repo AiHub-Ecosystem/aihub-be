@@ -5,7 +5,7 @@ import { offersCredentialOutsideTransport } from './credential-transport';
 
 /**
  * The Customer Web BFF supplies the end user's address in its own header; the
- * client secret header and reader live in `@/common/http/client-secret-header`.
+ * client secret header and reader live in `@/modules/auth/public/client-secret-header`.
  */
 export const WEB_SESSION_END_USER_IP_HEADER = 'X-AIHUB-End-User-IP';
 

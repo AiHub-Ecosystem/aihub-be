@@ -1,14 +1,14 @@
 import { AppError, internalError } from '@/common/errors/app-error';
-import {
-  WEB_SESSION_CLIENT_SECRET_HEADER,
-  clientSecretFrom,
-} from '@/common/http/client-secret-header';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import {
   WEB_SESSION_CLIENT_SECRET,
   type WebSessionClientSecretPort,
 } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
 import { webSessionUnavailable } from '@/modules/auth/web-sessions/application/web-session-errors';
+import {
+  WEB_SESSION_CLIENT_SECRET_HEADER,
+  clientSecretFrom,
+} from '@/modules/auth/web-sessions/public/client-secret-header';
 import {
   type CanActivate,
   type ExecutionContext,

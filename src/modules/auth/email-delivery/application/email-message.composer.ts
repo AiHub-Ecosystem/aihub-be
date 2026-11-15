@@ -1,5 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
-import { parseCustomerWebBaseUrl } from '@/common/http/customer-web-base-url';
+import { parseCustomerWebBaseUrl } from '@/config/customer-web-base-url';
 import type { EmailMessage } from './email-sender.port';
 import {
   API_KEY_NEAR_EXPIRY_WINDOW_MS,

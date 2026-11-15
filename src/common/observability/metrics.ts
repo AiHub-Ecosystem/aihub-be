@@ -1,45 +1,25 @@
 import { Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 
 import type { OperationId } from '@/catalog/operation-id';
-import {
-  registerCriticalJourneyMetrics,
-  secondsOf,
-} from './critical-journey-metrics';
-import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
-import {
-  type EmailOutboxBacklogSample,
-  registerEmailOutboxBacklogMetric,
-} from './email-outbox-backlog-metric';
-import { registerEmailOutboxBackpressureMetric } from './email-outbox-backpressure-metric';
-import {
-  type EmailDeliveryKindLabel,
-  registerEmailOutboxCancellationMetric,
-} from './email-outbox-cancellation-metric';
-import {
-  type EmailOutboxWalSlotHealthSample,
-  registerEmailOutboxWalMetric,
-} from './email-outbox-wal-metric';
-import { registerEmailProviderOutageMetric } from './email-provider-outage-metric';
 import { registerProcessRuntimeMetrics } from './process-runtime-metrics';
 
-export type { EmailOutboxWalSlotHealthSample } from './email-outbox-wal-metric';
-export type { EmailOutboxBacklogSample } from './email-outbox-backlog-metric';
-export type {
-  EmailDeliveryKindLabel,
-  EmailOutboxCancellationSample,
-} from './email-outbox-cancellation-metric';
+export const METRICS_ROUTE_PATH = '/metrics';
 
 /**
  * Shared metric registry. Protection rejection and Redis failure counters live
- * in `rejected-metric.ts` and `redis-unavailable-metric.ts`.
+ * in `rejected-metric.ts` and `redis-unavailable-metric.ts`. A module that owns
+ * a metric family registers it here from its own code: the email delivery
+ * metrics live in Auth, the critical-journey metrics in Metering, and the
+ * downstream breaker and concurrency metrics in Gateway.
  */
-export const METRICS_ROUTE_PATH = '/metrics';
-
 export const registry = new Registry();
-const recordCriticalJourneyMetrics = registerCriticalJourneyMetrics(registry);
 registerProcessRuntimeMetrics(registry);
-const emailOutboxWalMetric = registerEmailOutboxWalMetric(registry);
-const emailOutboxBacklogMetric = registerEmailOutboxBacklogMetric(registry);
+
+export function secondsOf(milliseconds: number): number | undefined {
+  return Number.isFinite(milliseconds) && milliseconds >= 0
+    ? milliseconds / 1000
+    : undefined;
+}
 
 let objectStorageQueueSource: (() => number) | undefined;
 
@@ -203,29 +183,6 @@ export function recordIdentityCacheCoalescedWait(
 ): void {
   identityCacheCoalescedWaitsTotal.inc({ kind });
 }
-
-/**
- * The bounded email kinds are the whole label domain, so this counter cannot grow
- * a series per recipient. Cancellation has a separate durable timestamp gauge;
- * only `credential_expired` pages, while routine lifecycle reasons stay quiet.
- */
-const emailDeliveryFailedTotal = new Counter({
-  name: 'aihub_email_delivery_failed_total',
-  help: 'Email Delivery Requests that used all their attempts without provider acceptance.',
-  labelNames: ['kind'],
-  registers: [registry],
-});
-
-/**
- * Counts passes that handed back a request whose payload only a newer release
- * can open (#484). Labelled by the bounded email kind, never by payload.
- */
-const emailOutboxUnrecognisedPayloadTotal = new Counter({
-  name: 'aihub_email_outbox_unrecognised_payload_total',
-  help: 'Email Delivery Requests handed back because their payload holds a value this release does not know.',
-  labelNames: ['kind'],
-  registers: [registry],
-});
 
 const postgresPoolErrorsTotal = new Counter({
   name: 'aihub_postgres_pool_errors_total',
@@ -395,10 +352,6 @@ export function recordPostgresPoolError(
   return sqlstateClass;
 }
 
-export function recordEmailDeliveryFailed(kind: EmailDeliveryKindLabel): void {
-  emailDeliveryFailedTotal.inc({ kind });
-}
-
 export function observeDispatchDeadlineMsRemaining(
   operation: OperationId,
   remainingMs: number,
@@ -430,52 +383,6 @@ export function recordDownstreamCredentialRejection(
   downstream: string,
 ): void {
   downstreamCredentialFailuresTotal.inc({ operation, downstream });
-}
-
-export function recordEmailOutboxUnrecognisedPayload(
-  kind: EmailDeliveryKindLabel,
-): void {
-  emailOutboxUnrecognisedPayloadTotal.inc({ kind });
-}
-
-export function setEmailOutboxWalHealthSource(
-  source: (() => Promise<EmailOutboxWalSlotHealthSample | null>) | undefined,
-): void {
-  emailOutboxWalMetric.setSource(source);
-}
-
-/**
- * Registers where the backlog gauges read from. Only the process that owns an
- * outbox registers one; until then the gauges expose no series.
- */
-export function setEmailOutboxBacklogSource(
-  source: (() => Promise<readonly EmailOutboxBacklogSample[]>) | undefined,
-): void {
-  emailOutboxBacklogMetric.setSource(source);
-}
-
-export const setEmailOutboxCancellationSource =
-  registerEmailOutboxCancellationMetric(registry);
-const emailOutboxBackpressureMetric =
-  registerEmailOutboxBackpressureMetric(registry);
-export const recordEmailOutboxBackpressureRefusal = (kind: string): void =>
-  emailOutboxBackpressureMetric.record(kind);
-export const setEmailDailySendBudgetSource =
-  registerEmailDailySendBudgetMetric(registry);
-export const setEmailProviderOutageDurationSource =
-  registerEmailProviderOutageMetric(registry);
-
-/** Registers the bounded labels supplied by the owning Auth module. */
-export function registerEmailDeliveryMetrics(
-  kinds: readonly EmailDeliveryKindLabel[],
-  backpressureKinds: readonly EmailDeliveryKindLabel[],
-): void {
-  emailOutboxBacklogMetric.setLabels(kinds);
-  for (const kind of kinds) {
-    emailDeliveryFailedTotal.inc({ kind }, 0);
-    emailOutboxUnrecognisedPayloadTotal.inc({ kind }, 0);
-  }
-  emailOutboxBackpressureMetric.registerKinds(backpressureKinds);
 }
 
 export interface DispatchAttemptUnresolvedSample {
@@ -543,8 +450,6 @@ export interface CompletedRequestMetrics {
   readonly operation: string;
   readonly statusCode: number;
   readonly outcome: string;
-  /** A bounded journey name supplied by the request-completion hook. */
-  readonly criticalJourney?: string;
   /** Total wall time in milliseconds; converted to seconds here. */
   readonly totalMs?: number;
   /** Downstream wait in milliseconds, already timed by the dispatcher. */
@@ -556,7 +461,6 @@ export interface CompletedRequestMetrics {
 export function recordCompletedRequest(request: CompletedRequestMetrics): void {
   const { operation, statusCode, outcome } = request;
   requestsTotal.inc({ operation, status: String(statusCode), outcome });
-  recordCriticalJourneyMetrics(request);
 
   const totalSeconds = secondsOf(request.totalMs ?? Number.NaN);
   if (totalSeconds !== undefined) {

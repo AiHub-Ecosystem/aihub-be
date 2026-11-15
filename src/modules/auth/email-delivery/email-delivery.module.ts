@@ -3,10 +3,6 @@ import type { ConfigType } from '@nestjs/config';
 
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
-import {
-  recordEmailOutboxBackpressureRefusal,
-  registerEmailDeliveryMetrics,
-} from '@/common/observability/metrics';
 import { hashOpaqueToken } from '@/common/security/opaque-token-issuer';
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
@@ -77,6 +73,10 @@ import {
   reportTerminalEmailDeliveryFailure,
   reportUnrecognisedEmailPayload,
 } from './infrastructure/email-outbox-poller.scheduler';
+import {
+  recordEmailOutboxBackpressureRefusal,
+  registerEmailDeliveryMetrics,
+} from './infrastructure/metrics/email-delivery-metrics';
 import { emailDeliveryWalSlot } from './infrastructure/outbox-store/email-delivery-wal.constants';
 import { missingQueuedEmailPayloadKeyVersions } from './infrastructure/outbox-store/email-outbox-key-retention';
 import { EmailOutboxWalConsumer } from './infrastructure/outbox-store/email-outbox-wal.consumer';
