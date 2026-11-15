@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "1.14.0"
+    "version": "1.15.0"
   },
   "servers": [
     {
@@ -782,7 +782,7 @@
     "/v1/ielts/writing/task1/grade": {
       "post": {
         "operationId": "writing.task1.grade",
-        "summary": "writing.task1.grade",
+        "summary": "Grade a Writing Task 1 essay",
         "x-required-scope": "writing.grade",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -1145,7 +1145,7 @@
     "/v1/ielts/writing/task2/grade": {
       "post": {
         "operationId": "writing.task2.grade",
-        "summary": "writing.task2.grade",
+        "summary": "Grade a Writing Task 2 essay",
         "x-required-scope": "writing.grade",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -1475,7 +1475,7 @@
     "/v1/ielts/speaking/grading": {
       "post": {
         "operationId": "speaking.grading",
-        "summary": "speaking.grading",
+        "summary": "Grade a Speaking response from an audio upload",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -2168,7 +2168,7 @@
     "/v1/ielts/speaking/grading-json": {
       "post": {
         "operationId": "speaking.grading-json",
-        "summary": "speaking.grading-json",
+        "summary": "Grade a Speaking response from a JSON request",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -3359,7 +3359,8 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v1/speaking/audio/uploads": {
@@ -4908,7 +4909,8 @@
           "503": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/organizations": {
@@ -5406,7 +5408,8 @@
           "500": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/organizations/{organization_id}/members": {
@@ -5640,7 +5643,8 @@
           "500": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/organizations/{organization_id}/invitations": {
@@ -6053,7 +6057,8 @@
           "500": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/organizations/{organization_id}/invitations/{invitation_id}": {
@@ -7147,7 +7152,8 @@
           "503": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/organizations/{organization_id}/api-keys/{api_key_id}": {
@@ -8318,7 +8324,8 @@
           "503": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/organizations/{organization_id}/audit-events": {
@@ -8737,7 +8744,8 @@
           "503": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     },
     "/v1/auth/change-password": {
@@ -10188,7 +10196,8 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v1/auth/web-sessions": {

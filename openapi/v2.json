@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.7.1"
+    "version": "2.8.0"
   },
   "servers": [
     {
@@ -782,7 +782,7 @@
     "/v2/ielts/writing/task1/grade": {
       "post": {
         "operationId": "writing.v2.task1.grade",
-        "summary": "writing.v2.task1.grade",
+        "summary": "Grade a Writing Task 1 essay",
         "x-required-scope": "writing.grade",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -1237,7 +1237,7 @@
     "/v2/ielts/writing/task2/grade": {
       "post": {
         "operationId": "writing.v2.task2.grade",
-        "summary": "writing.v2.task2.grade",
+        "summary": "Grade a Writing Task 2 essay",
         "x-required-scope": "writing.grade",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -1659,7 +1659,7 @@
     "/v2/ielts/writing/micro-exercises": {
       "post": {
         "operationId": "writing.v2.micro-exercises.create",
-        "summary": "writing.v2.micro-exercises.create",
+        "summary": "Create Writing micro-exercises",
         "x-required-scope": "writing.exercise",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -2767,7 +2767,7 @@
     "/v2/ielts/writing/long-writing-exercises": {
       "post": {
         "operationId": "writing.v2.long-writing-exercises.create",
-        "summary": "writing.v2.long-writing-exercises.create",
+        "summary": "Create a long Writing exercise",
         "x-required-scope": "writing.exercise",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -3140,7 +3140,7 @@
     "/v2/ielts/writing/micro-exercises/grade": {
       "post": {
         "operationId": "writing.v2.micro-exercises.grade",
-        "summary": "writing.v2.micro-exercises.grade",
+        "summary": "Grade a Writing micro-exercise",
         "x-required-scope": "writing.exercise",
         "x-identity-scope": "user",
         "x-idempotency": "required",
@@ -3453,7 +3453,7 @@
     "/v2/ielts/speaking/questions/grade": {
       "post": {
         "operationId": "speaking.v2.question-grading",
-        "summary": "speaking.v2.question-grading",
+        "summary": "Grade a Speaking question",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -4476,7 +4476,7 @@
     "/v2/ielts/speaking/parts/grade": {
       "post": {
         "operationId": "speaking.v2.part-grading",
-        "summary": "speaking.v2.part-grading",
+        "summary": "Grade a Speaking part",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -5412,7 +5412,7 @@
     "/v2/ielts/speaking/tests/grade": {
       "post": {
         "operationId": "speaking.v2.test-grading",
-        "summary": "speaking.v2.test-grading",
+        "summary": "Grade a Speaking test",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -6381,7 +6381,7 @@
     "/v2/ielts/speaking/responses/{response_id}": {
       "get": {
         "operationId": "speaking.v2.response-get",
-        "summary": "speaking.v2.response-get",
+        "summary": "Read a Speaking response result",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -7438,13 +7438,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/speaking/parts/{part_result_id}": {
       "get": {
         "operationId": "speaking.v2.part-get",
-        "summary": "speaking.v2.part-get",
+        "summary": "Read a Speaking part result",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -8417,13 +8418,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/speaking/tests/{test_id}": {
       "get": {
         "operationId": "speaking.v2.test-get",
-        "summary": "speaking.v2.test-get",
+        "summary": "Read a Speaking test result",
         "x-required-scope": "speaking.grade",
         "x-identity-scope": "user",
         "x-idempotency": "none",
@@ -9394,13 +9396,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/writing/task1/templates": {
       "get": {
         "operationId": "writing.v2.task1.templates",
-        "summary": "writing.v2.task1.templates",
+        "summary": "List Writing Task 1 templates",
         "security": [],
         "parameters": [
           {
@@ -9634,13 +9637,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/writing/task2/templates": {
       "get": {
         "operationId": "writing.v2.task2.templates",
-        "summary": "writing.v2.task2.templates",
+        "summary": "List Writing Task 2 templates",
         "security": [],
         "parameters": [
           {
@@ -9870,13 +9874,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/speaking/library": {
       "get": {
         "operationId": "speaking.v2.library",
-        "summary": "speaking.v2.library",
+        "summary": "List Speaking library topics",
         "security": [],
         "parameters": [
           {
@@ -10098,13 +10103,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/listening/tests": {
       "get": {
         "operationId": "listening.v2.tests",
-        "summary": "listening.v2.tests",
+        "summary": "List Listening tests",
         "security": [],
         "parameters": [
           {
@@ -10336,13 +10342,14 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/reading/tests": {
       "get": {
         "operationId": "reading.v2.tests",
-        "summary": "reading.v2.tests",
+        "summary": "List Reading tests",
         "security": [],
         "parameters": [
           {
@@ -10565,7 +10572,8 @@
             "description": "Same status as GET, without a response body."
           }
         },
-        "description": "Returns the same status and headers as GET without a response body."
+        "description": "Returns the same status and headers as GET without a response body.",
+        "x-internal": true
       }
     },
     "/v2/ielts/speaking/grading-jobs": {
@@ -11775,7 +11783,8 @@
           "503": {
             "description": "Same status as GET, without a response body."
           }
-        }
+        },
+        "x-internal": true
       }
     }
   }

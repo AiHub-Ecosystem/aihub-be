@@ -9,6 +9,18 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.8.0] - 2026-11-15
+
+### Changed
+
+- Every `/v2` operation `summary` is now a readable sentence, such as
+  `Grade a Writing Task 1 essay`, instead of an operation ID. This reverts the
+  ID-style summaries of the five practice content routes in 2.7.1 and renames
+  the ID-style summaries of the Writing and Speaking grading routes.
+- The generated `HEAD` operations carry `x-internal: true`, so Scalar hides
+  them. The routes still answer `HEAD` with the headers of `GET`. Paths,
+  parameters and responses are unchanged.
+
 ## [2.7.1] - 2026-11-15
 
 ### Changed
@@ -134,6 +146,17 @@ out.
   `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
+
+## [1.15.0] - 2026-11-15
+
+### Changed
+
+- The Writing and Speaking grading operations publish a readable sentence as
+  their `summary`, such as `Grade a Writing Task 1 essay`, instead of an
+  operation ID.
+- The generated `HEAD` operations carry `x-internal: true`, so Scalar hides
+  them. The routes still answer `HEAD` with the headers of `GET`. Paths,
+  parameters and responses are unchanged.
 
 ## [1.14.0] - 2026-11-14
 

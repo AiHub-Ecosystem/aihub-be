@@ -107,7 +107,7 @@ export type OperationDef = OperationDefBase &
 
 export const OPERATION_CATALOG = {
   'writing.task1.grade': {
-    openApi: { summary: 'writing.task1.grade' },
+    openApi: { summary: 'Grade a Writing Task 1 essay' },
     method: 'POST',
     path: '/v1/ielts/writing/task1/grade',
     requiredScope: 'writing.grade',
@@ -125,7 +125,7 @@ export const OPERATION_CATALOG = {
     responseContract: GradeResponseSchema,
   },
   'writing.task2.grade': {
-    openApi: { summary: 'writing.task2.grade' },
+    openApi: { summary: 'Grade a Writing Task 2 essay' },
     method: 'POST',
     path: '/v1/ielts/writing/task2/grade',
     requiredScope: 'writing.grade',
@@ -143,7 +143,7 @@ export const OPERATION_CATALOG = {
     responseContract: GradeResponseSchema,
   },
   'writing.v2.task1.grade': {
-    openApi: { summary: 'writing.v2.task1.grade' },
+    openApi: { summary: 'Grade a Writing Task 1 essay' },
     method: 'POST',
     path: '/v2/ielts/writing/task1/grade',
     requiredScope: 'writing.grade',
@@ -164,7 +164,7 @@ export const OPERATION_CATALOG = {
     responseContract: WritingV2GradeResponseSchema,
   },
   'writing.v2.task2.grade': {
-    openApi: { summary: 'writing.v2.task2.grade' },
+    openApi: { summary: 'Grade a Writing Task 2 essay' },
     method: 'POST',
     path: '/v2/ielts/writing/task2/grade',
     requiredScope: 'writing.grade',
@@ -182,7 +182,7 @@ export const OPERATION_CATALOG = {
     responseContract: WritingV2GradeResponseSchema,
   },
   'writing.v2.micro-exercises.create': {
-    openApi: { summary: 'writing.v2.micro-exercises.create' },
+    openApi: { summary: 'Create Writing micro-exercises' },
     method: 'POST',
     path: '/v2/ielts/writing/micro-exercises',
     requiredScope: 'writing.exercise',
@@ -201,7 +201,7 @@ export const OPERATION_CATALOG = {
     namedDownstreamErrors: ['INVALID_REQUEST'],
   },
   'writing.v2.long-writing-exercises.create': {
-    openApi: { summary: 'writing.v2.long-writing-exercises.create' },
+    openApi: { summary: 'Create a long Writing exercise' },
     method: 'POST',
     path: '/v2/ielts/writing/long-writing-exercises',
     requiredScope: 'writing.exercise',
@@ -220,7 +220,7 @@ export const OPERATION_CATALOG = {
     namedDownstreamErrors: ['INVALID_REQUEST'],
   },
   'writing.v2.micro-exercises.grade': {
-    openApi: { summary: 'writing.v2.micro-exercises.grade' },
+    openApi: { summary: 'Grade a Writing micro-exercise' },
     method: 'POST',
     path: '/v2/ielts/writing/micro-exercises/grade',
     requiredScope: 'writing.exercise',
@@ -239,7 +239,7 @@ export const OPERATION_CATALOG = {
     namedDownstreamErrors: ['INVALID_REQUEST'],
   },
   'speaking.grading': {
-    openApi: { summary: 'speaking.grading' },
+    openApi: { summary: 'Grade a Speaking response from an audio upload' },
     cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/ielts/speaking/grading',
@@ -264,7 +264,7 @@ export const OPERATION_CATALOG = {
     namedDownstreamErrors: ['AUDIO_UNREADABLE'],
   },
   'speaking.grading-json': {
-    openApi: { summary: 'speaking.grading-json' },
+    openApi: { summary: 'Grade a Speaking response from a JSON request' },
     cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v1/ielts/speaking/grading-json',
@@ -284,7 +284,7 @@ export const OPERATION_CATALOG = {
     responseContract: SpeakingGradeResponseSchema,
   },
   'speaking.v2.question-grading': {
-    openApi: { summary: 'speaking.v2.question-grading' },
+    openApi: { summary: 'Grade a Speaking question' },
     cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v2/ielts/speaking/questions/grade',
@@ -306,7 +306,7 @@ export const OPERATION_CATALOG = {
     namedDownstreamErrors: ['AUDIO_UNREADABLE'],
   },
   'speaking.v2.part-grading': {
-    openApi: { summary: 'speaking.v2.part-grading' },
+    openApi: { summary: 'Grade a Speaking part' },
     cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v2/ielts/speaking/parts/grade',
@@ -325,7 +325,7 @@ export const OPERATION_CATALOG = {
     responseContract: SpeakingV2PartResultSchema,
   },
   'speaking.v2.test-grading': {
-    openApi: { summary: 'speaking.v2.test-grading' },
+    openApi: { summary: 'Grade a Speaking test' },
     cacheControl: { value: 'no-store' },
     method: 'POST',
     path: '/v2/ielts/speaking/tests/grade',
@@ -344,7 +344,7 @@ export const OPERATION_CATALOG = {
     responseContract: SpeakingV2TestResultSchema,
   },
   'speaking.v2.response-get': {
-    openApi: { summary: 'speaking.v2.response-get' },
+    openApi: { summary: 'Read a Speaking response result' },
     cacheControl: { value: 'no-store' },
     method: 'GET',
     path: '/v2/ielts/speaking/responses/{response_id}',
@@ -362,7 +362,7 @@ export const OPERATION_CATALOG = {
     responseContract: SpeakingV2QuestionResultSchema,
   },
   'speaking.v2.part-get': {
-    openApi: { summary: 'speaking.v2.part-get' },
+    openApi: { summary: 'Read a Speaking part result' },
     cacheControl: { value: 'no-store' },
     method: 'GET',
     path: '/v2/ielts/speaking/parts/{part_result_id}',
@@ -380,7 +380,7 @@ export const OPERATION_CATALOG = {
     responseContract: SpeakingV2PartResultSchema,
   },
   'speaking.v2.test-get': {
-    openApi: { summary: 'speaking.v2.test-get' },
+    openApi: { summary: 'Read a Speaking test result' },
     cacheControl: { value: 'no-store' },
     method: 'GET',
     path: '/v2/ielts/speaking/tests/{test_id}',

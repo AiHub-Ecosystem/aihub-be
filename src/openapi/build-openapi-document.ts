@@ -80,6 +80,8 @@ function addHeadOperations(paths: Record<string, unknown>): void {
       summary: 'Retrieve response headers',
       description:
         'Returns the same status and headers as GET without a response body.',
+      // Scalar hides the entity from the reference; the route still answers HEAD.
+      'x-internal': true,
       responses,
     };
   }
