@@ -22,7 +22,7 @@ function seamPattern(file) {
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
 }
 
-/** @returns {{seams: {decorators: string[], publicApis: string[], exports: string[], sharedPrimitives: string[]}}} */
+/** @returns {{seams: {decorators: string[], publicApis: string[], exports: string[], nestedExports: string[], sharedPrimitives: string[]}}} */
 function discoverModuleSeams() {
   if (moduleDiscovery) return moduleDiscovery;
 
@@ -68,18 +68,11 @@ function discoverModuleSeams() {
     )
     .map(({ relative }) => relative);
 
-  /** @type {Map<string, Set<string>>} */
-  const exported = new Map();
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.parentPath !== modulesDirectory) continue;
-    const name = entry.name;
-    const source = sourcesByPath.get(
-      path.join(modulesDirectory, name, `${name}.module.ts`),
-    );
-    if (!source) continue;
+  /** @param {string} source @returns {Set<string>} */
+  const moduleExportSymbols = (source) => {
     const at = source.indexOf('exports:');
     const open = at < 0 ? -1 : source.indexOf('[', at);
-    if (open < 0) continue;
+    if (open < 0) return new Set();
     let depth = 0;
     let end = open;
     for (let index = open; index < source.length; index++) {
@@ -92,38 +85,74 @@ function discoverModuleSeams() {
         }
       }
     }
-    exported.set(
-      name,
-      new Set(
-        source
-          .slice(open + 1, end)
-          .split(',')
-          .map(
-            (part) =>
-              part
-                .trim()
-                .replace(/\/\/.*$/gm, '')
-                .trim()
-                .match(/^(?:type\s+)?([A-Za-z_$][\w$]*)/)?.[1],
-          )
-          .filter((symbol) => typeof symbol === 'string'),
-      ),
+    return new Set(
+      source
+        .slice(open + 1, end)
+        .split(',')
+        .map(
+          (part) =>
+            part
+              .trim()
+              .replace(/\/\/.*$/gm, '')
+              .trim()
+              .match(/^(?:type\s+)?([A-Za-z_$][\w$]*)/)?.[1],
+        )
+        .filter((symbol) => typeof symbol === 'string'),
     );
+  };
+
+  /** @type {Map<string, Set<string>>} */
+  const exported = new Map();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.parentPath !== modulesDirectory) continue;
+    const name = entry.name;
+    const source = sourcesByPath.get(
+      path.join(modulesDirectory, name, `${name}.module.ts`),
+    );
+    if (!source) continue;
+    exported.set(name, moduleExportSymbols(source));
   }
 
-  const exportsByFile = [];
-  for (const [module, symbols] of exported) {
-    for (const item of files) {
-      if (!item.parentPath.startsWith(path.join(modulesDirectory, module))) {
-        continue;
+  /** @type {Set<string>} */
+  const exportsByFile = new Set();
+  /** @type {Set<string>} */
+  const nestedExportsByFile = new Set();
+  for (const [module, initialSymbols] of exported) {
+    const moduleRoot = path.join(modulesDirectory, module);
+    const pendingExports = [{ symbols: initialSymbols, nested: false }];
+    /** @type {Set<string>} */
+    const expandedModules = new Set();
+    while (pendingExports.length > 0) {
+      const current = pendingExports.pop();
+      if (!current) continue;
+      for (const item of files) {
+        if (!item.parentPath.startsWith(moduleRoot)) continue;
+        const declaresExported = [...current.symbols].some((symbol) =>
+          new RegExp(
+            `^(?:export\\s+(?:abstract\\s+)?(?:class|const|function|interface|type|enum)\\s+${symbol}\\b|export\\s*\\{[^}]*\\b${symbol}\\b)`,
+            'm',
+          ).test(item.source),
+        );
+        if (!declaresExported) continue;
+        if (current.nested) {
+          if (!item.parentPath.split(/[\\/]/).includes('public')) {
+            nestedExportsByFile.add(item.relative);
+          }
+        } else {
+          exportsByFile.add(item.relative);
+        }
+        if (
+          !/@Module\s*\(/.test(item.source) ||
+          expandedModules.has(item.relative)
+        ) {
+          continue;
+        }
+        expandedModules.add(item.relative);
+        pendingExports.push({
+          symbols: moduleExportSymbols(item.source),
+          nested: true,
+        });
       }
-      const declaresExported = [...symbols].some((symbol) =>
-        new RegExp(
-          `^(?:export\\s+(?:abstract\\s+)?(?:class|const|function|interface|type|enum)\\s+${symbol}\\b|export\\s*\\{[^}]*\\b${symbol}\\b)`,
-          'm',
-        ).test(item.source),
-      );
-      if (declaresExported) exportsByFile.push(item.relative);
     }
   }
 
@@ -131,7 +160,8 @@ function discoverModuleSeams() {
     seams: {
       decorators,
       publicApis,
-      exports: exportsByFile,
+      exports: [...exportsByFile],
+      nestedExports: [...nestedExportsByFile],
       sharedPrimitives,
     },
   };
@@ -245,6 +275,14 @@ function publicModuleApiPaths() {
 function nestExportPaths() {
   return discoverModuleSeams().seams.exports;
 }
+/**
+ * Auth re-exports providers through AuthRuntimeModule; its external boundary
+ * accepts those nested Nest seams, while restricted internal edges stay narrow.
+ */
+/** @returns {string[]} */
+function nestedNestExportPaths() {
+  return discoverModuleSeams().seams.nestedExports;
+}
 
 /**
  * A presentation primitive that declares `module 'fastify'` extends the shared
@@ -332,6 +370,7 @@ function externalAuthRule() {
         '^src/modules/auth/(application/|.*/application/).*[.]port[.]ts$',
         '^src/modules/auth/public/',
         ...authFiles(nestExportPaths()),
+        ...authFiles(nestedNestExportPaths()),
         ...authFiles(nestDecoratorPaths()),
         ...authFiles(sharedPrimitivePaths()),
       ],

@@ -1008,6 +1008,7 @@ describe('external Auth import boundary fixtures', () => {
         "import '@/modules/auth/public/email-outbox';",
         "import '@/modules/auth/email-delivery/application/email-outbox.port';",
         "import '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';",
+        "import '@/modules/auth/web-sessions/presentation/web-session-client.guard';",
         'export const probe = true;',
         '',
       ].join('\n'),
