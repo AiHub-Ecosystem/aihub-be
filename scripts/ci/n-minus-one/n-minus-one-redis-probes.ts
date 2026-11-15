@@ -1,4 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { ERROR_CODES } from '@/common/errors/error-code';
 import Redis from 'ioredis';
@@ -7,7 +10,10 @@ import { Pool } from 'pg';
 import { verifyApiKeyCacheCompatibility } from './n-minus-one-api-key-cache-probe';
 import {
   CANDIDATE_PORT,
+  COMPAT_DIR,
+  DATABASE_URL,
   PREVIOUS_PORT,
+  ROOT,
   check,
   docker,
   expect2xx,
@@ -145,22 +151,40 @@ export async function verifyRedisCompatibility(input: {
 
   const issuerA = 'https://customer.compat.invalid';
   const identityA = identityKeys();
-  const configA = await request(
-    CANDIDATE_PORT,
-    'PUT',
-    `/v1/organizations/${organizationId}/identity-config`,
+  const publicKeysFile = join(COMPAT_DIR, `jwks-${organizationId}.json`);
+  writeFileSync(publicKeysFile, JSON.stringify(identityA.jwks));
+  const identitySetup = execFileSync(
+    process.execPath,
+    [
+      'scripts/cli/cli.mjs',
+      'identity:set',
+      '--target',
+      'production',
+      '--org',
+      organizationId,
+      '--issuer',
+      issuerA,
+      '--public-keys-file',
+      publicKeysFile,
+      '--allowed-algorithms',
+      'RS256',
+      '--max-assertion-ttl-seconds',
+      '300',
+    ],
     {
-      token: userToken,
-      body: {
-        issuer: issuerA,
-        jwks_url: null,
-        public_keys_jwks: identityA.jwks,
-        allowed_algorithms: ['RS256'],
-        max_assertion_ttl_seconds: 300,
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DATABASE_URL,
+        CONTROL_PLANE_DATABASE_URL: DATABASE_URL,
       },
     },
   );
-  expect2xx(configA, 'candidate JWKS write');
+  check(
+    identitySetup.trim() === organizationId,
+    'candidate operator JWKS provisioning returned an unexpected result',
+  );
   const configVersionResult = await database.query<{
     configVersion: string;
   }>(
