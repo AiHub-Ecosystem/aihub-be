@@ -314,7 +314,7 @@ export const PUBLIC_ROUTES = {
       description: 'This response must not be cached.',
     },
     openApi: {
-      summary: 'List Writing Task 1 templates',
+      summary: 'writing.v2.task1.templates',
       includeCorrelationId: false,
       parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
       successDescription:
@@ -337,7 +337,7 @@ export const PUBLIC_ROUTES = {
       description: 'This response must not be cached.',
     },
     openApi: {
-      summary: 'List Writing Task 2 templates',
+      summary: 'writing.v2.task2.templates',
       includeCorrelationId: false,
       parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
       successDescription:
@@ -360,7 +360,7 @@ export const PUBLIC_ROUTES = {
       description: 'This response must not be cached.',
     },
     openApi: {
-      summary: 'List Speaking library topics',
+      summary: 'speaking.v2.library',
       includeCorrelationId: false,
       parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
       successDescription:
@@ -383,7 +383,7 @@ export const PUBLIC_ROUTES = {
       description: 'This response must not be cached.',
     },
     openApi: {
-      summary: 'List Listening tests',
+      summary: 'listening.v2.tests',
       includeCorrelationId: false,
       parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
       successDescription: 'List of Listening tests with cursor pagination',
@@ -405,7 +405,7 @@ export const PUBLIC_ROUTES = {
       description: 'This response must not be cached.',
     },
     openApi: {
-      summary: 'List Reading tests',
+      summary: 'reading.v2.tests',
       includeCorrelationId: false,
       parameters: PRACTICE_CONTENT_QUERY_PARAMETERS,
       successDescription: 'List of Reading tests with cursor pagination',

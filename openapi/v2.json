@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.7.0"
+    "version": "2.8.0"
   },
   "servers": [
     {
@@ -9400,7 +9400,7 @@
     "/v2/ielts/writing/task1/templates": {
       "get": {
         "operationId": "writing.v2.task1.templates",
-        "summary": "List Writing Task 1 templates",
+        "summary": "writing.v2.task1.templates",
         "security": [],
         "parameters": [
           {
@@ -9640,7 +9640,7 @@
     "/v2/ielts/writing/task2/templates": {
       "get": {
         "operationId": "writing.v2.task2.templates",
-        "summary": "List Writing Task 2 templates",
+        "summary": "writing.v2.task2.templates",
         "security": [],
         "parameters": [
           {
@@ -9876,7 +9876,7 @@
     "/v2/ielts/speaking/library": {
       "get": {
         "operationId": "speaking.v2.library",
-        "summary": "List Speaking library topics",
+        "summary": "speaking.v2.library",
         "security": [],
         "parameters": [
           {
@@ -10104,7 +10104,7 @@
     "/v2/ielts/listening/tests": {
       "get": {
         "operationId": "listening.v2.tests",
-        "summary": "List Listening tests",
+        "summary": "listening.v2.tests",
         "security": [],
         "parameters": [
           {
@@ -10342,7 +10342,7 @@
     "/v2/ielts/reading/tests": {
       "get": {
         "operationId": "reading.v2.tests",
-        "summary": "List Reading tests",
+        "summary": "reading.v2.tests",
         "security": [],
         "parameters": [
           {

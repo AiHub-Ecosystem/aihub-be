@@ -9,6 +9,15 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.8.0] - 2026-11-15
+
+### Changed
+
+- The five `/v2` practice content routes publish their operation `summary` as
+  the operation ID (`writing.v2.task1.templates`, `writing.v2.task2.templates`,
+  `speaking.v2.library`, `listening.v2.tests`, `reading.v2.tests`), matching
+  the other `/v2` grading routes. Paths, parameters and responses are unchanged.
+
 ## [2.7.0] - 2026-11-14
 
 ### Added
