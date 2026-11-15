@@ -140,6 +140,12 @@
     },
     {
       "ruleId": "js/user-controlled-bypass",
+      "path": "src/modules/identity/api-keys/presentation/api-key.guard.ts",
+      "fingerprint": "75725a4e4b054d33:1",
+      "reason": "The request is marked BFF-sourced only after a constant-time match with the configured BFF secret; the forwarded visitor IP must also parse as an IP, and absent or invalid values are rejected."
+    },
+    {
+      "ruleId": "js/user-controlled-bypass",
       "path": "src/modules/identity/shared/presentation/user-identity.guard.ts",
       "fingerprint": "4c65496952cea22f:1",
       "reason": "Local auth bypass requires isLocalAuthBypassEnabled configuration and the local-development organization; a missing header alone grants nothing in production."
