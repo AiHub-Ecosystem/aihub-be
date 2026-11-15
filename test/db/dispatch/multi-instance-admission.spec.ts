@@ -365,6 +365,9 @@ describe('multi-instance grading admission', () => {
     // Ten first attempts allow one same-key repeat across the Organization.
     expect(retries.filter((answer) => answer?.status === 200)).toHaveLength(1);
     expect(retries.filter((answer) => answer?.status === 429)).toHaveLength(1);
+    const refusedRetry = retries.find((answer) => answer?.status === 429);
+    expect(refusedRetry?.body).toMatch(/"code"\s*:\s*"RATE_LIMITED"/);
+    expect(refusedRetry?.body).toContain('Organization retry budget exceeded');
     expect(downstreamCalls).toBe(10);
     await expect(
       pool.query<{ total: number }>(
