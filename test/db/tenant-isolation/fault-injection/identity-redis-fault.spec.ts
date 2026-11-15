@@ -138,7 +138,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
           expect.objectContaining({
             event: 'redis_degraded',
             seam: 'auth_failure_counter',
-            policy: 'brute-force protection is failing open until it recovers',
+            policy: 'API-key protection is failing open until it recovers',
           }),
         ]);
       } finally {
