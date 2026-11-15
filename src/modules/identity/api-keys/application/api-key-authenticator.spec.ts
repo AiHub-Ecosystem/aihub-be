@@ -84,6 +84,8 @@ class FakeCache implements ApiKeyCachePort {
 
 class FakeFailureCounter implements AuthFailureCounterPort {
   failures = 0;
+  sandboxLookups = 0;
+  sandboxLookupAllowed = true;
 
   get(_ip: string): Promise<number> {
     return Promise.resolve(this.failures);
@@ -93,6 +95,11 @@ class FakeFailureCounter implements AuthFailureCounterPort {
     this.failures += 1;
     return Promise.resolve(this.failures);
   }
+
+  consumeSandboxKeyLookup(_hashHex: string): Promise<boolean> {
+    this.sandboxLookups += 1;
+    return Promise.resolve(this.sandboxLookupAllowed);
+  }
 }
 
 function createAuthenticator(record: ApiKeyRecord | null = activeRecord): {
@@ -100,16 +107,25 @@ function createAuthenticator(record: ApiKeyRecord | null = activeRecord): {
   repository: FakeRepository;
   cache: FakeCache;
   failures: FakeFailureCounter;
+  environmentRefusals: string[];
 } {
   const repository = new FakeRepository(record);
   const cache = new FakeCache();
   const failures = new FakeFailureCounter();
+  const environmentRefusals: string[] = [];
 
   return {
-    authenticator: new ApiKeyAuthenticator(repository, cache, failures),
+    authenticator: new ApiKeyAuthenticator(
+      repository,
+      cache,
+      failures,
+      undefined,
+      (apiKeyId) => environmentRefusals.push(apiKeyId),
+    ),
     repository,
     cache,
     failures,
+    environmentRefusals,
   };
 }
 
@@ -167,12 +183,13 @@ describe('ApiKeyAuthenticator', () => {
     expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
-  it('rejects a key outside its environment without counting it as brute-force auth failure', async () => {
+  it('counts and logs a cross-environment key refusal as an auth failure', async () => {
     const before = await rejectedAuthCount();
-    const { authenticator, failures } = createAuthenticator({
-      ...activeRecord,
-      allowedEnvironments: ['production'],
-    });
+    const { authenticator, failures, environmentRefusals } =
+      createAuthenticator({
+        ...activeRecord,
+        allowedEnvironments: ['production'],
+      });
 
     const error = await authenticator
       .authenticate({
@@ -184,7 +201,8 @@ describe('ApiKeyAuthenticator', () => {
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe('ENVIRONMENT_NOT_ALLOWED');
-    expect(failures.failures).toBe(0);
+    expect(failures.failures).toBe(1);
+    expect(environmentRefusals).toEqual(['ak_backend']);
     expect(await rejectedAuthCount()).toBe(before + 1);
   });
 
@@ -192,7 +210,7 @@ describe('ApiKeyAuthenticator', () => {
     ['sandbox key on production', ['sandbox'], 'production'],
     ['production key on sandbox', ['production'], 'sandbox'],
   ])(
-    'rejects a %s without counting it as brute-force auth failure',
+    'rejects a %s and records the authentication failure',
     async (_label, allowedEnvironments, requestEnvironment) => {
       const { authenticator, failures } = createAuthenticator({
         ...activeRecord,
@@ -206,7 +224,7 @@ describe('ApiKeyAuthenticator', () => {
           clientIp: '203.0.113.10',
         }),
       ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_ALLOWED' });
-      expect(failures.failures).toBe(0);
+      expect(failures.failures).toBe(1);
     },
   );
 
@@ -456,7 +474,7 @@ describe('ApiKeyAuthenticator', () => {
   });
 
   it('reads Sandbox keys from Postgres on every request without reading or populating the key cache', async () => {
-    const { authenticator, repository, cache } = createAuthenticator({
+    const { authenticator, repository, cache, failures } = createAuthenticator({
       ...activeRecord,
       allowedEnvironments: ['sandbox'],
     });
@@ -482,6 +500,40 @@ describe('ApiKeyAuthenticator', () => {
     expect(cache.getCalls).toBe(0);
     expect(cache.setCalls).toBe(0);
     expect(cache.missCalls).toBe(0);
+    expect(failures.sandboxLookups).toBe(2);
+  });
+
+  it('does not let another Sandbox customer’s failures behind a NAT block this key', async () => {
+    const { authenticator, failures } = createAuthenticator({
+      ...activeRecord,
+      allowedEnvironments: ['sandbox'],
+    });
+    failures.failures = AUTH_FAILURE_LIMIT;
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'sandbox',
+        clientIp: '203.0.113.10',
+      }),
+    ).resolves.toMatchObject({ organizationId: 'org_acme' });
+  });
+
+  it('applies the Sandbox per-key limit before the control-plane lookup', async () => {
+    const { authenticator, repository, failures } = createAuthenticator({
+      ...activeRecord,
+      allowedEnvironments: ['sandbox'],
+    });
+    failures.sandboxLookupAllowed = false;
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'sandbox',
+        clientIp: '203.0.113.10',
+      }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    expect(repository.calls).toBe(0);
   });
 
   it('observes revocation on a forced-fresh grade authorization despite a cached positive record', async () => {

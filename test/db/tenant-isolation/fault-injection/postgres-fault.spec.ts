@@ -49,6 +49,7 @@ const noCache: ApiKeyCachePort = {
 const noFailures: AuthFailureCounterPort = {
   get: async () => 0,
   recordFailure: async () => 0,
+  consumeSandboxKeyLookup: async () => true,
 };
 
 const DATABASE_UNAVAILABLE_ANSWER = {

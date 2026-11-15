@@ -221,6 +221,7 @@ describe('RedisIdentityStore', () => {
     const authenticator = new ApiKeyAuthenticator(repository, store, {
       get: async () => 0,
       recordFailure: async () => 1,
+      consumeSandboxKeyLookup: async () => true,
     });
 
     await expect(
@@ -380,6 +381,30 @@ describe('RedisIdentityStore', () => {
     await expect(store.recordFailure('203.0.113.10')).resolves.toBe(2);
     await expect(store.get('203.0.113.10')).resolves.toBe(2);
     expect(redis.expirations.get('aihub:v1:authfail:203.0.113.10')).toBe(300);
+  });
+
+  it('caps Sandbox authentication lookups per key for one minute', async () => {
+    const redis = new FakeRedis();
+    const counter = new RedisAuthFailureCounter('', redis);
+    const hash = 'a'.repeat(64);
+
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      await expect(counter.consumeSandboxKeyLookup(hash)).resolves.toBe(true);
+    }
+    await expect(counter.consumeSandboxKeyLookup(hash)).resolves.toBe(false);
+    expect(redis.expirations.get(`aihub:v1:sandbox-key-auth:${hash}`)).toBe(60);
+  });
+
+  it('keeps Sandbox authentication available when Redis cannot set the lookup limit', async () => {
+    const redis = new FakeRedis();
+    redis.failTtlSetup = true;
+    const logger = new FakeLogger();
+    const counter = new RedisAuthFailureCounter('', redis, logger);
+
+    await expect(counter.consumeSandboxKeyLookup('a'.repeat(64))).resolves.toBe(
+      true,
+    );
+    expect(logger.warnings).toHaveLength(1);
   });
 
   it.each(['new', 'legacy'])(

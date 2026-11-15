@@ -227,7 +227,11 @@ beforeAll(async () => {
     ASSERTION_ISSUER,
     'customer-sandbox-key',
   );
-  signedAssertion = await signUserAssertion(identity, new Date());
+  signedAssertion = await signUserAssertion(
+    identity,
+    new Date(),
+    'aihub:sandbox',
+  );
 
   await controlPlane.query(
     `INSERT INTO organizations
@@ -263,10 +267,11 @@ beforeAll(async () => {
     );
   }
 
-  controlPlaneConfiguration = createAppConfiguration();
+  controlPlaneConfiguration = createAppConfiguration('production');
   controlPlaneConnectionConfiguration = createConnectionConfiguration(
     testDatabaseUrl(),
     controlPlaneReaderUrl.toString(),
+    'production',
   );
   const verifier: UserAccessTokenVerifierPort = {
     verify: async (token) =>
@@ -318,6 +323,7 @@ beforeAll(async () => {
   appConnectionConfiguration = createConnectionConfiguration(
     sandboxTestDatabaseUrl(),
     controlPlaneReaderUrl.toString(),
+    'sandbox',
   );
 
   downstreamCalls = 0;
@@ -373,7 +379,9 @@ beforeAll(async () => {
   await fastify.ready();
 });
 
-function createAppConfiguration(): MutableAppConfiguration {
+function createAppConfiguration(
+  scope: 'production' | 'sandbox' = 'sandbox',
+): MutableAppConfiguration {
   return {
     ...appConfig(),
     NODE_ENV: 'test',
@@ -381,7 +389,7 @@ function createAppConfiguration(): MutableAppConfiguration {
     AIHUB_STAGING_HOST: 'api.staging.test',
     AIHUB_DEVELOPMENT_HOST: 'api.development.test',
     AIHUB_SANDBOX_HOST: 'api.sandbox.test',
-    AIHUB_RUNTIME_DATABASE_SCOPE: 'sandbox',
+    AIHUB_RUNTIME_DATABASE_SCOPE: scope,
     AIHUB_SANDBOX_ORG_IDS: undefined,
   };
 }
@@ -389,9 +397,10 @@ function createAppConfiguration(): MutableAppConfiguration {
 function createConnectionConfiguration(
   databaseUrl: string,
   controlPlaneReadDatabaseUrl: string,
+  scope: 'production' | 'sandbox',
 ): MutableConnectionConfiguration {
   return {
-    databaseScope: 'sandbox',
+    databaseScope: scope,
     databasePoolerEnabled: false,
     poolConnections: {
       runtime: undefined,
@@ -400,7 +409,7 @@ function createConnectionConfiguration(
       'email-daily-budget': undefined,
     },
     databaseUrl,
-    controlPlaneDatabaseUrl: testDatabaseUrl(),
+    controlPlaneDatabaseUrl: databaseUrl,
     controlPlaneReadDatabaseUrl,
     emailDailyBudgetDatabaseUrl: testDatabaseUrl(),
     emailWalDatabaseUrl: testDatabaseUrl(),
@@ -500,6 +509,52 @@ function grade(
 }
 
 describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
+  it('refuses Sandbox management before touching either control-plane database', async () => {
+    const sandboxOrganization = await sandbox.query<{ count: number }>(
+      'SELECT count(*)::int AS count FROM organizations',
+    );
+    const controlPlaneOrganizations = await controlPlane.query<{
+      count: number;
+    }>('SELECT count(*)::int AS count FROM organizations');
+    expect(sandboxOrganization.rows[0]?.count).toBe(0);
+    expect(controlPlaneOrganizations.rows[0]?.count).toBe(1);
+
+    const [identityConfig, createOrganization] = await Promise.all([
+      app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: 'GET',
+          url: `/v1/organizations/${ORGANIZATION_ID}/identity-config`,
+          headers: { host: 'api.sandbox.test' },
+        }),
+      app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: 'POST',
+          url: '/v1/organizations',
+          headers: { host: 'api.sandbox.test' },
+          payload: { name: 'Unsupported Sandbox organization' },
+        }),
+    ]);
+
+    expect(identityConfig.statusCode).toBe(403);
+    expect(identityConfig.json()).toMatchObject({
+      error: { code: 'ENVIRONMENT_NOT_ALLOWED' },
+    });
+    expect(createOrganization.statusCode).toBe(403);
+    expect(createOrganization.json()).toMatchObject({
+      error: { code: 'ENVIRONMENT_NOT_ALLOWED' },
+    });
+    await expect(
+      sandbox.query('SELECT count(*)::int AS count FROM organizations'),
+    ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(
+      controlPlane.query('SELECT count(*)::int AS count FROM organizations'),
+    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+  });
+
   it('keeps the migrated demo key usable for assertion minting and Speaking', async () => {
     const demoOrganizationId = DEMO_ORGANIZATION_ID;
     const demoKey = generateApiKey(`ak_sandbox_demo_${ulid().toLowerCase()}`);

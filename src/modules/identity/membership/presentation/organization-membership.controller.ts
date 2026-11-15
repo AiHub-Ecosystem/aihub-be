@@ -36,6 +36,7 @@ import {
   ORGANIZATION_MEMBERSHIP,
   type OrganizationMembershipPort,
 } from '@/modules/identity/membership/application/organization-membership.port';
+import { SandboxManagementGuard } from '@/modules/identity/shared/presentation/sandbox-management.guard';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
@@ -47,7 +48,7 @@ import {
 } from './organization-roster-query';
 
 @Controller()
-@UseGuards(UserAccessJwtGuard)
+@UseGuards(SandboxManagementGuard, UserAccessJwtGuard)
 export class OrganizationMembershipController {
   constructor(
     @Inject(ORGANIZATION_MEMBERSHIP)

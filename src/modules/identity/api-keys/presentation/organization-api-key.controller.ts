@@ -24,6 +24,7 @@ import {
 import { UserAccessJwtGuard } from '@/modules/auth/public/web-sessions';
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import { SandboxManagementGuard } from '@/modules/identity/shared/presentation/sandbox-management.guard';
 import {
   CreateOrganizationApiKeyCommand,
   ListOrganizationApiKeysQuery,
@@ -36,7 +37,7 @@ import {
 } from './organization-api-key.response';
 
 @Controller()
-@UseGuards(UserAccessJwtGuard)
+@UseGuards(SandboxManagementGuard, UserAccessJwtGuard)
 export class OrganizationApiKeyController {
   constructor(
     private readonly commandBus: CommandBus,

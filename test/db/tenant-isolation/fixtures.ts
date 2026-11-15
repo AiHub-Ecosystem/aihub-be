@@ -75,13 +75,14 @@ export async function createTenantIdentity(
 export async function signUserAssertion(
   identity: TenantIdentity,
   now: Date = TEST_NOW,
+  audience = 'aihub',
 ): Promise<string> {
   const issuedAt = Math.floor(now.getTime() / 1_000) - 10;
   const expiresAt = issuedAt + 300;
   return new SignJWT({})
     .setProtectedHeader({ alg: 'RS256', kid: identity.keyId })
     .setIssuer(identity.issuer)
-    .setAudience('aihub')
+    .setAudience(audience)
     .setSubject(SHARED_SUBJECT)
     .setIssuedAt(issuedAt)
     .setExpirationTime(expiresAt)

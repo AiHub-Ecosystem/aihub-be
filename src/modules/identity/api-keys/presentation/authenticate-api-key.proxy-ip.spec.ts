@@ -41,6 +41,10 @@ class IpFailureCounter implements AuthFailureCounterPort {
     this.failures.set(ip, failures);
     return failures;
   }
+
+  async consumeSandboxKeyLookup(): Promise<boolean> {
+    return true;
+  }
 }
 
 describe('API-key failure budgets behind the trusted proxy', () => {

@@ -605,7 +605,11 @@ describe('organization API key rotation against PostgreSQL', () => {
     const authenticator = new ApiKeyAuthenticator(
       new PostgresApiKeyRepository(apiKeys),
       emptyCache(),
-      { get: async () => 0, recordFailure: async () => 1 },
+      {
+        get: async () => 0,
+        recordFailure: async () => 1,
+        consumeSandboxKeyLookup: async () => true,
+      },
     );
     await expect(
       authenticator.authenticate({
@@ -674,7 +678,11 @@ describe('organization API key rotation against PostgreSQL', () => {
     const authenticator = new ApiKeyAuthenticator(
       new PostgresApiKeyRepository(apiKeys),
       emptyCache(),
-      { get: async () => 0, recordFailure: async () => 1 },
+      {
+        get: async () => 0,
+        recordFailure: async () => 1,
+        consumeSandboxKeyLookup: async () => true,
+      },
     );
     await expect(
       authenticator.authenticate({
@@ -914,7 +922,11 @@ describe('organization API key revocation against PostgreSQL', () => {
         setMiss: async () => undefined,
         delete: async () => undefined,
       },
-      { get: async () => 0, recordFailure: async () => 1 },
+      {
+        get: async () => 0,
+        recordFailure: async () => 1,
+        consumeSandboxKeyLookup: async () => true,
+      },
     );
     await expect(
       authenticator.authenticate({

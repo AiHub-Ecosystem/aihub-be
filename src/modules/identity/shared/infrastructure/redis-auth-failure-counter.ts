@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type { AuthFailureCounterPort } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from '@/modules/identity/shared/application/sandbox-api-key-rate-limit';
 import {
   type RedisIdentityClient,
   connectRedisIdentityClient,
@@ -26,9 +27,9 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
     this.client = client ?? connectRedisIdentityClient(url);
     this.health = new RedisHealthReporter(
       'auth_failure_counter',
-      'API-key authentication failure counter',
+      'API-key authentication and lookup limits',
       logger,
-      'brute-force protection is failing open until it recovers',
+      'API-key protection is failing open until it recovers',
     );
   }
 
@@ -67,6 +68,25 @@ export class RedisAuthFailureCounter implements AuthFailureCounterPort {
     } catch {
       this.reportDegraded('write');
       return 0;
+    }
+  }
+
+  async consumeSandboxKeyLookup(hashHex: string): Promise<boolean> {
+    const client = this.client;
+    if (client === undefined) return true;
+
+    try {
+      const count = await incrementRedisCounterWithExpiry(
+        (script, numberOfKeys, ...args) =>
+          client.eval(script, numberOfKeys, ...args),
+        `aihub:v1:sandbox-key-auth:${hashHex}`,
+        60,
+      );
+      this.reportRecovered('write');
+      return count <= SANDBOX_API_KEY_RATE_LIMIT_RPM;
+    } catch {
+      this.reportDegraded('write');
+      return true;
     }
   }
 

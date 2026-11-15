@@ -161,11 +161,13 @@ function verifier(
     ...config,
     publicKeysJwks: null,
   },
+  runtimeScope: 'production' | 'sandbox' = 'production',
 ) {
   const subject = new UserAssertionVerifier(
     provider,
     new TestUserAssertionCrypto(),
     () => NOW,
+    runtimeScope,
   );
   return {
     verify: (input: {
@@ -193,6 +195,40 @@ describe('UserAssertionVerifier', () => {
       mode: 'signed_assertion',
     });
   });
+
+  it.each([
+    ['production', 'aihub', 'sandbox'],
+    ['sandbox', 'aihub:sandbox', 'production'],
+  ] as const)(
+    'accepts only the %s audience for that runtime scope',
+    async (scope, acceptedAudience, rejectedAudience) => {
+      const fixture = await rsaFixture();
+      const subject = verifier(
+        new FakeKeyProvider(fixture.jwks),
+        config,
+        scope,
+      );
+
+      await expect(
+        subject.verify({
+          signedAssertion: await token(fixture.privateKey, {
+            audience: acceptedAudience,
+            jti: 'jti-1',
+          }),
+          organizationId: 'org_acme',
+        }),
+      ).resolves.toMatchObject({ mode: 'signed_assertion' });
+      await expect(
+        subject.verify({
+          signedAssertion: await token(fixture.privateKey, {
+            audience: rejectedAudience,
+            jti: 'jti-2',
+          }),
+          organizationId: 'org_acme',
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    },
+  );
 
   it.each([
     ['missing jti', {}],

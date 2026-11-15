@@ -20,6 +20,7 @@ import {
   READ_ORGANIZATION_AUDIT_EVENTS,
   type ReadOrganizationAuditEventsPort,
 } from '@/modules/identity/audit/application/read-organization-audit-events.port';
+import { SandboxManagementGuard } from '@/modules/identity/shared/presentation/sandbox-management.guard';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
@@ -27,7 +28,7 @@ import { encodeAuditCursor } from './audit-cursor';
 import { parseOrganizationAuditQuery } from './audit-event-query';
 
 @Controller()
-@UseGuards(UserAccessJwtGuard)
+@UseGuards(SandboxManagementGuard, UserAccessJwtGuard)
 export class OrganizationAuditEventController {
   constructor(
     @Inject(READ_ORGANIZATION_AUDIT_EVENTS)

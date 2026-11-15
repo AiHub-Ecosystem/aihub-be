@@ -130,14 +130,11 @@ function validateClaims(
   payload: Readonly<Record<string, unknown>>,
   config: OrganizationIdentityConfig,
   nowSeconds: number,
-  allowSandboxAudience: boolean,
+  audience: string,
 ): { userId: string } {
   if (
     payload['iss'] !== config.issuer ||
-    (payload['aud'] !== 'aihub' &&
-      !(
-        allowSandboxAudience && payload['aud'] === SANDBOX_ASSERTION_AUDIENCE
-      )) ||
+    payload['aud'] !== audience ||
     !isEndUserId(payload['sub']) ||
     !isBoundedString(payload['jti']) ||
     !isIntegerSeconds(payload['iat']) ||
@@ -204,7 +201,7 @@ export class UserAssertionVerifier {
       verified,
       config,
       nowSeconds,
-      this.runtimeScope === 'sandbox',
+      this.runtimeScope === 'sandbox' ? SANDBOX_ASSERTION_AUDIENCE : 'aihub',
     );
     return {
       userId: claims.userId,

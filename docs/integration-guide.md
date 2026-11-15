@@ -477,8 +477,12 @@ matching key.
 
 Identity configuration is Organization-owned and applies to all of that
 Organization's environments. If using Signed User Assertions, use a compatible
-issuer and key set for staging and production; change the environment-specific
-API key and base URL, not the identity mode or issuer per request. If your
+issuer and key set across environments. Set the audience to `aihub` for
+Production and `aihub:sandbox` for Sandbox; select it alongside the
+environment-specific API key and base URL. Sandbox already accepts
+`aihub:sandbox`, so deploy this audience change to Sandbox callers before the
+server cutover. After the cutover, Sandbox rejects assertions with the old
+`aihub` audience, while Production continues to accept only `aihub`. If your
 environments cannot share one Organization-level identity configuration,
 contact your AIHUB administrator before onboarding.
 
@@ -533,14 +537,14 @@ apart (see
 
 ### Required claims
 
-| Claim | Value                  | Notes                                       |
-| ----- | ---------------------- | ------------------------------------------- |
-| `iss` | Your registered issuer | Must match exactly, character for character |
-| `aud` | `"aihub"`              | Constant                                    |
-| `sub` | Your user's id         | 1-256 visible ASCII characters, no spaces   |
-| `jti` | A fresh unique id      | One per assertion; a UUID is fine           |
-| `iat` | Issued-at, seconds     | Must not be more than 60s in the future     |
-| `exp` | Expiry, seconds        | Lifetime capped at 300s by default          |
+| Claim | Value                                                 | Notes                                       |
+| ----- | ----------------------------------------------------- | ------------------------------------------- |
+| `iss` | Your registered issuer                                | Must match exactly, character for character |
+| `aud` | `"aihub"` in Production; `"aihub:sandbox"` in Sandbox | Selects the receiving environment           |
+| `sub` | Your user's id                                        | 1-256 visible ASCII characters, no spaces   |
+| `jti` | A fresh unique id                                     | One per assertion; a UUID is fine           |
+| `iat` | Issued-at, seconds                                    | Must not be more than 60s in the future     |
+| `exp` | Expiry, seconds                                       | Lifetime capped at 300s by default          |
 
 Header must carry `alg` (`RS256` or `ES256`) and `kid` matching a key in your
 JWKS.
@@ -550,17 +554,21 @@ usable key in your JWKS.
 
 ### Node.js
 
+Each sample needs the deployment environment, set to `"production"` or
+`"sandbox"`. Node.js and Python take it as an argument; Java reads it from
+`AIHUB_ENVIRONMENT`.
+
 ```js
 import { SignJWT, importPKCS8 } from "jose";
 import { randomUUID } from "node:crypto";
 
 const privateKey = await importPKCS8(process.env.SIGNING_KEY_PEM, "RS256");
 
-export async function mintAssertion(userId) {
+export async function mintAssertion(userId, environment) {
   return new SignJWT({})
     .setProtectedHeader({ alg: "RS256", kid: "acme-2026-01" })
     .setIssuer("https://acme.edu")
-    .setAudience("aihub")
+    .setAudience(environment === "sandbox" ? "aihub:sandbox" : "aihub")
     .setSubject(userId)
     .setJti(randomUUID())
     .setIssuedAt()
@@ -574,12 +582,12 @@ export async function mintAssertion(userId) {
 ```python
 import time, uuid, jwt  # PyJWT
 
-def mint_assertion(user_id: str) -> str:
+def mint_assertion(user_id: str, environment: str) -> str:
     now = int(time.time())
     return jwt.encode(
         {
             "iss": "https://acme.edu",
-            "aud": "aihub",
+            "aud": "aihub:sandbox" if environment == "sandbox" else "aihub",
             "sub": user_id,
             "jti": str(uuid.uuid4()),
             "iat": now,
@@ -595,9 +603,10 @@ def mint_assertion(user_id: str) -> str:
 
 ```java
 // com.nimbusds:nimbus-jose-jwt
+String environment = System.getenv("AIHUB_ENVIRONMENT");
 var claims = new JWTClaimsSet.Builder()
     .issuer("https://acme.edu")
-    .audience("aihub")
+    .audience(environment.equals("sandbox") ? "aihub:sandbox" : "aihub")
     .subject(userId)
     .jwtID(UUID.randomUUID().toString())
     .issueTime(new Date())
@@ -656,8 +665,9 @@ It runs only on the sandbox hostname when the application process also has
 Sandbox runtime scope. Requests to the production hostname and requests handled
 by a Production process return `404` before API-key authentication. The mint
 route is limited to 5 requests per minute per key. Its assertions use the
-`aihub:sandbox` audience, which the identity verifier accepts only in Sandbox;
-customer assertions continue to use the `aihub` audience.
+`aihub:sandbox` audience, which the identity verifier accepts only in Sandbox.
+Customer assertions use the same environment-specific audiences, so a Sandbox
+assertion is rejected by Production.
 
 ### Minting
 

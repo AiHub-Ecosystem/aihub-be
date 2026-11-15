@@ -57,6 +57,7 @@ import {
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
+import { SandboxManagementGuard } from '@/modules/identity/shared/presentation/sandbox-management.guard';
 import { parseOrganizationInvitationQuery } from './organization-invitation-query';
 
 /**
@@ -107,7 +108,7 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
 }
 
 @Controller()
-@UseGuards(UserAccessJwtGuard)
+@UseGuards(SandboxManagementGuard, UserAccessJwtGuard)
 export class OrganizationInvitationController {
   constructor(
     @Inject(INVITE_ORGANIZATION_MEMBER)

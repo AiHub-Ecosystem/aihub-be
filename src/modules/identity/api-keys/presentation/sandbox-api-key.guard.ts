@@ -11,6 +11,7 @@ import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
+import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from '@/modules/identity/shared/application/sandbox-api-key-rate-limit';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   type RequestEnvironmentConfig,
@@ -21,7 +22,6 @@ import {
   type SandboxAssertionPolicyPort,
 } from '@/modules/identity/user-assertions/application/sandbox-assertion-policy.port';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
-import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from './sandbox-api-key-rate-limit';
 
 function notFound(): AppError {
   return new AppError({

@@ -87,6 +87,8 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     private readonly cache: ApiKeyCachePort,
     private readonly failureCounter: AuthFailureCounterPort,
     private readonly now: () => Date = () => new Date(),
+    private readonly logEnvironmentRefusal: (apiKeyId: string) => void = () =>
+      undefined,
   ) {}
 
   async authenticate(
@@ -97,6 +99,20 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     const hashHex = hashApiKey(credentials.value);
+    if (
+      credentials.environment === 'sandbox' &&
+      !(await this.failureCounter
+        .consumeSandboxKeyLookup(hashHex)
+        .catch(() => true))
+    ) {
+      recordRejected('rate_limit');
+      throw new AppError({
+        code: 'RATE_LIMITED',
+        message: 'Too many Sandbox API-key requests',
+        retryable: true,
+        retryAfterMs: 60_000,
+      });
+    }
     // Sandbox and the callers that ask for it (every grade, key validation)
     // read durable state, so revocation, suspension, and a scope change are
     // observed at the next request instead of waiting out the cache ceiling.
@@ -114,10 +130,15 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       // else's failed attempts â€” never pays this round trip and is never
       // gated by it, matching the "a legitimate request never touches this
       // counter" contract in the auth design.
-      const currentFailures = await this.getFailureCount(credentials.clientIp);
-      if (currentFailures >= AUTH_FAILURE_LIMIT) {
-        recordRejected('auth');
-        throw rateLimited();
+      // Sandbox uses its per-key lookup budget so unrelated NAT failures do not block valid keys.
+      if (credentials.environment !== 'sandbox') {
+        const currentFailures = await this.getFailureCount(
+          credentials.clientIp,
+        );
+        if (currentFailures >= AUTH_FAILURE_LIMIT) {
+          recordRejected('auth');
+          throw rateLimited();
+        }
       }
 
       record = forceFresh
@@ -143,7 +164,11 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     if (!record.allowedEnvironments.includes(credentials.environment)) {
+      await this.failureCounter
+        .recordFailure(credentials.clientIp)
+        .catch(() => 0);
       recordRejected('auth');
+      this.logEnvironmentRefusal(record.apiKeyId);
       throw environmentNotAllowed();
     }
     void this.repository

@@ -80,6 +80,7 @@ export function apiKeyCacheMissKey(hashHex: string): string {
 export interface AuthFailureCounterPort {
   get(ip: string): Promise<number>;
   recordFailure(ip: string): Promise<number>;
+  consumeSandboxKeyLookup(hashHex: string): Promise<boolean>;
 }
 
 export const AUTH_FAILURE_COUNTER = Symbol('AUTH_FAILURE_COUNTER');

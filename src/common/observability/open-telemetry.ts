@@ -34,6 +34,7 @@ if (exporterEndpoint !== undefined && exporterEndpoint.length > 0) {
   sdk = new NodeSDK({
     resource: defaultResource().merge(
       resourceFromAttributes({
+        'deployment.environment': configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
         'deployment.environment.name':
           configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
       }),

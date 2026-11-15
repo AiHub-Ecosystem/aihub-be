@@ -33,6 +33,7 @@ import {
   type SetOrganizationIdentityConfigPort,
 } from '@/modules/identity/organization-identity-configuration/application/set-organization-identity-config.port';
 import { invalidJwks } from '@/modules/identity/shared/application/jwks-errors';
+import { SandboxManagementGuard } from '@/modules/identity/shared/presentation/sandbox-management.guard';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
@@ -65,7 +66,7 @@ function configuredResponse(
 }
 
 @Controller()
-@UseGuards(UserAccessJwtGuard)
+@UseGuards(SandboxManagementGuard, UserAccessJwtGuard)
 export class OrganizationIdentityConfigController {
   constructor(
     @Inject(READ_ORGANIZATION_IDENTITY_CONFIG)

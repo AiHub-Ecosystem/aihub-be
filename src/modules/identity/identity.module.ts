@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 
@@ -160,6 +160,7 @@ import { OrganizationController } from './organizations/presentation/organizatio
 import { createIdentityTransactionRunner } from './shared/infrastructure/postgres-identity.client';
 import { RedisAuthFailureCounter } from './shared/infrastructure/redis-auth-failure-counter';
 import { RedisIdentityStore } from './shared/infrastructure/redis-identity.store';
+import { SandboxManagementGuard } from './shared/presentation/sandbox-management.guard';
 import { UserIdentityGuard } from './shared/presentation/user-identity.guard';
 import {
   JWKS_CACHE,
@@ -195,6 +196,7 @@ import { SandboxDemoKeyValidationController } from './user-assertions/presentati
 const IDENTITY_TRANSACTION_CLIENT = Symbol('IDENTITY_TRANSACTION_CLIENT');
 const API_KEY_NEAR_EXPIRY_NOTICES = Symbol('API_KEY_NEAR_EXPIRY_NOTICES');
 const IDENTITY_READ_CLIENT = Symbol('IDENTITY_READ_CLIENT');
+const apiKeyAuthenticatorLogger = new Logger('ApiKeyAuthenticator');
 type IdentityTransactionClient = ReturnType<
   typeof createIdentityTransactionRunner
 >;
@@ -220,6 +222,7 @@ type IdentityTransactionClient = ReturnType<
     OrganizationIdentityConfigController,
   ],
   providers: [
+    SandboxManagementGuard,
     CreateOrganizationApiKeyHandler,
     ListOrganizationApiKeysHandler,
     RevokeOrganizationApiKeyHandler,
@@ -551,7 +554,20 @@ type IdentityTransactionClient = ReturnType<
         repository: ApiKeyRepositoryPort,
         cache: ApiKeyCachePort,
         failureCounter: AuthFailureCounterPort,
-      ) => new ApiKeyAuthenticator(repository, cache, failureCounter),
+      ) =>
+        new ApiKeyAuthenticator(
+          repository,
+          cache,
+          failureCounter,
+          undefined,
+          (apiKeyId) =>
+            apiKeyAuthenticatorLogger.warn(
+              JSON.stringify({
+                event: 'api_key_environment_refused',
+                api_key_id: apiKeyId,
+              }),
+            ),
+        ),
       inject: [API_KEY_REPOSITORY, API_KEY_CACHE, AUTH_FAILURE_COUNTER],
     },
     {

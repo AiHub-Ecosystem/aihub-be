@@ -26,6 +26,7 @@ import {
   type AuthenticatedApiKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { isAiServiceScope } from '@/modules/identity/domain/api-key';
+import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from '@/modules/identity/shared/application/sandbox-api-key-rate-limit';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   type RequestEnvironmentConfig,
@@ -42,7 +43,6 @@ import {
   forbidden,
   forwardedVisitorIp,
 } from './authenticate-api-key';
-import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from './sandbox-api-key-rate-limit';
 
 function configurationError(diagnostic?: string): AppError {
   return new AppError({

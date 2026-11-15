@@ -40,6 +40,7 @@ import {
   RENAME_ORGANIZATION,
   type RenameOrganizationPort,
 } from '@/modules/identity/organizations/application/rename-organization.port';
+import { SandboxManagementGuard } from '@/modules/identity/shared/presentation/sandbox-management.guard';
 
 import { bearerRequestContext } from '@/modules/identity/shared/presentation/bearer-request-context';
 import { OrganizationIdPipe } from '@/modules/identity/shared/presentation/organization-id.pipe';
@@ -61,7 +62,7 @@ function decodeOrganizationReplay(value: unknown): CreatedOrganization {
 }
 
 @Controller()
-@UseGuards(UserAccessJwtGuard)
+@UseGuards(SandboxManagementGuard, UserAccessJwtGuard)
 export class OrganizationController {
   constructor(
     @Inject(CREATE_ORGANIZATION)
