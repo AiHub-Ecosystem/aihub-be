@@ -208,6 +208,7 @@ export async function seedGradingOrganization(
     readonly maxConcurrent: number;
     readonly monthlyQuota: number;
     readonly hardStop: boolean;
+    readonly assertionAudience?: 'aihub' | 'aihub:sandbox';
   },
 ): Promise<GradingOrganization> {
   const organizationId = `org_${options.label}_${ulid().toLowerCase()}`;
@@ -253,7 +254,11 @@ export async function seedGradingOrganization(
   return {
     organizationId,
     apiKey,
-    assertion: await signUserAssertion(identity, new Date()),
+    assertion: await signUserAssertion(
+      identity,
+      new Date(),
+      options.assertionAudience ?? 'aihub',
+    ),
   };
 }
 

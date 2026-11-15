@@ -211,6 +211,7 @@ describe('multi-instance grading admission', () => {
       maxConcurrent: 20,
       monthlyQuota: 20,
       hardStop: true,
+      assertionAudience: 'aihub:sandbox',
     });
     organizations.push(organization);
     await pool.query(
@@ -266,6 +267,7 @@ describe('multi-instance grading admission', () => {
       maxConcurrent: 20,
       monthlyQuota: 20,
       hardStop: true,
+      assertionAudience: 'aihub:sandbox',
     });
     organizations.push(globalOrganization);
     await pool.query(
