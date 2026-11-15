@@ -1,6 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 
-import { AppError } from '@/common/errors/app-error';
+import { authenticatedUserContextMissing } from '@/common/errors/auth-boundary-errors';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { isRequestId } from '@/common/request-context/request-id';
@@ -24,11 +24,7 @@ export function bearerRequestContext(
 ): BearerRequestContext {
   const userId = request.aihubUser?.userId;
   if (userId === undefined) {
-    throw new AppError({
-      code: 'INTERNAL_ERROR',
-      message: 'Authenticated user context is missing',
-      retryable: false,
-    });
+    throw authenticatedUserContextMissing();
   }
 
   const requestId = isRequestId(request.id) ? request.id : String(request.id);

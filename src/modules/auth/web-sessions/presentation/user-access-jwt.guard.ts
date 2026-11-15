@@ -8,6 +8,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '@/common/errors/app-error';
+import { authenticationConfigurationInvalid } from '@/common/errors/auth-boundary-errors';
 import {
   databaseUnavailableError,
   isPostgresUnavailable,
@@ -42,15 +43,6 @@ function requiredToken(): AppError {
     code: 'AUTH_USER_ACCESS_TOKEN_REQUIRED',
     message: 'User access token is required',
     retryable: false,
-  });
-}
-
-function configurationError(cause: unknown): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Authentication configuration is invalid',
-    retryable: false,
-    cause,
   });
 }
 
@@ -143,7 +135,7 @@ export class UserAccessJwtGuard implements CanActivate {
       if (isPostgresUnavailable(error)) {
         throw databaseUnavailableError(error);
       }
-      throw configurationError(error);
+      throw authenticationConfigurationInvalid({ cause: error });
     }
     if (status !== 'active') {
       challenge(context);

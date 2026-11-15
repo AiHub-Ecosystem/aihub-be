@@ -1,4 +1,5 @@
-import { AppError, internalError } from '@/common/errors/app-error';
+import { internalError } from '@/common/errors/app-error';
+import { clientSecretMissingOrInvalid } from '@/common/errors/auth-boundary-errors';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import {
   WEB_SESSION_CLIENT_SECRET,
@@ -37,11 +38,7 @@ function authenticateClient(
   }
   const presented = clientSecretFrom(request);
   if (presented === undefined || !constantTimeEquals(presented, expected)) {
-    throw new AppError({
-      code: 'UNAUTHORIZED',
-      message: 'Client secret is missing or invalid',
-      retryable: false,
-    });
+    throw clientSecretMissingOrInvalid();
   }
   request.aihubClientIpSource = 'customer_web_bff';
   return true;

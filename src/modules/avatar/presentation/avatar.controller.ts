@@ -13,7 +13,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { AppError } from '@/common/errors/app-error';
+import { authenticatedUserContextMissing } from '@/common/errors/auth-boundary-errors';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import {
@@ -35,11 +35,7 @@ function authenticatedUser(request: FastifyRequest): {
 } {
   const userId = request.aihubUser?.userId;
   if (userId === undefined) {
-    throw new AppError({
-      code: 'INTERNAL_ERROR',
-      message: 'Authenticated user context is missing',
-      retryable: false,
-    });
+    throw authenticatedUserContextMissing();
   }
   return { userId, requestId: String(request.id) };
 }

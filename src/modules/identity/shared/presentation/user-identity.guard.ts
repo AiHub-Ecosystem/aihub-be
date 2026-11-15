@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
-import { AppError } from '@/common/errors/app-error';
+import { authenticationConfigurationInvalid } from '@/common/errors/auth-boundary-errors';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { appConfig } from '@/config/runtime-configuration';
@@ -27,14 +27,6 @@ import {
 } from './request-environment';
 import { REQUIRED_OPERATION_METADATA } from './require-operation.decorator';
 import { resolveUserIdentity } from './resolve-user-identity';
-
-function configurationError(): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Authentication configuration is invalid',
-    retryable: false,
-  });
-}
 
 @Injectable()
 export class UserIdentityGuard implements CanActivate {
@@ -55,7 +47,7 @@ export class UserIdentityGuard implements CanActivate {
     );
 
     if (operationId === undefined || !(operationId in OPERATION_CATALOG)) {
-      throw configurationError();
+      throw authenticationConfigurationInvalid();
     }
 
     const authenticated = getAuthenticatedApiKey(request);

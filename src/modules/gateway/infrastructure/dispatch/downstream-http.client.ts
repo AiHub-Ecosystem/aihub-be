@@ -11,6 +11,7 @@ import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
 } from '@/common/observability/metrics';
+import { contractViolation } from '@/downstream/contract-violation';
 import type {
   DownstreamId,
   DownstreamMultipartBody,
@@ -278,12 +279,7 @@ export class DownstreamHttpClient {
         if (response.statusCode >= 400) {
           parsedBody = undefined;
         } else {
-          throw new AppError({
-            code: 'AI_SERVICE_CONTRACT_VIOLATION',
-            message: 'AI service returned an unexpected response shape',
-            retryable: false,
-            cause: error,
-          });
+          throw contractViolation(undefined, error);
         }
       }
 

@@ -1,4 +1,5 @@
-import { AppError, internalError } from '@/common/errors/app-error';
+import { internalError } from '@/common/errors/app-error';
+import { authenticatedUserContextMissing } from '@/common/errors/auth-boundary-errors';
 import type { FastifyRequest } from 'fastify';
 
 import { webSessionUnavailable } from '@/modules/auth/web-sessions/public';
@@ -12,11 +13,7 @@ export function requestIp(request: FastifyRequest): string {
 export function authenticatedUserId(request: FastifyRequest): string {
   const userId = request.aihubUser?.userId;
   if (userId === undefined) {
-    throw new AppError({
-      code: 'INTERNAL_ERROR',
-      message: 'Authenticated user context is missing',
-      retryable: false,
-    });
+    throw authenticatedUserContextMissing();
   }
   return userId;
 }

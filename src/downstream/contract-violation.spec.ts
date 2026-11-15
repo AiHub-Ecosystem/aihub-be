@@ -12,4 +12,12 @@ describe('contractViolation', () => {
     expect(error.diagnostic).toBe('missing data');
     expect((error.cause as Error).message).toBe('missing data');
   });
+
+  it('preserves an explicit cause without adding a diagnostic', () => {
+    const cause = new SyntaxError('invalid JSON');
+    const error = contractViolation(undefined, cause);
+
+    expect(error.cause).toBe(cause);
+    expect(error.diagnostic).toBeUndefined();
+  });
 });

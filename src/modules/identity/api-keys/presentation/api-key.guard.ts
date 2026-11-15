@@ -11,6 +11,10 @@ import { Reflector } from '@nestjs/core';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
+import {
+  authenticationConfigurationInvalid,
+  clientSecretMissingOrInvalid,
+} from '@/common/errors/auth-boundary-errors';
 import type { ClientIpSource } from '@/common/http/client-ip-source';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
@@ -44,15 +48,6 @@ import {
   forwardedVisitorIp,
 } from './authenticate-api-key';
 
-function configurationError(diagnostic?: string): AppError {
-  return new AppError({
-    code: 'INTERNAL_ERROR',
-    message: 'Authentication configuration is invalid',
-    retryable: false,
-    ...(diagnostic === undefined ? {} : { diagnostic }),
-  });
-}
-
 function visitorIpForBffRequest(
   request: AuthenticatedRequest,
   secret: WebSessionClientSecretPort | undefined,
@@ -62,20 +57,20 @@ function visitorIpForBffRequest(
 
   const expected = secret?.resolve();
   if (expected === undefined || expected.length === 0) {
-    throw configurationError('bff-client-secret-not-configured');
+    throw authenticationConfigurationInvalid({
+      diagnostic: 'bff-client-secret-not-configured',
+    });
   }
   if (!constantTimeEquals(presented, expected)) {
     recordRejected('auth');
-    throw new AppError({
-      code: 'UNAUTHORIZED',
-      message: 'Client secret is missing or invalid',
-      retryable: false,
-    });
+    throw clientSecretMissingOrInvalid();
   }
 
   const visitorIp = forwardedVisitorIp(request);
   if (visitorIp === undefined) {
-    throw configurationError('bff-visitor-ip-missing-or-invalid');
+    throw authenticationConfigurationInvalid({
+      diagnostic: 'bff-visitor-ip-missing-or-invalid',
+    });
   }
   request.aihubClientIpSource = 'customer_web_bff' satisfies ClientIpSource;
   return visitorIp;
@@ -124,7 +119,7 @@ export class ApiKeyGuard implements CanActivate {
       );
 
       if (operationId === undefined || !(operationId in OPERATION_CATALOG)) {
-        throw configurationError();
+        throw authenticationConfigurationInvalid();
       }
 
       const operation = OPERATION_CATALOG[operationId];
@@ -232,7 +227,9 @@ export class ApiKeyGuard implements CanActivate {
   }
 
   private requireConfiguration(): RequestEnvironmentConfig {
-    if (this.configuration === undefined) throw configurationError();
+    if (this.configuration === undefined) {
+      throw authenticationConfigurationInvalid();
+    }
     return this.configuration;
   }
 }

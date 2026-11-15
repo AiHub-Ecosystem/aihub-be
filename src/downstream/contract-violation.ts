@@ -5,12 +5,17 @@ import { AppError, internalError } from '@/common/errors/app-error';
  * breaks its contract. `reason` reaches the log as the diagnostic, so it names
  * fields and kinds of mismatch and never a value from the provider's response.
  */
-export function contractViolation(reason: string): AppError {
+export function contractViolation(
+  reason: string | undefined,
+  cause?: unknown,
+): AppError {
+  const errorCause =
+    cause === undefined && reason !== undefined ? internalError(reason) : cause;
   return new AppError({
     code: 'AI_SERVICE_CONTRACT_VIOLATION',
     message: 'AI service returned an unexpected response shape',
     retryable: false,
-    diagnostic: reason,
-    cause: internalError(reason),
+    ...(reason === undefined ? {} : { diagnostic: reason }),
+    ...(errorCause === undefined ? {} : { cause: errorCause }),
   });
 }
