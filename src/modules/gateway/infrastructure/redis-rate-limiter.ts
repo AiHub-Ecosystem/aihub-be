@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
 
+import { AppError } from '@/common/errors/app-error';
+import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import { incrementRedisCounterWithExpiry } from '@/common/redis/increment-with-expiry';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import {
@@ -23,21 +25,10 @@ export function rateLimitKey(keyId: string, windowIndex: number): string {
 
 export type RedisRateLimitClient = Pick<RedisGatewayClient, 'eval' | 'quit'>;
 
-interface FallbackWindow {
-  readonly windowStart: number;
-  count: number;
-}
-
 export class RedisRateLimiter implements RateLimiterPort {
   private readonly client: RedisRateLimitClient | undefined;
   private readonly now: () => number;
   private readonly random: () => number;
-  // ponytail: a process-local, single-instance approximation of the same
-  // per-minute limit, only ever consulted while Redis is unreachable. It is
-  // not shared across replicas and resets on restart — a coarse backstop so
-  // an outage means "capped at roughly the configured limit per instance",
-  // not "unlimited", never a substitute for the real distributed counter.
-  private readonly fallbackWindows = new Map<string, FallbackWindow>();
   private readonly health: RedisHealthReporter;
 
   constructor(
@@ -54,14 +45,15 @@ export class RedisRateLimiter implements RateLimiterPort {
       'rate_limit',
       'rate limiter',
       logger,
-      'falling back to a process-local ceiling until it recovers',
+      'refusing requests until it recovers',
     );
   }
 
   async consume(request: RateLimitRequest): Promise<RateLimitDecision> {
     const client = this.client;
     if (client === undefined) {
-      return this.consumeFallback(request);
+      this.health.reportDegraded();
+      throw this.unavailableError();
     }
 
     const window = rateLimitWindow(request.keyId, this.now());
@@ -76,7 +68,7 @@ export class RedisRateLimiter implements RateLimiterPort {
       );
     } catch (error) {
       this.health.reportDegraded(error);
-      return this.consumeFallback(request);
+      throw this.unavailableError(error);
     }
 
     this.health.reportRecovered();
@@ -87,32 +79,14 @@ export class RedisRateLimiter implements RateLimiterPort {
     await this.client?.quit().catch(() => undefined);
   }
 
-  private consumeFallback(request: RateLimitRequest): RateLimitDecision {
-    const window = rateLimitWindow(request.keyId, this.now());
-    const existing = this.fallbackWindows.get(request.keyId);
-    const count =
-      existing !== undefined && existing.windowStart === window.index
-        ? existing.count + 1
-        : 1;
-    this.fallbackWindows.set(request.keyId, {
-      windowStart: window.index,
-      count,
+  private unavailableError(cause?: unknown): AppError {
+    return new AppError({
+      code: 'REDIS_UNAVAILABLE',
+      message: 'Rate-limit controls are temporarily unavailable',
+      retryable: true,
+      retryAfterMs: outageRetryAfterMs(this.random),
+      diagnostic: 'rate-limit-redis-unavailable',
+      ...(cause === undefined ? {} : { cause }),
     });
-    this.pruneStaleFallbackWindows(window.index);
-
-    return rateLimitDecision(request.limit, count, window, this.random);
-  }
-
-  /**
-   * Keeps the fallback map from growing for the lifetime of an outage. Keys'
-   * windows are offset within the minute, so another key's current window can
-   * be one behind this one; only windows older than that are over.
-   */
-  private pruneStaleFallbackWindows(currentWindow: number): void {
-    for (const [keyId, window] of this.fallbackWindows) {
-      if (window.windowStart < currentWindow - 1) {
-        this.fallbackWindows.delete(keyId);
-      }
-    }
   }
 }

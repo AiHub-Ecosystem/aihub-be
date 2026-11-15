@@ -126,81 +126,41 @@ describe('RedisRateLimiter', () => {
 
       await expect(
         limiter.consume({ keyId: 'ak_backend', limit: 10 }),
-      ).resolves.toMatchObject({ allowed: true });
+      ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
 
       expect(redis.values.get(bucket)).toBe(kind === 'legacy' ? 4 : undefined);
       expect(redis.expirations.has(bucket)).toBe(false);
     },
   );
 
-  it('allows traffic when Redis is unavailable so authorization remains independent', async () => {
+  it('fails closed when Redis is not configured', async () => {
     await expect(
-      new RedisRateLimiter('', new FailingRedis()).consume({
-        keyId: 'ak_backend',
-        limit: 1,
-      }),
-    ).resolves.toMatchObject({ allowed: true });
-  });
-
-  it('still applies a ceiling in-process once Redis is unavailable', async () => {
-    const limiter = new RedisRateLimiter(
-      '',
-      new FailingRedis(),
-      () => NOW,
-      undefined,
-      noJitter,
-    );
-
-    await expect(
-      limiter.consume({ keyId: 'ak_backend', limit: 2 }),
-    ).resolves.toMatchObject({ allowed: true });
-    await expect(
-      limiter.consume({ keyId: 'ak_backend', limit: 2 }),
-    ).resolves.toMatchObject({ allowed: true });
-    await expect(
-      limiter.consume({ keyId: 'ak_backend', limit: 2 }),
-    ).resolves.toMatchObject({
-      allowed: false,
-      retryAfterMs: WINDOW.resetInMs,
+      new RedisRateLimiter(
+        '',
+        undefined,
+        () => NOW,
+        undefined,
+        noJitter,
+      ).consume({ keyId: 'ak_backend', limit: 1 }),
+    ).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryable: true,
     });
   });
 
-  it('keeps the process-local ceiling separate per API key', async () => {
-    const limiter = new RedisRateLimiter('', new FailingRedis(), () => NOW);
-
-    await limiter.consume({ keyId: 'ak_one', limit: 1 });
-
+  it('fails closed when Redis is unreachable', async () => {
     await expect(
-      limiter.consume({ keyId: 'ak_two', limit: 1 }),
-    ).resolves.toMatchObject({ allowed: true });
-  });
-
-  it('keeps each key counted in-process when keys are in different windows', async () => {
-    // Keys' windows are offset, so at one instant two keys can be in
-    // consecutive windows; neither may reset the other's count.
-    const MID_MINUTE = 1_782_000_030_000;
-    const keys = Array.from({ length: 50 }, (_, key) => `ak_${key}`);
-    const index = (keyId: string): number =>
-      rateLimitWindow(keyId, MID_MINUTE).index;
-    const behind = keys.find((keyId) => index(keyId) < index('ak_backend'));
-    const ahead = keys.find((keyId) => index(keyId) > index('ak_backend'));
-    const other = behind ?? ahead;
-    expect(other).toBeDefined();
-    const limiter = new RedisRateLimiter(
-      '',
-      new FailingRedis(),
-      () => MID_MINUTE,
-    );
-
-    await limiter.consume({ keyId: 'ak_backend', limit: 1 });
-    await limiter.consume({ keyId: String(other), limit: 1 });
-
-    await expect(
-      limiter.consume({ keyId: 'ak_backend', limit: 1 }),
-    ).resolves.toMatchObject({ allowed: false });
-    await expect(
-      limiter.consume({ keyId: String(other), limit: 1 }),
-    ).resolves.toMatchObject({ allowed: false });
+      new RedisRateLimiter(
+        '',
+        new FailingRedis(),
+        () => NOW,
+        undefined,
+        noJitter,
+      ).consume({ keyId: 'ak_backend', limit: 1 }),
+    ).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      retryable: true,
+    });
   });
 
   it('warns once when Redis becomes unreachable, not on every request', async () => {
@@ -212,9 +172,11 @@ describe('RedisRateLimiter', () => {
       logger,
     );
 
-    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
-    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
-    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    for (let index = 0; index < 3; index += 1) {
+      await expect(
+        limiter.consume({ keyId: 'ak_backend', limit: 10 }),
+      ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
+    }
 
     expect(logger.warnings).toHaveLength(1);
   });
@@ -234,15 +196,21 @@ describe('RedisRateLimiter', () => {
       logger,
     );
 
-    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 10 }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
     expect(logger.warnings).toHaveLength(1);
 
     current = redis;
-    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 10 }),
+    ).resolves.toMatchObject({ allowed: true });
     expect(logger.logs).toHaveLength(1);
 
     current = failing;
-    await limiter.consume({ keyId: 'ak_backend', limit: 10 });
+    await expect(
+      limiter.consume({ keyId: 'ak_backend', limit: 10 }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
     expect(logger.warnings).toHaveLength(2);
   });
 });

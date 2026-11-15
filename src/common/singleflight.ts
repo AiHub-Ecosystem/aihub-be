@@ -1,3 +1,4 @@
+// One matching loader per process; K processes can run up to K loaders.
 export class Singleflight<K, V> {
   private readonly flights = new Map<K, Promise<V>>();
 

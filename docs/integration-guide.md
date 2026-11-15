@@ -746,10 +746,13 @@ Customer Organization uses its individual allowance. AIHUB returns
 `429 QUOTA_EXCEEDED` at either limit until the next UTC month. During normal
 operation, Sandbox also limits each key to 5 requests per minute, each
 Organization to one concurrent grading request, and the whole Environment to
-ten concurrent grading requests. These Redis-backed burst controls follow the
-existing degraded-mode policy; the durable monthly allowance remains the hard
-spending boundary. If the durable Sandbox quota store is unavailable, the
-gateway fails closed.
+ten concurrent grading requests. The per-key rate limit is shared across AIHUB
+instances, so adding replicas does not multiply its 5 RPM allowance. Under the
+accepted multi-instance policy, if Redis cannot verify a rate-limit decision,
+AIHUB fails closed with `503 REDIS_UNAVAILABLE`; implementation and
+two-process verification are tracked in [#1571](https://github.com/AiHub-Ecosystem/aihub-be/issues/1571).
+The durable monthly allowance remains the hard spending boundary. If the
+durable Sandbox quota store is unavailable, the gateway fails closed.
 
 Each downstream Writing dispatch consumes one allowance, including a downstream
 error or timeout. A completed request replayed with the same `Idempotency-Key`
@@ -1487,11 +1490,16 @@ product can accept another grading run.
   free to the customer but use the Sandbox dispatch allowance.
 - Keys are scoped to your organization and the operation. Records are kept for
   24 hours.
-- Same-key retries share an Organization-wide rolling 60-second budget: at most
-  10% of first attempts, with a minimum of one retry. If the budget is spent,
-  AIHUB returns `429 RATE_LIMITED` with `Retry-After`; wait before repeating.
+- Same-key retries share an Organization-wide rolling 60-second budget across
+  all API keys and AIHUB instances: at most 10% of first attempts, with a
+  minimum of one retry. If the budget is spent, AIHUB returns `429 RATE_LIMITED`
+  with `Retry-After`; wait before repeating.
 - A replayed response carries the header `Idempotent-Replay: true` and
   `timing.downstream_ms: 0`.
+
+Internal XFetch cache reads coalesce identical in-flight loads within one AIHUB
+process. With K processes, up to K loaders for the same cache key may run at
+once; this cache behavior does not change grading or quota limits.
 
 At exhausted Production monthly quota, an admitted retry with the same key and
 body still returns a completed Writing result without grading, billing, or
@@ -1667,7 +1675,7 @@ separate table below.
 |  503 | `EMAIL_DELIVERY_BACKLOGGED`     | The email queue is too far behind to deliver a link before it expires (registration, resend, password recovery, invitation)                | Retry after `retry_after_ms`; the refused request created nothing and used no rate limit                           |
 |  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement                                                    | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |
 |  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode                                                  | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
-|  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely check graded admission or acquire/release its concurrency permit                                                    | Retry after `retry_after_ms`; AIHUB does not admit using local counters                                            |
+|  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely enforce a rate limit, check graded admission, or acquire/release its concurrency permit                             | Retry after `retry_after_ms`; AIHUB does not admit using local rate-limit counters                                 |
 |  503 | `RETRY_BUDGET_UNAVAILABLE`      | Reserved: AIHUB no longer returns this code; a Redis failure while checking graded admission is `REDIS_UNAVAILABLE`                        | If you handle it, treat it as `REDIS_UNAVAILABLE`: retry after `retry_after_ms`                                    |
 |  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                                                                | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable              |
 |  500 | `INTERNAL_ERROR`                | Fault on our side                                                                                                                          | Retry later; report with the `request_id`                                                                          |
@@ -1720,6 +1728,8 @@ RateLimit: "per-key";r=41;t=13
 ```
 
 - `q` is your key's limit per window, and `w` the window: 60 seconds.
+- This per-key limit is shared across AIHUB application instances; adding
+  replicas does not multiply `q`.
 - `r` is how many requests the key has left in the current window, and `t` the
   whole seconds until that window resets.
 - Each key has a fixed one-minute window that starts at its own offset into the
@@ -1731,6 +1741,11 @@ RateLimit: "per-key";r=41;t=13
 - A `429` for the same-key retry budget or the monthly quota also carries
   these fields. There `r` can be above `0`, because that refusal was not about
   the per-minute rate.
+
+The accepted multi-instance policy is to fail closed when Redis cannot verify
+a rate-limit decision: AIHUB returns retryable `503 REDIS_UNAVAILABLE` with
+`Retry-After` instead of applying a separate per-instance rate limit. The
+implementation and two-process verification are tracked in [#1571](https://github.com/AiHub-Ecosystem/aihub-be/issues/1571).
 
 The fields describe your own key only. They are advisory while the draft is not
 final, so the syntax may change with a later revision. Use them to slow down

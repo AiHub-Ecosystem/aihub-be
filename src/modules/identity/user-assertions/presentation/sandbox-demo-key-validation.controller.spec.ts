@@ -10,6 +10,7 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { SandboxDemoKeyValidationResponseSchema } from '@/contracts/sandbox/demo-key-validation';
 import { WEB_SESSION_CLIENT_SECRET } from '@/modules/auth/web-sessions/application/web-session-client-secret.port';
+import { RATE_LIMITER } from '@/modules/gateway/application/rate-limiter.port';
 import { SANDBOX_DISPATCH_BUDGET } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/public/sandbox-dispatch-budget';
 import {
@@ -99,6 +100,8 @@ describe('Sandbox demo key validation HTTP flow', () => {
       .useValue({ resolve: () => 'test-bff-client-secret' })
       .overrideProvider(API_KEY_AUTHENTICATOR)
       .useValue(authenticator)
+      .overrideProvider(RATE_LIMITER)
+      .useValue({ consume: async () => ({ allowed: true }) })
       .overrideProvider(SANDBOX_DISPATCH_BUDGET)
       .useValue(budget)
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
