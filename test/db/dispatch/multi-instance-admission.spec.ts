@@ -60,6 +60,29 @@ function grade(
   });
 }
 
+async function startTwoWorkers(
+  options: Parameters<typeof startWorker>[0],
+): Promise<[TestWorker, TestWorker]> {
+  const results = await Promise.allSettled([
+    startWorker(options),
+    startWorker(options),
+  ]);
+  const started = results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  );
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    await Promise.allSettled(started.map((worker) => worker.stop()));
+    throw failure.reason;
+  }
+
+  const [first, second] = results;
+  if (first?.status !== 'fulfilled' || second?.status !== 'fulfilled') {
+    throw new Error('Both test workers must start successfully');
+  }
+  return [first.value, second.value];
+}
+
 describe('multi-instance grading admission', () => {
   const pool = createTestPool();
   const sandboxPool = createSandboxTestPool();
@@ -118,10 +141,10 @@ describe('multi-instance grading admission', () => {
       downstreamCalls += 1;
     });
     const downstreamUrl = await listen(provider);
-    workers = await Promise.all([
-      startWorker({ downstreamUrl }),
-      startWorker({ downstreamUrl }),
-    ]);
+    const [firstWorker, secondWorker] = await startTwoWorkers({
+      downstreamUrl,
+    });
+    workers = [firstWorker, secondWorker];
     const organization = await seedGradingOrganization(pool, {
       label: 'multi_instance',
       maxConcurrent: 20,
@@ -137,8 +160,8 @@ describe('multi-instance grading admission', () => {
     const limited = await Promise.all(
       Array.from({ length: 8 }, (_, index) =>
         grade(
-          workers[index % workers.length]!,
-          organization!,
+          index % 2 === 0 ? firstWorker : secondWorker,
+          organization,
           `shared-limit-${ulid()}`,
         ),
       ),
@@ -153,9 +176,9 @@ describe('multi-instance grading admission', () => {
       [organization.organizationId],
     );
     const replayKey = `shared-replay-${ulid()}`;
-    const first = await grade(workers[0]!, organization, replayKey);
-    const replay = await grade(workers[1]!, organization, replayKey);
-    const refusedReplay = await grade(workers[0]!, organization, replayKey);
+    const first = await grade(firstWorker, organization, replayKey);
+    const replay = await grade(secondWorker, organization, replayKey);
+    const refusedReplay = await grade(firstWorker, organization, replayKey);
 
     expect(first?.status).toBe(200);
     expect(replay?.status).toBe(200);
@@ -177,10 +200,11 @@ describe('multi-instance grading admission', () => {
       downstreamCalls += 1;
     });
     const downstreamUrl = await listen(provider);
-    workers = await Promise.all([
-      startWorker({ downstreamUrl, runtimeDatabaseScope: 'sandbox' }),
-      startWorker({ downstreamUrl, runtimeDatabaseScope: 'sandbox' }),
-    ]);
+    const [firstWorker, secondWorker] = await startTwoWorkers({
+      downstreamUrl,
+      runtimeDatabaseScope: 'sandbox',
+    });
+    workers = [firstWorker, secondWorker];
 
     const organization = await seedGradingOrganization(pool, {
       label: 'sandbox_multi_org',
@@ -199,10 +223,12 @@ describe('multi-instance grading admission', () => {
       [organization.organizationId],
     );
 
-    const contenders = Array.from({ length: 4 }, (_, index) => ({
-      worker: workers[index % workers.length]!,
-      key: `sandbox-org-cap-${ulid()}`,
-    }));
+    const contenders = [
+      firstWorker,
+      secondWorker,
+      firstWorker,
+      secondWorker,
+    ].map((worker) => ({ worker, key: `sandbox-org-cap-${ulid()}` }));
     const responses = await Promise.all(
       contenders.map(({ worker, key }) =>
         grade(worker, organization, key, 'api.sandbox.test'),
@@ -211,19 +237,21 @@ describe('multi-instance grading admission', () => {
     const admittedIndex = responses.findIndex(
       (answer) => answer?.status === 200,
     );
-    expect(admittedIndex).toBeGreaterThanOrEqual(0);
+    if (admittedIndex < 0) throw new Error('No Sandbox request was admitted');
+    const admitted = contenders[admittedIndex];
+    if (admitted === undefined)
+      throw new Error('Admitted request was not found');
     expect(responses.filter((answer) => answer?.status === 429)).toHaveLength(
       3,
     );
     expect(downstreamCalls).toBe(1);
 
-    const replay = await grade(
-      workers[1 - (admittedIndex % 2)]!,
-      organization,
-      contenders[admittedIndex]!.key,
-      'api.sandbox.test',
-    );
-    expect(replay?.status).toBe(200);
+    const retries = await Promise.all([
+      grade(firstWorker, organization, admitted.key, 'api.sandbox.test'),
+      grade(secondWorker, organization, admitted.key, 'api.sandbox.test'),
+    ]);
+    expect(retries.filter((answer) => answer?.status === 200)).toHaveLength(1);
+    expect(retries.filter((answer) => answer?.status === 429)).toHaveLength(1);
     expect(downstreamCalls).toBe(1);
     await expect(
       sandboxPool.query<{ total: number }>(
@@ -254,7 +282,10 @@ describe('multi-instance grading admission', () => {
        WHERE month_start = date_trunc('month', now() AT TIME ZONE 'UTC')::date
          AND status = 'reserved'`,
     );
-    const seedCount = 499 - reserved.rows[0]!.count;
+    const reservedCount = reserved.rows[0];
+    if (reservedCount === undefined)
+      throw new Error('Reservation count is missing');
+    const seedCount = 499 - reservedCount.count;
     expect(seedCount).toBeGreaterThanOrEqual(0);
     sandboxSeedPrefix = `multi-seed-${ulid()}-`;
     await sandboxPool.query(
@@ -290,5 +321,57 @@ describe('multi-instance grading admission', () => {
            AND status = 'reserved'`,
       ),
     ).resolves.toMatchObject({ rows: [{ total: 500 }] });
+  }, 120_000);
+
+  it('shares the Organization retry allowance across two app processes', async () => {
+    let downstreamCalls = 0;
+    provider = createProvider(() => {
+      downstreamCalls += 1;
+    });
+    const downstreamUrl = await listen(provider);
+    const [firstWorker, secondWorker] = await startTwoWorkers({
+      downstreamUrl,
+    });
+    workers = [firstWorker, secondWorker];
+
+    const organization = await seedGradingOrganization(pool, {
+      label: 'multi_instance_retry_budget',
+      maxConcurrent: 20,
+      monthlyQuota: 20,
+      hardStop: true,
+    });
+    organizations.push(organization);
+
+    const firstAttempts = await Promise.all(
+      Array.from({ length: 9 }, (_, index) =>
+        grade(
+          index % 2 === 0 ? firstWorker : secondWorker,
+          organization,
+          `retry-budget-${ulid()}`,
+        ),
+      ),
+    );
+    expect(firstAttempts.every((answer) => answer?.status === 200)).toBe(true);
+    expect(downstreamCalls).toBe(9);
+
+    const retryKey = `retry-budget-replay-${ulid()}`;
+    const original = await grade(firstWorker, organization, retryKey);
+    expect(original?.status).toBe(200);
+    const retries = await Promise.all([
+      grade(firstWorker, organization, retryKey),
+      grade(secondWorker, organization, retryKey),
+    ]);
+
+    // Ten first attempts allow one same-key repeat across the Organization.
+    expect(retries.filter((answer) => answer?.status === 200)).toHaveLength(1);
+    expect(retries.filter((answer) => answer?.status === 429)).toHaveLength(1);
+    expect(downstreamCalls).toBe(10);
+    await expect(
+      pool.query<{ total: number }>(
+        `SELECT COALESCE(sum(billable_requests), 0)::int AS total
+         FROM usage_records WHERE organization_id = $1`,
+        [organization.organizationId],
+      ),
+    ).resolves.toMatchObject({ rows: [{ total: 10 }] });
   }, 120_000);
 });
