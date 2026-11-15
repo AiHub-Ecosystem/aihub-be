@@ -323,6 +323,7 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         );
         return new EmailOutboxWalConsumer({
           enabled: connections.emailWalDatabaseUrl !== undefined,
+          applicationScope: connections.databaseScope,
           replicationUrl: connections.emailWalDatabaseUrl ?? '',
           store,
           scheduler,

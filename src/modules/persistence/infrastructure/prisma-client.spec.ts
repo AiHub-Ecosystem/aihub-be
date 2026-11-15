@@ -25,6 +25,7 @@ describe('createSharedPrismaClients', () => {
 
   it('opens one client per distinct database when the roles differ', async () => {
     const clients = createSharedPrismaClients({
+      databaseScope: 'sandbox',
       databaseUrl: distinct,
       controlPlaneDatabaseUrl: equal,
       controlPlaneReadDatabaseUrl: equal,
@@ -33,6 +34,12 @@ describe('createSharedPrismaClients', () => {
 
     expect(clients.runtime).not.toBe(clients.controlPlane);
     expect(clients.controlPlane).toBe(clients.controlPlaneRead);
+    expect(clients.runtime.pool.options.application_name).toBe(
+      'aihub-be:sandbox:runtime',
+    );
+    expect(clients.controlPlane.pool.options.application_name).toBe(
+      'aihub-be:sandbox:control-plane',
+    );
 
     await clients.close();
   });
@@ -202,7 +209,11 @@ describe('createPrismaClient', () => {
 
 describe('createOperatorPrismaClient', () => {
   it('uses long-running limits instead of the request-path pool limits', async () => {
-    const client = createOperatorPrismaClient('runtime', 'postgres://operator');
+    const client = createOperatorPrismaClient(
+      'runtime',
+      'postgres://operator',
+      'aihub-be:production:operator:runtime',
+    );
 
     try {
       expect(client.pool.options.statement_timeout).toBe(300_000);
@@ -211,6 +222,9 @@ describe('createOperatorPrismaClient', () => {
         60_000,
       );
       expect(client.pool.options.max).toBe(1);
+      expect(client.pool.options.application_name).toBe(
+        'aihub-be:production:operator:runtime',
+      );
     } finally {
       await client.close();
     }

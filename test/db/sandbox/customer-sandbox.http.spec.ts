@@ -391,6 +391,7 @@ function createConnectionConfiguration(
   controlPlaneReadDatabaseUrl: string,
 ): MutableConnectionConfiguration {
   return {
+    databaseScope: 'sandbox',
     databasePoolerEnabled: false,
     poolConnections: {
       runtime: undefined,

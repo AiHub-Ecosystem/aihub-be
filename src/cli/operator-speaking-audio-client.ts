@@ -1,3 +1,5 @@
+import { operatorPostgresApplicationName } from './operator-postgres-application-name';
+
 export async function createOperatorSpeakingAudioClient(databaseUrl: string) {
   const [
     { createOperatorPrismaClient },
@@ -8,7 +10,11 @@ export async function createOperatorSpeakingAudioClient(databaseUrl: string) {
       '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository'
     ),
   ]);
-  const holder = createOperatorPrismaClient('runtime', databaseUrl);
+  const holder = createOperatorPrismaClient(
+    'runtime',
+    databaseUrl,
+    operatorPostgresApplicationName('runtime'),
+  );
   return Object.assign(
     new PostgresSpeakingAudioUploadRepository(holder.prisma),
     { close: () => holder.close() },

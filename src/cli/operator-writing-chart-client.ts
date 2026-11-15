@@ -1,3 +1,5 @@
+import { operatorPostgresApplicationName } from './operator-postgres-application-name';
+
 export async function createOperatorWritingChartClient(databaseUrl: string) {
   const [prismaModule, repositoryModule] = await Promise.all([
     import('@/modules/persistence/infrastructure/prisma-client'),
@@ -8,6 +10,7 @@ export async function createOperatorWritingChartClient(databaseUrl: string) {
   const holder = prismaModule.createOperatorPrismaClient(
     'runtime',
     databaseUrl,
+    operatorPostgresApplicationName('runtime'),
   );
   return Object.assign(
     new repositoryModule.PostgresWritingChartUploadRepository(holder.prisma),
@@ -24,7 +27,11 @@ export async function createOperatorWritingChartRevocationAuditClient(
       '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository'
     ),
   ]);
-  const holder = createOperatorPrismaClient('runtime', databaseUrl);
+  const holder = createOperatorPrismaClient(
+    'runtime',
+    databaseUrl,
+    operatorPostgresApplicationName('runtime'),
+  );
   return Object.assign(
     new repositoryModule.PostgresWritingChartRevocationAuditRepository(
       holder.prisma,

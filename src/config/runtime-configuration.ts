@@ -481,6 +481,7 @@ export function parseIdentityCacheHmacKey(
 }
 
 export interface RuntimeConnectionConfiguration {
+  readonly databaseScope: 'production' | 'sandbox';
   readonly databaseUrl: string | undefined;
   readonly databasePoolerEnabled: boolean;
   readonly poolConnections: {
@@ -861,6 +862,7 @@ export function getRuntimeSecretEnvironment(): Readonly<
 export function getRuntimeConnectionConfiguration(): RuntimeConnectionConfiguration {
   const configuration = getRuntimeConfiguration();
   return Object.freeze({
+    databaseScope: configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
     databaseUrl: configuration.DATABASE_URL,
     databasePoolerEnabled: configuration.AIHUB_DATABASE_POOLER_ENABLED,
     poolConnections: {

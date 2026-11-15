@@ -689,6 +689,9 @@ async function databasePool({ controlPlane = false } = {}) {
   const pg = /** @type {typeof import('pg')} */ (await import('pg'));
   return new pg.Pool({
     connectionString: databaseUrl,
+    application_name: operatorApplicationName(
+      controlPlane ? 'control-plane' : 'runtime',
+    ),
     max: 1,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 30_000,
@@ -696,6 +699,17 @@ async function databasePool({ controlPlane = false } = {}) {
     lock_timeout: 30_000,
     idle_in_transaction_session_timeout: 60_000,
   });
+}
+
+/** @param {string} role */
+function operatorApplicationName(role) {
+  const configuredScope =
+    process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production';
+  const scope =
+    configuredScope === 'production' || configuredScope === 'sandbox'
+      ? configuredScope
+      : 'unknown';
+  return 'aihub-be:' + scope + ':operator:' + role;
 }
 
 /** @param {CliOptions} options */
@@ -748,14 +762,15 @@ function controlPlaneDatabaseUrl() {
   return process.env.DATABASE_URL ?? '';
 }
 
-/** @param {string} databaseUrl @returns {Promise<OperatorDatabaseTarget>} */
-async function inspectOperatorDatabase(databaseUrl) {
+/** @param {string} databaseUrl @param {string} role @returns {Promise<OperatorDatabaseTarget>} */
+async function inspectOperatorDatabase(databaseUrl, role) {
   if (databaseUrl.trim().length === 0) {
     throw new Error('operator database URL is required');
   }
   const pg = /** @type {typeof import('pg')} */ (await import('pg'));
   const pool = new pg.Pool({
     connectionString: databaseUrl,
+    application_name: operatorApplicationName(role + ':inspect'),
     max: 1,
     connectionTimeoutMillis: 1_000,
     idleTimeoutMillis: 1_000,
@@ -809,7 +824,10 @@ async function prepareOperatorMutation(command, options) {
   const databaseUrl = CONTROL_PLANE_COMMANDS.has(command)
     ? controlPlaneDatabaseUrl()
     : (process.env.DATABASE_URL ?? '');
-  const target = await inspectOperatorDatabase(databaseUrl);
+  const target = await inspectOperatorDatabase(
+    databaseUrl,
+    CONTROL_PLANE_COMMANDS.has(command) ? 'control-plane' : 'runtime',
+  );
   requireTargetConfirmation(target.deployment, requestedTarget);
   if (CONTROL_PLANE_COMMANDS.has(command)) {
     requireControlPlaneDatabase(target.deployment);

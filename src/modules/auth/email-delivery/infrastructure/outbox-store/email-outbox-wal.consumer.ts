@@ -39,6 +39,7 @@ interface WalCheckpoint {
 
 export interface EmailOutboxWalConsumerOptions {
   readonly enabled?: boolean;
+  readonly applicationScope: 'production' | 'sandbox';
   readonly replicationUrl: string;
   readonly store: EmailDispatchStorePort;
   readonly scheduler: EmailOutboxPollerScheduler;
@@ -85,7 +86,8 @@ export class EmailOutboxWalConsumer
       const clientConfig: ReplicationClientConfig = {
         connectionString: this.options.replicationUrl,
         replication: 'database',
-        application_name: 'aihub-email-delivery-wal',
+        application_name:
+          'aihub-be:' + this.options.applicationScope + ':email-wal',
         keepAlive: true,
       };
       const service = new LogicalReplicationService(clientConfig, {

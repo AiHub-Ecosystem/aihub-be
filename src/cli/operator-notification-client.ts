@@ -1,5 +1,7 @@
 import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
 
+import { operatorPostgresApplicationName } from './operator-postgres-application-name';
+
 export async function createOperatorNotificationClient(databaseUrl: string) {
   const [
     { createIdentityTransactionRunner },
@@ -36,7 +38,11 @@ export async function createOperatorNotificationClient(databaseUrl: string) {
   ]);
   const emailOutboxSecrets =
     createCliRuntimeSecretProvider().getSnapshot().emailOutbox;
-  const holder = createOperatorPrismaClient('control-plane', databaseUrl);
+  const holder = createOperatorPrismaClient(
+    'control-plane',
+    databaseUrl,
+    operatorPostgresApplicationName('control-plane'),
+  );
   const dispatchStore = new PostgresEmailDispatchStore(holder.prisma);
   const emailOutbox = new EmailOutbox(
     new PostgresEmailDeliveryRequestRepository(emailOutboxSecrets),

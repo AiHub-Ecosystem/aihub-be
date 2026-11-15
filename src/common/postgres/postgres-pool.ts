@@ -447,10 +447,14 @@ export function postgresPoolOptions(
   max: number,
   timeouts: PostgresTimeouts = REQUEST_POSTGRES_TIMEOUTS,
   transactionPoolerEnabled = false,
+  applicationName?: string,
 ): PoolConfig {
   const statementTimeoutMs = timeouts.statement_timeout;
   return {
     connectionString: databaseUrl,
+    ...(applicationName === undefined
+      ? {}
+      : { application_name: applicationName }),
     max,
     connectionTimeoutMillis: POSTGRES_ACQUISITION_TIMEOUT_MS,
     idleTimeoutMillis: 30_000,

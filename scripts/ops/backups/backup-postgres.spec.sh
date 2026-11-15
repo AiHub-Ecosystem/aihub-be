@@ -30,13 +30,17 @@ cat >"$bin_dir/flock" <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
-# docker exec <container> sh -c '...pg_dump...' sh <db>  -> a fake dump on stdout
+# docker exec <container> sh -c '...pg_dump...' sh <db> <application_name>
+# -> a fake dump on stdout
 # docker run --rm --env-file <f> -v <dir>:/data:ro <image> copyto <src> <dst>
 cat >"$bin_dir/docker" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
   exec)
-    db="${*: -1}"
+    [[ "$5" == *'export PGAPPNAME="$2"'* ]] || exit 10
+    db="${*: -2:1}"
+    app_name="${*: -1}"
+    printf '%s %s\n' "$db" "$app_name" >>"$FAKE_DUMP_APPNAMES"
     [[ "$db" == "${FAKE_DUMP_FAIL:-none}" ]] && { echo "pg_dump: database \"$db\" is broken" >&2; exit 1; }
     printf 'PGDMP fake dump of %s\n' "$db"
     ;;
@@ -83,6 +87,7 @@ run_backup() {
     AIHUB_BACKUP_AGE_BIN="$bin_dir/age" \
     AIHUB_BACKUP_LOG="$test_root/backup.log" \
     FAKE_RCLONE_CALLS="$test_root/rclone.calls" \
+    FAKE_DUMP_APPNAMES="$test_root/dump-appnames" \
     "$@" bash "$script"
 }
 
@@ -91,6 +96,8 @@ run_backup() {
 run_backup env AIHUB_BACKUP_NOW=2026-10-18T13:47:00Z
 assert_contains "$test_root/backup.log" 'backup aihub exit=0'
 assert_contains "$test_root/backup.log" 'backup aihub_sandbox exit=0'
+assert_contains "$test_root/dump-appnames" 'aihub aihub-be:production:backup'
+assert_contains "$test_root/dump-appnames" 'aihub_sandbox aihub-be:sandbox:backup'
 assert_contains "$test_root/backup.log" 'prefixes=hourly object=aihub-20261018T134700Z.dump.age'
 assert_contains "$test_root/rclone.calls" '/data/aihub-20261018T134700Z.dump.age -> r2:aihub-backups/hourly/aihub/aihub-20261018T134700Z.dump.age'
 assert_contains "$test_root/rclone.calls" 'hourly/aihub_sandbox/aihub_sandbox-20261018T134700Z.dump.age'

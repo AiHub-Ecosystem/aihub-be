@@ -60,6 +60,7 @@ const POOL_CONNECTIONS: Readonly<Record<PostgresPoolName, number>> = {
 
 interface PrismaClientOptions {
   readonly max?: number;
+  readonly applicationName?: string;
   readonly transactionPoolerEnabled?: boolean;
   readonly poolConnections?: Partial<Record<PostgresConnectionRole, number>>;
   readonly roles?: readonly PostgresConnectionRole[];
@@ -93,6 +94,7 @@ export function createPrismaClient(
       connections,
       options.timeouts,
       options.transactionPoolerEnabled,
+      options.applicationName,
     ),
     roles,
   );
@@ -123,9 +125,11 @@ export function createPrismaClient(
 export function createOperatorPrismaClient(
   role: PostgresPoolName,
   databaseUrl: string,
+  applicationName: string,
 ): PrismaClientHolder {
   return createPrismaClient(role, databaseUrl, {
     max: 1,
+    applicationName,
     timeouts: OPERATOR_POSTGRES_TIMEOUTS,
   });
 }
@@ -222,6 +226,9 @@ export function createSharedPrismaClients(
 
     const created = createPrismaClient(role, databaseUrl, {
       roles: rolesFor(databaseUrl),
+      ...(urls.databaseScope === undefined
+        ? {}
+        : { applicationName: `aihub-be:${urls.databaseScope}:${role}` }),
       ...(urls.poolConnections === undefined
         ? {}
         : { poolConnections: urls.poolConnections }),

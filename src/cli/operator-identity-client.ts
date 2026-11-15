@@ -1,3 +1,5 @@
+import { operatorPostgresApplicationName } from './operator-postgres-application-name';
+
 export async function createOperatorIdentityClient(databaseUrl: string) {
   const [{ createIdentityTransactionRunner }, { createOperatorPrismaClient }] =
     await Promise.all([
@@ -6,7 +8,11 @@ export async function createOperatorIdentityClient(databaseUrl: string) {
       ),
       import('@/modules/persistence/infrastructure/prisma-client'),
     ]);
-  const holder = createOperatorPrismaClient('control-plane', databaseUrl);
+  const holder = createOperatorPrismaClient(
+    'control-plane',
+    databaseUrl,
+    operatorPostgresApplicationName('control-plane'),
+  );
   return Object.assign(createIdentityTransactionRunner(holder.prisma), {
     close: () => holder.close(),
   });

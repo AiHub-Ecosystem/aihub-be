@@ -1,3 +1,5 @@
+import { operatorPostgresApplicationName } from './operator-postgres-application-name';
+
 export async function createOperatorRegistrationClient(databaseUrl: string) {
   const [
     { createOperatorPrismaClient },
@@ -8,7 +10,11 @@ export async function createOperatorRegistrationClient(databaseUrl: string) {
       '@/modules/auth/accounts/infrastructure/postgres-pending-registration-records'
     ),
   ]);
-  const holder = createOperatorPrismaClient('control-plane', databaseUrl);
+  const holder = createOperatorPrismaClient(
+    'control-plane',
+    databaseUrl,
+    operatorPostgresApplicationName('control-plane'),
+  );
   return Object.assign(new PostgresPendingRegistrationRecords(holder.prisma), {
     close: () => holder.close(),
   });

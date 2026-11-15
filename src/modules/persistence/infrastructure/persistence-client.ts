@@ -25,6 +25,7 @@ export interface PrismaPool {
   readonly totalCount: number;
   readonly idleCount: number;
   readonly options: {
+    readonly application_name?: string | undefined;
     readonly max?: number | null | undefined;
     readonly connectionTimeoutMillis?: number | null | undefined;
     readonly idleTimeoutMillis?: number | null | undefined;
@@ -64,6 +65,7 @@ export interface PrismaClientHolder {
 }
 
 export interface PrismaClientUrls {
+  readonly databaseScope?: 'production' | 'sandbox';
   readonly poolConnections?: Partial<Record<PostgresConnectionRole, number>>;
   readonly databasePoolerEnabled?: boolean;
   readonly databaseUrl: string | undefined;

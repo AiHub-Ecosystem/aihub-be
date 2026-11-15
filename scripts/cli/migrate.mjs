@@ -79,6 +79,10 @@ async function pendingMigrations(pool) {
 
 const pool = new Pool({
   connectionString: databaseUrl,
+  application_name:
+    'aihub-be:' +
+    (process.env.AIHUB_RUNTIME_DATABASE_SCOPE?.trim() || 'production') +
+    ':migration',
   max: 1,
   connectionTimeoutMillis: 1_000,
   idleTimeoutMillis: 30_000,

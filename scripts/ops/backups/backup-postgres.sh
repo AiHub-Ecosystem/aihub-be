@@ -143,12 +143,16 @@ fi
 
 status=0
 for db in "${DATABASES[@]}"; do
+  scope=production
+  [[ "$db" == aihub_sandbox ]] && scope=sandbox
+  application_name="aihub-be:$scope:backup"
   name="$db-$stamp.dump.age"
   file="$tmp_dir/$name"
   started=$SECONDS
   timeout --signal=TERM --kill-after=10s "${STEP_TIMEOUT_SECONDS}s" \
     sudo -n docker exec "$DB_CONTAINER" \
-    sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$1"' sh "$db" \
+    sh -c 'export PGAPPNAME="$2"
+      exec pg_dump -Fc -U "$POSTGRES_USER" -d "$1"' sh "$db" "$application_name" \
     2>"$tmp_dir/dump.err" |
     "$age_bin" -r "$AGE_RECIPIENT" -o "$file" 2>"$tmp_dir/age.err"
   codes=("${PIPESTATUS[@]}")
