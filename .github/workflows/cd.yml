@@ -43,7 +43,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PULL_TOKEN }}
+          password: ${{ secrets.GHCR_READ_TOKEN }}
 
       - name: Install Cosign 2.4.1
         shell: bash
@@ -84,7 +84,9 @@ jobs:
           # See docs/operations/image-sbom-provenance.md.
           printf '### SBOM provenance\n\n`%s@%s`\n\nSPDX SBOM is attached as a signed attestation to this digest (CI artifact `image-sbom`, SPDX JSON). Verify from a workstation with:\n\n```bash\ncosign verify-attestation %s@%s --type spdxjson --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '\''https://github.com/%s/.github/workflows/ci.yml@refs/heads/main'\''\n```\n' \
             "$image_name" "$actual" "$image_name" "$actual" "$REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
+          # #366: deploy the digest CI published. The tag was only read to find
+          # it, and a tag overwritten after this check must not decide what runs.
+          echo "image=${image_name}@${actual}" >> "$GITHUB_OUTPUT"
 
       # #1839: enforce cryptographic verification of image signature and SPDX SBOM attestation
       # before any deployment steps or host contact.
@@ -329,14 +331,14 @@ jobs:
         shell: bash
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
           set -eu
           test -n "$GHCR_USERNAME"
-          test -n "$GHCR_PULL_TOKEN"
+          test -n "$GHCR_READ_TOKEN"
           target=aihub-deploy
           ssh_opts=(-F "$AIHUB_SSH_CONFIG")
-          printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
+          printf '%s' "$GHCR_READ_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
             "sudo -n docker login ghcr.io --username '$GHCR_USERNAME' --password-stdin"
 
       - name: Pause and drain AIHUB host jobs
@@ -499,7 +501,7 @@ jobs:
           target=aihub-deploy
           ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          target_sha_arg="$(printf '%q' "${AIHUB_IMAGE##*:}")"
+          target_sha_arg="$(printf '%q' "$DEPLOY_SHA")"
           ssh "${ssh_opts[@]}" "$target" "APP_DIR=$app_dir_arg TARGET_SHA=$target_sha_arg bash -se" <<'REMOTE'
           set -euo pipefail
           backup="$APP_DIR/.aihub-host-jobs-state/sync-backup"
@@ -545,7 +547,9 @@ jobs:
           ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
-          target_sha="${AIHUB_IMAGE##*:}"
+          # The image is a digest and names no commit; the host gets the CI revision.
+          target_sha="$DEPLOY_SHA"
+          revision_arg="$(printf '%q' "$DEPLOY_SHA")"
           tier_deployed=false
           rollback_tier() {
             local tier_arg
@@ -601,7 +605,7 @@ jobs:
             # cutover would have written, or the Sandbox deploy is refused.
             if [[ -z "$caller_ip_gate" ]]; then
               ssh "${ssh_opts[@]}" "$target" \
-                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE'
+                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg AIHUB_REVISION=$revision_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green/blue-green-host.sh resume production
@@ -616,7 +620,7 @@ jobs:
           REMOTE
             then
               ssh "${ssh_opts[@]}" "$target" \
-                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
+                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg AIHUB_REVISION=$revision_arg bash -se" <<'REMOTE' || true
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green/blue-green-host.sh recover-gate
@@ -665,7 +669,9 @@ jobs:
           ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
           image_arg="$(printf '%q' "$AIHUB_IMAGE")"
-          target_sha="${AIHUB_IMAGE##*:}"
+          # The image is a digest and names no commit; the host gets the CI revision.
+          target_sha="$DEPLOY_SHA"
+          revision_arg="$(printf '%q' "$DEPLOY_SHA")"
           tier_deployed=false
           rollback_tier() {
             local tier_arg
@@ -726,7 +732,7 @@ jobs:
           REMOTE
             then
               ssh "${ssh_opts[@]}" "$target" \
-                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg bash -se" <<'REMOTE' || true
+                "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg AIHUB_REVISION=$revision_arg bash -se" <<'REMOTE' || true
           set -euo pipefail
           cd "$APP_DIR"
           ./scripts/ops/blue-green/blue-green-host.sh recover-gate
@@ -783,13 +789,13 @@ jobs:
           target=aihub-deploy
           ssh_opts=(-F "$AIHUB_SSH_CONFIG")
           app_dir_arg="$(printf '%q' "$VPS_APP_DIR")"
-          image_arg="$(printf '%q' "$AIHUB_IMAGE")"
+          target_sha_arg="$(printf '%q' "$DEPLOY_SHA")"
           deploy_outcome="$(printf '%q' "$DEPLOY_OUTCOME")"
           ssh "${ssh_opts[@]}" "$target" \
-            "APP_DIR=$app_dir_arg AIHUB_IMAGE=$image_arg DEPLOY_OUTCOME=$deploy_outcome bash -se" <<'REMOTE'
+            "APP_DIR=$app_dir_arg TARGET_SHA=$target_sha_arg DEPLOY_OUTCOME=$deploy_outcome bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
-          ./scripts/ops/host-jobs/finish-host-jobs.sh finish "$DEPLOY_OUTCOME" "${AIHUB_IMAGE##*:}"
+          ./scripts/ops/host-jobs/finish-host-jobs.sh finish "$DEPLOY_OUTCOME" "$TARGET_SHA"
           REMOTE
         env:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
@@ -824,9 +830,10 @@ jobs:
           )"
           printf '## Active tier revisions\n\n%s\n' "$state" >> "$GITHUB_STEP_SUMMARY"
 
+      # #366: a failed logout leaves a registry credential on the host, so it
+      # fails the run instead of passing silently. The credential is read-only.
       - name: Log out of GHCR on VPS
         if: ${{ always() && steps.stale_guard.outputs.outcome == 'deploy' && steps.ghcr_login.outcome == 'success' }}
-        continue-on-error: true
         shell: bash
         run: |
           target=aihub-deploy

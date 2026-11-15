@@ -1,6 +1,6 @@
 # ADR-0064: CI publishes the image it booted; CD never rebuilds
 
-- Status: Accepted
+- Status: Accepted; amended by ADR-0169
 - Date: 2026-09-30
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0077: Production secrets only reach main image publisher
 
-- Status: Accepted
+- Status: Accepted; amended by ADR-0169
 - Date: 2026-10-07
 - Related: [#314](https://github.com/AiHub-Ecosystem/aihub-be/issues/314), [ADR-0064](0064-ci-publishes-the-image-it-booted.md)
 

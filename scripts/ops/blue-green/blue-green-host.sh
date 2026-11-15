@@ -170,8 +170,9 @@ fi
 
 write_image_env() {
   local image="$1"
-  [[ "$image" =~ ^ghcr\.io/aihub-ecosystem/aihub-be:[a-f0-9]{40}$ ]] || {
-    printf 'AIHUB_IMAGE must be an immutable AIHUB commit-SHA image\n' >&2
+  # A digest, not a tag: a tag can be overwritten after CI booted the image (#366).
+  [[ "$image" =~ ^ghcr\.io/aihub-ecosystem/aihub-be@sha256:[a-f0-9]{64}$ ]] || {
+    printf 'AIHUB_IMAGE must be an AIHUB image digest reference (ghcr.io/aihub-ecosystem/aihub-be@sha256:<digest>)\n' >&2
     return 1
   }
   printf 'AIHUB_IMAGE=%s\n' "$image" >"$DEPLOY_ENV"
@@ -889,11 +890,37 @@ clear_pending() {
   rm -f "$PENDING_FILE" "$PENDING_FILE.tmp"
 }
 
+# The eighth column is the image digest reference the release ran, so a later
+# rollback pulls that digest instead of a tag (#366). Rows written before it
+# existed have seven columns.
 record_release() {
-  local operation="$1" tier="$2" old_slot="$3" old_sha="$4" new_slot="$5" new_sha="$6"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$(date -u +%FT%TZ)" "$operation" "$tier" "$old_slot" "$old_sha" "$new_slot" "$new_sha" >>"$HISTORY_FILE"
+  local operation="$1" tier="$2" old_slot="$3" old_sha="$4" new_slot="$5" new_sha="$6" image="${7:-}"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(date -u +%FT%TZ)" "$operation" "$tier" "$old_slot" "$old_sha" "$new_slot" "$new_sha" "$image" >>"$HISTORY_FILE"
   chmod 600 "$HISTORY_FILE"
+}
+
+# The image digest reference of the release a rollback restores. A release
+# recorded before digests were kept falls back to the digest of the image its
+# retained container ran. Never a tag: a tag can point somewhere else by now.
+rollback_image() {
+  local tier="$1" slot="$2" sha="$3" image service id
+  image="$(awk -F '\t' -v tier="$tier" -v sha="$sha" '$3 == tier && $7 == sha && $8 != "" { image = $8 } END { print image }' "$HISTORY_FILE")"
+  if [[ -z "$image" ]]; then
+    service="$(service_for_slot "$tier" "$slot")" || return 1
+    id="$(container_id "$service")"
+    if [[ -n "$id" ]]; then
+      image="$(sudo -n docker inspect --format '{{.Config.Image}}' "$id" 2>/dev/null)" || image=
+    fi
+    if [[ -n "$image" && "$image" != *@sha256:* ]]; then
+      image="$(sudo -n docker image inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null)" || image=
+    fi
+  fi
+  [[ "$image" =~ ^ghcr\.io/aihub-ecosystem/aihub-be@sha256:[a-f0-9]{64}$ ]] || {
+    printf 'no image digest is recorded for %s release %s; refusing to roll back by tag\n' "$tier" "$sha" >&2
+    return 1
+  }
+  printf '%s\n' "$image"
 }
 
 retained_dir() {
@@ -1258,7 +1285,7 @@ deploy_tier() {
   # release then needs AIHUB_ROLLBACK_UNRETAINED=true.
   retain_release_inputs "$tier" "$(container_revision "$new_id")" ||
     printf 'warning: could not retain the %s release inputs\n' "$tier" >&2
-  record_release deploy "$tier" "$old_slot" "$old_sha" "$new_slot" "$(container_revision "$new_id")"
+  record_release deploy "$tier" "$old_slot" "$old_sha" "$new_slot" "$(container_revision "$new_id")" "$AIHUB_IMAGE"
   clear_pending
   capture_resources "committed-${tier}"
   printf '%s cutover complete old=%s new=%s\n' "$tier" "$old_sha" "$(container_revision "$new_id")"
@@ -1318,7 +1345,7 @@ bootstrap_sandbox() {
 
   retain_release_inputs sandbox "$(container_revision "$id")" ||
     printf 'warning: could not retain the sandbox release inputs\n' >&2
-  record_release deploy sandbox disabled disabled a "$(container_revision "$id")"
+  record_release deploy sandbox disabled disabled a "$(container_revision "$id")" "$AIHUB_IMAGE"
   clear_pending
   printf 'Sandbox enabled active=%s\n' "$(container_revision "$id")"
 }
@@ -1542,9 +1569,10 @@ resume_production() {
     printf 'a rollout is pending; refusing to resume Production\n' >&2
     return 1
   }
-  target_sha="${AIHUB_IMAGE##*:}"
+  # The image is a digest, which names no commit; CD passes the revision it deploys.
+  target_sha="${AIHUB_REVISION:-}"
   [[ "$target_sha" =~ ^[a-f0-9]{40}$ ]] || {
-    printf 'AIHUB_IMAGE with a commit SHA is required to resume Production\n' >&2
+    printf 'AIHUB_REVISION with a commit SHA is required to resume Production\n' >&2
     return 1
   }
   slot="$(active_slot production "$API_CONFIG")" || return 1
@@ -1695,7 +1723,7 @@ rollback_sandbox_to_disabled() {
 }
 
 rollback() {
-  local tier="$1" line old_slot old_sha new_slot new_sha logging_override
+  local tier="$1" line old_slot old_sha new_slot new_sha _image rollback_target logging_override
   [[ "$tier" == production || "$tier" == sandbox ]] || {
     printf 'rollback tier must be production or sandbox\n' >&2
     return 1
@@ -1709,7 +1737,7 @@ rollback() {
   line="$(awk -F '\t' -v tier="$tier" '$2 == "deploy" && $3 == tier { line=$0 } END { print line }' "$HISTORY_FILE")"
   [[ -n "$line" ]] || { printf 'no successful release history for %s\n' "$tier" >&2; return 1; }
   check_vault_agent
-  IFS=$'\t' read -r _ _ _ old_slot old_sha new_slot new_sha <<<"$line"
+  IFS=$'\t' read -r _ _ _ old_slot old_sha new_slot new_sha _image <<<"$line"
   if [[ "$tier" == sandbox && "$old_slot" == disabled ]]; then
     rollback_sandbox_to_disabled "$new_slot" "$new_sha"
     return $?
@@ -1721,10 +1749,11 @@ rollback() {
   # Before the image override changes: a rollback without a retained known-good
   # configuration stops here with both slots as they were.
   select_rollback_inputs "$tier" "$old_sha" || return 1
-  ensure_local_image "ghcr.io/aihub-ecosystem/aihub-be:${old_sha}" || return 1
+  rollback_target="$(rollback_image "$tier" "$old_slot" "$old_sha")" || return 1
+  ensure_local_image "$rollback_target" || return 1
   skip_candidate_pull=true
   snapshot_live_configs || return 1
-  AIHUB_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:${old_sha}"
+  AIHUB_IMAGE="$rollback_target"
   write_image_env "$AIHUB_IMAGE"
   # The release's own Compose file; --project-directory keeps its relative paths
   # and the project name on this directory, as they are for the current file.
@@ -1834,7 +1863,7 @@ rollback() {
     fi
     return 1
   fi
-  record_release rollback "$tier" "$new_slot" "$(container_revision "$active_id")" "$old_slot" "$old_sha"
+  record_release rollback "$tier" "$new_slot" "$(container_revision "$active_id")" "$old_slot" "$old_sha" "$AIHUB_IMAGE"
   clear_pending
   capture_resources "rollback-confirmed-${tier}" || true
   printf '%s rolled back to %s\n' "$tier" "$old_sha"
@@ -1947,9 +1976,9 @@ case "$COMMAND" in
       printf 'a rollout is pending; refusing to recover the caller-IP gate\n' >&2
       exit 1
     }
-    target_sha="${AIHUB_IMAGE##*:}"
+    target_sha="${AIHUB_REVISION:-}"
     [[ "$target_sha" =~ ^[a-f0-9]{40}$ ]] || {
-      printf 'AIHUB_IMAGE with a commit SHA is required to clear the caller-IP gate\n' >&2
+      printf 'AIHUB_REVISION with a commit SHA is required to clear the caller-IP gate\n' >&2
       exit 1
     }
     gate="$(gate_state)"

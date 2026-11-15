@@ -1101,7 +1101,8 @@ starting:
    as the Sandbox AppRole before starting the app.
 
 4. Deploy the verified image to Sandbox with
-   `AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:<commit-sha> ./scripts/ops/blue-green/blue-green-host.sh deploy sandbox`,
+   `AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be@sha256:<image-digest> ./scripts/ops/blue-green/blue-green-host.sh deploy sandbox`
+   (the digest CI published; the helper rejects a tag),
    then run `finalize`. With no Sandbox route, the helper bootstraps one app
    against the isolated directory and adds the managed route only after its
    health and dependency checks pass.
@@ -1917,10 +1918,13 @@ workflow. The rollback retention floor is two SHA tags: the current release and
 its previous successful release. ADR-0064 currently retains every SHA tag; do
 not add cleanup that removes this floor. #115 may set a finite depth later, but
 it must preserve at least these two releases. Before rollback, verify the
-chosen tag is still listed in the private package. The blue-green helper uses
-the target image from the host's local cache and pulls it only when the host no
-longer holds it, so a rollback to a release that ran here needs no registry
-login. When the image is absent, authenticate that Docker daemon to GHCR with
+chosen digest is still listed in the private package. The blue-green helper
+rolls back to the image digest it recorded for that release in `releases.tsv`
+(a release recorded before digests were kept resolves the digest of the image
+its retained container ran, and a release with neither is refused rather than
+pulled by tag). It uses that image from the host's local cache and pulls it
+only when the host no longer holds it, so a rollback to a release that ran here
+needs no registry login. When the image is absent, authenticate that Docker daemon to GHCR with
 an operator-managed `read:packages` credential through
 `sudo -n docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin`
 before the rollback, and log out after it. If the image is absent and cannot be
@@ -2008,7 +2012,9 @@ After rolling back one tier:
 ### Legacy direct Compose rollback
 
 Use this only when the running release has no successful blue-green history.
-Use the exact 40-character target SHA selected above. This updates both enabled
+Use the exact 40-character target SHA selected above and the image digest CI
+published for it (`image-digest` artifact of that CI run, or the digest in
+`releases.tsv`). This updates both enabled
 tiers to the same image, matching the legacy direct-Compose behavior. It leaves
 the expand-only schema in place and never deletes the database volume or runs a
 down-migration. In the same Bash session, record
@@ -2025,21 +2031,23 @@ set -euo pipefail
 : "${APP_DIR:?set APP_DIR to VPS_APP_DIR}"
 cd "$APP_DIR"
 rollback_sha='PASTE_40_CHARACTER_SHA_HERE'
+rollback_digest='PASTE_SHA256_DIGEST_HERE'
 [[ "$rollback_sha" =~ ^[a-f0-9]{40}$ ]]
-rollback_image="ghcr.io/aihub-ecosystem/aihub-be:$rollback_sha"
+[[ "$rollback_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+rollback_image="ghcr.io/aihub-ecosystem/aihub-be@$rollback_digest"
 if ! sudo -n docker image inspect "$rollback_image" >/dev/null 2>&1; then
   read -r -p 'GHCR username: ' GHCR_USERNAME
-  read -r -s -p 'GHCR read:packages token: ' GHCR_PULL_TOKEN
+  read -r -s -p 'GHCR read:packages token: ' GHCR_READ_TOKEN
   printf '\n'
-  if ! printf '%s' "$GHCR_PULL_TOKEN" | sudo -n docker login ghcr.io \
+  if ! printf '%s' "$GHCR_READ_TOKEN" | sudo -n docker login ghcr.io \
     --username "$GHCR_USERNAME" --password-stdin; then
-    unset GHCR_PULL_TOKEN
+    unset GHCR_READ_TOKEN
     exit 1
   fi
   pull_status=0
   sudo -n docker pull "$rollback_image" || pull_status=$?
   sudo -n docker logout ghcr.io >/dev/null 2>&1 || true
-  unset GHCR_PULL_TOKEN
+  unset GHCR_READ_TOKEN
   test "$pull_status" -eq 0
 fi
 env_tmp="$(mktemp .env.production.rollback.XXXXXX)"
@@ -2174,8 +2182,10 @@ set -euo pipefail
 cd "$APP_DIR"
 test "$(sed -n 's/^AIHUB_SANDBOX_ENABLED=//p' .env.production | tail -n 1)" = true
 rollback_sha='PASTE_40_CHARACTER_SHA_HERE'
+rollback_digest='PASTE_SHA256_DIGEST_HERE'
 [[ "$rollback_sha" =~ ^[a-f0-9]{40}$ ]]
-rollback_image="ghcr.io/aihub-ecosystem/aihub-be:$rollback_sha"
+[[ "$rollback_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+rollback_image="ghcr.io/aihub-ecosystem/aihub-be@$rollback_digest"
 sudo -n docker image inspect "$rollback_image" >/dev/null
 production_compose=(sudo -n docker compose --env-file .env.production -f docker-compose.production.yml)
 sandbox_compose=(sudo -n docker compose --profile sandbox --env-file .env.production -f docker-compose.production.yml)
@@ -2392,7 +2402,7 @@ caller-IP proof still needs resolution. The CD workflow uses `public-host`,
 checks; do not clear an unresolved gate by editing its state file. The rehearsal
 command deliberately injects a failed post-cutover smoke and succeeds only
 when Sandbox is restored and verified; it does not cut over Production. Use the
-immutable CI SHA for `AIHUB_IMAGE` when running it manually. The CD Actions
+image digest CI published for `AIHUB_IMAGE` when running it manually. The CD Actions
 summary reports the active SHA for each enabled tier after both successful and
 failed deploy attempts.
 
@@ -2401,7 +2411,7 @@ the Sandbox rehearsal from the deployment directory:
 
 ```bash
 cd "$APP_DIR"
-APP_DIR="$PWD" AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be:REPLACE_WITH_40_CHAR_CI_SHA \
+APP_DIR="$PWD" AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be@sha256:REPLACE_WITH_64_CHAR_CI_DIGEST \
   ./scripts/ops/blue-green/blue-green-host.sh rehearse sandbox
 APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh status
 ```
@@ -2413,10 +2423,12 @@ helper.
 ## GitHub Actions CD
 
 The `CI` workflow publishes the image it booted to GHCR under the commit SHA.
-After a successful CI run for a push to `main`, CD resolves that immutable SHA,
-checks the registry still holds the digest CI published and the SHA is still
-the tip of `main`, then syncs the helper and deployment files and deploys over
-SSH. CD migrates once, then gates each enabled tier: it cuts over Production,
+After a successful CI run for a push to `main`, CD checks the registry still
+holds the digest CI published and the SHA is still the tip of `main`, then
+syncs the helper and deployment files and deploys over SSH. CD hands the host
+`AIHUB_IMAGE=ghcr.io/aihub-ecosystem/aihub-be@sha256:<digest>`, never the tag,
+so a tag overwritten after the check cannot change what runs. The helper
+records that digest per release in `releases.tsv` and rolls back by it. CD migrates once, then gates each enabled tier: it cuts over Production,
 checks caller-IP resolution, and only then cuts over Sandbox. For each proof,
 the Actions runner requests the read-only `/docs` route on the public hostname,
 captures `X-Request-Id`, and asks the host to compare the matching application
@@ -2447,8 +2459,25 @@ secrets:
 - `VPS_SSH_PRIVATE_KEY`
 - `VPS_SSH_KNOWN_HOSTS` (the trusted host-key line for the VPS)
 - `GHCR_USERNAME`
-- `GHCR_PULL_TOKEN` (a token with `read:packages` and `write:packages`; the
-  main-only image publisher uses it to push, and CD uses it to pull)
+- `GHCR_READ_TOKEN` (a token with `read:packages` and nothing else; CD uses it
+  to read the registry digest and to log the host in for the pull)
+- `GHCR_PULL_TOKEN` (write-capable: `read:packages` and `write:packages`; only
+  the main-only CI image publisher uses it, to push. The name is historical.
+  CD and the host never receive it)
+
+#### Registry credentials
+
+| Credential        | Scope                             | Lives in                                                          |
+| ----------------- | --------------------------------- | ----------------------------------------------------------------- |
+| `GHCR_READ_TOKEN` | `read:packages`                   | `production` environment secret; on the host only during a deploy |
+| `GHCR_PULL_TOKEN` | `read:packages`, `write:packages` | `production` environment secret; the CI publisher job only        |
+
+CD logs the host out of GHCR when the deploy ends, and a failed logout fails the
+run. After the first deploy with this change, check the host once by running
+`sudo -n docker logout ghcr.io`: it must answer `Not logged in to ghcr.io`.
+Anything else means a login was left behind, so investigate before the next
+deploy. The token holds only `read:packages`, so a credential that does persist
+cannot push an image.
 
 Restrict the `production` environment's deployment branches to `main`. The CI
 image boot job runs for pull requests without entering this environment; only
@@ -2459,7 +2488,7 @@ completed CI run itself came from a push to `main`.
 
 The workflow uses the commit SHA as the only release tag; nothing publishes
 `latest`, so a rollback remains the immutable-image procedure above pointing at
-an earlier SHA. Keep all runtime, database, Vault, and downstream credentials
+the earlier release's digest. Keep all runtime, database, Vault, and downstream credentials
 in the VPS/Vault setup; never add them to GitHub Actions or the repository.
 
 Before any host change, CD fetches `main` and requires the completed CI run's

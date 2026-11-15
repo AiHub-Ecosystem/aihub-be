@@ -106,7 +106,6 @@ function runHostJobsStep(
         PATH: process.env['PATH'] ?? '',
         APP_DIR: root,
         AIHUB_HOST_JOB_METRICS_DIR: join(root, 'metrics'),
-        AIHUB_IMAGE: `ghcr.io/example/aihub:${TARGET}`,
         DEPLOY_OUTCOME: deployOutcome,
         TARGET_SHA: TARGET,
       },

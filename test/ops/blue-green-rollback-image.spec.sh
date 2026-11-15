@@ -30,7 +30,7 @@ extract() {
   ' "$2"
 }
 
-for function_name in ensure_local_image prepare_candidate rollback write_app_logging_override compose_override_supported; do
+for function_name in ensure_local_image prepare_candidate rollback rollback_image record_release write_image_env write_app_logging_override compose_override_supported; do
   definition="$(extract "$function_name" scripts/ops/blue-green/blue-green-host.sh)"
   [[ -n "$definition" ]] || fail "$function_name is missing from blue-green-host.sh"
   eval "$definition"
@@ -38,7 +38,33 @@ done
 
 old_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 new_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-old_image="ghcr.io/aihub-ecosystem/aihub-be:$old_sha"
+older_sha=cccccccccccccccccccccccccccccccccccccccc
+old_digest="sha256:$(printf 'b%.0s' {1..64})"
+new_digest="sha256:$(printf 'a%.0s' {1..64})"
+old_image="ghcr.io/aihub-ecosystem/aihub-be@$old_digest"
+new_image="ghcr.io/aihub-ecosystem/aihub-be@$new_digest"
+
+# The host accepts an image only as an immutable digest reference (#366): a tag
+# can be overwritten after CI booted the image it names.
+DEPLOY_ENV="$test_root/accepted.env"
+write_image_env "$old_image" || fail "a digest image reference should be accepted"
+assert_equals "$(cat "$DEPLOY_ENV")" "AIHUB_IMAGE=$old_image" "the digest reference written for Compose"
+for rejected in \
+  "ghcr.io/aihub-ecosystem/aihub-be:$old_sha" \
+  "ghcr.io/aihub-ecosystem/aihub-be:$old_sha@$old_digest" \
+  "ghcr.io/aihub-ecosystem/aihub-be@sha256:abc" \
+  "ghcr.io/other/aihub-be@$old_digest" \
+  "ghcr.io/aihub-ecosystem/aihub-be:latest"; do
+  if write_image_env "$rejected" 2>/dev/null; then
+    fail "write_image_env accepted '$rejected'"
+  fi
+done
+
+# record_release keeps the image of a release so a later rollback can pull it by
+# digest; a tab-separated row stays one record per release.
+HISTORY_FILE="$test_root/recorded.tsv"
+record_release deploy sandbox a "$old_sha" b "$new_sha" "$new_image"
+assert_equals "$(awk -F '\t' '{ print NF ":" $8 }' "$HISTORY_FILE")" "8:$new_image" "history columns and image"
 
 # Stand-ins for Docker. `local_images` is what the host holds; `registry_up`
 # decides whether a pull can succeed.
@@ -50,7 +76,17 @@ docker() {
   calls+=("docker $*")
   case "$1 $2" in
     "compose version") printf '%s\n' "$FAKE_COMPOSE_VERSION" ;;
+    "inspect --format")
+      # `docker inspect --format {{.Config.Image}} <id>` of the retained container.
+      printf '%s\n' "${FAKE_CONTAINER_IMAGE:-}"
+      ;;
     "image inspect")
+      # `docker image inspect --format {{index .RepoDigests 0}} <tag>`.
+      if [[ "$3" == --format ]]; then
+        printf '%s\n' "${FAKE_REPO_DIGEST:-}"
+        [[ -n "${FAKE_REPO_DIGEST:-}" ]]
+        return
+      fi
       local image
       for image in "${local_images[@]}"; do
         [[ "$image" != "$3" ]] || return 0
@@ -119,7 +155,11 @@ prepare_candidate app-sandbox-slot-b 3 true
 
 # A rollback whose image cannot be had stops before it changes anything.
 HISTORY_FILE="$test_root/releases.tsv"
-printf '2026-10-28T17:36:47Z\tdeploy\tsandbox\tb\t%s\ta\t%s\n' "$old_sha" "$new_sha" >"$HISTORY_FILE"
+write_history() {
+  printf '2026-10-27T09:00:00Z\tdeploy\tsandbox\ta\t%s\tb\t%s\t%s\n' "$older_sha" "$old_sha" "$old_image" >"$HISTORY_FILE"
+  printf '2026-10-28T17:36:47Z\tdeploy\tsandbox\tb\t%s\ta\t%s\t%s\n' "$old_sha" "$new_sha" "$new_image" >>"$HISTORY_FILE"
+}
+write_history
 sandbox_enabled=true
 changed=()
 load_sandbox_route_state() { :; }
@@ -146,11 +186,35 @@ fi
 assert_equals "${#changed[@]}" 0 "state changed before the image was secured"
 assert_no_call "compose" "rollback with a missing image"
 
+# The image comes from the digest recorded for the release being restored, not
+# from a tag built out of its revision.
+assert_equals "$(rollback_image sandbox b "$old_sha")" "$old_image" "digest recorded for the release"
+
+# A release recorded before digests were kept has no image column. The host
+# resolves the digest of the image its retained container actually ran, and a
+# rollback with nothing to resolve stops rather than pulling a tag.
+printf '2026-10-28T17:36:47Z\tdeploy\tsandbox\tb\t%s\ta\t%s\n' "$old_sha" "$new_sha" >"$HISTORY_FILE"
+service_for_slot() { printf 'app-sandbox-slot-b\n'; }
+container_id() { printf 'retained-container\n'; }
+FAKE_CONTAINER_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:$old_sha"
+FAKE_REPO_DIGEST="$old_image"
+assert_equals "$(rollback_image sandbox b "$old_sha")" "$old_image" "digest resolved from the retained legacy image"
+FAKE_CONTAINER_IMAGE="$old_image"
+FAKE_REPO_DIGEST=
+assert_equals "$(rollback_image sandbox b "$old_sha")" "$old_image" "digest reference kept by the retained container"
+FAKE_CONTAINER_IMAGE="ghcr.io/aihub-ecosystem/aihub-be:$old_sha"
+if message="$(rollback_image sandbox b "$old_sha" 2>&1)"; then
+  fail "a rollback with no recorded or resolvable digest should be refused"
+fi
+[[ "$message" == *"$old_sha"* ]] || fail "the refusal should name the revision: $message"
+unset FAKE_CONTAINER_IMAGE FAKE_REPO_DIGEST
+write_history
+
 # A successful manual rollback starts the candidate with only its logging
 # override layered over the retained Compose file.
 mkdir -p "$test_root/state"
 STATE_DIR="$test_root/state"
-printf '2026-10-28T17:36:47Z\tdeploy\tsandbox\tb\t%s\ta\t%s\n' "$old_sha" "$new_sha" >"$HISTORY_FILE"
+write_history
 local_images=("$old_image")
 sandbox_routed=true
 DEPLOY_ENV="$test_root/deploy.env"

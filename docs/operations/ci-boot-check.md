@@ -128,14 +128,15 @@ after the boot and N-1 compatibility checks pass. Pull requests run the same
 checks and push nothing.
 
 The push authenticates with the `production` environment's `GHCR_USERNAME` and
-`GHCR_PULL_TOKEN`, the same credentials CD uses. Only the push-only job enters
+`GHCR_PULL_TOKEN`. CD does not use that token: it reads the registry and logs
+the host in with the separate read-only `GHCR_READ_TOKEN` (#366). Only the push-only job enters
 that environment; its deployment branch policy allows `main`. `GITHUB_TOKEN`
 is deliberately not used: the package belongs to the organization, and the
 workflow token may write to it only once "Allow GitHub Actions to create and
 update packages" is enabled in the package settings. That setting is off, so
 `GITHUB_TOKEN` fails with `denied: permission_denied: write_package`. Despite
 its name, `GHCR_PULL_TOKEN` is write-capable and is the credential used to push
-here; it is also used by CD to pull the image. The `Image boot` job uses its
+here, and only here. The `Image boot` job uses its
 read-only `GITHUB_TOKEN` permission to pull the previous private package for
 the N-1 check; it does not receive the production environment or its secrets.
 
@@ -164,12 +165,15 @@ registry with `docker buildx imagetools inspect` rather than scraping
 `docker image inspect` would report the image ID, which is a different value
 from the manifest digest the registry indexes by.
 
-Sha tags are never deleted, so rolling back is a matter of pointing
-`AIHUB_IMAGE` at an earlier sha. Retention depth is #115's decision.
+CD deploys that digest, not the tag: `AIHUB_IMAGE` is
+`ghcr.io/aihub-ecosystem/aihub-be@sha256:<digest>`, so a sha tag repointed after
+the check cannot change what runs (#366). Sha tags are never deleted, so rolling
+back is a matter of pointing `AIHUB_IMAGE` at an earlier release's digest, which
+the host records per release. Retention depth is #115's decision.
 
 `latest` is not published by either workflow any more, so it is frozen on
 whatever the pre-change CD last pushed. Nothing deploys it: Compose resolves
-`AIHUB_IMAGE` to a SHA tag. #115 defines when, if ever, a release earns it.
+`AIHUB_IMAGE` to a digest. #115 defines when, if ever, a release earns it.
 
 ## Bumping the base image digest
 

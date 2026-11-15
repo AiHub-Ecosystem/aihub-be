@@ -115,7 +115,7 @@ describe('public edge health probe', () => {
       '"$APP_DIR/.aihub-host-jobs-candidate/install-host-jobs.sh" suspend',
     );
     expect(workflow).toContain(
-      './scripts/ops/host-jobs/finish-host-jobs.sh finish "$DEPLOY_OUTCOME" "${AIHUB_IMAGE##*:}"',
+      './scripts/ops/host-jobs/finish-host-jobs.sh finish "$DEPLOY_OUTCOME" "$TARGET_SHA"',
     );
     expect(workflow).toContain('finish-host-jobs.sh" report');
     expect(workflow).toContain('timeout-minutes: 45');

@@ -55,7 +55,8 @@ STATE_DIR="$test_root/state"
 GATE_FILE="$STATE_DIR/caller-ip-gate.tsv"
 PENDING_FILE="$STATE_DIR/pending.tsv"
 API_CONFIG="$test_root/aihub-api.conf"
-AIHUB_IMAGE="ghcr.io/example/aihub:$target_sha"
+AIHUB_IMAGE="ghcr.io/aihub-ecosystem/aihub-be@sha256:$(printf 'f%.0s' {1..64})"
+AIHUB_REVISION=$target_sha
 mkdir -p "$STATE_DIR"
 
 # Stand-ins for the Compose and Docker lookups.
@@ -67,7 +68,7 @@ container_revision() { printf '%s' "$production_sha"; }
 reset_state() {
   rm -f -- "$GATE_FILE" "$PENDING_FILE"
   production_sha=$target_sha
-  AIHUB_IMAGE="ghcr.io/example/aihub:$target_sha"
+  AIHUB_REVISION=$target_sha
 }
 
 # A skipped Production cutover wrote no gate, which refused the Sandbox deploy.
@@ -109,8 +110,8 @@ if resume_production >/dev/null 2>&1; then fail "resume accepted a Production re
 [[ ! -f "$GATE_FILE" ]] || fail "resume wrote a gate for the wrong revision"
 
 reset_state
-AIHUB_IMAGE=ghcr.io/example/aihub:latest
-if resume_production >/dev/null 2>&1; then fail "resume accepted an image without a commit SHA"; fi
+AIHUB_REVISION=
+if resume_production >/dev/null 2>&1; then fail "resume accepted a deploy without a commit SHA"; fi
 [[ ! -f "$GATE_FILE" ]] || fail "resume wrote a gate without a target SHA"
 
 reset_state
