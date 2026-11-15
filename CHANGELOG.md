@@ -147,6 +147,13 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.16.0] - 2026-11-15
+
+### Added
+
+- `organization.identity_issuer_released` is available in Organization audit
+  event filters and records when an operator releases an issuer.
+
 ## [1.15.0] - 2026-11-15
 
 ### Changed

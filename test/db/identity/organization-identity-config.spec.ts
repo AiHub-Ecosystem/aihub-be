@@ -282,7 +282,9 @@ describe('Organization identity configuration against PostgreSQL', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe('IDENTITY_CONFIG_CONFLICT');
+    expect((error as AppError).code).toBe(
+      'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
+    );
     const { rows } = await pool.query(
       'SELECT organization_id FROM organization_identity_configs ORDER BY organization_id',
     );

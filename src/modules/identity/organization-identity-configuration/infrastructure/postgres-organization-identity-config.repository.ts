@@ -421,7 +421,7 @@ export class PostgresOrganizationIdentityConfigRepository
       }
       if (isIssuerConflict(error)) {
         throw new AppError({
-          code: 'IDENTITY_CONFIG_CONFLICT',
+          code: 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
           message: 'Identity configuration conflicts with existing state',
           retryable: false,
         });

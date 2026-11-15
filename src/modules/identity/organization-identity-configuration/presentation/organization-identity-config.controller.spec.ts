@@ -494,7 +494,7 @@ describe('Organization identity configuration HTTP flow', () => {
   it('maps an issuer already used by another Organization to a safe conflict', async () => {
     configs.saveForOwner.mockRejectedValueOnce(
       new AppError({
-        code: 'IDENTITY_CONFIG_CONFLICT',
+        code: 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
         message: 'Identity configuration conflicts with existing state',
         retryable: false,
       }),
@@ -506,7 +506,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     expect(response.statusCode).toBe(409);
-    expectErrorCode(response, 'IDENTITY_CONFIG_CONFLICT');
+    expectErrorCode(response, 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT');
     expect(JSON.stringify(response.json<unknown>())).not.toContain(
       'another Organization',
     );

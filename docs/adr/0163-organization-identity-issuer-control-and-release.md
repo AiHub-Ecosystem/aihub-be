@@ -13,7 +13,7 @@ Self-serve Organization owners can create their own organizations, but could cla
 
 - A self-service JWKS URL is accepted only when its origin (scheme, hostname, and port) equals the issuer URL origin. Existing SSRF protections still validate and fetch the URL.
 - Inline JWKS are operator-provisioned through `identity:set`, which is the explicit operator-approval path. Self-service PUT refuses inline keys until a proof-of-control challenge is designed.
-- A uniqueness conflict returns `IDENTITY_CONFIG_CONFLICT` with a generic message that does not identify another Organization.
+- A uniqueness conflict uses the already-published `ORGANIZATION_IDENTITY_ISSUER_CONFLICT` code and a generic message that does not identify another Organization.
 - `identity:release --org <id> --actor <username>` disables the Organization Identity Configuration, releases its unique issuer claim, increments the JWKS cache version, and records `organization.identity_issuer_released` in the same transaction. The configuration row and audit record remain durable.
 - A database trigger reclaims the issuer when a configuration's trust settings change or a disabled configuration is re-enabled. This also protects claims when an N-1 writer, which does not know the claim column, changes the configuration.
 
