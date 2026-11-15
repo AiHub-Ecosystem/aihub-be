@@ -167,8 +167,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       },
     );
 
-    it('keeps the non-graded rate limit at a process-local ceiling', async () => {
-      // Freeze time so the Redis timeout loop cannot cross this key's window.
+    it('fails closed for non-graded rate limits, then admits after recovery', async () => {
       const now = 61_234;
       const limiter = new RedisRateLimiter('', client, () => now, NOOP_LOGGER);
       const keyId = `ak_${randomUUID()}`;
@@ -176,16 +175,19 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       const before = await redisUnavailableCount('rate_limit');
 
       await proxy.setMode(mode);
-      const decisions = [];
-      for (let index = 0; index < 3; index += 1) {
-        const call = await timed(() => limiter.consume({ keyId, limit: 2 }));
-        expect(call.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
-        if (call.result.status !== 'fulfilled') throw call.result.reason;
-        decisions.push(call.result.value.allowed);
-      }
+      const outage = await timed(() => limiter.consume({ keyId, limit: 2 }));
 
-      expect(decisions).toEqual([true, true, false]);
+      expect(rejection(outage.result)).toMatchObject(REDIS_UNAVAILABLE);
+      expect(outage.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
       expect(await redisUnavailableCount('rate_limit')).toBeGreaterThan(before);
+
+      await proxy.setMode('normal');
+      await redisAnswers(client);
+      await expect(limiter.consume({ keyId, limit: 2 })).resolves.toMatchObject(
+        {
+          allowed: true,
+        },
+      );
     });
   },
 );
