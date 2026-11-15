@@ -261,11 +261,7 @@ describe('Organization identity configuration HTTP flow', () => {
   it('creates an identity configuration through the owner Bearer route', async () => {
     const response = await set({
       issuer: 'https://acme.edu',
-      public_keys_jwks: {
-        keys: [
-          { kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1', alg: 'RS256' },
-        ],
-      },
+      jwks_url: 'https://acme.edu/.well-known/jwks.json',
     });
 
     expect(response.statusCode).toBe(200);
@@ -273,10 +269,8 @@ describe('Organization identity configuration HTTP flow', () => {
       data: {
         configured: true,
         issuer: 'https://acme.edu',
-        jwks_url: null,
-        public_keys_jwks: {
-          keys: [{ kid: 'rsa-1' }],
-        },
+        jwks_url: 'https://acme.edu/.well-known/jwks.json',
+        public_keys_jwks: null,
         allowed_algorithms: ['RS256', 'ES256'],
         max_assertion_ttl_seconds: 300,
         status: 'active',
@@ -317,7 +311,7 @@ describe('Organization identity configuration HTTP flow', () => {
       'an issuer past 2,048 UTF-8 bytes',
       {
         issuer: '漢'.repeat(2_048),
-        jwks_url: 'https://id.acme.edu/keys',
+        jwks_url: 'https://acme.edu/keys',
       },
     ],
   ])(
@@ -359,7 +353,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
       const response = await set({
         issuer: 'https://acme.edu',
-        jwks_url: 'https://id.acme.edu/keys',
+        jwks_url: 'https://acme.edu/keys',
       });
 
       expect(response.statusCode).toBe(503);
@@ -413,7 +407,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
     const response = await set({
       issuer: 'https://acme.edu',
-      jwks_url: 'https://id.acme.edu/keys',
+      jwks_url: 'https://acme.edu/keys',
     });
 
     expect(response.statusCode).toBe(400);
@@ -426,7 +420,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
   it.each([
     ['blocked private destination', 'https://10.0.0.8/keys'],
-    ['rejected redirect', 'https://id.acme.edu/keys'],
+    ['rejected redirect', 'https://acme.edu/redirect'],
   ])('returns the safe unsafe-URL error for a %s', async (_reason, url) => {
     validateRemote.mockRejectedValueOnce(
       new AppError({
@@ -445,7 +439,7 @@ describe('Organization identity configuration HTTP flow', () => {
       retryable: false,
     });
     expect(response.payload).not.toContain('10.0.0.8');
-    expect(response.payload).not.toContain('id.acme.edu');
+    expect(response.payload).not.toContain('acme.edu');
     expect(configs.saveForOwner.mock.calls).toHaveLength(0);
   });
 
@@ -465,7 +459,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
       const response = await set({
         issuer: 'https://acme.edu',
-        jwks_url: 'https://id.acme.edu/keys',
+        jwks_url: 'https://acme.edu/keys',
       });
 
       expect(response.statusCode).toBe(403);
@@ -500,21 +494,22 @@ describe('Organization identity configuration HTTP flow', () => {
   it('maps an issuer already used by another Organization to a safe conflict', async () => {
     configs.saveForOwner.mockRejectedValueOnce(
       new AppError({
-        code: 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
-        message: 'Issuer is already configured for another Organization',
+        code: 'IDENTITY_CONFIG_CONFLICT',
+        message: 'Identity configuration conflicts with existing state',
         retryable: false,
       }),
     );
 
     const response = await set({
       issuer: 'https://other.edu',
-      public_keys_jwks: {
-        keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB' }],
-      },
+      jwks_url: 'https://other.edu/jwks.json',
     });
 
     expect(response.statusCode).toBe(409);
-    expectErrorCode(response, 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT');
+    expectErrorCode(response, 'IDENTITY_CONFIG_CONFLICT');
+    expect(JSON.stringify(response.json<unknown>())).not.toContain(
+      'another Organization',
+    );
     expect(purgeJwks).not.toHaveBeenCalled();
   });
 
@@ -522,9 +517,7 @@ describe('Organization identity configuration HTTP flow', () => {
     purgeJwks.mockRejectedValueOnce(new Error('Redis host and password'));
     const payload = {
       issuer: 'https://acme.edu',
-      public_keys_jwks: {
-        keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'new-key' }],
-      },
+      jwks_url: 'https://acme.edu/jwks.json',
     };
 
     const failed = await set(payload);
@@ -547,9 +540,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
     const response = await set({
       issuer: 'https://acme.edu',
-      public_keys_jwks: {
-        keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'new-key' }],
-      },
+      jwks_url: 'https://acme.edu/jwks.json',
     });
 
     expect(response.statusCode).toBe(200);
@@ -745,11 +736,7 @@ describe('Organization identity configuration HTTP flow', () => {
     const OWNER_HEADERS = { authorization: 'Bearer valid.token.value' };
     const BODY = {
       issuer: 'https://acme.edu',
-      public_keys_jwks: {
-        keys: [
-          { kty: 'RSA', n: 'AQAB', e: 'AQAB', kid: 'rsa-1', alg: 'RS256' },
-        ],
-      },
+      jwks_url: 'https://acme.edu/jwks.json',
     };
 
     function lastSaveInput(): SaveOrganizationIdentityConfigInput {

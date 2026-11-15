@@ -111,6 +111,12 @@ const organizationStatusDescriptor = cliRunnerDescriptor(
   'runOrganizationStatusCommand',
   'organization status command is unavailable',
 );
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-identity-issuer-release').runReleaseOrganizationIdentityIssuerCommand>} */
+const organizationIdentityIssuerReleaseDescriptor = cliRunnerDescriptor(
+  'organization-identity-issuer-release',
+  'runReleaseOrganizationIdentityIssuerCommand',
+  'identity issuer release command is unavailable',
+);
 /** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-entitlement').runGrantOrganizationEntitlementCommand>} */
 const organizationEntitlementDescriptor = cliRunnerDescriptor(
   'organization-entitlement',
@@ -262,6 +268,11 @@ async function runRevokeAllRefreshSessions(input) {
 /** @param {Parameters<typeof import('../../src/cli/organization-status').runOrganizationStatusCommand>[0]} input */
 async function runOrganizationStatus(input) {
   return runCliCommand(organizationStatusDescriptor, input);
+}
+
+/** @param {Parameters<typeof import('../../src/cli/organization-identity-issuer-release').runReleaseOrganizationIdentityIssuerCommand>[0]} input */
+async function runReleaseOrganizationIdentityIssuer(input) {
+  return runCliCommand(organizationIdentityIssuerReleaseDescriptor, input);
 }
 
 /** @param {Parameters<typeof import('../../src/cli/organization-entitlement').runGrantOrganizationEntitlementCommand>[0]} input */
@@ -1020,6 +1031,7 @@ async function setIdentity(options) {
            allowed_algorithms = EXCLUDED.allowed_algorithms,
            max_assertion_ttl_seconds = EXCLUDED.max_assertion_ttl_seconds,
            status = EXCLUDED.status,
+           issuer_claimed = true,
            jwks_cache_version = organization_identity_configs.jwks_cache_version + 1,
            updated_at = now()`,
       [
@@ -1566,6 +1578,19 @@ async function main() {
   }
   if (command === 'identity:set') {
     await setIdentity(options);
+    return;
+  }
+  if (command === 'identity:release') {
+    const organizationId = requiredOption(options, 'org');
+    const actorUsername = requiredOption(options, 'actor');
+    const safety = await prepareOperatorMutation('identity:release', options);
+    if (safety?.previewed) return;
+    const outcome = await runReleaseOrganizationIdentityIssuer({
+      databaseUrl: controlPlaneDatabaseUrl(),
+      organizationId,
+      actorUsername,
+    });
+    if (outcome !== 'released') usageError();
     return;
   }
   if (command === 'idempotency:cleanup') {

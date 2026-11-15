@@ -80,7 +80,8 @@ function setInput(precondition?: IdentityConfigPrecondition) {
     userId: USER_ID,
     organizationId: ORGANIZATION_ID,
     issuer: 'https://acme.edu',
-    publicKeysJwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
+    publicKeysJwks: undefined,
+    jwksUrl: 'https://acme.edu/jwks.json',
     ...(precondition === undefined ? {} : { precondition }),
   };
 }
@@ -140,15 +141,46 @@ describe('SetOrganizationIdentityConfig precondition (ADR-0132)', () => {
   });
 });
 
-describe('SetOrganizationIdentityConfig trusted-key thumbprints (#447)', () => {
-  it('thumbprints the inline keys the configuration trusts', async () => {
+describe('SetOrganizationIdentityConfig issuer control', () => {
+  it('refuses inline keys unless the operator provisions them', async () => {
     const { setter, saves } = subject({ kind: 'saved', config: saved });
 
-    await setter.set(setInput());
+    await expect(
+      setter.set({
+        ...setInput(),
+        jwksUrl: null,
+        publicKeysJwks: { keys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB' }] },
+      }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_INVALID' });
 
-    expect(saves[0]?.keyThumbprints).toEqual([
-      jsonWebKeyThumbprint({ kty: 'RSA', n: 'modulus', e: 'AQAB' }),
-    ]);
+    expect(saves).toEqual([]);
+  });
+
+  it('refuses a JWKS host outside the issuer origin', async () => {
+    const { setter, saves } = subject({ kind: 'saved', config: saved });
+
+    await expect(
+      setter.set({
+        ...setInput(),
+        jwksUrl: 'https://keys.example.net/jwks.json',
+      }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_INVALID' });
+
+    expect(saves).toEqual([]);
+  });
+
+  it('refuses a JWKS URL on a different port from the issuer origin', async () => {
+    const { setter, saves } = subject({ kind: 'saved', config: saved });
+
+    await expect(
+      setter.set({
+        ...setInput(),
+        issuer: 'https://acme.edu:8443',
+        jwksUrl: 'https://acme.edu/jwks.json',
+      }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_INVALID' });
+
+    expect(saves).toEqual([]);
   });
 
   it('thumbprints the keys the fetched URL source validated', async () => {

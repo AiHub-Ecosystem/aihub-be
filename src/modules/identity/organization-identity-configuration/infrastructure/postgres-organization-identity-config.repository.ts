@@ -108,19 +108,22 @@ const INSERT_OR_UPDATE_CONFIG_SQL = `${INSERT_CONFIG_SQL}
     public_keys_jwks = EXCLUDED.public_keys_jwks,
     allowed_algorithms = EXCLUDED.allowed_algorithms,
     max_assertion_ttl_seconds = EXCLUDED.max_assertion_ttl_seconds,
+    issuer_claimed = true,
     jwks_cache_version = organization_identity_configs.jwks_cache_version + 1
   WHERE (
     organization_identity_configs.issuer,
     organization_identity_configs.jwks_url,
     organization_identity_configs.public_keys_jwks,
     organization_identity_configs.allowed_algorithms,
-    organization_identity_configs.max_assertion_ttl_seconds
+    organization_identity_configs.max_assertion_ttl_seconds,
+    organization_identity_configs.issuer_claimed
   ) IS DISTINCT FROM (
     EXCLUDED.issuer,
     EXCLUDED.jwks_url,
     EXCLUDED.public_keys_jwks,
     EXCLUDED.allowed_algorithms,
-    EXCLUDED.max_assertion_ttl_seconds
+    EXCLUDED.max_assertion_ttl_seconds,
+    true
   )
   RETURNING ${STORED_CONFIG_COLUMNS_SQL}
 `;
@@ -418,8 +421,8 @@ export class PostgresOrganizationIdentityConfigRepository
       }
       if (isIssuerConflict(error)) {
         throw new AppError({
-          code: 'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
-          message: 'Issuer is already configured for another Organization',
+          code: 'IDENTITY_CONFIG_CONFLICT',
+          message: 'Identity configuration conflicts with existing state',
           retryable: false,
         });
       }

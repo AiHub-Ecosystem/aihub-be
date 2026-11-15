@@ -272,15 +272,14 @@ model OrganizationAuditEvent {
 
 /// An Organization's self-service identity provider configuration.
 ///
-/// Trigger `organization_identity_configs_set_updated_at` is owned by
-/// migration 0003, which also owns its `CHECK` constraints; migration 0020 adds
-/// `organization_identity_configs_jwks_cache_version_check`. Migration 0056 adds
-/// `revision` and trigger `organization_identity_configs_bump_revision`, which
-/// raises it whenever a write changes the configuration.
+/// Triggers and constraints are migration-owned. Migration 0066 adds
+/// `issuerClaimed` and makes `oic_issuer_uq` partial so released issuers can be
+/// reclaimed.
 /// @owner identity
 model OrganizationIdentityConfig {
   organizationId        String       @id @map("organization_id")
-  issuer                String       @unique(map: "oic_issuer_uq")
+  issuer                String
+  issuerClaimed         Boolean      @default(true) @map("issuer_claimed")
   jwksUrl               String?      @map("jwks_url")
   publicKeysJwks        Json?        @map("public_keys_jwks")
   allowedAlgorithms      String[]     @default(["RS256", "ES256"]) @map("allowed_algorithms")
@@ -292,6 +291,7 @@ model OrganizationIdentityConfig {
   revision              BigInt       @default(1)
   organization          Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@unique([issuer], map: "oic_issuer_uq", where: raw("(issuer_claimed)"))
   @@map("organization_identity_configs")
 }
 

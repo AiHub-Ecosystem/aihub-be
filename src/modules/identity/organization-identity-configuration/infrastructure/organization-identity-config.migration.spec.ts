@@ -30,4 +30,21 @@ describe('organization identity configuration migration', () => {
     expect(migration).toContain('CHECK (max_assertion_ttl_seconds > 0');
     expect(migration).toContain("ARRAY['RS256', 'ES256']");
   });
+
+  it('releases issuer claims without deleting configuration and reclaims them on N-1 writes', async () => {
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../../../../../prisma/migrations/0066_identity_issuer_claim_release/migration.sql',
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'ADD COLUMN issuer_claimed boolean NOT NULL DEFAULT true',
+    );
+    expect(migration).toContain('WHERE issuer_claimed');
+    expect(migration).toContain('NEW.issuer_claimed := true');
+    expect(migration).toContain("'organization.identity_issuer_released'");
+  });
 });

@@ -247,7 +247,7 @@ The issuer is a URL, not a fetched endpoint: registering the key set inline mean
 
 `--max-assertion-ttl-seconds 3600` is the maximum the CLI accepts. It applies to this organization alone; production tenants keep their own, lower value. A tester gets an hour per token instead of five minutes, with no code change.
 
-**`identity:set` replaces the whole key set.** To add a second signing key later, write a file containing _both_ keys and pass that. Passing a file with only the new key silently retires the old one, and every assertion signed with it stops verifying.
+**`identity:set` replaces the whole key set.** To add a second signing key later, write a file containing _both_ keys and pass that. Passing a file with only the new key silently retires the old one, and every assertion signed with it stops verifying. Operators can release a squatted issuer with `identity:release --org <id> --actor <username>`; this disables signed-assertion verification for that Organization and records the release in its audit trail.
 
 ## 4. Configure the gateway
 

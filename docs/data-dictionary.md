@@ -16,7 +16,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | EmailVerificationToken             | auth        | 12      |
 | IdempotencyRecord                  | idempotency | 12      |
 | OrganizationAuditEvent             | identity    | 14      |
-| OrganizationIdentityConfig         | identity    | 12      |
+| OrganizationIdentityConfig         | identity    | 13      |
 | OrganizationInvitation             | identity    | 11      |
 | OrganizationMembership             | identity    | 8       |
 | Organization                       | identity    | 21      |
@@ -226,7 +226,8 @@ Owner: `identity`
 | Column                 | Type         | Attributes                                                                                    |
 | ---------------------- | ------------ | --------------------------------------------------------------------------------------------- |
 | organizationId         | String       | @id @map("organization_id")                                                                   |
-| issuer                 | String       | @unique(map: "oic_issuer_uq")                                                                 |
+| issuer                 | String       |                                                                                               |
+| issuerClaimed          | Boolean      | @default(true) @map("issuer_claimed")                                                         |
 | jwksUrl                | String?      | @map("jwks_url")                                                                              |
 | publicKeysJwks         | Json?        | @map("public_keys_jwks")                                                                      |
 | allowedAlgorithms      | String[]     | @default(["RS256", "ES256"]) @map("allowed_algorithms")                                       |

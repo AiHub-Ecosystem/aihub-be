@@ -20,7 +20,7 @@ import { JwksKeyProvider } from '@/modules/identity/user-assertions/infrastructu
 
 const ORGANIZATION_ID = 'org_acme';
 const ISSUER = 'https://acme.edu';
-const JWKS_URL = 'https://id.acme.edu/keys';
+const JWKS_URL = 'https://acme.edu/keys';
 const oldJwks = {
   keys: [{ kty: 'RSA', n: 'old-modulus', e: 'AQAB', kid: 'old-key' }],
 };

@@ -282,14 +282,65 @@ describe('Organization identity configuration against PostgreSQL', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe(
-      'ORGANIZATION_IDENTITY_ISSUER_CONFLICT',
-    );
+    expect((error as AppError).code).toBe('IDENTITY_CONFIG_CONFLICT');
     const { rows } = await pool.query(
       'SELECT organization_id FROM organization_identity_configs ORDER BY organization_id',
     );
     expect(rows).toEqual([{ organization_id: organizationId }]);
     expect(await auditEvents()).toHaveLength(1);
+  });
+
+  it('allows an issuer to be claimed after an operator releases it', async () => {
+    await repository.saveForOwner(input());
+    await pool.query(
+      `UPDATE organization_identity_configs
+       SET status = 'disabled', issuer_claimed = false
+       WHERE organization_id = $1`,
+      [organizationId],
+    );
+    const otherOrganizationId = `org_${ulid()}`;
+    await createOrganization(otherOrganizationId);
+    const otherOwner = await seedMember(otherOrganizationId, 'owner');
+
+    const claimed = await repository.saveForOwner(
+      input({ organizationId: otherOrganizationId, userId: otherOwner }),
+    );
+
+    expect(claimed.kind).toBe('saved');
+    expect(
+      await pool.query(
+        `SELECT organization_id, issuer_claimed
+       FROM organization_identity_configs ORDER BY organization_id`,
+      ),
+    ).toMatchObject({
+      rows: [
+        { organization_id: organizationId, issuer_claimed: false },
+        { organization_id: otherOrganizationId, issuer_claimed: true },
+      ],
+    });
+  });
+
+  it('reclaims a released issuer when an N-1 writer re-enables the configuration', async () => {
+    await repository.saveForOwner(input());
+    await pool.query(
+      `UPDATE organization_identity_configs
+       SET status = 'disabled', issuer_claimed = false
+       WHERE organization_id = $1`,
+      [organizationId],
+    );
+
+    await pool.query(
+      `UPDATE organization_identity_configs
+       SET status = 'active' WHERE organization_id = $1`,
+      [organizationId],
+    );
+
+    const result = await pool.query(
+      `SELECT issuer_claimed FROM organization_identity_configs
+       WHERE organization_id = $1`,
+      [organizationId],
+    );
+    expect(result.rows).toEqual([{ issuer_claimed: true }]);
   });
 
   it('refuses a non-owner in the transaction without writing config or audit', async () => {

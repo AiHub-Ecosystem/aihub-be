@@ -144,6 +144,53 @@ withBuild('operator CLI against PostgreSQL', () => {
     expect(JSON.stringify(events)).not.toContain(created.stdout);
   });
 
+  it('releases and disables an issuer with an operator audit event', async () => {
+    const operatorId = await seedOperator('ops-alice');
+    const organizationId = await organization();
+    await pool.query(
+      `INSERT INTO organization_identity_configs
+         (organization_id, issuer, jwks_url, allowed_algorithms,
+          max_assertion_ttl_seconds)
+       VALUES ($1, 'https://acme.edu', 'https://acme.edu/jwks.json',
+          ARRAY['RS256'], 300)`,
+      [organizationId],
+    );
+
+    const result = cli(
+      'identity:release',
+      '--org',
+      organizationId,
+      '--actor',
+      'ops-alice',
+    );
+
+    expect(result.status).toBe(0);
+    expect(
+      await pool.query(
+        `SELECT issuer_claimed, status FROM organization_identity_configs
+       WHERE organization_id = $1`,
+        [organizationId],
+      ),
+    ).toMatchObject({
+      rows: [{ issuer_claimed: false, status: 'disabled' }],
+    });
+    expect(
+      await pool.query(
+        `SELECT action, actor_user_account_id, detail
+       FROM organization_audit_events WHERE organization_id = $1`,
+        [organizationId],
+      ),
+    ).toMatchObject({
+      rows: [
+        {
+          action: 'organization.identity_issuer_released',
+          actor_user_account_id: operatorId,
+          detail: { issuer: 'https://acme.edu' },
+        },
+      ],
+    });
+  });
+
   it('revokes a key once, records one event, and succeeds again without a second', async () => {
     await seedOperator('ops-alice');
     const organizationId = await organization();

@@ -1,6 +1,7 @@
 # ADR-0053: Make end-user identity verification optional per Organization
 
-- Status: Accepted (supersedes ADR-0050)
+- Status: Accepted (supersedes ADR-0050; amends ADR-0004)
+- Amends: [ADR-0004](0004-signed-user-assertions-jwks.md)
 - Supersedes: ADR-0050
 - Related ADR: ADR-0049
 

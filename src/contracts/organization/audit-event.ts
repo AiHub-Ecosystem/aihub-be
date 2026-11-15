@@ -16,6 +16,7 @@ export const ORGANIZATION_AUDIT_ACTIONS = [
   'organization.suspended',
   'organization.restored',
   'organization.identity_config_set',
+  'organization.identity_issuer_released',
   'organization.entitlement_granted',
   'invitation.sent',
   'invitation.resent',

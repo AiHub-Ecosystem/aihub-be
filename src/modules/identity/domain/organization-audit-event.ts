@@ -14,6 +14,7 @@ export type OrganizationAuditAction =
   | 'organization.suspended'
   | 'organization.restored'
   | 'organization.identity_config_set'
+  | 'organization.identity_issuer_released'
   | 'organization.entitlement_granted'
   | 'invitation.sent'
   | 'invitation.resent'
@@ -164,6 +165,12 @@ interface OrganizationIdentityConfigSetDraft {
   readonly keyThumbprints: readonly string[];
 }
 
+interface OrganizationIdentityIssuerReleasedDraft {
+  readonly action: 'organization.identity_issuer_released';
+  readonly organizationId: string;
+  readonly issuer: string;
+}
+
 interface OrganizationEntitlementGrantedDraft {
   readonly action: 'organization.entitlement_granted';
   readonly organizationId: string;
@@ -263,6 +270,7 @@ export type OrganizationAuditDraft =
   | OrganizationRenamedDraft
   | OrganizationStatusDraft
   | OrganizationIdentityConfigSetDraft
+  | OrganizationIdentityIssuerReleasedDraft
   | OrganizationEntitlementGrantedDraft
   | InvitationDraft
   | InvitationRevokedDraft
@@ -314,6 +322,14 @@ function shape(draft: OrganizationAuditDraft): Shape {
           sourceKind: draft.sourceKind,
           keyThumbprints: [...draft.keyThumbprints],
         },
+        outcome: 'applied',
+      };
+    case 'organization.identity_issuer_released':
+      return {
+        targetType: 'organization',
+        targetId: draft.organizationId,
+        targetLabel: 'Identity issuer',
+        detail: { issuer: draft.issuer },
         outcome: 'applied',
       };
     case 'organization.entitlement_granted':

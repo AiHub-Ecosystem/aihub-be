@@ -1,6 +1,6 @@
 # ADR-0004: Signed User Assertions verified against per-organization JWKS
 
-- Status: Accepted (retroactive record; made optional per organization by ADR-0053)
+- Status: Accepted (retroactive record; amended by [ADR-0053](0053-optional-user-identity-verification.md) and [ADR-0163](0163-organization-identity-issuer-control-and-release.md))
 - Date: decided 2026-09-07 in the implementation specification suite; file written 2026-11-07
 
 ## Context
@@ -19,8 +19,8 @@ public JWKS, algorithm allowlist, and maximum assertion TTL.
 
 - `issuer` is globally UNIQUE in the identity configuration store. Without that
   constraint, organization B could register organization A's issuer and sign
-  assertions impersonating A's users — one unique index eliminates an entire
-  class of cross-tenant attacks.
+  assertions impersonating A's users. Claims require control proof and may be
+  released by an audited operator command (ADR-0163).
 - Strict TTL caps and an algorithm allowlist (RS256/ES256) bound replay and
   algorithm-confusion risk.
 - Only an active `owner` of an active organization may read or replace the

@@ -132,6 +132,9 @@ export class SetOrganizationIdentityConfig {
     if (hasInlineSource && publicKeysJwks === undefined) {
       throw invalidJwks();
     }
+    if (hasInlineSource) {
+      throw invalidJwks();
+    }
 
     // Every key the configuration will trust gets an RFC 7638 thumbprint in
     // the audit event, so swapping keys under the same issuer leaves a record
@@ -144,6 +147,17 @@ export class SetOrganizationIdentityConfig {
             url: jwksUrl,
           })
         : (publicKeysJwks ?? { keys: [] });
+    if (jwksUrl !== null) {
+      let issuerOrigin: string;
+      try {
+        issuerOrigin = new URL(issuer).origin;
+      } catch {
+        throw invalidJwks();
+      }
+      if (issuerOrigin !== new URL(jwksUrl).origin) {
+        throw invalidJwks();
+      }
+    }
     const keyThumbprints: string[] = [];
     for (const key of trustedJwks.keys) {
       const thumbprint = jsonWebKeyThumbprint(key);

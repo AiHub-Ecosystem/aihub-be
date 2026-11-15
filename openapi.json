@@ -268,7 +268,7 @@
         }
       },
       "Error409": {
-        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | AUTH_MFA_ALREADY_ENABLED | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_CHANGED",
+        "description": "IDEMPOTENCY_CONFLICT | AUTH_IDENTITY_UNAVAILABLE | AUTH_MFA_ALREADY_ENABLED | ORGANIZATION_MEMBER_EXISTS | ORGANIZATION_OWNER_REQUIRED | ORGANIZATION_IDENTITY_ISSUER_CONFLICT | IDENTITY_CONFIG_CONFLICT | ORGANIZATION_CREATION_LIMIT_REACHED | AVATAR_CHANGED",
         "headers": {
           "Retry-After": {
             "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
@@ -298,6 +298,7 @@
                         "ORGANIZATION_MEMBER_EXISTS",
                         "ORGANIZATION_OWNER_REQUIRED",
                         "ORGANIZATION_IDENTITY_ISSUER_CONFLICT",
+                        "IDENTITY_CONFIG_CONFLICT",
                         "ORGANIZATION_CREATION_LIMIT_REACHED",
                         "AVATAR_CHANGED"
                       ],
