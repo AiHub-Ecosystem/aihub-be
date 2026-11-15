@@ -369,22 +369,43 @@ export async function verifyRedisCompatibility(input: {
       entry: rotatedJwksEntry,
     });
   } else {
-    const nextConfig = await request(
-      CANDIDATE_PORT,
-      'PUT',
-      `/v1/organizations/${organizationId}/identity-config`,
+    const rotatedKeysFile = join(
+      COMPAT_DIR,
+      `jwks-rotated-${organizationId}.json`,
+    );
+    writeFileSync(rotatedKeysFile, JSON.stringify(identityB.jwks));
+    const identityRotation = execFileSync(
+      process.execPath,
+      [
+        'scripts/cli/cli.mjs',
+        'identity:set',
+        '--target',
+        'production',
+        '--org',
+        organizationId,
+        '--issuer',
+        issuerA,
+        '--public-keys-file',
+        rotatedKeysFile,
+        '--allowed-algorithms',
+        'RS256',
+        '--max-assertion-ttl-seconds',
+        '300',
+      ],
       {
-        token: userToken,
-        body: {
-          issuer: issuerA,
-          jwks_url: null,
-          public_keys_jwks: identityB.jwks,
-          allowed_algorithms: ['RS256'],
-          max_assertion_ttl_seconds: 300,
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DATABASE_URL,
+          CONTROL_PLANE_DATABASE_URL: DATABASE_URL,
         },
       },
     );
-    expect2xx(nextConfig, 'keyless candidate JWKS rotation');
+    check(
+      identityRotation.trim() === organizationId,
+      'candidate operator JWKS rotation returned an unexpected result',
+    );
     const generationAfter = await redis.get(generationKey);
     check(
       generationAfter !== initialGeneration && generationAfter !== null,
