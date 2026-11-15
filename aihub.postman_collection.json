@@ -4498,7 +4498,7 @@
     },
     {
       "name": "Public API /v2 (Practice content)",
-      "description": "Unauthenticated Listening and Reading practice test lists with cursor pagination (ADR-0130, ADR-0167).",
+      "description": "Unauthenticated Listening and Reading practice test lists with cursor pagination (ADR-0130, ADR-0168).",
       "item": [
         {
           "name": "1. List Listening tests",

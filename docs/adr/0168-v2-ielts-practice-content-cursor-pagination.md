@@ -1,9 +1,9 @@
-# ADR-0167: Publish IELTS practice content on /v2 with cursor pagination
+# ADR-0168: Publish IELTS practice content on /v2 with cursor pagination
 
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it on 2026-11-14
 - Date: 2026-11-14
 - Supersedes: [ADR-0166](0166-proxy-legacy-content-backend-lists.md)
-- Related: [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0129](0129-public-route-and-response-convention.md), [ADR-0130](0130-collection-routes-are-paginated-by-limit-and-cursor.md), [ADR-0142](0142-a-released-contract-defect-is-corrected-through-an-accepted-change-entry.md)
+- Related: [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0129](0129-public-route-and-response-convention.md), [ADR-0130](0130-collection-routes-are-paginated-by-limit-and-cursor.md), [ADR-0142](0142-a-released-contract-defect-is-corrected-through-an-accepted-change-entry.md), [#1916](https://github.com/AiHub-Ecosystem/aihub-be/issues/1916)
 
 ## Context
 
@@ -24,7 +24,7 @@ ADR-0166 temporarily proxied four unauthenticated endpoints (`/api/WritingTempla
    - `GET /v2/ielts/speaking/library`
    - `GET /v2/ielts/listening/tests`
    - `GET /v2/ielts/reading/tests`
-3. **Cursor pagination**: All five routes accept optional `limit` (integer 1..200, default 20) and `cursor` (opaque base64url string encoding `{ page: number }`), conforming to ADR-0130. Responses return `{ data: { <items>, next_cursor } }`.
+3. **Cursor pagination**: All five routes accept optional `limit` (integer 1..200, default 20) and `cursor` (opaque base64url string encoding `{ page, limit }`), conforming to ADR-0130. A cursor is bound to the `limit` it was issued with: a request that sends a different `limit` with it is `400 INVALID_REQUEST`. Responses return `{ data: { <items>, next_cursor } }`. The legacy backend honours only `page` and `pageSize`, so Speaking, Listening and Reading forward the page window upstream. It returns the whole Writing list unpaginated, so the two Writing routes fetch the full list and slice the page in memory.
 4. **Canonical snake_case schemas**: Response items are strictly mapped from upstream payloads into canonical snake_case TypeBox schemas. Author fields (`user_id`, `user_name`) and user attempt metrics (`user_attempt_count`, `attempt_count`) are dropped from anonymous public responses.
 5. **Contract versioning**: `/v1` moves to `1.14.0` (with accepted deletion entry); `/v2` contract moves to `2.7.0`.
 
@@ -33,3 +33,4 @@ ADR-0166 temporarily proxied four unauthenticated endpoints (`/api/WritingTempla
 - The public API surface for IELTS practice content is consistent with ADR-0129 and ADR-0130 across all skills.
 - The temporary `/api/*` and `/v1` endpoints are completely removed.
 - Clients paginate uniformly via `limit` and `cursor`.
+- The routes take no caller authentication, and AIHUB puts no rate limit or cache in front of them. Every Writing request costs a full upstream fetch (about 135 KB for Task 1). The limit and the cache decision are tracked in [#1916](https://github.com/AiHub-Ecosystem/aihub-be/issues/1916).

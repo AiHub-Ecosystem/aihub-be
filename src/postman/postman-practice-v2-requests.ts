@@ -6,7 +6,7 @@ export function practiceV2Folder(): Record<string, unknown> {
   return {
     name: PRACTICE_V2_FOLDER_NAME,
     description:
-      'Unauthenticated Listening and Reading practice test lists with cursor pagination (ADR-0130, ADR-0167).',
+      'Unauthenticated Listening and Reading practice test lists with cursor pagination (ADR-0130, ADR-0168).',
     item: [
       {
         name: '1. List Listening tests',

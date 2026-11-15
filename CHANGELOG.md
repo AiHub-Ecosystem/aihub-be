@@ -17,7 +17,7 @@ out.
   `GET /v2/ielts/writing/task2/templates` list Writing Task 1 and Task 2
   templates without authentication. Both accept optional `limit` and `cursor`
   query parameters and return cursor-paginated `data.templates` and
-  `data.next_cursor` (ADR-0130, ADR-0167).
+  `data.next_cursor` (ADR-0130, ADR-0168).
 - `GET /v2/ielts/speaking/library` lists Speaking library topics without
   authentication, accepting optional `limit` and `cursor` and returning
   cursor-paginated `data.topics` and `data.next_cursor`.
@@ -131,7 +131,7 @@ out.
 ### Removed
 
 - Removed `/v1/listening/tests` and `/v1/reading/tests` in favor of canonical
-  `/v2/ielts/...` endpoints (ADR-0167).
+  `/v2/ielts/...` endpoints (ADR-0168).
 
 ## [1.13.0] - 2026-11-14
 
