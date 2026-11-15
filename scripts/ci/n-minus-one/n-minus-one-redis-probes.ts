@@ -406,10 +406,17 @@ export async function verifyRedisCompatibility(input: {
       identityRotation.trim() === organizationId,
       'candidate operator JWKS rotation returned an unexpected result',
     );
-    const generationAfter = await redis.get(generationKey);
+    const rotatedConfig = await database.query<{
+      configVersion: string;
+    }>(
+      `SELECT jwks_cache_version::text AS "configVersion"
+         FROM organization_identity_configs WHERE organization_id = $1`,
+      [organizationId],
+    );
     check(
-      generationAfter !== initialGeneration && generationAfter !== null,
-      'keyless candidate invalidation did not advance the shared generation',
+      rotatedConfig.rows[0]?.configVersion !== undefined &&
+        rotatedConfig.rows[0].configVersion !== configVersion,
+      'keyless operator JWKS rotation did not advance the config version',
     );
     check(
       (await redis.get(initialJwksCacheKey)) === null,
