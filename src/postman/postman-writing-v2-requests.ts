@@ -207,6 +207,42 @@ export function writingV2Folder(): Record<string, unknown> {
   pm.expect(data.comment).to.be.a('string');
 });`,
       ),
+      {
+        name: '4. List Writing Task 1 templates',
+        request: {
+          method: 'GET',
+          header: [{ key: 'Accept', value: 'application/json' }],
+          url: '{{baseUrl}}/v2/ielts/writing/task1/templates',
+          description: 'Lists Task 1 writing templates with cursor pagination.',
+        },
+        event: [
+          {
+            listen: 'test',
+            script: {
+              type: 'text/javascript',
+              exec: [assertStatus(200)],
+            },
+          },
+        ],
+      },
+      {
+        name: '5. List Writing Task 2 templates',
+        request: {
+          method: 'GET',
+          header: [{ key: 'Accept', value: 'application/json' }],
+          url: '{{baseUrl}}/v2/ielts/writing/task2/templates',
+          description: 'Lists Task 2 writing templates with cursor pagination.',
+        },
+        event: [
+          {
+            listen: 'test',
+            script: {
+              type: 'text/javascript',
+              exec: [assertStatus(200)],
+            },
+          },
+        ],
+      },
     ],
   };
 }

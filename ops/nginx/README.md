@@ -15,7 +15,7 @@ hosts, their log-format include, both AIHUB logrotate policies, and the
 AIHUB-only rsyslog receiver. It creates or tightens the active log files
 without truncating them, validates logrotate, rsyslog, and nginx, restarts
 rsyslog only when its config changes, and restores the previous config files
-on failure. The deploy script requires helper version 3 before it changes
+on failure. The deploy script requires helper version 4 before it changes
 application containers. The operator must review and install helper updates;
 CD never installs or updates its own privileged helper.
 

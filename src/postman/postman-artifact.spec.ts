@@ -7,6 +7,7 @@ import {
   buildPostmanCollection,
   preservePostmanIds,
 } from './build-postman-collection';
+import { PRACTICE_V2_FOLDER_NAME } from './postman-practice-v2-requests';
 import { SPEAKING_V2_FOLDER_NAME } from './postman-speaking-v2-requests';
 import { WRITING_V2_FOLDER_NAME } from './postman-writing-v2-requests';
 
@@ -77,7 +78,11 @@ describe('committed aihub.postman_collection.json', () => {
       item: { name: string; item?: { request?: { url?: string } }[] }[];
     };
     const folders = collection.item.filter((entry) =>
-      [SPEAKING_V2_FOLDER_NAME, WRITING_V2_FOLDER_NAME].includes(entry.name),
+      [
+        SPEAKING_V2_FOLDER_NAME,
+        WRITING_V2_FOLDER_NAME,
+        PRACTICE_V2_FOLDER_NAME,
+      ].includes(entry.name),
     );
     // A path parameter stands for the collection variable that holds its value.
     const urls = folders

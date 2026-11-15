@@ -13,6 +13,7 @@ import {
   SPEAKING_SAMPLE_ANSWER_SCENARIOS,
   WEB_SESSION_SCENARIOS,
 } from './postman-example-scenarios';
+import { practiceV2Folder } from './postman-practice-v2-requests';
 import { D1_SCENARIOS, type Scenario } from './postman-scenarios';
 import {
   SPEAKING_V2_VARIABLES,
@@ -182,6 +183,7 @@ export async function buildPostmanCollection(
       ...base.item,
       speakingV2Folder(),
       writingV2Folder(),
+      practiceV2Folder(),
       {
         name: 'D1 handover test cases (docs/history/aihub-deliverable-1-historical-contract.md §G)',
         item: D1_SCENARIOS.map(scenarioToItem),

@@ -54,5 +54,12 @@
     "candidateVersion": "1.11.0",
     "decision": "docs/adr/0159-pending-invitation-authority-and-management-serialization.md",
     "changes": ["the request property `allowed_environments` became required"]
+  },
+  {
+    "major": 1,
+    "baseVersion": "1.13.0",
+    "candidateVersion": "1.14.0",
+    "decision": "docs/adr/0167-v2-ielts-practice-content-cursor-pagination.md",
+    "changes": ["api path removed without deprecation"]
   }
 ]

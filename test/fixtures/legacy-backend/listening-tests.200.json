@@ -1,0 +1,522 @@
+{
+  "items": [
+    {
+      "id": 4004,
+      "card_id": "4-s4",
+      "test_id": 4,
+      "test_ref": "lt_cam16_t4_s4",
+      "section_number": 4,
+      "parts": [
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 4 · The extinction of the dodo bird",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 4",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 490,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t4_p4_7848fe00.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/67cbbf21-293a-4512-b225-92f6d0af046d.mp3"
+    },
+    {
+      "id": 4003,
+      "card_id": "4-s3",
+      "test_id": 4,
+      "test_ref": "lt_cam16_t4_s3",
+      "section_number": 3,
+      "parts": [
+        3
+      ],
+      "title": "Cambridge IELTS 16 · Test 4 · City bike-sharing schemes",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 3",
+      "question_types": [
+        "multiple_choice_multi",
+        "matching"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 452,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t4_p3_6f9a01cb.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/1b44bedd-9759-4f6c-b4a9-01d0e87f41d3.mp3"
+    },
+    {
+      "id": 4002,
+      "card_id": "4-s2",
+      "test_id": 4,
+      "test_ref": "lt_cam16_t4_s2",
+      "section_number": 2,
+      "parts": [
+        2
+      ],
+      "title": "Cambridge IELTS 16 · Test 4 · Local council report on traffic and highways",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 2",
+      "question_types": [
+        "multiple_choice_single",
+        "plan_map_diagram_label"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 411,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t4_p2_8a726734.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/79555593-10a4-4489-9798-06dbc2e4a2bb.mp3"
+    },
+    {
+      "id": 4001,
+      "card_id": "4-s1",
+      "test_id": 4,
+      "test_ref": "lt_cam16_t4_s1",
+      "section_number": 1,
+      "parts": [
+        1
+      ],
+      "title": "Cambridge IELTS 16 · Test 4 · Holiday rental",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 1",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 438,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t4_p1_e9b7c7ca.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/2cfab4f8-9ec6-4b9a-ae3b-0b3873efbb45.mp3"
+    },
+    {
+      "id": 3004,
+      "card_id": "3-s4",
+      "test_id": 3,
+      "test_ref": "lt_cam16_t3_s4",
+      "section_number": 4,
+      "parts": [
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 3 · Hand knitting",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 4",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 446,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t3_p4_5314e265.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/e421b069-059b-43a4-a008-7e0f6592520a.mp3"
+    },
+    {
+      "id": 3003,
+      "card_id": "3-s3",
+      "test_id": 3,
+      "test_ref": "lt_cam16_t3_s3",
+      "section_number": 3,
+      "parts": [
+        3
+      ],
+      "title": "Cambridge IELTS 16 · Test 3 · Food science presentation",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 3",
+      "question_types": [
+        "multiple_choice_multi",
+        "multiple_choice_single"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 434,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t3_p3_4030f961.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/d8054c7e-9e1d-40f5-b904-84405b9e2650.mp3"
+    },
+    {
+      "id": 3002,
+      "card_id": "3-s2",
+      "test_id": 3,
+      "test_ref": "lt_cam16_t3_s2",
+      "section_number": 2,
+      "parts": [
+        2
+      ],
+      "title": "Cambridge IELTS 16 · Test 3 · Working in agriculture and horticulture",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 2",
+      "question_types": [
+        "multiple_choice_multi",
+        "matching"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 383,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t3_p2_155ea14a.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/7fef98da-3de9-4fc7-bae0-9c325763f353.mp3"
+    },
+    {
+      "id": 3001,
+      "card_id": "3-s1",
+      "test_id": 3,
+      "test_ref": "lt_cam16_t3_s1",
+      "section_number": 1,
+      "parts": [
+        1
+      ],
+      "title": "Cambridge IELTS 16 · Test 3 · Junior Cycle Camp",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 1",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 436,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t3_p1_06e1a207.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/01e8476f-6e10-407d-8da3-98c8f844bffd.mp3"
+    },
+    {
+      "id": 2004,
+      "card_id": "2-s4",
+      "test_id": 2,
+      "test_ref": "lt_cam16_t2_s4",
+      "section_number": 4,
+      "parts": [
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 2 · Health benefits of dance",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 4",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 472,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t2_p4_01e01282.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/d2b7f243-9f87-4b8a-820d-1e277d9a3f68.mp3"
+    },
+    {
+      "id": 2003,
+      "card_id": "2-s3",
+      "test_id": 2,
+      "test_ref": "lt_cam16_t2_s3",
+      "section_number": 3,
+      "parts": [
+        3
+      ],
+      "title": "Cambridge IELTS 16 · Test 2 · Assignment on sleep and dreams",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 3",
+      "question_types": [
+        "multiple_choice_single",
+        "flowchart_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 419,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t2_p3_94768acf.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/d2e7c3f7-8baf-4dbe-aadd-9fa9d08fb22d.mp3"
+    },
+    {
+      "id": 2002,
+      "card_id": "2-s2",
+      "test_id": 2,
+      "test_ref": "lt_cam16_t2_s2",
+      "section_number": 2,
+      "parts": [
+        2
+      ],
+      "title": "Cambridge IELTS 16 · Test 2 · Dartfield House school",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 2",
+      "question_types": [
+        "multiple_choice_single",
+        "matching",
+        "multiple_choice_multi"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 445,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t2_p2_84bf001d.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/c991b3ef-7a8c-4bd6-94b6-edfc69a0184f.mp3"
+    },
+    {
+      "id": 2001,
+      "card_id": "2-s1",
+      "test_id": 2,
+      "test_ref": "lt_cam16_t2_s1",
+      "section_number": 1,
+      "parts": [
+        1
+      ],
+      "title": "Cambridge IELTS 16 · Test 2 · Copying photos to digital format",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 1",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 423,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t2_p1_631b06dc.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/21604da5-6b53-455a-af33-8a869f257380.mp3"
+    },
+    {
+      "id": 1004,
+      "card_id": "1-s4",
+      "test_id": 1,
+      "test_ref": "lt_cam16_t1_s4",
+      "section_number": 4,
+      "parts": [
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 1 · Stoicism",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 4",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 453,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t1_p4_29c8ed51.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/c1558ca5-3fac-4f74-ab25-a73432bdd867.mp3"
+    },
+    {
+      "id": 1003,
+      "card_id": "1-s3",
+      "test_id": 1,
+      "test_ref": "lt_cam16_t1_s3",
+      "section_number": 3,
+      "parts": [
+        3
+      ],
+      "title": "Cambridge IELTS 16 · Test 1 · Art projects",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 3",
+      "question_types": [
+        "multiple_choice_multi",
+        "matching"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 435,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t1_p3_ec5f963c.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/f61698e7-6009-4dee-941f-1b9053b82147.mp3"
+    },
+    {
+      "id": 1002,
+      "card_id": "1-s2",
+      "test_id": 1,
+      "test_ref": "lt_cam16_t1_s2",
+      "section_number": 2,
+      "parts": [
+        2
+      ],
+      "title": "Cambridge IELTS 16 · Test 1 · Stevenson's",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 2",
+      "question_types": [
+        "multiple_choice_single",
+        "plan_map_diagram_label"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 412,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t1_p2_160fab9f.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/d8827e25-e117-4b6b-a647-d8f309dc38e6.mp3"
+    },
+    {
+      "id": 1001,
+      "card_id": "1-s1",
+      "test_id": 1,
+      "test_ref": "lt_cam16_t1_s1",
+      "section_number": 1,
+      "parts": [
+        1
+      ],
+      "title": "Cambridge IELTS 16 · Test 1 · Children's Engineering Workshops",
+      "source": "Cambridge",
+      "total_questions": 10,
+      "estimated_minutes": 10,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Section 1",
+      "question_types": [
+        "note_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 420,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t1_p1_2b1595ba.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/d380e579-18a0-41f1-b313-60e83be7f6f3.mp3"
+    },
+    {
+      "id": 4,
+      "card_id": "4-full",
+      "test_id": 4,
+      "test_ref": "lt_cam16_t4",
+      "parts": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 4",
+      "source": "Cambridge",
+      "total_questions": 40,
+      "estimated_minutes": 40,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Full test",
+      "question_types": [
+        "note_completion",
+        "multiple_choice_single",
+        "plan_map_diagram_label",
+        "multiple_choice_multi",
+        "matching"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 1791,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t4_full_8fb4063d.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/2cfab4f8-9ec6-4b9a-ae3b-0b3873efbb45.mp3"
+    },
+    {
+      "id": 3,
+      "card_id": "3-full",
+      "test_id": 3,
+      "test_ref": "lt_cam16_t3",
+      "parts": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 3",
+      "source": "Cambridge",
+      "total_questions": 40,
+      "estimated_minutes": 40,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Full test",
+      "question_types": [
+        "note_completion",
+        "multiple_choice_multi",
+        "matching",
+        "multiple_choice_single"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 1699,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t3_full_5e23d680.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/01e8476f-6e10-407d-8da3-98c8f844bffd.mp3"
+    },
+    {
+      "id": 2,
+      "card_id": "2-full",
+      "test_id": 2,
+      "test_ref": "lt_cam16_t2",
+      "parts": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 2",
+      "source": "Cambridge",
+      "total_questions": 40,
+      "estimated_minutes": 40,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Full test",
+      "question_types": [
+        "note_completion",
+        "multiple_choice_single",
+        "matching",
+        "multiple_choice_multi",
+        "flowchart_completion"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 1759,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t2_full_ff03fb43.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/21604da5-6b53-455a-af33-8a869f257380.mp3"
+    },
+    {
+      "id": 1,
+      "card_id": "1-full",
+      "test_id": 1,
+      "test_ref": "lt_cam16_t1",
+      "parts": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "title": "Cambridge IELTS 16 · Test 1",
+      "source": "Cambridge",
+      "total_questions": 40,
+      "estimated_minutes": 40,
+      "difficulty": "Trung bình",
+      "topic": "General",
+      "unit": "Full test",
+      "question_types": [
+        "note_completion",
+        "multiple_choice_single",
+        "plan_map_diagram_label",
+        "multiple_choice_multi",
+        "matching"
+      ],
+      "user_attempt_count": 0,
+      "duration_seconds": 1720,
+      "thumbnail_url": "https://s3.wispace.app/wispace/listening-thumbnails/c16t1_full_0f5189c1.jpg",
+      "audio_url": "https://s3.wispace.app/wispace/listening-audios/d380e579-18a0-41f1-b313-60e83be7f6f3.mp3"
+    }
+  ],
+  "total_count": 20,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1,
+  "done_count": 0,
+  "not_done_count": 20
+}

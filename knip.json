@@ -132,9 +132,6 @@
     // not imported by application code.
     "@nestjs/schematics",
     // Grafana k6 resolves its built-in modules inside the pinned runner image.
-    "k6",
-    // The mutation runner invokes this package's CLI via child_process, outside
-    // the static package-script scan.
-    "@stryker-mutator/core"
+    "k6"
   ]
 }

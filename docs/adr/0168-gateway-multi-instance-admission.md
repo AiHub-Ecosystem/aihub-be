@@ -1,6 +1,6 @@
-# ADR-0165: Gateway admission limits are shared across application instances
+# ADR-0168: Gateway admission limits are shared across application instances
 
-- Status: Accepted; implementation pending #1571
+- Status: Accepted
 - Date: 2026-11-14
 - Related issue: [#1571](https://github.com/AiHub-Ecosystem/aihub-be/issues/1571)
 - Related: [ADR-0006](0006-redis-scoped-role-fail-open.md), [ADR-0056](0056-customer-sandbox-test-tier.md), [ADR-0057](0057-graded-request-order-is-a-declared-contract.md), [ADR-0113](0113-organization-and-service-retry-budgets.md), [ADR-0116](0116-post-result-grading-completion-timing.md), [ADR-0144](0144-in-process-singleflight-request-coalescing.md)
