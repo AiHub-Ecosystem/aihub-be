@@ -41,6 +41,10 @@ const idempotencyRepositoryModule = new URL(
   '../../dist/modules/idempotency/infrastructure/postgres-idempotency.repository.js',
   import.meta.url,
 );
+const operatorPostgresApplicationNameModule = new URL(
+  '../../dist/cli/operator-postgres-application-name.js',
+  import.meta.url,
+);
 const PRIVATE_JWK_MEMBERS = new Set([
   'd',
   'p',
@@ -86,7 +90,9 @@ import {
 /** @typedef {{generateApiKey?: ApiKeyGenerator; default?: {generateApiKey?: ApiKeyGenerator}}} ApiKeyGeneratorModule */
 /** @typedef {import('@prisma-client/client').PrismaClient} GeneratedPrismaClient */
 /** @typedef {{prisma: GeneratedPrismaClient; close: () => Promise<void>}} OperatorPrismaClient */
-/** @typedef {(role: 'runtime', databaseUrl: string) => OperatorPrismaClient} PrismaClientFactory */
+/** @typedef {(role: 'runtime', databaseUrl: string, applicationName: string) => OperatorPrismaClient} PrismaClientFactory */
+/** @typedef {(role: 'runtime') => string} OperatorPostgresApplicationNameFactory */
+/** @typedef {{operatorPostgresApplicationName?: unknown; default?: Record<string, unknown>}} OperatorPostgresApplicationNameModule */
 /** @typedef {new (prisma: GeneratedPrismaClient) => {cleanupExpired: (cutoff?: Date) => Promise<number>}} IdempotencyRepositoryConstructor */
 /** @typedef {{createOperatorPrismaClient?: unknown; default?: Record<string, unknown>}} PrismaClientFactoryModule */
 /** @typedef {{PostgresIdempotencyRepository?: unknown; default?: Record<string, unknown>}} IdempotencyRepositoryModule */
@@ -1051,30 +1057,39 @@ async function cleanupIdempotency(options) {
   }
   if (
     !existsSync(prismaClientFactoryModule) ||
-    !existsSync(idempotencyRepositoryModule)
+    !existsSync(idempotencyRepositoryModule) ||
+    !existsSync(operatorPostgresApplicationNameModule)
   ) {
     throw new Error(
       'Idempotency cleanup is unavailable. Run "bun run build" before "idempotency:cleanup".',
     );
   }
 
-  const [factoryModule, repositoryModule] = await Promise.all([
-    /** @type {Promise<PrismaClientFactoryModule>} */ (
-      import(prismaClientFactoryModule.href)
-    ),
-    /** @type {Promise<IdempotencyRepositoryModule>} */ (
-      import(idempotencyRepositoryModule.href)
-    ),
-  ]);
+  const [factoryModule, repositoryModule, applicationNameModule] =
+    await Promise.all([
+      /** @type {Promise<PrismaClientFactoryModule>} */ (
+        import(prismaClientFactoryModule.href)
+      ),
+      /** @type {Promise<IdempotencyRepositoryModule>} */ (
+        import(idempotencyRepositoryModule.href)
+      ),
+      /** @type {Promise<OperatorPostgresApplicationNameModule>} */ (
+        import(operatorPostgresApplicationNameModule.href)
+      ),
+    ]);
   const createOperatorPrismaClientValue =
     factoryModule.createOperatorPrismaClient ??
     factoryModule.default?.createOperatorPrismaClient;
   const idempotencyRepositoryValue =
     repositoryModule.PostgresIdempotencyRepository ??
     repositoryModule.default?.PostgresIdempotencyRepository;
+  const operatorPostgresApplicationNameValue =
+    applicationNameModule.operatorPostgresApplicationName ??
+    applicationNameModule.default?.operatorPostgresApplicationName;
   if (
     typeof createOperatorPrismaClientValue !== 'function' ||
-    typeof idempotencyRepositoryValue !== 'function'
+    typeof idempotencyRepositoryValue !== 'function' ||
+    typeof operatorPostgresApplicationNameValue !== 'function'
   ) {
     throw new Error('Idempotency cleanup is unavailable.');
   }
@@ -1085,7 +1100,15 @@ async function cleanupIdempotency(options) {
     /** @type {IdempotencyRepositoryConstructor} */ (
       idempotencyRepositoryValue
     );
-  const client = createOperatorPrismaClient('runtime', databaseUrl);
+  const operatorPostgresApplicationName =
+    /** @type {OperatorPostgresApplicationNameFactory} */ (
+      operatorPostgresApplicationNameValue
+    );
+  const client = createOperatorPrismaClient(
+    'runtime',
+    databaseUrl,
+    operatorPostgresApplicationName('runtime'),
+  );
   try {
     const repository = new PostgresIdempotencyRepository(client.prisma);
     const deleted = await repository.cleanupExpired(

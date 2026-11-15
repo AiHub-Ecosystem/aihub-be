@@ -1,10 +1,10 @@
+import { createOperatorUserAccountStatusRepository } from '@/modules/auth/public/user-account-status';
 import type {
   DisableUserAccountResult,
   RestoreUserAccountResult,
   RevokeAllRefreshSessionsResult,
   UserAccountStatusPort,
 } from '@/modules/auth/shared/application/user-account-status.port';
-import { PostgresUserAccountStatusRepository } from '@/modules/auth/shared/infrastructure/postgres-user-account-status.repository';
 import { createOperatorAuthClient } from './operator-auth-client';
 import { runOperatorCommand } from './operator-command-context';
 
@@ -25,7 +25,7 @@ export async function runDisableUserAccountCommand(
   const emit = input.emit ?? console.log;
   const repository =
     input.repository ??
-    new PostgresUserAccountStatusRepository(
+    createOperatorUserAccountStatusRepository(
       await createOperatorAuthClient(input.databaseUrl),
     );
   const execution = await runOperatorCommand(
@@ -87,7 +87,7 @@ export async function runRestoreUserAccountCommand(
   const emit = input.emit ?? console.log;
   const repository =
     input.repository ??
-    new PostgresUserAccountStatusRepository(
+    createOperatorUserAccountStatusRepository(
       await createOperatorAuthClient(input.databaseUrl),
     );
   const execution = await runOperatorCommand(
@@ -143,7 +143,7 @@ export async function runRevokeAllRefreshSessionsCommand(
   const emit = input.emit ?? console.log;
   const repository =
     input.repository ??
-    new PostgresUserAccountStatusRepository(
+    createOperatorUserAccountStatusRepository(
       await createOperatorAuthClient(input.databaseUrl),
     );
   const execution = await runOperatorCommand(

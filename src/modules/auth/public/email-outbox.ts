@@ -1,2 +1,1 @@
-export { EmailOutbox } from '@/modules/auth/email-delivery/application/outbox/email-outbox';
-export { EmailOutboxBackpressureGate } from '@/modules/auth/email-delivery/application/outbox/email-outbox-backpressure.gate';
+export { createOperatorEmailOutbox } from '@/modules/auth/email-delivery/email-delivery-operator.module';

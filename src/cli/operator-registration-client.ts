@@ -3,19 +3,18 @@ import { operatorPostgresApplicationName } from './operator-postgres-application
 export async function createOperatorRegistrationClient(databaseUrl: string) {
   const [
     { createOperatorPrismaClient },
-    { PostgresPendingRegistrationRecords },
+    { createOperatorPendingRegistrationRecords },
   ] = await Promise.all([
     import('@/modules/persistence/infrastructure/prisma-client'),
-    import(
-      '@/modules/auth/accounts/infrastructure/postgres-pending-registration-records'
-    ),
+    import('@/modules/auth/public/pending-registration-expiry'),
   ]);
   const holder = createOperatorPrismaClient(
     'control-plane',
     databaseUrl,
     operatorPostgresApplicationName('control-plane'),
   );
-  return Object.assign(new PostgresPendingRegistrationRecords(holder.prisma), {
-    close: () => holder.close(),
-  });
+  return Object.assign(
+    createOperatorPendingRegistrationRecords(holder.prisma),
+    { close: () => holder.close() },
+  );
 }

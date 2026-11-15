@@ -183,22 +183,20 @@ function crossModuleRule() {
 }
 
 /**
- * `src/cli` is the composition root for the Operator surface: it is where a
- * command decides which Postgres client and which repository to construct,
- * exactly as `*.module.ts` does for the HTTP surface. Binding infrastructure is
- * that job, so `module-code-no-infrastructure-import` deliberately does not
- * reach this tree and this rule does not report it either.
+ * `src/cli` is the composition root for the Operator surface: it owns the
+ * database clients and lifecycle and composes non-Auth infrastructure. Auth
+ * adapters are composed by the Auth module behind its public operator facades.
  *
- * What it does report is a command reaching past the seam into a module's
- * application logic or domain. That logic belongs behind a port or in an
- * explicit public/ facade the module publishes.
+ * This rule reports a command reaching into a module's application logic or
+ * domain. That logic belongs behind a port or in an explicit public/ facade
+ * the module publishes.
  */
 function cliRule() {
   return {
     name: 'no-cli-module-internal-import',
     severity: 'error',
     comment:
-      "An Operator command imports a module's internal path. Use an application port or explicit public/ facade; constructing infrastructure remains the CLI composition root's job (ADR-0066).",
+      "An Operator command imports a module's internal path. Use an application port or explicit public/ facade; the CLI may construct other infrastructure, while Auth imports must also pass its public-seam rule (#1822, ADR-0066).",
     from: {
       path: '^src/cli/',
       pathNot: '[.]spec[.]ts$',
@@ -322,9 +320,9 @@ function externalAuthRule() {
     name: 'no-auth-internal-import-outside-auth',
     severity: 'error',
     comment:
-      'Runtime source outside Auth imports Auth through its root public facade, application ports, Nest exports, module composition, decorators, or shared Fastify primitives. The Operator CLI is governed by its composition-root rule.',
+      'Runtime source outside Auth, including the Operator CLI, imports Auth only through its public facades, application ports, Nest exports, module composition, decorators, or shared Fastify primitives (#1822).',
     from: {
-      path: '^src/(?!modules/auth/)(?!cli/)',
+      path: '^src/(?!modules/auth/)',
       pathNot: '[.]spec[.]ts$',
     },
     to: {

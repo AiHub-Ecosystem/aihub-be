@@ -958,7 +958,7 @@ describe('external Auth import boundary fixtures', () => {
     expect(authBoundaryRule?.severity).toBe('error');
     expect(matches(fromPath, 'src/openapi/openapi.controller.ts')).toBe(true);
     expect(matches(fromPath, 'src/modules/auth/auth.module.ts')).toBe(false);
-    expect(matches(fromPath, 'src/cli/operator-auth-client.ts')).toBe(false);
+    expect(matches(fromPath, 'src/cli/operator-auth-client.ts')).toBe(true);
     expect(matches(pathNot, 'src/modules/auth/public/email-outbox.ts')).toBe(
       true,
     );
@@ -987,6 +987,13 @@ describe('external Auth import boundary fixtures', () => {
     const root = workspaceRoot();
     const publicProbe = join(root, 'src', 'openapi', 'auth-public-probe.ts');
     const privateProbe = join(root, 'src', 'openapi', 'auth-private-probe.ts');
+    const cliPublicProbe = join(root, 'src', 'cli', 'auth-cli-public-probe.ts');
+    const cliPrivateProbe = join(
+      root,
+      'src',
+      'cli',
+      'auth-cli-private-probe.ts',
+    );
     const dependencyCruiserPath = join(
       repoRoot,
       'node_modules',
@@ -1009,6 +1016,26 @@ describe('external Auth import boundary fixtures', () => {
       privateProbe,
       [
         "import '@/modules/auth/web-sessions/presentation/refresh-cookie';",
+        'export const probe = true;',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      cliPublicProbe,
+      [
+        "import '@/modules/auth/auth.module';",
+        "import '@/modules/auth/public/email-outbox';",
+        "import '@/modules/auth/email-delivery/application/email-outbox.port';",
+        "import '@/modules/auth/public/pending-registration-expiry';",
+        "import '@/modules/auth/public/user-account-status';",
+        'export const probe = true;',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      cliPrivateProbe,
+      [
+        "import '@/modules/auth/shared/infrastructure/postgres-user-account-status.repository';",
         'export const probe = true;',
         '',
       ].join('\n'),
@@ -1042,15 +1069,28 @@ describe('external Auth import boundary fixtures', () => {
       const privateProbeViolations = violations.filter(({ from }) =>
         from.endsWith('/auth-private-probe.ts'),
       );
+      const cliPublicProbeViolations = violations.filter(({ from }) =>
+        from.endsWith('/auth-cli-public-probe.ts'),
+      );
+      const cliPrivateProbeViolations = violations.filter(({ from }) =>
+        from.endsWith('/auth-cli-private-probe.ts'),
+      );
 
       expect(publicProbeViolations).toEqual([]);
       expect(privateProbeViolations).toHaveLength(1);
       expect(privateProbeViolations[0]?.to).toContain(
         '/auth/web-sessions/presentation/refresh-cookie',
       );
+      expect(cliPublicProbeViolations).toEqual([]);
+      expect(cliPrivateProbeViolations).toHaveLength(1);
+      expect(cliPrivateProbeViolations[0]?.to).toContain(
+        '/auth/shared/infrastructure/postgres-user-account-status.repository',
+      );
     } finally {
       rmSync(publicProbe, { force: true });
       rmSync(privateProbe, { force: true });
+      rmSync(cliPublicProbe, { force: true });
+      rmSync(cliPrivateProbe, { force: true });
     }
   });
 });
