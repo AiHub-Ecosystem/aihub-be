@@ -1593,8 +1593,8 @@ describe('source-text architecture rules fail arch-check', () => {
         'test/real-timer.spec.ts',
         [
           'const delay = setTimeout;',
-          'async function sleep() { return new Promise((resolve) => delay(resolve, 5)); }',
           'it("waits", async () => {',
+          '  function sleep() { return new Promise((resolve) => delay(resolve, 5)); }',
           '  const wait = new Promise((resolve) => setTimeout(resolve, 5));',
           '  await wait;',
           '  const sleepWait = sleep();',

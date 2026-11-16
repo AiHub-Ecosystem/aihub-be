@@ -74,7 +74,15 @@ export function collectSourceTextFailures(options) {
     const relativePath = relative(root, file).replace(/\\/g, '/');
     const lines = source.split(/\r?\n/);
     const timerFunctions = new Set(['setTimeout']);
+    const timerPrimitives = new Set(['setTimeout']);
+    /** @type {Set<string>} */
     const timerPromiseFunctions = new Set();
+    /** @type {Map<import('typescript').Node, Set<string>>} */
+    const scopedTimerFunctions = new Map();
+    /** @type {Map<import('typescript').Node, Set<string>>} */
+    const scopedTimerPrimitives = new Map();
+    /** @type {Map<import('typescript').Node, Set<string>>} */
+    const scopedTimerPromiseFunctions = new Map();
     const imports = sourceFile.statements.filter(ts.isImportDeclaration);
     for (const statement of imports) {
       if (
@@ -93,6 +101,7 @@ export function collectSourceTextFailures(options) {
           element.name.text === 'setTimeout'
         ) {
           timerFunctions.add(element.name.text);
+          timerPrimitives.add(element.name.text);
           timerPromiseFunctions.add(element.name.text);
         }
       }
@@ -122,7 +131,8 @@ export function collectSourceTextFailures(options) {
       if (
         ts.isCallExpression(node) &&
         ts.isIdentifier(node.expression) &&
-        timerFunctions.has(node.expression.text)
+        (hasTimerPrimitive(node.expression) ||
+          hasTimerPromiseFunction(node.expression))
       ) {
         return true;
       }
@@ -154,6 +164,77 @@ export function collectSourceTextFailures(options) {
       return timerWaitVariables.get(sourceFile)?.has(node.text) ?? false;
     }
 
+    /** @param {import('typescript').Identifier} name @returns {boolean} */
+    function hasTimerFunction(name) {
+      return hasScopedFunction(name, scopedTimerFunctions, timerFunctions);
+    }
+
+    /** @param {import('typescript').Identifier} name @returns {boolean} */
+    function hasTimerPromiseFunction(name) {
+      return hasScopedFunction(
+        name,
+        scopedTimerPromiseFunctions,
+        timerPromiseFunctions,
+      );
+    }
+
+    /** @param {import('typescript').Identifier} name @returns {boolean} */
+    function hasTimerPrimitive(name) {
+      return hasScopedFunction(name, scopedTimerPrimitives, timerPrimitives);
+    }
+
+    /**
+     * @param {import('typescript').Identifier} name
+     * @param {Map<import('typescript').Node, Set<string>>} scopedNames
+     * @param {Set<string>} moduleNames
+     * @returns {boolean}
+     */
+    function hasScopedFunction(name, scopedNames, moduleNames) {
+      let scope = name.parent;
+      while (scope !== undefined && !ts.isFunctionLike(scope)) {
+        scope = scope.parent;
+      }
+      while (scope !== undefined) {
+        if (scopedNames.get(scope)?.has(name.text)) return true;
+        scope = scope.parent;
+        while (scope !== undefined && !ts.isFunctionLike(scope)) {
+          scope = scope.parent;
+        }
+      }
+      return (
+        scopedNames.get(sourceFile)?.has(name.text) ??
+        moduleNames.has(name.text)
+      );
+    }
+
+    /** @param {import('typescript').Node} node @returns {import('typescript').Node} */
+    function declarationScope(node) {
+      let scope = node.parent;
+      while (scope !== undefined && !ts.isFunctionLike(scope)) {
+        scope = scope.parent;
+      }
+      return scope ?? sourceFile;
+    }
+
+    /**
+     * @param {Map<import('typescript').Node, Set<string>>} scopedNames
+     * @param {Set<string>} moduleNames
+     * @param {import('typescript').Node} scope
+     * @param {string} name
+     */
+    function addFunctionName(scopedNames, moduleNames, scope, name) {
+      if (scope === sourceFile) {
+        moduleNames.add(name);
+        return;
+      }
+      let names = scopedNames.get(scope);
+      if (names === undefined) {
+        names = new Set();
+        scopedNames.set(scope, names);
+      }
+      names.add(name);
+    }
+
     /** @param {import('typescript').Node} node @param {() => void} found */
     function collectTimerWaitVariables(node, found) {
       const initializer = ts.isVariableDeclaration(node)
@@ -179,7 +260,7 @@ export function collectSourceTextFailures(options) {
           ts.isIdentifier(initializer) ||
           (ts.isCallExpression(initializer) &&
             ts.isIdentifier(initializer.expression) &&
-            timerPromiseFunctions.has(initializer.expression.text))) &&
+            hasTimerPromiseFunction(initializer.expression))) &&
         containsTimerWait(initializer)
       ) {
         /** @type {import('typescript').Node | undefined} */
@@ -207,13 +288,13 @@ export function collectSourceTextFailures(options) {
       let body;
       let functionNode;
       let isTimerAlias = false;
-      if (ts.isFunctionDeclaration(node) && node.parent === sourceFile) {
+      let isTimerPrimitiveAlias = false;
+      if (ts.isFunctionDeclaration(node)) {
         name = node.name;
         body = node.body;
         functionNode = node;
       } else if (
         ts.isVariableDeclaration(node) &&
-        isModuleScope(node) &&
         node.initializer !== undefined &&
         (ts.isArrowFunction(node.initializer) ||
           ts.isFunctionExpression(node.initializer))
@@ -223,24 +304,38 @@ export function collectSourceTextFailures(options) {
         functionNode = node.initializer;
       } else if (
         ts.isVariableDeclaration(node) &&
-        isModuleScope(node) &&
         ts.isIdentifier(node.name) &&
         node.initializer !== undefined &&
         ts.isIdentifier(node.initializer) &&
-        timerFunctions.has(node.initializer.text)
+        hasTimerFunction(node.initializer)
       ) {
         name = node.name;
         isTimerAlias = true;
+        isTimerPrimitiveAlias = hasTimerPrimitive(node.initializer);
       }
       if (
         name !== undefined &&
-        !timerFunctions.has(name.text) &&
+        !hasTimerFunction(name) &&
         (isTimerAlias || (body !== undefined && containsTimerWait(body)))
       ) {
-        timerFunctions.add(name.text);
+        const scope = declarationScope(node);
+        addFunctionName(scopedTimerFunctions, timerFunctions, scope, name.text);
+        if (isTimerPrimitiveAlias) {
+          addFunctionName(
+            scopedTimerPrimitives,
+            timerPrimitives,
+            scope,
+            name.text,
+          );
+        }
         found();
         if (functionNode !== undefined && returnsTimerPromise(functionNode)) {
-          timerPromiseFunctions.add(name.text);
+          addFunctionName(
+            scopedTimerPromiseFunctions,
+            timerPromiseFunctions,
+            scope,
+            name.text,
+          );
         }
       }
       node.forEachChild((child) => collectTimerFunctions(child, found));
@@ -250,10 +345,12 @@ export function collectSourceTextFailures(options) {
     function returnsTimerPromise(node, root = true) {
       if (!root && ts.isFunctionLike(node)) return false;
       if (
-        ts.canHaveModifiers(node) &&
-        ts
-          .getModifiers(node)
-          ?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+        ts.isArrowFunction(node) &&
+        !ts.isBlock(node.body) &&
+        ts.isCallExpression(node.body) &&
+        ts.isPropertyAccessExpression(node.body.expression) &&
+        ts.isIdentifier(node.body.expression.expression) &&
+        node.body.expression.expression.text === 'Promise'
       ) {
         return true;
       }
@@ -265,7 +362,7 @@ export function collectSourceTextFailures(options) {
             expression.expression.text === 'Promise') ||
           (ts.isCallExpression(expression) &&
             ts.isIdentifier(expression.expression) &&
-            timerPromiseFunctions.has(expression.expression.text))
+            hasTimerPromiseFunction(expression.expression))
         ) {
           return true;
         }
@@ -276,21 +373,12 @@ export function collectSourceTextFailures(options) {
     }
 
     /** @param {import('typescript').Node} node @returns {boolean} */
-    function isModuleScope(node) {
-      let parent = node.parent;
-      while (parent !== undefined && parent !== sourceFile) {
-        if (ts.isFunctionLike(parent)) return false;
-        parent = parent.parent;
-      }
-      return true;
-    }
-
-    /** @param {import('typescript').Node} node @returns {boolean} */
     function hasMarkedTimerWait(node) {
       if (
         ts.isCallExpression(node) &&
         ts.isIdentifier(node.expression) &&
-        timerFunctions.has(node.expression.text)
+        (hasTimerPrimitive(node.expression) ||
+          hasTimerPromiseFunction(node.expression))
       ) {
         const timerLine =
           sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
