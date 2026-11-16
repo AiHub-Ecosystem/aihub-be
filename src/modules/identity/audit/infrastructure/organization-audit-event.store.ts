@@ -14,6 +14,7 @@ import {
 import {
   type IdentityRepositoryClient,
   identityRows,
+  identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 type IdentitySqlClient = Parameters<typeof identityRows>[0];
@@ -109,8 +110,8 @@ export async function recordOrganizationAuditEvent(
 }
 
 /**
- * Writes a refused attempt, outside any transaction because the transaction
- * that refused it has rolled back.
+ * Writes a refused attempt in a transaction of its own, because the
+ * transaction that refused it has rolled back.
  *
  * Failure is swallowed deliberately, against the mutation path's rule. A
  * committed mutation with no trace loses evidence that state changed; an
@@ -124,7 +125,11 @@ export async function recordOrganizationAuditDenial(
   draft: OrganizationAuditDraft,
 ): Promise<void> {
   try {
-    await recordOrganizationAuditEvent(client, stamp, draft);
+    // Its own transaction, declared to the Organization seam (#785): the
+    // transaction that refused the attempt has already rolled back.
+    await identityTransaction(client, stamp.organizationId, (transaction) =>
+      recordOrganizationAuditEvent(transaction, stamp, draft),
+    );
   } catch {
     logger.error({
       event: 'organization_audit_denial_not_recorded',
