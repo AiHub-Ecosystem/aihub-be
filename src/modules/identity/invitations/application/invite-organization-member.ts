@@ -105,7 +105,8 @@ export class InviteOrganizationMember {
       'organization_invite_email',
       async () => {
         // Before the limits are spent: an outage is not the caller's fault.
-        const emailAllowed = await this.enforceRateLimits(input, email);
+        const emailAllowed =
+          await this.enforceInvitationLimitsAndCheckEmailDelivery(input, email);
 
         const now = new Date();
         const issued = this.tokenIssuer.issue(now);
@@ -187,7 +188,7 @@ export class InviteOrganizationMember {
     }
   }
 
-  private async enforceRateLimits(
+  private async enforceInvitationLimitsAndCheckEmailDelivery(
     input: InviteOrganizationMemberInput,
     email: string,
   ): Promise<boolean> {
