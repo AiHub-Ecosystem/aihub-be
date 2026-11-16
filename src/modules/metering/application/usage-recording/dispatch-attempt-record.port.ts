@@ -15,6 +15,7 @@ export interface DispatchAttemptStart {
 export interface DispatchAttemptRecordPort {
   beginAttempt(input: DispatchAttemptStart): Promise<string>;
   recordOutcome(
+    organizationId: string,
     attemptId: string,
     outcome: DispatchAttemptOutcome,
   ): Promise<void>;

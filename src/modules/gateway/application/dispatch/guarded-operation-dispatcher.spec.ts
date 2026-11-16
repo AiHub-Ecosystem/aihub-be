@@ -71,7 +71,7 @@ function fixture(options: { admit?: boolean | Error } = {}) {
   const beginAttempt = jest.fn(async () => 'attempt-1');
   const attempts: DispatchAttemptRecordPort = {
     beginAttempt,
-    recordOutcome: jest.fn(async (_id, outcome) => {
+    recordOutcome: jest.fn(async (_organizationId, _id, outcome) => {
       outcomes.push(outcome);
     }),
   };
@@ -223,7 +223,10 @@ describe('GuardedOperationDispatcher', () => {
       ).rejects.toThrow('connection refused');
 
       expect(outcomes).toEqual(['not_dispatched']);
-      expect(release).toHaveBeenCalledWith('req_01J8QK3M7XW2P5NRTVA9BCDEFG');
+      expect(release).toHaveBeenCalledWith(
+        'org_test',
+        'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
+      );
     });
 
     it('keeps the Sandbox reservation when the outcome is unknown', async () => {
@@ -304,7 +307,9 @@ describe('GuardedOperationDispatcher', () => {
       );
 
       expect(error.code).toBe('AI_SERVICE_TIMEOUT');
-      expect(release.mock.calls).toEqual([['req_01J8QK3M7XW2P5NRTVA9BCDEFG']]);
+      expect(release.mock.calls).toEqual([
+        ['org_test', 'req_01J8QK3M7XW2P5NRTVA9BCDEFG'],
+      ]);
       expect(beginAttempt).not.toHaveBeenCalled();
     });
 

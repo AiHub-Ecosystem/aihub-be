@@ -172,7 +172,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       throw environmentNotAllowed();
     }
     void this.repository
-      .touchLastUsed(record.apiKeyId, now)
+      .touchLastUsed(record.organizationId, record.apiKeyId, now)
       .catch(() => undefined);
 
     return {

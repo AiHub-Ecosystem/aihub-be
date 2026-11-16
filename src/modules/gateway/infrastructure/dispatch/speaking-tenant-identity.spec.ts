@@ -90,7 +90,11 @@ function attemptsFake() {
     return 'attempt-test';
   });
   const recordOutcome = jest.fn(
-    async (attemptId: string, outcome: DispatchAttemptOutcome) => {
+    async (
+      _organizationId: string,
+      attemptId: string,
+      outcome: DispatchAttemptOutcome,
+    ) => {
       outcomes.push({ attemptId, outcome });
     },
   );

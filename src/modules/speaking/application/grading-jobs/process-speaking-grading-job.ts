@@ -198,7 +198,7 @@ export class ProcessSpeakingGradingJob {
     });
     if (failed && job.environment === 'sandbox') {
       await this.dependencies.sandboxBudget
-        .release(job.jobId)
+        .release(job.organizationId, job.jobId)
         .catch(() => undefined);
     }
   }

@@ -9,6 +9,7 @@ import type {
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { quotaPeriod } from '@/modules/metering/public/quota-counter';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
@@ -126,11 +127,17 @@ export class PostgresSandboxDispatchBudget
     }, CONTROL_PLANE_TRANSACTION_OPTIONS);
   }
 
-  async release(requestId: string): Promise<void> {
-    await this.client.sandboxDispatchReservation.updateMany({
-      where: { requestId, status: 'reserved' },
-      data: { status: 'released', releasedAt: this.now() },
-    });
+  async release(organizationId: string, requestId: string): Promise<void> {
+    await organizationTransaction(
+      this.client,
+      organizationId,
+      async (transaction) => {
+        await transaction.sandboxDispatchReservation.updateMany({
+          where: { organizationId, requestId, status: 'reserved' },
+          data: { status: 'released', releasedAt: this.now() },
+        });
+      },
+    );
   }
 
   async allowanceFor(

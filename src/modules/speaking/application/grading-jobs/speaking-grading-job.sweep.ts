@@ -105,7 +105,7 @@ export class SpeakingGradingJobSweep {
       for (const job of jobs) {
         if (job.environment !== 'sandbox') continue;
         try {
-          await this.sandboxBudget.release(job.jobId);
+          await this.sandboxBudget.release(job.organizationId, job.jobId);
           sandboxReservationsReleased += 1;
         } catch {
           failedSteps.push('releaseExpiredSandboxReservation');

@@ -445,12 +445,19 @@ export class PostgresOrganizationIdentityConfigRepository
     }
 
     try {
-      const first = await this.readClient.organizationIdentityConfig.findFirst({
-        where:
-          status === null ? { organizationId } : { organizationId, status },
-        select: status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,
-      });
-      return first ?? undefined;
+      return await identityTransaction(
+        this.readClient,
+        organizationId,
+        async (transaction) => {
+          const first = await transaction.organizationIdentityConfig.findFirst({
+            where:
+              status === null ? { organizationId } : { organizationId, status },
+            select:
+              status === null ? STORED_CONFIG_SELECT : ACTIVE_CONFIG_SELECT,
+          });
+          return first ?? undefined;
+        },
+      );
     } catch (error) {
       throw identityStoreUnavailable(error);
     }

@@ -21,6 +21,7 @@ import {
 import {
   type IdentityRepositoryClient,
   identityRows,
+  identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 type ApiKeyLookupRow = Record<string, unknown>;
@@ -150,16 +151,30 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
     }
   }
 
-  async touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void> {
+  async touchLastUsed(
+    organizationId: string,
+    apiKeyId: string,
+    usedAt: Date,
+  ): Promise<void> {
     try {
       const throttleCutoff = new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS);
-      await this.client.apiKey.updateMany({
-        where: {
-          id: apiKeyId,
-          OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: throttleCutoff } }],
+      await identityTransaction(
+        this.client,
+        organizationId,
+        async (transaction) => {
+          await transaction.apiKey.updateMany({
+            where: {
+              id: apiKeyId,
+              organizationId,
+              OR: [
+                { lastUsedAt: null },
+                { lastUsedAt: { lt: throttleCutoff } },
+              ],
+            },
+            data: { lastUsedAt: usedAt },
+          });
         },
-        data: { lastUsedAt: usedAt },
-      });
+      );
     } catch (error) {
       throw identityStoreUnavailable(error);
     }

@@ -4,13 +4,21 @@ import type { PrismaClient } from '@prisma-client/client';
 import { PostgresDispatchAttemptRepository } from './postgres-dispatch-attempt.repository';
 
 function fakePrisma(rows: readonly unknown[] = []) {
-  const query = jest.fn().mockResolvedValue(rows);
+  const query = jest.fn(async (text: string) => {
+    if (text.includes('set_config')) return [];
+    return rows;
+  });
   const execute = jest.fn().mockResolvedValue(1);
   const updateMany = jest.fn().mockResolvedValue({ count: 1 });
   return {
     client: {
       $queryRawUnsafe: query,
       $executeRawUnsafe: execute,
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          $queryRawUnsafe: query,
+          dispatchAttempt: { updateMany },
+        }),
       dispatchAttempt: { updateMany },
     } as unknown as PrismaClient,
     query,
@@ -49,10 +57,14 @@ describe('PostgresDispatchAttemptRepository', () => {
       const { client, updateMany } = fakePrisma();
       const repository = new PostgresDispatchAttemptRepository(client);
 
-      await repository.recordOutcome('attempt-id', outcome);
+      await repository.recordOutcome('org-1', 'attempt-id', outcome);
 
       expect(updateMany).toHaveBeenCalledWith({
-        where: { attemptId: 'attempt-id', outcome: null },
+        where: {
+          attemptId: 'attempt-id',
+          organizationId: 'org-1',
+          outcome: null,
+        },
         data: { outcome },
       });
     },
