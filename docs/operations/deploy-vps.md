@@ -37,8 +37,8 @@ each hostname to its matching loopback port. See
   enabled.
 - A Vault operator session that can provision the AIHUB bundles, including the
   existing Wispace Redis credential, without using the runtime identity.
-- A CA file trusted by Vault and a role ID file for each Agent. The Agent
-  authenticates with its role ID; it does not use a `secret_id`.
+- A CA file trusted by Vault and protected role ID and Secret ID files for each
+  runtime Agent. The runtime Agent requires both AppRole credentials.
 - A release image in the registry, or a local Docker build.
 
 Do not reuse the development AppRole or the development rendered snapshot.
@@ -143,6 +143,7 @@ sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/pgbouncer
 sudo install -d -m 0700 /srv/aihub/secrets
 sudo install -m 0600 -o 10001 -g 10001 vault-ca.pem /srv/aihub/secrets/vault-ca.pem
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id /srv/aihub/secrets/vault-role-id
+sudo install -m 0600 -o 10001 -g 10001 vault-secret-id /srv/aihub/secrets/vault-secret-id
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id-sandbox /srv/aihub/secrets/vault-role-id-sandbox
 sudo docker network create --driver bridge --subnet 172.16.7.0/24 --gateway 172.16.7.1 aihub-production_backend
 cp .env.production.example .env.production
@@ -976,8 +977,8 @@ The Production directory contains `ai-speaking.json`, `ai-writing.json`,
 `resend.json`, `user-access-jwt.json`, `seaweedfs.json`, `database.json`,
 `redis.json`, `email-outbox.json`, `web-session.json`, and `auth-mfa.json`. It
 must not contain `sandbox-assertion.json`. Keep the directory mode `0700` and
-remove it after installing the helper-generated `vault-role-id` at
-`VAULT_ROLE_ID_FILE`. When the optional PgBouncer role is provisioned, read its
+remove it after installing the helper-generated `vault-role-id` and
+`vault-secret-id` at `VAULT_ROLE_ID_FILE` and `VAULT_SECRET_ID_FILE`. When the optional PgBouncer role is provisioned, read its
 role ID directly to the protected host path without printing it:
 
 Before provisioning `database-pooler.json`, export the four approved
@@ -1003,15 +1004,16 @@ so Docker NATs the connection to the Vault-side gateway first: on this host the
 Agent is at `172.16.7.x` but Vault sees `172.16.2.1`. Read the value from a
 rejected login in the Vault audit log.
 
-The role is provisioned with `bind_secret_id=false` so the Agent authenticates
-with its role ID alone and can re-authenticate whenever it is restarted, and
-with `bound_cidr_list` as the constraint Vault requires in that mode. Because
-every container on the host is NATed to the same gateway, that constraint blocks
-logins from outside the VPS but does not distinguish containers on it; the
-runtime policy is what limits what the token can read.
+The runtime role requires both `role_id` and a durable `secret_id` with
+`bind_secret_id=true`; its login quota allows 12 requests per minute and blocks
+the role for one minute at the limit. `secret_id_bound_cidrs` further restricts
+logins to the Vault-recorded network address, but all host containers share that
+gateway. Mount the Secret ID file only into Vault Agent. If either credential
+is compromised, rotate the role credentials, install both protected files,
+restart the Agent, verify a successful render, then revoke the old Secret ID.
+See [ADR-0170](../adr/0170-vault-runtime-approle-secret-id.md).
 
-Provisioning requires a non-root operator identity. The Agent needs no
-`secret_id`; for smoke checks, authenticate the Vault CLI as the generated
+Provisioning requires a non-root operator identity. For smoke checks, authenticate the Vault CLI as the generated
 AppRole using its role ID and keep the returned token only in the shell
 environment. Never print it or run the smoke check with the operator or root
 token. Validate the policy before starting the application:
@@ -1128,8 +1130,9 @@ docker compose --env-file .env.production \
 ```
 
 Before recreating Vault Agent, verify its operator-provisioned role ID file.
-The current AppRole uses `bind_secret_id=false`, so the Agent re-authenticates
-with that role ID and needs no one-use SecretID. CD does not provision roles.
+The runtime AppRole requires the protected role ID and durable Secret ID files.
+The Agent re-authenticates from those files after restarts; CD does not
+provision roles.
 Its #351 cutover step recreates the Production Agent only when it detects the
 old shared connection document and Sandbox is disabled. Other rollouts that
 change the rendered document schema must follow the coordinated release
@@ -1795,10 +1798,10 @@ rollback point, not a reason to drop the live database.
 Back up the existing Postgres before releases and test restore separately.
 Rotate compromised downstream credentials using the Vault runbook, then
 restart the matching Agent and app so the startup snapshot is re-rendered. The
-Agents use role IDs with `bind_secret_id=false`; do not mint or rotate a
-`secret_id`. If a role ID is compromised, rotate the affected AppRole and
-install its replacement role ID in that tier's host file before restarting
-its Agent. Certificates are renewed by certbot on the host, not by this stack.
+Runtime Agents use a role ID and durable Secret ID. If either credential is
+compromised, rotate the affected AppRole credentials and install both
+replacement files before restarting its Agent; revoke the old Secret ID after
+the replacement Agent authenticates. Certificates are renewed by certbot on the host, not by this stack.
 
 ## AI Speaking Production handoff
 

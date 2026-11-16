@@ -36,8 +36,10 @@ during a temporary Vault/Agent outage; it does not read Vault per request.
    Before deploying an MFA writer, also provision `email-outbox`, `web-session`,
    and `auth-mfa`; the latter contains `current_key_id` and a JSON string of
    key IDs mapped to 32-byte base64 keys.
-3. Provision the environment AppRole and configure Vault Agent to render all
-   four files under the AIHUB service account.
+3. Provision the environment AppRole, install its role ID and durable Secret ID
+   in protected files readable only by Vault Agent, and configure the Agent to
+   render all four files under the AIHUB service account. The runtime role login
+   quota allows 12 requests per minute and blocks for one minute at the limit.
 4. Set the rendered-file paths in the deployment config channel. Do not put
    runtime credential values in `.env.production`.
 5. Start one instance and run the opt-in AppRole smoke test. Verify health,
@@ -119,6 +121,12 @@ Rollback restores the previous approved KV versions, restarts Vault Agent and
 the application, and repeats the same checks. It never reintroduces a
 production `.env` fallback. Hot reload, per-request Vault reads, and automatic
 rotation orchestration remain out of scope.
+
+The runtime AppRole requires both `role_id` and `secret_id`; the Secret ID is
+durable so an Agent restart can authenticate without operator minting. If
+either credential is compromised, rotate the role credentials, replace both
+protected files, restart the Agent, and revoke the old Secret ID after the new
+Agent authenticates. See [ADR-0170](../adr/0170-vault-runtime-approle-secret-id.md).
 
 ## Failure matrix
 

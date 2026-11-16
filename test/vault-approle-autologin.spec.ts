@@ -8,22 +8,29 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('Vault AppRole unattended login', () => {
-  it('disables bind_secret_id so the Agent holds a durable credential', () => {
+  it('requires both AppRole credentials and mints a durable Secret ID', () => {
     const provision = readRepoFile('ops/vault/provision-runtime-secrets.mjs');
 
-    expect(provision).toContain("'bind_secret_id=false'");
-    expect(provision).toContain('`bound_cidr_list=${agentCidr}`');
-    expect(provision).not.toContain('secret_id_bound_cidrs');
+    expect(provision).toContain("'bind_secret_id=true'");
+    expect(provision).toContain("'secret_id_ttl=0'");
+    expect(provision).toContain("'secret_id_num_uses=0'");
+    expect(provision).toContain('`secret_id_bound_cidrs=${agentCidr}`');
+    expect(provision).toContain("'rate=12'");
+    expect(provision).toContain("'interval=1m'");
+    expect(provision).toContain("'vault-secret-id'");
   });
 
-  it('gives the Agent a role ID only, so nothing expires after login', () => {
+  it('mounts role ID and Secret ID only into the Agent', () => {
     const agentConfig = readRepoFile('ops/vault/agent/aihub-runtime.hcl');
     const compose = readRepoFile('docker-compose.production.yml');
 
     expect(agentConfig).toContain('role_id_file_path');
-    expect(agentConfig).not.toContain('secret_id_file_path');
+    expect(agentConfig).toContain('secret_id_file_path');
+    expect(agentConfig).toContain(
+      'remove_secret_id_file_after_reading = false',
+    );
     expect(compose).toContain('VAULT_ROLE_ID_FILE');
-    expect(compose).not.toContain('VAULT_SECRET_ID_FILE');
+    expect(compose).toContain('VAULT_SECRET_ID_FILE');
   });
 
   it('never assigns a container address to the CIDR variable', () => {
@@ -49,9 +56,7 @@ describe('Vault AppRole unattended login', () => {
   });
 
   it('never tells CD to recreate the Agent for a secret_id reason', () => {
-    // bind_secret_id=false means the Agent re-authenticates by itself. A comment
-    // telling the next operator to stage a SecretID by hand is how this comes
-    // back, so the stale reasoning is pinned here rather than left in prose.
+    // CD must not mint or install a Secret ID; it is provisioned by the operator.
     const cd = readRepoFile('.github/workflows/cd.yml');
 
     expect(cd).not.toContain('single-use');

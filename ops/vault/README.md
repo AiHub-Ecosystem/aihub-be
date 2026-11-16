@@ -109,10 +109,14 @@ Keep previous key IDs in the map while enabled factors still reference them;
 the new runtime reads this separate file, which the previous image ignores.
 Provision this bundle and render the file before deploying the writer release.
 
-The role is provisioned with `bind_secret_id=false`, so the Agent's role ID is a
-complete credential and the Agent re-authenticates on its own after a restart
-or a revoked token. `bound_cidr_list` is the constraint Vault requires when
-`bind_secret_id` is off.
+The runtime role requires both the Agent's role ID and a durable Secret ID.
+Provisioning writes the Secret ID to `vault-secret-id` in the protected
+credential directory; install it as `VAULT_SECRET_ID_FILE` with owner
+`10001:10001` and mode `0600`. The Agent can reuse it after a restart or revoked
+token. The role's login quota allows at most 12 requests per minute and blocks
+the role for one minute after a limit is reached. `secret_id_bound_cidrs` also
+restricts logins to the observed Vault-side network address; it is defense in
+depth because containers on the shared host share that address.
 
 The helper writes the selected policy, creates an AppRole with a short token
 TTL and bounded maximum TTL, and writes the runtime KV bundles. If the
@@ -192,8 +196,11 @@ apply any change to this line to the running Redis too. Persist the user with
 Vault. Verify authentication and a read-only script with that user, and use
 `ACL DRYRUN` to verify `SET` access without reserving a real send slot.
 
-Deliver the Role ID to Vault Agent through the deployment secret channel; never
-commit or paste it into an issue. There is no Agent `secret_id` to rotate.
+Deliver the Role ID and Secret ID to Vault Agent through the deployment secret
+channel; never commit or paste either into an issue. If either value is
+compromised, rotate the AppRole credentials, install both replacements, and
+restart the Agent. Revoke the previous Secret ID after the replacement Agent
+has authenticated.
 
 The AppRole policy must be read-only and must not receive `root`, `sys`, auth
 management, write, delete, or broad-list capabilities. Revoke bootstrap/root
