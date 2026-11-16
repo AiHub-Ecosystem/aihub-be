@@ -9,6 +9,8 @@ import type {
   IdempotencyReservation,
   ReserveIdempotencyInput,
 } from '@/modules/idempotency/application/idempotency-repository.port';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
+import type { PrismaClient } from '@prisma-client/client';
 
 interface IdempotencyQueryRow extends Record<string, unknown> {
   readonly request_id?: string;
@@ -18,10 +20,15 @@ interface IdempotencyQueryRow extends Record<string, unknown> {
   readonly response_body?: unknown;
 }
 
-/** The only thing the repository needs from Prisma: parameterized raw SQL. */
-interface IdempotencyClient {
+/** The only thing a statement needs from Prisma: parameterized raw SQL. */
+interface IdempotencyQueryClient {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
 }
+
+type IdempotencyQuery = (
+  text: string,
+  values: readonly unknown[],
+) => Promise<readonly IdempotencyQueryRow[]>;
 
 /**
  * The Organization predicate serves an Organization-scoped key and an Account
@@ -221,81 +228,99 @@ function reservationFromRow(row: unknown): IdempotencyReservation {
 export class PostgresIdempotencyRepository
   implements IdempotencyRepositoryPort
 {
-  constructor(private readonly client: IdempotencyClient) {}
+  constructor(private readonly client: PrismaClient) {}
 
-  private query(text: string, values: readonly unknown[]) {
-    // arch-check: shared wrapper separates reviewed SQL statements from bound values
-    return this.client.$queryRawUnsafe<readonly IdempotencyQueryRow[]>(
-      text,
-      ...values,
+  /**
+   * An Organization-scoped key runs in the Organization transaction seam
+   * (#785, ADR-0109). An Account Idempotency Scope has no Organization, so it
+   * stays on the unscoped client until #80 gives it a named pre-tenant path.
+   */
+  private scoped<T>(
+    organizationId: string | null,
+    run: (query: IdempotencyQuery) => Promise<T>,
+  ): Promise<T> {
+    const bind =
+      (client: IdempotencyQueryClient): IdempotencyQuery =>
+      (text, values) =>
+        // arch-check: shared wrapper separates reviewed SQL statements from bound values
+        client.$queryRawUnsafe<readonly IdempotencyQueryRow[]>(text, ...values);
+    if (organizationId === null) {
+      return run(bind(this.client));
+    }
+    return organizationTransaction(this.client, organizationId, (transaction) =>
+      run(bind(transaction)),
     );
   }
 
   async reserve(
     input: ReserveIdempotencyInput,
   ): Promise<IdempotencyReservation> {
-    const inserted = await this.query(IDEMPOTENCY_INSERT_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-      input.fingerprintHex,
-      input.requestId,
-      input.expiresAt,
-    ]);
-    const insertedRow = inserted[0];
-    if (insertedRow !== undefined) {
-      return { kind: 'claimed', requestId: requestIdFrom(insertedRow) };
-    }
+    return this.scoped(input.organizationId, async (query) => {
+      const inserted = await query(IDEMPOTENCY_INSERT_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+        input.fingerprintHex,
+        input.requestId,
+        input.expiresAt,
+      ]);
+      const insertedRow = inserted[0];
+      if (insertedRow !== undefined) {
+        return { kind: 'claimed', requestId: requestIdFrom(insertedRow) };
+      }
 
-    const claimed = await this.query(CLAIM_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-      input.fingerprintHex,
-      input.requestId,
-      input.expiresAt,
-    ]);
-    const claimedRow = claimed[0];
-    if (claimedRow !== undefined) {
-      return { kind: 'claimed', requestId: requestIdFrom(claimedRow) };
-    }
+      const claimed = await query(CLAIM_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+        input.fingerprintHex,
+        input.requestId,
+        input.expiresAt,
+      ]);
+      const claimedRow = claimed[0];
+      if (claimedRow !== undefined) {
+        return { kind: 'claimed', requestId: requestIdFrom(claimedRow) };
+      }
 
-    const existing = await this.query(IDEMPOTENCY_RESERVATION_READ_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-    ]);
-    const existingRow = existing[0];
-    if (existingRow === undefined) {
-      throw repositoryError(
-        'Idempotency record disappeared during reservation',
-      );
-    }
-    if (!isRecord(existingRow)) {
-      throw repositoryError('Idempotency record is malformed');
-    }
-    if (typeof existingRow.request_fingerprint !== 'string') {
-      throw repositoryError('Idempotency record is malformed');
-    }
-    if (existingRow.request_fingerprint !== input.fingerprintHex) {
-      return { kind: 'conflict', reason: 'fingerprint' };
-    }
-    return reservationFromRow(existingRow);
+      const existing = await query(IDEMPOTENCY_RESERVATION_READ_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+      ]);
+      const existingRow = existing[0];
+      if (existingRow === undefined) {
+        throw repositoryError(
+          'Idempotency record disappeared during reservation',
+        );
+      }
+      if (!isRecord(existingRow)) {
+        throw repositoryError('Idempotency record is malformed');
+      }
+      if (typeof existingRow.request_fingerprint !== 'string') {
+        throw repositoryError('Idempotency record is malformed');
+      }
+      if (existingRow.request_fingerprint !== input.fingerprintHex) {
+        return { kind: 'conflict', reason: 'fingerprint' };
+      }
+      return reservationFromRow(existingRow);
+    });
   }
 
   async findCompletedMatch(
     input: HasCompletedIdempotencyMatchInput,
   ): Promise<CompletedIdempotencyReplay | undefined> {
-    const rows = await this.query(IDEMPOTENCY_COMPLETED_REPLAY_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-      input.fingerprintHex,
-    ]);
+    const rows = await this.scoped(input.organizationId, (query) =>
+      query(IDEMPOTENCY_COMPLETED_REPLAY_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+        input.fingerprintHex,
+      ]),
+    );
     const row = rows[0];
     if (row === undefined) return undefined;
     const reservation = reservationFromRow(row);
@@ -309,44 +334,51 @@ export class PostgresIdempotencyRepository
   }
 
   async complete(input: CompleteIdempotencyInput): Promise<void> {
-    const rows = await this.query(COMPLETE_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-      input.requestId,
-      input.responseStatus,
-      input.responseBody,
-    ]);
+    const rows = await this.scoped(input.organizationId, (query) =>
+      query(COMPLETE_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+        input.requestId,
+        input.responseStatus,
+        input.responseBody,
+      ]),
+    );
     requireMutationResult(rows, 'Idempotency record was not completed');
   }
 
   async markFailed(input: IdempotencyAttemptInput): Promise<void> {
-    const rows = await this.query(FAILED_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-      input.requestId,
-    ]);
+    const rows = await this.scoped(input.organizationId, (query) =>
+      query(FAILED_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+        input.requestId,
+      ]),
+    );
     requireMutationResult(rows, 'Idempotency record was not marked failed');
   }
 
   async delete(input: IdempotencyAttemptInput): Promise<void> {
-    const rows = await this.query(DELETE_SQL, [
-      input.organizationId,
-      input.operation,
-      input.actorScope ?? '',
-      input.idempotencyKey,
-      input.requestId,
-    ]);
+    const rows = await this.scoped(input.organizationId, (query) =>
+      query(DELETE_SQL, [
+        input.organizationId,
+        input.operation,
+        input.actorScope ?? '',
+        input.idempotencyKey,
+        input.requestId,
+      ]),
+    );
     requireMutationResult(rows, 'Idempotency record was not deleted');
   }
 
+  /** Fleet-wide retention sweep: it spans Organizations, so it stays off the seam. */
   async cleanupExpired(cutoff?: Date): Promise<number> {
-    const rows = await this.query(IDEMPOTENCY_RETENTION_CLEANUP_SQL, [
-      cutoff ?? null,
-    ]);
+    const rows = await this.scoped(null, (query) =>
+      query(IDEMPOTENCY_RETENTION_CLEANUP_SQL, [cutoff ?? null]),
+    );
     return rows.length;
   }
 }
