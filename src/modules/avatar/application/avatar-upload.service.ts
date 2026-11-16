@@ -180,11 +180,22 @@ export class AvatarUploadService {
       await this.avatars.consumeUploadGrant(input.userId, input.assetId);
       return { ...this.published(current), created: false };
     }
-    const sanitized = await this.sanitizeUpload(
-      input.userId,
-      input.assetId,
-      signal,
-    );
+    let sanitized: SanitizedAvatarUpload;
+    try {
+      sanitized = await this.sanitizeUpload(
+        input.userId,
+        input.assetId,
+        signal,
+      );
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'NOT_FOUND') {
+        throw error;
+      }
+      const recorded = await this.avatars.findByUser(input.userId);
+      if (recorded?.assetId !== input.assetId) throw error;
+      await this.avatars.consumeUploadGrant(input.userId, input.assetId);
+      return { ...this.published(recorded), created: false };
+    }
     const completed = await this.avatars.withUserLock(input.userId, (avatars) =>
       this.recordUpload(completion, sanitized, avatars),
     );

@@ -21,6 +21,14 @@ const ASSET = 'ava_01J00000000000000000000001';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const NOW = new Date('2026-10-02T10:00:00.000Z');
 
+function deferred() {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 let cachedPng: Uint8Array | undefined;
 
 async function pngBytes(): Promise<Uint8Array> {
@@ -61,6 +69,9 @@ class FakeStorage implements AvatarStoragePort {
   failFinalCheck = false;
   failStagingDelete = false;
   readStarted: (() => void) | undefined;
+  describeGate:
+    | { readonly started: () => void; readonly wait: Promise<void> }
+    | undefined;
   copyGate:
     | { readonly started: () => void; readonly wait: Promise<void> }
     | undefined;
@@ -75,6 +86,8 @@ class FakeStorage implements AvatarStoragePort {
   async describeStagingObject(key: string, signal?: AbortSignal) {
     this.calls.push('check-staging');
     this.signals.push(signal);
+    this.describeGate?.started();
+    await this.describeGate?.wait;
     return this.staging.get(key);
   }
   async describeFinalObject(key: string, signal?: AbortSignal) {
@@ -167,6 +180,7 @@ describe('AvatarUploadService private staging', () => {
       requestId: REQUEST_ID,
     });
     const published = storage.finalBytes.get(objectKey);
+    if (published === undefined) throw new Error('Avatar was not published');
     storage.staging.set(objectKey, {
       contentType: 'image/png',
       byteSize: 12,
@@ -174,7 +188,7 @@ describe('AvatarUploadService private staging', () => {
     });
     storage.stagingBytes.set(objectKey, await otherPngBytes());
     expect(storage.finalBytes.get(objectKey)).toBe(published);
-    expect(await sharp(published!).metadata()).toMatchObject({
+    expect(await sharp(published).metadata()).toMatchObject({
       width: 2,
       height: 2,
     });
@@ -182,39 +196,66 @@ describe('AvatarUploadService private staging', () => {
 
   it('serializes same-asset completions across a replayed PUT', async () => {
     const { service, storage, objectKey } = await setup();
-    let beginCopy = (): void => undefined;
-    let releaseCopy = (): void => undefined;
-    const copyStarted = new Promise<void>((resolve) => {
-      beginCopy = resolve;
-    });
-    const copyGate = new Promise<void>((resolve) => {
-      releaseCopy = resolve;
-    });
-    storage.copyGate = { started: beginCopy, wait: copyGate };
+    const copyStarted = deferred();
+    const copyGate = deferred();
+    storage.copyGate = { started: copyStarted.resolve, wait: copyGate.promise };
     const first = service.completeUpload({
       userId: USER,
       assetId: ASSET,
       requestId: REQUEST_ID,
     });
-    await copyStarted;
+    await copyStarted.promise;
     storage.stagingBytes.set(objectKey, await otherPngBytes());
     const second = service.completeUpload({
       userId: USER,
       assetId: ASSET,
       requestId: REQUEST_ID,
     });
-    releaseCopy();
+    copyGate.resolve();
     await expect(Promise.all([first, second])).resolves.toMatchObject([
       { created: true },
       { created: false },
     ]);
-    expect(
-      await sharp(storage.finalBytes.get(objectKey)!).metadata(),
-    ).toMatchObject({
+    const published = storage.finalBytes.get(objectKey);
+    if (published === undefined) throw new Error('Avatar was not published');
+    expect(await sharp(published).metadata()).toMatchObject({
       width: 2,
       height: 2,
     });
     expect(storage.calls.filter((call) => call === 'copy')).toHaveLength(1);
+  });
+
+  it('returns idempotently when a concurrent completion removes staging', async () => {
+    const { service, storage, repository } = await setup();
+    const copyStarted = deferred();
+    const copyGate = deferred();
+    storage.copyGate = { started: copyStarted.resolve, wait: copyGate.promise };
+    const first = service.completeUpload({
+      userId: USER,
+      assetId: ASSET,
+      requestId: REQUEST_ID,
+    });
+    await copyStarted.promise;
+
+    const describeStarted = deferred();
+    const describeGate = deferred();
+    storage.describeGate = {
+      started: describeStarted.resolve,
+      wait: describeGate.promise,
+    };
+    const second = service.completeUpload({
+      userId: USER,
+      assetId: ASSET,
+      requestId: REQUEST_ID,
+    });
+    await describeStarted.promise;
+
+    copyGate.resolve();
+    await expect(first).resolves.toMatchObject({ created: true });
+    describeGate.resolve();
+
+    await expect(second).resolves.toMatchObject({ created: false });
+    expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
   });
 
   it('publishes bytes stripped of EXIF, ICC, and XMP metadata', async () => {
@@ -244,12 +285,13 @@ describe('AvatarUploadService private staging', () => {
 
     const published = storage.finalBytes.get(objectKey);
     expect(published).toBeDefined();
-    const metadata = await sharp(published!).metadata();
+    if (published === undefined) throw new Error('Avatar was not published');
+    const metadata = await sharp(published).metadata();
     expect(metadata.format).toBe('jpeg');
     expect(metadata.exif).toBeUndefined();
     expect(metadata.icc).toBeUndefined();
     expect(metadata.xmp).toBeUndefined();
-    expect(published!.byteLength).not.toBe(withMetadata.byteLength);
+    expect(published.byteLength).not.toBe(withMetadata.byteLength);
   });
 
   it('rejects a re-encoded image that grows beyond the size limit', async () => {
