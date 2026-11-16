@@ -242,14 +242,17 @@ describe('organization audit trail read against PostgreSQL', () => {
   const SECOND_ORGANIZATION_ID = 'org_other';
 
   function repository(): PostgresOrganizationAuditReadRepository {
+    const query = async (text: string, values: readonly unknown[]) => {
+      const result = await pool.query<Record<string, unknown>>(text, [
+        ...values,
+      ]);
+      return result.rows;
+    };
     return new PostgresOrganizationAuditReadRepository(
+      // The read runs in the Organization seam's transaction (#785).
       prismaFromQueryFake({
-        query: async (text: string, values: readonly unknown[]) => {
-          const result = await pool.query<Record<string, unknown>>(text, [
-            ...values,
-          ]);
-          return result.rows;
-        },
+        query,
+        transaction: (callback) => callback({ query }),
       }),
     );
   }
