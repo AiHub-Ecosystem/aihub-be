@@ -15,6 +15,14 @@ export const AVATAR_OBJECT_PREFIX = 'users/';
 
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
+/**
+ * Completion decodes the upload to re-encode it without camera metadata, so
+ * the declared size alone cannot bound the work: 2 MiB of compressed JPEG can
+ * describe an arbitrarily large bitmap. This is the ceiling the decoder
+ * enforces (#429).
+ */
+export const AVATAR_MAX_PIXELS = 20_000_000;
+
 export const AVATAR_UPLOAD_URL_TTL_SECONDS = 5 * 60;
 
 /**

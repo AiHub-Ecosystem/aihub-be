@@ -54,7 +54,10 @@ class FakeAvatarStorage implements AvatarStoragePort {
     throw new Error('not used by the sweep');
   }
 
-  async copyStagingToFinal(): Promise<void> {
+  async readStagingObject(): Promise<never> {
+    throw new Error('not used by the sweep');
+  }
+  async putFinalObject(): Promise<never> {
     throw new Error('not used by the sweep');
   }
   async describeFinalObject(): Promise<StoredAvatarObject | undefined> {

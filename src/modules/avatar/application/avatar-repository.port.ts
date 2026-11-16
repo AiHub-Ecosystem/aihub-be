@@ -31,6 +31,18 @@ export type RecordAvatarResult =
   | { readonly kind: 'exists' };
 
 /**
+ * What one accepted Avatar change records about itself (#429). It carries no
+ * image content and no URL: the asset id already names the published object.
+ * The account acting is the account whose Avatar changes, so one id is enough.
+ */
+export interface AvatarAuditEvent {
+  readonly action: 'avatar.set' | 'avatar.replaced' | 'avatar.removed';
+  readonly assetId: string;
+  readonly requestId: string;
+  readonly occurredAt: Date;
+}
+
+/**
  * Durable, and at most one Avatar per account: the database enforces it. Every
  * change is conditional on the Avatar the caller last read, so two concurrent
  * changes cannot both apply.
@@ -74,18 +86,27 @@ export interface AvatarRepositoryPort {
   recordedObjectKeys(
     objectKeys: readonly string[],
   ): Promise<ReadonlySet<string>>;
-  /** Records an account's first Avatar. */
-  record(avatar: Avatar): Promise<RecordAvatarResult>;
+  /** Records an account's first Avatar, and its audit event with it. */
+  record(avatar: Avatar, audit: AvatarAuditEvent): Promise<RecordAvatarResult>;
   /**
    * Swaps in `avatar` only while the account's record still names
-   * `previousAssetId`; `false` when it no longer does.
+   * `previousAssetId`; `false` when it no longer does. The audit event is
+   * written only when the swap applies.
    */
-  replace(previousAssetId: string, avatar: Avatar): Promise<boolean>;
+  replace(
+    previousAssetId: string,
+    avatar: Avatar,
+    audit: AvatarAuditEvent,
+  ): Promise<boolean>;
   /**
    * Removes the record only while it still names `assetId`; `false` when it no
-   * longer does.
+   * longer does. The audit event is written only when the removal applies.
    */
-  remove(userId: string, assetId: string): Promise<boolean>;
+  remove(
+    userId: string,
+    assetId: string,
+    audit: AvatarAuditEvent,
+  ): Promise<boolean>;
 }
 
 export const AVATAR_REPOSITORY = Symbol('AVATAR_REPOSITORY');

@@ -20,6 +20,12 @@ export interface ListedAvatarObject {
   readonly lastModified: Date | undefined;
 }
 
+/** The uploaded bytes, as they were read for completion. */
+export interface StagedAvatarObject {
+  readonly contentType: string | undefined;
+  readonly bytes: Uint8Array;
+}
+
 /**
  * Object storage for Avatars. Every method fails with
  * `AVATAR_STORAGE_UNAVAILABLE` when storage is unconfigured or unreachable.
@@ -33,12 +39,24 @@ export interface AvatarStoragePort {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
   }): Promise<AvatarUploadUrl>;
-  copyStagingToFinal(input: {
+  /**
+   * The uploaded bytes, bound by ETag so a replayed PUT cannot swap them
+   * between the check and the read. `undefined` when no object exists there.
+   */
+  readStagingObject(
+    objectKey: string,
+    etag: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<StagedAvatarObject | undefined>;
+  /**
+   * Writes the published object. Completion passes re-encoded bytes, so the
+   * published image carries none of the upload's metadata (#429).
+   */
+  putFinalObject(input: {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
+    readonly bytes: Uint8Array;
     readonly signal?: AbortSignal;
-    /** Binds the copy source by ETag so a replayed PUT cannot swap bytes. */
-    readonly stagingEtag?: string | undefined;
   }): Promise<void>;
   /**
    * The published, unsigned origin URL of an object (ADR-0069). Throws

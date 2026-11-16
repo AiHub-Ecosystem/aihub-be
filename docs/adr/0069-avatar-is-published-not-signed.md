@@ -1,6 +1,6 @@
 # ADR-0069: The Avatar is published, not signed
 
-- Status: Accepted
+- Status: Accepted; the 2026-11-07 private-staging completion is amended by [ADR-0170](0170-avatar-uploads-are-re-encoded-and-audited.md) (completion re-encodes instead of copying)
 - Date: 2026-10-02
 - Related issue: [#216](https://github.com/AiHub-Ecosystem/aihub-be/issues/216)
 - Related: [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md), [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0065](0065-aihub-owns-audio-asset-catalog-and-playback-urls.md)

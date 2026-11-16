@@ -214,9 +214,13 @@ describe('S3AvatarStorage', () => {
           unavailable,
         );
         await expect(
-          invalid.copyStagingToFinal({
+          invalid.readStagingObject(KEY, '"etag-123"'),
+        ).rejects.toMatchObject(unavailable);
+        await expect(
+          invalid.putFinalObject({
             objectKey: KEY,
             contentType: 'image/png',
+            bytes: new Uint8Array([1]),
           }),
         ).rejects.toMatchObject(unavailable);
         await expect(invalid.deleteObject(KEY)).rejects.toMatchObject(
@@ -267,21 +271,45 @@ describe('S3AvatarStorage', () => {
       );
     });
 
-    it('copies staging to the public bucket with replacement metadata and etag binding', async () => {
+    it('reads the staging bytes bound to the etag it read', async () => {
+      const { client, send } = clientAnswering(async () => ({
+        ContentType: 'image/png',
+        Body: {
+          transformToByteArray: async () => new Uint8Array([1, 2, 3]),
+        },
+      }));
+
+      await expect(
+        storage({ client }).readStagingObject(KEY, '"etag-123"'),
+      ).resolves.toEqual({
+        contentType: 'image/png',
+        bytes: new Uint8Array([1, 2, 3]),
+      });
+      expect(send.mock.calls[0]?.[0]?.input).toEqual({
+        Bucket: 'aihub-user-asset-staging',
+        Key: KEY,
+        IfMatch: '"etag-123"',
+      });
+    });
+
+    it('publishes the re-encoded bytes with the cache header and inline display', async () => {
       const { client, send } = clientAnswering(async () => ({}));
-      await storage({ client }).copyStagingToFinal({
+      const bytes = new Uint8Array([7, 8, 9]);
+
+      await storage({ client }).putFinalObject({
         objectKey: KEY,
         contentType: 'image/png',
-        stagingEtag: '"etag-123"',
+        bytes,
       });
+
       expect(send.mock.calls[0]?.[0]?.input).toEqual({
         Bucket: 'aihub-user-assets',
         Key: KEY,
-        CopySource: `aihub-user-asset-staging/${KEY}`,
-        MetadataDirective: 'REPLACE',
+        Body: bytes,
+        ContentLength: 3,
         ContentType: 'image/png',
+        ContentDisposition: 'inline',
         CacheControl: 'public, max-age=3600',
-        CopySourceIfMatch: '"etag-123"',
       });
     });
   });

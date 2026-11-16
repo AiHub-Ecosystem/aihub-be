@@ -106,6 +106,7 @@ export class AvatarController {
     const completed = await this.uploads.completeUpload({
       userId,
       assetId,
+      requestId,
       signal:
         getRequestLifecycle(request.raw)?.signal ??
         AbortSignal.timeout(
@@ -137,11 +138,13 @@ export class AvatarController {
   @Delete(PUBLIC_ROUTES['me.avatar.remove'].path)
   @HttpCode(PUBLIC_ROUTES['me.avatar.remove'].successStatus)
   async removeAvatar(@Req() request: FastifyRequest): Promise<void> {
-    const { userId } = authenticatedUser(request);
-    await this.uploads.removeAvatar(
+    const { userId, requestId } = authenticatedUser(request);
+    await this.uploads.removeAvatar({
       userId,
-      getRequestLifecycle(request.raw)?.signal ??
+      requestId,
+      signal:
+        getRequestLifecycle(request.raw)?.signal ??
         AbortSignal.timeout(PUBLIC_ROUTES['me.avatar.remove'].timeoutMs),
-    );
+    });
   }
 }

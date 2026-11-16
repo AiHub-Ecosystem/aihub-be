@@ -1,7 +1,9 @@
 import { AppError, internalError } from '@/common/errors/app-error';
+import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import type {
+  AvatarAuditEvent,
   AvatarRepositoryPort,
   AvatarUploadGrantRecord,
   RecordAvatarResult,
@@ -64,6 +66,13 @@ const CONSUME_GRANT_SQL = `
   SET status = 'consumed'
   WHERE user_account_id = $1 AND id = $2
 `;
+const INSERT_AUDIT_SQL = `
+  INSERT INTO user_avatar_audits
+    (id, user_account_id, actor_source, action, asset_id, request_id, occurred_at)
+  VALUES ($1, $2, 'authenticated_user', $3, $4, $5, $6)
+`;
+
+const nextAuditId = prefixedIdGenerator('uaa_');
 
 function grantLockKey(userId: string): string {
   return `avatar:grants:${userId}`;
@@ -229,9 +238,12 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
     );
   }
 
-  async record(avatar: Avatar): Promise<RecordAvatarResult> {
-    const inserted = await this.run(() =>
-      this.client.$queryRawUnsafe<readonly AvatarIdRow[]>(
+  async record(
+    avatar: Avatar,
+    audit: AvatarAuditEvent,
+  ): Promise<RecordAvatarResult> {
+    const inserted = await this.transaction(async (client) => {
+      const rows = await client.$queryRawUnsafe<readonly AvatarIdRow[]>(
         INSERT_SQL,
         avatar.assetId,
         avatar.userId,
@@ -239,8 +251,12 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
         avatar.contentType,
         avatar.byteSize,
         avatar.acceptedAt,
-      ),
-    );
+      );
+      if (rows.length === 1) {
+        await this.appendAudit(client, avatar.userId, audit);
+      }
+      return rows;
+    });
     if (inserted.length === 1) {
       return { kind: 'recorded', avatar };
     }
@@ -254,9 +270,13 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
 
   // Conditional on the asset the caller read: a concurrent change makes the
   // update match nothing, and the caller learns it lost rather than overwriting.
-  async replace(previousAssetId: string, avatar: Avatar): Promise<boolean> {
-    const updated = await this.run(() =>
-      this.client.userAvatar.updateMany({
+  async replace(
+    previousAssetId: string,
+    avatar: Avatar,
+    audit: AvatarAuditEvent,
+  ): Promise<boolean> {
+    return this.transaction(async (client) => {
+      const updated = await client.userAvatar.updateMany({
         where: { userAccountId: avatar.userId, id: previousAssetId },
         data: {
           id: avatar.assetId,
@@ -265,27 +285,58 @@ export class PostgresAvatarRepository implements AvatarRepositoryPort {
           byteSize: avatar.byteSize,
           acceptedAt: avatar.acceptedAt,
         },
-      }),
-    );
-    return updated.count === 1;
+      });
+      if (updated.count !== 1) return false;
+      await this.appendAudit(client, avatar.userId, audit);
+      return true;
+    });
   }
 
-  async remove(userId: string, assetId: string): Promise<boolean> {
-    const deleted = await this.run(() =>
-      this.client.userAvatar.deleteMany({
+  async remove(
+    userId: string,
+    assetId: string,
+    audit: AvatarAuditEvent,
+  ): Promise<boolean> {
+    return this.transaction(async (client) => {
+      const deleted = await client.userAvatar.deleteMany({
         where: { userAccountId: userId, id: assetId },
-      }),
+      });
+      if (deleted.count !== 1) return false;
+      await this.appendAudit(client, userId, audit);
+      return true;
+    });
+  }
+
+  /**
+   * The audit event joins the change's transaction, so a change that rolls
+   * back leaves no event behind and an event that cannot be written fails the
+   * change (ADR-0035).
+   */
+  private async appendAudit(
+    client: Prisma.TransactionClient,
+    userId: string,
+    audit: AvatarAuditEvent,
+  ): Promise<void> {
+    await client.$executeRawUnsafe(
+      INSERT_AUDIT_SQL,
+      nextAuditId(audit.occurredAt),
+      userId,
+      audit.action,
+      audit.assetId,
+      audit.requestId,
+      audit.occurredAt,
     );
-    return deleted.count === 1;
   }
 
   private async transaction<T>(
     run: (client: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    if (!('$transaction' in this.client)) {
-      throw storeError(internalError('Avatar transaction is unavailable'));
-    }
     try {
+      // Inside `withUserLock` the client is already a transaction, and a
+      // transaction client has no `$transaction` of its own to open.
+      if (!('$transaction' in this.client)) {
+        return await run(this.client);
+      }
       return await this.client.$transaction(
         (transaction) => run(transaction),
         AVATAR_LOCK_TRANSACTION_OPTIONS,

@@ -2,10 +2,15 @@ import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { payloadTooLarge, uploadNotFound } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
+import {
+  sanitizeRasterImage,
+  serializeRasterImageProcessing,
+} from '@/common/image/raster-image';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import {
   AVATAR_COMPLETION_WINDOW_MS,
   AVATAR_MAX_BYTES,
+  AVATAR_MAX_PIXELS,
   type Avatar,
   type AvatarContentType,
   avatarObjectKey,
@@ -13,7 +18,10 @@ import {
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
 
-import type { AvatarRepositoryPort } from './avatar-repository.port';
+import type {
+  AvatarAuditEvent,
+  AvatarRepositoryPort,
+} from './avatar-repository.port';
 import type { AvatarStoragePort } from './avatar-storage.port';
 import {
   AVATAR_COMPLETION_COPY_MIN_REMAINING_MS,
@@ -148,6 +156,7 @@ export class AvatarUploadService {
   async completeUpload(input: {
     readonly userId: string;
     readonly assetId: string;
+    readonly requestId: string;
     readonly signal?: AbortSignal;
   }): Promise<CompletedAvatar> {
     const deadlineAt = performance.now() + AVATAR_COMPLETION_DEADLINE_MS;
@@ -173,6 +182,7 @@ export class AvatarUploadService {
     input: {
       readonly userId: string;
       readonly assetId: string;
+      readonly requestId: string;
       readonly signal: AbortSignal;
       readonly deadlineAt: number;
     },
@@ -195,7 +205,10 @@ export class AvatarUploadService {
     );
 
     if (previous === undefined) {
-      const result = await avatars.record(avatar);
+      const result = await avatars.record(
+        avatar,
+        this.audit('avatar.set', avatar, input.requestId),
+      );
       if (result.kind === 'exists') {
         await this.discard(avatar.objectKey, input.signal);
         await this.discardStaging(avatar.objectKey, input.signal);
@@ -207,7 +220,13 @@ export class AvatarUploadService {
     // Deleted before the record stops naming it: if this fails, nothing has
     // changed, and retrying the completion retries the delete.
     await this.storage.deleteObject(previous.objectKey, input.signal);
-    if (await avatars.replace(previous.assetId, avatar)) {
+    if (
+      await avatars.replace(
+        previous.assetId,
+        avatar,
+        this.audit('avatar.replaced', avatar, input.requestId),
+      )
+    ) {
       return { avatar, created: true };
     }
 
@@ -223,7 +242,12 @@ export class AvatarUploadService {
     throw avatarChanged();
   }
 
-  async removeAvatar(userId: string, signal?: AbortSignal): Promise<void> {
+  async removeAvatar(input: {
+    readonly userId: string;
+    readonly requestId: string;
+    readonly signal?: AbortSignal;
+  }): Promise<void> {
+    const { userId, signal } = input;
     const current = await this.avatars.findByUser(userId);
     if (current === undefined) {
       return;
@@ -231,7 +255,13 @@ export class AvatarUploadService {
 
     // The object goes first: a failed delete leaves the Avatar as it was.
     await this.storage.deleteObject(current.objectKey, signal);
-    if (await this.avatars.remove(userId, current.assetId)) {
+    if (
+      await this.avatars.remove(
+        userId,
+        current.assetId,
+        this.audit('avatar.removed', current, input.requestId),
+      )
+    ) {
       return;
     }
 
@@ -246,7 +276,23 @@ export class AvatarUploadService {
     return { avatar, url: this.storage.publicUrl(avatar.objectKey) };
   }
 
-  /** Checks private staging, copies, then checks the unwriteable published key. */
+  private audit(
+    action: AvatarAuditEvent['action'],
+    avatar: Avatar,
+    requestId: string,
+  ): AvatarAuditEvent {
+    return {
+      action,
+      assetId: avatar.assetId,
+      requestId,
+      occurredAt: this.now(),
+    };
+  }
+
+  /**
+   * Checks private staging, re-encodes the bytes it actually read so no camera
+   * metadata is published, then checks the key it wrote (#429).
+   */
   private async verifiedUpload(
     userId: string,
     assetId: string,
@@ -271,24 +317,60 @@ export class AvatarUploadService {
       throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
     }
 
-    // The private bucket prevents a writable oversized object from being served publicly before completion.
+    // The private bucket prevents a writable oversized object from being served
+    // publicly before completion.
     const stagingObject = await this.validateStored(
       stored,
       objectKey,
       signal,
       true,
     );
+    const staged = await this.storage.readStagingObject(
+      objectKey,
+      stored.etag,
+      signal,
+    );
+    if (staged === undefined) {
+      await this.discardStaging(objectKey, signal);
+      throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
+    }
+    if (staged.contentType !== stagingObject.contentType) {
+      await this.discardStaging(objectKey, signal);
+      throw invalidRequest();
+    }
+
+    // Decoding is the expensive step and cannot be aborted, so it is serialized
+    // and bounded by the pixel ceiling; the abort check below covers the write.
+    const sanitized = await serializeRasterImageProcessing(() =>
+      sanitizeRasterImage({
+        contentType: stagingObject.contentType,
+        bytes: staged.bytes,
+        maxBytes: AVATAR_MAX_BYTES,
+        maxPixels: AVATAR_MAX_PIXELS,
+      }),
+    );
+    if (sanitized?.kind !== 'sanitized') {
+      await this.discardStaging(objectKey, signal);
+      if (sanitized?.kind === 'too_large') {
+        throw payloadTooLarge(
+          'PAYLOAD_TOO_LARGE',
+          'Avatar image is larger than 2 MiB',
+        );
+      }
+      throw invalidRequest();
+    }
+
     if (
-      signal?.aborted ||
+      signal.aborted ||
       deadlineAt - performance.now() < AVATAR_COMPLETION_COPY_MIN_REMAINING_MS
     ) {
       throw avatarStorageUnavailable();
     }
-    await this.storage.copyStagingToFinal({
+    await this.storage.putFinalObject({
       objectKey,
       contentType: stagingObject.contentType,
-      stagingEtag: stored.etag,
-      ...(signal === undefined ? {} : { signal }),
+      bytes: sanitized.bytes,
+      signal,
     });
     const published = await this.storage.describeFinalObject(objectKey, signal);
     if (published === undefined) {

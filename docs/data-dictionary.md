@@ -39,9 +39,10 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | WritingChartUpload                 | writing     | 15      |
 | WritingChartRevocationAudit        | writing     | 10      |
 | UsageRecord                        | metering    | 21      |
-| UserAccount                        | auth        | 23      |
+| UserAccount                        | auth        | 24      |
 | UserAvatar                         | avatar      | 7       |
 | UserAvatarUploadGrant              | avatar      | 7       |
+| UserAvatarAudit                    | avatar      | 8       |
 | UserMfaFactor                      | auth        | 8       |
 | UserMfaRecoveryCode                | auth        | 5       |
 | WebSession                         | auth        | 8       |
@@ -625,6 +626,7 @@ Owner: `auth`
 | refreshTokens                | RefreshToken[]                |                                            |
 | avatar                       | UserAvatar?                   |                                            |
 | avatarUploadGrants           | UserAvatarUploadGrant[]       |                                            |
+| avatarAudits                 | UserAvatarAudit[]             |                                            |
 | mfaFactor                    | UserMfaFactor?                |                                            |
 | mfaRecoveryCodes             | UserMfaRecoveryCode[]         |                                            |
 | webSessions                  | WebSession[]                  |                                            |
@@ -661,6 +663,21 @@ Owner: `avatar`
 | createdAt     | DateTime    | @map("created_at") @db.Timestamptz(6)                                                       |
 | expiresAt     | DateTime    | @map("expires_at") @db.Timestamptz(6)                                                       |
 | userAccount   | UserAccount | @relation(fields: [userAccountId], references: [id], onDelete: Cascade, onUpdate: NoAction) |
+
+## UserAvatarAudit
+
+Owner: `avatar`
+
+| Column        | Type        | Attributes                                                                                   |
+| ------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| id            | String      | @id                                                                                          |
+| userAccountId | String      | @map("user_account_id")                                                                      |
+| actorSource   | String      | @map("actor_source")                                                                         |
+| action        | String      |                                                                                              |
+| assetId       | String      | @map("asset_id")                                                                             |
+| requestId     | String      | @map("request_id")                                                                           |
+| occurredAt    | DateTime    | @map("occurred_at") @db.Timestamptz(6)                                                       |
+| userAccount   | UserAccount | @relation(fields: [userAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction) |
 
 ## UserMfaFactor
 

@@ -134,6 +134,7 @@ export async function resetIdentityTables(pool: Pool): Promise<void> {
       organization_invitations,
       organization_members,
       user_account_status_audits,
+      user_avatar_audits,
       web_sessions,
       auth_identities,
       user_accounts,
