@@ -316,7 +316,7 @@ describe('organization invitation email outbox over HTTP', () => {
     );
   });
 
-  it('preserves an actionable invitation when a suppressed resend cannot email a replacement', async () => {
+  it('preserves an actionable invitation when the shared email limit rejects a resend', async () => {
     const original = await invite();
     const originalBody = original.json<{ data: { invitation_id: string } }>();
     const originalInvitation = await pool.query<{
@@ -329,15 +329,9 @@ describe('organization invitation email outbox over HTTP', () => {
     );
 
     rateLimiter.denyEmailKey = INVITEE;
-    const suppressedResend = await invite();
+    const rejectedResend = await invite();
 
-    expect(suppressedResend.statusCode).toBe(201);
-    expect(suppressedResend.json()).toMatchObject({
-      data: {
-        invitation_id: originalBody.data.invitation_id,
-        email_delivery_status: 'suppressed',
-      },
-    });
+    expect(rejectedResend.statusCode).toBe(429);
     const currentInvitation = await pool.query<{
       id: string;
       token_hash: string;

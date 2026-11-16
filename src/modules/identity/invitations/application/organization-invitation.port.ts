@@ -11,7 +11,7 @@ export interface CreateOrganizationInvitationInput {
   readonly invitedBy: string;
   readonly tokenHash: string;
   readonly expiresAt: Date;
-  readonly emailDelivery?: OrganizationInviteEmailDelivery;
+  readonly emailDelivery: OrganizationInviteEmailDelivery;
   readonly now: Date;
 }
 
@@ -39,12 +39,6 @@ export interface OrganizationInviteEmailDelivery {
  */
 export type CreateOrganizationInvitationResult =
   | { readonly kind: 'created' }
-  | {
-      readonly kind: 'existing_invitation';
-      readonly invitationId: string;
-      readonly role: OrganizationMembershipRole;
-      readonly expiresAt: Date;
-    }
   | { readonly kind: 'member_exists' }
   | { readonly kind: 'caller_not_authorized' }
   | { readonly kind: 'organization_suspended' };

@@ -87,9 +87,7 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     typeof email !== 'string' ||
     (role !== 'owner' && role !== 'admin' && role !== 'member') ||
     typeof expiresAt !== 'string' ||
-    (emailDeliveryStatus !== undefined &&
-      emailDeliveryStatus !== 'queued' &&
-      emailDeliveryStatus !== 'suppressed')
+    (emailDeliveryStatus !== undefined && emailDeliveryStatus !== 'queued')
   ) {
     throw internalError('stored invitation replay is invalid');
   }

@@ -169,8 +169,7 @@ function decodeInvitation(value: unknown): InvitedOrganizationMember {
     typeof organizationId !== 'string' ||
     typeof email !== 'string' ||
     (role !== 'owner' && role !== 'admin' && role !== 'member') ||
-    (value['emailDeliveryStatus'] !== 'queued' &&
-      value['emailDeliveryStatus'] !== 'suppressed')
+    value['emailDeliveryStatus'] !== 'queued'
   ) {
     throw new Error('invalid stored invitation');
   }
@@ -406,7 +405,7 @@ describe('organization invitation management idempotency seam', () => {
     },
   );
 
-  it('suppresses email after the shared address ceiling without refusing invitations', async () => {
+  it('rejects invitations after the shared address ceiling before mutation', async () => {
     await execute({
       idempotencyKey: 'invite-1',
       email: ' Invitee@Example.COM ',
@@ -422,17 +421,17 @@ describe('organization invitation management idempotency seam', () => {
       userId: 'usr_third',
     });
 
-    const suppressed = await execute({
-      idempotencyKey: 'invite-4',
-      organizationId: 'org_fourth',
-      userId: 'usr_fourth',
-    });
-    expect(suppressed.result.emailDeliveryStatus).toBe('suppressed');
-    expect(invitationCreateInputs).toHaveLength(4);
-    expect(invitationCreateInputs[3]?.emailDelivery).toBeUndefined();
+    await expect(
+      execute({
+        idempotencyKey: 'invite-4',
+        organizationId: 'org_fourth',
+        userId: 'usr_fourth',
+      }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
+    expect(invitationCreateInputs).toHaveLength(3);
   });
 
-  it('does not let one Organization exhaust another Organization email allowance', async () => {
+  it('limits attempts by both Organization/email and email alone', async () => {
     for (const idempotencyKey of ['org-a-1', 'org-a-2', 'org-a-3']) {
       await execute({ idempotencyKey });
     }
@@ -442,12 +441,17 @@ describe('organization invitation management idempotency seam', () => {
       httpStatus: 429,
     });
 
-    const otherOrganization = await execute({
-      idempotencyKey: 'org-b-1',
-      organizationId: OTHER_ORGANIZATION_ID,
-    });
-    expect(otherOrganization.result.emailDeliveryStatus).toBe('suppressed');
-    expect(invitationCreateInputs).toHaveLength(4);
+    expect(
+      rateLimiter.counts.get(
+        `organization_invitation_email:["${ORGANIZATION_ID}","invitee@example.com"]`,
+      ),
+    ).toBe(4);
+    expect(
+      rateLimiter.counts.get(
+        'organization_invitation_email:invitee@example.com',
+      ),
+    ).toBe(3);
+    expect(invitationCreateInputs).toHaveLength(3);
   });
 
   it('rejects a different role with the same scoped key', async () => {

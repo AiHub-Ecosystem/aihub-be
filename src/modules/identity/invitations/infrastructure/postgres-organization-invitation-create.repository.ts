@@ -155,31 +155,6 @@ export class PostgresOrganizationInvitationCreateRepository
           return { kind: 'member_exists' };
         }
 
-        if (input.emailDelivery === undefined) {
-          const existingInvitation =
-            await transaction.organizationInvitation.findFirst({
-              where: {
-                organizationId: input.organizationId,
-                email: input.email,
-                consumedAt: null,
-                expiresAt: { gt: input.now },
-              },
-              select: { id: true, role: true, expiresAt: true },
-            });
-          if (existingInvitation !== null) {
-            const role = existingInvitation.role;
-            if (role !== 'owner' && role !== 'admin' && role !== 'member') {
-              throw invalidIdentityData();
-            }
-            return {
-              kind: 'existing_invitation',
-              invitationId: existingInvitation.id,
-              role,
-              expiresAt: existingInvitation.expiresAt,
-            };
-          }
-        }
-
         // Resend supersedes the previous open token, which is also what keeps
         // the one-open-invitation index satisfiable. Closing a token here is
         // also what separates a resend from a first invitation in the trail.
@@ -219,28 +194,26 @@ export class PostgresOrganizationInvitationCreateRepository
         // Sealed here because the Organization name is only readable in this
         // transaction, and queued here so the invitation and the request that
         // emails its credential commit or roll back together (ADR-0074).
-        if (input.emailDelivery !== undefined) {
-          await this.emailOutbox.queue(
-            {
-              [emailDeliveryTransactionBrand]: undefined,
-              client: transaction,
-            } as EmailDeliveryTransaction,
-            {
-              kind: 'organization_invite_email',
-              organizationId: input.organizationId,
-              inviterId: input.invitedBy,
-              payload: {
-                email: input.email,
-                token: input.emailDelivery.token,
-                expiresAt: input.expiresAt.toISOString(),
-                organizationName: name,
-                role: input.role,
-                inviterUsername,
-              },
-              createdAt: input.emailDelivery.createdAt,
+        await this.emailOutbox.queue(
+          {
+            [emailDeliveryTransactionBrand]: undefined,
+            client: transaction,
+          } as EmailDeliveryTransaction,
+          {
+            kind: 'organization_invite_email',
+            organizationId: input.organizationId,
+            inviterId: input.invitedBy,
+            payload: {
+              email: input.email,
+              token: input.emailDelivery.token,
+              expiresAt: input.expiresAt.toISOString(),
+              organizationName: name,
+              role: input.role,
+              inviterUsername,
             },
-          );
-        }
+            createdAt: input.emailDelivery.createdAt,
+          },
+        );
 
         return { kind: 'created' };
       });

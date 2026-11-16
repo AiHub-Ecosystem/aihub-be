@@ -41,10 +41,7 @@ export const CreateOrganizationInvitationResponseSchema = Type.Object(
         role: OrganizationMembershipRoleSchema,
         status: Type.Literal('pending'),
         expires_at: Type.String({ format: 'date-time' }),
-        email_delivery_status: Type.Union([
-          Type.Literal('queued'),
-          Type.Literal('suppressed'),
-        ]),
+        email_delivery_status: Type.Literal('queued'),
       },
       { additionalProperties: false },
     ),

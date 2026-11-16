@@ -5951,16 +5951,8 @@
                           "type": "string"
                         },
                         "email_delivery_status": {
-                          "anyOf": [
-                            {
-                              "const": "queued",
-                              "type": "string"
-                            },
-                            {
-                              "const": "suppressed",
-                              "type": "string"
-                            }
-                          ]
+                          "const": "queued",
+                          "type": "string"
                         }
                       }
                     },
