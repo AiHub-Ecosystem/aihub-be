@@ -369,6 +369,7 @@ describe('organization invitation email outbox over HTTP', () => {
     const key = { 'idempotency-key': 'invite-once-key' };
 
     const first = await invite(key);
+    const consumedAfterFirst = rateLimiter.consumed;
     const second = await invite(key);
 
     expect(first.statusCode).toBe(201);
@@ -381,6 +382,6 @@ describe('organization invitation email outbox over HTTP', () => {
     expect(await countRows('organization_invitations')).toBe(1);
     expect(await queuedRequests()).toHaveLength(1);
     // A replayed key spends no further allowance (ADR-0074).
-    expect(rateLimiter.consumed).toBe(3);
+    expect(rateLimiter.consumed).toBe(consumedAfterFirst);
   });
 });
