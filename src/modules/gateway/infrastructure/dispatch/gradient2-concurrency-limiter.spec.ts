@@ -18,7 +18,9 @@ describe('Gradient2Limit', () => {
 
   it('grows toward the documented maximum on flat RTT under load', () => {
     const limit = new Gradient2Limit();
-    limit.onSample(100, 10);
+    for (let sample = 0; sample < 12; sample += 1) {
+      limit.onSample(100, 0);
+    }
 
     for (let sample = 0; sample < 60; sample += 1) {
       limit.onSample(100, 10);
@@ -70,6 +72,15 @@ describe('Gradient2Limit', () => {
     }
   });
 
+  it('does not learn a degraded baseline during warmup under load', () => {
+    const limit = new Gradient2Limit();
+
+    for (let sample = 0; sample < 2_000; sample += 1) {
+      limit.onSample(20_000, 10);
+    }
+    expect(limit.getLimit()).toBe(2);
+  });
+
   it('recovers baseline and scales back to maxLimit when latency normalizes', () => {
     const limit = new Gradient2Limit();
     for (let sample = 0; sample < 12; sample += 1) {
@@ -103,6 +114,10 @@ describe('Gradient2ConcurrencyLimiter', () => {
 
   it('releases a slot, records its RTT sample, and admits again', () => {
     const limiter = new Gradient2ConcurrencyLimiter();
+    for (let sample = 0; sample < 12; sample += 1) {
+      expect(limiter.tryAcquire('https://ai-writing.test')).toBe(true);
+      limiter.release('https://ai-writing.test', 150);
+    }
     for (let request = 0; request < 10; request += 1) {
       expect(limiter.tryAcquire('https://ai-writing.test')).toBe(true);
     }
