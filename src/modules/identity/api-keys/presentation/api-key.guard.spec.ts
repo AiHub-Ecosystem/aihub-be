@@ -216,6 +216,30 @@ describe('ApiKeyGuard scope check', () => {
     expect(value).toMatchObject({ aihubClientIpSource: 'customer_web_bff' });
   });
 
+  it('rejects an authenticated BFF request with a malformed visitor IP', async () => {
+    const authenticate = jest.fn(async () => baseKey);
+    const value = request({
+      headers: {
+        host: 'api.aihub.test',
+        'x-api-key': 'aihub_sk_value',
+        'x-aihub-client-secret': 'bff-secret',
+        'x-aihub-visitor-ip': 'invalid',
+      },
+      log: { error: jest.fn() },
+    });
+
+    await expect(
+      guard({ authenticate }, { resolve: () => 'bff-secret' }).canActivate(
+        context(value),
+      ),
+    ).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      diagnostic: 'bff-visitor-ip-missing-or-invalid',
+    });
+    expect(authenticate).not.toHaveBeenCalled();
+    expect(value).toMatchObject({ aihubClientIpSource: 'customer_web_bff' });
+  });
+
   it('rejects a forged BFF secret before API-key authentication', async () => {
     const before = await rejectedAuthCount();
     const authenticate = jest.fn(async () => baseKey);
