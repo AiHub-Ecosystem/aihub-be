@@ -27,6 +27,7 @@ import { PostgresEmailDispatchStore } from '@/modules/auth/email-delivery/infras
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailCredentialRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-credential.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
+import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import {
   type PostgresAuthClient,
   createPostgresAuthClient,
@@ -52,6 +53,10 @@ const allowProviderOutagePermit = {
   recordProviderReachable: async () => undefined,
   readOutageDurationMs: async () => 0,
 };
+const allowInvitationEmailRateLimit = {
+  check: async () => ({ allowed: true as const }),
+  consume: async () => ({ allowed: true as const }),
+} satisfies AuthRateLimiterPort;
 
 /**
  * The cipher the application itself uses, so a row written here can only be read
@@ -311,7 +316,11 @@ function poller(
     allowProviderOutagePermit,
     now,
     { hash },
-    { owner, onTerminalFailure: reportTerminalEmailDeliveryFailure },
+    {
+      owner,
+      invitationEmailRateLimiter: allowInvitationEmailRateLimit,
+      onTerminalFailure: reportTerminalEmailDeliveryFailure,
+    },
   );
 }
 
@@ -1168,7 +1177,11 @@ describe('email outbox dispatch poller', () => {
         allowProviderOutagePermit,
         () => NOW,
         { hash },
-        { owner: OWNER_A, batchSize: 3 },
+        {
+          owner: OWNER_A,
+          batchSize: 3,
+          invitationEmailRateLimiter: allowInvitationEmailRateLimit,
+        },
       );
 
       await smallBatch.runOnce();
@@ -1336,6 +1349,7 @@ describe('email outbox dispatch poller', () => {
         { hash },
         {
           owner: OWNER_A,
+          invitationEmailRateLimiter: allowInvitationEmailRateLimit,
           onTerminalFailure: reportTerminalEmailDeliveryFailure,
         },
       );
@@ -1774,6 +1788,7 @@ describe('email outbox dispatch poller', () => {
         { hash },
         {
           owner: OWNER_A,
+          invitationEmailRateLimiter: allowInvitationEmailRateLimit,
           onTerminalFailure: reportTerminalEmailDeliveryFailure,
         },
       );
