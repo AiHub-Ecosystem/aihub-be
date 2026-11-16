@@ -160,23 +160,25 @@ export class PostgresWritingChartUploadRepository
   async findUpload(
     owner: WritingChartUploadOwner,
   ): Promise<WritingChartUploadLookup> {
-    const row = await this.run(() =>
-      this.client.writingChartUpload.findFirst({ where: ownerWhere(owner) }),
-    );
-    if (row === null) return { kind: 'missing' };
-    if (await this.run(() => isRevoked(this.client, row.id))) {
-      return { kind: 'missing' };
-    }
-    if (['open', 'rejected', 'publishing'].includes(row.status)) {
-      return { kind: 'intent', intent: mapIntent(row) };
-    }
-    const asset = mapAsset(row);
-    return asset === undefined ? { kind: 'missing' } : { kind: 'asset', asset };
+    return this.transaction(owner.organizationId, async (client) => {
+      const row = await client.writingChartUpload.findFirst({
+        where: ownerWhere(owner),
+      });
+      if (row === null) return { kind: 'missing' } as const;
+      if (await isRevoked(client, row.id)) return { kind: 'missing' } as const;
+      if (['open', 'rejected', 'publishing'].includes(row.status)) {
+        return { kind: 'intent', intent: mapIntent(row) } as const;
+      }
+      const asset = mapAsset(row);
+      return asset === undefined
+        ? ({ kind: 'missing' } as const)
+        : ({ kind: 'asset', asset } as const);
+    });
   }
 
   async rejectIntent(owner: WritingChartUploadOwner, now: Date): Promise<void> {
-    await this.run(() =>
-      this.client.writingChartUpload.updateMany({
+    await this.transaction(owner.organizationId, (client) =>
+      client.writingChartUpload.updateMany({
         where: {
           ...ownerWhere(owner),
           status: 'open',

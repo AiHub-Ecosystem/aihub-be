@@ -9,7 +9,10 @@ import {
   invalidIdentityData,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
-import type { IdentityRepositoryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import {
+  type IdentityRepositoryClient,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { mapOpenOrganizationInvitation } from './map-open-organization-invitation';
 import { invalidInvitationInput } from './organization-invitation-input';
 
@@ -50,34 +53,39 @@ export class PostgresOrganizationInvitationReadRepository
     // superseded, and revoked invitations; expiry is evaluated against the
     // application clock. Keyset pagination orders by createdAt desc, id asc.
     try {
-      const open = await this.client.organizationInvitation.findMany({
-        where: {
-          organizationId: input.organizationId,
-          consumedAt: null,
-          expiresAt: { gt: input.now },
-          ...(input.after !== undefined
-            ? {
-                OR: [
-                  { createdAt: { lt: input.after.createdAt } },
-                  {
-                    createdAt: input.after.createdAt,
-                    id: { gt: input.after.id },
-                  },
-                ],
-              }
-            : {}),
-        },
-        take: input.limit,
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          createdAt: true,
-          expiresAt: true,
-          invitedByUser: { select: { username: true } },
-        },
-        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-      });
+      const open = await identityTransaction(
+        this.client,
+        input.organizationId,
+        (transaction) =>
+          transaction.organizationInvitation.findMany({
+            where: {
+              organizationId: input.organizationId,
+              consumedAt: null,
+              expiresAt: { gt: input.now },
+              ...(input.after !== undefined
+                ? {
+                    OR: [
+                      { createdAt: { lt: input.after.createdAt } },
+                      {
+                        createdAt: input.after.createdAt,
+                        id: { gt: input.after.id },
+                      },
+                    ],
+                  }
+                : {}),
+            },
+            take: input.limit,
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              createdAt: true,
+              expiresAt: true,
+              invitedByUser: { select: { username: true } },
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+          }),
+      );
       return open.map(({ invitedByUser, ...invitation }) => {
         const item = mapOpenOrganizationInvitation({
           ...invitation,
