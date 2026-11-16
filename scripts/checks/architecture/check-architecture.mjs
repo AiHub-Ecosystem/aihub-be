@@ -1503,24 +1503,58 @@ export function collectSourceTextFailures(options) {
     visit(sourceFile);
   }
 
-  // #785: Identity request-serving persistence opens transactions through
-  // `identityTransaction`, which declares the Organization to PostgreSQL from
-  // an explicit argument before any repository statement runs. A direct
-  // `$transaction` bypasses that seam and would silently no-op under fail-closed
-  // RLS, so no Identity repository may open one. Cross-Organization work uses
-  // the unscoped form of the same helper, never a direct transaction.
+  // #785 / ADR-0109: request-serving persistence opens its transactions through
+  // `organizationTransaction` (Identity: `identityTransaction`), which declares
+  // the Organization to PostgreSQL from an explicit argument before any
+  // repository statement runs. A direct `$transaction` in infrastructure
+  // bypasses that seam and would silently see no rows under fail-closed RLS.
+  // The files below are the only ones that may open one, each for the reason
+  // given; a new repository is checked by default, so a bypass fails the gate.
   {
-    const seam =
-      'src/modules/identity/shared/infrastructure/postgres-identity.client.ts';
+    const directTransactionAllowed = new Map([
+      [
+        'src/modules/persistence/infrastructure/organization-transaction.ts',
+        'the seam itself',
+      ],
+      [
+        'src/modules/identity/shared/infrastructure/postgres-identity.client.ts',
+        'the Identity form of the seam and its unscoped pre-tenant form',
+      ],
+      [
+        'src/modules/auth/shared/infrastructure/auth-prisma.ts',
+        'Auth sessions and accounts, not Organization-owned rows',
+      ],
+      [
+        'src/modules/avatar/infrastructure/postgres-avatar.repository.ts',
+        'User-scoped avatar rows, no Organization column',
+      ],
+      [
+        'src/modules/metering/infrastructure/billing/postgres-billing-statement.repository.ts',
+        'Operator billing snapshot, close and adjustment across Organizations',
+      ],
+      [
+        'src/modules/metering/infrastructure/billing/postgres-public-api-major-usage.repository.ts',
+        'fleet-wide collector coverage, no Organization',
+      ],
+      [
+        'src/modules/metering/infrastructure/billing/postgres-usage-retention.repository.ts',
+        'fleet-wide usage pruning job',
+      ],
+      [
+        'src/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository.ts',
+        'Operator revocation that discovers the Organization from the asset',
+      ],
+    ]);
     for (const file of sourceFiles) {
       if (file.endsWith('.spec.ts')) continue;
       const relativePath = relative(root, file).replace(/\\/g, '/');
-      if (!relativePath.startsWith('src/modules/identity/')) continue;
-      if (!relativePath.includes('/infrastructure/')) continue;
-      if (relativePath === seam) continue;
+      if (!/^src\/modules\/[^/]+\/.*\/?infrastructure\//.test(relativePath)) {
+        continue;
+      }
+      if (directTransactionAllowed.has(relativePath)) continue;
       if (/\$transaction\s*\(/.test(sourceText(file))) {
         fail(
-          `${relativePath} opens a transaction directly; use identityTransaction from the shared seam so the Organization is declared inside the transaction (#785)`,
+          `${relativePath} opens a transaction directly; use organizationTransaction (Identity: identityTransaction) from the shared seam so the Organization is declared inside the transaction (#785)`,
         );
       }
     }

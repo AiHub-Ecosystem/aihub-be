@@ -30,6 +30,10 @@ export function organizationTransaction<T>(
   client: PrismaClient,
   organizationId: string,
   callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+  options: {
+    readonly maxWait: number;
+    readonly timeout: number;
+  } = CONTROL_PLANE_TRANSACTION_OPTIONS,
 ): Promise<T> {
   if (organizationId.trim().length === 0) {
     throw internalError(
@@ -52,6 +56,6 @@ export function organizationTransaction<T>(
         },
         { expired: () => new OrganizationTransactionExpiredError() },
       ),
-    CONTROL_PLANE_TRANSACTION_OPTIONS,
+    options,
   );
 }

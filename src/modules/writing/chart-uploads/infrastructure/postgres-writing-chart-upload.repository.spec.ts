@@ -8,7 +8,9 @@ function fakePrisma(count: jest.Mock) {
   const create = jest.fn().mockResolvedValue(undefined);
   const findFirst = jest.fn();
   const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const declare = jest.fn().mockResolvedValue([]);
   const transaction = {
+    $queryRawUnsafe: declare,
     $executeRawUnsafe: lock,
     writingChartUpload: { count, create, findFirst, updateMany },
     writingChartRevocationAudit: {
@@ -20,7 +22,7 @@ function fakePrisma(count: jest.Mock) {
       callback(transaction),
   );
   const client = { $transaction: runTransaction } as unknown as PrismaClient;
-  return { client, lock, create, count, findFirst, updateMany };
+  return { client, lock, declare, create, count, findFirst, updateMany };
 }
 
 const intent: WritingChartUploadIntent = {
