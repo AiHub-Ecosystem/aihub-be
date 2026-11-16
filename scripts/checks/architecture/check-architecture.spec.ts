@@ -1592,9 +1592,15 @@ describe('source-text architecture rules fail arch-check', () => {
       [
         'test/real-timer.spec.ts',
         [
+          'const delay = setTimeout;',
+          'async function sleep() { return new Promise((resolve) => delay(resolve, 5)); }',
           'it("waits", async () => {',
           '  const wait = new Promise((resolve) => setTimeout(resolve, 5));',
           '  await wait;',
+          '  const sleepWait = sleep();',
+          '  await sleepWait;',
+          '  const race = Promise.race([new Promise((resolve) => setTimeout(resolve, 5))]);',
+          '  await race;',
           '  await new Promise((resolve) => setTimeout(resolve, 10));',
           '  await new Promise((resolve) => setTimeout(resolve, 20)); // real-timer-ok: process shutdown needs a real event loop',
           '  expect(true).toBe(true);',
@@ -1613,11 +1619,13 @@ describe('source-text architecture rules fail arch-check', () => {
       ],
     ]);
 
-    expect(result.failures).toHaveLength(4);
-    expect(result.failures[0]).toContain('test/real-timer.spec.ts:3');
-    expect(result.failures[1]).toContain('test/real-timer.spec.ts:4');
-    expect(result.failures[2]).toContain('test/real-timer.spec.ts:7');
+    expect(result.failures).toHaveLength(6);
+    expect(result.failures[0]).toContain('test/real-timer.spec.ts:5');
+    expect(result.failures[1]).toContain('test/real-timer.spec.ts:7');
+    expect(result.failures[2]).toContain('test/real-timer.spec.ts:9');
     expect(result.failures[3]).toContain('test/real-timer.spec.ts:10');
+    expect(result.failures[4]).toContain('test/real-timer.spec.ts:13');
+    expect(result.failures[5]).toContain('test/real-timer.spec.ts:16');
   });
 
   it('rejects timer-promises and PostgreSQL sleeps in specs', () => {

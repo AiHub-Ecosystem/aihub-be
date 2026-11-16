@@ -101,27 +101,12 @@ export function collectSourceTextFailures(options) {
     /** @type {Map<import('typescript').Node, Set<string>>} */
     const timerWaitVariables = new Map();
 
-    for (const statement of sourceFile.statements) {
-      if (
-        ts.isFunctionDeclaration(statement) &&
-        statement.name !== undefined &&
-        statement.body !== undefined &&
-        containsTimerWait(statement.body)
-      ) {
-        timerFunctions.add(statement.name.text);
-      }
-      if (!ts.isVariableStatement(statement)) continue;
-      for (const declaration of statement.declarationList.declarations) {
-        if (
-          ts.isIdentifier(declaration.name) &&
-          declaration.initializer !== undefined &&
-          (ts.isArrowFunction(declaration.initializer) ||
-            ts.isFunctionExpression(declaration.initializer)) &&
-          containsTimerWait(declaration.initializer)
-        ) {
-          timerFunctions.add(declaration.name.text);
-        }
-      }
+    let foundTimerFunction = true;
+    while (foundTimerFunction) {
+      foundTimerFunction = false;
+      collectTimerFunctions(sourceFile, () => {
+        foundTimerFunction = true;
+      });
     }
 
     let foundTimerWaitVariable = true;
@@ -171,18 +156,31 @@ export function collectSourceTextFailures(options) {
 
     /** @param {import('typescript').Node} node @param {() => void} found */
     function collectTimerWaitVariables(node, found) {
+      const initializer = ts.isVariableDeclaration(node)
+        ? node.initializer
+        : undefined;
+      const isPromiseCombinator =
+        initializer !== undefined &&
+        ts.isCallExpression(initializer) &&
+        ts.isPropertyAccessExpression(initializer.expression) &&
+        ts.isIdentifier(initializer.expression.expression) &&
+        initializer.expression.expression.text === 'Promise' &&
+        ['all', 'allSettled', 'any', 'race'].includes(
+          initializer.expression.name.text,
+        );
       if (
         ts.isVariableDeclaration(node) &&
         ts.isIdentifier(node.name) &&
-        node.initializer !== undefined &&
-        ((ts.isNewExpression(node.initializer) &&
-          ts.isIdentifier(node.initializer.expression) &&
-          node.initializer.expression.text === 'Promise') ||
-          ts.isIdentifier(node.initializer) ||
-          (ts.isCallExpression(node.initializer) &&
-            ts.isIdentifier(node.initializer.expression) &&
-            timerPromiseFunctions.has(node.initializer.expression.text))) &&
-        containsTimerWait(node.initializer)
+        initializer !== undefined &&
+        ((ts.isNewExpression(initializer) &&
+          ts.isIdentifier(initializer.expression) &&
+          initializer.expression.text === 'Promise') ||
+          isPromiseCombinator ||
+          ts.isIdentifier(initializer) ||
+          (ts.isCallExpression(initializer) &&
+            ts.isIdentifier(initializer.expression) &&
+            timerPromiseFunctions.has(initializer.expression.text))) &&
+        containsTimerWait(initializer)
       ) {
         /** @type {import('typescript').Node | undefined} */
         let scope = node.parent;
@@ -201,6 +199,90 @@ export function collectSourceTextFailures(options) {
         }
       }
       node.forEachChild((child) => collectTimerWaitVariables(child, found));
+    }
+
+    /** @param {import('typescript').Node} node @param {() => void} found */
+    function collectTimerFunctions(node, found) {
+      let name;
+      let body;
+      let functionNode;
+      let isTimerAlias = false;
+      if (ts.isFunctionDeclaration(node) && node.parent === sourceFile) {
+        name = node.name;
+        body = node.body;
+        functionNode = node;
+      } else if (
+        ts.isVariableDeclaration(node) &&
+        isModuleScope(node) &&
+        node.initializer !== undefined &&
+        (ts.isArrowFunction(node.initializer) ||
+          ts.isFunctionExpression(node.initializer))
+      ) {
+        name = ts.isIdentifier(node.name) ? node.name : undefined;
+        body = node.initializer;
+        functionNode = node.initializer;
+      } else if (
+        ts.isVariableDeclaration(node) &&
+        isModuleScope(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer !== undefined &&
+        ts.isIdentifier(node.initializer) &&
+        timerFunctions.has(node.initializer.text)
+      ) {
+        name = node.name;
+        isTimerAlias = true;
+      }
+      if (
+        name !== undefined &&
+        !timerFunctions.has(name.text) &&
+        (isTimerAlias || (body !== undefined && containsTimerWait(body)))
+      ) {
+        timerFunctions.add(name.text);
+        found();
+        if (functionNode !== undefined && returnsTimerPromise(functionNode)) {
+          timerPromiseFunctions.add(name.text);
+        }
+      }
+      node.forEachChild((child) => collectTimerFunctions(child, found));
+    }
+
+    /** @param {import('typescript').Node} node @returns {boolean} */
+    function returnsTimerPromise(node, root = true) {
+      if (!root && ts.isFunctionLike(node)) return false;
+      if (
+        ts.canHaveModifiers(node) &&
+        ts
+          .getModifiers(node)
+          ?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+      ) {
+        return true;
+      }
+      if (ts.isReturnStatement(node) && node.expression !== undefined) {
+        const expression = node.expression;
+        if (
+          (ts.isNewExpression(expression) &&
+            ts.isIdentifier(expression.expression) &&
+            expression.expression.text === 'Promise') ||
+          (ts.isCallExpression(expression) &&
+            ts.isIdentifier(expression.expression) &&
+            timerPromiseFunctions.has(expression.expression.text))
+        ) {
+          return true;
+        }
+      }
+      return node
+        .getChildren(sourceFile)
+        .some((child) => returnsTimerPromise(child, false));
+    }
+
+    /** @param {import('typescript').Node} node @returns {boolean} */
+    function isModuleScope(node) {
+      let parent = node.parent;
+      while (parent !== undefined && parent !== sourceFile) {
+        if (ts.isFunctionLike(parent)) return false;
+        parent = parent.parent;
+      }
+      return true;
     }
 
     /** @param {import('typescript').Node} node @returns {boolean} */
