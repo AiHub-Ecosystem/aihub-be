@@ -79,127 +79,134 @@ export class PostgresOrganizationInvitationRevokeRepository
     let refused: OrganizationAuditDraft | undefined;
 
     try {
-      return await identityTransaction(this.client, async (transaction) => {
-        const organizationRows = await identityRows(
-          transaction,
-          LOCK_ORGANIZATION_FOR_REVOKE_SQL,
-          [input.organizationId],
-        );
-        const organization = organizationRows[0];
-        if (!isRecord(organization)) {
-          return { kind: 'not_found' };
-        }
+      return await identityTransaction(
+        this.client,
+        input.organizationId,
+        async (transaction) => {
+          const organizationRows = await identityRows(
+            transaction,
+            LOCK_ORGANIZATION_FOR_REVOKE_SQL,
+            [input.organizationId],
+          );
+          const organization = organizationRows[0];
+          if (!isRecord(organization)) {
+            return { kind: 'not_found' };
+          }
 
-        const organizationId = stringValue(organization, 'id');
-        const organizationStatus = organizationStatusValue(
-          organization,
-          'status',
-        );
-        if (
-          organizationId !== input.organizationId ||
-          organizationStatus === undefined
-        ) {
-          throw invalidIdentityData();
-        }
-        if (organizationSuspensionClosesSurface(organizationStatus)) {
-          return { kind: 'organization_suspended' };
-        }
+          const organizationId = stringValue(organization, 'id');
+          const organizationStatus = organizationStatusValue(
+            organization,
+            'status',
+          );
+          if (
+            organizationId !== input.organizationId ||
+            organizationStatus === undefined
+          ) {
+            throw invalidIdentityData();
+          }
+          if (organizationSuspensionClosesSurface(organizationStatus)) {
+            return { kind: 'organization_suspended' };
+          }
 
-        const invitationRows = await identityRows(
-          transaction,
-          LOCK_INVITATION_FOR_REVOKE_SQL,
-          [input.invitationId, input.organizationId],
-        );
-        const invitation = invitationRows[0];
-        if (!isRecord(invitation)) {
-          return { kind: 'not_found' };
-        }
+          const invitationRows = await identityRows(
+            transaction,
+            LOCK_INVITATION_FOR_REVOKE_SQL,
+            [input.invitationId, input.organizationId],
+          );
+          const invitation = invitationRows[0];
+          if (!isRecord(invitation)) {
+            return { kind: 'not_found' };
+          }
 
-        const invitationId = stringValue(invitation, 'id');
-        const invitationOrganizationId = stringValue(
-          invitation,
-          'organization_id',
-        );
-        const email = stringValue(invitation, 'email');
-        const role = membershipRoleValue(invitation, 'role');
-        const expiresAt = dateValue(invitation, 'expires_at');
-        const consumedAt =
-          invitation['consumed_at'] === null
-            ? null
-            : dateValue(invitation, 'consumed_at');
-        if (
-          invitationId === undefined ||
-          invitationOrganizationId !== input.organizationId ||
-          email === undefined ||
-          role === undefined ||
-          expiresAt == null ||
-          (invitation['consumed_at'] !== null && consumedAt === undefined)
-        ) {
-          throw invalidIdentityData();
-        }
+          const invitationId = stringValue(invitation, 'id');
+          const invitationOrganizationId = stringValue(
+            invitation,
+            'organization_id',
+          );
+          const email = stringValue(invitation, 'email');
+          const role = membershipRoleValue(invitation, 'role');
+          const expiresAt = dateValue(invitation, 'expires_at');
+          const consumedAt =
+            invitation['consumed_at'] === null
+              ? null
+              : dateValue(invitation, 'consumed_at');
+          if (
+            invitationId === undefined ||
+            invitationOrganizationId !== input.organizationId ||
+            email === undefined ||
+            role === undefined ||
+            expiresAt == null ||
+            (invitation['consumed_at'] !== null && consumedAt === undefined)
+          ) {
+            throw invalidIdentityData();
+          }
 
-        // ADR-0159 (decision 2): the caller's role is re-read under the
-        // Organization lock rather than trusting the role captured before the
-        // transaction, so a disable or demotion that committed while this
-        // request waited cannot close an invitation it no longer has authority
-        // over.
-        const callerRows = await identityRows(
-          transaction,
-          LOCK_MEMBERSHIP_AUTHORITY_SQL,
-          [input.organizationId, input.actorUserId],
-        );
-        const caller = membershipAuthority(callerRows[0]);
+          // ADR-0159 (decision 2): the caller's role is re-read under the
+          // Organization lock rather than trusting the role captured before the
+          // transaction, so a disable or demotion that committed while this
+          // request waited cannot close an invitation it no longer has authority
+          // over.
+          const callerRows = await identityRows(
+            transaction,
+            LOCK_MEMBERSHIP_AUTHORITY_SQL,
+            [input.organizationId, input.actorUserId],
+          );
+          const caller = membershipAuthority(callerRows[0]);
 
-        const callerAdmitted =
-          caller !== undefined &&
-          caller.status === 'active' &&
-          mayRevokeOrganizationInvitation({
-            actorRole: caller.role,
-            invitedRole: role,
+          const callerAdmitted =
+            caller !== undefined &&
+            caller.status === 'active' &&
+            mayRevokeOrganizationInvitation({
+              actorRole: caller.role,
+              invitedRole: role,
+            });
+
+          if (!callerAdmitted) {
+            // A caller who no longer actively belongs is refused without a
+            // denial record; an active caller whose role lacks authority earns
+            // the recorded denial, as before.
+            if (caller !== undefined && caller.status === 'active') {
+              refused = {
+                action: 'invitation.revoked',
+                invitationId,
+                email,
+                role,
+                denial: 'insufficient_authority',
+              };
+            }
+            throw forbidden('Organization invitation revocation is forbidden');
+          }
+
+          if (
+            consumedAt !== null ||
+            expiresAt.getTime() <= input.now.getTime()
+          ) {
+            return { kind: 'closed' };
+          }
+
+          const updated = await transaction.organizationInvitation.updateMany({
+            where: {
+              id: input.invitationId,
+              organizationId: input.organizationId,
+              consumedAt: null,
+              expiresAt: { gt: input.now },
+            },
+            data: { consumedAt: input.now },
+          });
+          if (updated.count === 0) {
+            return { kind: 'closed' };
+          }
+
+          await recordOrganizationAuditEvent(transaction, stamp, {
+            action: 'invitation.revoked',
+            invitationId,
+            email,
+            role,
           });
 
-        if (!callerAdmitted) {
-          // A caller who no longer actively belongs is refused without a
-          // denial record; an active caller whose role lacks authority earns
-          // the recorded denial, as before.
-          if (caller !== undefined && caller.status === 'active') {
-            refused = {
-              action: 'invitation.revoked',
-              invitationId,
-              email,
-              role,
-              denial: 'insufficient_authority',
-            };
-          }
-          throw forbidden('Organization invitation revocation is forbidden');
-        }
-
-        if (consumedAt !== null || expiresAt.getTime() <= input.now.getTime()) {
           return { kind: 'closed' };
-        }
-
-        const updated = await transaction.organizationInvitation.updateMany({
-          where: {
-            id: input.invitationId,
-            organizationId: input.organizationId,
-            consumedAt: null,
-            expiresAt: { gt: input.now },
-          },
-          data: { consumedAt: input.now },
-        });
-        if (updated.count === 0) {
-          return { kind: 'closed' };
-        }
-
-        await recordOrganizationAuditEvent(transaction, stamp, {
-          action: 'invitation.revoked',
-          invitationId,
-          email,
-          role,
-        });
-
-        return { kind: 'closed' };
-      });
+        },
+      );
     } catch (error) {
       if (refused !== undefined) {
         await recordOrganizationAuditDenial(this.client, stamp, refused);

@@ -61,67 +61,71 @@ export class PostgresOrganizationStatusRepository
   private transact(
     input: SetOrganizationStatusInput,
   ): Promise<SetOrganizationStatusResult> {
-    return identityTransaction(this.client, async (transaction) => {
-      const actorId = await findActiveAccountId(
-        transaction,
-        input.actorUsername,
-      );
-      if (actorId === undefined) {
-        return { kind: 'actor_invalid' as const };
-      }
+    return identityTransaction(
+      this.client,
+      input.organizationId,
+      async (transaction) => {
+        const actorId = await findActiveAccountId(
+          transaction,
+          input.actorUsername,
+        );
+        if (actorId === undefined) {
+          return { kind: 'actor_invalid' as const };
+        }
 
-      const organizationRows = await identityRows(
-        transaction,
-        LOCK_ORGANIZATION_SQL,
-        [input.organizationId],
-      );
-      const organization = organizationRows[0];
-      if (!isRecord(organization)) {
-        return { kind: 'organization_not_found' as const };
-      }
-      const name = stringValue(organization, 'name');
-      const status = organizationStatusValue(organization, 'status');
-      if (name === undefined || status === undefined) {
-        throw invalidIdentityData();
-      }
+        const organizationRows = await identityRows(
+          transaction,
+          LOCK_ORGANIZATION_SQL,
+          [input.organizationId],
+        );
+        const organization = organizationRows[0];
+        if (!isRecord(organization)) {
+          return { kind: 'organization_not_found' as const };
+        }
+        const name = stringValue(organization, 'name');
+        const status = organizationStatusValue(organization, 'status');
+        if (name === undefined || status === undefined) {
+          throw invalidIdentityData();
+        }
 
-      const keyHashes = await organizationKeyHashes(
-        transaction,
-        input.organizationId,
-      );
+        const keyHashes = await organizationKeyHashes(
+          transaction,
+          input.organizationId,
+        );
 
-      // A repeat of the applied status is a delivery, not an act.
-      if (status === input.status) {
-        return { kind: 'unchanged' as const, keyHashes };
-      }
+        // A repeat of the applied status is a delivery, not an act.
+        if (status === input.status) {
+          return { kind: 'unchanged' as const, keyHashes };
+        }
 
-      await transaction.organization.update({
-        where: { id: input.organizationId },
-        data: { status: input.status },
-      });
-      await recordOrganizationAuditEvent(
-        transaction,
-        auditStamp(
+        await transaction.organization.update({
+          where: { id: input.organizationId },
+          data: { status: input.status },
+        });
+        await recordOrganizationAuditEvent(
+          transaction,
+          auditStamp(
+            {
+              context: { requestId: input.requestId },
+              organizationId: input.organizationId,
+            },
+            actorId,
+            input.occurredAt,
+            'self_declared_operator',
+          ),
           {
-            context: { requestId: input.requestId },
+            action:
+              input.status === 'suspended'
+                ? 'organization.suspended'
+                : 'organization.restored',
             organizationId: input.organizationId,
+            name,
           },
-          actorId,
-          input.occurredAt,
-          'self_declared_operator',
-        ),
-        {
-          action:
-            input.status === 'suspended'
-              ? 'organization.suspended'
-              : 'organization.restored',
-          organizationId: input.organizationId,
-          name,
-        },
-      );
+        );
 
-      return { kind: 'changed' as const, keyHashes };
-    });
+        return { kind: 'changed' as const, keyHashes };
+      },
+    );
   }
 
   close(): Promise<void> {

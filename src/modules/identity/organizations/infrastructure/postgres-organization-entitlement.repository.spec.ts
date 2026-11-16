@@ -18,7 +18,9 @@ function scriptedClient(script: Script) {
   const grants: { id: string; push: string }[] = [];
 
   const transaction = {
-    $queryRawUnsafe: async (_text: string, ...values: unknown[]) => {
+    $queryRawUnsafe: async (text: string, ...values: unknown[]) => {
+      // The Organization seam declares the tenant before repository reads.
+      if (text.includes('set_config')) return [];
       rawStatements.push(values);
       return reads.shift() ?? [];
     },

@@ -497,30 +497,34 @@ export async function runAuthorizedMutation(
     organizationId: input.organizationId,
   });
   try {
-    return await identityTransaction(client, async (transaction) => {
-      const { caller, target } = await lockMutationContext(
-        transaction,
-        input,
-        ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action],
-      );
-      const decision = mutationDecision(action, caller, target);
-      if (target !== undefined && decision?.kind === 'forbidden') {
-        mutation.refuse(forbiddenDraft(target, caller));
-      }
-      const authorizedTarget = requireAuthorizedMutationTarget(
-        action,
-        caller,
-        target,
-        decision,
-      );
-      return run({
-        transaction,
-        caller,
-        target: authorizedTarget,
-        stamp: mutation.stamp,
-        refuse: mutation.refuse,
-      });
-    });
+    return await identityTransaction(
+      client,
+      input.organizationId,
+      async (transaction) => {
+        const { caller, target } = await lockMutationContext(
+          transaction,
+          input,
+          ORGANIZATION_MEMBERSHIP_ROUTE_DENIAL[action],
+        );
+        const decision = mutationDecision(action, caller, target);
+        if (target !== undefined && decision?.kind === 'forbidden') {
+          mutation.refuse(forbiddenDraft(target, caller));
+        }
+        const authorizedTarget = requireAuthorizedMutationTarget(
+          action,
+          caller,
+          target,
+          decision,
+        );
+        return run({
+          transaction,
+          caller,
+          target: authorizedTarget,
+          stamp: mutation.stamp,
+          refuse: mutation.refuse,
+        });
+      },
+    );
   } catch (error) {
     return mutation.rethrow(error);
   }

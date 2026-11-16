@@ -51,7 +51,9 @@ function scriptedClient(
     ): Promise<T> => {
       let read = 0;
       return callback({
-        $queryRawUnsafe: async (_text: string, ...values: unknown[]) => {
+        $queryRawUnsafe: async (text: string, ...values: unknown[]) => {
+          // The Organization seam declares the tenant before repository reads.
+          if (text.includes('set_config')) return [];
           if (read === 0) {
             read += 1;
             return organization === undefined ? [] : [organization];

@@ -32,65 +32,69 @@ export class PostgresOrganizationIdentityIssuerReleaseRepository
     input: ReleaseOrganizationIdentityIssuerInput,
   ): Promise<ReleaseOrganizationIdentityIssuerResult> {
     try {
-      return await identityTransaction(this.client, async (transaction) => {
-        const actorId = await findActiveAccountId(
-          transaction,
-          input.actorUsername,
-        );
-        if (actorId === undefined) {
-          return { kind: 'actor_invalid' as const };
-        }
+      return await identityTransaction(
+        this.client,
+        input.organizationId,
+        async (transaction) => {
+          const actorId = await findActiveAccountId(
+            transaction,
+            input.actorUsername,
+          );
+          if (actorId === undefined) {
+            return { kind: 'actor_invalid' as const };
+          }
 
-        const organizations = await identityRows(
-          transaction,
-          'SELECT id FROM organizations WHERE id = $1 FOR UPDATE',
-          [input.organizationId],
-        );
-        if (organizations.length === 0) {
-          return { kind: 'organization_not_found' as const };
-        }
+          const organizations = await identityRows(
+            transaction,
+            'SELECT id FROM organizations WHERE id = $1 FOR UPDATE',
+            [input.organizationId],
+          );
+          if (organizations.length === 0) {
+            return { kind: 'organization_not_found' as const };
+          }
 
-        const configs = await identityRows(
-          transaction,
-          `SELECT issuer FROM organization_identity_configs
+          const configs = await identityRows(
+            transaction,
+            `SELECT issuer FROM organization_identity_configs
            WHERE organization_id = $1 AND issuer_claimed FOR UPDATE`,
-          [input.organizationId],
-        );
-        const config = configs[0];
-        const issuer =
-          config === undefined ? undefined : stringValue(config, 'issuer');
-        if (issuer === undefined) {
-          return { kind: 'issuer_unclaimed' as const };
-        }
+            [input.organizationId],
+          );
+          const config = configs[0];
+          const issuer =
+            config === undefined ? undefined : stringValue(config, 'issuer');
+          if (issuer === undefined) {
+            return { kind: 'issuer_unclaimed' as const };
+          }
 
-        await identityRows(
-          transaction,
-          `UPDATE organization_identity_configs
+          await identityRows(
+            transaction,
+            `UPDATE organization_identity_configs
            SET issuer_claimed = false,
                status = 'disabled',
                jwks_cache_version = jwks_cache_version + 1
            WHERE organization_id = $1`,
-          [input.organizationId],
-        );
-        await recordOrganizationAuditEvent(
-          transaction,
-          auditStamp(
+            [input.organizationId],
+          );
+          await recordOrganizationAuditEvent(
+            transaction,
+            auditStamp(
+              {
+                context: { requestId: input.requestId },
+                organizationId: input.organizationId,
+              },
+              actorId,
+              input.occurredAt,
+              'self_declared_operator',
+            ),
             {
-              context: { requestId: input.requestId },
+              action: 'organization.identity_issuer_released',
               organizationId: input.organizationId,
+              issuer,
             },
-            actorId,
-            input.occurredAt,
-            'self_declared_operator',
-          ),
-          {
-            action: 'organization.identity_issuer_released',
-            organizationId: input.organizationId,
-            issuer,
-          },
-        );
-        return { kind: 'released' as const };
-      });
+          );
+          return { kind: 'released' as const };
+        },
+      );
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

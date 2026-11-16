@@ -63,6 +63,7 @@ export class PostgresOrganizationRenameRepository
     try {
       const result = await identityTransaction(
         this.client,
+        input.organizationId,
         async (transaction) => {
           const organizationRows = await identityRows(
             transaction,
