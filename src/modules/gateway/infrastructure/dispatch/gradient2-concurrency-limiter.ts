@@ -51,14 +51,17 @@ export class Gradient2Limit {
     this.factor = 2 / (config.longWindow + 1);
   }
 
-  onSample(rttMs: number, inFlight: number): void {
+  onSample(rttMs: number, inFlight: number, allowLowLoadBaseline = true): void {
     if (!Number.isFinite(rttMs) || rttMs < 0) return;
     this.lastRtt = rttMs;
     if (this.warmupCount < WARMUP) {
       this.warmupCount += 1;
       this.warmupSum += rttMs;
       this.longRtt = this.warmupSum / this.warmupCount;
-    } else if (inFlight < this.estimatedLimit / 2 || rttMs < this.longRtt) {
+    } else if (
+      (allowLowLoadBaseline && inFlight < this.estimatedLimit / 2) ||
+      rttMs < this.longRtt
+    ) {
       // Refresh baseline only at low load or on recovery, so sustained overload
       // cannot drift it upward toward degraded latency.
       this.longRtt = this.longRtt * (1 - this.factor) + rttMs * this.factor;
@@ -100,6 +103,7 @@ export class Gradient2Limit {
 interface OriginState {
   readonly limit: Gradient2Limit;
   inFlight: number;
+  saturated: boolean;
 }
 
 export class Gradient2ConcurrencyLimiter {
@@ -121,6 +125,7 @@ export class Gradient2ConcurrencyLimiter {
       return false;
     }
     state.inFlight += 1;
+    if (state.inFlight >= state.limit.getLimit()) state.saturated = true;
     return true;
   }
 
@@ -128,7 +133,8 @@ export class Gradient2ConcurrencyLimiter {
     const state = this.origins.get(origin);
     if (state === undefined || state.inFlight === 0) return;
     state.inFlight -= 1;
-    state.limit.onSample(rttMs, state.inFlight + 1);
+    state.limit.onSample(rttMs, state.inFlight + 1, !state.saturated);
+    if (state.inFlight === 0) state.saturated = false;
   }
 
   snapshot(): readonly DownstreamConcurrencySample[] {
@@ -147,6 +153,7 @@ export class Gradient2ConcurrencyLimiter {
       state = {
         limit: new Gradient2Limit(this.config),
         inFlight: 0,
+        saturated: false,
       };
       this.origins.set(origin, state);
     }

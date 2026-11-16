@@ -182,6 +182,32 @@ describe('Gradient2ConcurrencyLimiter', () => {
     expect(afterSpike).toBeGreaterThanOrEqual(2);
   });
 
+  it('keeps the floor across saturated batches with degraded RTTs', () => {
+    const origin = 'https://saturated.test';
+    const limiter = new Gradient2ConcurrencyLimiter();
+    for (let sample = 0; sample < 12; sample += 1) {
+      expect(limiter.tryAcquire(origin)).toBe(true);
+      limiter.release(origin, 1_000);
+    }
+
+    let reachedFloor = false;
+    let driftedAfterFloor = false;
+    for (let batch = 0; batch < 2_000; batch += 1) {
+      let acquired = 0;
+      while (limiter.tryAcquire(origin)) acquired += 1;
+      for (let request = 0; request < acquired; request += 1) {
+        limiter.release(origin, 2_000);
+      }
+      const currentLimit = limiter.snapshot()[0]?.limit;
+      driftedAfterFloor ||= reachedFloor && currentLimit !== 2;
+      reachedFloor ||= currentLimit === 2;
+    }
+
+    expect(reachedFloor).toBe(true);
+    expect(driftedAfterFloor).toBe(false);
+    expect(limiter.snapshot()[0]?.limit).toBe(2);
+  });
+
   it('records each refused admission in the limit-dropped metric', async () => {
     const limiter = new Gradient2ConcurrencyLimiter();
 
