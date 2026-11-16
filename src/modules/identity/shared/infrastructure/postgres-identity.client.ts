@@ -4,6 +4,7 @@ import {
   isLifecycleProperty,
   isRowlessWrite,
   normalizeRawRows,
+  organizationTransaction,
   runGuardedTransaction,
 } from '@/modules/persistence/persistence.module';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
@@ -75,8 +76,35 @@ function runPrismaTransaction<T>(
 export function identityTransaction<T>(
   client: IdentityRepositoryClient,
   callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+): Promise<T>;
+/**
+ * Organization-scoped form (#785). The write path passes the Organization
+ * explicitly, so the shared transaction seam can declare it to PostgreSQL
+ * before any repository statement runs. Repository predicates remain.
+ */
+export function identityTransaction<T>(
+  client: IdentityRepositoryClient,
+  organizationId: string,
+  callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+): Promise<T>;
+export function identityTransaction<T>(
+  client: IdentityRepositoryClient,
+  organizationIdOrCallback:
+    | string
+    | ((transaction: Prisma.TransactionClient) => Promise<T>),
+  maybeCallback?: (transaction: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  return runPrismaTransaction(client, callback);
+  if (typeof organizationIdOrCallback === 'function') {
+    return runPrismaTransaction(client, organizationIdOrCallback);
+  }
+  if (maybeCallback === undefined) {
+    throw internalError('Identity transaction callback is required');
+  }
+  return organizationTransaction(
+    client,
+    organizationIdOrCallback,
+    maybeCallback,
+  );
 }
 
 /**
