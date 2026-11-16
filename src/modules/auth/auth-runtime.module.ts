@@ -59,11 +59,8 @@ import {
   AUTH_POSTGRES_READINESS,
   type AuthPostgresReadiness,
 } from './public/postgres-readiness';
-import {
-  AUTH_RATE_LIMITER,
-  type AuthRateLimiterPort,
-} from './rate-limit/application/auth-rate-limiter.port';
-import { RedisAuthRateLimiter } from './rate-limit/infrastructure/redis-auth-rate-limiter';
+import { AUTH_RATE_LIMITER } from './rate-limit/application/auth-rate-limiter.port';
+import { AuthRateLimitModule } from './rate-limit/public/auth-rate-limit.module';
 import { AUTH_CLOCK, type AuthClock } from './shared/application/auth-clock';
 import { AUTH_SECURITY_EVENT_RECORDER } from './shared/application/auth-security-event.port';
 import { AuthSecurityEventRecorder } from './shared/infrastructure/auth-security-event-recorder';
@@ -144,6 +141,7 @@ function createUserAccessTokenCrypto(
     PersistenceModule,
     SecretsModule,
     EmailDeliveryModule,
+    AuthRateLimitModule,
   ],
   controllers: [MfaController, WebSessionController, UserAccessTokenController],
   providers: [
@@ -388,14 +386,6 @@ function createUserAccessTokenCrypto(
       useFactory: (): AuthClock => ({ now: () => new Date() }),
     },
     {
-      provide: AUTH_RATE_LIMITER,
-      inject: [RUNTIME_CONNECTION_CONFIGURATION],
-      useFactory: (
-        configuration: RuntimeConnectionConfigurationPort,
-      ): AuthRateLimiterPort =>
-        new RedisAuthRateLimiter(configuration.redisUrl ?? ''),
-    },
-    {
       provide: USER_ACCESS_TOKEN_CRYPTO,
       useFactory: createUserAccessTokenCrypto,
       inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
@@ -427,7 +417,7 @@ function createUserAccessTokenCrypto(
   exports: [
     AUTH_POSTGRES_READINESS,
     EmailDeliveryModule,
-    AUTH_RATE_LIMITER,
+    AuthRateLimitModule,
     USER_ACCOUNT_REPOSITORY,
     VERIFICATION_TOKEN_REPOSITORY,
     PASSWORD_RESET_TOKEN_REPOSITORY,
