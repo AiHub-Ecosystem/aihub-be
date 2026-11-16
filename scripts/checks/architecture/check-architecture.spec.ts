@@ -1614,18 +1614,23 @@ describe('source-text architecture rules fail arch-check', () => {
           '  jest.useFakeTimers();',
           '  await new Promise((resolve) => setTimeout(resolve, 1));',
           '});',
+          'it("does not exempt waits for an uncalled fake timer helper", async () => {',
+          '  function setupFakeTimers() { jest.useFakeTimers(); }',
+          '  await new Promise((resolve) => setTimeout(resolve, 1));',
+          '});',
           '',
         ].join('\n'),
       ],
     ]);
 
-    expect(result.failures).toHaveLength(6);
+    expect(result.failures).toHaveLength(7);
     expect(result.failures[0]).toContain('test/real-timer.spec.ts:5');
     expect(result.failures[1]).toContain('test/real-timer.spec.ts:7');
     expect(result.failures[2]).toContain('test/real-timer.spec.ts:9');
     expect(result.failures[3]).toContain('test/real-timer.spec.ts:10');
     expect(result.failures[4]).toContain('test/real-timer.spec.ts:13');
     expect(result.failures[5]).toContain('test/real-timer.spec.ts:16');
+    expect(result.failures[6]).toContain('test/real-timer.spec.ts:25');
   });
 
   it('rejects timer-promises and PostgreSQL sleeps in specs', () => {

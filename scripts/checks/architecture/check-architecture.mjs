@@ -451,7 +451,8 @@ export function collectSourceTextFailures(options) {
     ) {
       const awaitedPosition = awaitedNode.getStart(sourceFile);
       /** @param {import('typescript').Node} node @returns {boolean} */
-      function containsSetup(node) {
+      function containsSetup(node, root = true) {
+        if (!root && ts.isFunctionLike(node)) return false;
         if (ts.isCallExpression(node)) {
           const callee = node.expression;
           if (
@@ -473,7 +474,9 @@ export function collectSourceTextFailures(options) {
             return true;
           }
         }
-        return node.getChildren(sourceFile).some(containsSetup);
+        return node
+          .getChildren(sourceFile)
+          .some((child) => containsSetup(child, false));
       }
       return containsSetup(callback);
     }
