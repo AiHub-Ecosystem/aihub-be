@@ -208,12 +208,14 @@ describe('Redis keys lost under load', () => {
       }
       active += 1;
       peakActive = Math.max(peakActive, active);
+      // real-timer-ok: the fault-injection lane waits for Redis and database recovery behavior
       await new Promise((resolve) => setTimeout(resolve, 200));
       active -= 1;
       await decision.lease.release();
     };
 
     const first = Array.from({ length: 6 }, run);
+    // real-timer-ok: the fault-injection lane waits for Redis and database recovery behavior
     await new Promise((resolve) => setTimeout(resolve, 50));
     await raw.del(`aihub:v1:inflight:${ORGANIZATION_A}`);
     const second = Array.from({ length: 6 }, run);

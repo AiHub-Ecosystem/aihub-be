@@ -432,6 +432,7 @@ describe('graded request chain', () => {
         username: 'student',
         passwordHash: 'stored-password-hash',
       });
+      // real-timer-ok: the real HTTP request must race the hanging provider
       const auth = await completesWhileSpeakingHangs(
         app.inject({
           method: 'POST',
@@ -446,6 +447,7 @@ describe('graded request chain', () => {
       expect(auth.statusCode).toBe(200);
       expect(auth.headers['set-cookie']).toBeDefined();
 
+      // real-timer-ok: the real HTTP request must race the hanging provider
       const writing = await completesWhileSpeakingHangs(
         app.inject({
           method: 'POST',

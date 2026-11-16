@@ -298,17 +298,14 @@ describe('application shutdown drain', () => {
         await response.arrayBuffer();
 
         let closed = false;
+        const serverClosed = new Promise<void>((resolve) =>
+          app.getHttpServer().once('close', resolve),
+        );
         const closing = app.close().then(() => {
           closed = true;
           return undefined;
         });
-        for (
-          let attempt = 0;
-          attempt < 20 && app.getHttpServer().listening;
-          attempt += 1
-        ) {
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, 5));
-        }
+        await serverClosed;
         expect(app.getHttpServer().listening).toBe(false);
         expect(closed).toBe(false);
         await expect(refuseNewConnection(address.port)).rejects.toMatchObject({

@@ -80,6 +80,7 @@ describe('shared email provider outage circuit in Redis', () => {
     const deadline = Date.now() + 3_000;
     while (!permit.allowed && Date.now() < deadline) {
       const waitMs = Math.min(permit.retryAfterMs, 50);
+      // real-timer-ok: the Redis-backed circuit must cross real retry and outage intervals
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       permit = await circuitA.acquireSendPermit();
     }
@@ -89,6 +90,7 @@ describe('shared email provider outage circuit in Redis', () => {
 
     // An older in-flight request may fail after this probe has started.
     await circuitB.recordProviderFailure(0);
+    // real-timer-ok: the Redis-backed circuit must cross real retry and outage intervals
     await new Promise((resolve) => setTimeout(resolve, 10));
     await expect(circuitB.acquireSendPermit()).resolves.toMatchObject({
       allowed: false,
@@ -107,6 +109,7 @@ describe('shared email provider outage circuit in Redis', () => {
 
   it('releases a probe whose failure recording died on a Redis error, so the next acquire proceeds', async () => {
     await circuitA.recordProviderFailure(1);
+    // real-timer-ok: the Redis-backed circuit must cross real retry and outage intervals
     await new Promise((resolve) => setTimeout(resolve, 50));
     const permit = await circuitA.acquireSendPermit();
     if (!permit.allowed || permit.probeToken === undefined) {
@@ -131,6 +134,7 @@ describe('shared email provider outage circuit in Redis', () => {
 
   it('takes over a probe held past the stale margin by an owner that never answered', async () => {
     await circuitA.recordProviderFailure(1);
+    // real-timer-ok: the Redis-backed circuit must cross real retry and outage intervals
     await new Promise((resolve) => setTimeout(resolve, 50));
     const permit = await circuitA.acquireSendPermit();
     if (!permit.allowed || permit.probeToken === undefined) {

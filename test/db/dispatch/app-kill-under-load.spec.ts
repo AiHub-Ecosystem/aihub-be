@@ -107,6 +107,7 @@ describe('an app process killed under grading load', () => {
 
     const deadline = Date.now() + 20_000;
     while (received < IN_FLIGHT && Date.now() < deadline) {
+      // real-timer-ok: the child process and live HTTP request must overlap before termination
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     expect(received).toBe(IN_FLIGHT);

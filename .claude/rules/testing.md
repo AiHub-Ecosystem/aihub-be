@@ -19,3 +19,4 @@ paths:
 - Identity specs stay beside their feature layer; keep cross-module integration and database specs under `test/`.
 - A `Proxy` that stands in for a client or handle gets a spec for each trap it defines (`get`, `has`, `ownKeys`, `set`), run with a lifecycle property (`then`, `close`, `onModuleDestroy`) and with an ordinary one. Frameworks probe a provider through `in` as well as through property reads, so a trap covered by only one of the two fails in production.
 - Reach for the database lane only for behaviour a real engine settles: partial unique indexes, upsert guards, constraint rejection, row locks under concurrency. Everything else stays a unit test.
+- Specs wait for concurrent work with a deferred promise, an observable event, or fake timers. A real timer wait or `pg_sleep` needs an inline or immediately preceding `// real-timer-ok: reason` comment explaining why the test must exercise elapsed real time.

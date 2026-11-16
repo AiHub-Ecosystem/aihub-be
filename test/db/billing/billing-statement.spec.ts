@@ -440,6 +440,7 @@ async function waitForBlocked(pattern: string): Promise<void> {
       [pattern],
     );
     if ((rows[0]?.n ?? 0) > 0) return;
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`no backend blocked on ${pattern}`);
@@ -489,6 +490,7 @@ describe('billing statement concurrency (#999)', () => {
     // The adjustment has passed its closed-month check and waits to insert.
     const holder = await holdTableLock('billing_adjustments', 'SHARE');
     const adjusting = service.adjust(lateAdjustment);
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await waitForBlocked('%billing_adjustments%');
     const closing = service.statement({
       month: OCTOBER,
@@ -496,6 +498,7 @@ describe('billing statement concurrency (#999)', () => {
       closeAs: 'operator_a',
       now: AFTER_OCTOBER,
     });
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await waitForBlocked(ADVISORY_WAIT);
     await commitHolder(holder);
 
@@ -523,10 +526,12 @@ describe('billing statement concurrency (#999)', () => {
       closeAs: 'operator_a',
       now: AFTER_OCTOBER,
     });
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await waitForBlocked('%billing_month_closures%');
     const refused = service
       .adjust(lateAdjustment)
       .catch((error: unknown) => error);
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await waitForBlocked(ADVISORY_WAIT);
     await commitHolder(holder);
 
@@ -550,6 +555,7 @@ describe('billing statement concurrency (#999)', () => {
       organizationId: ORG,
       now: AFTER_OCTOBER,
     });
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await waitForBlocked('%billing_adjustments%');
     await usage({ at: '2026-10-06T00:00:00Z' });
     await holder.query(
@@ -583,6 +589,7 @@ describe('billing statement concurrency (#999)', () => {
       organizationId: ORG,
       now: AFTER_OCTOBER,
     });
+    // real-timer-ok: the database-backed statement worker must progress across its real interval
     await waitForBlocked('%billing_month_closures%');
     await holder.query(
       `INSERT INTO billing_month_closures (

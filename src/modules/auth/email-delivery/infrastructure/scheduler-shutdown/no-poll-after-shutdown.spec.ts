@@ -7,7 +7,7 @@ describe('EmailOutboxPollerScheduler during shutdown', () => {
       beginShutdown();
       const before = poller.passes;
 
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 80)); // real-timer-ok: assertion covers several production polling intervals after shutdown begins
 
       expect(poller.passes).toBe(before);
     }, false);

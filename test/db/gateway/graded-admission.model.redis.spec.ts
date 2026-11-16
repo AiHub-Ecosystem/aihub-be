@@ -62,6 +62,7 @@ beforeAll(async () => {
       break;
     } catch (error) {
       if (attempt >= 50) throw error;
+      // real-timer-ok: the Redis model must cross its real admission window
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
@@ -74,6 +75,7 @@ beforeAll(async () => {
       break;
     } catch (error) {
       if (attempt >= 50) throw error;
+      // real-timer-ok: the Redis model must cross its real admission window
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }

@@ -4,17 +4,32 @@ describe('serializeWritingChartImageProcessing', () => {
   it('allows only one image processing operation at a time', async () => {
     let active = 0;
     let maximumActive = 0;
+    let releaseFirst: (() => void) | undefined;
+    let markFirstStarted: (() => void) | undefined;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
 
-    await Promise.all(
+    const operations = Promise.all(
       [1, 2, 3].map(() =>
         serializeWritingChartImageProcessing(async () => {
           active += 1;
           maximumActive = Math.max(maximumActive, active);
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          if (active === 1) {
+            markFirstStarted?.();
+            await firstGate;
+          }
           active -= 1;
         }),
       ),
     );
+    await firstStarted;
+    expect(maximumActive).toBe(1);
+    releaseFirst?.();
+    await operations;
 
     expect(maximumActive).toBe(1);
   });

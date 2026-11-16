@@ -167,6 +167,7 @@ describe('sanitizeWritingChartImage', () => {
   it('keeps the event loop responsive for a 20-megapixel image', async () => {
     const source = await image('jpeg', 5_000, 4_000);
     await getMetrics();
+    // real-timer-ok: the test samples real event-loop lag while image work runs
     await new Promise((resolve) => setTimeout(resolve, 25));
     await getMetrics();
 
@@ -176,6 +177,7 @@ describe('sanitizeWritingChartImage', () => {
     });
     expect(sanitized).toMatchObject({ kind: 'sanitized' });
 
+    // real-timer-ok: the test samples real event-loop lag while image work runs
     await new Promise((resolve) => setTimeout(resolve, 25));
     const metrics = await getMetrics();
     const lag = metrics.match(/^aihub_event_loop_lag_seconds (\S+)$/m);

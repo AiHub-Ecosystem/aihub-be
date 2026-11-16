@@ -978,6 +978,7 @@ describe('HttpOperationDispatcher', () => {
   it('records a pre-send timeout if the durable write outlasts the operation deadline', async () => {
     const attempts = fakeDispatchAttempts();
     attempts.recorder.beginAttempt = jest.fn(async () => {
+      // real-timer-ok: the test measures the real operation deadline around a durable write
       await new Promise((resolve) => setTimeout(resolve, 150));
       return 'attempt-test';
     });
@@ -1011,6 +1012,7 @@ describe('HttpOperationDispatcher', () => {
   it('recomputes the outbound timeout after persisting dispatch evidence', async () => {
     const attempts = fakeDispatchAttempts();
     attempts.recorder.beginAttempt = jest.fn(async () => {
+      // real-timer-ok: the test measures the real operation deadline around a durable write
       await new Promise((resolve) => setTimeout(resolve, 100));
       return 'attempt-test';
     });

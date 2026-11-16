@@ -15,6 +15,7 @@ async function waitForPoolCounts(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (pool.totalCount === total && pool.idleCount === idle) return;
+    // real-timer-ok: the driver timeout must elapse against a real PostgreSQL connection
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error('Prisma pool did not return to its expected counts');
@@ -78,6 +79,7 @@ describe('PostgreSQL request timeouts', () => {
       expect(postgresTimeoutKind(outcome.error)).toBe('lock_timeout');
       expect(elapsedMs).toBeLessThan(3_500);
 
+      // real-timer-ok: the driver timeout must elapse against a real PostgreSQL connection
       await waitForPoolCounts(prismaPool, expectedTotal, expectedTotal);
       expect(prismaPool.totalCount).toBe(expectedTotal);
       expect(prismaPool.idleCount).toBe(expectedTotal);

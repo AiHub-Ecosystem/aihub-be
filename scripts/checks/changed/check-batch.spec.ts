@@ -29,15 +29,12 @@ const {
   }>;
 };
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** A fake runner whose gates finish in a chosen order with chosen exit codes. */
+/** A fake runner that returns chosen exit codes without depending on time. */
 function fakeRun(
   behavior: Record<string, { delay: number; code: number; output?: string }>,
 ) {
   return async (gate: string) => {
-    const { delay, code, output = `${gate} body\n` } = behavior[gate]!;
-    await wait(delay);
+    const { code, output = `${gate} body\n` } = behavior[gate]!;
     return { code, output };
   };
 }
@@ -95,16 +92,38 @@ describe('check batch', () => {
 
   it('prints gates in declared order when they complete in another order', async () => {
     const sink = collect();
-    await runBatch({
+    const release = new Map<string, () => void>();
+    const started = new Map<string, Promise<void>>();
+    const markStarted = new Map<string, () => void>();
+    const completionOrder: string[] = [];
+    for (const gate of ['slow', 'middle', 'fast']) {
+      started.set(
+        gate,
+        new Promise<void>((resolve) => markStarted.set(gate, resolve)),
+      );
+    }
+    const batch = runBatch({
       gates: ['slow', 'middle', 'fast'],
       freeBytes: BYTES_PER_CHILD * 3,
-      run: fakeRun({
-        slow: { delay: 40, code: 0 },
-        middle: { delay: 20, code: 0 },
-        fast: { delay: 1, code: 0 },
-      }),
+      run: (gate) =>
+        new Promise((resolve) => {
+          markStarted.get(gate)?.();
+          release.set(gate, () => {
+            completionOrder.push(gate);
+            resolve({ code: 0, output: `${gate} body\n` });
+          });
+        }),
       ...sink,
     });
+    await Promise.all(started.values());
+    release.get('fast')?.();
+    await Promise.resolve();
+    release.get('middle')?.();
+    await Promise.resolve();
+    release.get('slow')?.();
+    await batch;
+
+    expect(completionOrder).toEqual(['fast', 'middle', 'slow']);
     expect(sink.lines.slice(0, 3)).toEqual([
       'check:batch: slow ok',
       'check:batch: middle ok',
@@ -114,19 +133,42 @@ describe('check batch', () => {
 
   it('marks the first gate that failed in declared order, not the first to finish', async () => {
     const sink = collect();
-    const outcome = await runBatch({
+    const results = new Map<
+      string,
+      (result: { code: number; output: string }) => void
+    >();
+    const started = new Map<string, Promise<void>>();
+    const markStarted = new Map<string, () => void>();
+    for (const gate of ['early-fail', 'late-fail', 'passing']) {
+      started.set(
+        gate,
+        new Promise<void>((resolve) => markStarted.set(gate, resolve)),
+      );
+    }
+    const outcome = runBatch({
       gates: ['early-fail', 'late-fail', 'passing'],
       freeBytes: BYTES_PER_CHILD * 3,
-      run: fakeRun({
-        'early-fail': { delay: 40, code: 1, output: 'the real gate output\n' },
-        'late-fail': { delay: 2, code: 1, output: 'other output\n' },
-        passing: { delay: 1, code: 0 },
-      }),
+      run: (gate) =>
+        new Promise((resolve) => {
+          markStarted.get(gate)?.();
+          results.set(gate, resolve);
+        }),
       ...sink,
     });
 
-    expect(outcome.exitCode).toBe(1);
-    expect(outcome.failed).toEqual(['early-fail', 'late-fail']);
+    await Promise.all(started.values());
+    results.get('late-fail')?.({ code: 1, output: 'other output\n' });
+    await Promise.resolve();
+    results.get('passing')?.({ code: 0, output: 'passing body\n' });
+    await Promise.resolve();
+    results.get('early-fail')?.({
+      code: 1,
+      output: 'the real gate output\n',
+    });
+    const settled = await outcome;
+
+    expect(settled.exitCode).toBe(1);
+    expect(settled.failed).toEqual(['early-fail', 'late-fail']);
     // verify:summary scans back from the failure line to the last `$ ` line, so exactly
     // one marker may exist and it must name the gate, not this batch.
     const markers = sink.lines.filter((line) => line.startsWith('$ '));

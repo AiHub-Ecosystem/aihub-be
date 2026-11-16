@@ -279,6 +279,7 @@ describe('a slow AI Service under grading load and client retries', () => {
           retryAfterMs: error?.retryAfterMs,
         });
         if (error?.retryable !== true) return;
+        // real-timer-ok: the tenant fault-injection lane exercises real retry and rate intervals
         await new Promise((resolve) =>
           setTimeout(resolve, error.retryAfterMs ?? 200),
         );
@@ -287,6 +288,7 @@ describe('a slow AI Service under grading load and client retries', () => {
     const clients: Promise<void>[] = [];
     for (let index = 0; index < OFFERED_RPS * seconds; index += 1) {
       clients.push(attempt(organizations[index % organizations.length] ?? ''));
+      // real-timer-ok: the tenant fault-injection lane exercises real retry and rate intervals
       await new Promise((resolve) => setTimeout(resolve, 1_000 / OFFERED_RPS));
     }
     await Promise.all(clients);

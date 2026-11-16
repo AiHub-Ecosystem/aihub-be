@@ -273,6 +273,7 @@ class FakeStorage implements WritingChartUploadStoragePort {
     );
     try {
       if (this.inspectionDelayMs > 0) {
+        // real-timer-ok: the real HTTP upload stream must overlap delayed inspection
         await new Promise((resolve) =>
           setTimeout(resolve, this.inspectionDelayMs),
         );

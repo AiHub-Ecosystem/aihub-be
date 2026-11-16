@@ -71,7 +71,7 @@ class PgBouncerProbeController {
     return this.runtime.prisma.$transaction(async (transaction) => {
       await transaction.$queryRaw`
         SELECT true AS waited
-        FROM pg_sleep(${SLEEP_SECONDS}) /* aihub_pgbouncer_http_probe */
+        FROM pg_sleep(${SLEEP_SECONDS}) /* real-timer-ok: hold a real PostgreSQL backend during the PgBouncer HTTP probe */ /* aihub_pgbouncer_http_probe */
       `;
       await transaction.$executeRaw`
         INSERT INTO aihub_pgbouncer_http_probe (id) VALUES (${id})
@@ -159,6 +159,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
       method: 'POST',
       url: `/__test/pgbouncer/sleep-and-write/${holderId}`,
     });
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await waitForActiveQuery(adminPool, HTTP_PROBE_SQL, 1);
 
     const startedAt = performance.now();
@@ -171,6 +172,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
     expect((await holder).json()).toEqual({ saved: true });
 
     expect(await storedIds(adminPool)).toEqual([holderId]);
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await expectNoActiveQuery(adminPool, HTTP_PROBE_SQL);
     await expectNoOrphanBackends(adminPool);
     const recovered = await app.inject({
@@ -187,9 +189,10 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
   it('returns retryable unavailability while PgBouncer has no backend slots', async () => {
     const holders = [1, 2].map(() =>
       holderPool.query(
-        `SELECT pg_sleep(${SLEEP_SECONDS}) /* ${BACKEND_HOLDER_SQL} */`,
+        `SELECT pg_sleep(${SLEEP_SECONDS}) /* real-timer-ok: occupy each real PgBouncer backend slot */ /* ${BACKEND_HOLDER_SQL} */`,
       ),
     );
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await waitForActiveQuery(adminPool, BACKEND_HOLDER_SQL, 2);
 
     const waiterId = ulid();
@@ -203,6 +206,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
 
     await Promise.all(holders);
     expect(await storedIds(adminPool)).toEqual([]);
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await expectNoActiveQuery(adminPool, BACKEND_HOLDER_SQL);
     await expectNoOrphanBackends(adminPool);
     const recovered = await app.inject({
@@ -219,16 +223,19 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
   it('keeps combined app-checkout and PgBouncer wait within one second', async () => {
     const holders = [1, 2].map(() =>
       holderPool.query(
-        `SELECT pg_sleep(${SLEEP_SECONDS}) /* ${BACKEND_HOLDER_SQL} */`,
+        `SELECT pg_sleep(${SLEEP_SECONDS}) /* real-timer-ok: occupy each real PgBouncer backend slot */ /* ${BACKEND_HOLDER_SQL} */`,
       ),
     );
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await waitForActiveQuery(adminPool, BACKEND_HOLDER_SQL, 2);
 
     const first = app.inject({
       method: 'POST',
       url: `/__test/pgbouncer/write/${ulid()}`,
     });
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await waitForApplicationPoolBorrow(runtimePool);
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await new Promise((resolve) => setTimeout(resolve, 25));
 
     const startedAt = performance.now();
@@ -242,6 +249,7 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
 
     await Promise.all(holders);
     expect(await storedIds(adminPool)).toEqual([]);
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await expectNoActiveQuery(adminPool, BACKEND_HOLDER_SQL);
     await expectNoOrphanBackends(adminPool);
   });
@@ -286,6 +294,7 @@ async function waitForApplicationPoolBorrow(
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     if (pool.totalCount === 1 && pool.idleCount === 0) return;
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error('the first HTTP request did not acquire its app pool client');
@@ -307,6 +316,7 @@ async function waitForActiveQuery(
       [`%${marker}%`],
     );
     if ((result.rows[0]?.count ?? 0) >= expectedCount) return;
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(
@@ -326,6 +336,7 @@ async function expectNoActiveQuery(pool: Pool, marker: string): Promise<void> {
       [`%${marker}%`],
     );
     if (result.rows[0]?.count === 0) return;
+    // real-timer-ok: the real PgBouncer socket and backend pool must progress
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error('a PgBouncer probe query remained active after completion');

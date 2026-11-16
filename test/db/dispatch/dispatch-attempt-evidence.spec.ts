@@ -118,6 +118,7 @@ describe('durable dispatch-attempt evidence', () => {
       `dispatch-crash-${ulid()}`,
     );
     let dispatchWaitTimer: NodeJS.Timeout | undefined;
+    // real-timer-ok: fail the live HTTP integration if the provider is never reached
     const dispatchStarted = await Promise.race([
       providerReceived.then(() => 'provider_received'),
       customerResponse.then((response) =>

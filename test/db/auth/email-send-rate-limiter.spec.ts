@@ -58,6 +58,7 @@ describe('shared email send rate limiter', () => {
     expect(retryDelays).toHaveLength(1);
     expect(retryDelays[0]).toBeGreaterThan(0);
 
+    // real-timer-ok: the test observes a real Redis rate-limit window
     await new Promise((resolve) => setTimeout(resolve, 120));
 
     expect((await second.reserve()).reserved).toBe(true);

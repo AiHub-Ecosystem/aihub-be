@@ -24,6 +24,7 @@ class FakeUsageRepository implements UsageRepositoryPort {
 
   async insert(record: UsageRecord): Promise<void> {
     if (this.delayMs > 0) {
+      // real-timer-ok: the test measures a real metering deadline against a late write
       await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     }
     if (this.shouldFail) {
@@ -596,6 +597,7 @@ describe('MeteringService', () => {
     );
     expect(telemetry.failures).toEqual(['timeout']);
     // The insert still lands late; the bound only stops the caller waiting.
+    // real-timer-ok: the test measures a real metering deadline against a late write
     await new Promise((resolve) =>
       setTimeout(resolve, METERING_WRITE_TIMEOUT_MS + 100),
     );

@@ -92,6 +92,22 @@ async function holdPublicationLock() {
   };
 }
 
+async function waitForPublicationLockWaiter(): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const result = await pool.query<{ waiting: boolean }>(`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock'
+          AND query LIKE '%pg_advisory_xact_lock(hashtextextended%'
+      ) AS waiting
+    `);
+    if (result.rows[0]?.waiting) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error('publication transaction did not reach its advisory lock');
+}
+
 describe('Writing chart publication limit during a concurrent publish', () => {
   it('marks a publication published only under the admission lock', async () => {
     const inFlight = await insertUpload('publishing');
@@ -109,7 +125,7 @@ describe('Writing chart publication limit during a concurrent publish', () => {
         settled = true;
         return asset;
       });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForPublicationLockWaiter();
     expect(settled).toBe(false);
 
     await release();

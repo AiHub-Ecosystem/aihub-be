@@ -108,6 +108,7 @@ async function createBlackholeRedis() {
 async function settleWithin<T>(promise: Promise<T>, timeoutMs: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    // real-timer-ok: bound a real Redis socket that may never answer
     return await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
@@ -138,16 +139,21 @@ describe('RedisAuthRateLimiter command deadline', () => {
 
     try {
       await limiter.consume({ ...input, key: 'connection-warmup' });
+      // real-timer-ok: a real Redis socket must demonstrate the command deadline
       await settleWithin(redis.readyCheck, 750);
+      // real-timer-ok: a real Redis socket must demonstrate the command deadline
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
+      // real-timer-ok: the real socket must remain unresponsive until the Redis deadline
       await expect(settleWithin(limiter.consume(input), 750)).resolves.toEqual({
         allowed: true,
       });
+      // real-timer-ok: the real socket must remain unresponsive until the Redis deadline
       await expect(settleWithin(limiter.check(input), 750)).resolves.toEqual({
         allowed: false,
         retryAfterMs: 1_000,
       });
+      // real-timer-ok: the real socket must remain unresponsive until the Redis deadline
       await expect(settleWithin(limiter.consume(input), 750)).resolves.toEqual({
         allowed: false,
         retryAfterMs: 1_000,

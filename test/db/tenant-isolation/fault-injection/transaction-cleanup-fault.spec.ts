@@ -181,7 +181,7 @@ describe.each(RUNS)('a transaction through %s', (_name, run) => {
         run(holder.prisma, async (transaction) => {
           pid = await lockedBackend(transaction);
           await transaction.$executeRawUnsafe(
-            `INSERT INTO ${PROBE} SELECT 1 FROM pg_sleep(3)`,
+            `INSERT INTO ${PROBE} SELECT 1 FROM pg_sleep(3) /* real-timer-ok: hold the backend in PgSleep during tenant connection teardown */`,
           );
         }),
       );
@@ -238,7 +238,7 @@ describe.each(RUNS)('a transaction through %s', (_name, run) => {
         run(holder.prisma, async (transaction) => {
           pid = await lockedBackend(transaction);
           await transaction.$executeRawUnsafe(
-            `INSERT INTO ${PROBE} SELECT 1 FROM pg_sleep(3)`,
+            `INSERT INTO ${PROBE} SELECT 1 FROM pg_sleep(3) /* real-timer-ok: keep the PostgreSQL backend in PgSleep while cancellation is injected */`,
           );
         }),
       );

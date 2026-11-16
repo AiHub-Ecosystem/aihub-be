@@ -122,6 +122,7 @@ describe('Graded admission through a Redis fault proxy', () => {
       }
       expect(downstream).toHaveBeenCalledTimes(3);
 
+      // real-timer-ok: the fault-injection lane measures real downstream retry backoff
       await new Promise((resolve) => setTimeout(resolve, 800));
       await proxy.setMode('normal');
       await redisAnswers(client);

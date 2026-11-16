@@ -157,6 +157,7 @@ describe('PostgreSQL fencing token prototype', () => {
       },
     );
     const exited = once(worker, 'exit');
+    // real-timer-ok: the Redis-backed lease and fencing token use real expiration time
     const acquired = await waitForMessage(worker, 'acquired');
 
     expect(acquired.token).toBe('1');
@@ -169,6 +170,7 @@ describe('PostgreSQL fencing token prototype', () => {
       ),
     ).resolves.toBeUndefined();
 
+    // real-timer-ok: the Redis-backed lease and fencing token use real expiration time
     await new Promise((resolve) =>
       setTimeout(resolve, PROTOTYPE_LEASE_TTL_MS + 200),
     );
@@ -187,6 +189,7 @@ describe('PostgreSQL fencing token prototype', () => {
       writeProtectedValue(pool, RESOURCE_ID, 'worker-b', newerToken),
     ).resolves.toBe(1);
 
+    // real-timer-ok: the Redis-backed lease and fencing token use real expiration time
     const settled = await waitForMessage(worker, 'settled');
     expect(settled).toMatchObject({
       leaseLostDetected: true,

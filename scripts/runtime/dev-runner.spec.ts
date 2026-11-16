@@ -172,6 +172,7 @@ describe('dev runner graceful lifecycle', () => {
       );
 
       // Wait a moment for request to be in flight
+      // real-timer-ok: the child process must finish its real shutdown sequence
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Stop app while request is in flight

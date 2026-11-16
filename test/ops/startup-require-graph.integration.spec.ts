@@ -49,6 +49,7 @@ async function waitForChild(
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`Application exited early: ${logs()}`);
     }
+    // real-timer-ok: the child process needs real startup and HTTP response time
     await delay(100);
   }
   throw new Error(`Timed out waiting for the application: ${logs()}`);
@@ -143,6 +144,7 @@ withBuild('startup require graph (#227)', () => {
   }, 60_000);
 
   it('reports a malformed local environment file as a configuration error at boot', async () => {
+    // real-timer-ok: the test waits for an OS child process to reject startup configuration
     await withBootEnvironment(async (directory, environment) => {
       writeFileSync(
         join(directory, '.env'),
@@ -150,6 +152,7 @@ withBuild('startup require graph (#227)', () => {
       );
       const { child, logs } = await bootWithEnvironment(environment, directory);
       try {
+        // real-timer-ok: the child process needs real startup and HTTP response time
         await waitForChild(
           child,
           () => child.exitCode !== null || child.signalCode !== null,

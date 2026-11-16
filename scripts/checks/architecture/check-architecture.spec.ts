@@ -1587,6 +1587,47 @@ describe('source-text architecture rules fail arch-check', () => {
     ]);
   }
 
+  it('rejects awaited real timers in specs unless the reason is inline', () => {
+    const result = checkFixtures([
+      [
+        'test/real-timer.spec.ts',
+        [
+          'it("waits", async () => {',
+          '  await new Promise((resolve) => setTimeout(resolve, 10));',
+          '  await new Promise((resolve) => setTimeout(resolve, 20)); // real-timer-ok: process shutdown needs a real event loop',
+          '  expect(true).toBe(true);',
+          '  await Promise.race([Promise.resolve(), new Promise((resolve) => setTimeout(resolve, 30))]);',
+          '});',
+          '',
+        ].join('\n'),
+      ],
+    ]);
+
+    expect(result.failures).toHaveLength(2);
+    expect(result.failures[0]).toContain('test/real-timer.spec.ts:2');
+    expect(result.failures[1]).toContain('test/real-timer.spec.ts:5');
+  });
+
+  it('rejects timer-promises and PostgreSQL sleeps in specs', () => {
+    const result = checkFixtures([
+      [
+        'test/real-timer.spec.ts',
+        [
+          'import { setTimeout as delay } from "node:timers/promises";',
+          'it("waits", async () => {',
+          '  await delay(10);',
+          '  await db.$queryRaw`SELECT pg_sl' + 'eep(1)`;',
+          '});',
+          '',
+        ].join('\n'),
+      ],
+    ]);
+
+    expect(result.failures).toHaveLength(2);
+    expect(result.failures.join('\n')).toContain('test/real-timer.spec.ts:3');
+    expect(result.failures.join('\n')).toContain('test/real-timer.spec.ts:4');
+  });
+
   it.each([
     'client.$queryRawUnsafe(`SELECT * FROM records WHERE id = ${request.id}`);\n',
     "const query = prefix + request.sql;\nclient['$executeRawUnsafe'](query);\n",

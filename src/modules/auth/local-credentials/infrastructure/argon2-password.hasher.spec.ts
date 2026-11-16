@@ -53,6 +53,7 @@ describe('Argon2PasswordHasher', () => {
   });
 
   it('limits hash and verify operations together', async () => {
+    jest.useFakeTimers();
     let active = 0;
     let peak = 0;
     const work = async <T>(result: T) => {
@@ -73,6 +74,7 @@ describe('Argon2PasswordHasher', () => {
       cappedHasher.verify('password', 'encoded'),
     ];
 
+    await jest.runAllTimersAsync();
     await Promise.all(operations);
 
     expect(peak).toBe(2);

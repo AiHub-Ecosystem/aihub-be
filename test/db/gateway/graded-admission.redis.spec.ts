@@ -67,6 +67,7 @@ beforeAll(async () => {
       break;
     } catch (error) {
       if (attempt >= 50) throw error;
+      // real-timer-ok: the Redis admission window is part of this database-lane assertion
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }

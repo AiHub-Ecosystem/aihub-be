@@ -55,7 +55,7 @@ async function waitForPoolErrorCount(
     if (count > previousCount) {
       return count;
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
   throw new Error('PostgreSQL pool error was not recorded within 5 seconds');
 }

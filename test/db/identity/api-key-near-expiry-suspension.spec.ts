@@ -181,6 +181,7 @@ function pausedWhile(match: (text: string) => boolean): {
       if (attempt > 500) {
         throw new Error('the paused statement never ran');
       }
+      // real-timer-ok: the persisted key suspension must become visible through real database work
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   };

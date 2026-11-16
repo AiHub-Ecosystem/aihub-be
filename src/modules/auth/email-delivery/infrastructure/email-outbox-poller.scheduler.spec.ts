@@ -68,12 +68,10 @@ function scheduler(
   });
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 describe('EmailOutboxPollerScheduler', () => {
   const subjects: EmailOutboxPollerScheduler[] = [];
+
+  beforeEach(() => jest.useFakeTimers());
 
   it('polls queued rows when WAL dispatch is not configured', async () => {
     const poller = new ControllablePoller();
@@ -85,7 +83,7 @@ describe('EmailOutboxPollerScheduler', () => {
     subjects.push(subject);
 
     await subject.onModuleInit();
-    await delay(20);
+    await advance(20);
     subject.onApplicationShutdown();
 
     expect(poller.dispatchCalls).toBeGreaterThan(0);
@@ -95,7 +93,12 @@ describe('EmailOutboxPollerScheduler', () => {
     for (const subject of subjects.splice(0)) {
       subject.onApplicationShutdown();
     }
+    jest.useRealTimers();
   });
+
+  async function advance(ms: number): Promise<void> {
+    await jest.advanceTimersByTimeAsync(ms);
+  }
 
   async function start(
     poller: ControllablePoller,
@@ -110,8 +113,8 @@ describe('EmailOutboxPollerScheduler', () => {
   it('does not start a poller under test', async () => {
     const poller = new ControllablePoller();
 
-    void start(poller, 'test');
-    await delay(INTERVAL_MS * 4);
+    await start(poller, 'test');
+    await advance(INTERVAL_MS * 4);
 
     expect(poller.calls).toBe(0);
   });
@@ -119,8 +122,8 @@ describe('EmailOutboxPollerScheduler', () => {
   it('polls on its interval outside test', async () => {
     const poller = new ControllablePoller();
 
-    void start(poller, 'production');
-    await delay(INTERVAL_MS * 3);
+    await start(poller, 'production');
+    await advance(INTERVAL_MS * 3);
 
     expect(poller.calls).toBeGreaterThanOrEqual(1);
   });
@@ -170,7 +173,7 @@ describe('EmailOutboxPollerScheduler', () => {
       });
       expect(poller.calls).toBe(0);
 
-      await delay(INTERVAL_MS * 3);
+      await advance(INTERVAL_MS * 3);
       expect(poller.calls).toBeGreaterThan(0);
     } finally {
       error.mockRestore();
@@ -216,7 +219,7 @@ describe('EmailOutboxPollerScheduler', () => {
 
     try {
       await expect(subject.onModuleInit()).resolves.toBeUndefined();
-      await delay(INTERVAL_MS * 12);
+      await advance(INTERVAL_MS * 12);
       // The gate has not passed: no pass may run, so no ceiling can reset.
       expect(poller.calls).toBe(0);
       expect(error).toHaveBeenCalledWith({
@@ -226,7 +229,7 @@ describe('EmailOutboxPollerScheduler', () => {
       // The table becomes readable: the next tick passes the gate and the
       // outbox resumes, with the deferral logged exactly once.
       tableReadable = true;
-      await delay(INTERVAL_MS * 12);
+      await advance(INTERVAL_MS * 12);
       expect(poller.calls).toBeGreaterThan(0);
       expect(error).toHaveBeenCalledTimes(1);
     } finally {
@@ -256,14 +259,14 @@ describe('EmailOutboxPollerScheduler', () => {
 
     try {
       await subject.onModuleInit();
-      await delay(INTERVAL_MS * 4);
+      await advance(INTERVAL_MS * 4);
       // Boot gate returns immediately; a timer pass is held inside the gate
       // with running=true set synchronously.
       expect(gateAttempts).toBeGreaterThanOrEqual(1);
       const callsWhileHeld = poller.calls;
 
       resolveHeldGate?.();
-      await delay(INTERVAL_MS * 4);
+      await advance(INTERVAL_MS * 4);
       expect(poller.calls).toBeGreaterThan(callsWhileHeld);
     } finally {
       error.mockRestore();
@@ -345,25 +348,25 @@ describe('EmailOutboxPollerScheduler', () => {
   it('skips a tick while the previous pass is still running', async () => {
     const poller = new ControllablePoller(true);
 
-    void start(poller, 'production');
-    await delay(INTERVAL_MS * 4);
+    await start(poller, 'production');
+    await advance(INTERVAL_MS * 4);
     expect(poller.calls).toBeGreaterThanOrEqual(0);
     const firstPassCalls = poller.calls;
 
     poller.finish();
-    await delay(INTERVAL_MS * 4);
+    await advance(INTERVAL_MS * 4);
     expect(poller.calls).toBeGreaterThan(firstPassCalls);
   });
 
   it('stops polling after shutdown', async () => {
     const poller = new ControllablePoller();
     const subject = await start(poller, 'production');
-    await delay(INTERVAL_MS * 3);
+    await advance(INTERVAL_MS * 3);
     poller.finish();
     const beforeShutdown = poller.calls;
 
     subject.onApplicationShutdown();
-    await delay(INTERVAL_MS * 4);
+    await advance(INTERVAL_MS * 4);
 
     expect(poller.calls).toBe(beforeShutdown);
   });

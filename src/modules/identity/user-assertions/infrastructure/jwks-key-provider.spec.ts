@@ -95,6 +95,54 @@ class FakeCache implements JwksCachePort {
   }
 }
 
+function deferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => undefined;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+function gatedJwksFetch() {
+  const started = deferred<void>();
+  const gate = deferred<void>();
+  return {
+    started: started.promise,
+    release: gate.resolve,
+    fetch: async () => {
+      started.resolve();
+      await gate.promise;
+      return new Response(JSON.stringify(jwks));
+    },
+  };
+}
+
+function gatedProvider(cache: FakeCache) {
+  const fetch = gatedJwksFetch();
+  let fetchCount = 0;
+  const provider = new JwksKeyProvider(
+    cache,
+    async () => {
+      fetchCount += 1;
+      return fetch.fetch();
+    },
+    publicLookup(),
+  );
+  return { fetch, fetchCount: () => fetchCount, provider };
+}
+
+async function resolveDuringFetch<T>(
+  fetch: ReturnType<typeof gatedJwksFetch>,
+  first: () => Promise<T>,
+  second: () => Promise<T>,
+): Promise<[T, T]> {
+  const firstResult = first();
+  await fetch.started;
+  const secondResult = second();
+  fetch.release();
+  return Promise.all([firstResult, secondResult]);
+}
+
 function publicLookup(address = '8.8.8.8') {
   const family = address.includes(':') ? 6 : 4;
   return () => ({
@@ -179,24 +227,24 @@ describe('JwksKeyProvider', () => {
 
   it('coalesces concurrent JWKS resolutions for the same Organization and config', async () => {
     const cache = new FakeCache();
-    let fetches = 0;
-    const provider = new JwksKeyProvider(
-      cache,
-      async () => {
-        fetches += 1;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        return new Response(JSON.stringify(jwks));
-      },
-      publicLookup(),
-    );
+    const { fetch, fetchCount, provider } = gatedProvider(cache);
 
     await expect(
-      Promise.all([
-        provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
-        provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
-      ]),
+      resolveDuringFetch(
+        fetch,
+        () =>
+          provider.resolve({
+            organizationId: 'org_acme',
+            config: remoteConfig,
+          }),
+        () =>
+          provider.resolve({
+            organizationId: 'org_acme',
+            config: remoteConfig,
+          }),
+      ),
     ).resolves.toEqual([jwks, jwks]);
-    expect(fetches).toBe(1);
+    expect(fetchCount()).toBe(1);
   });
 
   it('keeps an unavailable refresh lock from causing a refetch during its cooldown, and refetches after it', async () => {
@@ -257,33 +305,27 @@ describe('JwksKeyProvider', () => {
         ? { acquired: true, available: true }
         : { acquired: false, available: true };
     };
-    let fetches = 0;
-    const provider = new JwksKeyProvider(
-      cache,
-      async () => {
-        fetches += 1;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        return new Response(JSON.stringify(jwks));
-      },
-      publicLookup(),
-    );
+    const { fetch, fetchCount, provider } = gatedProvider(cache);
 
     await expect(
-      Promise.all([
-        provider.resolve({
-          organizationId: 'org_acme',
-          config: remoteConfig,
-          forceRefresh: true,
-        }),
-        provider.resolve({
-          organizationId: 'org_acme',
-          config: remoteConfig,
-          forceRefresh: true,
-        }),
-      ]),
+      resolveDuringFetch(
+        fetch,
+        () =>
+          provider.resolve({
+            organizationId: 'org_acme',
+            config: remoteConfig,
+            forceRefresh: true,
+          }),
+        () =>
+          provider.resolve({
+            organizationId: 'org_acme',
+            config: remoteConfig,
+            forceRefresh: true,
+          }),
+      ),
     ).resolves.toEqual([jwks, jwks]);
     expect(lockRequests).toBe(1);
-    expect(fetches).toBe(1);
+    expect(fetchCount()).toBe(1);
   });
 
   it('serves stale keys when another process owns the forced refresh lock', async () => {
@@ -735,24 +777,30 @@ describe('JwksKeyProvider', () => {
   it('coalesces owner validation and assertion lookup for the same Organization and JWKS URL', async () => {
     const cache = new FakeCache();
     let fetches = 0;
+    const fetch = gatedJwksFetch();
     const provider = new JwksKeyProvider(
       cache,
       async () => {
         fetches += 1;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        return new Response(JSON.stringify(jwks));
+        return fetch.fetch();
       },
       publicLookup(),
     );
 
     await expect(
-      Promise.all([
-        provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
-        provider.validateRemote({
-          organizationId: 'org_acme',
-          url: remoteConfig.jwksUrl ?? '',
-        }),
-      ]),
+      resolveDuringFetch(
+        fetch,
+        () =>
+          provider.resolve({
+            organizationId: 'org_acme',
+            config: remoteConfig,
+          }),
+        () =>
+          provider.validateRemote({
+            organizationId: 'org_acme',
+            url: remoteConfig.jwksUrl ?? '',
+          }),
+      ),
     ).resolves.toEqual([jwks, jwks]);
     expect(fetches).toBe(1);
   });

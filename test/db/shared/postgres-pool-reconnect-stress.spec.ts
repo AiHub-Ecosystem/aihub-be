@@ -48,6 +48,7 @@ async function proxyReady(): Promise<void> {
   for (;;) {
     if (proxyUp && (await probeSucceeds())) return;
     if (Date.now() > deadline) throw new Error('proxy did not come back');
+    // real-timer-ok: the test exercises real PostgreSQL reconnect and restart time
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
@@ -148,7 +149,9 @@ describe('PostgreSQL restart under 100 concurrent queries (#1608)', () => {
 
     // Recovery: after the breaker's cooldown a probe closes it again.
     await proxy.setMode('normal');
+    // real-timer-ok: the test exercises real PostgreSQL reconnect and restart time
     await proxyReady();
+    // real-timer-ok: the test exercises real PostgreSQL reconnect and restart time
     await new Promise((resolve) => setTimeout(resolve, RESTART_DOWN_MS));
     await expect(pool.query('SELECT 1')).resolves.toBeDefined();
 

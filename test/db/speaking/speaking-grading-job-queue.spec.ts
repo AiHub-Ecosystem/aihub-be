@@ -33,6 +33,7 @@ async function waitFor(
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     if (await condition()) return;
+    // real-timer-ok: the database-backed queue worker must cross its real polling interval
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(description);
@@ -79,16 +80,19 @@ describe('Speaking grading job BullMQ integration', () => {
       { concurrency: 2 },
     );
 
+    // real-timer-ok: the database-backed queue worker must cross its real polling interval
     await waitFor(
       async () => processed.length >= 1,
       'The first BullMQ job was not processed',
     );
+    // real-timer-ok: the database-backed queue worker must cross its real polling interval
     await waitFor(
       async () => (await inspector?.getJob(jobId)) === undefined,
       'The completed BullMQ job was not removed',
     );
 
     await queue.enqueue({ jobId, environment });
+    // real-timer-ok: the database-backed queue worker must cross its real polling interval
     await waitFor(
       async () => processed.length >= 2,
       'The same BullMQ job id was not accepted after removal',

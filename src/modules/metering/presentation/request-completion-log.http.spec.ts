@@ -218,7 +218,7 @@ class ScriptedUsageRepository {
     }
 
     if (this.delayMs > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, this.delayMs));
+      await new Promise<void>((resolve) => setTimeout(resolve, this.delayMs)); // real-timer-ok: latency assertions measure wall-clock request time
     }
     this.records.push(record);
   }
@@ -239,8 +239,8 @@ const idempotency = {
     _decodeReplay: IdempotencyReplayDecoder<T>,
   ): Promise<IdempotencyExecution<T>> {
     if (idempotencyDelayMs > 0) {
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, idempotencyDelayMs),
+      await new Promise<void>(
+        (resolve) => setTimeout(resolve, idempotencyDelayMs), // real-timer-ok: latency assertions measure wall-clock request time
       );
     }
     return {
@@ -326,13 +326,13 @@ describe('request completion log over the HTTP boundary', () => {
       .useValue({
         consume: async () => {
           if (admissionDelayMs > 0) {
-            await new Promise<void>((resolve) =>
-              setTimeout(resolve, admissionDelayMs),
+            await new Promise<void>(
+              (resolve) => setTimeout(resolve, admissionDelayMs), // real-timer-ok: latency assertions measure wall-clock request time
             );
           }
           if (admissionRefusalDelayMs > 0) {
-            await new Promise<void>((resolve) =>
-              setTimeout(resolve, admissionRefusalDelayMs),
+            await new Promise<void>(
+              (resolve) => setTimeout(resolve, admissionRefusalDelayMs), // real-timer-ok: latency assertions measure wall-clock request time
             );
             throw new AppError({
               code: 'QUOTA_EXCEEDED',
@@ -358,8 +358,8 @@ describe('request completion log over the HTTP boundary', () => {
           lease: {
             release: async () => {
               if (permitReleaseDelayMs > 0) {
-                await new Promise<void>((resolve) =>
-                  setTimeout(resolve, permitReleaseDelayMs),
+                await new Promise<void>(
+                  (resolve) => setTimeout(resolve, permitReleaseDelayMs), // real-timer-ok: latency assertions measure wall-clock request time
                 );
               }
               if (permitReleaseUnavailable) {
@@ -1066,7 +1066,7 @@ describe('request completion log over the HTTP boundary', () => {
     const delayGuard = jest
       .spyOn(ApiKeyGuard.prototype, 'canActivate')
       .mockImplementation(async function (this: ApiKeyGuard, context) {
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs)); // real-timer-ok: this test verifies wall-clock duration metrics
         return original.call(this, context);
       });
     const originalWrite = log.write.bind(log);
@@ -1166,7 +1166,7 @@ describe('request completion log over the HTTP boundary', () => {
     await serverSawClose;
     stalled.release();
     // The server's late reply has nowhere to go; give it time to finish.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50)); // real-timer-ok: the disconnected HTTP socket needs real event-loop time to finish its late response
 
     expect(log.completions()).toHaveLength(0);
   });

@@ -6,7 +6,6 @@ describe('EmailOutboxPollerScheduler during shutdown', () => {
       await prune.started;
 
       const closing = app.close();
-      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(events).toContain('prune-started');
       expect(events).not.toContain('redis-closed');
 

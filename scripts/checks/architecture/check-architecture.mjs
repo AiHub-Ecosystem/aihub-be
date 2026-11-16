@@ -41,6 +41,13 @@ export function collectSourceTextFailures(options) {
   const srcDirectory = join(root, 'src');
   const allFiles = options.files ?? collectTypeScriptFiles(srcDirectory);
   const sourceFiles = allFiles.filter((file) => file.endsWith('.ts'));
+  const specFiles = virtual
+    ? sourceFiles.filter((file) => file.endsWith('.spec.ts'))
+    : ['src', 'test', 'scripts'].flatMap((directory) =>
+        collectTypeScriptFiles(join(root, directory)).filter((file) =>
+          file.endsWith('.spec.ts'),
+        ),
+      );
   /** @type {Map<string, string>} */
   const sourceTextByPath = new Map();
   /** @type {string[]} */
@@ -54,6 +61,186 @@ export function collectSourceTextFailures(options) {
       sourceTextByPath.set(file, source);
     }
     return source;
+  }
+
+  for (const file of specFiles) {
+    const source = sourceText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    const lines = source.split(/\r?\n/);
+    const timerFunctions = new Set(['setTimeout']);
+    const imports = sourceFile.statements.filter(ts.isImportDeclaration);
+    for (const statement of imports) {
+      if (
+        !ts.isStringLiteral(statement.moduleSpecifier) ||
+        !['node:timers/promises', 'timers/promises'].includes(
+          statement.moduleSpecifier.text,
+        ) ||
+        statement.importClause?.namedBindings === undefined ||
+        !ts.isNamedImports(statement.importClause.namedBindings)
+      ) {
+        continue;
+      }
+      for (const element of statement.importClause.namedBindings.elements) {
+        if (
+          element.propertyName?.text === 'setTimeout' ||
+          element.name.text === 'setTimeout'
+        ) {
+          timerFunctions.add(element.name.text);
+        }
+      }
+    }
+
+    for (const statement of sourceFile.statements) {
+      if (
+        ts.isFunctionDeclaration(statement) &&
+        statement.name !== undefined &&
+        statement.body !== undefined &&
+        containsTimerWait(statement.body)
+      ) {
+        timerFunctions.add(statement.name.text);
+      }
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.initializer !== undefined &&
+          (ts.isArrowFunction(declaration.initializer) ||
+            ts.isFunctionExpression(declaration.initializer)) &&
+          containsTimerWait(declaration.initializer)
+        ) {
+          timerFunctions.add(declaration.name.text);
+        }
+      }
+    }
+
+    /** @param {import('typescript').Node} node @returns {boolean} */
+    function containsTimerWait(node) {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        timerFunctions.has(node.expression.text)
+      ) {
+        return true;
+      }
+      return node.getChildren(sourceFile).some(containsTimerWait);
+    }
+
+    /** @param {import('typescript').Node} node @returns {boolean} */
+    function hasMarkedTimerWait(node) {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        timerFunctions.has(node.expression.text)
+      ) {
+        const timerLine =
+          sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+            .line + 1;
+        if (/\/\/\s*real-timer-ok:\s*\S/.test(lines[timerLine - 1] ?? '')) {
+          return true;
+        }
+      }
+      return node.getChildren(sourceFile).some(hasMarkedTimerWait);
+    }
+
+    /** @param {import('typescript').Node} node @returns {boolean} */
+    function isFakeTimerTest(node) {
+      let current = node.parent;
+      while (current !== undefined) {
+        if (
+          ts.isCallExpression(current) &&
+          current.arguments.some(
+            (argument) => argument.pos <= node.pos && argument.end >= node.end,
+          )
+        ) {
+          const callback = current.arguments.find(
+            (argument) =>
+              ts.isArrowFunction(argument) || ts.isFunctionExpression(argument),
+          );
+          const callee = current.expression;
+          const name = ts.isIdentifier(callee)
+            ? callee.text
+            : ts.isPropertyAccessExpression(callee)
+              ? callee.name.text
+              : '';
+          if (
+            (name === 'it' || name === 'test') &&
+            callback !== undefined &&
+            containsFakeTimerSetup(callback)
+          ) {
+            return true;
+          }
+        }
+        current = current.parent;
+      }
+      return false;
+    }
+
+    /** @param {import('typescript').Node} node @returns {boolean} */
+    function containsFakeTimerSetup(node) {
+      if (ts.isCallExpression(node)) {
+        const callee = node.expression;
+        if (ts.isIdentifier(callee) && callee.text === 'withFakeTimers') {
+          return true;
+        }
+        if (
+          ts.isPropertyAccessExpression(callee) &&
+          ts.isIdentifier(callee.expression) &&
+          callee.expression.text === 'jest' &&
+          callee.name.text === 'useFakeTimers'
+        ) {
+          return true;
+        }
+      }
+      return node.getChildren(sourceFile).some(containsFakeTimerSetup);
+    }
+
+    /** @param {import('typescript').Node} node */
+    function checkTimerWait(node) {
+      if (
+        ts.isAwaitExpression(node) &&
+        containsTimerWait(node.expression) &&
+        !isFakeTimerTest(node)
+      ) {
+        const line =
+          sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+            .line + 1;
+        const lineText = lines[line - 1] ?? '';
+        const previousLine = lines[line - 2] ?? '';
+        if (
+          !/\/\/\s*real-timer-ok:\s*\S/.test(lineText) &&
+          !/\/\/\s*real-timer-ok:\s*\S/.test(previousLine) &&
+          !hasMarkedTimerWait(node.expression)
+        ) {
+          fail(
+            `${relativePath}:${line} awaits a real timer; use a gate or fake timers, or add an inline // real-timer-ok: reason comment`,
+          );
+        }
+      }
+      node.forEachChild(checkTimerWait);
+    }
+    checkTimerWait(sourceFile);
+
+    for (const match of source.matchAll(/pg_sleep\s*\(/gi)) {
+      const line = source.slice(0, match.index).split(/\r?\n/).length;
+      const lines = source.split(/\r?\n/);
+      const lineText = lines[line - 1] ?? '';
+      const previousLine = lines[line - 2] ?? '';
+      if (
+        !/\/\/\s*real-timer-ok:\s*\S/.test(lineText) &&
+        !/\/\/\s*real-timer-ok:\s*\S/.test(previousLine) &&
+        !/\/\*\s*real-timer-ok:\s*\S/.test(lineText)
+      ) {
+        fail(
+          `${relativePath}:${line} uses pg_sleep; use a database event or add an inline // real-timer-ok: reason comment`,
+        );
+      }
+    }
   }
 
   /** @param {string} message */
