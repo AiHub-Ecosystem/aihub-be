@@ -252,6 +252,8 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
   it('resolves an active membership with organization status', async () => {
     const client = new FakePostgres();
+    // Membership reads run inside the Organization seam's transaction.
+    client.transactionRows = [[membershipRow]];
 
     await expect(
       new PostgresOrganizationMembershipRepository(
@@ -272,7 +274,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
       },
     });
 
-    expect(client.queries[0]?.values).toEqual([
+    expect(client.transactionQueries[0]?.values).toEqual([
       membershipRow.user_account_id,
       membershipRow.organization_id,
     ]);
@@ -280,7 +282,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
   it('distinguishes a disabled membership internally', async () => {
     const client = new FakePostgres();
-    client.result = [{ ...membershipRow, membership_status: 'disabled' }];
+    client.transactionRows = [
+      [{ ...membershipRow, membership_status: 'disabled' }],
+    ];
 
     await expect(
       new PostgresOrganizationMembershipRepository(
@@ -512,7 +516,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect((unavailable as AppError).code).toBe('INTERNAL_ERROR');
 
     client.shouldFail = false;
-    client.result = [{ ...membershipRow, role: 'superuser' }];
+    client.transactionRows = [[{ ...membershipRow, role: 'superuser' }]];
     const malformed = await new PostgresOrganizationMembershipRepository(
       prismaFromQueryFake(client),
     )
@@ -527,7 +531,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect((malformed as AppError).code).toBe('INTERNAL_ERROR');
     expect((malformed as AppError).message).toBe('Identity data is invalid');
 
-    client.result = [{ ...membershipRow, user_account_id: 'usr_other' }];
+    client.transactionRows = [
+      [{ ...membershipRow, user_account_id: 'usr_other' }],
+    ];
     const mismatched = await new PostgresOrganizationMembershipRepository(
       prismaFromQueryFake(client),
     )

@@ -334,7 +334,9 @@ export class PostgresSpeakingGradingJobRepository
   }
 
   async countInFlight(input: InFlightCountInput): Promise<number> {
-    return this.run(() => countInFlight(this.client, input));
+    return this.scoped(input.organizationId, (transaction) =>
+      countInFlight(transaction, input),
+    );
   }
 
   async listStaleQueued(input: {
