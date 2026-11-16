@@ -2,8 +2,13 @@ import type { PrismaClient } from '@prisma-client/client';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { PostgresSandboxDispatchBudget } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
+import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
+import {
+  auditStamp,
+  recordOrganizationAuditDenial,
+} from '@/modules/identity/audit/infrastructure/organization-audit-event.store';
 import { PostgresOrganizationAuditReadRepository } from '@/modules/identity/audit/infrastructure/postgres-organization-audit-read.repository';
 import { PostgresOrganizationInvitationReadRepository } from '@/modules/identity/invitations/infrastructure/postgres-organization-invitation-read.repository';
 import { PostgresOrganizationMembershipReadRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership-read.repository';
@@ -86,6 +91,13 @@ const gradingJob = {
   audioAssetId: 'aud_01J00000000000000000000001',
   request: { part: 1 as const, questionId: 'question-1' },
   createdAt: NOW,
+};
+const idempotencyKey = {
+  organizationId: ORG,
+  operation: 'writing.task1.grade' as const,
+  actorScope: '',
+  idempotencyKey: 'grade-1',
+  requestId: 'req_1',
 };
 const gradingOwner = {
   organizationId: ORG,
@@ -306,6 +318,40 @@ const groups: readonly Group[] = [
     },
   },
   {
+    name: 'PostgresIdempotencyRepository',
+    prototype: PostgresIdempotencyRepository.prototype,
+    scoped: {
+      reserve: (client) =>
+        new PostgresIdempotencyRepository(client).reserve({
+          ...idempotencyKey,
+          fingerprintHex: 'a'.repeat(64),
+          expiresAt: new Date(NOW.getTime() + 3_600_000),
+        }),
+      findCompletedMatch: (client) =>
+        new PostgresIdempotencyRepository(client).findCompletedMatch({
+          organizationId: ORG,
+          operation: idempotencyKey.operation,
+          actorScope: '',
+          idempotencyKey: idempotencyKey.idempotencyKey,
+          fingerprintHex: 'a'.repeat(64),
+        }),
+      complete: (client) =>
+        new PostgresIdempotencyRepository(client).complete({
+          ...idempotencyKey,
+          responseStatus: 200,
+          responseBody: {},
+        }),
+      markFailed: (client) =>
+        new PostgresIdempotencyRepository(client).markFailed(idempotencyKey),
+      delete: (client) =>
+        new PostgresIdempotencyRepository(client).delete(idempotencyKey),
+    },
+    unscoped: {
+      cleanupExpired: SWEEP,
+      scoped: HELPER,
+    },
+  },
+  {
     name: 'PostgresApiKeyRepository',
     prototype: PostgresApiKeyRepository.prototype,
     scoped: {
@@ -490,24 +536,53 @@ describe('Organization seam coverage (#785, ADR-0109)', () => {
   it.each(cases)('%s runs inside the Organization seam', async (_name, run) => {
     const prisma = new ScriptedPrisma();
     await Promise.resolve(run(prisma.client())).catch(() => undefined);
+    expect(seamViolations(prisma)).toEqual([]);
+  });
 
-    // A method that failed before any statement would pass vacuously.
-    expect(prisma.statements.length).toBeGreaterThan(0);
-    expect(
-      prisma.statements.filter(({ transaction }) => transaction === 0),
-    ).toEqual([]);
-
-    const transactions = new Set(
-      prisma.statements.map(({ transaction }) => transaction),
+  it('recordOrganizationAuditDenial runs inside the Organization seam', async () => {
+    const prisma = new ScriptedPrisma();
+    await recordOrganizationAuditDenial(
+      prisma.client(),
+      auditStamp({ context, organizationId: ORG }, 'usr_actor', NOW),
+      {
+        action: 'organization.renamed',
+        organizationId: ORG,
+        name: 'Acme Learning',
+        denial: 'insufficient_authority',
+      },
     );
-    for (const transaction of transactions) {
-      const first = prisma.statements.find(
-        (statement) => statement.transaction === transaction,
-      );
-      expect([first?.name, first?.args]).toEqual([
-        'SELECT set_config($1, $2, true)',
-        ['aihub.organization_id', ORG],
-      ]);
-    }
+    expect(seamViolations(prisma)).toEqual([]);
   });
 });
+
+/** What a covered method did outside the seam; empty means it stayed inside. */
+function seamViolations(prisma: ScriptedPrisma): string[] {
+  const violations: string[] = [];
+  // A method that failed before any statement would pass vacuously.
+  if (prisma.statements.length === 0) violations.push('ran no statement');
+  for (const statement of prisma.statements) {
+    if (statement.transaction === 0) {
+      violations.push(`outside a transaction: ${statement.name}`);
+    }
+  }
+  const transactions = new Set(
+    prisma.statements
+      .map(({ transaction }) => transaction)
+      .filter((transaction) => transaction !== 0),
+  );
+  for (const transaction of transactions) {
+    const first = prisma.statements.find(
+      (statement) => statement.transaction === transaction,
+    );
+    const declared =
+      first?.name === 'SELECT set_config($1, $2, true)' &&
+      first.args[0] === 'aihub.organization_id' &&
+      first.args[1] === ORG;
+    if (!declared) {
+      violations.push(
+        `transaction ${transaction} does not open with the Organization setting`,
+      );
+    }
+  }
+  return violations;
+}
