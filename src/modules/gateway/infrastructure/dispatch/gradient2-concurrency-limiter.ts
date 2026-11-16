@@ -54,14 +54,11 @@ export class Gradient2Limit {
   onSample(rttMs: number, inFlight: number): void {
     if (!Number.isFinite(rttMs) || rttMs < 0) return;
     this.lastRtt = rttMs;
-    if (this.warmupCount < WARMUP && inFlight < this.estimatedLimit / 2) {
+    if (this.warmupCount < WARMUP) {
       this.warmupCount += 1;
       this.warmupSum += rttMs;
       this.longRtt = this.warmupSum / this.warmupCount;
-    } else if (
-      this.warmupCount >= WARMUP &&
-      (inFlight < this.estimatedLimit / 2 || rttMs < this.longRtt)
-    ) {
+    } else if (inFlight < this.estimatedLimit / 2 || rttMs < this.longRtt) {
       // Refresh baseline only at low load or on recovery, so sustained overload
       // cannot drift it upward toward degraded latency.
       this.longRtt = this.longRtt * (1 - this.factor) + rttMs * this.factor;

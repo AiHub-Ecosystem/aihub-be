@@ -72,13 +72,31 @@ describe('Gradient2Limit', () => {
     }
   });
 
-  it('does not learn a degraded baseline during warmup under load', () => {
+  it('initializes its baseline during warmup under saturated healthy load', () => {
     const limit = new Gradient2Limit();
 
-    for (let sample = 0; sample < 2_000; sample += 1) {
+    for (let sample = 0; sample < 100; sample += 1) {
+      limit.onSample(100, 10);
+    }
+
+    expect(limit.getLimit()).toBe(20);
+    expect(limit.getRttMinMs()).toBe(100);
+  });
+
+  it('recovers after a cold start at saturated degraded latency', () => {
+    const limit = new Gradient2Limit();
+
+    for (let sample = 0; sample < 500; sample += 1) {
       limit.onSample(20_000, 10);
     }
-    expect(limit.getLimit()).toBe(2);
+    expect(limit.getLimit()).toBe(20);
+
+    for (let sample = 0; sample < 2_000; sample += 1) {
+      limit.onSample(1_000, 10);
+    }
+
+    expect(limit.getLimit()).toBe(20);
+    expect(limit.getRttMinMs()).toBeLessThanOrEqual(1_100);
   });
 
   it('recovers baseline and scales back to maxLimit when latency normalizes', () => {
