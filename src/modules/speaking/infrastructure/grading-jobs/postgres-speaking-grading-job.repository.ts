@@ -1,7 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { IDEMPOTENCY_RETENTION_MS } from '@/modules/idempotency/public/idempotency-key';
-import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
@@ -134,7 +134,9 @@ export class PostgresSpeakingGradingJobRepository
     let admissionFailed = false;
     let admissionError: unknown;
     try {
-      return await this.client.$transaction(
+      return await organizationTransaction(
+        this.client,
+        input.job.organizationId,
         async (transaction): Promise<SpeakingGradingJobCreationOutcome> => {
           // One lock per Organization, not per month: reservations carry over a
           // month boundary, so admissions on either side must serialize.
@@ -160,7 +162,6 @@ export class PostgresSpeakingGradingJobRepository
           await insertJob(transaction, input.job);
           return { created: true };
         },
-        CONTROL_PLANE_TRANSACTION_OPTIONS,
       );
     } catch (error) {
       if (admissionFailed) throw admissionError;

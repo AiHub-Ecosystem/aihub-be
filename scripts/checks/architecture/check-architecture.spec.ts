@@ -2193,17 +2193,15 @@ describe('fixture isolation (#1636)', () => {
   });
 });
 
-describe('Identity persistence opens transactions through the Organization seam (#785)', () => {
-  function checkRepository(source: string): {
+describe('request-serving persistence opens transactions through the Organization seam (#785)', () => {
+  function checkRepository(
+    source: string,
+    path = 'src/modules/identity/api-keys/infrastructure/postgres-fixture.repository.ts',
+  ): {
     status: number | null;
     output: string;
   } {
-    return checkFixtures([
-      [
-        'src/modules/identity/api-keys/infrastructure/postgres-fixture.repository.ts',
-        source,
-      ],
-    ]);
+    return checkFixtures([[path, source]]);
   }
 
   it('rejects a repository that opens a direct transaction', () => {
@@ -2217,9 +2215,24 @@ describe('Identity persistence opens transactions through the Organization seam 
       ].join('\n'),
     );
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain(
-      'use identityTransaction from the shared seam',
+    expect(result.output).toContain('use organizationTransaction');
+  });
+
+  it('rejects a direct transaction in a module outside Identity', () => {
+    const result = checkRepository(
+      'export const run = (client: { $transaction: (cb: () => void) => void }) => client.$transaction(() => {});',
+      'src/modules/speaking/infrastructure/postgres-fixture.repository.ts',
     );
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('use organizationTransaction');
+  });
+
+  it('keeps a named cross-Organization repository off the seam', () => {
+    const result = checkRepository(
+      'export const run = (client: { $transaction: (cb: () => void) => void }) => client.$transaction(() => {});',
+      'src/modules/metering/infrastructure/billing/postgres-usage-retention.repository.ts',
+    );
+    expect(result.output).not.toContain('use organizationTransaction');
   });
 
   it('accepts a repository that routes through the seam', () => {

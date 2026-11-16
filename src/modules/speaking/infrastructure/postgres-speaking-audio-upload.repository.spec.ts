@@ -35,7 +35,8 @@ describe('PostgresSpeakingAudioUploadRepository completion timeout', () => {
     };
     const query = jest.fn(async (sql: string, ..._values: unknown[]) => {
       if (sql.includes('set_config')) {
-        setConfigCalled = true;
+        // The seam declares the Organization first; only the idle timeout counts.
+        if (_values[0] === '35000') setConfigCalled = true;
         return [];
       }
       return [row];
@@ -69,9 +70,15 @@ describe('PostgresSpeakingAudioUploadRepository completion timeout', () => {
       },
     });
 
+    // The seam declares the Organization before any repository statement.
+    expect(query.mock.calls[0]).toEqual([
+      'SELECT set_config($1, $2, true)',
+      'aihub.organization_id',
+      row.organizationId,
+    ]);
     // set_config was called with the 35 000 ms idle timeout value.
-    expect(query.mock.calls[0]?.[0]).toContain('set_config');
-    expect(query.mock.calls[0]?.[1]).toBe('35000');
+    expect(query.mock.calls[1]?.[0]).toContain('set_config');
+    expect(query.mock.calls[1]?.[1]).toBe('35000');
     // prepare ran only after set_config had already been called.
     expect(prepareCalledAfterSetConfig).toBe(true);
   });
@@ -99,7 +106,9 @@ describe('PostgresSpeakingAudioUploadRepository Organization ceilings (#374)', (
   }) {
     const create = jest.fn().mockResolvedValue(undefined);
     const query = jest.fn(async (sql: string, ..._values: unknown[]) => {
-      if (sql.includes('pg_advisory_xact_lock')) return [];
+      if (sql.includes('pg_advisory_xact_lock') || sql.includes('set_config')) {
+        return [];
+      }
       return [holding];
     });
     const transaction = {
@@ -131,12 +140,13 @@ describe('PostgresSpeakingAudioUploadRepository Organization ceilings (#374)', (
       decide: () => ({ kind: 'within' }),
     });
 
-    expect(query.mock.calls[0]?.[0]).toContain('pg_advisory_xact_lock');
-    expect(query.mock.calls[0]?.[1]).toBe(
+    // Call 0 declares the Organization; the lock and holding query follow it.
+    expect(query.mock.calls[1]?.[0]).toContain('pg_advisory_xact_lock');
+    expect(query.mock.calls[1]?.[1]).toBe(
       'org_speaking_upload:speaking-audio:intents',
     );
     // The holding query runs after the lock, never before it.
-    expect(query.mock.calls[1]?.[0]).toContain('openIntents');
+    expect(query.mock.calls[2]?.[0]).toContain('openIntents');
   });
 
   it('writes no intent when the ceiling refuses', async () => {

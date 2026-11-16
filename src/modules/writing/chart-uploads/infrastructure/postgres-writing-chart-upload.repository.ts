@@ -1,6 +1,6 @@
 import { AppError, internalError } from '@/common/errors/app-error';
 import { storeUnavailable } from '@/common/errors/upload-errors';
-import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import {
   WRITING_CHART_ORG_HOURLY_LIMIT,
   WRITING_CHART_PUBLICATION_LEASE_MS,
@@ -126,7 +126,7 @@ export class PostgresWritingChartUploadRepository
   constructor(private readonly client: PrismaClient) {}
 
   async createIntent(intent: WritingChartUploadIntent): Promise<boolean> {
-    return this.transaction(async (client) => {
+    return this.transaction(intent.organizationId, async (client) => {
       await this.lock(client, advisoryKey(intent, 'intents'));
       const since = new Date(
         intent.createdAt.getTime() - WRITING_CHART_RATE_WINDOW_MS,
@@ -191,7 +191,7 @@ export class PostgresWritingChartUploadRepository
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
   }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'> {
-    return this.transaction(async (client) => {
+    return this.transaction(input.owner.organizationId, async (client) => {
       await this.lock(client, advisoryKey(input.owner, 'publications'));
       const row = await client.writingChartUpload.findFirst({
         where: ownerWhere(input.owner),
@@ -267,7 +267,7 @@ export class PostgresWritingChartUploadRepository
     readonly publicationStartedAt: Date;
     readonly imageUrl: string;
   }): Promise<WritingChartAsset | 'revoked' | undefined> {
-    return this.transaction(async (client) => {
+    return this.transaction(input.owner.organizationId, async (client) => {
       await this.lock(client, advisoryKey(input.owner, 'publications'));
       if (await isRevoked(client, input.owner.assetId)) {
         await client.writingChartUpload.updateMany({
@@ -311,7 +311,7 @@ export class PostgresWritingChartUploadRepository
     owner: WritingChartUploadOwner,
     publicationStartedAt: Date,
   ): Promise<void> {
-    await this.transaction(async (client) => {
+    await this.transaction(owner.organizationId, async (client) => {
       await this.lock(client, advisoryKey(owner, 'publications'));
       const status = (await isRevoked(client, owner.assetId))
         ? 'rejected'
@@ -410,13 +410,11 @@ export class PostgresWritingChartUploadRepository
   }
 
   private async transaction<T>(
+    organizationId: string,
     run: (client: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
     try {
-      return await this.client.$transaction(
-        (client) => run(client),
-        CONTROL_PLANE_TRANSACTION_OPTIONS,
-      );
+      return await organizationTransaction(this.client, organizationId, run);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw storeUnavailable(

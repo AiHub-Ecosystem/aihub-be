@@ -31,11 +31,18 @@ class FakeClient {
   readonly released: string[] = [];
   readonly locks: (string | number)[][] = [];
   readonly storedMonthStarts: Date[] = [];
+  readonly declared: unknown[][] = [];
 
   constructor(private readonly policy: FakePolicy = {}) {}
 
   async $transaction<T>(work: (tx: FakeClient) => Promise<T>): Promise<T> {
     return work(this);
+  }
+
+  /** The Organization setting statement the transaction seam issues first. */
+  async $queryRawUnsafe(...parameters: unknown[]): Promise<unknown[]> {
+    this.declared.push(parameters);
+    return [];
   }
 
   async $executeRawUnsafe(...parameters: (string | number)[]): Promise<number> {
@@ -162,6 +169,9 @@ describe('PostgresSandboxDispatchBudget allowance policy', () => {
       ['SELECT pg_advisory_xact_lock($1, $2)', 182, 202610],
     ]);
     expect(client.storedMonthStarts).toEqual([OCTOBER_START]);
+    expect(client.declared).toEqual([
+      ['SELECT set_config($1, $2, true)', 'aihub.organization_id', 'org_acme'],
+    ]);
   });
 
   it('admits against the persisted default when the Organization has no override', async () => {
