@@ -2249,3 +2249,53 @@ describe('request-serving persistence opens transactions through the Organizatio
     expect(result.status).toBe(0);
   });
 });
+
+describe('Identity repositories do not run statements on their own client (#785)', () => {
+  const REJECTED = 'runs a statement on its own client outside a transaction';
+  const path =
+    'src/modules/identity/invitations/infrastructure/postgres-fixture.repository.ts';
+
+  function checkRepository(
+    body: string,
+    repositoryPath = path,
+  ): { status: number | null; output: string } {
+    return checkFixtures([
+      [
+        repositoryPath,
+        [
+          'export class FixtureRepository {',
+          '  constructor(private readonly client: unknown) {}',
+          '  async run(organizationId: string) {',
+          body,
+          '  }',
+          '}',
+        ].join('\n'),
+      ],
+    ]);
+  }
+
+  it.each([
+    ['identityRows', '    return identityRows(this.client, "SELECT 1", []);'],
+    ['a raw query', '    return this.client.$queryRawUnsafe("SELECT 1");'],
+    ['a model delegate write', '    return this.client.apiKey.updateMany({});'],
+  ])('rejects %s on this.client', (_name, body) => {
+    const result = checkRepository(body);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(REJECTED);
+  });
+
+  it('accepts a statement on the transaction the seam hands over', () => {
+    const result = checkRepository(
+      '    return identityTransaction(this.client, organizationId, (transaction) => identityRows(transaction, "SELECT 1", []));',
+    );
+    expect(result.output).not.toContain(REJECTED);
+  });
+
+  it('keeps a named pre-tenant repository off the seam', () => {
+    const result = checkRepository(
+      '    return identityRows(this.client, "SELECT 1", []);',
+      'src/modules/identity/api-keys/infrastructure/postgres-api-key.repository.ts',
+    );
+    expect(result.output).not.toContain(REJECTED);
+  });
+});

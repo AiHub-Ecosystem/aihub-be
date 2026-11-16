@@ -1560,6 +1560,50 @@ export function collectSourceTextFailures(options) {
     }
   }
 
+  // #785 / ADR-0109: a statement an Identity repository runs on its own client
+  // (`this.client`) runs outside any transaction, so it never declares the
+  // Organization and would see no rows under fail-closed RLS. A request-serving
+  // statement goes through `identityTransaction(this.client, organizationId, ...)`
+  // and runs on the transaction it hands over. The files below are the only ones
+  // that may use `this.client` directly, each for the reason given. This reads
+  // the text, so it does not follow a client copied into another variable; the
+  // coverage spec in `src/modules/persistence` is the behavioural check.
+  {
+    const unscopedIdentityClientAllowed = new Map([
+      [
+        'src/modules/identity/api-keys/infrastructure/postgres-api-key.repository.ts',
+        'pre-tenant lookup by key hash (ADR-0109 decision 6, #80)',
+      ],
+      [
+        'src/modules/identity/membership/infrastructure/postgres-organization-membership-read.repository.ts',
+        'pre-tenant roster of one User Account across Organizations (ADR-0109 decision 6, #80)',
+      ],
+      [
+        'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts',
+        'scheduled sweep across Organizations, not request-serving',
+      ],
+      [
+        'src/modules/identity/shared/infrastructure/postgres-operator-redis-failure.repository.ts',
+        'Operator Redis failure record, no Organization column',
+      ],
+    ]);
+    const unscopedIdentityClientUse =
+      /\bidentityRows\(\s*this\.client\b|\bthis\.client\.\$(?:query|execute)Raw|\bthis\.client\.[a-z]\w*\.(?:find\w*|create\w*|update\w*|delete\w*|count|upsert|aggregate|groupBy)\s*\(/;
+    for (const file of sourceFiles) {
+      if (file.endsWith('.spec.ts')) continue;
+      const relativePath = relative(root, file).replace(/\\/g, '/');
+      if (!/^src\/modules\/identity\/.*\/infrastructure\//.test(relativePath)) {
+        continue;
+      }
+      if (unscopedIdentityClientAllowed.has(relativePath)) continue;
+      if (unscopedIdentityClientUse.test(sourceText(file))) {
+        fail(
+          `${relativePath} runs a statement on its own client outside a transaction; use identityTransaction(this.client, organizationId, ...) so the Organization is declared first (#785)`,
+        );
+      }
+    }
+  }
+
   // ADR-0054 / #784: every statement that stores a session takes a
   // SessionAdmission, and the second-factor check mints it. The one other way to
   // get one, `admitSessionContinuation`, skips that check because it continues a
