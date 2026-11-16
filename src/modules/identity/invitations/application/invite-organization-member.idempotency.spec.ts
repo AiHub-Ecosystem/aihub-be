@@ -405,33 +405,7 @@ describe('organization invitation management idempotency seam', () => {
     },
   );
 
-  it('rejects invitations after the shared address ceiling before mutation', async () => {
-    await execute({
-      idempotencyKey: 'invite-1',
-      email: ' Invitee@Example.COM ',
-    });
-    await execute({
-      idempotencyKey: 'invite-2',
-      organizationId: OTHER_ORGANIZATION_ID,
-      userId: OTHER_USER_ID,
-    });
-    await execute({
-      idempotencyKey: 'invite-3',
-      organizationId: 'org_third',
-      userId: 'usr_third',
-    });
-
-    await expect(
-      execute({
-        idempotencyKey: 'invite-4',
-        organizationId: 'org_fourth',
-        userId: 'usr_fourth',
-      }),
-    ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
-    expect(invitationCreateInputs).toHaveLength(3);
-  });
-
-  it('limits attempts by both Organization/email and email alone', async () => {
+  it('lets another Organization invite an address after this Organization reaches its limit', async () => {
     for (const idempotencyKey of ['org-a-1', 'org-a-2', 'org-a-3']) {
       await execute({ idempotencyKey });
     }
@@ -439,6 +413,11 @@ describe('organization invitation management idempotency seam', () => {
     await expect(execute({ idempotencyKey: 'org-a-4' })).rejects.toMatchObject({
       code: 'RATE_LIMITED',
       httpStatus: 429,
+    });
+    await execute({
+      idempotencyKey: 'org-b-1',
+      organizationId: OTHER_ORGANIZATION_ID,
+      userId: OTHER_USER_ID,
     });
 
     expect(
@@ -448,10 +427,10 @@ describe('organization invitation management idempotency seam', () => {
     ).toBe(4);
     expect(
       rateLimiter.counts.get(
-        'organization_invitation_email:invitee@example.com',
+        `organization_invitation_email:["${OTHER_ORGANIZATION_ID}","invitee@example.com"]`,
       ),
-    ).toBe(3);
-    expect(invitationCreateInputs).toHaveLength(3);
+    ).toBe(1);
+    expect(invitationCreateInputs).toHaveLength(4);
   });
 
   it('rejects a different role with the same scoped key', async () => {

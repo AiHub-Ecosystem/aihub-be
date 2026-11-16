@@ -11,6 +11,8 @@ import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_KIND_POLICIES,
 } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import { invitationRecipientRetryAfterMs } from '@/modules/auth/email-delivery/application/send-policy/invitation-recipient-rate-limit';
+import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
 export const MAX_DELIVERY_ATTEMPTS = 3;
 
@@ -18,6 +20,7 @@ export { MAX_CREDENTIAL_LIFETIME_MS } from '@/modules/auth/email-delivery/applic
 
 export interface EmailDeliveryPollerMaintenanceOptions {
   readonly owner: string;
+  readonly invitationEmailRateLimiter?: AuthRateLimiterPort;
   readonly onTerminalFailure?: (failure: {
     readonly id: string;
     readonly kind: EmailDeliveryKind;
@@ -42,6 +45,40 @@ export class EmailDeliveryPollerMaintenance {
 
   get hasPendingAttemptReleases(): boolean {
     return this.pendingUnspentAttempts.size > 0;
+  }
+
+  async deferInvitationAtRecipientLimit(
+    request: EmailDeliveryRequestRecord,
+    recipient: string,
+    now: Date,
+    fallbackMs: number,
+  ): Promise<boolean> {
+    if (request.kind !== 'organization_invite_email') return false;
+    const retryAfterMs = await invitationRecipientRetryAfterMs(
+      this.options.invitationEmailRateLimiter,
+      recipient,
+      fallbackMs,
+    );
+    if (retryAfterMs === undefined) return false;
+    await this.store.releaseDeferred({
+      id: request.id,
+      owner: this.options.owner,
+      retryAt: new Date(now.getTime() + retryAfterMs),
+    });
+    return true;
+  }
+
+  async defer(
+    request: EmailDeliveryRequestRecord,
+    now: Date,
+    retryAfterMs: number,
+  ): Promise<'deferred'> {
+    await this.store.releaseDeferred({
+      id: request.id,
+      owner: this.options.owner,
+      retryAt: new Date(now.getTime() + retryAfterMs),
+    });
+    return 'deferred';
   }
 
   async reconcile(): Promise<{ cancelled: number; failed: number }> {

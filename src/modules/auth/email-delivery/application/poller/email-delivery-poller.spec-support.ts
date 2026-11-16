@@ -28,6 +28,7 @@ import type {
   EmailProviderResponse,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
+import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { EmailDeliveryPoller } from './email-delivery-poller';
 
 export const NOW = new Date('2026-10-05T12:00:00.000Z');
@@ -40,6 +41,27 @@ export const VERIFICATION_PAYLOAD = {
   token: TOKEN,
   expiresAt: new Date(NOW.getTime() + HOUR).toISOString(),
 };
+export const INVITATION_PAYLOAD = {
+  ...VERIFICATION_PAYLOAD,
+  organizationName: 'Example Organization',
+  role: 'member' as const,
+};
+
+export class FakeInvitationEmailRateLimiter implements AuthRateLimiterPort {
+  calls: Parameters<AuthRateLimiterPort['consume']>[0][] = [];
+  result: Awaited<ReturnType<AuthRateLimiterPort['consume']>> = {
+    allowed: true,
+  };
+
+  async check(): Promise<Awaited<ReturnType<AuthRateLimiterPort['check']>>> {
+    return { allowed: true };
+  }
+
+  async consume(input: Parameters<AuthRateLimiterPort['consume']>[0]) {
+    this.calls.push(input);
+    return this.result;
+  }
+}
 
 export class FakeStore implements EmailDispatchStorePort {
   claims: ClaimEmailDeliveryRequestsInput[] = [];
@@ -358,6 +380,7 @@ export function harness(
     rateLimiter?: FakeEmailSendRateLimiter;
     outageCircuit?: FakeEmailProviderOutageCircuit;
     dailySendBudget?: EmailDailySendBudgetPort;
+    invitationEmailRateLimiter?: AuthRateLimiterPort;
     now?: () => Date;
     notices?: EmailNoticeResolvers;
     onTerminalFailure?: (failure: {
@@ -375,6 +398,7 @@ export function harness(
   credentials: FakeCredentials;
   sender: RecordingSender;
   outageCircuit: FakeEmailProviderOutageCircuit;
+  invitationEmailRateLimiter: AuthRateLimiterPort;
 } {
   const store = new FakeStore();
   const credentials = new FakeCredentials();
@@ -383,6 +407,8 @@ export function harness(
   const rateLimiter = options.rateLimiter ?? new FakeEmailSendRateLimiter();
   const outageCircuit =
     options.outageCircuit ?? new FakeEmailProviderOutageCircuit();
+  const invitationEmailRateLimiter =
+    options.invitationEmailRateLimiter ?? new FakeInvitationEmailRateLimiter();
   if (options.rateReservation !== undefined) {
     rateLimiter.result = options.rateReservation.reserved
       ? { reserved: true }
@@ -402,6 +428,7 @@ export function harness(
     { hash: () => TOKEN_HASH },
     {
       owner: 'instance-a',
+      invitationEmailRateLimiter,
       ...(options.notices === undefined ? {} : { notices: options.notices }),
       ...(options.onTerminalFailure === undefined
         ? {}
@@ -417,7 +444,14 @@ export function harness(
         : { dailySendBudget: options.dailySendBudget }),
     },
   );
-  return { poller, store, credentials, sender, outageCircuit };
+  return {
+    poller,
+    store,
+    credentials,
+    sender,
+    outageCircuit,
+    invitationEmailRateLimiter,
+  };
 }
 
 export function worstCaseBatchMs(batchSize: number): number {

@@ -316,7 +316,7 @@ describe('organization invitation email outbox over HTTP', () => {
     );
   });
 
-  it('preserves an actionable invitation when the shared email limit rejects a resend', async () => {
+  it('preserves an actionable invitation when the Organization/email limit rejects a resend', async () => {
     const original = await invite();
     const originalBody = original.json<{ data: { invitation_id: string } }>();
     const originalInvitation = await pool.query<{
@@ -328,7 +328,7 @@ describe('organization invitation email outbox over HTTP', () => {
       [originalBody.data.invitation_id],
     );
 
-    rateLimiter.denyEmailKey = INVITEE;
+    rateLimiter.denyEmailKey = JSON.stringify([ORGANIZATION_ID, INVITEE]);
     const rejectedResend = await invite();
 
     expect(rejectedResend.statusCode).toBe(429);
