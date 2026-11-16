@@ -33,6 +33,7 @@ import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastr
 import {
   type IdentityRepositoryClient,
   identityRows,
+  identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 // The caller's username rides along because surfaces that record who handled an
@@ -423,10 +424,15 @@ export class PostgresOrganizationMembershipReadRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await identityRows(this.client, RESOLVE_MEMBERSHIP_SQL, [
-        input.userId,
+      rows = await identityTransaction(
+        this.client,
         input.organizationId,
-      ]);
+        (transaction) =>
+          identityRows(transaction, RESOLVE_MEMBERSHIP_SQL, [
+            input.userId,
+            input.organizationId,
+          ]),
+      );
     } catch (error) {
       throw identityStoreUnavailable(error);
     }
@@ -509,14 +515,19 @@ export class PostgresOrganizationMembershipReadRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await identityRows(this.client, LIST_ORGANIZATION_MEMBERS_SQL, [
+      rows = await identityTransaction(
+        this.client,
         input.organizationId,
-        input.userId,
-        admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
-        input.status,
-        input.after ?? null,
-        input.limit,
-      ]);
+        (transaction) =>
+          identityRows(transaction, LIST_ORGANIZATION_MEMBERS_SQL, [
+            input.organizationId,
+            input.userId,
+            admittedRoles(MEMBERSHIP_LIST_ADMISSION.admittedRoles),
+            input.status,
+            input.after ?? null,
+            input.limit,
+          ]),
+      );
     } catch (error) {
       throw identityStoreUnavailable(error);
     }

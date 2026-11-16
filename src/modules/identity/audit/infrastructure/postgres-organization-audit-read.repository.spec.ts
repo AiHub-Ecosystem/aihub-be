@@ -1,6 +1,9 @@
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { ListOrganizationAuditEventsInput } from '@/modules/identity/audit/application/organization-audit-event-read.port';
-import { prismaFromQueryFake } from '@/modules/persistence/testing/query-fake-client';
+import {
+  type QueryHandle,
+  prismaFromQueryFake,
+} from '@/modules/persistence/testing/query-fake-client';
 
 import type { PostgresIdentityQueryClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { PostgresOrganizationAuditReadRepository } from './postgres-organization-audit-read.repository';
@@ -20,6 +23,16 @@ class FakePostgres implements PostgresIdentityQueryClient {
       return Promise.reject(this.failure);
     }
     return Promise.resolve(this.result);
+  }
+
+  /** The audit read runs in the Organization seam's transaction. */
+  transaction<T>(callback: (handle: QueryHandle) => Promise<T>): Promise<T> {
+    return callback({
+      query: (text, values) =>
+        text.includes('set_config')
+          ? Promise.resolve([])
+          : this.query(text, values),
+    });
   }
 }
 
