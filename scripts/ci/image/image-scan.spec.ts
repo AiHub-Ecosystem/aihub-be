@@ -63,6 +63,55 @@ describe('container image vulnerability scanning (#331)', () => {
     expect(content).toContain('gh issue');
   });
 
+  it('publishes both SPDX and CycloneDX SBOMs for the same image digest', () => {
+    const content = readFileSync('.github/workflows/ci.yml', 'utf8');
+    const start = content.indexOf('\n  publish-image:');
+    const end = content.indexOf('\n  outbox-evaluation:', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const publishJob = content.slice(start, end);
+
+    expect(publishJob).toContain('syft "$IMAGE_REF"');
+    expect(publishJob).toContain('-o spdx-json=image-sbom.spdx.json');
+    expect(publishJob).toContain('-o cyclonedx-json=image-sbom.cyclonedx.json');
+    expect(publishJob).toContain('test -s image-sbom.cyclonedx.json');
+    expect(publishJob).toContain('name: image-sbom');
+    expect(publishJob).toContain('image-sbom.spdx.json');
+    expect(publishJob).toContain('image-sbom.cyclonedx.json');
+  });
+
+  it('audits production dependencies and tracks Bun dependencies with Dependabot', () => {
+    const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+    const auditStart = workflow.indexOf('\n  audit:');
+    const auditEnd = workflow.indexOf('\n  database:', auditStart);
+    expect(auditStart).toBeGreaterThanOrEqual(0);
+    expect(auditEnd).toBeGreaterThan(auditStart);
+    expect(workflow.slice(auditStart, auditEnd)).toContain(
+      'bun audit --prod --audit-level=high',
+    );
+
+    const dependabot = readFileSync('.github/dependabot.yml', 'utf8');
+    expect(dependabot).toContain('package-ecosystem: "bun"');
+    expect(dependabot).toContain('interval: "weekly"');
+  });
+
+  it('writes and publishes SARIF for the booted image vulnerability scan', () => {
+    const content = readFileSync('.github/workflows/ci.yml', 'utf8');
+    const start = content.indexOf('\n  image:');
+    const end = content.indexOf('\n  publish-image:', start);
+    const imageJob = content.slice(start, end);
+
+    expect(imageJob).toContain(
+      'grype "docker:$image_id" --only-fixed --fail-on high',
+    );
+    expect(imageJob).toContain(
+      '--output sarif=production-image-vulnerabilities.sarif',
+    );
+    expect(imageJob).toContain('name: dependency-vulnerability-sarif');
+    expect(imageJob).toContain('path: production-image-vulnerabilities.sarif');
+    expect(imageJob).toContain('if: always()');
+  });
+
   it('pins both build and runtime stages to one versioned Node 22 digest', () => {
     const dockerfile = readFileSync('Dockerfile', 'utf8');
     const base = dockerfile.match(

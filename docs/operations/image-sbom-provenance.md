@@ -4,11 +4,13 @@ This runbook records how the production Docker image's Software Bill of Material
 
 ## Where the SBOM is produced
 
-CI builds and boots the production image, then the `publish-image` job (`.github/workflows/ci.yml`, `main` push only, `production` environment) pushes the booted image to GHCR and generates an SPDX JSON SBOM for that image digest with Syft (`anchore/sbom-action`). The SBOM is:
+CI builds and boots the production image, then the `publish-image` job (`.github/workflows/ci.yml`, `main` push only, `production` environment) pushes the booted image to GHCR and generates SPDX JSON and CycloneDX JSON SBOMs for that image digest with Syft. Both formats include the image's discovered components and license metadata. The SBOMs are:
 
-- uploaded as a workflow artifact (`image-sbom`) for the CI run containing both `image-sbom.spdx.json` and its offline Cosign signature bundle `image-sbom.spdx.json.bundle`;
+- uploaded as a workflow artifact (`image-sbom`) for the CI run containing `image-sbom.spdx.json`, `image-sbom.cyclonedx.json`, and the offline Cosign signature bundle `image-sbom.spdx.json.bundle`;
 - attached to the image in the registry as an in-toto SPDX attestation, signed keylessly with cosign/Sigstore and bound to the image digest; and
 - scanned with Grype (`anchore/scan-action`) before the release is considered complete.
+
+The SPDX document remains the signed registry attestation verified by CD. The CycloneDX document is published in the same artifact for consumers that need that interchange format. Dependency CVEs are audited in CI with `bun audit --prod --audit-level=high`; the image scan fails for fixable High and Critical CVEs and publishes the Grype results as a SARIF artifact, including when the severity gate fails. License metadata is included in both SBOMs for review; the repository has no separate license allowlist policy.
 
 CD (`.github/workflows/cd.yml`) resolves the image by digest and never rebuilds it (ADR-0064). The SBOM follows the image digest, so an operator can start from the deployed digest and find the same attestation.
 

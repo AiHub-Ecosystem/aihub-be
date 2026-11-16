@@ -1183,7 +1183,16 @@ jobs:
           [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "### Vulnerability scan: aihub:image-boot ($image_id)" >> "$GITHUB_STEP_SUMMARY"
           grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
-          grype "docker:$image_id" --only-fixed --fail-on high
+          grype "docker:$image_id" --only-fixed --fail-on high \
+            --output sarif=production-image-vulnerabilities.sarif
+
+      - name: Upload dependency vulnerability SARIF
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-vulnerability-sarif
+          path: production-image-vulnerabilities.sarif
+          if-no-files-found: ignore
 
       - name: Build and scan firewall guard image (Grype)
         shell: bash
@@ -1396,7 +1405,7 @@ jobs:
           printf '### Image published\n\n`%s`\n\nManifest digest `%s`\n\nSBOM provenance: attached as signed SPDX in-toto attestation to `%s`.\n' \
             "$image" "$digest" "$image_ref" >> "$GITHUB_STEP_SUMMARY"
 
-      # Syft SPDX for the pushed digest — bound to the digest, not the tag,
+      # Syft SBOMs for the pushed digest — bound to the digest, not the tag,
       # so the "which image contains CVE X" question (#1814) has one answer.
       # Pinned by SHA256 per repo selected-actions policy.
       - name: Install Syft 1.18.1
@@ -1419,8 +1428,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          syft "$IMAGE_REF" -o spdx-json=image-sbom.spdx.json
+          syft "$IMAGE_REF" \
+            -o spdx-json=image-sbom.spdx.json \
+            -o cyclonedx-json=image-sbom.cyclonedx.json
           test -s image-sbom.spdx.json
+          test -s image-sbom.cyclonedx.json
 
       # cosign keyless signing: image signature + SPDX attestation, both bound
       # to the pushed digest, plus an offline detached bundle for non-registry verification.
@@ -1469,6 +1481,7 @@ jobs:
           name: image-sbom
           path: |
             image-sbom.spdx.json
+            image-sbom.cyclonedx.json
             image-sbom.spdx.json.bundle
 
       # Native Grype scan of the attached SBOM. Fails the release if a vulnerability
