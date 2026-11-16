@@ -17,6 +17,14 @@ function fakePrisma(
     return {};
   });
   const client = {
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        $queryRawUnsafe: async (text: string) => {
+          if (text.includes('set_config')) return [];
+          return [];
+        },
+        usageRecord: { create },
+      }),
     usageRecord: { create },
   } as unknown as PrismaClient;
   return {

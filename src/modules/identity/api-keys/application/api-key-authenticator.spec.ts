@@ -48,7 +48,11 @@ class FakeRepository implements ApiKeyRepositoryPort {
     return Promise.resolve(this.record);
   }
 
-  touchLastUsed(_apiKeyId: string, _usedAt: Date): Promise<void> {
+  touchLastUsed(
+    _organizationId: string,
+    _apiKeyId: string,
+    _usedAt: Date,
+  ): Promise<void> {
     return Promise.resolve();
   }
 }

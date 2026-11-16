@@ -118,7 +118,10 @@ describe('SpeakingGradingJobSweep', () => {
         completedAt: NOW,
       }),
     );
-    expect(release).toHaveBeenCalledWith(expiredSandboxJob.jobId);
+    expect(release).toHaveBeenCalledWith(
+      expiredSandboxJob.organizationId,
+      expiredSandboxJob.jobId,
+    );
     expect(release).toHaveBeenCalledTimes(1);
     expect(repository.releaseSettledQuotaReservations).toHaveBeenCalledWith(
       new Date(

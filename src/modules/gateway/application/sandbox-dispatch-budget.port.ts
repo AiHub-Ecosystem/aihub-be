@@ -24,7 +24,7 @@ export interface SandboxDispatchBudgetPort {
    * override takes effect atomically.
    */
   reserve(input: SandboxDispatchReservation): Promise<boolean>;
-  release(requestId: string): Promise<void>;
+  release(organizationId: string, requestId: string): Promise<void>;
   /** null when policy state cannot be read; callers must not assume a default. */
   allowanceFor(
     organizationId: string,

@@ -137,7 +137,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
       signal,
       deadlineMs: remainingMs,
     });
-    await this.record(run.attemptId, 'response_received');
+    await this.record(run, run.attemptId, 'response_received');
     return result;
   }
 
@@ -181,6 +181,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
       !run.callStarted || this.transport.isUndelivered(error);
     if (run.attemptId !== undefined) {
       await this.record(
+        run,
         run.attemptId,
         classifyAttemptOutcome(run.responseStatus, notDispatched),
       );
@@ -191,11 +192,14 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
   }
 
   private async record(
+    run: DispatchRun,
     attemptId: string,
     outcome: DispatchAttemptOutcome,
   ): Promise<void> {
+    const organizationId = run.context.organizationId;
+    if (organizationId === undefined) return;
     try {
-      await this.attempts.recordOutcome(attemptId, outcome);
+      await this.attempts.recordOutcome(organizationId, attemptId, outcome);
     } catch {
       this.warn('dispatch_attempt_outcome_not_recorded');
     }

@@ -44,7 +44,11 @@ export interface ApiKeyRecord {
 
 export interface ApiKeyRepositoryPort {
   findByHash(hashHex: string): Promise<ApiKeyRecord | null>;
-  touchLastUsed(apiKeyId: string, usedAt: Date): Promise<void>;
+  touchLastUsed(
+    organizationId: string,
+    apiKeyId: string,
+    usedAt: Date,
+  ): Promise<void>;
 }
 
 export const API_KEY_REPOSITORY = Symbol('API_KEY_REPOSITORY');

@@ -11,6 +11,7 @@ import type {
   DispatchAttemptRecordPort,
   DispatchAttemptStart,
 } from '@/modules/metering/application/usage-recording/dispatch-attempt-record.port';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
@@ -86,14 +87,21 @@ export class PostgresDispatchAttemptRepository
   }
 
   async recordOutcome(
+    organizationId: string,
     attemptId: string,
     outcome: DispatchAttemptOutcome,
   ): Promise<void> {
-    // Once: an outcome already recorded is never overwritten.
-    await this.client.dispatchAttempt.updateMany({
-      where: { attemptId, outcome: null },
-      data: { outcome },
-    });
+    await organizationTransaction(
+      this.client,
+      organizationId,
+      async (transaction) => {
+        // Once: an outcome already recorded is never overwritten.
+        await transaction.dispatchAttempt.updateMany({
+          where: { attemptId, organizationId, outcome: null },
+          data: { outcome },
+        });
+      },
+    );
   }
 
   async getUnresolvedByOperation(): Promise<

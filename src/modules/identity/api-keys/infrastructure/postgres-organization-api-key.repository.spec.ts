@@ -107,7 +107,8 @@ describe('PostgresOrganizationApiKeyRepository organization context', () => {
 
   it('maps attribution from nested Prisma relations on listApiKeys', async () => {
     const prisma = new ScriptedPrisma();
-    prisma.outside = [
+    prisma.inside = [
+      undefined, // the Organization setting statement the seam issues first
       [
         {
           id: 'ak_01J00000000000000000000000',

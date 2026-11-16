@@ -185,6 +185,16 @@ function harness(
   };
 }
 
+function expectReleasedBeforeDispatch(subject: ReturnType<typeof harness>) {
+  expect(subject.sandboxRelease.mock.calls[0]).toEqual([
+    job.organizationId,
+    job.jobId,
+  ]);
+  expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
+  expect(subject.execute).not.toHaveBeenCalled();
+  expect(subject.release).toHaveBeenCalledTimes(1);
+}
+
 describe('ProcessSpeakingGradingJob', () => {
   it('skips a duplicate delivery when the conditional claim loses', async () => {
     const subject = harness({ claimed: null });
@@ -241,10 +251,7 @@ describe('ProcessSpeakingGradingJob', () => {
         }) as unknown as SpeakingGradingJobError,
       }),
     );
-    expect(subject.sandboxRelease).toHaveBeenCalledWith(job.jobId);
-    expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
-    expect(subject.execute).not.toHaveBeenCalled();
-    expect(subject.release).toHaveBeenCalledTimes(1);
+    expectReleasedBeforeDispatch(subject);
   });
 
   it('maps a missing object to AUDIO_ASSET_EXPIRED before dispatch', async () => {
@@ -268,10 +275,7 @@ describe('ProcessSpeakingGradingJob', () => {
         }) as unknown as SpeakingGradingJobError,
       }),
     );
-    expect(subject.sandboxRelease).toHaveBeenCalledWith(job.jobId);
-    expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
-    expect(subject.execute).not.toHaveBeenCalled();
-    expect(subject.release).toHaveBeenCalledTimes(1);
+    expectReleasedBeforeDispatch(subject);
   });
 
   it('stores the captured provider result, records ownership and finalizes metering once', async () => {

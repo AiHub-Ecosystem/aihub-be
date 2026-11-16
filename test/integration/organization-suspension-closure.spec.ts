@@ -172,7 +172,9 @@ describe('a suspended Organization closes every management surface', () => {
       return {
         $transaction: (callback: (transaction: unknown) => Promise<unknown>) =>
           callback({
-            $queryRawUnsafe: async () => {
+            $queryRawUnsafe: async (text: string) => {
+              // The Organization seam declares the tenant before locked reads.
+              if (text.includes('set_config')) return [];
               const rows = reads[read];
               read += 1;
               return rows ?? [];

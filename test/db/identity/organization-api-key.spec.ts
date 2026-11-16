@@ -465,15 +465,15 @@ describe('API-key lookup and last-used tracking against PostgreSQL', () => {
     const store = new PostgresApiKeyRepository(apiKeys);
 
     const first = new Date('2026-09-22T12:34:56.000Z');
-    await store.touchLastUsed(apiKeyId, first);
+    await store.touchLastUsed(ORGANIZATION_ID, apiKeyId, first);
     expect(await lastUsedAt(apiKeyId)).toEqual(first);
 
     const throttled = new Date('2026-09-22T12:35:30.000Z');
-    await store.touchLastUsed(apiKeyId, throttled);
+    await store.touchLastUsed(ORGANIZATION_ID, apiKeyId, throttled);
     expect(await lastUsedAt(apiKeyId)).toEqual(first);
 
     const pastTheWindow = new Date('2026-09-22T12:36:30.000Z');
-    await store.touchLastUsed(apiKeyId, pastTheWindow);
+    await store.touchLastUsed(ORGANIZATION_ID, apiKeyId, pastTheWindow);
     expect(await lastUsedAt(apiKeyId)).toEqual(pastTheWindow);
   });
 
@@ -490,6 +490,7 @@ describe('API-key lookup and last-used tracking against PostgreSQL', () => {
     });
 
     await new PostgresApiKeyRepository(apiKeys).touchLastUsed(
+      ORGANIZATION_ID,
       apiKeyId,
       new Date('2026-09-22T12:34:56.000Z'),
     );
@@ -513,9 +514,9 @@ describe('API-key lookup and last-used tracking against PostgreSQL', () => {
         message: 'Identity store is unavailable',
       });
       expect(JSON.stringify(error)).not.toContain('aihub_absent_database');
-      await expect(store.touchLastUsed('ak_any', new Date())).rejects.toThrow(
-        'Identity store is unavailable',
-      );
+      await expect(
+        store.touchLastUsed(ORGANIZATION_ID, 'ak_any', new Date()),
+      ).rejects.toThrow('Identity store is unavailable');
     } finally {
       await unreachable.close();
     }

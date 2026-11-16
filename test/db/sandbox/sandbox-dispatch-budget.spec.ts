@@ -93,8 +93,8 @@ describe('Postgres Sandbox dispatch budget', () => {
       throw new Error('expected one active Sandbox reservation');
     }
 
-    await budget.release(reservationId);
-    await budget.release(reservationId);
+    await budget.release(ORGANIZATION_ID, reservationId);
+    await budget.release(ORGANIZATION_ID, reservationId);
     await expect(
       budget.reserve({
         organizationId: ORGANIZATION_ID,

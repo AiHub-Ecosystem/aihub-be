@@ -102,7 +102,11 @@ function fakeDispatchAttempts() {
     readonly outcome: DispatchAttemptOutcome;
   }> = [];
   const recordOutcome = jest.fn(
-    async (attemptId: string, outcome: DispatchAttemptOutcome) => {
+    async (
+      _organizationId: string,
+      attemptId: string,
+      outcome: DispatchAttemptOutcome,
+    ) => {
       outcomes.push({ attemptId, outcome });
     },
   );
@@ -137,17 +141,17 @@ function sandboxContext(signal?: AbortSignal) {
 
 function fakeSandboxBudget(admitted = true): SandboxDispatchBudgetPort & {
   reserveCalls: unknown[];
-  releaseCalls: string[];
+  releaseCalls: readonly string[][];
 } {
   const budget = {
     reserveCalls: [] as unknown[],
-    releaseCalls: [] as string[],
+    releaseCalls: [] as string[][],
     async reserve(input: unknown) {
       this.reserveCalls.push(input);
       return admitted;
     },
-    async release(requestId: string) {
-      this.releaseCalls.push(requestId);
+    async release(organizationId: string, requestId: string) {
+      this.releaseCalls.push([organizationId, requestId]);
     },
     async allowanceFor() {
       return {
@@ -972,7 +976,9 @@ describe('HttpOperationDispatcher', () => {
       createInternalErrorEnvelope(requestContext.requestId),
     );
     expect(request).not.toHaveBeenCalled();
-    expect(budget.releaseCalls).toEqual([requestContext.requestId]);
+    expect(budget.releaseCalls).toEqual([
+      ['org_sandbox', requestContext.requestId],
+    ]);
   });
 
   it('records a pre-send timeout if the durable write outlasts the operation deadline', async () => {
@@ -1240,6 +1246,7 @@ describe('HttpOperationDispatcher', () => {
       dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
     ).resolves.toMatchObject({ data: { overall_band: 7 } });
     expect(recordOutcome.mock.calls).toContainEqual([
+      'org_test',
       'attempt-test',
       'response_received',
     ]);
@@ -1267,7 +1274,9 @@ describe('HttpOperationDispatcher', () => {
         requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       },
     ]);
-    expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);
+    expect(budget.releaseCalls).toEqual([
+      ['org_sandbox', 'req_01J8QK3M7XW2P5NRTVA9BCDEFG'],
+    ]);
     expect(attempts.outcomes).toEqual([
       { attemptId: 'attempt-test', outcome: 'not_dispatched' },
     ]);
@@ -1333,7 +1342,9 @@ describe('HttpOperationDispatcher', () => {
     ).rejects.toMatchObject({ code: 'AI_SERVICE_TIMEOUT' });
 
     expect(request).not.toHaveBeenCalled();
-    expect(budget.releaseCalls).toEqual(['req_01J8QK3M7XW2P5NRTVA9BCDEFG']);
+    expect(budget.releaseCalls).toEqual([
+      ['org_sandbox', 'req_01J8QK3M7XW2P5NRTVA9BCDEFG'],
+    ]);
   });
 
   it('consumes a reservation when a downstream response proves dispatch occurred', async () => {
