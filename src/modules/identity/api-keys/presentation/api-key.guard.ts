@@ -66,13 +66,13 @@ function visitorIpForBffRequest(
     throw clientSecretMissingOrInvalid();
   }
 
+  request.aihubClientIpSource = 'customer_web_bff' satisfies ClientIpSource;
   const visitorIp = forwardedVisitorIp(request);
   if (visitorIp === undefined) {
     throw authenticationConfigurationInvalid({
       diagnostic: 'bff-visitor-ip-missing-or-invalid',
     });
   }
-  request.aihubClientIpSource = 'customer_web_bff' satisfies ClientIpSource;
   return visitorIp;
 }
 
