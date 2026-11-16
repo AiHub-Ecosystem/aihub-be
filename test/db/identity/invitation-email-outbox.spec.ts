@@ -99,14 +99,17 @@ class RecordingSender implements EmailSenderPort {
 
 class CountingRateLimiter implements AuthRateLimiterPort {
   consumed = 0;
+  denyEmailKey: string | undefined;
 
   async check(): Promise<{ readonly allowed: true }> {
     return { allowed: true };
   }
 
-  async consume(): Promise<{ readonly allowed: true }> {
+  async consume(
+    input: Parameters<AuthRateLimiterPort['consume']>[0],
+  ): Promise<{ readonly allowed: boolean }> {
     this.consumed += 1;
-    return { allowed: true };
+    return { allowed: input.key !== this.denyEmailKey };
   }
 }
 
@@ -207,6 +210,7 @@ beforeEach(async () => {
   identityClient.failOutboxInserts = false;
   sender.calls = [];
   rateLimiter.consumed = 0;
+  rateLimiter.denyEmailKey = undefined;
 });
 
 function invite(headers: Record<string, string> = {}) {
@@ -310,6 +314,40 @@ describe('organization invitation email outbox over HTTP', () => {
     expect(responseBody.data.invitation_id).toMatch(
       /^oiv_[0-9A-HJKMNP-TV-Z]{26}$/,
     );
+  });
+
+  it('preserves an actionable invitation when a suppressed resend cannot email a replacement', async () => {
+    const original = await invite();
+    const originalBody = original.json<{ data: { invitation_id: string } }>();
+    const originalInvitation = await pool.query<{
+      id: string;
+      token_hash: string;
+      consumed_at: Date | null;
+    }>(
+      'SELECT id, token_hash, consumed_at FROM organization_invitations WHERE id = $1',
+      [originalBody.data.invitation_id],
+    );
+
+    rateLimiter.denyEmailKey = INVITEE;
+    const suppressedResend = await invite();
+
+    expect(suppressedResend.statusCode).toBe(201);
+    expect(suppressedResend.json()).toMatchObject({
+      data: {
+        invitation_id: originalBody.data.invitation_id,
+        email_delivery_status: 'suppressed',
+      },
+    });
+    const currentInvitation = await pool.query<{
+      id: string;
+      token_hash: string;
+      consumed_at: Date | null;
+    }>(
+      'SELECT id, token_hash, consumed_at FROM organization_invitations WHERE email = $1',
+      [INVITEE],
+    );
+    expect(currentInvitation.rows).toEqual(originalInvitation.rows);
+    expect(await queuedRequests()).toHaveLength(1);
   });
 
   it('rolls the invitation and its audit event back when the outbox write fails', async () => {

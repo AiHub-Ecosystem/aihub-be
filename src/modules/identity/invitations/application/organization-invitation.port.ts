@@ -39,6 +39,12 @@ export interface OrganizationInviteEmailDelivery {
  */
 export type CreateOrganizationInvitationResult =
   | { readonly kind: 'created' }
+  | {
+      readonly kind: 'existing_invitation';
+      readonly invitationId: string;
+      readonly role: OrganizationMembershipRole;
+      readonly expiresAt: Date;
+    }
   | { readonly kind: 'member_exists' }
   | { readonly kind: 'caller_not_authorized' }
   | { readonly kind: 'organization_suspended' };

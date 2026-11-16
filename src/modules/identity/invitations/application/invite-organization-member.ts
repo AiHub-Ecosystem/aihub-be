@@ -149,6 +149,17 @@ export class InviteOrganizationMember {
           throw forbidden(INVITATION_SENDING_FORBIDDEN);
         }
 
+        if (result.kind === 'existing_invitation') {
+          return {
+            invitationId: result.invitationId,
+            organizationId: input.organizationId,
+            email,
+            role: result.role,
+            expiresAt: result.expiresAt,
+            emailDeliveryStatus: 'suppressed',
+          };
+        }
+
         return {
           invitationId: issued.id,
           organizationId: input.organizationId,
