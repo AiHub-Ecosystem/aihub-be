@@ -75,13 +75,18 @@ export class PostgresDispatchAttemptRepository
 
   async beginAttempt(input: DispatchAttemptStart): Promise<string> {
     const attemptId = randomUUID();
-    await this.client.$executeRawUnsafe(
-      INSERT_DISPATCH_ATTEMPT_SQL,
-      attemptId,
-      input.requestId,
+    await organizationTransaction(
+      this.client,
       input.organizationId,
-      input.operation,
-      input.operationTimeoutMs,
+      (transaction) =>
+        transaction.$executeRawUnsafe(
+          INSERT_DISPATCH_ATTEMPT_SQL,
+          attemptId,
+          input.requestId,
+          input.organizationId,
+          input.operation,
+          input.operationTimeoutMs,
+        ),
     );
     return attemptId;
   }

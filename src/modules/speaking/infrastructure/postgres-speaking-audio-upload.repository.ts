@@ -188,8 +188,8 @@ export class PostgresSpeakingAudioUploadRepository
   constructor(private readonly client: PrismaClient) {}
 
   async createIntent(intent: SpeakingAudioUploadIntent): Promise<void> {
-    await this.run(() =>
-      this.client.speakingAudioUploadIntent.create({
+    await this.transaction(intent.organizationId, (client) =>
+      client.speakingAudioUploadIntent.create({
         data: intentData(intent),
       }),
     );
@@ -232,40 +232,44 @@ export class PostgresSpeakingAudioUploadRepository
   async findUpload(
     owner: SpeakingAudioUploadOwner,
   ): Promise<SpeakingAudioUploadLookup> {
-    const intent = mapIntent(
-      (await this.run(() =>
-        this.client.speakingAudioUploadIntent.findFirst({
+    return this.transaction(owner.organizationId, async (client) => {
+      const intent = mapIntent(
+        (await client.speakingAudioUploadIntent.findFirst({
           where: ownerWhere(owner),
-        }),
-      )) ?? undefined,
-    );
-    if (intent !== undefined) {
-      return { kind: 'intent', intent };
-    }
+        })) ?? undefined,
+      );
+      if (intent !== undefined) {
+        return { kind: 'intent', intent } as const;
+      }
 
-    const asset = await this.findAsset(this.client, owner);
-    return asset === undefined ? { kind: 'missing' } : { kind: 'asset', asset };
+      const asset = await this.findAsset(client, owner);
+      return asset === undefined
+        ? ({ kind: 'missing' } as const)
+        : ({ kind: 'asset', asset } as const);
+    });
   }
 
   async confirmRefreshableIntent(input: {
     readonly owner: SpeakingAudioUploadOwner;
     readonly now: Date;
   }): Promise<boolean> {
-    const matching = await this.run(() =>
-      this.client.speakingAudioUploadIntent.count({
-        where: {
-          ...ownerWhere(input.owner),
-          status: 'open',
-          expiresAt: { gt: input.now },
-        },
-      }),
+    const matching = await this.transaction(
+      input.owner.organizationId,
+      (client) =>
+        client.speakingAudioUploadIntent.count({
+          where: {
+            ...ownerWhere(input.owner),
+            status: 'open',
+            expiresAt: { gt: input.now },
+          },
+        }),
     );
     return matching === 1;
   }
 
   async removeRejectedIntent(owner: SpeakingAudioUploadOwner): Promise<void> {
-    await this.run(() =>
-      this.client.speakingAudioUploadIntent.deleteMany({
+    await this.transaction(owner.organizationId, (client) =>
+      client.speakingAudioUploadIntent.deleteMany({
         where: { ...ownerWhere(owner), status: 'rejected' },
       }),
     );

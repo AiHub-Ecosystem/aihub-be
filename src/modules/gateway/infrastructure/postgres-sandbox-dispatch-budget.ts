@@ -150,22 +150,31 @@ export class PostgresSandboxDispatchBudget
   ): Promise<SandboxAllowanceSnapshot | null> {
     const { start: monthStart } = quotaPeriod(this.now());
     try {
-      const monthlyLimit = await effectiveAllowance(
+      return await organizationTransaction(
         this.client,
         organizationId,
-        monthStart,
+        async (transaction) => {
+          const monthlyLimit = await effectiveAllowance(
+            transaction,
+            organizationId,
+            monthStart,
+          );
+          if (monthlyLimit === null) return null;
+          return {
+            monthlyLimit,
+            reserved: await transaction.sandboxDispatchReservation.count({
+              where: { status: 'reserved', monthStart, organizationId },
+            }),
+            sharedMonthlyLimit: SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
+            // Counts every Organization on purpose: the shared ceiling is
+            // environment-wide. #80 must give this count a named cross-
+            // Organization path before a policy covers this table (ADR-0109).
+            sharedReserved: await transaction.sandboxDispatchReservation.count({
+              where: { status: 'reserved', monthStart },
+            }),
+          };
+        },
       );
-      if (monthlyLimit === null) return null;
-      return {
-        monthlyLimit,
-        reserved: await this.client.sandboxDispatchReservation.count({
-          where: { status: 'reserved', monthStart, organizationId },
-        }),
-        sharedMonthlyLimit: SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
-        sharedReserved: await this.client.sandboxDispatchReservation.count({
-          where: { status: 'reserved', monthStart },
-        }),
-      };
     } catch {
       return null;
     }

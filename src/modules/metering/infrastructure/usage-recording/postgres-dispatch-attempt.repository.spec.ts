@@ -17,6 +17,7 @@ function fakePrisma(rows: readonly unknown[] = []) {
       $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
           $queryRawUnsafe: query,
+          $executeRawUnsafe: execute,
           dispatchAttempt: { updateMany },
         }),
       dispatchAttempt: { updateMany },
