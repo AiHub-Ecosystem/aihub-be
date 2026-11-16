@@ -189,7 +189,7 @@ async function completesWhileSpeakingHangs<T>(work: Promise<T>): Promise<T> {
     );
   });
   try {
-    return await Promise.race([work, blocked]);
+    return await Promise.race([work, blocked]); // real-timer-ok: bounds a request that may hang
   } finally {
     clearTimeout(timer);
   }

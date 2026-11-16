@@ -74,6 +74,7 @@ export function collectSourceTextFailures(options) {
     const relativePath = relative(root, file).replace(/\\/g, '/');
     const lines = source.split(/\r?\n/);
     const timerFunctions = new Set(['setTimeout']);
+    const timerPromiseFunctions = new Set();
     const imports = sourceFile.statements.filter(ts.isImportDeclaration);
     for (const statement of imports) {
       if (
@@ -92,9 +93,13 @@ export function collectSourceTextFailures(options) {
           element.name.text === 'setTimeout'
         ) {
           timerFunctions.add(element.name.text);
+          timerPromiseFunctions.add(element.name.text);
         }
       }
     }
+
+    /** @type {Map<import('typescript').Node, Set<string>>} */
+    const timerWaitVariables = new Map();
 
     for (const statement of sourceFile.statements) {
       if (
@@ -119,6 +124,14 @@ export function collectSourceTextFailures(options) {
       }
     }
 
+    let foundTimerWaitVariable = true;
+    while (foundTimerWaitVariable) {
+      foundTimerWaitVariable = false;
+      collectTimerWaitVariables(sourceFile, () => {
+        foundTimerWaitVariable = true;
+      });
+    }
+
     /** @param {import('typescript').Node} node @returns {boolean} */
     function containsTimerWait(node) {
       if (
@@ -128,7 +141,66 @@ export function collectSourceTextFailures(options) {
       ) {
         return true;
       }
+      if (ts.isIdentifier(node) && hasTimerWaitVariable(node)) {
+        return true;
+      }
       return node.getChildren(sourceFile).some(containsTimerWait);
+    }
+
+    /** @param {import('typescript').Identifier} node @returns {boolean} */
+    function hasTimerWaitVariable(node) {
+      if (
+        ts.isPropertyAccessExpression(node.parent) &&
+        node.parent.name === node
+      ) {
+        return false;
+      }
+      let scope = node.parent;
+      while (scope !== undefined && !ts.isFunctionLike(scope)) {
+        scope = scope.parent;
+      }
+      while (scope !== undefined) {
+        if (timerWaitVariables.get(scope)?.has(node.text)) return true;
+        scope = scope.parent;
+        while (scope !== undefined && !ts.isFunctionLike(scope)) {
+          scope = scope.parent;
+        }
+      }
+      return timerWaitVariables.get(sourceFile)?.has(node.text) ?? false;
+    }
+
+    /** @param {import('typescript').Node} node @param {() => void} found */
+    function collectTimerWaitVariables(node, found) {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer !== undefined &&
+        ((ts.isNewExpression(node.initializer) &&
+          ts.isIdentifier(node.initializer.expression) &&
+          node.initializer.expression.text === 'Promise') ||
+          ts.isIdentifier(node.initializer) ||
+          (ts.isCallExpression(node.initializer) &&
+            ts.isIdentifier(node.initializer.expression) &&
+            timerPromiseFunctions.has(node.initializer.expression.text))) &&
+        containsTimerWait(node.initializer)
+      ) {
+        /** @type {import('typescript').Node | undefined} */
+        let scope = node.parent;
+        while (scope !== undefined && !ts.isFunctionLike(scope)) {
+          scope = scope.parent;
+        }
+        const owner = scope ?? sourceFile;
+        let variables = timerWaitVariables.get(owner);
+        if (variables === undefined) {
+          variables = new Set();
+          timerWaitVariables.set(owner, variables);
+        }
+        if (!variables.has(node.name.text)) {
+          variables.add(node.name.text);
+          found();
+        }
+      }
+      node.forEachChild((child) => collectTimerWaitVariables(child, found));
     }
 
     /** @param {import('typescript').Node} node @returns {boolean} */
@@ -168,10 +240,25 @@ export function collectSourceTextFailures(options) {
             : ts.isPropertyAccessExpression(callee)
               ? callee.name.text
               : '';
+          let awaitedInNestedFunction = false;
+          for (
+            let parent = node.parent;
+            parent !== undefined && parent !== callback;
+            parent = parent.parent
+          ) {
+            if (ts.isFunctionLike(parent)) {
+              awaitedInNestedFunction = true;
+              break;
+            }
+          }
           if (
             (name === 'it' || name === 'test') &&
             callback !== undefined &&
-            containsFakeTimerSetup(callback)
+            containsFakeTimerSetupBefore(
+              callback,
+              node,
+              awaitedInNestedFunction,
+            )
           ) {
             return true;
           }
@@ -181,23 +268,44 @@ export function collectSourceTextFailures(options) {
       return false;
     }
 
-    /** @param {import('typescript').Node} node @returns {boolean} */
-    function containsFakeTimerSetup(node) {
-      if (ts.isCallExpression(node)) {
-        const callee = node.expression;
-        if (ts.isIdentifier(callee) && callee.text === 'withFakeTimers') {
-          return true;
+    /**
+     * @param {import('typescript').Node} callback
+     * @param {import('typescript').Node} awaitedNode
+     * @param {boolean} [allowSetupAfterWait]
+     * @returns {boolean}
+     */
+    function containsFakeTimerSetupBefore(
+      callback,
+      awaitedNode,
+      allowSetupAfterWait = false,
+    ) {
+      const awaitedPosition = awaitedNode.getStart(sourceFile);
+      /** @param {import('typescript').Node} node @returns {boolean} */
+      function containsSetup(node) {
+        if (ts.isCallExpression(node)) {
+          const callee = node.expression;
+          if (
+            (allowSetupAfterWait ||
+              node.getStart(sourceFile) < awaitedPosition) &&
+            ts.isIdentifier(callee) &&
+            callee.text === 'withFakeTimers'
+          ) {
+            return true;
+          }
+          if (
+            (allowSetupAfterWait ||
+              node.getStart(sourceFile) < awaitedPosition) &&
+            ts.isPropertyAccessExpression(callee) &&
+            ts.isIdentifier(callee.expression) &&
+            callee.expression.text === 'jest' &&
+            callee.name.text === 'useFakeTimers'
+          ) {
+            return true;
+          }
         }
-        if (
-          ts.isPropertyAccessExpression(callee) &&
-          ts.isIdentifier(callee.expression) &&
-          callee.expression.text === 'jest' &&
-          callee.name.text === 'useFakeTimers'
-        ) {
-          return true;
-        }
+        return node.getChildren(sourceFile).some(containsSetup);
       }
-      return node.getChildren(sourceFile).some(containsFakeTimerSetup);
+      return containsSetup(callback);
     }
 
     /** @param {import('typescript').Node} node */
