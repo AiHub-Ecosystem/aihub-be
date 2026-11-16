@@ -5,6 +5,7 @@ import { Prisma, PrismaClient } from '@prisma-client/client';
 import {
   createIdentityTransactionRunner,
   identityRows,
+  identityTransaction,
 } from './postgres-identity.client';
 
 afterEach(() => {
@@ -194,5 +195,43 @@ describe('Identity transaction lifetime on Prisma', () => {
       throw new Error('The raw query returned no row');
     }
     expect(Buffer.isBuffer(Reflect.get(firstRow, 'binary'))).toBe(true);
+  });
+});
+
+describe('Organization-scoped identity transaction (#785)', () => {
+  it('declares the Organization inside the transaction before any statement', async () => {
+    const { client, queryRaw, transaction } = identityClient(async () => []);
+    const order: string[] = [];
+    queryRaw.mockImplementation(async (..._args: unknown[]) => {
+      order.push('set_config');
+      return [];
+    });
+
+    await identityTransaction(client, 'org_a', async () => {
+      order.push('callback');
+      return undefined;
+    });
+
+    expect(order).toEqual(['set_config', 'callback']);
+    expect(queryRaw).toHaveBeenCalledWith(
+      'SELECT set_config($1, $2, true)',
+      'aihub.organization_id',
+      'org_a',
+    );
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 1_000,
+      timeout: 5_000,
+    });
+  });
+
+  it('keeps the unscoped form for pre-tenant and cross-Organization work', async () => {
+    const { client, queryRaw } = identityClient(async () => []);
+
+    await identityTransaction(client, async () => {
+      await identityRows(client, 'SELECT 1');
+    });
+
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledWith('SELECT 1');
   });
 });

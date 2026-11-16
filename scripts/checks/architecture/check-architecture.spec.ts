@@ -2192,3 +2192,47 @@ describe('fixture isolation (#1636)', () => {
     expect(leftovers).toEqual([]);
   });
 });
+
+describe('Identity persistence opens transactions through the Organization seam (#785)', () => {
+  function checkRepository(source: string): {
+    status: number | null;
+    output: string;
+  } {
+    return checkFixtures([
+      [
+        'src/modules/identity/api-keys/infrastructure/postgres-fixture.repository.ts',
+        source,
+      ],
+    ]);
+  }
+
+  it('rejects a repository that opens a direct transaction', () => {
+    const result = checkRepository(
+      [
+        'export class FixtureRepository {',
+        '  async run(client: { $transaction: (cb: () => Promise<void>) => Promise<void> }) {',
+        '    await client.$transaction(async () => {});',
+        '  }',
+        '}',
+      ].join('\n'),
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(
+      'use identityTransaction from the shared seam',
+    );
+  });
+
+  it('accepts a repository that routes through the seam', () => {
+    const result = checkRepository(
+      [
+        'import { identityTransaction } from "@/modules/identity/shared/infrastructure/postgres-identity.client";',
+        'export class FixtureRepository {',
+        '  async run(client: unknown, organizationId: string) {',
+        '    return identityTransaction(client as never, organizationId, async () => 1);',
+        '  }',
+        '}',
+      ].join('\n'),
+    );
+    expect(result.status).toBe(0);
+  });
+});

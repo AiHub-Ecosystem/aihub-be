@@ -39,60 +39,64 @@ export class PostgresOrganizationEntitlementRepository
     input: GrantOrganizationEntitlementInput,
   ): Promise<GrantOrganizationEntitlementResult> {
     try {
-      return await identityTransaction(this.client, async (transaction) => {
-        const actorId = await findActiveAccountId(
-          transaction,
-          input.actorUsername,
-        );
-        if (actorId === undefined) return { kind: 'actor_invalid' as const };
+      return await identityTransaction(
+        this.client,
+        input.organizationId,
+        async (transaction) => {
+          const actorId = await findActiveAccountId(
+            transaction,
+            input.actorUsername,
+          );
+          if (actorId === undefined) return { kind: 'actor_invalid' as const };
 
-        const rows = await identityRows(transaction, LOCK_ORGANIZATION_SQL, [
-          input.organizationId,
-        ]);
-        const organization = rows[0];
-        if (!isRecord(organization))
-          return { kind: 'organization_not_found' as const };
-        const name = stringValue(organization, 'name');
-        const entitlements = organization['entitlements'];
-        if (
-          name === undefined ||
-          !Array.isArray(entitlements) ||
-          !entitlements.every((value) => typeof value === 'string')
-        ) {
-          throw invalidIdentityData();
-        }
+          const rows = await identityRows(transaction, LOCK_ORGANIZATION_SQL, [
+            input.organizationId,
+          ]);
+          const organization = rows[0];
+          if (!isRecord(organization))
+            return { kind: 'organization_not_found' as const };
+          const name = stringValue(organization, 'name');
+          const entitlements = organization['entitlements'];
+          if (
+            name === undefined ||
+            !Array.isArray(entitlements) ||
+            !entitlements.every((value) => typeof value === 'string')
+          ) {
+            throw invalidIdentityData();
+          }
 
-        const keyHashes = await organizationKeyHashes(
-          transaction,
-          input.organizationId,
-        );
-        if (entitlements.includes(input.entitlement))
-          return { kind: 'unchanged' as const, keyHashes };
+          const keyHashes = await organizationKeyHashes(
+            transaction,
+            input.organizationId,
+          );
+          if (entitlements.includes(input.entitlement))
+            return { kind: 'unchanged' as const, keyHashes };
 
-        await transaction.organization.update({
-          where: { id: input.organizationId },
-          data: { entitlements: { push: input.entitlement } },
-        });
-        await recordOrganizationAuditEvent(
-          transaction,
-          auditStamp(
+          await transaction.organization.update({
+            where: { id: input.organizationId },
+            data: { entitlements: { push: input.entitlement } },
+          });
+          await recordOrganizationAuditEvent(
+            transaction,
+            auditStamp(
+              {
+                context: { requestId: input.requestId },
+                organizationId: input.organizationId,
+              },
+              actorId,
+              input.occurredAt,
+              'self_declared_operator',
+            ),
             {
-              context: { requestId: input.requestId },
+              action: 'organization.entitlement_granted',
               organizationId: input.organizationId,
+              name,
+              entitlement: input.entitlement,
             },
-            actorId,
-            input.occurredAt,
-            'self_declared_operator',
-          ),
-          {
-            action: 'organization.entitlement_granted',
-            organizationId: input.organizationId,
-            name,
-            entitlement: input.entitlement,
-          },
-        );
-        return { kind: 'granted' as const, keyHashes };
-      });
+          );
+          return { kind: 'granted' as const, keyHashes };
+        },
+      );
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw identityStoreUnavailable(error);

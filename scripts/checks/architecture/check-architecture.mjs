@@ -1503,6 +1503,29 @@ export function collectSourceTextFailures(options) {
     visit(sourceFile);
   }
 
+  // #785: Identity request-serving persistence opens transactions through
+  // `identityTransaction`, which declares the Organization to PostgreSQL from
+  // an explicit argument before any repository statement runs. A direct
+  // `$transaction` bypasses that seam and would silently no-op under fail-closed
+  // RLS, so no Identity repository may open one. Cross-Organization work uses
+  // the unscoped form of the same helper, never a direct transaction.
+  {
+    const seam =
+      'src/modules/identity/shared/infrastructure/postgres-identity.client.ts';
+    for (const file of sourceFiles) {
+      if (file.endsWith('.spec.ts')) continue;
+      const relativePath = relative(root, file).replace(/\\/g, '/');
+      if (!relativePath.startsWith('src/modules/identity/')) continue;
+      if (!relativePath.includes('/infrastructure/')) continue;
+      if (relativePath === seam) continue;
+      if (/\$transaction\s*\(/.test(sourceText(file))) {
+        fail(
+          `${relativePath} opens a transaction directly; use identityTransaction from the shared seam so the Organization is declared inside the transaction (#785)`,
+        );
+      }
+    }
+  }
+
   // ADR-0054 / #784: every statement that stores a session takes a
   // SessionAdmission, and the second-factor check mints it. The one other way to
   // get one, `admitSessionContinuation`, skips that check because it continues a

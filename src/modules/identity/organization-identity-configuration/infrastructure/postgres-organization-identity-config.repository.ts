@@ -303,118 +303,124 @@ export class PostgresOrganizationIdentityConfigRepository
     const stamp = auditStamp(input, input.userId, input.context.receivedAt);
 
     try {
-      return await identityTransaction(this.client, async (transaction) => {
-        const organization = (
-          (await identityRows(
-            transaction,
-            `SELECT status FROM organizations WHERE id = $1 FOR UPDATE`,
-            [input.organizationId],
-          )) as readonly IdentityConfigRow[]
-        )[0];
-        if (!isRecord(organization)) {
-          return { kind: 'forbidden' as const };
-        }
-        const organizationStatus = organizationStatusValue(
-          organization,
-          'status',
-        );
-        if (organizationStatus === undefined) {
-          throw invalidIdentityData();
-        }
-        if (organizationStatus !== 'active') {
-          return { kind: 'forbidden' as const };
-        }
+      return await identityTransaction(
+        this.client,
+        input.organizationId,
+        async (transaction) => {
+          const organization = (
+            (await identityRows(
+              transaction,
+              `SELECT status FROM organizations WHERE id = $1 FOR UPDATE`,
+              [input.organizationId],
+            )) as readonly IdentityConfigRow[]
+          )[0];
+          if (!isRecord(organization)) {
+            return { kind: 'forbidden' as const };
+          }
+          const organizationStatus = organizationStatusValue(
+            organization,
+            'status',
+          );
+          if (organizationStatus === undefined) {
+            throw invalidIdentityData();
+          }
+          if (organizationStatus !== 'active') {
+            return { kind: 'forbidden' as const };
+          }
 
-        const membership = (
-          (await identityRows(
-            transaction,
-            `SELECT role, status
+          const membership = (
+            (await identityRows(
+              transaction,
+              `SELECT role, status
              FROM organization_members
              WHERE organization_id = $1 AND user_account_id = $2
              FOR UPDATE`,
-            [input.organizationId, input.userId],
-          )) as readonly IdentityConfigRow[]
-        )[0];
-        if (!isRecord(membership)) {
-          return { kind: 'forbidden' as const };
-        }
-        const role = membershipRoleValue(membership, 'role');
-        const status = membershipStatusValue(membership, 'status');
-        if (role === undefined || status === undefined) {
-          throw invalidIdentityData();
-        }
-        if (role !== 'owner' || status !== 'active') {
-          return { kind: 'forbidden' as const };
-        }
-
-        const precondition = input.precondition;
-        if (precondition !== undefined) {
-          const current = (
-            (await identityRows(
-              transaction,
-              SELECT_CONFIG_REVISION_FOR_UPDATE_SQL,
-              [input.organizationId],
+              [input.organizationId, input.userId],
             )) as readonly IdentityConfigRow[]
           )[0];
-          const currentRevision = isRecord(current)
-            ? bigintDigitsValue(current['revision'])
-            : undefined;
-          if (!identityConfigPreconditionHolds(precondition, currentRevision)) {
+          if (!isRecord(membership)) {
+            return { kind: 'forbidden' as const };
+          }
+          const role = membershipRoleValue(membership, 'role');
+          const status = membershipStatusValue(membership, 'status');
+          if (role === undefined || status === undefined) {
+            throw invalidIdentityData();
+          }
+          if (role !== 'owner' || status !== 'active') {
+            return { kind: 'forbidden' as const };
+          }
+
+          const precondition = input.precondition;
+          if (precondition !== undefined) {
+            const current = (
+              (await identityRows(
+                transaction,
+                SELECT_CONFIG_REVISION_FOR_UPDATE_SQL,
+                [input.organizationId],
+              )) as readonly IdentityConfigRow[]
+            )[0];
+            const currentRevision = isRecord(current)
+              ? bigintDigitsValue(current['revision'])
+              : undefined;
+            if (
+              !identityConfigPreconditionHolds(precondition, currentRevision)
+            ) {
+              return { kind: 'precondition_failed' as const };
+            }
+          }
+
+          const createOnly = precondition?.kind === 'absent';
+          const written = (await identityRows(
+            transaction,
+            createOnly
+              ? INSERT_CONFIG_IF_ABSENT_SQL
+              : INSERT_OR_UPDATE_CONFIG_SQL,
+            [
+              input.organizationId,
+              input.issuer,
+              input.jwksUrl,
+              input.publicKeysJwks === null
+                ? null
+                : JSON.stringify(input.publicKeysJwks),
+              [...input.allowedAlgorithms],
+              input.maxAssertionTtlSeconds,
+            ],
+          )) as readonly IdentityConfigRow[];
+          if (createOnly && written.length === 0) {
             return { kind: 'precondition_failed' as const };
           }
-        }
 
-        const createOnly = precondition?.kind === 'absent';
-        const written = (await identityRows(
-          transaction,
-          createOnly
-            ? INSERT_CONFIG_IF_ABSENT_SQL
-            : INSERT_OR_UPDATE_CONFIG_SQL,
-          [
-            input.organizationId,
-            input.issuer,
-            input.jwksUrl,
-            input.publicKeysJwks === null
-              ? null
-              : JSON.stringify(input.publicKeysJwks),
-            [...input.allowedAlgorithms],
-            input.maxAssertionTtlSeconds,
-          ],
-        )) as readonly IdentityConfigRow[];
-        if (createOnly && written.length === 0) {
-          return { kind: 'precondition_failed' as const };
-        }
+          const changed = written.length > 0;
+          const row =
+            written[0] ??
+            (
+              (await identityRows(
+                transaction,
+                ADVANCE_UNCHANGED_JWKS_CACHE_VERSION_SQL,
+                [input.organizationId],
+              )) as readonly IdentityConfigRow[]
+            )[0];
+          const config = storedIdentityConfigFromRow(row);
+          if (config === undefined) {
+            throw invalidIdentityData();
+          }
 
-        const changed = written.length > 0;
-        const row =
-          written[0] ??
-          (
-            (await identityRows(
-              transaction,
-              ADVANCE_UNCHANGED_JWKS_CACHE_VERSION_SQL,
-              [input.organizationId],
-            )) as readonly IdentityConfigRow[]
-          )[0];
-        const config = storedIdentityConfigFromRow(row);
-        if (config === undefined) {
-          throw invalidIdentityData();
-        }
+          if (changed) {
+            await recordOrganizationAuditEvent(transaction, stamp, {
+              action: 'organization.identity_config_set',
+              organizationId: input.organizationId,
+              issuer: input.issuer,
+              sourceKind: input.sourceKind,
+              keyThumbprints: input.keyThumbprints,
+            });
+          }
 
-        if (changed) {
-          await recordOrganizationAuditEvent(transaction, stamp, {
-            action: 'organization.identity_config_set',
-            organizationId: input.organizationId,
-            issuer: input.issuer,
-            sourceKind: input.sourceKind,
-            keyThumbprints: input.keyThumbprints,
-          });
-        }
-
-        return {
-          kind: changed ? ('saved' as const) : ('unchanged' as const),
-          config,
-        };
-      });
+          return {
+            kind: changed ? ('saved' as const) : ('unchanged' as const),
+            config,
+          };
+        },
+      );
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

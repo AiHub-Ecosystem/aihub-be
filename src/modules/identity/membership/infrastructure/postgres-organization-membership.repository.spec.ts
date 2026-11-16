@@ -98,11 +98,13 @@ class FakePostgres implements PostgresIdentityQueryClient {
   ): Promise<T> {
     let index = 0;
     return callback({
-      query: async (_text, values) => {
-        this.transactionQueries.push({ values });
+      query: async (text, values) => {
         if (this.shouldFail) {
           throw new Error('database unavailable');
         }
+        // The Organization seam declares the tenant before repository reads.
+        if (text.includes('set_config')) return [];
+        this.transactionQueries.push({ values });
         const rows = this.transactionRows[index] ?? [];
         index += 1;
         return rows;
