@@ -410,25 +410,10 @@ export function collectSourceTextFailures(options) {
             : ts.isPropertyAccessExpression(callee)
               ? callee.name.text
               : '';
-          let awaitedInNestedFunction = false;
-          for (
-            let parent = node.parent;
-            parent !== undefined && parent !== callback;
-            parent = parent.parent
-          ) {
-            if (ts.isFunctionLike(parent)) {
-              awaitedInNestedFunction = true;
-              break;
-            }
-          }
           if (
             (name === 'it' || name === 'test') &&
             callback !== undefined &&
-            containsFakeTimerSetupBefore(
-              callback,
-              node,
-              awaitedInNestedFunction,
-            )
+            containsFakeTimerSetupBefore(callback, node)
           ) {
             return true;
           }
@@ -441,14 +426,9 @@ export function collectSourceTextFailures(options) {
     /**
      * @param {import('typescript').Node} callback
      * @param {import('typescript').Node} awaitedNode
-     * @param {boolean} [allowSetupAfterWait]
      * @returns {boolean}
      */
-    function containsFakeTimerSetupBefore(
-      callback,
-      awaitedNode,
-      allowSetupAfterWait = false,
-    ) {
+    function containsFakeTimerSetupBefore(callback, awaitedNode) {
       const awaitedPosition = awaitedNode.getStart(sourceFile);
       /** @param {import('typescript').Node} node @returns {boolean} */
       function containsSetup(node, root = true) {
@@ -456,16 +436,14 @@ export function collectSourceTextFailures(options) {
         if (ts.isCallExpression(node)) {
           const callee = node.expression;
           if (
-            (allowSetupAfterWait ||
-              node.getStart(sourceFile) < awaitedPosition) &&
+            node.getStart(sourceFile) < awaitedPosition &&
             ts.isIdentifier(callee) &&
             callee.text === 'withFakeTimers'
           ) {
             return true;
           }
           if (
-            (allowSetupAfterWait ||
-              node.getStart(sourceFile) < awaitedPosition) &&
+            node.getStart(sourceFile) < awaitedPosition &&
             ts.isPropertyAccessExpression(callee) &&
             ts.isIdentifier(callee.expression) &&
             callee.expression.text === 'jest' &&

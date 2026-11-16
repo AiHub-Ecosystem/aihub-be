@@ -370,7 +370,7 @@ describe('IdempotencyService', () => {
       override async reserve(
         reservation: ReserveIdempotencyInput,
       ): Promise<IdempotencyReservation> {
-        await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+        await new Promise((resolve) => setTimeout(resolve, this.delayMs)); // real-timer-ok: reservation is exercised under fake timers
         return super.reserve(reservation);
       }
     }
