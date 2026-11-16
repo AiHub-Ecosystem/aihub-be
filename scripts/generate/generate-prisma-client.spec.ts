@@ -122,17 +122,13 @@ describe('prisma client stamp', () => {
     expect(runGate(disk, true)).toBe('compile');
   });
 
-  it('runs a verify-shaped gate sequence with one generation', () => {
+  it('runs the verify Prisma preparation once in runtime mode', () => {
     const disk = emptyDisk();
-    // knip, lint, type-check (plain), then test and build (runtime), then a
-    // second lint and type-check (plain) before the build gate again.
-    const plans = [false, false, false, true, true, false, false, true].map(
-      (runtime) => runGate(disk, runtime),
-    );
+    const plans = [runGate(disk, true)];
 
     expect(plans.filter((plan) => plan === 'generate')).toHaveLength(1);
-    expect(plans.filter((plan) => plan === 'compile')).toHaveLength(1);
-    expect(plans.filter((plan) => plan === 'skip')).toHaveLength(6);
+    expect(plans.filter((plan) => plan === 'compile')).toHaveLength(0);
+    expect(plans.filter((plan) => plan === 'skip')).toHaveLength(0);
   });
 });
 

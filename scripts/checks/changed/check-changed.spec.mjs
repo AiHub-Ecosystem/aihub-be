@@ -1220,12 +1220,29 @@ await test('all gates in bun run verify have commands and a tested path mapping'
   );
   const invoked = [
     ...packageJson.scripts.verify.matchAll(/\bbun run\s+([\w:-]+)/g),
-  ].map((match) => match[1] ?? '');
+  ]
+    .map((match) => match[1] ?? '')
+    .filter((gate) => gate !== 'generate:prisma-client');
+  assert.equal(
+    [
+      ...packageJson.scripts.verify.matchAll(
+        /\bbun run\s+generate:prisma-client\b/g,
+      ),
+    ].length,
+    1,
+  );
   // `check:batch` is one step that runs several gates. The guarantee is about
   // the gates, so expand the step into its declared members rather than letting
   // a single step name stand in for the coverage of eleven.
+  const verifyAliases = {
+    'knip:verify': 'knip',
+    'lint:verify': 'lint',
+    'type-check:verify': 'type-check',
+    'test:verify': 'test',
+    'build:verify': 'build',
+  };
   const expanded = invoked.flatMap((gate) =>
-    gate === 'check:batch' ? BATCHED_GATES : [gate],
+    gate === 'check:batch' ? BATCHED_GATES : [verifyAliases[gate] ?? gate],
   );
   const mapped = new Set(pathCases.flatMap(({ gates }) => gates));
   for (const gate of expanded) {

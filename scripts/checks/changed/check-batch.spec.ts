@@ -4,12 +4,14 @@ import { existsSync, readFileSync } from 'node:fs';
 // node, the same shape `scripts/ci/image/host-job-image-check.spec.ts` uses.
 const {
   BATCHED_GATES,
+  VERIFY_GATES,
   BYTES_PER_CHILD,
   MAX_CONCURRENCY,
   concurrencyFor,
   runBatch,
 } = require('./check-batch.cjs') as {
   BATCHED_GATES: string[];
+  VERIFY_GATES: string[];
   BYTES_PER_CHILD: number;
   MAX_CONCURRENCY: number;
   concurrencyFor: (input: { freeBytes?: number }) => number;
@@ -172,6 +174,15 @@ describe('check batch', () => {
       expect(scripts[gate]).toBeTruthy();
     }
     expect(scripts['check:batch']).toContain('check-batch.cjs');
+    expect(VERIFY_GATES).toEqual(
+      expect.arrayContaining([
+        'format:check',
+        'arch-check',
+        'check:app-errors',
+        'check:nginx-headers',
+        'check:folder-entries',
+      ]),
+    );
     // Compare tokens, not substrings: `bun run check:imports:dist` still in verify
     // would otherwise read as if the `check:imports` member ran twice.
     const verifyGates = [
@@ -180,6 +191,22 @@ describe('check batch', () => {
     expect(verifyGates).toContain('check:batch');
     for (const gate of BATCHED_GATES) {
       expect(verifyGates).not.toContain(gate);
+    }
+  });
+
+  it('prepares Prisma once before verify gates that do not regenerate it', () => {
+    const { scripts } = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(scripts['verify']!.match(/generate:prisma-client/g)).toHaveLength(1);
+    for (const gate of [
+      'knip:verify',
+      'lint:verify',
+      'type-check:verify',
+      'test:verify',
+      'build:verify',
+    ]) {
+      expect(scripts[gate]).not.toContain('generate-prisma-client');
     }
   });
 

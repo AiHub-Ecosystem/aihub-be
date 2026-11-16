@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Runs the gates that touch nothing but the repository side by side, so
- * `bun run verify` pays one process start where it used to pay eleven.
+ * `bun run verify` runs independent repository checks with bounded concurrency.
  *
  * Measured 2026-10-21 on a 12-core developer machine: each member costs
  * 1,1-2,6 s sequentially, and a gate whose real work is a repo-wide scan still
@@ -36,8 +36,7 @@ const MAX_CONCURRENCY = 3;
 
 /**
  * Gates with no output, artifact, or ordering dependency on each other.
- * `check:nginx-headers` is excluded deliberately: it needs nginx installed and
- * is not portable to every developer machine.
+ * Verification checks share the same bounded pool as the repository-only gates.
  */
 const BATCHED_GATES = [
   'check:imports',
@@ -60,6 +59,15 @@ const BATCHED_GATES = [
   'check:log-redaction',
   'test:log-redaction',
   'check:declaration-registry',
+];
+
+const VERIFY_GATES = [
+  'format:check',
+  'arch-check',
+  'check:app-errors',
+  'check:nginx-headers',
+  'check:folder-entries',
+  ...BATCHED_GATES,
 ];
 
 /** @param {{freeBytes?: number}} [options] @returns {number} */
@@ -102,7 +110,7 @@ function runGate(gate) {
 
 /** @param {RunBatchOptions} [options] @returns {Promise<BatchResult>} */
 async function runBatch({
-  gates = BATCHED_GATES,
+  gates = process.argv.includes('--verify') ? VERIFY_GATES : BATCHED_GATES,
   freeBytes = os.freemem(),
   run = runGate,
   log = (...args) => console.log(...args),
@@ -194,6 +202,7 @@ if (require.main === module) {
 
 module.exports = {
   BATCHED_GATES,
+  VERIFY_GATES,
   MAX_CONCURRENCY,
   BYTES_PER_CHILD,
   concurrencyFor,
