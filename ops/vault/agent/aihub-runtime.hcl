@@ -1,15 +1,16 @@
 # Deploy this Agent configuration outside the repository's application image.
 # Both files are provisioned through the deployment secret channel and must be
-# readable only by the Agent service account. AppRole requires both values;
-# an Agent restart can re-authenticate with the durable Secret ID.
+# readable only by the Agent service account. The AppRole requires a Secret ID:
+# another container on the shared host has the role ID and the NATed gateway
+# address but not this file. It has no TTL or use limit, so the Agent can
+# re-authenticate whenever it is restarted or its token is revoked.
 
 auto_auth {
   method "approle" {
     mount_path = "auth/approle"
     config = {
-      role_id_file_path = "/run/secrets/vault/role_id"
+      role_id_file_path   = "/run/secrets/vault/role_id"
       secret_id_file_path = "/run/secrets/vault/secret_id"
-      remove_secret_id_file_after_reading = false
     }
   }
 }

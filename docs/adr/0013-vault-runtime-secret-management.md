@@ -1,8 +1,9 @@
 # ADR-0013: Vault-backed runtime secret management
 
-- Status: Superseded by ADR-0170
+- Status: Accepted and implemented; amended by ADR-0170 and superseded by ADR-0171
 - Date: 2026-09-12; production cutover 2026-09-20
 - Related issue: [#30](https://github.com/AiHub-Ecosystem/aihub-be/issues/30)
+- Amended by: [ADR-0171](0171-vault-runtime-login-requires-a-secret-id.md) (AppRole auto-auth mechanism)
 
 ## Context
 
@@ -49,7 +50,11 @@ auditable source with least-privilege access and explicit rotation.
   in-memory-only secret channel.
 - A running process continues using its validated snapshot through a temporary
   Vault outage. A restart fails closed until Agent renders both files.
-- See ADR-0170 for the runtime AppRole authentication and recovery decision.
+- The one-use AppRole Secret ID must be rotated when the Agent container is
+  recreated after its initial login. (Obsolete: ADR-0171 retires this statement;
+  runtime auto-auth now uses a durable Secret ID alongside the role ID.)
+- AppRole auto-auth now uses a durable Secret ID alongside the role ID. ADR-0171
+  replaces the statement above.
 - Public contracts, API-key hashes, identity configuration, usage, idempotency,
   and Redis cache semantics are unchanged.
 

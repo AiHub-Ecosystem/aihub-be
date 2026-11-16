@@ -71,9 +71,9 @@ feature before claiming platform-level AIHUB pattern coverage.
    the old key and issue a replacement. For a Vault credential, follow the
    [Vault runtime-secret runbook](../../ops/vault/README.md) and the
    [deployment runbook](deploy-vps.md).
-   A compromised AppRole role ID requires rotating that AppRole, installing the
-   replacement role ID in the matching tier's host secret file, and restarting
-   its Agent. See [credential-specific rotation tracking in #365](https://github.com/AiHub-Ecosystem/aihub-be/issues/365)
+   A compromised AppRole role ID or Secret ID requires rotating that AppRole and
+   installing both replacement credential files in the matching tier before
+   restarting its Agent. See [credential-specific rotation tracking in #365](https://github.com/AiHub-Ecosystem/aihub-be/issues/365)
    for related procedures and known gaps.
 3. Remove the exposed value from the current tree. If it entered Git history,
    coordinate history cleanup with the repository owner. Deleting the line does

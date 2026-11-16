@@ -2,7 +2,8 @@ auto_auth {
   method "approle" {
     mount_path = "auth/approle"
     config = {
-      role_id_file_path = "/run/secrets/vault/role_id"
+      role_id_file_path   = "/run/secrets/vault/role_id"
+      secret_id_file_path = "/run/secrets/vault/secret_id"
     }
   }
 }

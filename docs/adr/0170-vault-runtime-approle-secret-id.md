@@ -1,6 +1,6 @@
 # ADR-0170: Require a Secret ID for runtime Vault AppRole logins
 
-- Status: Accepted and implemented
+- Status: Superseded by ADR-0171
 - Date: 2026-11-16
 - Supersedes: [ADR-0013](0013-vault-runtime-secret-management.md) authentication consequences
 - Related: [#431](https://github.com/AiHub-Ecosystem/aihub-be/issues/431), [#193](https://github.com/AiHub-Ecosystem/aihub-be/issues/193), [#414](https://github.com/AiHub-Ecosystem/aihub-be/issues/414)
