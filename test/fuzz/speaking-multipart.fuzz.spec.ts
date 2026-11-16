@@ -22,8 +22,17 @@ import { FastifySpeakingMultipartParser } from '@/modules/speaking/infrastructur
 import { assertWithReproducer } from './assert-with-reproducer';
 import seeds from './seeds.json';
 
-const fieldName = string({ maxLength: 24 }).map(
-  (name) => `caller-field-${name}`,
+const fieldName = oneof(
+  constantFrom(
+    'part',
+    'question_id',
+    'prompt_text',
+    'test_type',
+    'test_code',
+    'transcript',
+    'part_result_id',
+  ),
+  string({ maxLength: 24 }).map((name) => `caller-field-${name}`),
 );
 const fieldValue = string({ maxLength: 32 }).map(
   (value) => `caller-value-${value}`,
@@ -55,8 +64,25 @@ const validCases = tuple(
   string({ minLength: 1, maxLength: 32 }),
   constantFrom('wav', 'mp3', 'm4a', 'webm', 'ogg'),
   uint8Array({ minLength: 100, maxLength: 512 }),
+  integer({ min: 0, max: 31 }),
+  string({ maxLength: 32 }),
+  constantFrom('Practice', 'Full-test'),
+  string({ maxLength: 32 }),
+  string({ maxLength: 32 }),
+  string({ maxLength: 64 }),
 ).map(
-  ([part, questionId, extension, bytes]) =>
+  ([
+    part,
+    questionId,
+    extension,
+    bytes,
+    optionalMask,
+    promptText,
+    testType,
+    testCode,
+    transcript,
+    partResultId,
+  ]) =>
     [
       [
         {
@@ -71,6 +97,56 @@ const validCases = tuple(
           value: questionId,
           truncated: false as const,
         },
+        ...(optionalMask & 1
+          ? [
+              {
+                type: 'field' as const,
+                fieldname: 'prompt_text',
+                value: promptText,
+                truncated: false as const,
+              },
+            ]
+          : []),
+        ...(optionalMask & 2
+          ? [
+              {
+                type: 'field' as const,
+                fieldname: 'test_type',
+                value: testType,
+                truncated: false as const,
+              },
+            ]
+          : []),
+        ...(optionalMask & 4
+          ? [
+              {
+                type: 'field' as const,
+                fieldname: 'test_code',
+                value: testCode,
+                truncated: false as const,
+              },
+            ]
+          : []),
+        ...(optionalMask & 8
+          ? [
+              {
+                type: 'field' as const,
+                fieldname: 'transcript',
+                value: transcript,
+                truncated: false as const,
+              },
+            ]
+          : []),
+        ...(optionalMask & 16
+          ? [
+              {
+                type: 'field' as const,
+                fieldname: 'part_result_id',
+                value: partResultId,
+                truncated: false as const,
+              },
+            ]
+          : []),
       ],
       { filename: `audio.${extension}`, bytes: Array.from(bytes) },
     ] as const,
@@ -109,8 +185,13 @@ function toParts(
 }
 
 describe('Speaking multipart fuzz (#626)', () => {
+  let startedAt: number;
+
+  beforeAll(() => {
+    startedAt = performance.now();
+  });
+
   it('returns schema-valid parsed requests or a documented AppError', async () => {
-    const startedAt = performance.now();
     const property = asyncProperty(cases, async ([fields, file]) => {
       let outcome:
         | { accepted: true; valid: boolean }
@@ -149,8 +230,9 @@ describe('Speaking multipart fuzz (#626)', () => {
           code !== 'INVALID_REQUEST' ||
           fields.every(
             (part) =>
-              !message.includes(part.fieldname) &&
-              !message.includes(part.value),
+              (part.fieldname.length < 8 ||
+                !message.includes(part.fieldname)) &&
+              (part.value.length < 8 || !message.includes(part.value)),
           );
         outcome = {
           accepted: false,
@@ -176,11 +258,9 @@ describe('Speaking multipart fuzz (#626)', () => {
       seeds.speakingMultipart,
       'speaking-multipart.json',
     );
-    expect(performance.now() - startedAt).toBeLessThan(seeds.maxRuntimeMs);
   });
 
   it('validates v2 question multipart inputs and sanitizes rejections', async () => {
-    const startedAt = performance.now();
     const property = asyncProperty(cases, async ([fields, file]) => {
       let outcome: [boolean, boolean, boolean, boolean];
       try {
@@ -228,8 +308,9 @@ describe('Speaking multipart fuzz (#626)', () => {
           code !== 'INVALID_REQUEST' ||
             fields.every(
               (part) =>
-                !message.includes(part.fieldname) &&
-                !message.includes(part.value),
+                (part.fieldname.length < 8 ||
+                  !message.includes(part.fieldname)) &&
+                (part.value.length < 8 || !message.includes(part.value)),
             ),
           true,
         ];
@@ -243,6 +324,11 @@ describe('Speaking multipart fuzz (#626)', () => {
       seeds.speakingMultipart,
       'speaking-multipart-v2.json',
     );
-    expect(performance.now() - startedAt).toBeLessThan(seeds.maxRuntimeMs);
+  });
+
+  it('keeps the multipart fuzz lane within its time budget', () => {
+    expect(performance.now() - startedAt).toBeLessThan(
+      seeds.speakingMultipartBudgetMs,
+    );
   });
 });

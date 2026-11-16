@@ -45,7 +45,6 @@ async function discoverPublicSchemas(): Promise<void> {
           .filter(
             ([name, schema]) =>
               /(?:Request|Query)Schema$/.test(name) &&
-              name !== 'SpeakingGradeRequestSchema' &&
               typeof schema === 'object' &&
               schema !== null &&
               'type' in schema,
@@ -181,22 +180,11 @@ function checkBoundary(schema: TSchema, query: boolean, candidate: unknown) {
   } catch (error) {
     const message =
       error instanceof AppError ? (error.publicMessage ?? error.message) : '';
-    const callerStrings =
-      typeof candidate === 'object' && candidate !== null
-        ? Object.entries(candidate).flatMap(([key, value]) => [
-            key,
-            ...(typeof value === 'string' ? [value] : []),
-          ])
-        : typeof candidate === 'string'
-          ? [candidate]
-          : [];
     return {
       accepted: false,
       isAppError: error instanceof AppError,
       code: error instanceof AppError ? error.code : undefined,
-      noReflection: callerStrings
-        .filter((value) => value.length >= 8)
-        .every((value) => !message.includes(value)),
+      noReflection: message === 'Request failed validation',
     };
   }
 }
@@ -206,6 +194,9 @@ describe('public request schema fuzz (#626)', () => {
 
   it('discovers and fuzzes every exported request and query schema', async () => {
     const startedAt = performance.now();
+    expect(
+      seeds.contractsBudgetMs + seeds.speakingMultipartBudgetMs,
+    ).toBeLessThanOrEqual(seeds.laneBudgetMs);
     expect(publicSchemas.length).toBeGreaterThan(0);
     expect(new Set(publicSchemas.map(({ name }) => name)).size).toBe(
       publicSchemas.length,
@@ -236,6 +227,6 @@ describe('public request schema fuzz (#626)', () => {
         `contracts-${name}.json`,
       );
     }
-    expect(performance.now() - startedAt).toBeLessThan(seeds.maxRuntimeMs);
+    expect(performance.now() - startedAt).toBeLessThan(seeds.contractsBudgetMs);
   });
 });
