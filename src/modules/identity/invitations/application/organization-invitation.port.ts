@@ -11,7 +11,7 @@ export interface CreateOrganizationInvitationInput {
   readonly invitedBy: string;
   readonly tokenHash: string;
   readonly expiresAt: Date;
-  readonly emailDelivery: OrganizationInviteEmailDelivery;
+  readonly emailDelivery?: OrganizationInviteEmailDelivery;
   readonly now: Date;
 }
 

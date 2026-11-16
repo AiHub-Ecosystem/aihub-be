@@ -35,7 +35,7 @@ export interface InvitedOrganizationMember {
   readonly role: OrganizationMembershipRole;
   readonly expiresAt: Date;
   /** Acceptance-time only: the request is queued, not yet with the provider. */
-  readonly emailDeliveryStatus: 'queued';
+  readonly emailDeliveryStatus: 'queued' | 'suppressed';
 }
 
 export const ORGANIZATION_INVITATION_RATE_LIMITS = {
@@ -105,7 +105,7 @@ export class InviteOrganizationMember {
       'organization_invite_email',
       async () => {
         // Before the limits are spent: an outage is not the caller's fault.
-        await this.enforceRateLimits(input, email);
+        const emailAllowed = await this.enforceRateLimits(input, email);
 
         const now = new Date();
         const issued = this.tokenIssuer.issue(now);
@@ -121,10 +121,9 @@ export class InviteOrganizationMember {
           // The request that carries the credential is committed with the
           // invitation, so a caller retrying after a delivery failure re-sends
           // nothing: a worker dispatches the row (ADR-0074).
-          emailDelivery: {
-            token: issued.raw,
-            createdAt: now,
-          },
+          ...(emailAllowed
+            ? { emailDelivery: { token: issued.raw, createdAt: now } }
+            : {}),
           now,
         });
 
@@ -155,7 +154,7 @@ export class InviteOrganizationMember {
           email,
           role: input.role,
           expiresAt: issued.expiresAt,
-          emailDeliveryStatus: 'queued',
+          emailDeliveryStatus: emailAllowed ? 'queued' : 'suppressed',
         };
       },
     );
@@ -191,14 +190,13 @@ export class InviteOrganizationMember {
   private async enforceRateLimits(
     input: InviteOrganizationMemberInput,
     email: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const requests = [
       { ...ORGANIZATION_INVITATION_RATE_LIMITS.user, key: input.userId },
       {
         ...ORGANIZATION_INVITATION_RATE_LIMITS.organization,
         key: input.organizationId,
       },
-      { ...ORGANIZATION_INVITATION_RATE_LIMITS.email, key: email },
     ];
 
     for (const request of requests) {
@@ -207,5 +205,20 @@ export class InviteOrganizationMember {
         throw rateLimited(decision.retryAfterMs);
       }
     }
+
+    const strictEmailLimit = await this.rateLimiter.consume({
+      ...ORGANIZATION_INVITATION_RATE_LIMITS.email,
+      key: JSON.stringify([input.organizationId, email]),
+    });
+    if (!strictEmailLimit.allowed) {
+      throw rateLimited(strictEmailLimit.retryAfterMs);
+    }
+
+    return (
+      await this.rateLimiter.consume({
+        ...ORGANIZATION_INVITATION_RATE_LIMITS.email,
+        key: email,
+      })
+    ).allowed;
   }
 }

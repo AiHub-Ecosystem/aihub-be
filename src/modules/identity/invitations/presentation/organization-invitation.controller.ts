@@ -87,7 +87,9 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     typeof email !== 'string' ||
     (role !== 'owner' && role !== 'admin' && role !== 'member') ||
     typeof expiresAt !== 'string' ||
-    (emailDeliveryStatus !== undefined && emailDeliveryStatus !== 'queued')
+    (emailDeliveryStatus !== undefined &&
+      emailDeliveryStatus !== 'queued' &&
+      emailDeliveryStatus !== 'suppressed')
   ) {
     throw internalError('stored invitation replay is invalid');
   }
@@ -103,7 +105,7 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     email,
     role,
     expiresAt: parsedExpiresAt,
-    emailDeliveryStatus: 'queued',
+    emailDeliveryStatus: emailDeliveryStatus ?? 'queued',
   };
 }
 

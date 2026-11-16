@@ -536,9 +536,9 @@ describe('Organization invitation HTTP flow', () => {
 
     // The committed credential is the one a worker will email: the same raw
     // token, never a re-mint, and never persisted in the clear.
-    expect(persisted.emailDelivery.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(persisted.emailDelivery.token).not.toBe(persisted.tokenHash);
-    expect(persisted.emailDelivery.createdAt).toBe(persisted.now);
+    expect(persisted.emailDelivery?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(persisted.emailDelivery?.token).not.toBe(persisted.tokenHash);
+    expect(persisted.emailDelivery?.createdAt).toBe(persisted.now);
     // The provider is not called in the request path.
     expect(emailSender.send.mock.calls).toHaveLength(0);
   });
@@ -1080,7 +1080,7 @@ describe('Organization invitation HTTP flow', () => {
       stderr.mockRestore();
     }
 
-    const rawToken = createInvitationCall().emailDelivery.token;
+    const rawToken = createInvitationCall().emailDelivery?.token;
     expect(rawToken).toBeDefined();
     expect(written.join('')).not.toContain(rawToken);
   });
