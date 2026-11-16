@@ -2473,11 +2473,23 @@ secrets:
 | `GHCR_PULL_TOKEN` | `read:packages`, `write:packages` | `production` environment secret; the CI publisher job only        |
 
 CD logs the host out of GHCR when the deploy ends, and a failed logout fails the
-run. After the first deploy with this change, check the host once by running
-`sudo -n docker logout ghcr.io`: it must answer `Not logged in to ghcr.io`.
-Anything else means a login was left behind, so investigate before the next
-deploy. The token holds only `read:packages`, so a credential that does persist
-cannot push an image.
+run. After the first deploy with this change, check the host once. Do not use
+the `docker logout` message as evidence: Docker 29 answers
+`Removing login credentials for <registry>` even for a registry it never held.
+Read the credential store instead. Root's `/root/.docker/config.json` must be
+absent or hold no `ghcr.io` entry under `auths`. An operator with Docker access
+and no root shell mounts it read-only and counts matches without printing the
+file:
+
+```sh
+sudo -n docker run --rm --pull=never --network=none --entrypoint sh \
+  -v /root/.docker:/d:ro "$(sudo -n docker ps --filter name=app --format '{{.Image}}' | head -1)" \
+  -c 'if [ -f /d/config.json ]; then grep -c ghcr.io /d/config.json || true; else echo no-config; fi'
+```
+
+`no-config` or a count of `0` means no login was left behind. Any other count
+means one was, so investigate before the next deploy. The token holds only
+`read:packages`, so a credential that does persist cannot push an image.
 
 Restrict the `production` environment's deployment branches to `main`. The CI
 image boot job runs for pull requests without entering this environment; only
