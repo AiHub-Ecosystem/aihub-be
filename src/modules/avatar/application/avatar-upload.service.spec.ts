@@ -1,5 +1,8 @@
+import { randomBytes } from 'node:crypto';
+
 import sharp from 'sharp';
 
+import { serializeRasterImageProcessing } from '@/common/image/raster-image';
 import { InMemoryAvatarRepository } from '@/modules/avatar/testing/in-memory-avatar.repository';
 import type {
   AvatarStoragePort,
@@ -57,6 +60,7 @@ class FakeStorage implements AvatarStoragePort {
   readonly signals: (AbortSignal | undefined)[] = [];
   failFinalCheck = false;
   failStagingDelete = false;
+  readStarted: (() => void) | undefined;
   copyGate:
     | { readonly started: () => void; readonly wait: Promise<void> }
     | undefined;
@@ -86,6 +90,7 @@ class FakeStorage implements AvatarStoragePort {
   ): Promise<StagedAvatarObject | undefined> {
     this.calls.push('read-staging');
     this.signals.push(signal);
+    this.readStarted?.();
     const object = this.staging.get(objectKey);
     const bytes = this.stagingBytes.get(objectKey);
     return object === undefined || bytes === undefined
@@ -245,6 +250,74 @@ describe('AvatarUploadService private staging', () => {
     expect(metadata.icc).toBeUndefined();
     expect(metadata.xmp).toBeUndefined();
     expect(published!.byteLength).not.toBe(withMetadata.byteLength);
+  });
+
+  it('rejects a re-encoded image that grows beyond the size limit', async () => {
+    const { service, storage, objectKey } = await setup();
+    const raw = randomBytes(1300 * 1300);
+    const compressed = await sharp(raw, {
+      raw: { width: 1300, height: 1300, channels: 1 },
+    })
+      .png({ palette: true, colours: 256, compressionLevel: 9 })
+      .toBuffer();
+    expect(compressed.byteLength).toBeLessThanOrEqual(2 * 1024 * 1024);
+    const reencoded = await sharp(compressed).png().toBuffer();
+    expect(reencoded.byteLength).toBeGreaterThan(2 * 1024 * 1024);
+    storage.staging.set(objectKey, {
+      contentType: 'image/png',
+      byteSize: compressed.byteLength,
+      lastModified: NOW,
+    });
+    storage.stagingBytes.set(objectKey, compressed);
+
+    await expect(
+      service.completeUpload({
+        userId: USER,
+        assetId: ASSET,
+        requestId: REQUEST_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PAYLOAD_TOO_LARGE',
+      message:
+        'Avatar image is too large after processing; use a smaller image',
+    });
+  });
+
+  it('skips queued decoding when the completion is aborted', async () => {
+    const { service, storage } = await setup();
+    let release = (): void => undefined;
+    let started = (): void => undefined;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const blocker = serializeRasterImageProcessing(async () => {
+      started();
+      await gate;
+    });
+    await ready;
+    let stagingRead = (): void => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      stagingRead = resolve;
+    });
+    storage.readStarted = stagingRead;
+    const controller = new AbortController();
+    const completion = service.completeUpload({
+      userId: USER,
+      assetId: ASSET,
+      requestId: REQUEST_ID,
+      signal: controller.signal,
+    });
+    await readStarted;
+    controller.abort();
+    release();
+    await expect(completion).rejects.toMatchObject({
+      code: 'AVATAR_STORAGE_UNAVAILABLE',
+    });
+    await blocker;
+    expect(storage.calls).not.toContain('copy');
   });
 
   it('checks staging before copy and checks the copied final object before recording', async () => {

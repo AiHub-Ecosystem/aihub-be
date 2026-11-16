@@ -21,6 +21,7 @@ import { createTestPool, resetIdentityTables } from '../shared/database';
 let pool: Pool;
 let client: ReturnType<typeof createAvatarQueryClient>;
 let repository: PostgresAvatarRepository;
+let auditSequence = 0;
 
 class DeferredStorage implements AvatarStoragePort {
   readonly staging = new Map<string, StoredAvatarObject>();
@@ -137,11 +138,14 @@ function audit(
     action,
     assetId,
     requestId: 'req_01J00000000000000000000000',
-    occurredAt: new Date('2026-10-02T10:00:01.000Z'),
+    occurredAt: new Date(
+      new Date('2026-10-02T10:00:01.000Z').getTime() + auditSequence++,
+    ),
   };
 }
 
 beforeEach(async () => {
+  auditSequence = 0;
   await resetIdentityTables(pool);
   userId = await seedAccount();
 });

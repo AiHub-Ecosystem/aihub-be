@@ -45,6 +45,12 @@ export interface PublishedAvatar {
   readonly url: string;
 }
 
+interface SanitizedAvatarUpload {
+  readonly objectKey: string;
+  readonly contentType: AvatarContentType;
+  readonly bytes: Uint8Array;
+}
+
 export interface CompletedAvatar extends PublishedAvatar {
   /** `false` when an earlier completion of the same asset recorded it. */
   readonly created: boolean;
@@ -166,8 +172,21 @@ export class AvatarUploadService {
         ? deadline
         : AbortSignal.any([input.signal, deadline]);
     const completion = { ...input, signal, deadlineAt };
+    if (!isAvatarAssetId(input.assetId)) {
+      throw invalidRequest();
+    }
+    const current = await this.avatars.findByUser(input.userId);
+    if (current?.assetId === input.assetId) {
+      await this.avatars.consumeUploadGrant(input.userId, input.assetId);
+      return { ...this.published(current), created: false };
+    }
+    const sanitized = await this.sanitizeUpload(
+      input.userId,
+      input.assetId,
+      signal,
+    );
     const completed = await this.avatars.withUserLock(input.userId, (avatars) =>
-      this.recordUpload(completion, avatars),
+      this.recordUpload(completion, sanitized, avatars),
     );
     // A consumed grant stops holding a slot whether this request created the
     // record or found it already recorded by a concurrent completion.
@@ -186,18 +205,16 @@ export class AvatarUploadService {
       readonly signal: AbortSignal;
       readonly deadlineAt: number;
     },
+    sanitized: SanitizedAvatarUpload,
     avatars: AvatarRepositoryPort,
   ): Promise<{ readonly avatar: Avatar; readonly created: boolean }> {
-    if (!isAvatarAssetId(input.assetId)) {
-      throw invalidRequest();
-    }
-
     const previous = await avatars.findByUser(input.userId);
     if (previous?.assetId === input.assetId) {
       return { avatar: previous, created: false };
     }
 
-    const avatar = await this.verifiedUpload(
+    const avatar = await this.publishUpload(
+      sanitized,
       input.userId,
       input.assetId,
       input.signal,
@@ -289,16 +306,12 @@ export class AvatarUploadService {
     };
   }
 
-  /**
-   * Checks private staging, re-encodes the bytes it actually read so no camera
-   * metadata is published, then checks the key it wrote (#429).
-   */
-  private async verifiedUpload(
+  /** Checks and re-encodes staging before opening the Avatar lock transaction. */
+  private async sanitizeUpload(
     userId: string,
     assetId: string,
     signal: AbortSignal,
-    deadlineAt: number,
-  ): Promise<Avatar> {
+  ): Promise<SanitizedAvatarUpload> {
     const objectKey = avatarObjectKey(userId, assetId);
     const stored = await this.storage.describeStagingObject(objectKey, signal);
     if (stored === undefined) {
@@ -339,55 +352,71 @@ export class AvatarUploadService {
       throw invalidRequest();
     }
 
-    // Decoding is the expensive step and cannot be aborted, so it is serialized
-    // and bounded by the pixel ceiling; the abort check below covers the write.
-    const sanitized = await serializeRasterImageProcessing(() =>
-      sanitizeRasterImage({
+    // Decoding cannot be aborted; queued work must re-check its deadline.
+    const sanitized = await serializeRasterImageProcessing(() => {
+      if (signal.aborted) throw avatarStorageUnavailable();
+      return sanitizeRasterImage({
         contentType: stagingObject.contentType,
         bytes: staged.bytes,
         maxBytes: AVATAR_MAX_BYTES,
         maxPixels: AVATAR_MAX_PIXELS,
-      }),
-    );
+      });
+    });
     if (sanitized?.kind !== 'sanitized') {
       await this.discardStaging(objectKey, signal);
       if (sanitized?.kind === 'too_large') {
         throw payloadTooLarge(
           'PAYLOAD_TOO_LARGE',
-          'Avatar image is larger than 2 MiB',
+          'Avatar image is too large after processing; use a smaller image',
         );
       }
       throw invalidRequest();
     }
 
-    if (
-      signal.aborted ||
-      deadlineAt - performance.now() < AVATAR_COMPLETION_COPY_MIN_REMAINING_MS
-    ) {
-      throw avatarStorageUnavailable();
-    }
-    await this.storage.putFinalObject({
+    return {
       objectKey,
       contentType: stagingObject.contentType,
       bytes: sanitized.bytes,
+    };
+  }
+
+  private async publishUpload(
+    sanitized: SanitizedAvatarUpload,
+    userId: string,
+    assetId: string,
+    signal: AbortSignal,
+    deadlineAt: number,
+  ): Promise<Avatar> {
+    if (
+      signal.aborted ||
+      deadlineAt - performance.now() < AVATAR_COMPLETION_COPY_MIN_REMAINING_MS
+    )
+      throw avatarStorageUnavailable();
+    await this.storage.putFinalObject({
+      objectKey: sanitized.objectKey,
+      contentType: sanitized.contentType,
+      bytes: sanitized.bytes,
       signal,
     });
-    const published = await this.storage.describeFinalObject(objectKey, signal);
+    const published = await this.storage.describeFinalObject(
+      sanitized.objectKey,
+      signal,
+    );
     if (published === undefined) {
-      await this.discard(objectKey, signal);
-      await this.discardStaging(objectKey, signal);
+      await this.discard(sanitized.objectKey, signal);
+      await this.discardStaging(sanitized.objectKey, signal);
       throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
     }
     const finalObject = await this.validateStored(
       published,
-      objectKey,
+      sanitized.objectKey,
       signal,
       false,
     );
     return {
       assetId,
       userId,
-      objectKey,
+      objectKey: sanitized.objectKey,
       contentType: finalObject.contentType,
       byteSize: finalObject.byteSize,
       acceptedAt: this.now(),
