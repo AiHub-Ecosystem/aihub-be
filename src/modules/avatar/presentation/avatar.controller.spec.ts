@@ -735,25 +735,17 @@ describe('Avatar upload HTTP flow', () => {
       ]);
     });
 
-    it('changes nothing when the previous object cannot be deleted, and a retry finishes', async () => {
+    it('commits replacement when previous-object cleanup fails', async () => {
       const previous = await currentAvatar();
       const next = await uploadedAsset();
       storage.deleteFails = true;
 
-      const failed = await complete(next.assetId);
+      const response = await complete(next.assetId);
 
-      expect(failed.statusCode).toBe(503);
-      expectErrorCode(failed, 'AVATAR_STORAGE_UNAVAILABLE');
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
+      expect(response.statusCode).toBe(201);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
       expect(storage.objects.has(previous.objectKey)).toBe(true);
       expect(storage.objects.has(next.objectKey)).toBe(true);
-
-      storage.deleteFails = false;
-      const retried = await complete(next.assetId);
-
-      expect(retried.statusCode).toBe(201);
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
-      expect(storage.objects.has(previous.objectKey)).toBe(false);
     });
 
     it('answers not found for an asset that was already replaced', async () => {
@@ -777,6 +769,8 @@ describe('Avatar upload HTTP flow', () => {
           storage.objects.set(winner.objectKey, winnerObject);
         const current = repository.avatars.get(USER_ID);
         if (current !== undefined) {
+          storage.objects.delete(current.objectKey);
+          storage.finalBytes.delete(current.objectKey);
           repository.avatars.set(USER_ID, {
             ...current,
             assetId: winner.assetId,
@@ -800,6 +794,8 @@ describe('Avatar upload HTTP flow', () => {
       repository.beforeNextChange = () => {
         const current = repository.avatars.get(USER_ID);
         if (current !== undefined) {
+          storage.objects.delete(current.objectKey);
+          storage.finalBytes.delete(current.objectKey);
           repository.avatars.set(USER_ID, {
             ...current,
             assetId: next.assetId,
@@ -843,8 +839,8 @@ describe('Avatar upload HTTP flow', () => {
   });
 
   describe('removing an Avatar', () => {
-    it('keeps the Avatar record when the request deadline interrupts object deletion', async () => {
-      const { assetId } = await uploadedAsset();
+    it('removes the record when the request deadline interrupts object cleanup', async () => {
+      const { assetId, objectKey } = await uploadedAsset();
       await complete(assetId);
       const timeout = jest
         .spyOn(AbortSignal, 'timeout')
@@ -863,8 +859,9 @@ describe('Avatar upload HTTP flow', () => {
           url: '/v1/me/avatar',
           headers: { authorization: 'Bearer valid.token.value' },
         });
-        expect(response.statusCode).toBe(503);
-        expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+        expect(response.statusCode).toBe(204);
+        expect(repository.avatars.has(USER_ID)).toBe(false);
+        expect(storage.objects.has(objectKey)).toBe(true);
       } finally {
         timeout.mockRestore();
         remove.mockRestore();
@@ -922,21 +919,16 @@ describe('Avatar upload HTTP flow', () => {
       ]);
     });
 
-    it('keeps the Avatar when the object cannot be deleted, and a retry finishes', async () => {
+    it('removes the record when object cleanup fails', async () => {
       const { assetId, objectKey } = await uploadedAsset();
       await complete(assetId);
       storage.deleteFails = true;
 
-      const failed = await remove();
+      const response = await remove();
 
-      expect(failed.statusCode).toBe(503);
-      expectErrorCode(failed, 'AVATAR_STORAGE_UNAVAILABLE');
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+      expect(response.statusCode).toBe(204);
+      expect(repository.avatars.has(USER_ID)).toBe(false);
       expect(storage.objects.has(objectKey)).toBe(true);
-
-      storage.deleteFails = false;
-      expect((await remove()).statusCode).toBe(204);
-      expect(repository.avatars.size).toBe(0);
     });
 
     it('answers AVATAR_CHANGED and keeps an Avatar swapped in meanwhile', async () => {

@@ -185,6 +185,24 @@ function harness(
   };
 }
 
+function expectExpiredAssetCleanup(
+  subject: ReturnType<typeof harness>,
+  includeJobId = false,
+) {
+  expect(subject.repository.fail).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ...(includeJobId ? { jobId: job.jobId } : {}),
+      error: expect.objectContaining({
+        code: 'AUDIO_ASSET_EXPIRED',
+      }) as unknown as SpeakingGradingJobError,
+    }),
+  );
+  expect(subject.sandboxRelease).toHaveBeenCalledWith(job.jobId);
+  expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
+  expect(subject.execute).not.toHaveBeenCalled();
+  expect(subject.release).toHaveBeenCalledTimes(1);
+}
+
 describe('ProcessSpeakingGradingJob', () => {
   it('skips a duplicate delivery when the conditional claim loses', async () => {
     const subject = harness({ claimed: null });
@@ -233,18 +251,8 @@ describe('ProcessSpeakingGradingJob', () => {
       environment: job.environment,
     });
 
-    expect(subject.repository.fail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jobId: job.jobId,
-        error: expect.objectContaining({
-          code: 'AUDIO_ASSET_EXPIRED',
-        }) as unknown as SpeakingGradingJobError,
-      }),
-    );
-    expect(subject.sandboxRelease).toHaveBeenCalledWith(job.jobId);
-    expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
-    expect(subject.execute).not.toHaveBeenCalled();
-    expect(subject.release).toHaveBeenCalledTimes(1);
+    expectExpiredAssetCleanup(subject, true);
+    expect(subject.repository.fail).toHaveBeenCalled();
   });
 
   it('maps a missing object to AUDIO_ASSET_EXPIRED before dispatch', async () => {
@@ -261,17 +269,8 @@ describe('ProcessSpeakingGradingJob', () => {
       environment: job.environment,
     });
 
-    expect(subject.repository.fail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.objectContaining({
-          code: 'AUDIO_ASSET_EXPIRED',
-        }) as unknown as SpeakingGradingJobError,
-      }),
-    );
-    expect(subject.sandboxRelease).toHaveBeenCalledWith(job.jobId);
-    expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
-    expect(subject.execute).not.toHaveBeenCalled();
-    expect(subject.release).toHaveBeenCalledTimes(1);
+    expectExpiredAssetCleanup(subject);
+    expect(subject.repository.fail).toHaveBeenCalled();
   });
 
   it('stores the captured provider result, records ownership and finalizes metering once', async () => {

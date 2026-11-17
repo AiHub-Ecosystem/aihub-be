@@ -1,7 +1,12 @@
-import { serializeRasterImageProcessing } from '@/common/image/raster-image';
+import {
+  reserveRasterImageProcessing,
+  serializeRasterImageProcessing,
+} from '@/common/image/raster-image';
 
 export function serializeWritingChartImageProcessing<T>(
+  admission: ReturnType<typeof reserveRasterImageProcessing>,
+  signal: AbortSignal,
   operation: () => Promise<T>,
 ): Promise<T> {
-  return serializeRasterImageProcessing(operation);
+  return serializeRasterImageProcessing(admission, signal, operation);
 }

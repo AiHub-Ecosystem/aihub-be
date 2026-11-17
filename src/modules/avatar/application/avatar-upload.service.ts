@@ -3,14 +3,12 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import { payloadTooLarge, uploadNotFound } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
-  sanitizeRasterImage,
-  serializeRasterImageProcessing,
+  RasterImageProcessingAbortedError,
+  RasterImageProcessingCapacityError,
 } from '@/common/image/raster-image';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import {
-  AVATAR_COMPLETION_WINDOW_MS,
   AVATAR_MAX_BYTES,
-  AVATAR_MAX_PIXELS,
   type Avatar,
   type AvatarContentType,
   avatarObjectKey,
@@ -23,6 +21,10 @@ import type {
   AvatarRepositoryPort,
 } from './avatar-repository.port';
 import type { AvatarStoragePort } from './avatar-storage.port';
+import {
+  AvatarUploadImageSanitizer,
+  type SanitizedAvatarUpload,
+} from './avatar-upload-image-sanitizer';
 import {
   AVATAR_COMPLETION_COPY_MIN_REMAINING_MS,
   AVATAR_COMPLETION_DEADLINE_MS,
@@ -45,10 +47,13 @@ export interface PublishedAvatar {
   readonly url: string;
 }
 
-interface SanitizedAvatarUpload {
-  readonly objectKey: string;
-  readonly contentType: AvatarContentType;
-  readonly bytes: Uint8Array;
+function avatarRasterCapacityReached(): AppError {
+  return new AppError({
+    code: 'RATE_LIMITED',
+    message: 'Avatar image processing is busy; retry later',
+    retryable: true,
+    retryAfterMs: 1000,
+  });
 }
 
 export interface CompletedAvatar extends PublishedAvatar {
@@ -75,19 +80,26 @@ function avatarStorageUnavailable(): AppError {
 /**
  * Sets, replaces, and removes the one Avatar an account holds (ADR-0068).
  *
- * No upload intent is stored: completion rebuilds the key from the
- * authenticated account. A previous object is always deleted before the
- * record stops naming it, so a failed delete changes nothing and a retry
- * finishes the job; every record change is conditional on the Avatar this
- * request read, so a concurrent change is reported rather than overwritten.
+ * Completion rebuilds the key from the authenticated account. Changes are
+ * conditional, and previous objects are cleaned only after the new record commits.
  */
 export class AvatarUploadService {
+  private readonly imageSanitizer: AvatarUploadImageSanitizer;
+
   constructor(
     private readonly avatars: AvatarRepositoryPort,
     private readonly storage: AvatarStoragePort,
     private readonly newAssetId: IdMinter,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.imageSanitizer = new AvatarUploadImageSanitizer(
+      storage,
+      (stored, objectKey, signal, staging) =>
+        this.validateStored(stored, objectKey, signal, staging),
+      (objectKey, signal) => this.discardStaging(objectKey, signal),
+      now,
+    );
+  }
 
   async requestUpload(input: {
     readonly userId: string;
@@ -182,12 +194,18 @@ export class AvatarUploadService {
     }
     let sanitized: SanitizedAvatarUpload;
     try {
-      sanitized = await this.sanitizeUpload(
+      sanitized = await this.imageSanitizer.sanitizeOnce(
         input.userId,
         input.assetId,
         signal,
       );
     } catch (error) {
+      if (error instanceof RasterImageProcessingCapacityError) {
+        throw avatarRasterCapacityReached();
+      }
+      if (error instanceof RasterImageProcessingAbortedError) {
+        throw avatarStorageUnavailable();
+      }
       if (!(error instanceof AppError) || error.code !== 'NOT_FOUND') {
         throw error;
       }
@@ -196,16 +214,34 @@ export class AvatarUploadService {
       await this.avatars.consumeUploadGrant(input.userId, input.assetId);
       return { ...this.published(recorded), created: false };
     }
-    const completed = await this.avatars.withUserLock(input.userId, (avatars) =>
-      this.recordUpload(completion, sanitized, avatars),
-    );
-    // A consumed grant stops holding a slot whether this request created the
-    // record or found it already recorded by a concurrent completion.
-    await this.avatars.consumeUploadGrant(input.userId, input.assetId);
-    if (completed.created) {
-      await this.discardStaging(completed.avatar.objectKey, signal);
+    try {
+      const completed = await this.avatars.withUserLock(
+        input.userId,
+        (avatars) => this.recordUpload(completion, sanitized, avatars),
+      );
+      // A consumed grant stops holding a slot whether this request created the
+      // record or found it already recorded by a concurrent completion.
+      await this.avatars.consumeUploadGrant(input.userId, input.assetId);
+      if (completed.cleanupObjectKey !== undefined) {
+        await this.discardIfUnrecorded(
+          input.userId,
+          completed.cleanupObjectKey,
+        );
+      }
+      if (completed.changed) {
+        await this.discardStaging(sanitized.objectKey, signal);
+        throw avatarChanged();
+      }
+      if (completed.created) {
+        await this.discardStaging(completed.avatar.objectKey, signal);
+      }
+      return {
+        ...this.published(completed.avatar),
+        created: completed.created,
+      };
+    } finally {
+      sanitized.release();
     }
-    return { ...this.published(completed.avatar), created: completed.created };
   }
 
   private async recordUpload(
@@ -218,7 +254,12 @@ export class AvatarUploadService {
     },
     sanitized: SanitizedAvatarUpload,
     avatars: AvatarRepositoryPort,
-  ): Promise<{ readonly avatar: Avatar; readonly created: boolean }> {
+  ): Promise<{
+    readonly avatar: Avatar;
+    readonly created: boolean;
+    readonly cleanupObjectKey?: string;
+    readonly changed?: boolean;
+  }> {
     const previous = await avatars.findByUser(input.userId);
     if (previous?.assetId === input.assetId) {
       return { avatar: previous, created: false };
@@ -238,16 +279,16 @@ export class AvatarUploadService {
         this.audit('avatar.set', avatar, input.requestId),
       );
       if (result.kind === 'exists') {
-        await this.discard(avatar.objectKey, input.signal);
-        await this.discardStaging(avatar.objectKey, input.signal);
-        throw avatarChanged();
+        return {
+          avatar: (await avatars.findByUser(input.userId)) ?? avatar,
+          created: false,
+          cleanupObjectKey: avatar.objectKey,
+          changed: true,
+        };
       }
       return { avatar: result.avatar, created: result.kind === 'recorded' };
     }
 
-    // Deleted before the record stops naming it: if this fails, nothing has
-    // changed, and retrying the completion retries the delete.
-    await this.storage.deleteObject(previous.objectKey, input.signal);
     if (
       await avatars.replace(
         previous.assetId,
@@ -255,7 +296,11 @@ export class AvatarUploadService {
         this.audit('avatar.replaced', avatar, input.requestId),
       )
     ) {
-      return { avatar, created: true };
+      return {
+        avatar,
+        created: true,
+        cleanupObjectKey: previous.objectKey,
+      };
     }
 
     // Lost to another change. A concurrent completion of this same asset is a
@@ -265,9 +310,12 @@ export class AvatarUploadService {
       await this.discardStaging(avatar.objectKey, input.signal);
       return { avatar: current, created: false };
     }
-    await this.discard(avatar.objectKey, input.signal);
-    await this.discardStaging(avatar.objectKey, input.signal);
-    throw avatarChanged();
+    return {
+      avatar: current ?? previous,
+      created: false,
+      cleanupObjectKey: avatar.objectKey,
+      changed: true,
+    };
   }
 
   async removeAvatar(input: {
@@ -275,28 +323,23 @@ export class AvatarUploadService {
     readonly requestId: string;
     readonly signal?: AbortSignal;
   }): Promise<void> {
-    const { userId, signal } = input;
-    const current = await this.avatars.findByUser(userId);
-    if (current === undefined) {
-      return;
-    }
-
-    // The object goes first: a failed delete leaves the Avatar as it was.
-    await this.storage.deleteObject(current.objectKey, signal);
-    if (
-      await this.avatars.remove(
+    const { userId } = input;
+    const removed = await this.avatars.withUserLock(userId, async (avatars) => {
+      const current = await avatars.findByUser(userId);
+      if (current === undefined) return undefined;
+      const didRemove = await avatars.remove(
         userId,
         current.assetId,
         this.audit('avatar.removed', current, input.requestId),
-      )
-    ) {
-      return;
-    }
-
-    // Another request changed it. Gone is what was asked for; a different
-    // Avatar swapped in meanwhile is not this request's to delete.
-    if ((await this.avatars.findByUser(userId)) !== undefined) {
-      throw avatarChanged();
+      );
+      if (didRemove || (await avatars.findByUser(userId)) === undefined) {
+        return current;
+      }
+      return null;
+    });
+    if (removed === null) throw avatarChanged();
+    if (removed !== undefined) {
+      await this.discardIfUnrecorded(userId, removed.objectKey, input.signal);
     }
   }
 
@@ -318,79 +361,6 @@ export class AvatarUploadService {
   }
 
   /** Checks and re-encodes staging before opening the Avatar lock transaction. */
-  private async sanitizeUpload(
-    userId: string,
-    assetId: string,
-    signal: AbortSignal,
-  ): Promise<SanitizedAvatarUpload> {
-    const objectKey = avatarObjectKey(userId, assetId);
-    const stored = await this.storage.describeStagingObject(objectKey, signal);
-    if (stored === undefined) {
-      throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
-    }
-
-    // Older than the window, or of an age storage will not state: the sweep may
-    // be about to delete it, and the gap between the two windows is what keeps
-    // a completion and a sweep from ever acting on the same object.
-    const age =
-      stored.lastModified === undefined
-        ? undefined
-        : this.now().getTime() - stored.lastModified.getTime();
-    if (age === undefined || age > AVATAR_COMPLETION_WINDOW_MS) {
-      await this.discardStaging(objectKey, signal);
-      throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
-    }
-
-    // The private bucket prevents a writable oversized object from being served
-    // publicly before completion.
-    const stagingObject = await this.validateStored(
-      stored,
-      objectKey,
-      signal,
-      true,
-    );
-    const staged = await this.storage.readStagingObject(
-      objectKey,
-      stored.etag,
-      signal,
-    );
-    if (staged === undefined) {
-      await this.discardStaging(objectKey, signal);
-      throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
-    }
-    if (staged.contentType !== stagingObject.contentType) {
-      await this.discardStaging(objectKey, signal);
-      throw invalidRequest();
-    }
-
-    // Decoding cannot be aborted; queued work must re-check its deadline.
-    const sanitized = await serializeRasterImageProcessing(() => {
-      if (signal.aborted) throw avatarStorageUnavailable();
-      return sanitizeRasterImage({
-        contentType: stagingObject.contentType,
-        bytes: staged.bytes,
-        maxBytes: AVATAR_MAX_BYTES,
-        maxPixels: AVATAR_MAX_PIXELS,
-      });
-    });
-    if (sanitized?.kind !== 'sanitized') {
-      await this.discardStaging(objectKey, signal);
-      if (sanitized?.kind === 'too_large') {
-        throw payloadTooLarge(
-          'PAYLOAD_TOO_LARGE',
-          'Avatar image is too large after processing; use a smaller image',
-        );
-      }
-      throw invalidRequest();
-    }
-
-    return {
-      objectKey,
-      contentType: stagingObject.contentType,
-      bytes: sanitized.bytes,
-    };
-  }
-
   private async publishUpload(
     sanitized: SanitizedAvatarUpload,
     userId: string,
@@ -479,6 +449,18 @@ export class AvatarUploadService {
     signal?: AbortSignal,
   ): Promise<void> {
     await this.storage.deleteObject(objectKey, signal).catch(() => undefined);
+  }
+
+  private async discardIfUnrecorded(
+    userId: string,
+    objectKey: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.avatars.withUserLock(userId, async (avatars) => {
+      if ((await avatars.recordedObjectKeys([objectKey])).has(objectKey))
+        return;
+      await this.discard(objectKey, signal);
+    });
   }
 
   private async discardStaging(

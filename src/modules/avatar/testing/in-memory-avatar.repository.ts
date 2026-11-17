@@ -23,12 +23,16 @@ export class InMemoryAvatarRepository implements AvatarRepositoryPort {
     })[]
   >();
   beforeNextChange: (() => void) | undefined;
+  beforeNextLock: (() => Promise<void>) | undefined;
   private readonly locks = new Map<string, Promise<void>>();
 
   async withUserLock<T>(
     userId: string,
     operation: (repository: AvatarRepositoryPort) => Promise<T>,
   ): Promise<T> {
+    const beforeNextLock = this.beforeNextLock;
+    this.beforeNextLock = undefined;
+    await beforeNextLock?.();
     const previous = this.locks.get(userId) ?? Promise.resolve();
     let release = (): void => undefined;
     const current = new Promise<void>((resolve) => {

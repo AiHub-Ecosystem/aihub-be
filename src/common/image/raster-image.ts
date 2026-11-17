@@ -16,18 +16,108 @@ const FORMAT_BY_CONTENT_TYPE = {
 
 sharp.concurrency(1);
 
-let processingTail: Promise<void> = Promise.resolve();
+export type RasterImageProcessingLane = 'avatar' | 'writing-chart';
 
-/** Decoding is expensive, so only one image is processed at a time. */
+export class RasterImageProcessingCapacityError extends Error {}
+
+export class RasterImageProcessingAbortedError extends Error {}
+
+const laneLimits: Record<RasterImageProcessingLane, number> = {
+  avatar: 2,
+  'writing-chart': 4,
+};
+const laneAdmissions: Record<RasterImageProcessingLane, number> = {
+  avatar: 0,
+  'writing-chart': 0,
+};
+type Admission = {
+  readonly lane: RasterImageProcessingLane;
+  isActive(): boolean;
+  release(): void;
+};
+type Job = {
+  readonly signal: AbortSignal;
+  readonly run: () => Promise<void>;
+  readonly abort: () => void;
+};
+const processingQueue: Job[] = [];
+let processing = false;
+
+/** Bounds retained image requests before callers read their bytes. */
+export function reserveRasterImageProcessing(
+  lane: RasterImageProcessingLane,
+): Admission {
+  if (laneAdmissions[lane] >= laneLimits[lane]) {
+    throw new RasterImageProcessingCapacityError(
+      'Raster image capacity reached',
+    );
+  }
+  laneAdmissions[lane] += 1;
+  let released = false;
+  return {
+    lane,
+    isActive: () => !released,
+    release() {
+      if (released) return;
+      released = true;
+      laneAdmissions[lane] -= 1;
+    },
+  };
+}
+
+/** Decoding is process-wide serialized; an aborted queued job is removed promptly. */
 export function serializeRasterImageProcessing<T>(
+  admission: Admission,
+  signal: AbortSignal,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const result = processingTail.then(operation, operation);
-  processingTail = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
+  if (!admission.isActive()) {
+    return Promise.reject(
+      new RasterImageProcessingCapacityError('Admission released'),
+    );
+  }
+  if (signal.aborted) {
+    return Promise.reject(new RasterImageProcessingAbortedError());
+  }
+  return new Promise<T>((resolve, reject) => {
+    const job: Job = {
+      signal,
+      run: async () => {
+        try {
+          if (signal.aborted) throw new RasterImageProcessingAbortedError();
+          resolve(await operation());
+        } catch (error) {
+          reject(error);
+        }
+      },
+      abort: () => {
+        const index = processingQueue.indexOf(job);
+        if (index < 0) return;
+        processingQueue.splice(index, 1);
+        signal.removeEventListener('abort', job.abort);
+        reject(new RasterImageProcessingAbortedError());
+      },
+    };
+    processingQueue.push(job);
+    signal.addEventListener('abort', job.abort, { once: true });
+    void processNextRasterImage();
+  });
+}
+
+async function processNextRasterImage(): Promise<void> {
+  if (processing) return;
+  const job = processingQueue.shift();
+  if (job === undefined) return;
+  processing = true;
+  job.signal.removeEventListener('abort', job.abort);
+  try {
+    await job.run();
+  } catch {
+    // `run` settles the caller's promise; keep the shared queue moving.
+  } finally {
+    processing = false;
+    void processNextRasterImage();
+  }
 }
 
 function withinPixelLimit(

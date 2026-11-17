@@ -2,7 +2,10 @@ import { randomBytes } from 'node:crypto';
 
 import sharp from 'sharp';
 
-import { serializeRasterImageProcessing } from '@/common/image/raster-image';
+import {
+  reserveRasterImageProcessing,
+  serializeRasterImageProcessing,
+} from '@/common/image/raster-image';
 import { InMemoryAvatarRepository } from '@/modules/avatar/testing/in-memory-avatar.repository';
 import type {
   AvatarStoragePort,
@@ -67,6 +70,7 @@ class FakeStorage implements AvatarStoragePort {
   readonly calls: string[] = [];
   readonly signals: (AbortSignal | undefined)[] = [];
   failFinalCheck = false;
+  failFinalDelete = false;
   failStagingDelete = false;
   readStarted: (() => void) | undefined;
   describeGate:
@@ -130,6 +134,7 @@ class FakeStorage implements AvatarStoragePort {
   async deleteObject(key: string, signal?: AbortSignal) {
     this.calls.push('delete-final');
     this.signals.push(signal);
+    if (this.failFinalDelete) throw new Error('delete failed');
     this.final.delete(key);
   }
   async deleteStagingObject(key: string, signal?: AbortSignal) {
@@ -171,6 +176,27 @@ async function setup() {
   return { repository, storage, service, objectKey };
 }
 
+function seedPreviousAvatar(
+  repository: InMemoryAvatarRepository,
+  storage: FakeStorage,
+) {
+  const avatar = {
+    assetId: 'ava_01J00000000000000000000002',
+    userId: USER,
+    objectKey: `users/${USER}/avatar/ava_01J00000000000000000000002/original`,
+    contentType: 'image/png' as const,
+    byteSize: 1,
+    acceptedAt: NOW,
+  };
+  repository.avatars.set(USER, avatar);
+  storage.final.set(avatar.objectKey, {
+    contentType: avatar.contentType,
+    byteSize: avatar.byteSize,
+    lastModified: NOW,
+  });
+  return avatar;
+}
+
 describe('AvatarUploadService private staging', () => {
   it('publishes a copy that a later staging PUT cannot overwrite', async () => {
     const { service, storage, objectKey } = await setup();
@@ -196,6 +222,12 @@ describe('AvatarUploadService private staging', () => {
 
   it('serializes same-asset completions across a replayed PUT', async () => {
     const { service, storage, objectKey } = await setup();
+    const describeStarted = deferred();
+    const describeGate = deferred();
+    storage.describeGate = {
+      started: describeStarted.resolve,
+      wait: describeGate.promise,
+    };
     const copyStarted = deferred();
     const copyGate = deferred();
     storage.copyGate = { started: copyStarted.resolve, wait: copyGate.promise };
@@ -204,13 +236,15 @@ describe('AvatarUploadService private staging', () => {
       assetId: ASSET,
       requestId: REQUEST_ID,
     });
-    await copyStarted.promise;
-    storage.stagingBytes.set(objectKey, await otherPngBytes());
+    await describeStarted.promise;
     const second = service.completeUpload({
       userId: USER,
       assetId: ASSET,
       requestId: REQUEST_ID,
     });
+    describeGate.resolve();
+    await copyStarted.promise;
+    storage.stagingBytes.set(objectKey, await otherPngBytes());
     copyGate.resolve();
     await expect(Promise.all([first, second])).resolves.toMatchObject([
       { created: true },
@@ -223,9 +257,12 @@ describe('AvatarUploadService private staging', () => {
       height: 2,
     });
     expect(storage.calls.filter((call) => call === 'copy')).toHaveLength(1);
+    expect(
+      storage.calls.filter((call) => call === 'read-staging'),
+    ).toHaveLength(1);
   });
 
-  it('returns idempotently when a concurrent completion removes staging', async () => {
+  it('coalesces completion while publication is in progress', async () => {
     const { service, storage, repository } = await setup();
     const copyStarted = deferred();
     const copyGate = deferred();
@@ -237,24 +274,18 @@ describe('AvatarUploadService private staging', () => {
     });
     await copyStarted.promise;
 
-    const describeStarted = deferred();
-    const describeGate = deferred();
-    storage.describeGate = {
-      started: describeStarted.resolve,
-      wait: describeGate.promise,
-    };
     const second = service.completeUpload({
       userId: USER,
       assetId: ASSET,
       requestId: REQUEST_ID,
     });
-    await describeStarted.promise;
 
     copyGate.resolve();
     await expect(first).resolves.toMatchObject({ created: true });
-    describeGate.resolve();
-
     await expect(second).resolves.toMatchObject({ created: false });
+    expect(
+      storage.calls.filter((call) => call === 'read-staging'),
+    ).toHaveLength(1);
     expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
   });
 
@@ -335,10 +366,15 @@ describe('AvatarUploadService private staging', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const blocker = serializeRasterImageProcessing(async () => {
-      started();
-      await gate;
-    });
+    const blockerAdmission = reserveRasterImageProcessing('avatar');
+    const blocker = serializeRasterImageProcessing(
+      blockerAdmission,
+      new AbortController().signal,
+      async () => {
+        started();
+        await gate;
+      },
+    );
     await ready;
     let stagingRead = (): void => undefined;
     const readStarted = new Promise<void>((resolve) => {
@@ -354,11 +390,12 @@ describe('AvatarUploadService private staging', () => {
     });
     await readStarted;
     controller.abort();
-    release();
     await expect(completion).rejects.toMatchObject({
       code: 'AVATAR_STORAGE_UNAVAILABLE',
     });
+    release();
     await blocker;
+    blockerAdmission.release();
     expect(storage.calls).not.toContain('copy');
   });
 
@@ -377,22 +414,9 @@ describe('AvatarUploadService private staging', () => {
     expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
   });
 
-  it('passes one completion deadline signal to every storage call while locked', async () => {
+  it('uses the completion signal for publication and staging cleanup', async () => {
     const { service, storage, repository } = await setup();
-    const previous = {
-      assetId: 'ava_01J00000000000000000000002',
-      userId: USER,
-      objectKey: `users/${USER}/avatar/ava_01J00000000000000000000002/original`,
-      contentType: 'image/png' as const,
-      byteSize: 1,
-      acceptedAt: NOW,
-    };
-    repository.avatars.set(USER, previous);
-    storage.final.set(previous.objectKey, {
-      contentType: previous.contentType,
-      byteSize: previous.byteSize,
-      lastModified: NOW,
-    });
+    seedPreviousAvatar(repository, storage);
 
     await service.completeUpload({
       userId: USER,
@@ -400,8 +424,7 @@ describe('AvatarUploadService private staging', () => {
       requestId: REQUEST_ID,
     });
 
-    // All six storage calls must be present (staging check and read, publish,
-    // final check, old-object delete, post-record staging cleanup).
+    // Final-object cleanup follows the committed row change.
     expect(storage.calls).toContain('check-staging');
     expect(storage.calls).toContain('copy');
     expect(storage.calls).toContain('check-final');
@@ -409,9 +432,8 @@ describe('AvatarUploadService private staging', () => {
     expect(storage.calls).toContain('delete-staging');
     expect(storage.signals).toHaveLength(6);
     expect(storage.signals[0]).toBeInstanceOf(AbortSignal);
-    expect(
-      storage.signals.every((signal) => signal === storage.signals[0]),
-    ).toBe(true);
+    expect(storage.signals[4]).toBeUndefined();
+    expect(storage.signals[5]).toBe(storage.signals[0]);
   });
 
   it('does not copy when the completion deadline aborts before publication', async () => {
@@ -504,6 +526,72 @@ describe('AvatarUploadService private staging', () => {
     expect(storage.staging.has(objectKey)).toBe(false);
   });
 
+  it('keeps a candidate adopted while losing-completion cleanup waits', async () => {
+    const { service, storage, repository, objectKey } = await setup();
+    const previousId = 'ava_01J00000000000000000000002';
+    const firstWinnerId = 'ava_01J00000000000000000000003';
+    const secondWinnerId = 'ava_01J00000000000000000000004';
+    const previousKey = `users/${USER}/avatar/${previousId}/original`;
+    const firstWinnerKey = `users/${USER}/avatar/${firstWinnerId}/original`;
+    const previous = {
+      assetId: previousId,
+      userId: USER,
+      objectKey: previousKey,
+      contentType: 'image/png' as const,
+      byteSize: 1,
+      acceptedAt: NOW,
+    };
+    repository.avatars.set(USER, previous);
+    storage.final.set(previousKey, {
+      contentType: previous.contentType,
+      byteSize: previous.byteSize,
+      lastModified: NOW,
+    });
+    const cleanupStarted = deferred();
+    const cleanupGate = deferred();
+    repository.beforeNextChange = () => {
+      repository.avatars.set(USER, {
+        ...previous,
+        assetId: firstWinnerId,
+        objectKey: firstWinnerKey,
+      });
+      repository.beforeNextLock = async () => {
+        cleanupStarted.resolve();
+        await cleanupGate.promise;
+      };
+    };
+
+    const losing = service.completeUpload({
+      userId: USER,
+      assetId: ASSET,
+      requestId: REQUEST_ID,
+    });
+    await cleanupStarted.promise;
+
+    const secondKey = `users/${USER}/avatar/${secondWinnerId}/original`;
+    storage.staging.set(secondKey, {
+      contentType: 'image/png',
+      byteSize: 12,
+      lastModified: NOW,
+    });
+    storage.stagingBytes.set(secondKey, await pngBytes());
+    await service.completeUpload({
+      userId: USER,
+      assetId: secondWinnerId,
+      requestId: REQUEST_ID,
+    });
+    await service.completeUpload({
+      userId: USER,
+      assetId: ASSET,
+      requestId: REQUEST_ID,
+    });
+
+    cleanupGate.resolve();
+    await expect(losing).rejects.toMatchObject({ code: 'AVATAR_CHANGED' });
+    expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
+    expect(storage.finalBytes.has(objectKey)).toBe(true);
+  });
+
   it('deletes final and staging when the final check fails', async () => {
     const { service, storage, objectKey } = await setup();
     storage.failFinalCheck = true;
@@ -529,6 +617,28 @@ describe('AvatarUploadService private staging', () => {
       }),
     ).resolves.toMatchObject({ created: true });
     expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
+  });
+
+  it('commits avatar changes before best-effort object cleanup', async () => {
+    const { service, storage, repository } = await setup();
+    const previous = seedPreviousAvatar(repository, storage);
+    storage.failFinalDelete = true;
+
+    await expect(
+      service.completeUpload({
+        userId: USER,
+        assetId: ASSET,
+        requestId: REQUEST_ID,
+      }),
+    ).resolves.toMatchObject({ created: true });
+    expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
+    expect(storage.final.has(previous.objectKey)).toBe(true);
+
+    await service.removeAvatar({ userId: USER, requestId: REQUEST_ID });
+    expect(repository.avatars.has(USER)).toBe(false);
+    expect(storage.final.has(`users/${USER}/avatar/${ASSET}/original`)).toBe(
+      true,
+    );
   });
 
   it('retries a copy left behind before the record write', async () => {
