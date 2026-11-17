@@ -33,7 +33,7 @@ export function sandboxBudgetUnavailable(cause?: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Sandbox dispatch admission is unavailable',
-    retryable: true,
+    retryable: false,
     ...(cause === undefined ? {} : { cause }),
   });
 }

@@ -264,7 +264,7 @@ describe('GuardedOperationDispatcher', () => {
       expect(transport.calls).toHaveLength(0);
     });
 
-    it('answers a retryable 503-class error when the budget store is unreadable', async () => {
+    it('answers a non-retryable internal error when the budget store fails for a non-database reason', async () => {
       const { dispatcher, beginAttempt } = fixture({
         admit: new Error('down'),
       });
@@ -278,7 +278,7 @@ describe('GuardedOperationDispatcher', () => {
       );
 
       expect(error.code).toBe('INTERNAL_ERROR');
-      expect(error.retryable).toBe(true);
+      expect(error.retryable).toBe(false);
       expect(beginAttempt).not.toHaveBeenCalled();
     });
 

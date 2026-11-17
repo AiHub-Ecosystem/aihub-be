@@ -84,8 +84,8 @@ export class S3SpeakingAudioStorage implements SpeakingAudioStoragePort {
         }),
         { expiresIn: this.config.expiresInSeconds },
       );
-    } catch {
-      throw storageUnavailable();
+    } catch (error) {
+      throw storageUnavailable(error);
     }
   }
 }

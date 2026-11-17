@@ -17,6 +17,8 @@ describe('S3SpeakingAudioStorage', () => {
     ).rejects.toMatchObject({
       code: 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
       retryable: true,
+      // The failure-reason metric needs a classified reason (#373, §I.7).
+      diagnostic: 'object_storage:unavailable',
     });
   });
 

@@ -55,6 +55,7 @@ describe('SandboxAdmission', () => {
     ).toMatchObject({
       code: 'INTERNAL_ERROR',
       httpStatus: 500,
+      retryable: false,
     });
     expect(isPostgresUnavailable(new Error('policy row missing'))).toBe(false);
   });
