@@ -24,6 +24,23 @@ export interface SpeakingAudioUploadOwner {
   readonly environment: SpeakingAudioEnvironment;
 }
 
+export interface CompleteSpeakingAudioUploadIntentInput {
+  readonly owner: SpeakingAudioUploadOwner;
+  readonly now: () => Date;
+  readonly prepare: (
+    intent: SpeakingAudioUploadIntent,
+  ) => Promise<
+    | { readonly kind: 'accepted'; readonly asset: SpeakingAudioAsset }
+    | { readonly kind: 'refused'; readonly refusal: AppError }
+  >;
+}
+
+export type CompleteSpeakingAudioUploadIntentResult =
+  | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
+  | { readonly kind: 'already_completed'; readonly asset: SpeakingAudioAsset }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'refused'; readonly refusal: AppError };
+
 export interface SpeakingAudioUploadRepositoryPort {
   createIntent(intent: SpeakingAudioUploadIntent): Promise<void>;
   /**
@@ -47,24 +64,9 @@ export interface SpeakingAudioUploadRepositoryPort {
   }): Promise<boolean>;
   removeRejectedIntent(owner: SpeakingAudioUploadOwner): Promise<void>;
   /** Holds the intent row lock while preparing storage and recording the asset. */
-  completeIntent(input: {
-    readonly owner: SpeakingAudioUploadOwner;
-    readonly now: () => Date;
-    readonly prepare: (
-      intent: SpeakingAudioUploadIntent,
-    ) => Promise<
-      | { readonly kind: 'accepted'; readonly asset: SpeakingAudioAsset }
-      | { readonly kind: 'refused'; readonly refusal: AppError }
-    >;
-  }): Promise<
-    | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
-    | {
-        readonly kind: 'already_completed';
-        readonly asset: SpeakingAudioAsset;
-      }
-    | { readonly kind: 'missing' }
-    | { readonly kind: 'refused'; readonly refusal: AppError }
-  >;
+  completeIntent(
+    input: CompleteSpeakingAudioUploadIntentInput,
+  ): Promise<CompleteSpeakingAudioUploadIntentResult>;
   listCleanupCandidates(input: {
     readonly expiredBefore: Date;
     readonly limit: number;

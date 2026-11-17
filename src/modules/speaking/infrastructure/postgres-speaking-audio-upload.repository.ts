@@ -12,6 +12,8 @@ import {
   type SpeakingAudioOrganizationHolding,
 } from '@/modules/speaking/application/audio/speaking-audio-org-ceiling.policy';
 import type {
+  CompleteSpeakingAudioUploadIntentInput,
+  CompleteSpeakingAudioUploadIntentResult,
   SpeakingAudioUploadLookup,
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
@@ -275,24 +277,9 @@ export class PostgresSpeakingAudioUploadRepository
     );
   }
 
-  async completeIntent(input: {
-    readonly owner: SpeakingAudioUploadOwner;
-    readonly now: () => Date;
-    readonly prepare: (
-      intent: SpeakingAudioUploadIntent,
-    ) => Promise<
-      | { readonly kind: 'accepted'; readonly asset: SpeakingAudioAsset }
-      | { readonly kind: 'refused'; readonly refusal: AppError }
-    >;
-  }): Promise<
-    | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
-    | {
-        readonly kind: 'already_completed';
-        readonly asset: SpeakingAudioAsset;
-      }
-    | { readonly kind: 'missing' }
-    | { readonly kind: 'refused'; readonly refusal: AppError }
-  > {
+  async completeIntent(
+    input: CompleteSpeakingAudioUploadIntentInput,
+  ): Promise<CompleteSpeakingAudioUploadIntentResult> {
     return this.completionTransaction(
       input.owner.organizationId,
       async (client) => {
