@@ -1,5 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+import { ModelQuote, ModelText } from '@/contracts/model-text';
+
 import {
   BandSchema,
   CriterionIdSchema,
@@ -62,22 +64,22 @@ export const WritingErrorPrioritySchema = Type.Object(
 
 const ErrorSchema = Type.Object(
   {
-    quote: Type.String(),
+    quote: ModelQuote(),
     // A standard code such as `LR03`. A string in both captures; opaque, so a
     // provider rename is not a breaking change (ADR-0143 decision 3).
-    error_codes: Type.String(),
-    error_name: Type.String(),
-    explanation: Type.String(),
-    improved_version: Type.String(),
+    error_codes: ModelText(),
+    error_name: ModelText(),
+    explanation: ModelText(),
+    improved_version: ModelQuote(),
   },
   { additionalProperties: false },
 );
 
 const SuggestionSchema = Type.Object(
   {
-    quote: Type.String(),
-    explanation: Type.String(),
-    improved_version: Type.String(),
+    quote: ModelQuote(),
+    explanation: ModelText(),
+    improved_version: ModelQuote(),
   },
   { additionalProperties: false },
 );
@@ -86,18 +88,18 @@ const CriterionSchema = Type.Object(
   {
     id: CriterionIdSchema,
     band: BandSchema,
-    band_reason: Type.String(),
-    strengths: Type.Array(Type.String()),
-    areas_for_improvement: Type.Array(Type.String()),
+    band_reason: ModelText(),
+    strengths: Type.Array(ModelText()),
+    areas_for_improvement: Type.Array(ModelText()),
     errors: Type.Array(ErrorSchema),
     suggestions: Type.Array(SuggestionSchema),
-    feedback_detail: Type.Array(Type.String()),
+    feedback_detail: Type.Array(ModelText()),
   },
   { additionalProperties: false },
 );
 
 const MicroComment = Type.Object(
-  { quote: Type.String(), explanation: Type.String() },
+  { quote: ModelQuote(), explanation: ModelText() },
   { additionalProperties: false },
 );
 
@@ -108,8 +110,8 @@ const MicroComment = Type.Object(
  */
 const MicroExerciseSchema = Type.Object(
   {
-    prompt: Type.String(),
-    question_type: Type.String(),
+    prompt: ModelText(),
+    question_type: ModelText(),
     comments: Type.Array(MicroComment),
   },
   { additionalProperties: false },
@@ -123,18 +125,18 @@ export const WritingV2GradeResponseSchema = Type.Object(
       {
         summary: Type.Object(
           {
-            overall: Type.String(),
-            detail: Type.Array(Type.String()),
-            cta: Type.String(),
+            overall: ModelText(),
+            detail: Type.Array(ModelText()),
+            cta: ModelText(),
           },
           { additionalProperties: false },
         ),
         progress: Type.Object(
           {
-            status: Type.String(),
-            error_recur: Type.Array(Type.String()),
-            error_impro: Type.Array(Type.String()),
-            error_new: Type.Array(Type.String()),
+            status: ModelText(),
+            error_recur: Type.Array(ModelText()),
+            error_impro: Type.Array(ModelText()),
+            error_new: Type.Array(ModelText()),
           },
           { additionalProperties: false },
         ),
@@ -143,8 +145,8 @@ export const WritingV2GradeResponseSchema = Type.Object(
     ),
     error_priority: Type.Array(WritingErrorPrioritySchema, { maxItems: 3 }),
     data_micro: Type.Record(
-      Type.String(),
-      Type.Record(Type.String(), MicroExerciseSchema),
+      ModelText(),
+      Type.Record(ModelText(), MicroExerciseSchema),
     ),
   },
   { additionalProperties: false },

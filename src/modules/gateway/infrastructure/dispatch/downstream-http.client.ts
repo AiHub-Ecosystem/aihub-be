@@ -38,8 +38,15 @@ export interface DownstreamHttpRequestOptions {
   readonly requestId: string;
   readonly deadlineMs: number;
   readonly signal: AbortSignal;
+  /**
+   * The most response body to read. The dispatcher passes the operation's own
+   * limit; a caller that names none gets the default, so no read is unbounded.
+   */
+  readonly maxResponseBytes?: number;
   readonly onResponseReceived?: (statusCode: number) => void;
 }
+
+export const DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
 
 type DownstreamBaseUrls =
   | string
@@ -169,6 +176,34 @@ function normalizeHeaders(
   return normalized;
 }
 
+/**
+ * Reads a response body as JSON, counting the bytes as they arrive. Past the
+ * limit the body is destroyed, which cancels the stream and frees its
+ * connection, before an oversized value is allocated. The limit applies to the
+ * bytes on the wire: the client does not ask for or decode a content encoding,
+ * so those are also the bytes that become the JSON text (#377).
+ */
+async function readJsonWithin(
+  body: AsyncIterable<unknown> & { destroy(): unknown },
+  maxBytes: number,
+): Promise<unknown> {
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for await (const chunk of body) {
+    const bytes =
+      chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk));
+    received += bytes.byteLength;
+    if (received > maxBytes) {
+      body.destroy();
+      throw contractViolation(
+        `response body exceeds the ${maxBytes} byte limit`,
+      );
+    }
+    chunks.push(bytes);
+  }
+  return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
+}
+
 export class DownstreamHttpClient {
   private readonly dispatchers = new Map<string, Dispatcher>();
   private readonly inFlightByOrigin = new Map<string, number>();
@@ -272,8 +307,13 @@ export class DownstreamHttpClient {
 
       let parsedBody: unknown;
       try {
-        parsedBody = await response.body.json();
+        parsedBody = await readJsonWithin(
+          response.body,
+          options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
+        );
       } catch (error) {
+        // An oversized body is a contract violation on any status.
+        if (error instanceof AppError) throw error;
         if (options.signal.aborted || isTransportFailure(error)) {
           throw transportError(error, options.signal.aborted);
         }

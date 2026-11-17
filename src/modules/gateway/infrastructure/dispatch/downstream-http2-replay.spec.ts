@@ -1,5 +1,3 @@
-import { createPrivateKey } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import {
   type Http2Session,
   type ServerHttp2Stream,
@@ -7,7 +5,6 @@ import {
   constants as http2Constants,
 } from 'node:http2';
 import type { AddressInfo } from 'node:net';
-import { join } from 'node:path';
 import type { TLSSocket } from 'node:tls';
 import { Pool } from 'undici/index.js';
 
@@ -18,6 +15,7 @@ import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { DownstreamRetryBudgetPort } from '@/modules/gateway/application/dispatch/downstream-retry-budget.port';
 import { DownstreamCircuitBreakers } from '@/modules/gateway/infrastructure/dispatch/downstream-circuit-breakers';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import { tlsStubCredentials } from '@/modules/gateway/infrastructure/dispatch/downstream-tls-stub.testing';
 import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 
@@ -30,21 +28,6 @@ type AttemptAction =
 
 const requestBody = { essay: 'one logical grading request' };
 const serializedBody = JSON.stringify(requestBody);
-const key = createPrivateKey({
-  key: readFileSync(
-    join(process.cwd(), 'test/fixtures/downstream-http2/server-key.der'),
-  ),
-  format: 'der',
-  type: 'pkcs8',
-}).export({ format: 'pem', type: 'pkcs8' });
-const cert = Buffer.from(
-  readFileSync(
-    join(process.cwd(), 'test/fixtures/downstream-http2/server-cert.fixture'),
-    'utf8',
-  ),
-  'base64',
-).toString('utf8');
-
 function streamIdOf(stream: ServerHttp2Stream): number {
   if (typeof stream.id !== 'number') {
     throw new Error('HTTP/2 server stream has no assigned ID');
@@ -64,7 +47,10 @@ function createHttp2Harness(actions: readonly AttemptAction[]) {
     stream: ServerHttp2Stream;
     body: string;
   }> = [];
-  const server = createSecureServer({ key, cert, allowHTTP1: false });
+  const server = createSecureServer({
+    ...tlsStubCredentials,
+    allowHTTP1: false,
+  });
   server.on('secureConnection', (socket: TLSSocket) => {
     protocols.push(
       typeof socket.alpnProtocol === 'string' ? socket.alpnProtocol : '',

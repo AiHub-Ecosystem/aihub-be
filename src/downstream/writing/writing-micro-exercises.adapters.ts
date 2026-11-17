@@ -21,6 +21,7 @@ import type {
   DownstreamErrorHint,
   DownstreamRequest,
 } from '@/downstream/downstream.types';
+import { stripControlCharacters } from '@/downstream/model-text';
 import { requiredSpeakingIdentityHeaders } from '@/downstream/speaking/speaking-grading.adapter';
 
 function jsonRequest(
@@ -66,7 +67,7 @@ function parseData<T extends TSchema>(schema: T, body: unknown): Static<T> {
   if (!isRecord(body) || body['success'] !== true || !isRecord(body['data'])) {
     throw contractViolation('response is missing a successful data object');
   }
-  const data = Value.Clean(schema, body['data']);
+  const data = Value.Clean(schema, stripControlCharacters(body['data']));
   if (!Value.Check(schema, data)) {
     const firstError = Value.Errors(schema, data).First();
     throw contractViolation(

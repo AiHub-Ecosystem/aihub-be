@@ -5,8 +5,11 @@ import { CRITERION_IDS, type CriterionId } from '@/contracts/writing/grading';
 import {
   WritingErrorPrioritySchema,
   type WritingV2GradeResponse,
+  WritingV2GradeResponseSchema,
 } from '@/contracts/writing/v2/grading';
 import { contractViolation } from '@/downstream/contract-violation';
+import { stripControlCharacters } from '@/downstream/model-text';
+import { assertPublicContract } from '@/downstream/public-contract';
 
 const Strings = Type.Array(Type.String());
 
@@ -118,7 +121,10 @@ function toCriteria(
  * (ADR-0143 decisions 1 to 3). Pure: no I/O, no clock, no logging. String values
  * pass through verbatim.
  */
-export function parseWritingV3Response(body: unknown): WritingV2GradeResponse {
+export function parseWritingV3Response(
+  rawBody: unknown,
+): WritingV2GradeResponse {
+  const body = stripControlCharacters(rawBody);
   if (!Value.Check(ProviderBody, body)) {
     const firstError = Value.Errors(ProviderBody, body).First();
     // The path names a field, never a value from the provider body.
@@ -129,7 +135,7 @@ export function parseWritingV3Response(body: unknown): WritingV2GradeResponse {
   const { data, data_micro } = body;
   const assessment = data['Overall Assessment'];
 
-  return {
+  const response: WritingV2GradeResponse = {
     overall_band: data.overall_band,
     criteria: toCriteria(data.evaluation),
     overall_assessment: {
@@ -157,4 +163,6 @@ export function parseWritingV3Response(body: unknown): WritingV2GradeResponse {
     ),
     data_micro,
   };
+  assertPublicContract(WritingV2GradeResponseSchema, response);
+  return response;
 }
