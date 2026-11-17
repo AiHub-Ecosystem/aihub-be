@@ -232,7 +232,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "aef78abeabbda22b5c7d409f34731104a5fe8e128e6dd84ff5c8622e220d87e9"
+          rules_sha256: "384b8ec514db5e88c152dbdad32ff4b9bf54e0444729489a119fe0fd309b2eea"
 
   - name: aihub-email-outbox
     rules:
