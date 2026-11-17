@@ -18,7 +18,6 @@ import {
 import type { ClientIpSource } from '@/common/http/client-ip-source';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
-import { appConfig } from '@/config/runtime-configuration';
 import { clientSecretFrom } from '@/modules/auth/public/client-secret-header';
 import {
   WEB_SESSION_CLIENT_SECRET,
@@ -42,6 +41,7 @@ import {
   REQUIRED_OPERATION_METADATA,
 } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { openMeteringEvidence } from '@/modules/metering/public/metering-evidence';
+import { RUNTIME_PRESENTATION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import {
   authenticateApiKey,
   forbidden,
@@ -101,7 +101,7 @@ export class ApiKeyGuard implements CanActivate {
     @Inject(API_KEY_AUTHENTICATOR)
     private readonly authenticator: ApiKeyAuthenticatorPort,
     @Optional()
-    @Inject(appConfig.KEY)
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
     private readonly configuration?: RequestEnvironmentConfig,
     @Optional()
     @Inject(WEB_SESSION_CLIENT_SECRET)

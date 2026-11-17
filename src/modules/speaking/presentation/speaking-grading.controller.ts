@@ -7,13 +7,11 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import type { ConfigType } from '@nestjs/config';
 import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { parseRequestBody } from '@/common/http/parse-request-body';
-import { appConfig } from '@/config/runtime-configuration';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
@@ -31,6 +29,10 @@ import {
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
+import {
+  RUNTIME_PRESENTATION_CONFIGURATION,
+  type RuntimePresentationConfiguration,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
 import {
   SPEAKING_AUDIO_URL_REJECTION_RECORDER,
   type SpeakingAudioUrlRejectionRecorderPort,
@@ -60,7 +62,7 @@ interface ParsedJsonBody {
 function parseJsonBody(
   body: unknown,
   request: AuthenticatedRequest,
-  configuration: ConfigType<typeof appConfig>,
+  configuration: RuntimePresentationConfiguration,
   rejections: SpeakingAudioUrlRejectionRecorderPort,
 ): ParsedJsonBody {
   const parsed = parseRequestBody(
@@ -107,8 +109,8 @@ export class SpeakingGradingController {
     private readonly multipartParser: SpeakingMultipartParserPort,
     @Inject(SPEAKING_UPLOAD_CEILING)
     private readonly uploadCeiling: InFlightCeiling,
-    @Inject(appConfig.KEY)
-    private readonly configuration: ConfigType<typeof appConfig>,
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
+    private readonly configuration: RuntimePresentationConfiguration,
     @Inject(SPEAKING_AUDIO_URL_REJECTION_RECORDER)
     private readonly urlRejections: SpeakingAudioUrlRejectionRecorderPort,
     @Inject(SpeakingRecordingAccess)

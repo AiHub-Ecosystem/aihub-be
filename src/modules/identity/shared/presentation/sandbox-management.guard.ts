@@ -7,16 +7,16 @@ import {
 
 import { AppError } from '@/common/errors/app-error';
 import {
-  type RuntimeConfiguration,
-  appConfig,
-} from '@/config/runtime-configuration';
+  RUNTIME_PRESENTATION_CONFIGURATION,
+  type RuntimePresentationConfiguration,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
 
 @Injectable()
 export class SandboxManagementGuard implements CanActivate {
   constructor(
-    @Inject(appConfig.KEY)
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
     private readonly configuration: Pick<
-      RuntimeConfiguration,
+      RuntimePresentationConfiguration,
       'AIHUB_RUNTIME_DATABASE_SCOPE'
     >,
   ) {}

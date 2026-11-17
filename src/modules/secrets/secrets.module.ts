@@ -7,7 +7,10 @@ import {
   getRuntimeSecretEnvironment,
 } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
-import { RUNTIME_CONNECTION_CONFIGURATION } from './application/runtime-connection-configuration.port';
+import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  RUNTIME_PRESENTATION_CONFIGURATION,
+} from './application/runtime-connection-configuration.port';
 import { RUNTIME_SECRET_PROVIDER } from './application/runtime-secret-provider.port';
 import { SEAWEEDFS_S3_CLIENT } from './application/seaweedfs-s3-client.port';
 import { createRuntimeSecretProvider } from './infrastructure/configured-runtime-secret.provider';
@@ -32,6 +35,12 @@ import { createSeaweedFsS3Client } from './infrastructure/seaweedfs-s3-client.fa
       useFactory: getRuntimeConnectionConfiguration,
     },
     {
+      provide: RUNTIME_PRESENTATION_CONFIGURATION,
+      inject: [appConfig.KEY],
+      useFactory: (configuration: ConfigType<typeof appConfig>) =>
+        configuration,
+    },
+    {
       provide: SEAWEEDFS_S3_CLIENT,
       inject: [RUNTIME_SECRET_PROVIDER, appConfig.KEY],
       useFactory: (
@@ -48,6 +57,7 @@ import { createSeaweedFsS3Client } from './infrastructure/seaweedfs-s3-client.fa
   exports: [
     RUNTIME_SECRET_PROVIDER,
     RUNTIME_CONNECTION_CONFIGURATION,
+    RUNTIME_PRESENTATION_CONFIGURATION,
     SEAWEEDFS_S3_CLIENT,
   ],
 })

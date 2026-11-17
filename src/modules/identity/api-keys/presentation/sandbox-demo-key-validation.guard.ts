@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -14,6 +13,7 @@ import {
 import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from '@/modules/identity/shared/application/sandbox-api-key-rate-limit';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
+import { RUNTIME_PRESENTATION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { authenticateApiKey, forwardedVisitorIp } from './authenticate-api-key';
 
 /**
@@ -29,7 +29,7 @@ export class SandboxDemoKeyValidationGuard implements CanActivate {
   constructor(
     @Inject(API_KEY_AUTHENTICATOR)
     private readonly authenticator: ApiKeyAuthenticatorPort,
-    @Inject(appConfig.KEY)
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
     private readonly configuration: RequestEnvironmentConfig,
   ) {}
 

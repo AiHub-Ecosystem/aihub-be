@@ -8,7 +8,6 @@ import { Reflector } from '@nestjs/core';
 
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { recordRejected } from '@/common/observability/rejected-metric';
-import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -18,6 +17,7 @@ import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
+import { RUNTIME_PRESENTATION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import type { RequestEnvironmentConfig } from '@/modules/identity/shared/presentation/request-environment';
@@ -35,7 +35,7 @@ export class ApiKeyUserIdentityGuard implements CanActivate {
     private readonly authenticator: ApiKeyAuthenticatorPort,
     @Inject(USER_IDENTITY_RESOLVER)
     private readonly resolver: UserIdentityResolverPort,
-    @Inject(appConfig.KEY)
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
     private readonly configuration: RequestEnvironmentConfig,
   ) {}
 

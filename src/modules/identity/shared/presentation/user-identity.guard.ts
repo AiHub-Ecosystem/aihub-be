@@ -11,12 +11,12 @@ import type { OperationId } from '@/catalog/operation-id';
 import { authenticationConfigurationInvalid } from '@/common/errors/auth-boundary-errors';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { recordRejected } from '@/common/observability/rejected-metric';
-import { appConfig } from '@/config/runtime-configuration';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,
 } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { addMeteringEvidence } from '@/modules/metering/public/metering-evidence';
+import { RUNTIME_PRESENTATION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
@@ -35,7 +35,7 @@ export class UserIdentityGuard implements CanActivate {
     private readonly reflector: Reflector,
     @Inject(USER_IDENTITY_RESOLVER)
     private readonly resolver: UserIdentityResolverPort,
-    @Inject(appConfig.KEY)
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
     private readonly configuration?: RequestEnvironmentConfig,
   ) {}
 

@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
-import { appConfig } from '@/config/runtime-configuration';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,
@@ -21,6 +20,7 @@ import {
   SANDBOX_ASSERTION_POLICY,
   type SandboxAssertionPolicyPort,
 } from '@/modules/identity/user-assertions/application/sandbox-assertion-policy.port';
+import { RUNTIME_PRESENTATION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { authenticateApiKey, forbidden } from './authenticate-api-key';
 
 function notFound(): AppError {
@@ -59,7 +59,7 @@ export class SandboxApiKeyGuard implements CanActivate {
     private readonly authenticator: ApiKeyAuthenticatorPort,
     @Inject(SANDBOX_ASSERTION_POLICY)
     private readonly policy: SandboxAssertionPolicyPort,
-    @Inject(appConfig.KEY)
+    @Inject(RUNTIME_PRESENTATION_CONFIGURATION)
     private readonly configuration: RequestEnvironmentConfig,
   ) {}
 
