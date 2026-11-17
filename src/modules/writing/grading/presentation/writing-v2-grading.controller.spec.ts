@@ -25,6 +25,7 @@ import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/appli
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { QUOTA_COUNTER } from '@/modules/metering/public/quota-counter';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
+import { withWritingErrorPriorityCapture } from '../../../../../test/support/writing-error-priority-fixture';
 
 const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 const PROVIDER_URL = 'https://ai-writing.test';
@@ -39,13 +40,10 @@ function rawFixture(name: string): unknown {
 }
 
 function gradeFixture(task: 1 | 2): unknown {
-  const body = rawFixture(`grade-v3-task${task}.response.json`) as {
-    data: Record<string, unknown>;
-  };
-  const priority = rawFixture(
-    `grade-v3-task${task}-error-priority.capture.json`,
-  ) as { data: { error_priority: unknown } };
-  return { ...body, data: { ...body.data, ...priority.data } };
+  return withWritingErrorPriorityCapture(
+    rawFixture(`grade-v3-task${task}.response.json`) as Record<string, unknown>,
+    task,
+  );
 }
 
 const task1Fixture = rawFixture('grade-v3-task1.request.json') as {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { withWritingErrorPriorityCapture } from '../../../test/support/writing-error-priority-fixture';
 import {
   writingV3Task1GradeAdapter,
   writingV3Task2GradeAdapter,
@@ -18,13 +19,10 @@ function fixture(name: string): unknown {
 }
 
 function gradeResponseFixture(task: 1 | 2): unknown {
-  const response = fixture(`grade-v3-task${task}.response.json`) as {
-    data: Record<string, unknown>;
-  };
-  const priority = fixture(
-    `grade-v3-task${task}-error-priority.capture.json`,
-  ) as { data: Record<string, unknown> };
-  return { ...response, data: { ...response.data, ...priority.data } };
+  return withWritingErrorPriorityCapture(
+    fixture(`grade-v3-task${task}.response.json`) as Record<string, unknown>,
+    task,
+  );
 }
 
 const context = createRequestContext({

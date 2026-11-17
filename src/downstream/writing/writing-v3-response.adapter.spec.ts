@@ -5,6 +5,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { isRecord } from '@/common/is-record';
 import { WritingV2GradeResponseSchema } from '@/contracts/writing/v2/grading';
+import { withWritingErrorPriorityCapture } from '../../../test/support/writing-error-priority-fixture';
 import { parseWritingV3Response } from './writing-v3-response.adapter';
 
 function fixture(name: string): Record<string, unknown> {
@@ -18,23 +19,6 @@ function fixture(name: string): Record<string, unknown> {
     throw new Error('fixture is not an object');
   }
   return parsed;
-}
-
-function withPriorityCapture(
-  body: Record<string, unknown>,
-  task: 1 | 2,
-): Record<string, unknown> {
-  const data = body['data'];
-  const capturedData = fixture(
-    `grade-v3-task${task}-error-priority.capture.json`,
-  )['data'];
-  if (!isRecord(data) || !isRecord(capturedData)) {
-    throw new Error('fixture data is not an object');
-  }
-  return {
-    ...body,
-    data: { ...data, error_priority: capturedData['error_priority'] },
-  };
 }
 
 function thrownBy(action: () => unknown): unknown {
@@ -54,7 +38,7 @@ describe('parseWritingV3Response', () => {
     'maps the captured %s onto the /v2 schema',
     (name, firstCriterion, task) => {
       const result = parseWritingV3Response(
-        withPriorityCapture(fixture(name), task),
+        withWritingErrorPriorityCapture(fixture(name), task),
       );
 
       expect(Value.Check(WritingV2GradeResponseSchema, result)).toBe(true);
@@ -89,7 +73,7 @@ describe('parseWritingV3Response', () => {
     ['rank above the allowed range', { rank: 4 }],
     ['an unknown group', { group: 'task_response' }],
   ])('rejects error_priority with %s', (_label, override) => {
-    const body = withPriorityCapture(
+    const body = withWritingErrorPriorityCapture(
       fixture('grade-v3-task1.response.json'),
       1,
     );
@@ -103,7 +87,7 @@ describe('parseWritingV3Response', () => {
   });
 
   it('ignores additive provider fields inside error_priority entries', () => {
-    const body = withPriorityCapture(
+    const body = withWritingErrorPriorityCapture(
       fixture('grade-v3-task1.response.json'),
       1,
     );
@@ -124,7 +108,9 @@ describe('parseWritingV3Response', () => {
 
   it('renames keys to snake_case and keeps provider strings verbatim, leading "- " included', () => {
     const body = fixture('grade-v3-task2.response.json');
-    const result = parseWritingV3Response(withPriorityCapture(body, 2));
+    const result = parseWritingV3Response(
+      withWritingErrorPriorityCapture(body, 2),
+    );
     const data = body['data'] as {
       overall_band: number;
       'Overall Assessment': {
@@ -152,7 +138,9 @@ describe('parseWritingV3Response', () => {
 
   it('carries each criterion errors and suggestions, and data_micro inside the result', () => {
     const body = fixture('grade-v3-task1.response.json');
-    const result = parseWritingV3Response(withPriorityCapture(body, 1));
+    const result = parseWritingV3Response(
+      withWritingErrorPriorityCapture(body, 1),
+    );
     const lexical = result.criteria.find(
       (criterion) => criterion.id === 'lexical_resource',
     );
@@ -171,7 +159,10 @@ describe('parseWritingV3Response', () => {
   it('never publishes usage, metrics or the chain of thought', () => {
     const result = JSON.stringify(
       parseWritingV3Response(
-        withPriorityCapture(fixture('grade-v3-task1.response.json'), 1),
+        withWritingErrorPriorityCapture(
+          fixture('grade-v3-task1.response.json'),
+          1,
+        ),
       ),
     );
 
@@ -184,7 +175,7 @@ describe('parseWritingV3Response', () => {
   });
 
   it('accepts a data_micro with codes AIHUB has never seen', () => {
-    const body = withPriorityCapture(
+    const body = withWritingErrorPriorityCapture(
       fixture('grade-v3-task2.response.json'),
       2,
     );
