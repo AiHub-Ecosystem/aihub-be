@@ -1281,6 +1281,11 @@ The response uses the common `{ "data", "meta" }` envelope. `data` has:
 - `overall_assessment`: `summary` (`overall`, `detail`, `cta`) and `progress`
   (`status`, and the lists `error_recur`, `error_impro` and `error_new`), which
   reports on this essay against the End-User's earlier results.
+- `error_priority`: up to three provider-ranked Writing priority errors. Each
+  entry has `rank`, `group`, `code`, `name_en`, `name_vi` and `reason_vi`; the
+  provider's order is preserved. `code` is open-ended, and `group` is one of
+  `task_achievement_response_coherence_cohesion`, `lexical_resource` or
+  `grammatical_range_accuracy`.
 - `data_micro`: the errors grouped by criterion and then by code, as
   `{ "<criterion>": { "<code>": { "prompt", "question_type", "comments": [{ "quote", "explanation" }] } } }`.
   It is empty (`{}`) when no error was found. Exercise routes take one selected

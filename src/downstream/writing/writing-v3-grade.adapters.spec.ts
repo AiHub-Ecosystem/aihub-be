@@ -17,6 +17,16 @@ function fixture(name: string): unknown {
   );
 }
 
+function gradeResponseFixture(task: 1 | 2): unknown {
+  const response = fixture(`grade-v3-task${task}.response.json`) as {
+    data: Record<string, unknown>;
+  };
+  const priority = fixture(
+    `grade-v3-task${task}-error-priority.capture.json`,
+  ) as { data: Record<string, unknown> };
+  return { ...response, data: { ...response.data, ...priority.data } };
+}
+
 const context = createRequestContext({
   requestId: 'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
   receivedAt: new Date('2026-11-01T00:00:00.000Z'),
@@ -77,7 +87,7 @@ describe('writingV3Task1GradeAdapter', () => {
     const parsed = writingV3Task1GradeAdapter.parseResponse({
       status: 200,
       headers: {},
-      body: fixture('grade-v3-task1.response.json'),
+      body: gradeResponseFixture(1),
     });
 
     expect(parsed.criteria[0]?.id).toBe('task_achievement');
@@ -135,7 +145,7 @@ describe('writingV3Task2GradeAdapter', () => {
     const parsed = writingV3Task2GradeAdapter.parseResponse({
       status: 200,
       headers: {},
-      body: fixture('grade-v3-task2.response.json'),
+      body: gradeResponseFixture(2),
     });
 
     expect(parsed.criteria[0]?.id).toBe('task_response');

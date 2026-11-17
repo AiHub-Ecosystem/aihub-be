@@ -31,3 +31,4 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0012](0012-defer-distributed-tracing.md)                 | Defer distributed tracing in Stage A                             | Superseded by ADR-0063                      |
 | [0013](0013-vault-runtime-secret-management.md)           | Vault-backed runtime secret management                           | Accepted; amended by ADR-0171               |
 | [0171](0171-vault-runtime-login-requires-a-secret-id.md)  | Vault runtime login requires a Secret ID as well as the role ID  | Accepted; supersedes ADR-0170               |
+| [0172](0172-writing-priority-errors-in-v2-grading.md)     | Publish provider-ranked Writing priority errors in `/v2`         | Accepted; amends ADR-0143                   |

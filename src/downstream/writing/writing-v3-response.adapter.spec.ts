@@ -20,6 +20,23 @@ function fixture(name: string): Record<string, unknown> {
   return parsed;
 }
 
+function withPriorityCapture(
+  body: Record<string, unknown>,
+  task: 1 | 2,
+): Record<string, unknown> {
+  const data = body['data'];
+  const capturedData = fixture(
+    `grade-v3-task${task}-error-priority.capture.json`,
+  )['data'];
+  if (!isRecord(data) || !isRecord(capturedData)) {
+    throw new Error('fixture data is not an object');
+  }
+  return {
+    ...body,
+    data: { ...data, error_priority: capturedData['error_priority'] },
+  };
+}
+
 function thrownBy(action: () => unknown): unknown {
   try {
     action();
@@ -31,23 +48,63 @@ function thrownBy(action: () => unknown): unknown {
 
 describe('parseWritingV3Response', () => {
   it.each([
-    ['grade-v3-task1.response.json', 'task_achievement'],
-    ['grade-v3-task2.response.json', 'task_response'],
-  ])('maps the captured %s onto the /v2 schema', (name, firstCriterion) => {
-    const result = parseWritingV3Response(fixture(name));
+    ['grade-v3-task1.response.json', 'task_achievement', 1],
+    ['grade-v3-task2.response.json', 'task_response', 2],
+  ] as const)(
+    'maps the captured %s onto the /v2 schema',
+    (name, firstCriterion, task) => {
+      const result = parseWritingV3Response(
+        withPriorityCapture(fixture(name), task),
+      );
 
-    expect(Value.Check(WritingV2GradeResponseSchema, result)).toBe(true);
-    expect(result.criteria.map((criterion) => criterion.id)).toEqual([
-      firstCriterion,
-      'coherence_cohesion',
-      'lexical_resource',
-      'grammatical_range_accuracy',
-    ]);
+      expect(Value.Check(WritingV2GradeResponseSchema, result)).toBe(true);
+      expect(result.criteria.map((criterion) => criterion.id)).toEqual([
+        firstCriterion,
+        'coherence_cohesion',
+        'lexical_resource',
+        'grammatical_range_accuracy',
+      ]);
+      expect(result.error_priority).toEqual(
+        (
+          fixture(`grade-v3-task${task}-error-priority.capture.json`)[
+            'data'
+          ] as Record<string, unknown>
+        )['error_priority'],
+      );
+    },
+  );
+
+  it.each([1, 2] as const)(
+    'rejects a Task %i provider response without error_priority',
+    (task) => {
+      expect(
+        thrownBy(() =>
+          parseWritingV3Response(fixture(`grade-v3-task${task}.response.json`)),
+        ),
+      ).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+    },
+  );
+
+  it.each([
+    ['rank above the allowed range', { rank: 4 }],
+    ['an unknown group', { group: 'task_response' }],
+  ])('rejects error_priority with %s', (_label, override) => {
+    const body = withPriorityCapture(
+      fixture('grade-v3-task1.response.json'),
+      1,
+    );
+    const data = body['data'] as Record<string, unknown>;
+    const [first] = data['error_priority'] as Record<string, unknown>[];
+    data['error_priority'] = [{ ...first, ...override }];
+
+    expect(thrownBy(() => parseWritingV3Response(body))).toMatchObject({
+      code: 'AI_SERVICE_CONTRACT_VIOLATION',
+    });
   });
 
   it('renames keys to snake_case and keeps provider strings verbatim, leading "- " included', () => {
     const body = fixture('grade-v3-task2.response.json');
-    const result = parseWritingV3Response(body);
+    const result = parseWritingV3Response(withPriorityCapture(body, 2));
     const data = body['data'] as {
       overall_band: number;
       'Overall Assessment': {
@@ -75,7 +132,7 @@ describe('parseWritingV3Response', () => {
 
   it('carries each criterion errors and suggestions, and data_micro inside the result', () => {
     const body = fixture('grade-v3-task1.response.json');
-    const result = parseWritingV3Response(body);
+    const result = parseWritingV3Response(withPriorityCapture(body, 1));
     const lexical = result.criteria.find(
       (criterion) => criterion.id === 'lexical_resource',
     );
@@ -93,7 +150,9 @@ describe('parseWritingV3Response', () => {
 
   it('never publishes usage, metrics or the chain of thought', () => {
     const result = JSON.stringify(
-      parseWritingV3Response(fixture('grade-v3-task1.response.json')),
+      parseWritingV3Response(
+        withPriorityCapture(fixture('grade-v3-task1.response.json'), 1),
+      ),
     );
 
     expect(result).not.toContain('coT');
@@ -105,7 +164,10 @@ describe('parseWritingV3Response', () => {
   });
 
   it('accepts a data_micro with codes AIHUB has never seen', () => {
-    const body = fixture('grade-v3-task2.response.json');
+    const body = withPriorityCapture(
+      fixture('grade-v3-task2.response.json'),
+      2,
+    );
     const result = parseWritingV3Response({
       ...body,
       data_micro: {

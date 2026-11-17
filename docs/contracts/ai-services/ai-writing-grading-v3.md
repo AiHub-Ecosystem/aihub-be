@@ -16,7 +16,9 @@ Owner: AI Writing service. Consumer: the AIHUB gateway, for Public API `/v2`
 Fixtures: `test/fixtures/ai-writing/grade-v3-task1.{request,response}.json` and
 `grade-v3-task2.{request,response}.json`. Redacted telemetry captures are in
 `grade-v3-task{1,2}.telemetry.capture.json`; they contain no essay and no
-provider text. Each task was captured once.
+provider text. Each task was captured once. Dev response captures for
+`data.error_priority` were added on 2026-11-17 in
+`grade-v3-task{1,2}-error-priority.capture.json`.
 
 The provider's document also holds test credentials and a sample token. They are
 not copied here or anywhere in this repository.
@@ -97,6 +99,13 @@ The body is `{ success, data_micro, data, usage, metrics }`.
 - `data_micro` is `{ criterion: { code: { prompt, question_type, comments[] } } }`,
   `{}` when there is no error. The 48 error codes are `TA01–06`, `TR01–08`,
   `CC01–08`, `LR01–07` and `GRA01–19`.
+- Both v3 grading responses include `data.error_priority`, a list of at most
+  three provider-ranked Writing priority errors. Each entry has `rank` (1–3),
+  `group` (`task_achievement_response_coherence_cohesion`, `lexical_resource`
+  or `grammatical_range_accuracy`), `code`, `name_en`, `name_vi` and
+  `reason_vi`. The error code remains an open string. An empty list means no
+  priority was selected; omission or a malformed entry violates the response
+  contract.
 - `data.coT`, `data.task`, `usage` and `metrics` are not published. AIHUB reads
   `usage` and `metrics` for metering only.
 

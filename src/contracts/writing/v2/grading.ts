@@ -48,6 +48,24 @@ export type WritingV2GradeTask2Request = Static<
   typeof WritingV2GradeTask2RequestSchema
 >;
 
+const WritingErrorPriorityGroupSchema = Type.Union([
+  Type.Literal('task_achievement_response_coherence_cohesion'),
+  Type.Literal('lexical_resource'),
+  Type.Literal('grammatical_range_accuracy'),
+]);
+
+export const WritingErrorPrioritySchema = Type.Object(
+  {
+    rank: Type.Integer({ minimum: 1, maximum: 3 }),
+    group: WritingErrorPriorityGroupSchema,
+    code: Type.String(),
+    name_en: Type.String(),
+    name_vi: Type.String(),
+    reason_vi: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 const ErrorSchema = Type.Object(
   {
     quote: Type.String(),
@@ -129,6 +147,7 @@ export const WritingV2GradeResponseSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
+    error_priority: Type.Array(WritingErrorPrioritySchema, { maxItems: 3 }),
     data_micro: Type.Record(
       Type.String(),
       Type.Record(Type.String(), MicroExerciseSchema),

@@ -38,6 +38,16 @@ function rawFixture(name: string): unknown {
   return parsed;
 }
 
+function gradeFixture(task: 1 | 2): unknown {
+  const body = rawFixture(`grade-v3-task${task}.response.json`) as {
+    data: Record<string, unknown>;
+  };
+  const priority = rawFixture(
+    `grade-v3-task${task}-error-priority.capture.json`,
+  ) as { data: { error_priority: unknown } };
+  return { ...body, data: { ...body.data, ...priority.data } };
+}
+
 const task1Fixture = rawFixture('grade-v3-task1.request.json') as {
   question: string;
   topic: string;
@@ -193,7 +203,7 @@ describe('Writing /v2 grading HTTP flow', () => {
       essay: task2Fixture.essay,
     }).reply(200, () => {
       downstreamCalls += 1;
-      return rawFixture('grade-v3-task2.response.json');
+      return gradeFixture(2);
     });
 
     const response = await post('task2', task2Payload);
@@ -206,6 +216,13 @@ describe('Writing /v2 grading HTTP flow', () => {
     expect(body.data.overall_assessment.progress.status).toEqual(
       expect.any(String),
     );
+    expect(body.data.error_priority).toMatchObject([
+      {
+        rank: 1,
+        group: 'task_achievement_response_coherence_cohesion',
+        code: 'CC01',
+      },
+    ]);
     for (const hidden of ['coT', 'layer1_errors', '"usage"', '"metrics"']) {
       expect(response.payload).not.toContain(hidden);
     }
@@ -223,7 +240,7 @@ describe('Writing /v2 grading HTTP flow', () => {
       url: task1Fixture.url,
     }).reply(200, () => {
       downstreamCalls += 1;
-      return rawFixture('grade-v3-task1.response.json');
+      return gradeFixture(1);
     });
 
     const response = await post('task1', task1Payload);
@@ -233,6 +250,13 @@ describe('Writing /v2 grading HTTP flow', () => {
     const body = Value.Parse(GradingResponseSchema, response.json());
     expect(body.meta.operation).toBe('writing.v2.task1.grade');
     expect(body.data.criteria[0]?.id).toBe('task_achievement');
+    expect(body.data.error_priority).toMatchObject([
+      {
+        rank: 1,
+        group: 'task_achievement_response_coherence_cohesion',
+        code: 'CC01',
+      },
+    ]);
   });
 
   it.each([
