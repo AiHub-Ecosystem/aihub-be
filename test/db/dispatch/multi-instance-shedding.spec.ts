@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { type Server, createServer } from 'node:http';
 
 import type Redis from 'ioredis';
@@ -47,7 +48,11 @@ function grade(
   });
 }
 
-async function waitForPublishedLevel(redis: Redis): Promise<string> {
+async function waitForPublishedLevel(
+  redis: Redis,
+  saturated: TestWorker,
+  flood: readonly Promise<HttpAnswer | undefined>[],
+): Promise<string> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const level = await redis.get(SHEDDING_LEVEL_KEY);
@@ -55,7 +60,38 @@ async function waitForPublishedLevel(redis: Redis): Promise<string> {
     // real-timer-ok: the level arrives over Redis from another OS process
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error('no instance published a shedding level within 30 s');
+  // The scrape is the only view of why nothing escalated: no dispatch in
+  // flight reads exactly like a governor that never ran.
+  const metrics = await scrape(saturated);
+  // A refusal before dispatch never reaches the limiter, so the flood's own
+  // answers are the other half of the picture.
+  const settled = (
+    await Promise.race([
+      Promise.allSettled(flood),
+      new Promise<null>((resolve) =>
+        // real-timer-ok: bounded wait on real HTTP responses
+        setTimeout(() => resolve(null), 3_000),
+      ),
+    ])
+  )
+    ?.map((result) =>
+      result.status === 'fulfilled' ? String(result.value?.status) : 'error',
+    )
+    .slice(0, 5)
+    .join(',');
+  const concurrency = metrics
+    .split('\n')
+    .filter((line) => line.startsWith('aihub_downstream_concurrency_limit'))
+    .join('\n');
+  throw new Error(
+    [
+      'no instance published a shedding level within 30 s',
+      `redis ${SHEDDING_LEVEL_KEY}=${String(await redis.get(SHEDDING_LEVEL_KEY))}`,
+      `first flood statuses: ${settled ?? 'none settled in 3 s'}`,
+      concurrency === '' ? 'no concurrency sample' : concurrency,
+      `applied level ${shedLevel(metrics)}`,
+    ].join('\n'),
+  );
 }
 
 /**
@@ -92,12 +128,66 @@ function login(worker: TestWorker): Promise<HttpAnswer | undefined> {
   });
 }
 
+/** The worker's own scrape: the only way to see what its gate admitted. */
+async function scrape(worker: TestWorker): Promise<string> {
+  const answer = await sendRequest(worker.url, {
+    method: 'GET',
+    path: '/metrics',
+  });
+  if (answer === undefined) throw new Error('worker did not answer /metrics');
+  return answer.body;
+}
+
+function shedCount(
+  metrics: string,
+  tier: 'critical' | 'standard' | 'best-effort',
+) {
+  const match = new RegExp(
+    `^aihub_shed_requests_total\\{tier="${tier}"\\} (\\d+)$`,
+    'm',
+  ).exec(metrics);
+  if (match?.[1] === undefined) throw new Error(`no shed sample for ${tier}`);
+  return Number(match[1]);
+}
+
+function shedLevel(metrics: string): number {
+  const match = /^aihub_shed_level (\d+)$/m.exec(metrics);
+  if (match?.[1] === undefined) throw new Error('no aihub_shed_level sample');
+  return Number(match[1]);
+}
+
+/**
+ * The governor adopts the shared level on its own one-second timer, so a peer
+ * publishes before it applies. Waiting here keeps the next assertion about
+ * shedding rather than about that timer's phase.
+ */
+async function waitForAppliedLevel(
+  worker: TestWorker,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  let last = -1;
+  while (Date.now() < deadline) {
+    last = shedLevel(await scrape(worker));
+    if (last >= expected) return;
+    // real-timer-ok: the level arrives on the worker's own refresh timer
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`worker stayed at shed level ${last}, expected ${expected}`);
+}
+
 describe('multi-instance prioritized load shedding', () => {
   const pool = createTestPool();
   const redis = createSandboxTestRedis();
   let provider: Server | undefined;
   let workers: TestWorker[] = [];
   let organization: GradingOrganization | undefined;
+
+  beforeAll(async () => {
+    // The client refuses commands until it is connected, and this suite's first
+    // act is a DEL, before any request has given it time to connect.
+    if (redis.status !== 'ready') await once(redis, 'ready');
+  });
 
   afterEach(async () => {
     await Promise.allSettled(workers.map((worker) => worker.stop()));
@@ -134,15 +224,21 @@ describe('multi-instance prioritized load shedding', () => {
     });
     organization = seeded;
 
-    // The same path admits while the host is healthy, so a later 503 is the
-    // shedding decision rather than a broken worker.
-    const admittedBeforeFlood = await grade(saturated, seeded);
-    expect(admittedBeforeFlood?.status).toBe(200);
+    // The stalled provider never answers, so no grading call can return 200.
+    // What must hold before the flood is that the gate is quiet: level 0, and
+    // not one refusal counted. Without this, a later 503 could be a worker that
+    // never worked.
+    const before = await scrape(saturated);
+    expect(before).toContain('aihub_shed_level 0');
+    expect(shedCount(before, 'best-effort')).toBe(0);
 
     const flood = Array.from({ length: FLOOD }, () => grade(saturated, seeded));
     flood.forEach((call) => void call.catch(() => undefined));
 
-    await expect(waitForPublishedLevel(redis)).resolves.toMatch(/^[12]$/);
+    await expect(
+      waitForPublishedLevel(redis, saturated, flood),
+    ).resolves.toMatch(/^[12]$/);
+    await waitForAppliedLevel(peer, 1);
 
     // The peer is idle, so its own policy stays at zero: a refusal it makes
     // proves the level arrived through the shared store.
@@ -156,6 +252,13 @@ describe('multi-instance prioritized load shedding', () => {
     expect(saturatedShed.answer?.status).toBe(503);
     expect(saturatedShed.answer?.body).toContain('"SERVICE_OVERLOADED"');
     expect(saturatedShed.elapsedMs).toBeLessThan(1_000);
+
+    // The refusals are counted by tier, and the idle peer counted its own.
+    for (const worker of [saturated, peer]) {
+      expect(shedCount(await scrape(worker), 'best-effort')).toBeGreaterThan(0);
+      // A refusal that lands on a critical route would show up here.
+      expect(shedCount(await scrape(worker), 'critical')).toBe(0);
+    }
 
     for (const answer of [await login(peer), await login(saturated)]) {
       // Unknown credentials answer 401, not 503: the tier guard let them in.
