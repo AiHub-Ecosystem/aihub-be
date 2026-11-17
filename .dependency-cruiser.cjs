@@ -170,7 +170,7 @@ function discoverModuleSeams() {
 
 /**
  * A business module reaches another through its public seam and nothing else.
- * The seam is three things (ADR-0066):
+ * The seam is six things (ADR-0106, amended by ADR-0156):
  *
  *   1. `<module>.module.ts`, which is Nest composition wiring.
  *   2. `application/**\/*.port.ts`, an application port the owner declares.
@@ -199,7 +199,7 @@ function crossModuleRule() {
     name: 'no-cross-module-internal-import',
     severity: 'error',
     comment:
-      "A business module imports another module's internal path. Use the module file, an application port, an explicit public/ facade, a Nest export, decorator, or shared request primitive (ADR-0066).",
+      "A business module imports another module's internal path. Use the module file, an application port, an explicit public/ facade, a Nest export, decorator, or shared request primitive (ADR-0106).",
     from: {
       // Group 1 is the importing module's name.
       path: '^src/modules/([^/]+)/',

@@ -1671,7 +1671,7 @@ export function collectSourceTextFailures(options) {
     return { failures, stoppedEarly: true };
   }
 
-  // ADR-0066 / #674: an inner layer must not augment the web framework's
+  // ADR-0106 / #674: an inner layer must not augment the web framework's
   // request type. dependency-cruiser cannot see `declare module`, so check the
   // source text directly.
   for (const layer of ['application', 'domain']) {
