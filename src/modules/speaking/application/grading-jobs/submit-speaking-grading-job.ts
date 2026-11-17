@@ -185,7 +185,7 @@ export class SubmitSpeakingGradingJob {
       ...owner,
       assetId: request.audio_asset_id,
     };
-    if (!(await hasLiveSpeakingAudioAsset(this.audio, assetOwner, now))) {
+    if (!(await hasLiveSpeakingAudioAsset(this.audio, assetOwner, this.now))) {
       // The probe consumed no admission yet: charge the rate limit and the
       // Organization retry budget before answering NOT_FOUND, or a caller
       // could poll for foreign asset ids without ever being limited.

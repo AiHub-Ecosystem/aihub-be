@@ -156,4 +156,25 @@ describe('SpeakingRecordingAccess', () => {
       });
     },
   );
+
+  it('refuses an asset whose retention deadline passes while the lookup is in flight', async () => {
+    let clock = NOW;
+    let finishLookup: (lookup: SpeakingAudioUploadLookup) => void = () =>
+      undefined;
+    const access = new SpeakingRecordingAccess(
+      {
+        findUpload: () =>
+          new Promise<SpeakingAudioUploadLookup>((resolve) => {
+            finishLookup = resolve;
+          }),
+      },
+      () => clock,
+    );
+
+    const pending = refusal(access, OWNER);
+    clock = ASSET.retentionExpiresAt;
+    finishLookup({ kind: 'asset', asset: ASSET });
+
+    await expect(pending).resolves.toMatchObject({ code: 'NOT_FOUND' });
+  });
 });
