@@ -949,6 +949,34 @@ tests:
         alertname: AIHUBAIWritingAvailabilityFastBurn
         exp_alerts: []
 
+  # #1591: shedding 25% of arriving requests for ten minutes fires; 10% does not.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_tier_requests_total{job="aihub-production-app",tier="best-effort"}'
+        values: "0+40x12"
+      - series: 'aihub_shed_requests_total{job="aihub-production-app",tier="best-effort"}'
+        values: "0+10x12"
+      - series: 'aihub_tier_requests_total{job="aihub-sandbox-app",tier="best-effort"}'
+        values: "0+100x12"
+      - series: 'aihub_shed_requests_total{job="aihub-sandbox-app",tier="best-effort"}'
+        values: "0+10x12"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AIHUBSheddingSustained
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: AIHUBSheddingSustained
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+            exp_annotations:
+              summary: "AIHUB has shed more than 20% of requests for ten minutes"
+              description: "aihub-production-app refused 25% of arriving requests to protect the AI Services. Shedding this long means demand exceeds capacity: read aihub_shed_level for the tier being shed and aihub:shed_ratio:rate5m for which tier carries it, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#prioritized-load-shedding
+
   # #900: warn per process at 80% of the 1.5 CPU limit.
   - interval: 1m
     input_series:

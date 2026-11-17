@@ -9,6 +9,14 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.9.0] - 2026-11-17
+
+### Added
+
+- `SERVICE_OVERLOADED` is a new `503` refusal. When the AI Services are
+  saturated, AIHUB now refuses the lowest-priority requests first, and answers
+  them with this code plus `Retry-After` and `error.retry_after_ms`.
+
 ## [2.8.0] - 2026-11-15
 
 ### Changed
@@ -146,6 +154,14 @@ out.
   `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
+
+## [1.17.0] - 2026-11-17
+
+### Added
+
+- `SERVICE_OVERLOADED` is a new `503` refusal. When the AI Services are
+  saturated, AIHUB refuses the lowest-priority requests first, and answers them
+  with this code plus `Retry-After` and `error.retry_after_ms`.
 
 ## [1.16.0] - 2026-11-15
 

@@ -306,7 +306,7 @@ export const PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: SpeakingQuestionsResponseSchema,
-    errorStatuses: [400, 500],
+    errorStatuses: [400, 500, 503],
   },
   'writing.v2.task1.templates': {
     cacheControl: {

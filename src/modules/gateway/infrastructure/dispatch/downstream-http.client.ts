@@ -18,7 +18,10 @@ import type {
   DownstreamRequest,
   InternalAIServiceResponse,
 } from '@/downstream/downstream.types';
-import { recordDownstreamLimitDropped } from './downstream-concurrency-metrics';
+import {
+  type DownstreamConcurrencySample,
+  recordDownstreamLimitDropped,
+} from './downstream-concurrency-metrics';
 import {
   Gradient2ConcurrencyLimiter,
   type Gradient2Config,
@@ -300,6 +303,15 @@ export class DownstreamHttpClient {
         this.inFlightByOrigin.set(base.origin, remaining);
       }
     }
+  }
+
+  /**
+   * The live adaptive capacity per origin. Read by the shedding governor: the
+   * limiter's own `inFlight / limit` is the overload signal (ADR-0172), so
+   * there is no second limiter to disagree with it.
+   */
+  concurrencySnapshot(): readonly DownstreamConcurrencySample[] {
+    return this.concurrencyLimiter.snapshot();
   }
 
   async close(): Promise<void> {

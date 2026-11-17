@@ -8,6 +8,11 @@ import {
 import { AppModule } from '@/app.module';
 import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import { generateRequestId } from '@/common/request-context/request-id';
+import {
+  SHEDDING_LEVEL,
+  type SheddingLevelPort,
+} from '@/modules/gateway/application/shedding/shedding-level.port';
+import { recordTierOutcome } from '@/modules/gateway/infrastructure/dispatch/shedding-metrics';
 import { registerRequestHooks } from '@/register-request-hooks';
 
 describe('AIHUB crash worker', () => {
@@ -18,7 +23,10 @@ describe('AIHUB crash worker', () => {
     );
     app.enableShutdownHooks();
     const fastify = app.getHttpAdapter().getInstance();
-    registerRequestHooks(fastify, undefined);
+    registerRequestHooks(fastify, undefined, undefined, {
+      level: app.get<SheddingLevelPort>(SHEDDING_LEVEL, { strict: false }),
+      record: recordTierOutcome,
+    });
     // As in main.ts, so the auth routes can read and clear their cookies.
     await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
     registerMetricsRoute(fastify);

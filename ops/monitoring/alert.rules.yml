@@ -155,6 +155,29 @@ groups:
           description: "{{ $labels.operation }} in {{ $labels.job }} received repeated 401 or 403 answers from {{ $labels.downstream }} in the last five minutes."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-credential-rejections
 
+      # #1591: shed_ratio per tier, from the two counters the gateway exports.
+      - record: aihub:shed_ratio:rate5m
+        expr: |
+          sum by (job, tier) (rate(aihub_shed_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          /
+          sum by (job, tier) (rate(aihub_tier_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+
+      - alert: AIHUBSheddingSustained
+        expr: |
+          sum by (job) (rate(aihub_shed_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          /
+          sum by (job) (rate(aihub_tier_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "AIHUB has shed more than 20% of requests for ten minutes"
+          description: "{{ $labels.job }} refused {{ $value | humanizePercentage }} of arriving requests to protect the AI Services. Shedding this long means demand exceeds capacity: read aihub_shed_level for the tier being shed and aihub:shed_ratio:rate5m for which tier carries it, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#prioritized-load-shedding
+
   - name: aihub-tracing
     rules:
       - alert: AIHUBTraceReceiverNotReceiving
@@ -207,7 +230,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "a3f19ab6a88f96405beec65e292edc9da56384a0ff6efe0e05ef6cf321785d29"
+          rules_sha256: "41b3444bab4e887a5d487ff8b9de0a3af36721f778f1233a92a3ae604f048898"
 
   - name: aihub-email-outbox
     rules:

@@ -11,7 +11,16 @@ import {
   registerPublicApiMajorUsage,
   registerRequestCompletionLog,
 } from './modules/metering/public/http-hooks';
+import type { RequestTier } from './modules/gateway/application/shedding/request-tier';
+import type { SheddingLevelPort } from './modules/gateway/application/shedding/shedding-level.port';
+import { registerSheddingGuard } from './modules/gateway/presentation/shedding.hook';
 import type { PublicApiMajorUsageSample } from './modules/metering/public/public-api-major-usage';
+
+/** Prioritized load shedding, bound to wherever the gateway reports its tiers. */
+export interface SheddingHookOptions {
+  readonly level: SheddingLevelPort;
+  readonly record: (tier: RequestTier, outcome: 'admitted' | 'shed') => void;
+}
 
 /**
  * Every Fastify hook the application runs around a request, in the order the
@@ -25,6 +34,7 @@ export function registerRequestHooks(
   instance: FastifyInstance,
   tracer: Tracer | undefined,
   recordPublicApiMajorUsage?: (sample: PublicApiMajorUsageSample) => void,
+  shedding?: SheddingHookOptions,
 ): void {
   // Capture ingress before tracing, body-size rejection, parsing, and Nest guards.
   registerRequestTiming(instance);
@@ -33,6 +43,12 @@ export function registerRequestHooks(
   // bounded and prevent raw request URLs or query values entering traces.
   if (tracer !== undefined) {
     registerRequestTracing(instance, tracer);
+  }
+
+  // After tracing so a shed request still carries a span, and before the
+  // body-size guard so neither reads a body for a request it will refuse.
+  if (shedding !== undefined) {
+    registerSheddingGuard(instance, shedding.level, shedding.record);
   }
 
   registerBodySizeGuard(instance);
