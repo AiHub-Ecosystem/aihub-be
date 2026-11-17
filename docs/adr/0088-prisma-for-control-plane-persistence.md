@@ -126,6 +126,21 @@ so it catches a transaction abandoned outside the normal runner without
 terminating a bounded transaction. These values are applied once by the shared
 pool factory. `#588` separately owns reserving admission capacity.
 
+### One warm connection per pool (2026-11-17)
+
+`idleTimeoutMillis` is 30 seconds, and eviction only fires above the pool's
+`min`. With the default `min` of 0 that left every pool empty between sparse
+callers: the Sandbox assertion probe arrives once a minute, so each request
+paid a cold TCP, TLS, and authentication handshake. On the production host that
+handshake occasionally exceeded the 250 ms acquisition deadline under the
+container's shared CPU quota, answering `503 DATABASE_UNAVAILABLE` even though
+PostgreSQL was healthy.
+
+Each shared pool now sets `min: 1`, so one connection stays open across the gap
+and a sparse caller finds it warm. The 250 ms acquisition bound and the
+30-second idle timeout are unchanged, and the extra connection is one per pool
+inside the existing per-role `max` budget.
+
 Operator work uses a separate explicit profile: 5-minute statements,
 30-second lock waits, and 60-second idle transactions. The Prisma-backed
 operator factory and raw `pg` CLI and migration pools set that profile so

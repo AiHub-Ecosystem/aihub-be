@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient, type TransactionStatus } from 'pg';
 
 import { getMetrics } from '@/common/observability/metrics';
-import { createPostgresPool } from './postgres-pool';
+import { createPostgresPool, postgresPoolOptions } from './postgres-pool';
 
 type ConnectCallback = (
   error: Error | undefined,
@@ -119,6 +119,17 @@ describe('Postgres pool connection reuse', () => {
 
     expect(callbacks).toHaveLength(1);
     expect(release).toHaveBeenCalledWith();
+  });
+});
+
+describe('Postgres pool options', () => {
+  it('keeps one connection past the idle timeout so a sparse caller stays warm', () => {
+    const options = postgresPoolOptions('postgres://runtime', 44);
+
+    // A caller spaced wider than idleTimeoutMillis (the 60 s Sandbox probe)
+    // finds a warm connection instead of paying a cold handshake.
+    expect(options.min).toBe(1);
+    expect(options.idleTimeoutMillis).toBe(30_000);
   });
 });
 

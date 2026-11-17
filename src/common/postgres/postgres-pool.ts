@@ -456,6 +456,10 @@ export function postgresPoolOptions(
       ? {}
       : { application_name: applicationName }),
     max,
+    // One connection stays past `idleTimeoutMillis`, so a caller spaced wider
+    // than that gap (the 60 s Sandbox probe) does not pay a cold TCP, TLS, and
+    // auth handshake inside its 250 ms acquisition budget.
+    min: 1,
     connectionTimeoutMillis: POSTGRES_ACQUISITION_TIMEOUT_MS,
     idleTimeoutMillis: 30_000,
     ...(!transactionPoolerEnabled ? timeouts : {}),
