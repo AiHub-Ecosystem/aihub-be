@@ -4,6 +4,7 @@ import { Value } from '@sinclair/typebox/value';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { isRecord } from '@/common/is-record';
 import type { RequestContext } from '@/common/request-context/request-context';
+import { MODEL_TEXT_MAX_LENGTH } from '@/contracts/model-text';
 import {
   type CreateLongWritingExerciseRequest,
   type CreateMicroExerciseRequest,
@@ -21,7 +22,10 @@ import type {
   DownstreamErrorHint,
   DownstreamRequest,
 } from '@/downstream/downstream.types';
-import { stripControlCharacters } from '@/downstream/model-text';
+import {
+  assertTextWithinLimit,
+  stripControlCharacters,
+} from '@/downstream/model-text';
 import { requiredSpeakingIdentityHeaders } from '@/downstream/speaking/speaking-grading.adapter';
 
 function jsonRequest(
@@ -74,6 +78,8 @@ function parseData<T extends TSchema>(schema: T, body: unknown): Static<T> {
       `response data does not match the captured shape at ${firstError?.path ?? '/'}`,
     );
   }
+  // These public schemas publish no text limit, so the adapter holds it (#377).
+  assertTextWithinLimit(data, MODEL_TEXT_MAX_LENGTH);
   return data as Static<T>;
 }
 

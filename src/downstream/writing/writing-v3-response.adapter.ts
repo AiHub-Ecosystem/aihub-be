@@ -1,6 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
+import { MODEL_TEXT_MAX_LENGTH } from '@/contracts/model-text';
 import { CRITERION_IDS, type CriterionId } from '@/contracts/writing/grading';
 import {
   WritingErrorPrioritySchema,
@@ -117,6 +118,24 @@ function toCriteria(
 }
 
 /**
+ * `data_micro` is keyed by provider text: a trait, then an error code. A schema
+ * cannot bound a record key, so the length is checked here, with the same limit
+ * as every other model-generated label.
+ */
+function assertKeysWithinTextLimit(
+  dataMicro: ProviderBodyShape['data_micro'],
+): void {
+  for (const [trait, errors] of Object.entries(dataMicro)) {
+    if (
+      trait.length > MODEL_TEXT_MAX_LENGTH ||
+      Object.keys(errors).some((code) => code.length > MODEL_TEXT_MAX_LENGTH)
+    ) {
+      throw contractViolation('data_micro key exceeds the text limit');
+    }
+  }
+}
+
+/**
  * Maps a captured-shape AI Writing v3 grading body onto the `/v2` response
  * (ADR-0143 decisions 1 to 3). Pure: no I/O, no clock, no logging. String values
  * pass through verbatim.
@@ -133,6 +152,7 @@ export function parseWritingV3Response(
     );
   }
   const { data, data_micro } = body;
+  assertKeysWithinTextLimit(data_micro);
   const assessment = data['Overall Assessment'];
 
   const response: WritingV2GradeResponse = {

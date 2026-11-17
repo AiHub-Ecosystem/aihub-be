@@ -220,3 +220,55 @@ describe('parseWritingV3Response', () => {
     });
   });
 });
+
+describe('parseWritingV3Response data_micro keys (#377)', () => {
+  const TEXT_LIMIT = 4_000;
+
+  function withKeys(names: {
+    readonly trait?: string;
+    readonly code?: string;
+  }): Record<string, unknown> {
+    const body = fixture('grade-v3-task1.response.json');
+    const micro = body['data_micro'];
+    const trait = isRecord(micro) ? Object.entries(micro)[0] : undefined;
+    const traitErrors = trait?.[1];
+    const code = isRecord(traitErrors)
+      ? Object.entries(traitErrors)[0]
+      : undefined;
+    if (trait === undefined || code === undefined) {
+      throw new Error('the fixture has no data_micro entry');
+    }
+    return {
+      ...body,
+      data_micro: {
+        [names.trait ?? trait[0]]: { [names.code ?? code[0]]: code[1] },
+      },
+    };
+  }
+
+  it.each([
+    ['trait', { trait: 'k'.repeat(TEXT_LIMIT + 1) }],
+    ['error-code', { code: 'k'.repeat(TEXT_LIMIT + 1) }],
+  ])('refuses a %s key past the text limit', (_label, names) => {
+    expect(
+      thrownBy(() => parseWritingV3Response(withKeys(names))),
+    ).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+  });
+
+  it('accepts keys of exactly the text limit', () => {
+    const key = 'k'.repeat(TEXT_LIMIT);
+
+    expect(() =>
+      parseWritingV3Response(withKeys({ trait: key, code: key })),
+    ).not.toThrow();
+  });
+
+  it('removes control characters from the keys it passes on', () => {
+    const result = parseWritingV3Response(
+      withKeys({ trait: 'tr\u0007ait', code: 'co\u202Ede' }),
+    );
+
+    expect(Object.keys(result.data_micro)).toEqual(['trait']);
+    expect(Object.keys(result.data_micro['trait'] ?? {})).toEqual(['code']);
+  });
+});

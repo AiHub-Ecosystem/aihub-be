@@ -24,6 +24,30 @@ out.
 - Writing `/v2` grading responses include provider-ranked `error_priority`
   entries for up to three priority errors.
 
+## [2.9.0] - 2026-11-18
+
+### Changed
+
+- Model-generated text in `/v2` Writing and Speaking grading results is
+  published as untrusted plain text with a length limit. Feedback, explanation,
+  and label fields carry `maxLength` 4000, and a quotation or transcript carries
+  `maxLength` 20000, counted in UTF-16 code units. AIHUB removes control
+  characters from these fields. Render them as text, never as HTML.
+ - An AI service response with a text field over its limit, or a body over the
+  operation's size limit, is refused as `502 AI_SERVICE_CONTRACT_VIOLATION`.
+
+## [1.17.0] - 2026-11-18
+
+### Changed
+
+- Model-generated text in `/v1` Writing and Speaking grading results is
+  published as untrusted plain text with a length limit. Feedback, explanation,
+  and label fields carry `maxLength` 4000, and a quotation or transcript carries
+  `maxLength` 20000, counted in UTF-16 code units. AIHUB removes control
+  characters from these fields. Render them as text, never as HTML.
+ - An AI service response with a text field over its limit, or a body over the
+  operation's size limit, is refused as `502 AI_SERVICE_CONTRACT_VIOLATION`.
+
 ## [2.8.0] - 2026-11-15
 
 ### Changed

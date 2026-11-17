@@ -1,7 +1,5 @@
 import { type Static, Type } from '@sinclair/typebox';
 
-import { ModelText } from '@/contracts/model-text';
-
 import { CriterionIdSchema } from '@/contracts/writing/grading';
 import { WRITING_EXERCISE_IMAGE_URL_MAX_LENGTH } from '@/modules/writing/public/grading-policy';
 
@@ -130,26 +128,26 @@ export type GradeMicroExerciseRequest = Static<
   typeof GradeMicroExerciseRequestSchema
 >;
 
-const StringList = Type.Array(ModelText());
+const StringList = Type.Array(Type.String());
 
 const ExerciseItemFields = {
   questions_no: Type.Integer({ minimum: 1 }),
-  question_text: ModelText(),
+  question_text: Type.String(),
   question_image: Type.Union([
     Type.String({ maxLength: WRITING_EXERCISE_IMAGE_URL_MAX_LENGTH }),
     Type.Null(),
   ]),
-  explanation: ModelText(),
+  explanation: Type.String(),
 };
 
 const MicroMetaFields = {
-  id: ModelText({ minLength: 1 }),
-  ai_grading: ModelText(),
-  difficulty: ModelText(),
-  topic: ModelText(),
-  instruction: ModelText(),
+  id: Type.String({ minLength: 1 }),
+  ai_grading: Type.String(),
+  difficulty: Type.String(),
+  topic: Type.String(),
+  instruction: Type.String(),
   number_of_questions: Type.Integer({ minimum: 1 }),
-  rationale_for_exercise: Type.Union([ModelText(), Type.Null()]),
+  rationale_for_exercise: Type.Union([Type.String(), Type.Null()]),
 };
 
 const MicroResponseData = <
@@ -165,7 +163,7 @@ const MicroResponseData = <
         {
           ...MicroMetaFields,
           type: Type.Literal(type),
-          error_code: ModelText(),
+          error_code: Type.String(),
         },
         { additionalProperties: false },
       ),
@@ -176,10 +174,10 @@ const MicroResponseData = <
 
 const MultipleChoiceOptions = Type.Object(
   {
-    A: ModelText(),
-    B: ModelText(),
-    C: ModelText(),
-    D: ModelText(),
+    A: Type.String(),
+    B: Type.String(),
+    C: Type.String(),
+    D: Type.String(),
   },
   { additionalProperties: false },
 );
@@ -190,7 +188,7 @@ const MultipleChoiceSingle = MicroResponseData(
     {
       ...ExerciseItemFields,
       options: MultipleChoiceOptions,
-      correct: ModelText(),
+      correct: Type.String(),
     },
     { additionalProperties: false },
   ),
@@ -202,7 +200,7 @@ const MultipleChoiceMultiple = MicroResponseData(
     {
       ...ExerciseItemFields,
       options: MultipleChoiceOptions,
-      correct: Type.Array(ModelText(), { minItems: 1, maxItems: 4 }),
+      correct: Type.Array(Type.String(), { minItems: 1, maxItems: 4 }),
     },
     { additionalProperties: false },
   ),
@@ -213,8 +211,8 @@ const ChooseFromList = MicroResponseData(
   Type.Object(
     {
       ...ExerciseItemFields,
-      options: Type.Array(ModelText(), { minItems: 2 }),
-      correct: ModelText(),
+      options: Type.Array(Type.String(), { minItems: 2 }),
+      correct: Type.String(),
     },
     { additionalProperties: false },
   ),
@@ -236,7 +234,7 @@ const Annotation = MicroResponseData(
   Type.Object(
     {
       ...ExerciseItemFields,
-      text_for_annotation: ModelText(),
+      text_for_annotation: Type.String(),
       correct: StringList,
     },
     { additionalProperties: false },
@@ -248,8 +246,8 @@ const Reorder = MicroResponseData(
   Type.Object(
     {
       ...ExerciseItemFields,
-      options: Type.Array(ModelText(), { minItems: 2 }),
-      correct: ModelText(),
+      options: Type.Array(Type.String(), { minItems: 2 }),
+      correct: Type.String(),
     },
     { additionalProperties: false },
   ),
@@ -257,9 +255,9 @@ const Reorder = MicroResponseData(
 
 const OpenWritingAnswer = Type.Object(
   {
-    sample_answer: ModelText(),
-    ai_grading_rubric: ModelText(),
-    note: Type.Union([ModelText(), Type.Null()]),
+    sample_answer: Type.String(),
+    ai_grading_rubric: Type.String(),
+    note: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -302,13 +300,13 @@ const LongWritingExerciseResponse = Type.Object(
   {
     meta: Type.Object(
       {
-        id: ModelText({ minLength: 1 }),
+        id: Type.String({ minLength: 1 }),
         type: Type.Literal('long_writing'),
-        ai_grading: ModelText(),
+        ai_grading: Type.String(),
         error_code: StringList,
-        difficulty: ModelText(),
-        topic: ModelText(),
-        instruction: ModelText(),
+        difficulty: Type.String(),
+        topic: Type.String(),
+        instruction: Type.String(),
         number_of_questions: Type.Integer({ minimum: 1 }),
       },
       { additionalProperties: false },
@@ -320,8 +318,8 @@ const LongWritingExerciseResponse = Type.Object(
           hint: StringList,
           correct: Type.Object(
             {
-              sample_answer: ModelText(),
-              ai_grading_rubric: ModelText(),
+              sample_answer: Type.String(),
+              ai_grading_rubric: Type.String(),
             },
             { additionalProperties: false },
           ),
@@ -342,7 +340,7 @@ export type LongWritingExerciseResponse = Static<
 export const MicroExerciseGradeResponseSchema = Type.Object(
   {
     score: Type.Integer({ minimum: 1, maximum: 10 }),
-    comment: ModelText(),
+    comment: Type.String(),
   },
   { additionalProperties: false },
 );

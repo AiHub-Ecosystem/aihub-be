@@ -144,9 +144,11 @@ export const WritingV2GradeResponseSchema = Type.Object(
       { additionalProperties: false },
     ),
     error_priority: Type.Array(WritingErrorPrioritySchema, { maxItems: 3 }),
+    // TypeBox turns a record key schema into a pattern and drops its length, so
+    // the keys carry no `maxLength` here; the adapter bounds them (#377).
     data_micro: Type.Record(
-      ModelText(),
-      Type.Record(ModelText(), MicroExerciseSchema),
+      Type.String(),
+      Type.Record(Type.String(), MicroExerciseSchema),
     ),
   },
   { additionalProperties: false },

@@ -1,4 +1,15 @@
-import { stripControlCharacters } from './model-text';
+import { AppError } from '@/common/errors/app-error';
+import {
+  MAX_RESPONSE_DEPTH,
+  assertTextWithinLimit,
+  stripControlCharacters,
+} from './model-text';
+
+function nested(depth: number): unknown {
+  let value: unknown = 'leaf';
+  for (let level = 0; level < depth; level += 1) value = [value];
+  return value;
+}
 
 describe('stripControlCharacters', () => {
   it('drops C0, C1 and bidirectional controls but keeps tab, newline and carriage return', () => {
@@ -14,19 +25,65 @@ describe('stripControlCharacters', () => {
     expect(stripControlCharacters(text)).toBe(text);
   });
 
-  it('cleans every string in a nested body and keeps its keys and other values', () => {
+  it('cleans every string and every key in a nested body and keeps other values', () => {
     const cleaned = stripControlCharacters({
-      'k\u0007ey': ['x\u0007', { deep: 'y\u0000' }],
+      'k\u0007ey': ['x\u0007', { 'in‮ner': 'y\u0000' }],
       band: 6.5,
       done: true,
       nothing: null,
     });
 
     expect(cleaned).toEqual({
-      'k\u0007ey': ['x', { deep: 'y' }],
+      key: ['x', { inner: 'y' }],
       band: 6.5,
       done: true,
       nothing: null,
     });
+  });
+
+  it('accepts a body nested exactly to the depth limit', () => {
+    expect(() =>
+      stripControlCharacters(nested(MAX_RESPONSE_DEPTH)),
+    ).not.toThrow();
+  });
+
+  it('refuses a deeper body as a contract violation instead of exhausting the stack', () => {
+    let thrown: unknown;
+    try {
+      stripControlCharacters(nested(10_000));
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AppError);
+    expect(thrown).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+  });
+});
+
+describe('assertTextWithinLimit', () => {
+  it('accepts text up to the limit at any depth, and ignores keys and non-strings', () => {
+    expect(() =>
+      assertTextWithinLimit(
+        { ['k'.repeat(50)]: ['x'.repeat(10), { deep: 'y'.repeat(10) }], n: 99 },
+        10,
+      ),
+    ).not.toThrow();
+  });
+
+  it('refuses a longer string as a contract violation that does not echo it', () => {
+    let thrown: unknown;
+    try {
+      assertTextWithinLimit({ list: ['ok', 'secret'.repeat(5)] }, 10);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AppError);
+    expect(thrown).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+    const logged =
+      thrown instanceof AppError
+        ? `${thrown.message} ${thrown.diagnostic}`
+        : '';
+    expect(logged).not.toContain('secret');
   });
 });
