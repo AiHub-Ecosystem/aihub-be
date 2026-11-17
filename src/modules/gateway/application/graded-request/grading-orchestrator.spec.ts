@@ -348,6 +348,62 @@ describe('GradingOrchestratorPort', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('replays a stored Writing v2 response from before error_priority existed', async () => {
+    const { port, calls, stored } = fixture();
+    const legacyData = {
+      overall_band: 7,
+      criteria: [
+        'task_response',
+        'coherence_cohesion',
+        'lexical_resource',
+        'grammatical_range_accuracy',
+      ].map((id) => ({
+        id,
+        band: 7,
+        band_reason: '',
+        strengths: [],
+        areas_for_improvement: [],
+        errors: [],
+        suggestions: [],
+        feedback_detail: [],
+      })),
+      overall_assessment: {
+        summary: { overall: '', detail: [], cta: '' },
+        progress: {
+          status: '',
+          error_recur: [],
+          error_impro: [],
+          error_new: [],
+        },
+      },
+      data_micro: {},
+    };
+    stored.set('writing.v2.task2.grade:legacy-writing-v2-replay', {
+      operation: 'writing.v2.task2.grade',
+      data: legacyData,
+      downstreamMs: 23,
+    });
+
+    const replay = await port.execute({
+      ...metadata(new AbortController().signal),
+      operation: 'writing.v2.task2.grade',
+      input: {
+        question: 'Discuss the topic.',
+        topic: 'education',
+        essay: 'A clear essay.',
+      },
+      idempotencyKey: 'legacy-writing-v2-replay',
+    });
+
+    expect(replay.data).toEqual(legacyData);
+    expect(replay.data).not.toHaveProperty('error_priority');
+    expect(replay).toMatchObject({
+      downstreamMs: 0,
+      idempotentReplay: true,
+    });
+    expect(calls).toHaveLength(0);
+  });
+
   describe('a stored body carrying members a newer release added', () => {
     const writingCommand = {
       ...metadata(new AbortController().signal),

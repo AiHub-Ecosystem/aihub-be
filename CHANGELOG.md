@@ -9,6 +9,13 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.9.0] - 2026-11-18
+
+### Added
+
+- Writing `/v2` grading responses include provider-ranked `error_priority`
+  entries for up to three priority errors.
+
 ## [2.8.0] - 2026-11-15
 
 ### Changed

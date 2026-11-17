@@ -156,6 +156,17 @@ export const WritingV2GradeResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+/** Read-only idempotency shape for completed grades written before `error_priority`. */
+export const WritingV2StoredGradeResponseSchema = Type.Object(
+  {
+    ...WritingV2GradeResponseSchema.properties,
+    error_priority: Type.Optional(
+      WritingV2GradeResponseSchema.properties.error_priority,
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export type WritingV2GradeResponse = Static<
   typeof WritingV2GradeResponseSchema
 >;

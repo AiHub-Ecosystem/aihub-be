@@ -14,6 +14,9 @@ three documented groups while leaving error codes open-ended. The dev provider
 returned this shape for both grading tasks on 2026-11-17; captures are kept in
 `test/fixtures/ai-writing/grade-v3-task{1,2}-error-priority.capture.json`.
 Additional provider fields on an entry are ignored and are not published.
+An older completed `/v2` idempotency result may predate the field; a read-only
+legacy decoder preserves its absence on replay without grading again. Fresh
+provider responses still require the field.
 
 On rollback, N-1 replays the stored idempotency response body without grading
 again; the added field may be present and is ignored by the older response
