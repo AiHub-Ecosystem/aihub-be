@@ -27,33 +27,7 @@ import {
   selectKeyedJob,
 } from './speaking-grading-job-row';
 
-const JOB_COLUMNS = `
-  job_id AS "jobId",
-  organization_id AS "organizationId",
-  end_user_id AS "endUserId",
-  environment,
-  identity_mode AS "identityMode",
-  api_key_id AS "apiKeyId",
-  max_concurrent AS "maxConcurrent",
-  quota_tracked AS "quotaTracked",
-  quota_unverified AS "quotaUnverified",
-  audio_asset_id AS "audioAssetId",
-  part,
-  question_id AS "questionId",
-  prompt_text AS "promptText",
-  test_type AS "testType",
-  test_code AS "testCode",
-  part_result_id AS "partResultId",
-  idempotency_key AS "idempotencyKey",
-  status,
-  lease_expires_at AS "leaseExpiresAt",
-  dispatch_started_at AS "dispatchStartedAt",
-  result,
-  error_code AS "errorCode",
-  error_message AS "errorMessage",
-  error_retryable AS "errorRetryable",
-  created_at AS "createdAt",
-  completed_at AS "completedAt"`;
+import { jobColumns } from './speaking-grading-job-columns';
 
 const SPEAKING_GRADING_QUOTA_LOCK_SQL =
   'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
@@ -218,7 +192,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await transaction.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `SELECT ${JOB_COLUMNS} FROM speaking_grading_jobs WHERE job_id = $1 AND organization_id = $2 AND end_user_id = $3 AND environment = $4`,
+        `SELECT ${jobColumns()} FROM speaking_grading_jobs WHERE job_id = $1 AND organization_id = $2 AND end_user_id = $3 AND environment = $4`,
         jobId,
         owner.organizationId,
         owner.endUserId,
@@ -248,7 +222,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await this.client.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'running', lease_expires_at = $2 WHERE job_id = $1 AND status = 'queued' AND created_at >= $3 RETURNING ${JOB_COLUMNS}`,
+        `UPDATE speaking_grading_jobs SET status = 'running', lease_expires_at = $2 WHERE job_id = $1 AND status = 'queued' AND created_at >= $3 RETURNING ${jobColumns()}`,
         input.jobId,
         input.leaseExpiresAt,
         input.expireBefore,
@@ -386,7 +360,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await this.client.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'running' AND dispatch_started_at < $1 RETURNING ${JOB_COLUMNS}`,
+        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'running' AND dispatch_started_at < $1 RETURNING ${jobColumns()}`,
         input.startedBefore,
         input.completedAt,
         input.error.code,
@@ -406,7 +380,7 @@ export class PostgresSpeakingGradingJobRepository
       const rows = await this.client.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
-        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'queued' AND created_at < $1 RETURNING ${JOB_COLUMNS}`,
+        `UPDATE speaking_grading_jobs SET status = 'failed', result = NULL, quota_reservation_active = false, completed_at = $2, lease_expires_at = NULL, error_code = $3, error_message = $4, error_retryable = $5 WHERE status = 'queued' AND created_at < $1 RETURNING ${jobColumns()}`,
         input.createdBefore,
         input.completedAt,
         input.error.code,

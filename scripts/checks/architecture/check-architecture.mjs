@@ -1188,6 +1188,7 @@ export function collectSourceTextFailures(options) {
    */
   const SQL_FRAGMENT_ALLOWLIST = [
     { name: 'billableRequestSql', module: 'billable-request-sql' },
+    { name: 'jobColumns', module: 'speaking-grading-job-columns' },
   ];
 
   /** @param {import('typescript').SourceFile} sourceFile */
