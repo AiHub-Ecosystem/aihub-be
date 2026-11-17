@@ -6,7 +6,8 @@ describe('server timeouts', () => {
   });
 
   it('bounds an idle connection and never disables either timeout', () => {
-    expect(CONNECTION_TIMEOUT_MS).toBe(60_000);
+    expect(CONNECTION_TIMEOUT_MS).toBe(135_000);
+    expect(CONNECTION_TIMEOUT_MS).toBeGreaterThan(125_000);
     expect(REQUEST_TIMEOUT_MS).toBeGreaterThan(CONNECTION_TIMEOUT_MS);
   });
 });

@@ -907,12 +907,10 @@ describe('Speaking grading HTTP flow', () => {
 
   it('maps an upload deadline cancellation through the envelope and releases its upload slot', async () => {
     const ceiling = app.get<InFlightCeiling>(SPEAKING_UPLOAD_CEILING);
-    const originalEnter = ceiling.enter.bind(ceiling);
-    let release: (() => void) | undefined;
-    jest.spyOn(ceiling, 'enter').mockImplementation(() => {
-      release = originalEnter();
-      return release;
-    });
+    const held = Array.from(
+      { length: SPEAKING_UPLOADS_IN_FLIGHT_MAX - 1 },
+      () => ceiling.enter(),
+    );
     const parser = app.get<SpeakingMultipartParserPort>(
       SPEAKING_MULTIPART_PARSER,
     );
@@ -936,12 +934,14 @@ describe('Speaking grading HTTP flow', () => {
 
       expect(response.statusCode).toBe(504);
       expectError(response, 'AI_SERVICE_TIMEOUT');
-      expect(release).toBeDefined();
-      expect(() => ceiling.enter()()).not.toThrow();
+      const eighth = ceiling.enter();
+      eighth();
     } finally {
+      for (const leave of held) {
+        leave();
+      }
       parser.parse = originalParse;
       timeout.mockRestore();
-      jest.restoreAllMocks();
     }
   });
 
