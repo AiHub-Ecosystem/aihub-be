@@ -1,7 +1,15 @@
+import { Logger } from '@nestjs/common';
+
+import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
+import { clampSheddingLevel } from '@/modules/gateway/application/shedding/request-tier';
 import type { SheddingLevelPort } from '@/modules/gateway/application/shedding/shedding-level.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
-/** One key for every instance: the level is a property of the shared host. */
+/**
+ * One key for every instance: the level is a property of the shared host.
+ * Production and Sandbox run on separate Redis databases (`/0` and `/1`, each
+ * with its own credentials), so this key never crosses tiers.
+ */
 export const SHEDDING_LEVEL_KEY = 'aihub:v1:shed:level';
 
 /**
@@ -27,12 +35,6 @@ return current
 
 export type SheddingLevelRedisClient = Pick<RedisGatewayClient, 'get' | 'eval'>;
 
-function clampLevel(value: number): number {
-  return Number.isFinite(value)
-    ? Math.max(0, Math.min(2, Math.floor(value)))
-    : 0;
-}
-
 /**
  * The level this instance applies: the higher of its own policy and the shared
  * one. Both live in memory, so `current()` never awaits Redis; the governor
@@ -41,15 +43,26 @@ function clampLevel(value: number): number {
 export class SheddingLevelStore implements SheddingLevelPort {
   private local = 0;
   private shared = 0;
+  private readonly health: RedisHealthReporter;
 
-  constructor(private readonly client?: SheddingLevelRedisClient) {}
+  constructor(
+    private readonly client?: SheddingLevelRedisClient,
+    logger: Pick<Logger, 'warn' | 'log'> = new Logger(SheddingLevelStore.name),
+  ) {
+    this.health = new RedisHealthReporter(
+      'shedding_level',
+      'shedding level store',
+      logger,
+      'keeping the last known peer level',
+    );
+  }
 
   current(): number {
     return Math.max(this.local, this.shared);
   }
 
   setLocal(level: number): void {
-    const next = clampLevel(level);
+    const next = clampSheddingLevel(level);
     this.local = next;
     if (next > 0) this.publish(next);
   }
@@ -60,9 +73,11 @@ export class SheddingLevelStore implements SheddingLevelPort {
     if (client === undefined) return;
     try {
       const stored = await client.get(SHEDDING_LEVEL_KEY);
-      this.shared = stored === null ? 0 : clampLevel(Number(stored));
-    } catch {
+      this.shared = stored === null ? 0 : clampSheddingLevel(Number(stored));
+      this.health.reportRecovered();
+    } catch (error) {
       // Fail open: a Redis outage must not shed traffic by itself.
+      this.health.reportDegraded(error);
     }
   }
 
@@ -77,6 +92,6 @@ export class SheddingLevelStore implements SheddingLevelPort {
         level,
         SHARED_LEVEL_TTL_SECONDS,
       )
-      .catch(() => undefined);
+      .catch((error: unknown) => this.health.reportDegraded(error));
   }
 }

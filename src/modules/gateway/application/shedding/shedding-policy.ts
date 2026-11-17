@@ -11,14 +11,6 @@ export const SHEDDING_POLICY = Object.freeze({
   escalationIntervalMs: 1_000,
 });
 
-export interface SheddingThresholds {
-  readonly enterShedLevel1: number;
-  readonly enterShedLevel2: number;
-  readonly recoverBelow: number;
-  readonly recoverAfterMs: number;
-  readonly escalationIntervalMs: number;
-}
-
 /**
  * How much load the gateway refuses, as the number of lowest tiers shed:
  * `0` sheds nothing, `1` sheds `best-effort`, `2` sheds `standard` too.
@@ -32,10 +24,6 @@ export class SheddingPolicy {
   // Never transitioned: the spacing applies between changes, not to the first.
   private lastTransitionAt = Number.NEGATIVE_INFINITY;
   private belowSince: number | undefined;
-
-  constructor(
-    private readonly thresholds: SheddingThresholds = SHEDDING_POLICY,
-  ) {}
 
   /**
    * Folds one capacity sample in, and returns the level to apply now.
@@ -55,11 +43,13 @@ export class SheddingPolicy {
     if (target > this.level) {
       if (
         nowMs - this.lastTransitionAt <
-        this.thresholds.escalationIntervalMs
+        SHEDDING_POLICY.escalationIntervalMs
       ) {
         return this.level;
       }
-      this.level = target;
+      // One tier per change: a first sample at full utilization must not skip
+      // `best-effort` shedding entirely and refuse `standard` traffic.
+      this.level = Math.min(target, this.level + 1);
       this.lastTransitionAt = nowMs;
       this.belowSince = undefined;
       return this.level;
@@ -70,13 +60,13 @@ export class SheddingPolicy {
       return this.level;
     }
 
-    if (utilization >= this.thresholds.recoverBelow) {
+    if (utilization >= SHEDDING_POLICY.recoverBelow) {
       this.belowSince = undefined;
       return this.level;
     }
 
     this.belowSince ??= nowMs;
-    if (nowMs - this.belowSince < this.thresholds.recoverAfterMs) {
+    if (nowMs - this.belowSince < SHEDDING_POLICY.recoverAfterMs) {
       return this.level;
     }
 
@@ -86,13 +76,9 @@ export class SheddingPolicy {
     return this.level;
   }
 
-  currentLevel(): number {
-    return this.level;
-  }
-
   private targetLevelFor(utilization: number): number {
-    if (utilization >= this.thresholds.enterShedLevel2) return 2;
-    if (utilization >= this.thresholds.enterShedLevel1) return 1;
+    if (utilization >= SHEDDING_POLICY.enterShedLevel2) return 2;
+    if (utilization >= SHEDDING_POLICY.enterShedLevel1) return 1;
     return 0;
   }
 }

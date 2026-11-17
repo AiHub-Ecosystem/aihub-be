@@ -4,7 +4,6 @@ import { createErrorEnvelope } from '@/common/errors/error-envelope';
 import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import { recordRequestFailure } from '@/common/http/request-failure.recorder';
 import { markRequestAdmission } from '@/common/http/request-timing.hook';
-import { recordRejected } from '@/common/observability/rejected-metric';
 import { isRequestId } from '@/common/request-context/request-id';
 import {
   type RequestTier,
@@ -13,7 +12,7 @@ import {
 } from '@/modules/gateway/application/shedding/request-tier';
 import type { SheddingLevelPort } from '@/modules/gateway/application/shedding/shedding-level.port';
 
-/** A refused request costs one lookup and one small reply, well inside 50 ms. */
+/** A refusal costs one tier lookup and one small reply, before any body is read. */
 export function registerSheddingGuard(
   instance: Pick<FastifyInstance, 'addHook'>,
   level: SheddingLevelPort,
@@ -34,7 +33,6 @@ export function registerSheddingGuard(
     markRequestAdmission(request.raw);
     recordRequestFailure(request, 'SERVICE_OVERLOADED');
     record(tier, 'shed');
-    recordRejected('concurrency');
     reply
       .code(503)
       .header('Retry-After', String(Math.ceil(retryAfterMs / 1_000)))

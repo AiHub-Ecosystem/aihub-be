@@ -35,13 +35,17 @@ describe('registerSheddingGuard', () => {
   let level: FixedLevel;
   let handled: number;
   let bodyRead: number;
+  let recorded: string[];
 
   beforeEach(async () => {
     handled = 0;
     bodyRead = 0;
+    recorded = [];
     level = new FixedLevel(0);
     app = Fastify();
-    registerSheddingGuard(app, level);
+    registerSheddingGuard(app, level, (tier, outcome) => {
+      recorded.push(`${tier}:${outcome}`);
+    });
     app.post(GRADE_PATH, async (request) => {
       handled += 1;
       await request.body;
@@ -72,6 +76,7 @@ describe('registerSheddingGuard', () => {
 
     expect(response.statusCode).toBe(200);
     expect(handled).toBe(1);
+    expect(recorded).toEqual(['best-effort:admitted']);
   });
 
   it('refuses a best-effort request with 503, Retry-After, and no body read', async () => {
@@ -94,6 +99,7 @@ describe('registerSheddingGuard', () => {
     expect(body.error.retry_after_ms).toBeGreaterThan(0);
     expect(handled).toBe(0);
     expect(bodyRead).toBe(0);
+    expect(recorded).toEqual(['best-effort:shed']);
   });
 
   it('keeps critical requests answering at every level', async () => {

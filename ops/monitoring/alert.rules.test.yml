@@ -972,9 +972,10 @@ tests:
               owner: aihub-operations
               service: aihub
               job: aihub-production-app
+              tier: best-effort
             exp_annotations:
               summary: "AIHUB has shed more than 20% of requests for ten minutes"
-              description: "aihub-production-app refused 25% of arriving requests to protect the AI Services. Shedding this long means demand exceeds capacity: read aihub_shed_level for the tier being shed and aihub:shed_ratio:rate5m for which tier carries it, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
+              description: "aihub-production-app refused 25% of its best-effort requests to protect the AI Services. Shedding this long means demand exceeds capacity in that tier: read aihub_shed_level for how far shedding has escalated, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#prioritized-load-shedding
 
   # #900: warn per process at 80% of the 1.5 CPU limit.

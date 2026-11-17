@@ -1,6 +1,11 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { requestTierOf, shedsAtLevel } from './request-tier';
+import { PUBLIC_ROUTES, type PublicRouteId } from '@/catalog/public-routes';
+import { PUBLIC_ROUTE_TIERS } from '@/catalog/request-tiers';
+import {
+  clampSheddingLevel,
+  requestTierOf,
+  shedsAtLevel,
+} from './request-tier';
 
 describe('requestTierOf', () => {
   it('ranks every dispatch operation best-effort', () => {
@@ -43,8 +48,13 @@ describe('requestTierOf', () => {
   });
 
   it('covers every public route exactly once', () => {
-    for (const route of Object.values(PUBLIC_ROUTES)) {
-      expect(requestTierOf(route.method, route.path)).not.toBeUndefined();
+    for (const routeId of Object.keys(PUBLIC_ROUTES) as PublicRouteId[]) {
+      const route = PUBLIC_ROUTES[routeId];
+      // Compares the lookup result with the table, so a template that fails to
+      // compile or an exact route shadowed by another one shows up here.
+      expect(requestTierOf(route.method, route.path)).toBe(
+        PUBLIC_ROUTE_TIERS[routeId],
+      );
     }
   });
 });
@@ -56,5 +66,13 @@ describe('shedsAtLevel', () => {
     expect(shedsAtLevel('standard', 1)).toBe(false);
     expect(shedsAtLevel('standard', 2)).toBe(true);
     expect(shedsAtLevel('critical', 2)).toBe(false);
+    expect(shedsAtLevel('best-effort', 9)).toBe(true);
+  });
+
+  it('clamps a level read from Redis or a peer', () => {
+    expect(clampSheddingLevel(-1)).toBe(0);
+    expect(clampSheddingLevel(1.7)).toBe(1);
+    expect(clampSheddingLevel(99)).toBe(2);
+    expect(clampSheddingLevel(Number.NaN)).toBe(0);
   });
 });

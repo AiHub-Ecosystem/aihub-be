@@ -58,20 +58,28 @@ async function waitForPublishedLevel(redis: Redis): Promise<string> {
   throw new Error('no instance published a shedding level within 30 s');
 }
 
-/** Green-only evidence: the call returns as soon as a real 503 arrives. */
+/**
+ * Green-only evidence: the call returns as soon as a real 503 arrives, and a
+ * refusal is measured as a fast one — it never waits on Redis or on the body.
+ */
 async function eventuallyShed(
   worker: TestWorker,
   organization: GradingOrganization,
-): Promise<HttpAnswer | undefined> {
+): Promise<{ answer: HttpAnswer | undefined; elapsedMs: number }> {
   const deadline = Date.now() + 15_000;
   let last: HttpAnswer | undefined;
+  let elapsedMs = 0;
   while (Date.now() < deadline) {
+    const startedAt = Date.now();
     last = await grade(worker, organization);
-    if (last?.status === 503) return last;
+    if (last?.status === 503) {
+      elapsedMs = Date.now() - startedAt;
+      break;
+    }
     // real-timer-ok: each retry is a real HTTP request to the peer process
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  return last;
+  return { answer: last, elapsedMs };
 }
 
 function login(worker: TestWorker): Promise<HttpAnswer | undefined> {
@@ -126,6 +134,11 @@ describe('multi-instance prioritized load shedding', () => {
     });
     organization = seeded;
 
+    // The same path admits while the host is healthy, so a later 503 is the
+    // shedding decision rather than a broken worker.
+    const admittedBeforeFlood = await grade(saturated, seeded);
+    expect(admittedBeforeFlood?.status).toBe(200);
+
     const flood = Array.from({ length: FLOOD }, () => grade(saturated, seeded));
     flood.forEach((call) => void call.catch(() => undefined));
 
@@ -134,16 +147,20 @@ describe('multi-instance prioritized load shedding', () => {
     // The peer is idle, so its own policy stays at zero: a refusal it makes
     // proves the level arrived through the shared store.
     const peerShed = await eventuallyShed(peer, seeded);
-    expect(peerShed?.status).toBe(503);
-    expect(peerShed?.body).toContain('"SERVICE_OVERLOADED"');
-    expect(peerShed?.body).toMatch(/"retry_after_ms":\d+/);
+    expect(peerShed.answer?.status).toBe(503);
+    expect(peerShed.answer?.body).toContain('"SERVICE_OVERLOADED"');
+    expect(peerShed.answer?.body).toMatch(/"retry_after_ms":\d+/);
+    expect(peerShed.elapsedMs).toBeLessThan(1_000);
 
     const saturatedShed = await eventuallyShed(saturated, seeded);
-    expect(saturatedShed?.status).toBe(503);
-    expect(saturatedShed?.body).toContain('"SERVICE_OVERLOADED"');
+    expect(saturatedShed.answer?.status).toBe(503);
+    expect(saturatedShed.answer?.body).toContain('"SERVICE_OVERLOADED"');
+    expect(saturatedShed.elapsedMs).toBeLessThan(1_000);
 
     for (const answer of [await login(peer), await login(saturated)]) {
-      expect(answer?.status).not.toBe(503);
+      // Unknown credentials answer 401, not 503: the tier guard let them in.
+      expect(answer).toBeDefined();
+      expect(answer?.status).toBe(401);
       expect(answer?.body).not.toContain('SERVICE_OVERLOADED');
     }
   }, 180_000);

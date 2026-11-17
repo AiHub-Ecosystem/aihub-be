@@ -44,11 +44,16 @@ and metrics an alert can read.
    Reads are served from process memory and refreshed on a timer; a refusal never
    waits on Redis. A lower publish never lowers the shared key — it is raised and
    expires on its own TTL, and a failed Redis read keeps the last known level.
-   Redis being down never sheds by itself.
+   Redis being down never sheds by itself. Production and Sandbox connect to
+   separate Redis databases with separate credentials (`/0` and `/1`), so one
+   key carries one Environment's level and Sandbox saturation cannot shed
+   Production traffic.
 6. The refusal is `503 SERVICE_OVERLOADED` with `Retry-After` and
    `error.retry_after_ms`. `aihub_shed_requests_total` and
    `aihub_tier_requests_total` are labeled by tier; `aihub:shed_ratio:rate5m` is
-   their ratio and `AIHUBSheddingSustained` alerts above 20% for 10 minutes.
+   their ratio and `AIHUBSheddingSustained` alerts when one tier of one process
+   exceeds 20% for 10 minutes. The ratio is per tier because a tier shedding a
+   third of its own arrivals never moves the all-tier average.
 
 ## Tier propagation to the AI Services
 

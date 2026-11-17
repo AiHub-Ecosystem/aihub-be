@@ -55,16 +55,23 @@ export class SheddingGovernorScheduler implements OnModuleInit {
       peakUtilization(this.snapshot()),
       this.now(),
     );
-    setSheddingLevelMetric(next);
     this.level.setLocal(next);
+    // The gauge reports the level this instance applies, which is the higher of
+    // its own decision and a peer's; a peer shedding alone must still show.
+    setSheddingLevelMetric(this.level.current());
     this.readSharedLevel();
   }
 
   private readSharedLevel(): void {
     if (this.readingSharedLevel) return;
     this.readingSharedLevel = true;
-    void this.level.refresh().finally(() => {
-      this.readingSharedLevel = false;
-    });
+    void this.level
+      .refresh()
+      // A peer's level raises what this instance applies, so the gauge moves
+      // with the read rather than a pass later.
+      .then(() => setSheddingLevelMetric(this.level.current()))
+      .finally(() => {
+        this.readingSharedLevel = false;
+      });
   }
 }
